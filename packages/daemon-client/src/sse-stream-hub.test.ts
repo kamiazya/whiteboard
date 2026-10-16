@@ -1,15 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { parseSseEvent } from './sse-frames.js'
 import { SseStreamHub } from './sse-stream-hub.js'
-import {
-  documentSnapshotUrl,
-  documentSyncKey,
-  documentUpdateUrl,
-  workspaceDocKey,
-  workspaceHandleOfSyncKey,
-  workspaceIdOfSyncKey,
-} from './sync-key.js'
 import { flush } from './test-utils/flush.js'
 
 function createFake() {
@@ -155,7 +146,7 @@ describe('SseStreamHub', () => {
   it('is undisturbed by a keep-alive between two real frames', async () => {
     // What a hub-level test can see: a keep-alive delivers nothing and the
     // stream stays live. That the frame is dropped by the PARSER rather than
-    // absorbed downstream is `parseSseEvent`'s own test below — every
+    // absorbed downstream is `parseSseEvent`'s own test in sse-frames.test.ts — every
     // consumer in `dispatch` re-validates, so this one passes either way.
     const fake = createFake()
     const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
@@ -603,95 +594,5 @@ describe('SseStreamHub', () => {
     await flush()
 
     expect(fake.streamOpens()).toBe(1)
-  })
-})
-
-describe('doc-key URL mapping', () => {
-  it('maps a workspace-scope key to the workspace-document routes', () => {
-    expect(documentUpdateUrl('http://d', 'workspace:ws-1')).toBe(
-      'http://d/api/w/ws-1/workspace-document/update',
-    )
-    expect(documentSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
-      'http://d/api/w/ws-1/workspace-document/snapshot',
-    )
-  })
-
-  it('still maps a per-document key to the per-document routes', () => {
-    expect(documentUpdateUrl('http://d', 'ws-1/nested/path')).toBe(
-      'http://d/api/w/ws-1/document/nested/path/update',
-    )
-  })
-})
-
-describe('documentSyncKey', () => {
-  it('joins the handle and the path on one slash, keeping the path whole', () => {
-    expect(documentSyncKey('ws-1', 'nested/path')).toBe('ws-1/nested/path')
-  })
-
-  it('is read back by the two parsers as a per-document key', () => {
-    const key = documentSyncKey('ws-1', 'a')
-    expect(workspaceHandleOfSyncKey(key)).toBe('ws-1')
-    expect(workspaceIdOfSyncKey(key)).toBeNull()
-  })
-})
-
-describe('workspaceHandleOfSyncKey', () => {
-  it('reads the workspace id straight off a workspace-scope key', () => {
-    expect(workspaceHandleOfSyncKey('workspace:ws-1')).toBe('ws-1')
-  })
-
-  it('reads the workspace id off the first slash of a per-document key', () => {
-    expect(workspaceHandleOfSyncKey('ws-1/nested/path')).toBe('ws-1')
-  })
-
-  it('refuses a malformed key', () => {
-    expect(workspaceHandleOfSyncKey('workspace:')).toBeNull()
-    expect(workspaceHandleOfSyncKey('no-slash-here')).toBeNull()
-    expect(workspaceHandleOfSyncKey('/leading-slash')).toBeNull()
-  })
-
-  it('refuses a handle with no path behind it, and builds no snapshot URL for it', () => {
-    expect(workspaceHandleOfSyncKey('ws-1/')).toBeNull()
-    expect(documentSnapshotUrl('http://d', 'ws-1/')).toBeNull()
-  })
-})
-
-describe('workspaceIdOfSyncKey', () => {
-  it('reads the id off a workspace-scope key', () => {
-    expect(workspaceIdOfSyncKey('workspace:ws-1')).toBe('ws-1')
-  })
-
-  it('answers null for a per-document key, which names a handle and a path rather than a workspace-scope subscription', () => {
-    expect(workspaceIdOfSyncKey('ws-1/nested/path')).toBeNull()
-  })
-
-  it('answers null for the bare prefix and for the stored key shape', () => {
-    expect(workspaceIdOfSyncKey('workspace:')).toBeNull()
-    expect(workspaceIdOfSyncKey('workspace-tree:ws-1')).toBeNull()
-  })
-
-  it('is the inverse of workspaceDocKey', () => {
-    expect(workspaceIdOfSyncKey(workspaceDocKey('ws-1'))).toBe('ws-1')
-  })
-})
-
-describe('parseSseEvent', () => {
-  it('reads the event name and joins every data line', () => {
-    expect(parseSseEvent('event: update\ndata: one\ndata: two')).toEqual({
-      event: 'update',
-      data: 'one\ntwo',
-    })
-  })
-
-  it('defaults the event name to message', () => {
-    expect(parseSseEvent('data: hi')).toEqual({ event: 'message', data: 'hi' })
-  })
-
-  it('answers nothing for a frame with no data line', () => {
-    // A comment and a bare keep-alive: something arrived, and there is
-    // nothing to deliver. An empty event is not an event.
-    expect(parseSseEvent(': keep-alive')).toBeNull()
-    expect(parseSseEvent('event: ready')).toBeNull()
-    expect(parseSseEvent('')).toBeNull()
   })
 })
