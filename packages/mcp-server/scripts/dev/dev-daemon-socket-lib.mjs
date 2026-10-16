@@ -369,25 +369,21 @@ async function judgeLiveness(
  * present only for a daemon that is running and did not answer — the one case
  * a line reports — and says which ask went unanswered and how, so the line
  * names what actually happened rather than a wait that may never have run.
- * An `answers` seam can only say whether, so its silence names no cause.
  *
  * @param {{ pid: number, socketPath: string, startedAt?: string, token?: string }} record
  * @param {{
- *   answers?: (record: { socketPath: string }) => Promise<boolean>,
  *   isAlive?: (pid: number) => boolean,
  *   startMs?: (pid: number) => number | null,
  *   request?: typeof requestDaemon,
  * }} [seams]
  * @returns {Promise<{ running: boolean, answering: boolean, process: 'daemon' | 'foreign' | 'dead', liveness: 'running' | 'unconfirmed' | 'pid-reused' | 'dead', silence?: string }>}
  */
-export async function assessRecordedDaemon(record, { answers, ...seams } = {}) {
+export async function assessRecordedDaemon(record, seams = {}) {
   const judged = await judgeLiveness(record, seams)
   const asked =
     judged.answered !== undefined
       ? { answered: judged.answered, silence: judged.silence }
-      : answers !== undefined
-        ? { answered: await answers(record), silence: `did not answer ${PING_PATH}` }
-        : await askPing(record, seams.request ?? requestDaemon, PING_TIMEOUT_MS)
+      : await askPing(record, seams.request ?? requestDaemon, PING_TIMEOUT_MS)
   const occupied = judged.liveness === 'running' || judged.liveness === 'unconfirmed'
   const running = occupied || asked.answered
   return {

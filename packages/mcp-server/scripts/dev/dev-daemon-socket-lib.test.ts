@@ -160,8 +160,8 @@ describe('assessRecordedDaemon', () => {
   const refused = async (): Promise<never> => {
     throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
   }
+  const pinged = async () => ({ status: 200, contentType: 'text/plain', text: 'ok' })
   const seams = (over: Partial<Parameters<typeof assessRecordedDaemon>[1]> = {}) => ({
-    answers: async () => false,
     isAlive: () => true,
     startMs: () => recordedAt - 5_000,
     request: refused,
@@ -169,7 +169,7 @@ describe('assessRecordedDaemon', () => {
   })
 
   it('is running when the socket answers', async () => {
-    expect(await assessRecordedDaemon(record, seams({ answers: async () => true }))).toEqual({
+    expect(await assessRecordedDaemon(record, seams({ request: pinged }))).toEqual({
       running: true,
       answering: true,
       process: 'daemon',
@@ -181,8 +181,7 @@ describe('assessRecordedDaemon', () => {
     const request = vi.fn(async (_record: unknown, req: { timeoutMs?: number }) => {
       throw Object.assign(new Error('no answer'), { code: NO_ANSWER, timeoutMs: req.timeoutMs })
     })
-    const { answers: _ping, ...asked } = seams({ request })
-    expect(await assessRecordedDaemon(record, asked)).toEqual({
+    expect(await assessRecordedDaemon(record, seams({ request }))).toEqual({
       running: true,
       answering: false,
       process: 'daemon',
@@ -210,15 +209,15 @@ describe('assessRecordedDaemon', () => {
       async () => ({ status: 503, contentType: 'text/plain', text: '' }),
       'answered /api/runtime/ping with HTTP 503',
     ],
+    [
+      'a connection taken and then closed',
+      async (): Promise<never> => {
+        throw Object.assign(new Error('socket hang up'), { code: NO_ANSWER })
+      },
+      'took the connection to /api/runtime/ping and dropped it',
+    ],
   ])('words a running daemon’s ping failing with %s as what it was', async (_, request, silence) => {
-    const { answers: _ping, ...asked } = seams({ request })
-    expect((await assessRecordedDaemon(record, asked)).silence).toBe(silence)
-  })
-
-  it('names no wait for a ping seam that can only say it went unanswered', async () => {
-    expect((await assessRecordedDaemon(record, seams())).silence).toBe(
-      'did not answer /api/runtime/ping',
-    )
+    expect((await assessRecordedDaemon(record, seams({ request }))).silence).toBe(silence)
   })
 
   it('is not running when the recorded pid started after the record was written', async () => {
@@ -243,21 +242,18 @@ describe('assessRecordedDaemon', () => {
 
   it('is running when the socket answers though the recorded pid is gone', async () => {
     expect(
-      await assessRecordedDaemon(
-        record,
-        seams({ isAlive: () => false, answers: async () => true }),
-      ),
+      await assessRecordedDaemon(record, seams({ isAlive: () => false, request: pinged })),
     ).toEqual({ running: true, answering: true, process: 'dead', liveness: 'dead' })
   })
 
   it('asks a late-starting pid’s socket once, and reads its reply as the answer', async () => {
-    const answers = vi.fn(async () => false)
+    // A second ask would be the ping, through the same seam.
     const request = vi.fn(async () => ({
       status: 200,
       contentType: 'application/json',
       text: JSON.stringify({ pid: 42 }),
     }))
-    const late = seams({ startMs: () => recordedAt + 60_000, answers, request })
+    const late = seams({ startMs: () => recordedAt + 60_000, request })
     expect(await assessRecordedDaemon(record, late)).toEqual({
       running: true,
       answering: true,
@@ -265,7 +261,10 @@ describe('assessRecordedDaemon', () => {
       liveness: 'running',
     })
     expect(request).toHaveBeenCalledTimes(1)
-    expect(answers).not.toHaveBeenCalled()
+    expect(request).toHaveBeenCalledWith(
+      { socketPath: '/s' },
+      expect.objectContaining({ path: '/api/runtime/status' }),
+    )
   })
 
   it('takes a live pid as the daemon when the start time or the record cannot say otherwise', async () => {
@@ -703,11 +702,18 @@ describe("the liveness verdict against the daemon's own", () => {
           })
           const daemonSide = daemonVerdict.state
           const devRequest = async (
-            _record: unknown,
-            req: { headers?: Record<string, string> },
+            asked: { socketPath?: string },
+            req: { path: string; headers?: Record<string, string> },
           ) => {
+            if (asked.socketPath === undefined) {
+              throw Object.assign(new Error('connect ENOENT'), { code: 'ENOENT' })
+            }
             if (reply.kind === 'wedged') {
               throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
+            }
+            // The ping is unauthenticated: any daemon serving the socket answers it.
+            if (req.path === PING_PATH && reply.kind === 'reply') {
+              return { status: 200, contentType: 'text/plain', text: 'ok' }
             }
             const presented = req.headers?.authorization?.replace(/^Bearer /, '')
             const { status, body } = answer(presented)
@@ -728,7 +734,7 @@ describe("the liveness verdict against the daemon's own", () => {
           // passed as generated so both sides judge the same record.
           const assessed = await assessRecordedDaemon(
             record as typeof record & { socketPath: string },
-            { ...identity, request: devRequest, answers: async () => pings },
+            { ...identity, request: devRequest },
           )
           expect(assessed.running).toBe(
             isOccupying(daemonVerdict) || (daemonSide === 'dead' && pings),
