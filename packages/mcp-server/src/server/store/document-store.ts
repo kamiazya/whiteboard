@@ -209,11 +209,6 @@ function placeDocumentInTree({
   }
 }
 
-// ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
-//    upserting the matching DB rows. ──
-// overwrite defaults to false so canvas_create does not destroy existing
-// data by mistake. Normal incremental saves (update-route writes, live-doc and
-// restore writes, compactDocument) must pass overwrite: true.
 /**
  * Called after every successful `saveDocument`.
  *
@@ -241,6 +236,11 @@ function notifyDocumentSaved(workspaceId: string, path: string): void {
   }
 }
 
+// Saves a LoroDoc by writing the snapshot binary to the blobs/ tree and
+// upserting the matching DB rows. `overwrite` defaults to false so a write
+// that creates a document cannot replace one already at the path by mistake;
+// a write that replaces content in place (an update, an in-place restore)
+// passes `overwrite: true`.
 export async function saveDocument(
   workspaceId: string,
   path: string,

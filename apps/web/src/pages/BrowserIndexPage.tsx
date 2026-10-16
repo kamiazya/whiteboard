@@ -485,7 +485,7 @@ function useBrowserCreate({
   setError,
   onRemoved,
 }: BrowserCreateInput) {
-  // The `disabled` attribute (via createDisabled) is the whole double-press
+  // The `disabled={creating}` attribute is the whole double-press
   // mechanism: React flushes this state before a second click can dispatch,
   // and a handler-side `if (creating) return` reads a stale closure in
   // exactly the same-tick case it would have to catch.

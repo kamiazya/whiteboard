@@ -336,7 +336,7 @@ describe('BrowserIndexPage', () => {
   })
 
   it('creates exactly one canvas for two presses inside a single tick', async () => {
-    // Pins the createDisabled wiring: React flushes `creating` before a
+    // Pins the `disabled={creating}` wiring: React flushes `creating` before a
     // second click can dispatch on the now-disabled button.
     const store = new BrowserStoreDouble()
     const { onOpenDocument } = renderPage(store)

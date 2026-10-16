@@ -266,7 +266,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     lastRouteSyncPathRef.current = location.pathname
     const parsed = parseWorkspaceRoute(location.pathname)
     if (parsed === null) return
-    // parseDaemonRoute returns a fresh object every time, and React compares
+    // `parseWorkspaceRoute` returns a fresh object every time, and React compares
     // state by reference — so re-set only when the route actually differs,
     // otherwise a back/forward landing on the current view re-renders for
     // nothing.

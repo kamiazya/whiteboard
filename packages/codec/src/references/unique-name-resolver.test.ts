@@ -20,11 +20,11 @@ describe('createUniqueNameResolver', () => {
   })
 
   it('a document claiming one alias twice is ONE owner, not an ambiguity', () => {
-    // Callers feed a path entry AND a name entry per document, so a document
-    // NAMED exactly its own path arrives as two claims with one id. The
-    // reader navigates that link (daemonLinkEntries dedupes the row), so the
-    // resolver must resolve it too — found by the command-sequence property:
-    // backlinks dropped a link the preview renders live.
+    // A caller that feeds a path entry AND a name entry per document hands a
+    // document NAMED exactly its own path over as two claims with one id. The
+    // reader navigates that link, so the resolver must resolve it too — found
+    // by the command-sequence property: backlinks dropped a link the preview
+    // renders live.
     const resolve = createUniqueNameResolver([
       { id: 'A', name: 'beta/leaf' },
       { id: 'A', name: 'beta/leaf' },
