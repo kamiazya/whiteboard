@@ -63,8 +63,9 @@ export function resolveRectColor(color: string | undefined): string {
 // a later one reads `unsaved`: a stuck browser write; a daemon write the
 // backend reported failed (it reports both outcomes, so a later landed write
 // clears it); a refused append to the offline replica. A refused browser
-// write and a rejected daemon session are `offline`. The app badge is not
-// read off this table (`asksForReturn` takes the connection state itself).
+// write and a rejected or never-opened daemon session are `offline`. The app
+// badge is not read off this table (`asksForReturn` takes the connection
+// state itself).
 const BROWSER_STATUS: Record<StorageHealth, FaviconStatus> = {
   ok: 'quiet',
   stuck: 'unsaved',
@@ -75,6 +76,7 @@ const DAEMON_STATUS: Record<SessionHealth, FaviconStatus> = {
   reconnecting: 'syncing',
   'sync-off': 'offline',
   'write-failed': 'unsaved',
+  'not-opened': 'offline',
 }
 const REPLICA_STATUS: Record<ReplicaSaveHealth, FaviconStatus> = {
   ok: 'quiet',

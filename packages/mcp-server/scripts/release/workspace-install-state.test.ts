@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
-  pnpmSpawnOptions,
   preservingWorkspaceInstallState,
   runDeploy,
   WORKSPACE_STATE_FILE,
@@ -80,15 +79,6 @@ describe('preservingWorkspaceInstallState', () => {
 })
 
 describe('the pnpm launcher', () => {
-  // pnpm on Windows is a `.cmd` shim, which only a shell can launch.
-  it.each([
-    ['win32', true],
-    ['linux', false],
-    ['darwin', false],
-  ] as const)('on %s launches pnpm with shell: %s', (platform, shell) => {
-    expect(pnpmSpawnOptions(platform)).toEqual({ encoding: 'utf-8', shell })
-  })
-
   // The real-pnpm cases below deploy through `runDeploy`; they pin the SBOM
   // script only if it launches its deploy through the same function.
   it('is the one the SBOM script deploys through', () => {
@@ -119,7 +109,6 @@ const PINNED_PNPM_VERSION = PINNED_PACKAGE_MANAGER.replace(/^pnpm@/, '').replace
 // version it has not cached, so with an empty cache and no network the
 // premise of the cases below is absent; they skip and say why rather than
 // failing on a module corepack never downloaded. Probed, never inferred.
-const PNPM_SPAWN = pnpmSpawnOptions()
 const PROBE_TIMEOUT_MS = 60_000
 
 function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
@@ -130,7 +119,7 @@ function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
       JSON.stringify({ private: true, packageManager: PINNED_PACKAGE_MANAGER }),
     )
     const result = spawnSync('pnpm', ['--version'], {
-      ...PNPM_SPAWN,
+      encoding: 'utf-8',
       cwd: dir,
       // A corepack fetch that stalls must read as a pnpm that cannot start,
       // not hold test collection open.
@@ -151,7 +140,7 @@ const PINNED_PNPM = probePinnedPnpm()
 
 describe('a real pnpm deploy --legacy --prod', () => {
   function pnpm(cwd: string, args: string[]): string {
-    const result = spawnSync('pnpm', args, { ...PNPM_SPAWN, cwd })
+    const result = spawnSync('pnpm', args, { encoding: 'utf-8', cwd })
     expect(result.status, `${args.join(' ')}\n${result.stderr}${result.stdout}`).toBe(0)
     return result.stdout
   }

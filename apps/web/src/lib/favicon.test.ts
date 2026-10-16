@@ -116,6 +116,8 @@ describe('faviconStatusOf', () => {
       reconnecting: 'syncing',
       'sync-off': 'offline',
       'write-failed': 'unsaved',
+      // Drawn as sync off: the tab icon shows what the person sees.
+      'not-opened': 'offline',
     },
     replica: { ok: 'quiet', failed: 'unsaved' },
   } as const satisfies {

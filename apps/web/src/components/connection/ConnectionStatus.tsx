@@ -91,6 +91,7 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
   reconnecting: 'Reconnecting',
   'sync-off': 'Sync off',
   'write-failed': 'Not saved yet',
+  'not-opened': 'Sync off',
 }
 
 /**

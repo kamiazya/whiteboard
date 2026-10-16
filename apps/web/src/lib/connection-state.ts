@@ -7,14 +7,19 @@ import type { StorageHealth } from './storage-health.js'
  * Health of the live document session a daemon-kept page runs.
  * `write-failed`: a write the daemon did not take is outstanding — the
  * transport may well be up, so it is not a reconnect.
+ * `not-opened`: the load was refused or failed before any session was built,
+ * so no editor mounted and nothing can have been typed. It reads as sync-off
+ * wherever the state is DRAWN (`isSyncOff`), and holds nothing wherever the
+ * question is what this tab alone holds (`isNotKeeping`) — a session that ran
+ * and was then refused (`sync-off`) may strand edits; this one cannot.
  */
-export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-failed'
+export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-failed' | 'not-opened'
 
 /**
  * What a daemon-kept page reports from what its session knows. A refusal —
- * the credential rejected, or a load refused or failed, where no session runs
- * at all — outranks everything, because reconnecting is the only way out of
- * it; then a write that did not land (the session's persistence account, not
+ * the credential rejected (`sync-off`), or a load refused or failed, where no
+ * session runs at all (`not-opened`) — outranks everything, because
+ * reconnecting is the only way out of it; then a write that did not land (the session's persistence account, not
  * its `error` status, which an unreadable document reports too); synced is
  * claimed only while the session is connected; everything else — `idle`,
  * `error` — folds in with reconnecting, whose copy makes no claim.
@@ -25,7 +30,8 @@ export function sessionHealthOf(
   persistence: BrowserPersistenceState,
   noSession = false,
 ): SessionHealth {
-  if (authError || noSession) return 'sync-off'
+  if (authError) return 'sync-off'
+  if (noSession) return 'not-opened'
   if (persistence.kind === 'degraded' && persistence.reason === 'write-failed')
     return 'write-failed'
   return status === 'connected' ? 'synced' : 'reconnecting'
@@ -62,10 +68,13 @@ export type ConnectionState =
 
 /**
  * The one state whose only exit is reconnecting — what the shell's attention
- * dot keys on. A transient reconnect is not it: that recovers on its own.
+ * dot keys on. A transient reconnect is not it: that recovers on its own. A
+ * session never opened has the same only exit, so it is drawn the same.
  */
 export function isSyncOff(state: ConnectionState): boolean {
-  return state.keeper === 'daemon' && state.session === 'sync-off'
+  return (
+    state.keeper === 'daemon' && (state.session === 'sync-off' || state.session === 'not-opened')
+  )
 }
 
 /**
@@ -96,11 +105,12 @@ export function asksForReturn(state: ConnectionState): boolean {
 
 /**
  * What a live region says when the keeper stops keeping, in words about that
- * keeper; empty while it keeps. Spoken only for these, never for a reconnect
- * blip, which read aloud mid-sentence is noise.
+ * keeper; empty while it keeps. Spoken only for these and for sync off, never
+ * for a reconnect blip, which read aloud mid-sentence is noise.
  */
 export function notKeepingAnnouncement(state: ConnectionState | null): string {
-  if (state === null || !isNotKeeping(state)) return ''
-  if (state.keeper !== 'daemon') return 'Writing to this browser failed'
-  return state.session === 'sync-off' ? 'Live sync off' : 'Changes not saved yet'
+  if (state === null) return ''
+  if (isSyncOff(state)) return 'Live sync off'
+  if (!isNotKeeping(state)) return ''
+  return state.keeper === 'daemon' ? 'Changes not saved yet' : 'Writing to this browser failed'
 }

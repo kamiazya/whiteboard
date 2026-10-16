@@ -20,7 +20,14 @@ describe('the app badge a window writes', () => {
   // unsaved, which the leave prompt asks about too.
   const SHOWN = {
     browser: { ok: false, stuck: true, failed: true },
-    daemon: { synced: false, reconnecting: false, 'sync-off': true, 'write-failed': true },
+    daemon: {
+      synced: false,
+      reconnecting: false,
+      'sync-off': true,
+      'write-failed': true,
+      // No session was built, so nothing typed can be waiting here.
+      'not-opened': false,
+    },
     replica: { ok: false, failed: true },
   } as const satisfies {
     browser: Record<StorageHealth, boolean>
