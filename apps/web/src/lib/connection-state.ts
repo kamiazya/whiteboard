@@ -38,8 +38,8 @@ export function sessionHealthOf(
  * into a daemon) leaves behind.
  *
  * Each keeper's health is the health IT can answer for. The daemon's is the
- * live session (derived from transport liveness — its writes are sent, never
- * acknowledged). The browser's is its storage: whether the writes behind the
+ * live session (transport liveness, plus whether its writes are landing —
+ * the backend reports a landed write and a failed one alike). The browser's is its storage: whether the writes behind the
  * open document are landing (`StorageHealth`, judged from the persistence
  * facts the session reports). Both are quiet when healthy; the shell mark
  * draws only a condition.
