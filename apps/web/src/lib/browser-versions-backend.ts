@@ -1,3 +1,4 @@
+import { restorePointOptions } from '@kamiazya/whiteboard-history'
 import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -73,14 +74,14 @@ export function createBrowserVersionsBackend(deps: {
         (v) => v.id === versionId,
       )?.label
       await deps.record.applyRestore(past, label)
-      // The point the restore produced, recorded the same way the daemon's
-      // operation records it: a restore reconciles a past state onto the live
-      // one, and a restore that leaves no row is one nobody can find
-      // afterwards. Best effort for the same reason as there — the content
+      // The point the restore produced, recorded as the daemon's operation
+      // records it — automatic, naming what it restored: a restore reconciles
+      // a past state onto the live one, and a restore that leaves no row is
+      // one nobody can find afterwards. Best effort for the same reason as there — the content
       // has already landed, so a failed row costs the history a point and the
       // document nothing.
       try {
-        await deps.store.save(workspaceId, path, { restoredFrom: versionId })
+        await deps.store.save(workspaceId, path, restorePointOptions(versionId))
       } catch {
         // See above.
       }

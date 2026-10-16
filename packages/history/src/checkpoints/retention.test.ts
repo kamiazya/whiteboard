@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   autoVersionsOverCap,
   MAX_AUTO_PER_DOCUMENT,
+  restorePointOptions,
   sandwichedAutoVersionIds,
 } from './retention.js'
 
@@ -32,7 +33,11 @@ describe('autoVersionsOverCap', () => {
 })
 
 describe('sandwichedAutoVersionIds', () => {
-  const row = (id: string, auto: boolean) => ({ id, auto })
+  const row = (id: string, auto: boolean, restoredFrom: string | null = null) => ({
+    id,
+    auto,
+    restoredFrom,
+  })
 
   it('removes the automatic rows strictly between the first and last manual save', () => {
     expect(
@@ -61,5 +66,26 @@ describe('sandwichedAutoVersionIds', () => {
   it('leaves a document with fewer than two manual saves alone', () => {
     expect(sandwichedAutoVersionIds([row('a1', true), row('m1', false)])).toEqual([])
     expect(sandwichedAutoVersionIds([row('a1', true), row('a2', true)])).toEqual([])
+  })
+
+  it('the sandwich spares lineage on both ends', () => {
+    // A restore's merge point and the point it named, both automatic and both
+    // bracketed by manual saves: exactly the rows the sandwich would take.
+    expect(
+      sandwichedAutoVersionIds([
+        row('m1', false),
+        row('named', true),
+        row('m2', false),
+        row('merge', true, 'named'),
+        row('plain', true),
+        row('m3', false),
+      ]),
+    ).toEqual(['plain'])
+  })
+})
+
+describe('restorePointOptions', () => {
+  it('records a restore point as automatic, naming what it restored', () => {
+    expect(restorePointOptions('v-past')).toEqual({ auto: true, restoredFrom: 'v-past' })
   })
 })

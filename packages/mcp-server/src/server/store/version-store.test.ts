@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { restorePointOptions } from '@kamiazya/whiteboard-history'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -73,7 +74,14 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const { createIsolatedDb } = await import('./db/test-helpers.js')
     handle = await createIsolatedDb({ dataDir: tempDir })
     store = new FileVersionStore()
-    await seedDocuments('sess-1', ['canvas-a', 'canvas-b', 'canvas-x', 'canvas-y', 'canvas-z'])
+    await seedDocuments('sess-1', [
+      'canvas-a',
+      'canvas-b',
+      'canvas-x',
+      'canvas-y',
+      'canvas-z',
+      'canvas-r',
+    ])
   })
 
   afterEach(async () => {
@@ -477,6 +485,29 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
       const remaining = (await store.list('sess-1', 'canvas-x')).map((v) => v.id).sort()
       expect(remaining).toEqual([m1.id, m2.id, m3.id, a4.id].sort())
+    })
+
+    it('spares a restore point and the version it restored, though both sit in a sandwich', async () => {
+      const m1 = await saveAt('canvas-r', 'manual', 1_000)
+      const named = await saveAt('canvas-r', 'auto', 2_000)
+      const m2 = await saveAt('canvas-r', 'manual', 3_000)
+      const doc = new LoroDoc()
+      appendElement(doc, 'restored')
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 4_000)
+      let merge: { id: string }
+      try {
+        merge = await store.save('sess-1', 'canvas-r', doc, restorePointOptions(named.id))
+      } finally {
+        nowSpy.mockRestore()
+      }
+      const plain = await saveAt('canvas-r', 'auto', 5_000)
+      const m3 = await saveAt('canvas-r', 'manual', 6_000)
+
+      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-r')
+
+      expect(result.deletedIds).toEqual([plain.id])
+      const remaining = (await store.list('sess-1', 'canvas-r')).map((v) => v.id).sort()
+      expect(remaining).toEqual([m1.id, named.id, m2.id, merge.id, m3.id].sort())
     })
 
     it('keeps every auto when fewer than two manual versions exist (nothing to sandwich)', async () => {
