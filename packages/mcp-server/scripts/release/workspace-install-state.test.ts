@@ -10,7 +10,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
+  deployArgs,
   preservingWorkspaceInstallState,
   WORKSPACE_STATE_FILE,
 } from './workspace-install-state.mjs'
@@ -79,18 +81,73 @@ describe('preservingWorkspaceInstallState', () => {
 // The helper names pnpm's file by a literal, so a pnpm that renamed it would
 // leave the helper restoring nothing while every case above stays green. This
 // runs the real deploy, with the script's flags, against a workspace with no
-// registry dependencies so it needs no network.
+// registry dependencies so the install needs no network.
+//
+// The fixture pins the repo's own `packageManager`, read from the root
+// manifest so a pnpm bump moves it too. Unpinned, the pnpm that runs is
+// whatever the machine resolves outside the repo — a global install, or
+// corepack's last-known-good, which can be a newer major that keeps
+// `settings.dev` true after a prod deploy or a version corepack must
+// download — and the cases test that pnpm instead of the one the script runs.
+const PINNED_PACKAGE_MANAGER: string = JSON.parse(
+  readFileSync(join(repoRoot(), 'package.json'), 'utf-8'),
+).packageManager
+const PINNED_PNPM_VERSION = PINNED_PACKAGE_MANAGER.replace(/^pnpm@/, '').replace(/\+.*$/, '')
+
+// Whether the pinned pnpm can start at all here. Corepack fetches a pinned
+// version it has not cached, so with an empty cache and no network the
+// premise of the cases below is absent; they skip and say why rather than
+// failing on a module corepack never downloaded. Probed, never inferred.
+// pnpm on Windows is a `.cmd` shim, which only a shell can launch.
+const PNPM_SPAWN = { encoding: 'utf-8', shell: process.platform === 'win32' } as const
+const PROBE_TIMEOUT_MS = 60_000
+
+function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'wb-pinned-pnpm-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ private: true, packageManager: PINNED_PACKAGE_MANAGER }),
+    )
+    const result = spawnSync('pnpm', ['--version'], {
+      ...PNPM_SPAWN,
+      cwd: dir,
+      // A corepack fetch that stalls must read as a pnpm that cannot start,
+      // not hold test collection open.
+      timeout: PROBE_TIMEOUT_MS,
+    })
+    if (result.status === 0) return { runs: true }
+    const output = `${result.stderr}${result.stdout}`.trim()
+    // A launcher crash prints the throwing source line first; the error line names the cause.
+    const detail =
+      result.error?.message ?? output.split('\n').find((line) => /^\w*Error:/.test(line)) ?? output
+    return { runs: false, reason: `${PINNED_PACKAGE_MANAGER} cannot start here: ${detail}` }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const PINNED_PNPM = probePinnedPnpm()
+
 describe('a real pnpm deploy --legacy --prod', () => {
-  function pnpm(cwd: string, args: string[]) {
-    const result = spawnSync('pnpm', args, { cwd, encoding: 'utf-8' })
+  function pnpm(cwd: string, args: string[]): string {
+    const result = spawnSync('pnpm', args, { ...PNPM_SPAWN, cwd })
     expect(result.status, `${args.join(' ')}\n${result.stderr}${result.stdout}`).toBe(0)
+    return result.stdout
+  }
+
+  function requirePinnedPnpm(skip: (note?: string) => void): void {
+    if (!PINNED_PNPM.runs) skip(PINNED_PNPM.reason)
   }
 
   function makeWorkspace(): string {
     const root = makeRoot()
     mkdirSync(join(root, 'packages', 'app'), { recursive: true })
     mkdirSync(join(root, 'packages', 'tool'), { recursive: true })
-    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'root', private: true }))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'root', private: true, packageManager: PINNED_PACKAGE_MANAGER }),
+    )
     writeFileSync(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
     writeFileSync(
       join(root, 'packages', 'app', 'package.json'),
@@ -104,18 +161,17 @@ describe('a real pnpm deploy --legacy --prod', () => {
     return root
   }
 
-  const deploy = (root: string) =>
-    pnpm(root, [
-      '--filter',
-      'app',
-      'deploy',
-      '--legacy',
-      '--prod',
-      '--ignore-scripts',
-      join(root, 'out'),
-    ])
+  const deploy = (root: string) => pnpm(root, deployArgs('app', join(root, 'out')))
 
-  it('marks the workspace prod-only when nothing restores it', () => {
+  it('runs the pnpm version the repo pins', ({ skip }) => {
+    requirePinnedPnpm(skip)
+    const root = makeWorkspace()
+
+    expect(pnpm(root, ['--version']).trim()).toBe(PINNED_PNPM_VERSION)
+  }, 60_000)
+
+  it('marks the workspace prod-only when nothing restores it', ({ skip }) => {
+    requirePinnedPnpm(skip)
     const root = makeWorkspace()
     expect(readDev(root)).toBe(true)
 
@@ -124,11 +180,18 @@ describe('a real pnpm deploy --legacy --prod', () => {
     expect(readDev(root)).toBe(false)
   }, 60_000)
 
-  it('leaves settings.dev true once wrapped', () => {
+  it('leaves settings.dev true once wrapped', ({ skip }) => {
+    requirePinnedPnpm(skip)
     const root = makeWorkspace()
 
     preservingWorkspaceInstallState(root, () => deploy(root))
 
     expect(readDev(root)).toBe(true)
   }, 60_000)
+
+  // The other half of the skip: CI is the run whose green is load-bearing, so
+  // the pinned pnpm must start there or every case above is silently skipped.
+  it.runIf(process.env.CI)('can start the pinned pnpm on CI', () => {
+    expect(PINNED_PNPM).toEqual({ runs: true })
+  })
 })

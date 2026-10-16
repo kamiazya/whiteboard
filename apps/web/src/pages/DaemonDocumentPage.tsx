@@ -10,6 +10,7 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useAppBadge } from '../hooks/useFavicon.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
@@ -37,7 +38,7 @@ import {
   daemonTopBarSlot,
   daemonVersionsSlot,
 } from './daemon-document-slots.js'
-import { deriveDaemonPageState } from './daemon-page-state.js'
+import { type DaemonPageState, deriveDaemonPageState } from './daemon-page-state.js'
 import type {
   DocumentKeeper,
   DocumentKeeperAnswer,
@@ -69,6 +70,14 @@ export interface DaemonDocumentPageProps {
 }
 
 const pathOf = (document: { readonly path: string }): string => document.path
+
+/**
+ * A load the daemon refused — on membership of either kind — or that failed
+ * builds no session, and nothing retries it: the shell reads sync-off, never
+ * reconnecting, since only the person acting can get past it.
+ */
+const buildsNoSession = (state: DaemonPageState): boolean =>
+  state.kind === 'membership-refused' || state.kind === 'load-degraded'
 
 /**
  * The daemon keeper: the controller over the daemon's REST routes, the sync
@@ -349,11 +358,26 @@ function useDaemonDocument(
       resolveOpenDocumentSymbol({ kind: documentKind, canvas: canvasValue, facets: sync.facets }),
     [documentKind, canvasValue, sync.facets],
   )
-  // One state feeds both the tab and the shell mark. A withdrawn membership
-  // builds no session, so nothing is reconnecting: it reads sync-off.
-  const withdrawn = controller.refusal !== null
-  const session = sessionHealthOf(authError, syncStatus, persistence, withdrawn)
+  // The page-level render state, derived once (see daemon-page-state.ts for
+  // the cascade's invariants). Terminal states render from THIS, never from
+  // ad-hoc controller-field checks in the JSX — the machine is shared with
+  // BrowserDocumentPage (document-page-state.ts), so the two pages' state
+  // vocabularies cannot drift apart silently.
+  const pageState = deriveDaemonPageState({
+    loading: controller.loading,
+    loadError: controller.loadError,
+    canvas,
+    documentCount: controller.documents.length,
+    // The path is LISTED, which is a different question from whether this
+    // connection syncs its content — an injected backend keeps the
+    // per-document contract and carries no content id at all.
+    documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
+    refusal: controller.refusal,
+  })
+  // One state feeds the tab, the badge and the shell mark.
+  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(pageState))
   const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
+  useAppBadge(connection)
   useDocumentFavicon({
     settingsStore,
     documentId: contentDocumentId ?? null,
@@ -385,11 +409,6 @@ function useDaemonDocument(
     }
   }
 
-  // The page-level render state, derived once (see daemon-page-state.ts for
-  // the cascade's invariants). Terminal states render from THIS, never from
-  // ad-hoc controller-field checks in the JSX — the machine is shared with
-  // BrowserDocumentPage (document-page-state.ts), so the two pages' state
-  // vocabularies cannot drift apart silently.
   // The workspace's tag vocabulary for every tag row and the board's colour
   // by intent (ADR-0040 decision 5): read through the same files source the
   // document browser uses, once per workspace.
@@ -403,18 +422,6 @@ function useDaemonDocument(
   )
   const tagVocabulary = useTagVocabulary(tagsSource)
   const facetRegistry = useStencilRegistry(tagsSource)
-
-  const pageState = deriveDaemonPageState({
-    loading: controller.loading,
-    loadError: controller.loadError,
-    canvas,
-    documentCount: controller.documents.length,
-    // The path is LISTED, which is a different question from whether this
-    // connection syncs its content — an injected backend keeps the
-    // per-document contract and carries no content id at all.
-    documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
-    refusal: controller.refusal,
-  })
 
   const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal

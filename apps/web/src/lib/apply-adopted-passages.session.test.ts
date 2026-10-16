@@ -15,7 +15,11 @@ import {
 import { MARKDOWN_MAX_CHARS, type ProposedChange } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import {
+  COMMIT_DEBOUNCE_MS,
+  createDocumentSyncSession,
+  createGenerationCounters,
+} from './document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const BODY = '# Plan\n\nThe plan is to ship on Thursday.\n'
@@ -75,7 +79,7 @@ async function decide(
 ): Promise<void> {
   const command: EditorCommand = { kind: 'decide-proposal', proposalId: 'p1', decision, changes }
   session.onChange(applyCommand(session.getCanvas(), command), command)
-  await vi.advanceTimersByTimeAsync(300)
+  await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 }
 
 describe('adopting a proposed passage (ADR-0029 decision 6)', () => {

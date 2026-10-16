@@ -19,6 +19,7 @@ import { KeeperNotices } from '../components/connection/KeeperNotices.js'
 import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { REPLICA_SAVE_FAILED_COPY } from '../lib/replica-state-copy.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
+import { stubAppBadge } from '../test-utils/app-badge.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
@@ -175,21 +176,17 @@ describe('ReplicaReadPage save failure', () => {
   })
 
   it('sets the app badge while a refused edit is the only copy', async () => {
-    const setAppBadge = vi.fn(() => Promise.resolve())
-    const clearAppBadge = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'setAppBadge', { value: setAppBadge, configurable: true })
-    Object.defineProperty(navigator, 'clearAppBadge', { value: clearAppBadge, configurable: true })
+    const badge = stubAppBadge()
     try {
       store.save.mockRejectedValue(new Error('QuotaExceededError'))
       await openPlanAndEdit()
-      expect(setAppBadge).not.toHaveBeenCalled()
+      expect(badge.set).not.toHaveBeenCalled()
       await screen.findByRole('alert')
       await expectLoggedFailure('replica save failed')
-      // jsdom draws no favicon, but the badge is set from the same status.
-      await vi.waitFor(() => expect(setAppBadge).toHaveBeenCalledTimes(1))
+      // jsdom draws no favicon, but the badge is set from the same state.
+      await vi.waitFor(() => expect(badge.set).toHaveBeenCalledTimes(1))
     } finally {
-      Reflect.deleteProperty(navigator, 'setAppBadge')
-      Reflect.deleteProperty(navigator, 'clearAppBadge')
+      badge.restore()
     }
   })
 

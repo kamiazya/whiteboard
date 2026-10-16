@@ -29,6 +29,7 @@ import { writeMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  COMMIT_DEBOUNCE_MS,
   createDocumentSyncSession,
   createGenerationCounters,
   type DocumentSyncSession,
@@ -42,7 +43,7 @@ const TAIL = ' Omega paragraph closes it.'
 const BODY = `${HEAD}${MIDDLE}${TAIL}`
 const AT = { start: BODY.indexOf(PASSAGE), end: BODY.indexOf(PASSAGE) + PASSAGE.length }
 
-/** A keystroke's gap: well inside the session's 300ms debounce. */
+/** A keystroke's gap: well inside the session's commit debounce. */
 const KEYSTROKE_MS = 40
 
 interface Reading {
@@ -105,7 +106,7 @@ async function openSession(): Promise<{
       messages: [{ id: 'm1', body: 'why Friday?' }],
     },
   })
-  await vi.advanceTimersByTimeAsync(300)
+  await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
   expect(session.getThreadMarks().get('t1'), 'the fixture marks its passage').toEqual(AT)
   backend.pushed.length = 0
   return { session, backend }
@@ -139,7 +140,7 @@ async function measure(burst: (view: EditorView) => Promise<void>): Promise<Read
   const { session, backend } = await openSession()
   const view = daemonEditor(session)
   await burst(view)
-  await vi.advanceTimersByTimeAsync(300)
+  await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
   const range = session.getThreadMarks().get('t1')
   const text = session.getMarkdownBody()
   const reading: Reading = {

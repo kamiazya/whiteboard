@@ -43,7 +43,7 @@ import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTr
 import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
-import { useFavicon } from '../hooks/useFavicon.js'
+import { useAppBadge, useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
@@ -494,6 +494,7 @@ function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetr
     return () => setShellConnection(null)
   }, [state])
   useFavicon({ style: 'dot', status: faviconStatusOf(state), rects: NO_OUTLINE })
+  useAppBadge(state)
   return failed ? <ReplicaSaveFailedNotice onRetry={onRetry} /> : null
 }
 

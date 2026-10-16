@@ -3,6 +3,7 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
+import { stubAppBadge } from '../test-utils/app-badge.js'
 import {
   latestEditorProps,
   resetCapturedEditorProps,
@@ -28,9 +29,8 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 const created: FakeDocumentBackend[] = []
 
 // The favicon itself is a canvas jsdom cannot draw; the installed app's
-// badge is set from the same status, and only for `unsaved`.
-const setAppBadge = vi.fn(() => Promise.resolve())
-const clearAppBadge = vi.fn(() => Promise.resolve())
+// badge is set from the same state, while the keeper is not keeping.
+let badge: ReturnType<typeof stubAppBadge>
 
 async function renderPageAndEdit(): Promise<FakeDocumentBackend> {
   await act(async () => {
@@ -65,8 +65,7 @@ describe('DaemonDocumentPage when a write is refused', () => {
     window.localStorage.clear()
     resetCapturedEditorProps()
     created.length = 0
-    Object.defineProperty(navigator, 'setAppBadge', { value: setAppBadge, configurable: true })
-    Object.defineProperty(navigator, 'clearAppBadge', { value: clearAppBadge, configurable: true })
+    badge = stubAppBadge()
     vi.mocked(daemonApiClient.listWorkspaces).mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }],
     })
@@ -78,14 +77,13 @@ describe('DaemonDocumentPage when a write is refused', () => {
   })
   afterEach(() => {
     cleanup()
-    Reflect.deleteProperty(navigator, 'setAppBadge')
-    Reflect.deleteProperty(navigator, 'clearAppBadge')
+    badge.restore()
     vi.clearAllMocks()
   })
 
   it('reads a refused push as write-failed on the shell and unsaved on the badge', async () => {
     const backend = await renderPageAndEdit()
-    expect(setAppBadge).not.toHaveBeenCalled()
+    expect(badge.set).not.toHaveBeenCalled()
     await act(async () => {
       backend.handlers?.onAuthError?.('push')
       backend.handlers?.onError?.('storage-failure')
@@ -93,7 +91,7 @@ describe('DaemonDocumentPage when a write is refused', () => {
     await waitFor(() =>
       expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'write-failed' }),
     )
-    expect(setAppBadge).toHaveBeenCalled()
+    expect(badge.set).toHaveBeenCalled()
   })
 
   it('returns to synced and clears the badge once a write lands', async () => {
@@ -102,14 +100,14 @@ describe('DaemonDocumentPage when a write is refused', () => {
       backend.handlers?.onAuthError?.('push')
       backend.handlers?.onError?.('storage-failure')
     })
-    await waitFor(() => expect(setAppBadge).toHaveBeenCalled())
-    clearAppBadge.mockClear()
+    await waitFor(() => expect(badge.set).toHaveBeenCalled())
+    badge.clear.mockClear()
     await act(async () => {
       backend.handlers?.onWritesLanded?.()
     })
     await waitFor(() =>
       expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' }),
     )
-    expect(clearAppBadge).toHaveBeenCalled()
+    expect(badge.clear).toHaveBeenCalled()
   })
 })
