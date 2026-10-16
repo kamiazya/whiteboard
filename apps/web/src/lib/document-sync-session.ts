@@ -974,8 +974,8 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onBackendError(reason)
         deps.onStatusChange('error')
-        // A write that failed without its push rejecting (a store, a worker's
-        // keeper, a refused credential); the ledger tells it from a failed LOAD.
+        // A write that did not land but was not refused for its bytes (a store,
+        // a worker's keeper, a refused credential); the ledger tells it from a failed LOAD.
         if (reason === 'storage-failure') persistence.storageFailed()
       },
     })
