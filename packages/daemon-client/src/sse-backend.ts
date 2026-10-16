@@ -247,10 +247,11 @@ export class SseBackend implements DocumentBackend {
         } else handlers.onError?.('storage-failure')
       },
       // A refused credential is the caller's to surface, not this backend's
-      // to retry: the source has already stopped reconnecting.
-      onAuthRefused: () => {
+      // to retry. What still runs depends on the request refused — a refused
+      // push leaves the stream following — so the caller is told which.
+      onAuthRefused: (cause) => {
         if (this.cancelled) return
-        handlers.onAuthError?.()
+        handlers.onAuthError?.(cause)
       },
       onWriteRefused: (refusal) => this.writeRefused(refusal, handlers),
     }

@@ -433,7 +433,7 @@ describe('DaemonDocumentPage', () => {
 
     const backend = createdBackends[0]!
     await act(async () => {
-      backend.handlers?.onAuthError?.()
+      backend.handlers?.onAuthError?.('stream')
     })
 
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
@@ -442,6 +442,25 @@ describe('DaemonDocumentPage', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     // Editor chrome stays mounted — auth error never replaces the page.
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
+  })
+
+  it('keeps live sync on when only a push is refused, since the stream still follows', async () => {
+    await act(async () => {
+      renderWithRouterWrapper(
+        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
+
+    // A read-only credential: every write is refused, the stream is not.
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.('push')
+    })
+
+    // Not sync-off: whether the write landed is the session's write path to say.
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
   })
 
   it('reports a live auth error to the shell-status store (and clears on unmount)', async () => {
@@ -455,7 +474,7 @@ describe('DaemonDocumentPage', () => {
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
 
     await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
+      createdBackends[0]?.handlers?.onAuthError?.('stream')
     })
     // The App-mounted shell reads this to draw the chip and to light the
     // gear's attention dot.
@@ -480,7 +499,7 @@ describe('DaemonDocumentPage', () => {
     fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
+      createdBackends[0]?.handlers?.onAuthError?.('stream')
     })
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 

@@ -594,7 +594,7 @@ describe('useDocumentSync', () => {
       const { result } = renderHook(() => useDocumentSync(backend))
 
       act(() => {
-        backend._ctrl.handlers!.onAuthError?.()
+        backend._ctrl.handlers!.onAuthError?.('stream')
       })
 
       expect(result.current.syncStatus).toBe('error')
@@ -612,7 +612,7 @@ describe('useDocumentSync', () => {
       expect(result.current.syncStatus).toBe('connected')
 
       act(() => {
-        staleHandlers.onAuthError?.()
+        staleHandlers.onAuthError?.('stream')
       })
 
       expect(result.current.syncStatus).toBe('connected')
@@ -624,7 +624,7 @@ describe('useDocumentSync', () => {
       const { result } = renderHook(() => useDocumentSync(backend, { onAuthError }))
 
       act(() => {
-        backend._ctrl.handlers!.onAuthError?.()
+        backend._ctrl.handlers!.onAuthError?.('stream')
       })
 
       expect(onAuthError).toHaveBeenCalledTimes(1)

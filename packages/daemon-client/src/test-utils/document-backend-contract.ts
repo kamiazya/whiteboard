@@ -227,6 +227,8 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
     await settle()
 
     expect(rec.calls.filter((c) => c === 'authError')).toEqual(['authError'])
+    // A request this document's following depends on, never a push.
+    expect(['stream', 'subscribe']).toContain(rec.authCauses[0])
     // The refused reconnect, and no attempt after it.
     if (asksBefore !== undefined) expect(h.keeperAsks?.()).toBe(asksBefore + 1)
     clock?.cleanup()

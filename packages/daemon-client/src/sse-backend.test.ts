@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
-import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
+import type { AuthRefusalCause, DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { flush } from './test-utils/flush.js'
 
 function sseFrame(event: string, data: string): string {
@@ -372,6 +372,43 @@ describe('SseBackend', () => {
     await vi.waitFor(() => expect(sent.length).toBe(1))
     expect(sent[0]).toEqual({ doc: 'ws-1/canvas-a', message: { type: 'client_ready' } })
     expect(fake.calls.some((c) => c.url.includes('/api/sync/message'))).toBe(false)
+    backend.disconnect()
+  })
+})
+
+describe('SseBackend when the keeper refuses the credential', () => {
+  // A refused push leaves the stream following the document, so the caller
+  // has to hear WHICH request was refused to tell "cannot write here" from
+  // "live sync is off".
+  it('passes on which request the keeper refused', async () => {
+    const fake = createFakeTransport([])
+    const { handlers } = createHandlers()
+    const causes: AuthRefusalCause[] = []
+    const listeners: DocListener[] = []
+    const source = {
+      subscribe: (_doc: string, listener: DocListener) => {
+        listeners.push(listener)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () => Promise.resolve(null),
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      fake.transport,
+      source,
+    )
+    backend.connect({ ...handlers, onAuthError: (cause) => causes.push(cause) })
+    await flush()
+
+    const binary = listeners[0]!
+    binary.onAuthRefused?.('push')
+    binary.onAuthRefused?.('subscribe')
+    binary.onAuthRefused?.('stream')
+    expect(causes).toEqual(['push', 'subscribe', 'stream'])
     backend.disconnect()
   })
 })

@@ -351,6 +351,31 @@ describe('stream connect refusals', () => {
     hub.close()
   })
 
+  // Releasing one document of several ends no lifetime, so the pending open's
+  // refusal still describes the documents left, and halts the loop for them.
+  it("keeps a pending open's refusal for the documents a partial release leaves", async () => {
+    let requests = 0
+    let answerFirst: (res: Response) => void = () => {}
+    const fetch = async (input: string | URL | Request): Promise<Response> => {
+      if (!String(input).includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      requests += 1
+      if (requests === 1) return new Promise<Response>((resolve) => (answerFirst = resolve))
+      return new Response('', { status: 401 })
+    }
+    const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const b = vi.fn()
+    const releaseA = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: b })
+    await vi.waitFor(() => expect(requests).toBe(1))
+    releaseA()
+    answerFirst(new Response('', { status: 401 }))
+
+    await vi.waitFor(() => expect(b).toHaveBeenCalledTimes(1))
+    expect(b.mock.calls).toEqual([['stream']])
+    expect(requests).toBe(1)
+    hub.close()
+  })
+
   // A refusal that lands once nobody is subscribed describes nobody: kept, it
   // would refuse the next subscriber without the daemon being asked again.
   it('asks again for a document subscribing after a refusal nobody was left to hear', async () => {

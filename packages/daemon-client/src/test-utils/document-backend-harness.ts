@@ -5,6 +5,7 @@
  */
 import { expect, vi } from 'vitest'
 import type { DocumentBackend, DocumentBackendHandlers } from '../document-backend-contract.js'
+import type { AuthRefusalCause } from '../sse-stream-hub.js'
 
 export interface DocumentBackendHarness {
   backend: DocumentBackend
@@ -136,6 +137,8 @@ export interface LocalEdit {
 interface Recorded {
   handlers: DocumentBackendHandlers
   calls: string[]
+  /** The request each `authError` in `calls` was refused on, in order. */
+  authCauses: AuthRefusalCause[]
   /** Every snapshot and update delivered, in order. */
   delivered: Uint8Array[]
   /** The first snapshot delivered, or `null` before one was. */
@@ -144,10 +147,12 @@ interface Recorded {
 
 export function recorder(): Recorded {
   const calls: string[] = []
+  const authCauses: AuthRefusalCause[] = []
   const delivered: Uint8Array[] = []
   let snapshot: Uint8Array | null = null
   return {
     calls,
+    authCauses,
     delivered,
     snapshot: () => snapshot,
     handlers: {
@@ -166,7 +171,10 @@ export function recorder(): Recorded {
       onRestoreStarted: () => calls.push('restoreStarted'),
       onRestoreComplete: () => calls.push('restoreComplete'),
       onViewportRequest: () => calls.push('viewport'),
-      onAuthError: () => calls.push('authError'),
+      onAuthError: (cause) => {
+        calls.push('authError')
+        authCauses.push(cause)
+      },
       onWriteRefused: () => calls.push('writeRefused'),
     } satisfies DocumentBackendHandlers,
   }

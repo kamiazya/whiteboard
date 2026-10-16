@@ -959,8 +959,9 @@ export function createDocumentSyncSession(
         }
       },
 
-      onAuthError() {
-        if (isStale()) return
+      onAuthError(cause) {
+        // A refused push is a write that did not land (onError), not a refused session.
+        if (isStale() || cause === 'push') return
         deps.onStatusChange('error')
         try {
           deps.getOptions().onAuthError?.()
@@ -973,9 +974,8 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onBackendError(reason)
         deps.onStatusChange('error')
-        // A write failure that is not a rejected push arrives here — the
-        // browser backend's store, or a worker-backed transport's keeper (see
-        // persistence-ledger). The ledger tells it apart from a failed LOAD.
+        // A write that failed without its push rejecting (a store, a worker's
+        // keeper, a refused credential); the ledger tells it from a failed LOAD.
         if (reason === 'storage-failure') persistence.storageFailed()
       },
     })
