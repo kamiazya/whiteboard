@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, readdir } from 'node:fs/promises'
+import { cp, lstat, mkdir, readdir, stat } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { NATIVE_HOST_DIRNAME } from '../daemon/native-host/install.js'
@@ -66,18 +66,27 @@ export interface BackupRestoreOptions {
 }
 
 // Walk every existing path component of `p` from the deepest toward the root.
-// Returns true if any component is a symbolic link.
-// Used by CLI callers to fail-closed before passing paths to the helper, so
-// an ancestor symlink (e.g. `<safe>/link → /outside`) cannot redirect writes
-// to locations outside the operator's intended storage zone.
+// Returns true when the path's own final component is a symbolic link, or an
+// ancestor is one that someone other than root or this user could have placed.
+// Used by CLI callers to fail-closed before passing paths to the helper, so a
+// planted ancestor symlink (e.g. `<shared>/link → /outside`) cannot redirect
+// writes outside the operator's intended storage zone.
+//
+// An ancestor link is not refused outright because operating systems ship them
+// where nobody else can write: macOS's `/tmp → /private/tmp` and
+// `/var → /private/var` sit in a root-owned `/` that no one else may write, so
+// refusing every link would refuse the temp directory itself.
 async function hasAncestorSymlink(p: string): Promise<boolean> {
-  let current = resolve(p)
+  const target = resolve(p)
+  let current = target
   while (true) {
     const parent = dirname(current)
     if (parent === current) break // reached filesystem root
     try {
       const st = await lstat(current)
-      if (st.isSymbolicLink()) return true
+      if (st.isSymbolicLink() && (current === target || !(await isTrustedLinkParent(parent)))) {
+        return true
+      }
     } catch (err) {
       if (!isMissingFileError(err)) throw err
       // Component does not exist yet; check its parent.
@@ -85,6 +94,18 @@ async function hasAncestorSymlink(p: string): Promise<boolean> {
     current = parent
   }
   return false
+}
+
+// Whether only root or this user could have created an entry in `dir`: it is
+// owned by one of them and neither group- nor other-writable. A sticky bit
+// does not help — in a sticky `/tmp` anyone may still add a NEW link. Where
+// there are no POSIX owners to ask (Windows: `process.getuid` is absent) no
+// directory is trusted, so every symlink in the path is refused there.
+async function isTrustedLinkParent(dir: string): Promise<boolean> {
+  const uid = process.getuid?.()
+  if (uid === undefined) return false
+  const st = await stat(dir)
+  return (st.uid === 0 || st.uid === uid) && (st.mode & 0o022) === 0
 }
 
 export type OutputPathState = 'missing' | 'present' | 'unsafe'

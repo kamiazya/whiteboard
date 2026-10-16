@@ -11,11 +11,13 @@ import { operatorJsonLine } from './operator-json.js'
 // `server support-bundle` alike: the same output-folder check, the same
 // refusal sentences, and a file set read off the manifest's own `sections`.
 //
-// The folder is judged by `inspectOutputPath` (`requireDirectory`), which
-// refuses a symlink ANYWHERE in the path, not only as its deepest existing
-// part: `--output-dir` is the operator's own choice rather than a sandbox, but
-// a link planted above it would still carry the bundle somewhere the operator
-// did not name. A path that cannot be examined is a failure, never a refusal.
+// The folder is judged by `inspectOutputPath` (`requireDirectory`), the same
+// check backup and restore use: the folder itself may not be a symlink, and a
+// symlink above it is followed only when nobody but root or this user could
+// have placed it. `--output-dir` is the operator's own choice rather than a
+// sandbox, but a link planted in a shared folder above it would still carry
+// the bundle somewhere the operator did not name. A path that cannot be
+// examined is a failure, never a refusal.
 //
 // The folder is checked, and created when missing, BEFORE the bundle is
 // collected, so a slow doctor run is never spent on a folder that will be
@@ -28,7 +30,7 @@ import { operatorJsonLine } from './operator-json.js'
 // on, so no error text ever reaches them.
 
 const REFUSED_UNSAFE =
-  'Could not write support bundle. The output path must be a directory, and no part of it a symlink.'
+  'Could not write support bundle. The output path must be a real directory, not reached through a symlink in a folder other users can write.'
 const REFUSED_NOT_EMPTY = 'Could not write support bundle. The output directory must be empty.'
 const FAILED = 'Could not write support bundle.'
 

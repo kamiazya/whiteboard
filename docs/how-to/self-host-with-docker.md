@@ -847,7 +847,7 @@ deployment state with maintainers without exposing credentials or raw paths.
 after stopping it:
 
 ```sh
-# Collect a bundle into /data/bundles/2025-01-01 (output dir must be missing or empty, with no symlink in its path).
+# Collect a bundle into /data/bundles/2025-01-01 (output dir must be missing or empty, and not reached through a symlink in a folder other users can write).
 docker exec whiteboard-server node dist/cli/index.js server support-bundle \
   --json \
   --output-dir=/data/bundles/2025-01-01

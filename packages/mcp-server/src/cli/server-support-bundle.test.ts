@@ -16,6 +16,7 @@ import {
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
 import {
@@ -27,8 +28,7 @@ import {
 let tmpRoot: string
 
 beforeEach(async () => {
-  // Canonicalize so paths don't traverse system-level symlinks
-  // (e.g. /var → /private/var on macOS) that would trip the ancestor-symlink guard.
+  // Canonicalized, so every symlink a case meets is one the case planted.
   tmpRoot = await realpath(await mkdtemp(join(tmpdir(), 'wb-server-support-bundle-test-')))
 })
 afterEach(async () => {
@@ -393,9 +393,9 @@ describe('runServerSupportBundle', () => {
     expect(outcome.stdout).toBe('')
   })
 
-  it('ancestor symlink in output path → exit 1', async () => {
+  it('ancestor symlink others could have planted in output path → exit 1', async () => {
     const realDir = join(tmpRoot, 'real-anc')
-    const linkDir = join(tmpRoot, 'link-anc')
+    const linkDir = join(await makeWritableByOthers(join(tmpRoot, 'shared')), 'link-anc')
     await mkdir(realDir)
     await symlink(realDir, linkDir)
 

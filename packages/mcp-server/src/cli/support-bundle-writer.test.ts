@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
@@ -92,19 +93,19 @@ const REFUSALS: readonly Refusal[] = [
     },
   },
   {
-    name: 'a missing directory below a symlinked parent',
+    name: 'a missing directory below a symlink in a shared folder',
     arrange: async () => {
       await mkdir(at('real'))
-      await symlink(at('real'), at('link'))
-      return { outputDir: at('link', 'bundle'), untouched: at('real') }
+      await symlink(at('real'), join(await makeWritableByOthers(at('shared')), 'link'))
+      return { outputDir: at('shared', 'link', 'bundle'), untouched: at('real') }
     },
   },
   {
-    name: 'a missing directory two levels below a symlinked ancestor',
+    name: 'a missing directory two levels below a symlink in a shared folder',
     arrange: async () => {
       await mkdir(at('real', 'sub'), { recursive: true })
-      await symlink(at('real'), at('link'))
-      return { outputDir: at('link', 'sub', 'bundle'), untouched: at('real', 'sub') }
+      await symlink(at('real'), join(await makeWritableByOthers(at('shared')), 'link'))
+      return { outputDir: at('shared', 'link', 'sub', 'bundle'), untouched: at('real', 'sub') }
     },
   },
   {
@@ -130,7 +131,7 @@ describe('both support-bundle commands refuse an unusable output folder alike', 
     }
     expect(answers).toEqual(
       new Set([
-        'Could not write support bundle. The output path must be a directory, and no part of it a symlink.\n',
+        'Could not write support bundle. The output path must be a real directory, not reached through a symlink in a folder other users can write.\n',
         'Could not write support bundle. The output directory must be empty.\n',
         'Could not write support bundle.\n',
       ]),
@@ -186,6 +187,17 @@ describe('both support-bundle commands write through the one writer', () => {
         '"platform":{"os":"linux","nodeVersion":"v22.0.0"},"mode":"server-mode",' +
         '"sections":["status.json","doctor.json","record.json"]}\n',
     )
+  })
+
+  // The operating system's own links (macOS's `/tmp -> /private/tmp`) live in
+  // folders only root may write; a link in this user's own folder stands in.
+  it('both follow a symlink in a folder only this user can write', async () => {
+    await mkdir(at('real'))
+    await symlink(at('real'), at('link'))
+
+    expect((await viaDaemon(at('link', 'daemon-out'))).exitCode).toBe(0)
+    expect((await viaServer(at('link', 'server-out'))).exitCode).toBe(0)
+    expect((await readdir(at('real'))).sort()).toEqual(['daemon-out', 'server-out'])
   })
 
   // A command that writes a file of its own has a second output-folder check
