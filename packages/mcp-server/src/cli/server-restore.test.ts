@@ -14,8 +14,9 @@ import { runServerRestore } from './server-restore.js'
 let tmpRoot: string
 
 beforeEach(async () => {
-  // Canonicalize via realpath so paths don't traverse system-level symlinks
-  // (e.g. /var → /private/var on macOS) that would trip hasAncestorSymlink.
+  // Resolved, so the only symlinks on a path these tests build are the ones a
+  // test plants: a refusal is then that link's, never the platform's own
+  // temp-dir link (macOS's /var → /private/var).
   tmpRoot = await realpath(await mkdtemp(join(tmpdir(), 'wb-server-restore-test-')))
 })
 afterEach(async () => {
