@@ -4,32 +4,19 @@
  * leave behind. Each is a line whose absence changes nothing a happy-path
  * test can see.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserPersistenceState } from './browser-persistence-state.js'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import {
+  flushMicrotasks,
+  openTestSession,
+  snapshotOf,
+} from '../test-utils/document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
   edges: [],
-}
-
-function snapshotOf(value: SpatialCanvas): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, value)
-  return doc.export({ mode: 'snapshot' })
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 30; i++) await Promise.resolve()
 }
 
 beforeEach(() => {
@@ -40,31 +27,12 @@ afterEach(() => {
 })
 
 function openSession(checkpoints?: { signal: () => void; flush: () => void }) {
-  let handlers: DocumentBackendHandlers | null = null
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () => Promise.resolve(),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const persistence: BrowserPersistenceState['kind'][] = []
   const onStatusChange = vi.fn()
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange,
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-    onPersistenceChange: (state) => persistence.push(state.kind),
-    checkpoints,
+  const s = openTestSession({
+    snapshot: snapshotOf(canvas),
+    deps: { onStatusChange, ...(checkpoints === undefined ? {} : { checkpoints }) },
   })
-  session.connect()
-  handlers!.onSnapshot(snapshotOf(canvas))
-  return { session, persistence, onStatusChange, handlers: handlers! as DocumentBackendHandlers }
+  return { ...s, onStatusChange }
 }
 
 function withVisibility(state: DocumentVisibilityState): () => void {
@@ -114,7 +82,7 @@ describe('a session that has been replaced or disposed', () => {
   it('ignores an edit reported by a body binding of a document a snapshot replaced', () => {
     const s = openSession()
     const stale = s.session.getBodyBinding()!
-    s.handlers.onSnapshot(snapshotOf(canvas))
+    s.handlers().onSnapshot(snapshotOf(canvas))
     const current = s.session.getBodyBinding()!
     expect(current).not.toBe(stale)
 
@@ -133,7 +101,7 @@ describe('a session that has been replaced or disposed', () => {
     s.session.dispose()
     const reported = s.onStatusChange.mock.calls.length
 
-    s.handlers.onWritesLanded?.()
+    s.handlers().onWritesLanded?.()
     expect(s.onStatusChange).toHaveBeenCalledTimes(reported)
     expect(s.persistence).toEqual([])
   })
