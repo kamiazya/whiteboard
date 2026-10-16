@@ -2,8 +2,10 @@ language js
 
 // Executable half of three flake shapes from
 // .claude/skills/steward/reference/flake-shapes.md,
-// plus three shapes that are not flakes but fail the same way: the run reports
-// green while checking less than it appears to.
+// plus four families that are not flakes but fail the same way — `.only`, an
+// un-awaited async assertion, an un-awaited `expectLoggedFailure` claim, and
+// chronology in a test title: the run reports green while checking less than
+// it appears to.
 // Guarded by .claude/scripts/biome-plugin.test.mjs, which reads the rules OUT
 // OF THIS FILE and requires the bad fixture to reach each one.
 // Adding a shape is the `executable-rungs` resource of the
