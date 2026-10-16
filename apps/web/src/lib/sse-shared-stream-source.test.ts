@@ -461,4 +461,27 @@ describe('a listener joining a document in this tab', () => {
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
     expect(onConnectionChange).not.toHaveBeenCalled()
   })
+  // Releasing and subscribing again is how a refused document is retried, so
+  // news that arrives for it in between must not answer the retry.
+  it('is not told of a refusal that arrived after the tab let the document go', () => {
+    const source = createSharedSseStreamSource(origin('joiner-late-news'))
+    const off = source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    off?.()
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' })
+
+    const refused = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: refused })
+    expect(refused).not.toHaveBeenCalled()
+  })
+
+  it('starts from nothing after the page is hidden', () => {
+    const source = createSharedSseStreamSource(origin('joiner-pagehide'))
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' })
+    globalThis.dispatchEvent(new Event('pagehide'))
+
+    const refused = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: refused })
+    expect(refused).not.toHaveBeenCalled()
+  })
 })

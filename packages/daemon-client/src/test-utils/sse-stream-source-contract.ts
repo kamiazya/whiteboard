@@ -449,6 +449,35 @@ function refusedJoinerCases(
     offSecond()
     h.cleanup()
   })
+
+  // A drop is not a recovery: the stream that comes back still asks nothing
+  // for a refused document, so its refusal still describes it.
+  it('still tells a listener joining a refused document after the stream dropped', async () => {
+    const h = await create()
+    const doc = nextIsolatedDoc()
+    h.refuseSubscribe(doc)
+    let refusedFirst = 0
+    const firstStates: boolean[] = []
+    const offFirst = h.source.subscribe(
+      doc,
+      listenerOf({
+        onAuthRefused: () => refusedFirst++,
+        onConnectionChange: (connected) => firstStates.push(connected),
+      }),
+    )
+    await until(() => refusedFirst === 1)
+    const heardBefore = firstStates.length
+    h.dropStream()
+    await until(() => firstStates.length > heardBefore)
+
+    let refusedSecond = 0
+    const offSecond = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refusedSecond++ }))
+
+    expect(refusedSecond).toBe(1)
+    offFirst()
+    offSecond()
+    h.cleanup()
+  })
 }
 
 /** A refused push is announced to whoever holds the document, and to nobody later. */
