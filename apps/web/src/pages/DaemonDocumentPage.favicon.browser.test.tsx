@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../index.css'
 import { renderFavicon } from '../lib/favicon.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { createUserSettingsStore, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 
@@ -60,7 +60,7 @@ describe('the daemon page tab icon', () => {
     cleanup()
     vi.unstubAllGlobals()
     resetShellStatusForTests()
-    window.localStorage.clear()
+    window.localStorage.removeItem(STORAGE_KEY)
   })
 
   it('draws the offline icon once the stream refuses the credential', async () => {

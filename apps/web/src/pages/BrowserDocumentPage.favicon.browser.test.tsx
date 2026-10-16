@@ -11,7 +11,7 @@ import { AppShell } from '../components/AppShell.js'
 import { renderFavicon } from '../lib/favicon.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { resetShellStatusForTests } from '../lib/shell-status-store.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { createUserSettingsStore, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -35,7 +35,7 @@ describe('the browser page tab icon', () => {
   afterEach(() => {
     cleanup()
     resetShellStatusForTests()
-    window.localStorage.clear()
+    window.localStorage.removeItem(STORAGE_KEY)
   })
 
   it('draws the offline icon once the store refuses a write', async () => {
