@@ -540,7 +540,7 @@ describe('runServerSupportBundle', () => {
 // A failure the filesystem reports carries the path it failed on in its
 // message, so the generic sentence is the only thing either catch may print.
 describe('runServerSupportBundle on a filesystem failure', () => {
-  const GENERIC = 'support bundle failed\n'
+  const GENERIC = 'Could not write support bundle.\n'
   const SENTINEL = 'written by someone else\n'
 
   it('prints only the generic sentence when the output dir cannot be prepared', async () => {

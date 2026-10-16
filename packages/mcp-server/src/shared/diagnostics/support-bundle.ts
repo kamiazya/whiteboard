@@ -49,7 +49,7 @@ function assertIsoTimestamp(value: string, label: string): string {
 
 export const SUPPORT_BUNDLE_SCHEMA_VERSION = 1
 
-const daemonBundleSectionSchema = z.enum(['manifest.json', 'status.json', 'doctor.json'])
+const daemonBundleSectionSchema = z.enum(['status.json', 'doctor.json'])
 
 // Server mode carries the record it was started from.
 const serverBundleSectionSchema = z.enum(['status.json', 'doctor.json', 'record.json'])
@@ -68,18 +68,20 @@ const manifestCommon = {
     .strict(),
 }
 
+const daemonBundleManifestSchema = z
+  .object({
+    ...manifestCommon,
+    mode: z.literal('daemon'),
+    sections: z.array(daemonBundleSectionSchema),
+  })
+  .strict()
+
 // The one declaration of what `manifest.json` may hold, whichever command
 // wrote it: `mode` says which bundle this is, and with it which sections.
 // Names of the files included in a bundle (excluding the manifest itself),
 // pinned to an enum so a new section requires explicit schema acknowledgement.
 export const supportBundleManifestSchema = z.discriminatedUnion('mode', [
-  z
-    .object({
-      ...manifestCommon,
-      mode: z.literal('daemon'),
-      sections: z.array(daemonBundleSectionSchema),
-    })
-    .strict(),
+  daemonBundleManifestSchema,
   z
     .object({
       ...manifestCommon,
@@ -89,6 +91,15 @@ export const supportBundleManifestSchema = z.discriminatedUnion('mode', [
     .strict(),
 ])
 type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
+
+// A bundle as the writer takes it: the manifest, and one serialised file per
+// section that manifest lists. Keyed by the manifest's own section names, so a
+// mode's file set follows its branch of the schema and nothing else.
+export type SupportBundle = SupportBundleManifest extends infer M
+  ? M extends SupportBundleManifest
+    ? { readonly manifest: M; readonly sections: Readonly<Record<M['sections'][number], string>> }
+    : never
+  : never
 
 // Redacted status section. The input IS the status result, so a REQUIRED field
 // added to `daemon status --json` is a type error here until the bundle decides
@@ -191,31 +202,18 @@ export interface SupportBundleInput {
   doctor: SupportBundleDoctorInput
 }
 
-export interface SupportBundle {
-  manifest: SupportBundleManifest
-  // Deterministic file map. Keys are stable section names; values
-  // are JSON strings exactly as a maintainer would write
-  // to disk. Iteration order is the same as `manifest.sections`
-  // plus the manifest itself, so a directory write produces a
-  // deterministic layout.
-  files: {
-    'manifest.json': string
-    'status.json': string
-    'doctor.json': string
-  }
-}
-
 export class SupportBundleError extends Error {
   override readonly name = 'SupportBundleError'
 }
 
-export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
+export function buildSupportBundle(
+  input: SupportBundleInput,
+): Extract<SupportBundle, { manifest: { mode: 'daemon' } }> {
   // Validate manifest shape up front so a malformed `createdAt`
   // fails closed before we serialize any section. Echoing the input
   // is intentionally avoided — `SupportBundleError.message` is
-  // generic so a future support-bundle CLI cannot leak the bad
-  // value.
-  const manifestParsed = supportBundleManifestSchema.safeParse({
+  // generic so the command printing it cannot leak the bad value.
+  const manifestParsed = daemonBundleManifestSchema.safeParse({
     schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
     mode: 'daemon',
     createdAt: input.createdAt,
@@ -233,8 +231,7 @@ export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
 
   return {
     manifest,
-    files: {
-      'manifest.json': `${JSON.stringify(manifest)}\n`,
+    sections: {
       'status.json': `${JSON.stringify(status)}\n`,
       'doctor.json': `${JSON.stringify(doctor)}\n`,
     },
