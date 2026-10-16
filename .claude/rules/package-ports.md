@@ -122,7 +122,7 @@ in `arch-lint` fails on a second spelling of the stored key.
 `docRefKey` lives here for the same reason. It is a STORED key, and two
 stores that spell it differently cannot read each other's documents — with
 nothing to say so at compile time. `workspaceIdOfStoredDocKey` is its exact inverse (the sync wire key is another
-grammar, daemon-client's `sse-stream-hub.ts`), and
+grammar, daemon-client's `sync-key.ts`), and
 `doc-ref-key-one-place.test.ts` fails on any other spelling of the key outside
 ports (frozen migrations skipped).
 
