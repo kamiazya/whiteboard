@@ -30,8 +30,12 @@ afterEach(() => {
 /** A session over a backend whose pushes never settle, as a refused one's do not. */
 function openSession() {
   let authErrors = 0
+  let pushes = 0
   const { session, handlers, statuses, persistenceStates } = openTestSession({
-    push: () => new Promise<void>(() => {}),
+    push: () => {
+      pushes += 1
+      return new Promise<void>(() => {})
+    },
     snapshot: snapshotOf(canvas),
     deps: {
       getOptions: () => ({
@@ -45,6 +49,7 @@ function openSession() {
     session,
     handlers,
     authErrors: () => authErrors,
+    pushes: () => pushes,
     // What a daemon-kept page derives from the same three facts.
     health: () =>
       sessionHealthOf(
@@ -62,6 +67,8 @@ describe('a refused credential', () => {
     vi.useFakeTimers()
     const s = openSession()
     await editAndPush(s.session, canvas, MOVE)
+    // A refusal only means something about a push that was actually sent.
+    expect(s.pushes()).toBe(1)
     // The order a refused push produces with the stream still open: the
     // refusal, then the write that did not land.
     s.handlers().onAuthError?.('push')
@@ -80,6 +87,7 @@ describe('a refused credential', () => {
     vi.useFakeTimers()
     const s = openSession()
     await editAndPush(s.session, canvas, MOVE)
+    expect(s.pushes()).toBe(1)
     s.handlers().onAuthError?.(cause)
     await flushMicrotasks()
 
