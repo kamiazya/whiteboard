@@ -233,11 +233,11 @@ function parseRequiredAuth(
   return { ok: true, jwtIssuer, jwtAudience, jwksUri }
 }
 
-/** The bind port: absent defaults, present-but-out-of-range refuses. */
+/** The bind port: absent or blank defaults, present-but-out-of-range refuses. */
 function parsePortTuning(
   env: NodeJS.ProcessEnv,
 ): { ok: true; port: number } | ServerModeEnvConfigResult {
-  const portRaw = env[ENV_KEYS.PORT]
+  const portRaw = optional(env, ENV_KEYS.PORT)
   const port = portRaw === undefined ? 3099 : parsePort(portRaw)
   if (port === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
   return { ok: true, port }

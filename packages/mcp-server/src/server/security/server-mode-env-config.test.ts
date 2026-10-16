@@ -146,11 +146,21 @@ describe('parseServerModeEnvConfig — valid config', () => {
     expect(result.config.jwtScopeClaim).toBe('scp')
   })
 
-  it('whitespace-only PORT fails with port_out_of_range (fail-closed: set but empty is invalid)', () => {
+  // Blank is unset here as for every other optional field, and as the image's
+  // own HEALTHCHECK reads it (`PORT||3099`): a compose `${VAR}` left unset
+  // interpolates to an empty string, which must not abort startup.
+  it('whitespace-only PORT uses default 3099', () => {
     const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_PORT: '   ' })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.code).toBe('server_mode_env.port_out_of_range')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.port).toBe(3099)
+  })
+
+  it('space-padded PORT is trimmed and accepted', () => {
+    const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_PORT: ' 8080 ' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.port).toBe(8080)
   })
 
   it('whitespace-only JWT_CLOCK_SKEW_SECONDS uses default 60', () => {
@@ -676,11 +686,11 @@ describe('parseServerModeEnvConfig — PBT', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseServerModeEnvConfig — deterministic contract anchors', () => {
-  it('whitespace-only PORT fails with port_out_of_range (set but empty = invalid, not unset)', () => {
-    const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_PORT: '   ' })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.code).toBe('server_mode_env.port_out_of_range')
+  it('empty-string PORT uses default 3099 (blank = unset, not invalid)', () => {
+    const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_PORT: '' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.port).toBe(3099)
   })
 
   it('whitespace-only EXTERNAL_URL is treated as missing', () => {

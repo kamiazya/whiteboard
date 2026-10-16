@@ -88,10 +88,10 @@ pnpm test --project <name>              # nearest layer (names: test-layer-selec
 pnpm test:browser                       # every real-browser project
 pnpm test:browser:replay                # + DOM replay of EVERY test in .vitest/index.html (~1MB per 100 tests)
 pnpm test:browser:trace <file>          # + Playwright DOM snapshots — refuses a run naming no file (23GB)
-for i in 1 2 3 4 5; do pnpm exec vitest run <file>; done   # what CI's stress step does
+node .claude/scripts/stress-changed.mjs   # CI's stress job: 5 fresh runs + one --repeats=3 pass per changed file
 pnpm lint                               # includes the GritQL flake-shape plugin
 pnpm test:scripts                       # plugin fixture guard + quarantine budget
-pnpm --filter <pkg> exec stryker run --mutate src/<file>.ts  # one file; bare render is ~3.5h of mutants
+STRYKER_MUTATE=src/<file>.ts pnpm --filter <pkg> exec stryker run --mutate src/<file>.ts  # one file; bare render is ~3.5h of mutants
 pnpm mutation:contracts | pnpm mutation:render             # whole Stryker lanes (resources/property-and-mutation.md)
 node .claude/scripts/flake-watch.mjs    # tests failing ≥2 main runs in 14 days
 ```

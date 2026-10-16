@@ -1,7 +1,7 @@
 # Link documents and see what links back
 
 Connect documents to each other, and read those connections from the other
-side. Works against a daemon-backed workspace.
+side. Works the same whether the browser or the daemon keeps the workspace.
 
 ## Write a link
 
