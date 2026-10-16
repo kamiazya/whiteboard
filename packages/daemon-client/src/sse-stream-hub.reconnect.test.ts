@@ -333,4 +333,34 @@ describe('stream connect refusals', () => {
     expect(again).not.toHaveBeenCalled()
     hub.close()
   })
+
+  // A refusal that lands once nobody is subscribed describes nobody: kept, it
+  // would refuse the next subscriber without the daemon being asked again.
+  it('asks again for a document subscribing after a refusal nobody was left to hear', async () => {
+    let requests = 0
+    let answerFirst: (res: Response) => void = () => {}
+    let refusalRead: () => void = () => {}
+    const read = new Promise<void>((resolve) => {
+      refusalRead = resolve
+    })
+    const fetch = async (input: string | URL | Request): Promise<Response> => {
+      if (!String(input).includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      requests += 1
+      if (requests === 1) return new Promise<Response>((resolve) => (answerFirst = resolve))
+      return new Response(new ReadableStream<Uint8Array>(), { status: 200 })
+    }
+    const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const release = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(requests).toBe(1))
+    release()
+    // The hub cancels a refused open's body, which is how the test knows it has read the answer.
+    answerFirst(new Response(new ReadableStream({ cancel: () => refusalRead() }), { status: 401 }))
+    await read
+
+    const refused = vi.fn()
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
+    await vi.waitFor(() => expect(requests).toBe(2))
+    expect(refused).not.toHaveBeenCalled()
+    hub.close()
+  })
 })

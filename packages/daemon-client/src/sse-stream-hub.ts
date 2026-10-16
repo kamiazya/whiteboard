@@ -559,7 +559,10 @@ export class SseStreamHub implements SseStreamSource {
       // An unconsumed body holds the connection open under undici, and the
       // reconnect loop would repeat that on every failed attempt.
       void res.body?.cancel().catch(() => {})
-      if (isAuthRefusal(res.status)) {
+      // Only while something is subscribed: a refusal that lands after the
+      // last release describes nobody, and kept it would refuse the next
+      // subscriber without the daemon being asked again.
+      if (isAuthRefusal(res.status) && this.docs.size > 0) {
         this.streamRefused = true
         this.announceAuthRefused(this.docs.values(), 'stream')
       }
