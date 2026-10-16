@@ -15,14 +15,13 @@
  * refuses a workspace the credential may not enter, rather than on the
  * stream: a stream refused halts the worker's stream for the origin until
  * every claim on it is released, which the other cases' reconnects would
- * otherwise trip over. `refuseStream` is the stream-level refusal, and lets go
- * of the harness's own claim so that release can happen.
- * For the same reason `streamOpens` counts the case's own subscribes, not
+ * otherwise trip over. For the same reason `keeperAsks` counts the case's own subscribes, not
  * stream opens: on a shared stream, being asked for again IS a backend's
  * reconnect, and a refused workspace must not be asked for again on the
- * reopens other cases cause. `failsNextStreamOpen` fails that subscribe as a
+ * reopens other cases cause. `failsNextKeeperAsk` fails that subscribe as a
  * dropped request, which the hub answers by reopening the stream after its
- * backoff. No `sentUpdates`: the
+ * backoff. `refuseStream` is the stream-level refusal, and lets go of the
+ * harness's own claim so that release can happen. No `sentUpdates`: the
  * worker merges a push into its replica before writing onward, so arbitrary
  * bytes never reach the daemon — `localEdit` is a real Loro edit instead.
  * No `refusesNextWrite`: the worker announces a refusal only once it has
@@ -292,8 +291,8 @@ async function harness(): Promise<DocumentBackendHarness> {
     },
     refuseStream: () => refuseStream(holdStream),
     anotherBackend: () => anotherBackend(workspaceId, source),
-    streamOpens: () => subscribesAsked.get(`workspace:${workspaceId}`) ?? 0,
-    failsNextStreamOpen: () => {
+    keeperAsks: () => subscribesAsked.get(`workspace:${workspaceId}`) ?? 0,
+    failsNextKeeperAsk: () => {
       failNextSubscribe.add(`workspace:${workspaceId}`)
     },
     localEdit: (snapshot) => tabEdit(workspaceId, keeper, snapshot),

@@ -210,8 +210,8 @@ function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
     },
     anotherBackend: () =>
       new SseBackend(`ws-other-${++otherSeq}`, 'canvas-b', BASE, { fetch: daemonFetch(daemon) }),
-    streamOpens: () => daemon.streamOpens,
-    failsNextStreamOpen: () => {
+    keeperAsks: () => daemon.streamOpens,
+    failsNextKeeperAsk: () => {
       daemon.failNextStream = true
     },
     keeperWrites: (live) => {
