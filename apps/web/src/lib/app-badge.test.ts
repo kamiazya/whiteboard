@@ -50,6 +50,17 @@ describe('updateAppBadge', () => {
     if (isNotKeeping(state)) expect(shown).toBe(true)
   })
 
+  it('puts back a Badging API the stub shadowed when it restores', () => {
+    const original = () => Promise.resolve()
+    Object.defineProperty(navigator, 'setAppBadge', { value: original, configurable: true })
+    try {
+      stubAppBadge().restore()
+      expect(navigator.setAppBadge).toBe(original)
+    } finally {
+      Reflect.deleteProperty(navigator, 'setAppBadge')
+    }
+  })
+
   it('is a no-op where the Badging API is unavailable', () => {
     expect(() => updateAppBadge({ keeper: 'browser', storage: 'failed' })).not.toThrow()
   })

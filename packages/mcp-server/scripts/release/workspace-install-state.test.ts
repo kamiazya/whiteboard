@@ -98,6 +98,10 @@ const PINNED_PNPM_VERSION = PINNED_PACKAGE_MANAGER.replace(/^pnpm@/, '').replace
 // version it has not cached, so with an empty cache and no network the
 // premise of the cases below is absent; they skip and say why rather than
 // failing on a module corepack never downloaded. Probed, never inferred.
+// pnpm on Windows is a `.cmd` shim, which only a shell can launch.
+const PNPM_SPAWN = { encoding: 'utf-8', shell: process.platform === 'win32' } as const
+const PROBE_TIMEOUT_MS = 60_000
+
 function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
   const dir = mkdtempSync(join(tmpdir(), 'wb-pinned-pnpm-'))
   try {
@@ -105,7 +109,13 @@ function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
       join(dir, 'package.json'),
       JSON.stringify({ private: true, packageManager: PINNED_PACKAGE_MANAGER }),
     )
-    const result = spawnSync('pnpm', ['--version'], { cwd: dir, encoding: 'utf-8' })
+    const result = spawnSync('pnpm', ['--version'], {
+      ...PNPM_SPAWN,
+      cwd: dir,
+      // A corepack fetch that stalls must read as a pnpm that cannot start,
+      // not hold test collection open.
+      timeout: PROBE_TIMEOUT_MS,
+    })
     if (result.status === 0) return { runs: true }
     const output = `${result.stderr}${result.stdout}`.trim()
     // A launcher crash prints the throwing source line first; the error line names the cause.
@@ -121,7 +131,7 @@ const PINNED_PNPM = probePinnedPnpm()
 
 describe('a real pnpm deploy --legacy --prod', () => {
   function pnpm(cwd: string, args: string[]): string {
-    const result = spawnSync('pnpm', args, { cwd, encoding: 'utf-8' })
+    const result = spawnSync('pnpm', args, { ...PNPM_SPAWN, cwd })
     expect(result.status, `${args.join(' ')}\n${result.stderr}${result.stdout}`).toBe(0)
     return result.stdout
   }
