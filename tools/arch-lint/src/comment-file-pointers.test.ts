@@ -132,6 +132,17 @@ const DELIBERATE: Record<string, string> = {
     'lists the per-surface resolvers this theme layer replaced; the sentence is the record of what they were',
   'packages/canvas-render/src/theme/spatial-theme.ts#spatial-scene-appearance.ts': 'same list',
 
+  // The `.mjs` half: scripts, workflows and their tests, where an illustration
+  // or a fixture's own file name is written the way a pointer is.
+  '.claude/scripts/flake-watch-lib.mjs#path/to/x.test.ts':
+    'the doc comment illustrates the annotation format the parser strips, not a file',
+  'packages/mcp-server/scripts/mutation/covering-tests.mjs#./x.ts':
+    'an illustration of the `.js`-to-`.ts` specifier mapping the function performs',
+  '.claude/scripts/complexity-of.test.mjs#m.mjs':
+    'the fixture file the test writes into its own temp directory',
+  '.claude/workflows/lib/explain-design.test.mjs#a.ts':
+    'quotes the malformed design value the test feeds in, not a path',
+
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
   // SUBJECT is the file's absence — a rule explaining why a surface went.
   // Correcting the name would make each say the opposite of what it says.
@@ -193,10 +204,12 @@ function unresolvedOnLine(
  * Source, the `.claude` markdown, and the documents a package keeps beside its
  * code (README, and `apps/web`'s DESIGN and BRAND): a README is the front door
  * and names `src` files the way a comment does, with no comment marker.
+ * Source includes `.mjs`: the build steps, smokes and gates are scripts, and a
+ * reader checking what one protects follows its comments the same way.
  */
 function isScannedFile(path: string): boolean {
   return (
-    /\.tsx?$/.test(path) ||
+    /\.(?:tsx?|mjs)$/.test(path) ||
     (path.startsWith('.claude/') && path.endsWith('.md')) ||
     /^(?:packages|apps)\/[^/]+\/(?:README|DESIGN|BRAND)\.md$/.test(path)
   )
@@ -243,6 +256,9 @@ describe('a filename in a comment, backticked or a bare test file, names a file 
     expect(UNRESOLVED.length).toBeLessThan(40)
     expect(tracked.filter(isScannedFile)).toContain('packages/model/README.md')
     expect(tracked.filter(isScannedFile)).toContain('apps/web/DESIGN.md')
+    expect(tracked.filter(isScannedFile)).toContain(
+      'tests/e2e/distribution/packaged-server-mode-entrypoint-smoke.mjs',
+    )
   })
 
   it('has no pointer at a file that is gone', () => {

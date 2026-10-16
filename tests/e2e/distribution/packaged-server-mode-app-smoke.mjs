@@ -236,7 +236,7 @@ try {
   console.log('[server-mode-smoke] scenario 2 (origin normalization): PASS')
 
   // --- Scenario 2b: origin normalization wired through app composition ---
-  // Guards against a regression where buildServerModeApp passes raw
+  // Guards against a regression where `createApp` passes raw
   // options.allowedOrigins instead of exposure.allowedOrigins to the MCP origin
   // middleware. The app receives the :443 form; the normalized origin
   // (https://norm-check.example.com) must pass the gate and reach the auth

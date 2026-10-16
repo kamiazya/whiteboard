@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Build step: copies the vendored export font asset into dist so the
 // packaged/dev-daemon layout (dist/assets/fonts/...) matches what
-// resolveExportFontFile (src/server/export/export-font.ts) actually
+// `resolveExportFontFaces` (src/server/export/export-font.ts) actually
 // resolves at runtime. Runs AFTER tsdown (tsdown's clean option would otherwise
 // wipe a copy placed before it), mirroring copy-widget-into-dist.mjs's
 // ordering.

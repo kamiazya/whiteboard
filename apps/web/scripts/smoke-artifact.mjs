@@ -152,14 +152,16 @@ function main() {
     assert(!csp.match(/script-src[^;]*'unsafe-eval'/), "CSP: no 'unsafe-eval' in script-src")
   }
 
-  // ── Preview-origin rejection wired up in the bundle ───────────────────────────
-  // Static analysis: verify the built JS bundle includes the origin-classification
-  // string constant and the browser-origin access that App.tsx passes at bootstrap.
-  // If App.tsx is changed to use resolveProviderStateFromRaw (which has no
-  // browserOrigin check) the bundle will still contain `whiteboard.pages.dev` but
-  // will not contain a `location.origin` access near the bootstrap call — however
-  // the more reliable signal is that both strings must survive the build.
-  console.log('\n[smoke-artifact] preview-origin rejection wired up in bundle')
+  // ── Origin-policy inputs survive the build ─────────────────────────────────────
+  // Static analysis, and only a presence check: the built JS must still carry
+  // the pages-domain constant `classifyPagesOrigin` matches against and a
+  // `location.origin` read, the browser origin App.tsx hands
+  // `resolveHostedProviderStateFromRaw` at bootstrap. That policy is decided
+  // there and pinned by provider.test.ts: a preview origin runs in browser mode
+  // and refuses a daemon connection, and a non-production `publicOrigin` is
+  // refused. A bootstrap that stopped passing the origin would lose the
+  // `location.origin` read; nothing here can tell which call it feeds.
+  console.log('\n[smoke-artifact] origin-policy constant and browser-origin read survive in bundle')
   const assetsDir = resolve(DIST, 'assets')
   const jsBundles = existsSync(assetsDir)
     ? readdirSync(assetsDir)

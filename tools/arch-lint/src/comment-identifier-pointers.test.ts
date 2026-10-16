@@ -57,17 +57,21 @@ const looksLikeOwnSymbol = (name: string): boolean =>
 
 const SELF = 'tools/arch-lint/src/comment-identifier-pointers.test.ts'
 
+const isPackageSource = (path: string): boolean =>
+  /^(?:packages|apps|tools)\/[^/]+\/src\/.*\.tsx?$/.test(path) &&
+  path !== SELF &&
+  !path.includes('/migrations/')
+
 /**
  * Comment sources: product code, tests and the shared `test-utils` helpers
  * (a conformance suite's comments name the production helper its case was
  * written for), not migrations. The guard's own
  * file is out: its comments name the stale pointers it was written about, as
- * its own fixtures.
+ * its own fixtures. Every `.mjs` is read too — the build steps, smokes and
+ * gates are scripts, and the function a gate's comment names is where a reader
+ * goes to learn what it protects. Measured when added: one unresolved name.
  */
-const isCommentSource = (path: string): boolean =>
-  /^(?:packages|apps|tools)\/[^/]+\/src\/.*\.tsx?$/.test(path) &&
-  path !== SELF &&
-  !path.includes('/migrations/')
+const isCommentSource = (path: string): boolean => isPackageSource(path) || /\.mjs$/.test(path)
 
 /** Prose the dev workflow reads: the always-on and path-scoped rules, and every skill. */
 const isWorkflowProse = (path: string): boolean =>
@@ -124,6 +128,8 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
   'tools/arch-lint/src/test-only-exports.test.ts#isOriginAllowedForServerMode': 'same sentence',
   'tools/arch-lint/src/vocabulary-check.test.ts#BROWSER_LOCAL':
     'a retired word, spelled in every casing in order to ban it',
+  'packages/mcp-server/scripts/measure/workspace-record-memory.mjs#NODE_OPTIONS':
+    "Node's own environment variable, named to say a search for it found no use",
 
   // Dev-workflow prose (.claude/rules, .claude/skills). History and worked
   // examples first: each names a thing that is gone, in a sentence that says so.
@@ -324,6 +330,7 @@ describe('an identifier a source comment points at is one the code still has', (
     expect(EXISTING.size).toBeGreaterThan(20_000)
     expect(UNRESOLVED.length).toBeLessThan(MENTIONS.length / 10)
     expect(MENTIONS.some(({ file }) => /\.test\.tsx?$/.test(file))).toBe(true)
+    expect(MENTIONS.some(({ file }) => file.endsWith('.mjs'))).toBe(true)
   })
 
   it('has no pointer at a symbol that is gone', () => {
@@ -387,13 +394,15 @@ describe('the ledgers hold nothing that has stopped being true', () => {
 // it pins, and that regression is usually the retired tool's own: measured
 // when this arm was written, test comments named an unregistered tool 41
 // times against product code's 14, and those 14 split into 6 stale pointers
-// and the 8 history sentences ledgered below.
+// and the 8 history sentences ledgered below. Package source only, not the
+// `.mjs` scripts the identifier arm reads: the e2e smoke narrates the tools it
+// stopped calling the way a test does (five such sentences when measured).
 const TOOL_NAME = /\bwb_[a-z]+(?:_[a-z]+)*\b/g
 /** A tool's own declaration: the `name` a definition hands the MCP registration. */
 const TOOL_DECLARATION = /\bname:\s*'((?:wb|canvas)_[a-z]+(?:_[a-z]+)*)'/g
 
 const isProductSource = (path: string): boolean =>
-  isCommentSource(path) && !/\.test\.tsx?$/.test(path)
+  isPackageSource(path) && !/\.test\.tsx?$/.test(path)
 
 /** Retired tools a product comment names as history, each with the sentence that makes it so. */
 const RETIRED_TOOL_HISTORY: Readonly<Record<string, string>> = {

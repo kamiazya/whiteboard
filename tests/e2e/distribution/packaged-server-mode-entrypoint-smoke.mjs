@@ -395,7 +395,8 @@ const REQUIRED_FLAGS = [
       fail(`scenario 8: /api/runtime/ping expected 200, got ${pingResp.status}`)
     const pingBody = await pingResp.json()
     if (pingBody.ok !== true) fail('scenario 8: ping.ok must be true')
-    // daemonPingResponseSchema (shared/api-contracts/runtime.ts) deliberately
+    // `daemonPingResponseSchema`
+    // (packages/daemon-client/src/api-contracts/runtime.ts) deliberately
     // carries instanceId, not pid: an OS pid is reused across processes, so a
     // stale record comparing pid alone could misidentify an unrelated process
     // as this server. instanceId is unique per start and never reused.

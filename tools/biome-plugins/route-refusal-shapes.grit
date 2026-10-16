@@ -12,12 +12,14 @@ language js
 // refusal on the same router answered JSON (found by the fuzz lane rather
 // than by a reader).
 //
-// SCOPED in biome.json to packages/mcp-server/src/server/routes/**, and it
-// has to be: `c.notFound()` is CORRECT twice outside that directory,
-// and a rule reaching them would flag working code.
+// SCOPED in biome.json to packages/mcp-server/src/server/routes/** and
+// packages/server-core/src/** — the daemon's routes and the `/api/v1` routes
+// `createServer` mounts — and to nothing wider, because `c.notFound()` is
+// CORRECT outside them and a rule reaching it would flag working code:
 //
-//   - `app.ts`'s two UI catch-alls (`app.get('*')`) serve a browser, not an
-//     API client, and a reserved UI path 404s with no body on purpose.
+//   - `mountServerModeWebApp`'s UI catch-all (`app.get('*')`, in
+//     server-mode-web-app.ts) serves a browser, not an API client, and a
+//     reserved UI path 404s with no body on purpose.
 //
 // What this rule deliberately does NOT ban, so the scope stays honest rather
 // than exempted: `c.text` and `c.html` inside `routes/`. The OAuth approval
