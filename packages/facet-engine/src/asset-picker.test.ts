@@ -40,7 +40,11 @@ const pack = definePlugin({
   id: 'pack',
   displayName: 'Pack',
   facets: [],
-  assets: { stencils: { bucket: { displayName: 'Bucket' }, queue: { displayName: 'Queue' } } },
+  // `bucket` declares a name its id does not humanize to, so a label read off
+  // the id instead of the declaration cannot pass for one.
+  assets: {
+    stencils: { bucket: { displayName: 'Object store' }, queue: { displayName: 'Queue' } },
+  },
 })
 
 const optionsOf = (registry: ReturnType<typeof createFacetRegistry>) => {
@@ -66,7 +70,7 @@ describe('an asset-ref field is offered the registered assets', () => {
 
   it('labels each by what the asset calls itself, not by its id', () => {
     const options = optionsOf(createFacetRegistry([paint, pack]))
-    expect(options.find((option) => option.value === 'pack.bucket')?.label).toBe('Bucket')
+    expect(options.find((option) => option.value === 'pack.bucket')?.label).toBe('Object store')
   })
 
   it('offers a null first, since the field is optional and absent is a real answer', () => {

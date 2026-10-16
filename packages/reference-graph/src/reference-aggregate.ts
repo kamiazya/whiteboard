@@ -84,7 +84,7 @@ export class ReferenceAggregate {
    * Every held document referencing `documentId`, resolved against the
    * aggregate's CURRENT path table — the reader's rule exactly: `[[...]]`
    * may name a path or a document id, and nothing else (mirrors apps/web's
-   * daemonLinkEntries + the codec resolver).
+   * `linkEntries` + the codec's `createUniqueNameResolver`).
    */
   backlinksOf(documentId: string): BacklinkEntry[] {
     const alive = this.entries()

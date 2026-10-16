@@ -345,7 +345,7 @@ export function useBrowserDocumentController(
     return () => {
       cancelled = true
     }
-  }, []) // store identity is stable; storeRef tracks current value
+  }, []) // mount-only: the body reads the stable refs above, never captured props
 
   // Discrete edit — flush immediately (no debounce) so a rename
   // never lingers as "Unsaved changes" and survives a fast reload.

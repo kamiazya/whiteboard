@@ -93,7 +93,7 @@ export function resetWidgetHtmlCacheForTests(overridePath?: string): void {
 // Declares MCP Apps (SEP-1865) support and registers the ui:// resource
 // referenced by UI-linked tools' `_meta.ui.resourceUri`. Called once per
 // McpServer instance (both stdio and per-request HTTP /mcp transports),
-// mirroring how registerAllTools is invoked in index.ts.
+// beside `registerDocumentTools` in server.ts.
 export function registerMcpAppsExtension(server: McpServer): void {
   // The extensions capability field exists on ServerCapabilitiesSchema but
   // is not yet part of the SDK's typed capabilities options accepted by

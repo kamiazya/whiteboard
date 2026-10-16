@@ -149,7 +149,7 @@ describe('typesetMdastBlocks — declared font family matches the measured one',
 
 describe('measured-vs-declared font SIZE on markdown runs', () => {
   it('a heading run declares the size it was measured at, not the inherited default', () => {
-    // Headings are measured at HEADING_FONT_SIZE_PX[depth]; a run that then
+    // Headings are measured at the theme's `headingFontSizePx[depth]`; a run that then
     // draws at the host's inherited size renders every wrap width and block
     // height wrong AND flattens the visual hierarchy (h1 == body). Same
     // invariant class as the fontFamily guard above, for size.

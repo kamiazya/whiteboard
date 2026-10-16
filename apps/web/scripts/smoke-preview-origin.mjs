@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs'
-// Behavioral artifact smoke: loads the built dist/ in a real Chromium browser with
-// __WHITEBOARD_RUNTIME_CONFIG__.publicOrigin set to a preview URL and asserts that
-// App renders data-provider="invalid-config" rather than entering browser mode.
+// Behavioral artifact smoke: loads the built dist/ in a real Chromium browser and
+// asserts the hosted app's Cloudflare Pages preview policy end to end, on the
+// built artifact rather than through unit tests alone:
 //
-// In production Cloudflare Pages deploys the publicOrigin config value is the primary
-// mechanism used to reject preview deploys. This test verifies that the built artifact
-// (not just unit tests) correctly enforces that contract end-to-end.
+// - an injected __WHITEBOARD_RUNTIME_CONFIG__ whose publicOrigin is a preview
+//   URL renders data-provider="invalid-config": a preview may never claim to be
+//   the production origin;
+// - the app SERVED AT a preview origin with no runtime config enters the
+//   browser keeper, because previews are meant to be usable;
+// - the same preview origin given a daemonBaseUrl renders invalid-config: a
+//   preview deploy never connects to a daemon.
+//
+// Pages serves dist/ as static files and injects no runtime config; only a
+// server-mode keeper does (mcp-server's server-mode-web-app.ts). The configs
+// here are injected with an init script, standing in for a deploy that
+// carries one.
 //
 // A second, plain load of the same build asserts the other half of that story:
 // the hosted app registers its service worker and, after a reload, is controlled
@@ -42,6 +51,62 @@ async function serviceWorkerControlsReload(browser, origin) {
   }
 }
 
+// A host classifyPagesOrigin reads as 'preview': any subdomain of the
+// production project. A pages.dev host of some OTHER project is a different
+// class (custom-domain-deferred) and would prove a different branch.
+const PREVIEW_ORIGIN = 'https://abc123.kamiazya-whiteboard.pages.dev'
+
+// Which keeper the page settled on. The invalid-config screen carries its
+// own marker; any other outcome draws the app shell's mark. With no
+// daemonBaseUrl in the config and a fresh browser context holding no
+// remembered daemon, the browser keeper is the only one that can draw it.
+async function settledKeeper(page) {
+  const invalid = page.locator('main[data-provider="invalid-config"]')
+  const shell = page.getByTestId('shell-mark')
+  await invalid
+    .or(shell)
+    .first()
+    .waitFor({ state: 'attached', timeout: 15_000 })
+    .catch(() => {})
+  if ((await invalid.count()) > 0) return 'invalid-config'
+  if ((await shell.count()) > 0) return 'app shell'
+  return '(neither marker)'
+}
+
+// Loads the build as if served AT the preview origin: every request to it is
+// answered from the local dist server, so window.location.origin is the
+// preview host. Service workers are blocked because a worker's own fetches
+// bypass request routing.
+async function keeperAtPreviewOrigin(browser, appOrigin, runtimeConfig) {
+  const context = await browser.newContext({ serviceWorkers: 'block' })
+  try {
+    await context.route(`${PREVIEW_ORIGIN}/**`, async (route) => {
+      const url = new URL(route.request().url())
+      const response = await route.fetch({ url: `${appOrigin}${url.pathname}${url.search}` })
+      await route.fulfill({ response })
+    })
+    const page = await context.newPage()
+    if (runtimeConfig !== undefined) {
+      await page.addInitScript((config) => {
+        window.__WHITEBOARD_RUNTIME_CONFIG__ = config
+      }, runtimeConfig)
+    }
+    await page.goto(`${PREVIEW_ORIGIN}/`, { waitUntil: 'networkidle' })
+    return await settledKeeper(page)
+  } finally {
+    await context.close()
+  }
+}
+
+function expectKeeper(actual, expected, label) {
+  if (actual === expected) {
+    console.log(`  pass  ${label}`)
+    return true
+  }
+  console.error(`  FAIL  ${label}: expected ${expected}, got ${actual}`)
+  return false
+}
+
 if (!existsSync(DIST)) {
   console.error('[smoke-preview-origin] dist/ not found — run pnpm build first')
   process.exit(1)
@@ -60,37 +125,28 @@ let failed = false
 
 try {
   const page = await browser.newPage()
-
-  // Inject a runtime config that sets publicOrigin to a Cloudflare Pages preview URL.
-  // resolveHostedRuntimeConfig rejects preview publicOrigin values, so the app must
-  // render data-provider="invalid-config". This mirrors how a real CF Pages deploy
-  // would behave: the Workers/Pages platform injects __WHITEBOARD_RUNTIME_CONFIG__
-  // with the deploy's public origin before serving the HTML.
-  await page.addInitScript(() => {
-    window.__WHITEBOARD_RUNTIME_CONFIG__ = { publicOrigin: 'https://abc123.whiteboard.pages.dev' }
-  })
-
+  await page.addInitScript((origin) => {
+    window.__WHITEBOARD_RUNTIME_CONFIG__ = { publicOrigin: origin }
+  }, PREVIEW_ORIGIN)
   await page.goto(`${app.origin}/`, { waitUntil: 'networkidle' })
-
-  // Wait for the element rather than sampling count() immediately after
-  // networkidle: React mounts <main> asynchronously (and the page components
-  // are lazy-loaded), so an instant count races the hydration and flakes.
-  const invalidConfig = page.locator('main[data-provider="invalid-config"]')
-  const appeared = await invalidConfig
-    .waitFor({ state: 'attached', timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false)
-  if (appeared) {
-    console.log('  pass  App renders data-provider="invalid-config" for preview publicOrigin')
-  } else {
-    const provider = await page
-      .locator('main')
-      .first()
-      .getAttribute('data-provider')
-      .catch(() => '(no main)')
-    console.error(`  FAIL  expected data-provider="invalid-config", got: ${provider}`)
-    failed = true
-  }
+  const checks = [
+    expectKeeper(
+      await settledKeeper(page),
+      'invalid-config',
+      'a preview publicOrigin in the runtime config renders invalid-config',
+    ),
+    expectKeeper(
+      await keeperAtPreviewOrigin(browser, app.origin, undefined),
+      'app shell',
+      'served at a preview origin with no runtime config, the browser keeper answers',
+    ),
+    expectKeeper(
+      await keeperAtPreviewOrigin(browser, app.origin, { daemonBaseUrl: 'http://127.0.0.1:3099' }),
+      'invalid-config',
+      'served at a preview origin, a daemonBaseUrl is refused with invalid-config',
+    ),
+  ]
+  if (checks.includes(false)) failed = true
 
   const controlled = await serviceWorkerControlsReload(browser, `${app.origin}/`).catch(() => false)
   if (controlled) {

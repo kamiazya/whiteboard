@@ -315,7 +315,7 @@ describe('app — server-mode composition', () => {
     })
 
     it('request without Origin header reaches auth layer (API clients are permitted)', async () => {
-      // isOriginAllowedByPolicy returns true when Origin is absent — non-browser
+      // `createServerModeOriginMiddleware` passes when Origin is absent — non-browser
       // API clients do not send Origin. The auth layer handles authz instead.
       // Use empty scopes so auth rejects with 403, proving origin gate passed.
       const app = createApp(makeServerModeOptions([]))

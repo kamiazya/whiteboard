@@ -11,7 +11,7 @@
 | Build output goes to `apps/web/dist/` | `wrangler.toml` `pages_build_output_dir` |
 | Security headers (CSP, X-Frame-Options, …) are served on every route | `apps/web/public/_headers` → copied into `dist/` at build time |
 | CSP has no wildcard sources; `script-src` and `default-src` are `'self'`; `connect-src` admits only `'self'` and the font catalogue's pinned origin (a hosted page reaches a local daemon through the extension, never over loopback) | `headers-policy.test.ts` + `smoke-artifact.mjs` |
-| Cloudflare Pages preview deploys (`*.kamiazya-whiteboard.pages.dev`) enter `invalid-config`, not the browser keeper | `App.tsx` passes `window.location.origin` to `resolveHostedProviderStateFromRaw`; preview origins are rejected at bootstrap |
+| Cloudflare Pages preview deploys (`*.kamiazya-whiteboard.pages.dev`) run with the browser keeper but never connect to a daemon, and no runtime config may name a non-production `publicOrigin` | `App.tsx` passes `window.location.origin` to `resolveHostedProviderStateFromRaw`, which refuses a daemon on a preview origin; `resolveHostedRuntimeConfig` refuses the `publicOrigin` |
 | No Cloudflare API tokens or account IDs in the repo | `web-app-boundary.test.ts` CF secrets drift guard |
 
 ## What is NOT decided yet
@@ -39,15 +39,21 @@ pnpm check:pages-release              # pnpm build + smoke:artifact + smoke:prev
 npx wrangler pages deploy apps/web/dist --project-name kamiazya-whiteboard
 ```
 
-`check:pages-release` is the single pre-deploy gate. It delegates to the private `@whiteboard/checks` runner, which builds `apps/web/dist/`, verifies artifact integrity (`smoke:artifact`), and confirms preview-origin rejection in a real browser (`smoke:preview-origin`, needs Playwright + a local `127.0.0.1` bind). It is the `pages-release` tier in `release-gate-matrix.json` and is deliberately **not** part of `check:release-candidate`; the CI `verify` job runs the same smoke primitives on every PR, and the workflows above do not run `check:pages-release` itself, so run it before a manual deploy. See [testing.md → Hosted Web App Release Gates](../testing.md#hosted-web-app-cloudflare-pages-release-gates) for the full gate / security-review map.
+`check:pages-release` is the single pre-deploy gate. It delegates to the private `@whiteboard/checks` runner, which builds `apps/web/dist/`, verifies artifact integrity (`smoke:artifact`), and confirms the preview-origin policy in a real browser (`smoke:preview-origin`, needs Playwright + a local `127.0.0.1` bind). It is the `pages-release` tier in `release-gate-matrix.json` and is deliberately **not** part of `check:release-candidate`; the CI `verify` job runs the same smoke primitives on every PR, and the workflows above do not run `check:pages-release` itself, so run it before a manual deploy. See [testing.md → Hosted Web App Release Gates](../testing.md#hosted-web-app-cloudflare-pages-release-gates) for the full gate / security-review map.
 
 ## Single-page-app fallback
 
-The app has client-side routes (`/w/:workspaceId`, `/local/:documentId`, …) with no file in `dist/`. Pages serves `index.html` for those paths on its own **as long as the project has no top-level `404.html`**; adding one turns that behaviour off and every deep link answers 404. There is no `_redirects` file: a `/* /index.html 200` rule is rejected by wrangler as an infinite loop and ignored, and deep links answer 200 without it. `smoke-artifact.mjs` asserts that `dist/` carries neither file.
+The app has client-side routes (`/w/:workspace`, `/w/:workspace/d/<document path>`, …) with no file in `dist/`. Pages serves `index.html` for those paths on its own **as long as the project has no top-level `404.html`**; adding one turns that behaviour off and every deep link answers 404. There is no `_redirects` file: a `/* /index.html 200` rule is rejected by wrangler as an infinite loop and ignored, and deep links answer 200 without it. `smoke-artifact.mjs` asserts that `dist/` carries neither file.
 
 ## Preview origins
 
-Cloudflare automatically creates preview deploys at `https://<hash>.kamiazya-whiteboard.pages.dev`. These are intentionally blocked: the app returns an `invalid-config` error page on any preview origin. This prevents a misconfigured preview from silently acting as a real whiteboard.
+Cloudflare creates preview deploys at subdomains of the production origin: `https://<hash>.kamiazya-whiteboard.pages.dev`, the `latest` alias, and the per-PR branch aliases. A preview is a working app on purpose, so a fix can be checked on one before release:
+
+- **Browser keeper: runs.** The browser keeper is offline and does not depend on the origin, so a preview origin with no runtime config opens normally. Its workspaces live in that origin's own IndexedDB, apart from production's.
+- **Daemon connection: refused.** A runtime config naming a `daemonBaseUrl` on a preview origin renders the `invalid-config` screen, so a preview deploy never reaches a daemon.
+- **Non-production `publicOrigin`: refused.** A runtime config whose `publicOrigin` is a preview, custom-domain, insecure or loopback origin renders `invalid-config` on any origin, so no deploy can claim to be the production origin.
+
+Pages serves `dist/` as static files and injects no runtime config. Only a server-mode keeper injects one, so on Pages the first case is the one that applies.
 
 ## Local development
 

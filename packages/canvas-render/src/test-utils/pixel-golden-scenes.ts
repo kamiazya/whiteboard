@@ -38,7 +38,15 @@
  *
  * Baseline filenames are platform/browser-suffixed (`-chromium-linux`) by
  * Vitest itself. CI runs linux chromium, so a baseline regenerated on a
- * non-linux machine is not CI-valid — regenerate on linux, or in CI. Only
+ * non-linux machine is not CI-valid — regenerate on linux, or take CI's:
+ * push the change, and when `test-browser` fails, download the run's
+ * `browser-traces-test-browser-<shard>-attempt-<n>` artifact (the shard
+ * that failed). Under `.vitest/attachments/src/svg/pixel-golden.browser.test.ts/`
+ * — a hidden directory once unzipped — a missing baseline left
+ * `<scene>-reference-chromium-linux.png`, and a mismatch left
+ * `<scene>-actual-chromium-linux.png`. Eyeball it (step 2), then commit it
+ * as `src/svg/__screenshots__/pixel-golden.browser.test.ts/<scene>-chromium-linux.png`,
+ * dropping the `-reference`/`-actual` infix. Only
  * `-chromium-linux` baselines are committed, so the harness skips off linux
  * (saying so) rather than writing one, and `svg/pixel-golden-baselines.test.ts`
  * fails on a scene without one or on a baseline for any other platform.

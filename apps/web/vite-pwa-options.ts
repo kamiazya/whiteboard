@@ -33,7 +33,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     display: 'standalone',
     start_url: '/',
     // Launching from the OS focuses the already-open app instead of piling
-    // up windows; documents are live documents, not one-shot pages.
+    // up windows; documents are live documents, not one-shot pages. The
+    // launch's URL then reaches the page as LaunchParams, which
+    // src/hooks/use-new-canvas-launches.ts consumes.
     launch_handler: { client_mode: 'focus-existing' },
     // Richer install dialog on Chromium. The image is the docs gallery
     // screenshot; pwa-icons.test.ts pins the declared size to the file.

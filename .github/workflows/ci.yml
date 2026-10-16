@@ -233,14 +233,21 @@ jobs:
       # A failing browser test prints the path of its retained trace and the
       # runner is then discarded with it; the trace is the only place its
       # stack, action log and screenshots are kept (vitest.browser.shared.ts).
-      # About 80KB per failure, since DOM snapshots are off. Held by
+      # About 80KB per failure, since DOM snapshots are off. A failed
+      # `toMatchScreenshot` writes its candidate PNG under the repo-root
+      # `.vitest/attachments/` instead, and that file is how a contributor
+      # off linux gets a linux pixel baseline (pixel-golden-scenes.ts); the
+      # directory is hidden, so it needs `include-hidden-files`. Held by
       # ci-policy.test.ts for every job that runs a browser project.
       - name: Upload browser traces of failed tests
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: browser-traces-test-browser-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
-          path: '**/tmp/vitest-traces/**/*.trace.zip'
+          path: |
+            **/tmp/vitest-traces/**/*.trace.zip
+            .vitest/attachments/**/*.png
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 
@@ -406,7 +413,10 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: browser-traces-stress-changed-tests-attempt-${{ github.run_attempt }}
-          path: '**/tmp/vitest-traces/**/*.trace.zip'
+          path: |
+            **/tmp/vitest-traces/**/*.trace.zip
+            .vitest/attachments/**/*.png
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 
