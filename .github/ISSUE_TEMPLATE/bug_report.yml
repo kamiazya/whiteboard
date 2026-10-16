@@ -49,7 +49,7 @@ body:
     attributes:
       label: Package version
       description: The `@kamiazya/whiteboard-mcp` version you are running (check your `package.json`, or run `npm ls @kamiazya/whiteboard-mcp`). Write `n/a` if you only used the hosted web app's browser keeper.
-      placeholder: "e.g. 0.5.0"
+      placeholder: "e.g. 0.0.x"
     validations:
       required: true
 
@@ -87,6 +87,16 @@ body:
         - Other
     validations:
       required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        For the local daemon or server mode: paste the output of `whiteboard daemon doctor --json` (or `whiteboard server doctor --json`), or the `manifest.json` and `doctor.json` from a support bundle (`whiteboard daemon support-bundle --json --output-dir=<empty folder>`, or `whiteboard server support-bundle`). The bundle is redacted (no token, no document content, no absolute paths); `doctor --json` output is not, so read it for paths you would rather not share before pasting.
+      render: json
+    validations:
+      required: false
 
   - type: textarea
     id: context

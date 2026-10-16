@@ -101,6 +101,52 @@ place.
   recorded pid, for example because another user owns that process. Nothing
   else was changed.
 
+## Collect a support bundle
+
+`whiteboard daemon support-bundle` writes the daemon's `status` and `doctor`
+results to a folder as redacted JSON, for attaching to a bug report. It reads
+the record and runs the checks only; it does not start, stop or signal the
+daemon.
+
+```sh
+whiteboard daemon support-bundle --json --output-dir=./whiteboard-bundle
+# Another data directory than the default:
+whiteboard daemon support-bundle --json --output-dir=./whiteboard-bundle --data-dir=<path>
+```
+
+| File | Content |
+|------|---------|
+| `status.json` | What `daemon status --json` reports: `ok`, `reason`, `recordFound`, `recordFresh`, `pidAlive`, and the record's `pid`, `version` and `startedAt` |
+| `doctor.json` | Every `daemon doctor --json` check: `id`, `status`, `summary`, `detail` and `remediation` |
+| `manifest.json` | `createdAt`, `packageVersion`, `platform` (OS and Node version), `mode` (`daemon`), and the sections above. Written last, so every file it lists is already there |
+
+What the bundle never contains:
+
+- The record's token, or any `Authorization`/`Bearer` value.
+- Document content, uploaded files, or the input and output of MCP tool calls.
+- Absolute paths in the check text: each one is replaced with
+  `[REDACTED_PATH]`, so the data directory is not named.
+- Log lines. The daemon writes its log records to stderr and keeps no log file.
+
+The output folder may be missing, in which case it is created, or empty. The
+command refuses any other folder and writes nothing:
+
+- A folder that is not empty: `Could not write support bundle. The output
+  directory must be empty.`
+- A path that is a file or itself a symlink, or that passes through a symlink
+  in a folder someone else could have placed it in: `Could not write support
+  bundle. The output path must be a real directory, not reached through a
+  symlink in a folder other users can write.` A symlink is followed when the
+  folder holding it is owned by you or root and is not group- or
+  other-writable, so macOS's `/tmp` (a link to `/private/tmp`) is fine. On
+  Windows every symlink in the path is refused.
+
+On success, stdout is one JSON line,
+`{"schemaVersion":1,"ok":true,"outputDir":"<absolute path>","files":["status.json","doctor.json","manifest.json"]}`,
+and the exit code is `0`. On any failure, stdout is empty, stderr carries one
+line that names no path, and the exit code is `1`. Nothing already written is
+removed.
+
 ## Get the `whiteboard` command
 
 Every `whiteboard ...` command on this page is the CLI that
