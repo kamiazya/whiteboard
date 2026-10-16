@@ -20,6 +20,7 @@ import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COMMIT_DEBOUNCE_MS } from '../lib/document-sync-session.js'
+import { heldHandlers } from '../test-utils/document-sync-session.js'
 import { useDocumentSync } from './useDocumentSync.js'
 
 const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -31,12 +32,12 @@ function addDocument(record: LoroDoc): void {
 }
 
 function openDocument() {
-  let handlers: DocumentBackendHandlers | null = null
+  const { hold, handlers: h } = heldHandlers()
   const pushed: Uint8Array[] = []
   const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
+    connect(next: DocumentBackendHandlers) {
+      hold(next)
+      next.onConnected()
     },
     disconnect() {},
     pushLocalUpdate: (bytes: Uint8Array) => {
@@ -46,7 +47,6 @@ function openDocument() {
     sendClientReady() {},
   } satisfies DocumentBackend
   const hook = renderHook(() => useDocumentSync(backend, { contentDocumentId: DOC }))
-  const h = () => handlers as unknown as DocumentBackendHandlers
   const peer = new LoroDoc()
   addDocument(peer)
   act(() => h().onSnapshot(peer.export({ mode: 'snapshot' })))

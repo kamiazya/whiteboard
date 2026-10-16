@@ -7,11 +7,12 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  editAndPush,
   flushMicrotasks,
   openTestSession,
   snapshotOf,
 } from '../test-utils/document-sync-session.js'
-import { applyCommand, type EditorCommand } from './spatial/commands.js'
+import type { EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
@@ -34,18 +35,13 @@ function openSession() {
   return { ...s, releasePush: () => releasePush() }
 }
 
-async function editAndPush(session: ReturnType<typeof openSession>['session']) {
-  const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-  session.onChange(applyCommand(canvas, edit), edit)
-  await vi.advanceTimersByTimeAsync(300)
-  await flushMicrotasks()
-}
+const MOVE: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
 
 describe('a write the backend retries on its own', () => {
   it('leaves the document saved, not degraded, once the backend says it landed', async () => {
     vi.useFakeTimers()
     const s = openSession()
-    await editAndPush(s.session)
+    await editAndPush(s.session, canvas, MOVE)
     // The order a push can produce: handed over, refused and REPORTED, then
     // resolved as if nothing happened — which must not read as saved.
     s.handlers().onError?.('storage-failure')
@@ -66,7 +62,7 @@ describe('a write the backend retries on its own', () => {
   it('degrades on a refusal that arrives after the push already resolved', async () => {
     vi.useFakeTimers()
     const s = openSession()
-    await editAndPush(s.session)
+    await editAndPush(s.session, canvas, MOVE)
     s.releasePush()
     await flushMicrotasks()
     expect(s.persistence).toEqual(['pending', 'saved'])

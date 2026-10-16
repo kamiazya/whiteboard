@@ -1,7 +1,4 @@
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { useDocumentSync } from '../../hooks/useDocumentSync.js'
@@ -10,6 +7,7 @@ import {
   getWriteRefusal,
   showWriteRefusal,
 } from '../../lib/write-refusal-store.js'
+import { heldHandlers } from '../../test-utils/document-sync-session.js'
 import { WriteRefusedNotice } from './WriteRefusedNotice.js'
 
 afterEach(() => {
@@ -45,20 +43,15 @@ describe('the notice for a change the keeper refused', () => {
 })
 
 describe('a document page whose keeper refuses a change', () => {
-  function backendHandingOver(): {
-    backend: DocumentBackend
-    handlers: () => DocumentBackendHandlers
-  } {
-    let handlers: DocumentBackendHandlers | null = null
+  function backendHandingOver() {
+    const { hold, handlers } = heldHandlers()
     const backend: DocumentBackend = {
-      connect: (h) => {
-        handlers = h
-      },
+      connect: hold,
       disconnect: () => {},
       pushLocalUpdate: () => Promise.resolve(),
       sendClientReady: () => {},
     }
-    return { backend, handlers: () => handlers as unknown as DocumentBackendHandlers }
+    return { backend, handlers }
   }
 
   it('shows the notice, and takes it down with the document', () => {
