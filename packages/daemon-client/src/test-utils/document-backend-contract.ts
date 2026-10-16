@@ -700,7 +700,9 @@ function upstreamDeliveryCases(
     void Promise.resolve(h.backend.pushLocalUpdate(edit.bytes)).catch(() => {})
     h.backend.disconnect()
 
-    await vi.waitFor(async () => expect(await edit.landed()).toBe(true))
+    await vi.waitFor(async () => expect(await edit.landed()).toBe(true), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
     h.cleanup()
   })
 }
