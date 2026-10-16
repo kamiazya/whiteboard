@@ -379,7 +379,7 @@ const SCOPE_DECISIONS = [
   ['tenant people', 'PUT', '/api/people/u1/administrator', scoped('workspace:write')],
   ['tenant people', 'POST', '/api/invitations', scoped('workspace:write')],
   ['runtime (rest)', 'GET', '/api/runtime/status', scoped('runtime:read')],
-  ['debug', 'GET', '/api/debug', scoped('runtime:admin')],
+  ['debug', 'GET', '/api/debug', { kind: 'daemon-token-only' }],
   ['fonts', 'GET', '/api/fonts', scoped('runtime:read')],
   ['fonts', 'POST', '/api/fonts/install', scoped('runtime:admin')],
 ] as const
@@ -426,11 +426,18 @@ describe('what each rule decides', () => {
     }
   })
 
-  it('debug needs runtime:admin under every verb and for any path beneath it', () => {
+  // Judged by KIND, not scopes: no scope set, however wide, opens a dump of
+  // every live document, so a scoped decision here would be a bar some
+  // narrow credential could clear.
+  it('debug is daemon-token-only under every verb and for any path beneath it', () => {
     for (const method of ['GET', ...WRITE_VERBS]) {
-      expect(resolveApiRouteScope(method, '/api/debug'), method).toEqual(scoped('runtime:admin'))
+      expect(resolveApiRouteScope(method, '/api/debug'), method).toEqual({
+        kind: 'daemon-token-only',
+      })
     }
-    expect(resolveApiRouteScope('GET', '/api/debug/documents')).toEqual(scoped('runtime:admin'))
+    expect(resolveApiRouteScope('GET', '/api/debug/documents')).toEqual({
+      kind: 'daemon-token-only',
+    })
   })
 })
 

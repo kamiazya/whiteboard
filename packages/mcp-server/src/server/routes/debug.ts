@@ -1,7 +1,5 @@
 import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
-import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
-import type { CredentialResolver } from '../security/credential-resolver.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
@@ -31,18 +29,10 @@ async function summarizeDocument(
   }
 }
 
+// Who may read the dump is the route-scope registry's `daemon-token-only`
+// decision, enforced by the /api/* middleware in front of this router — so
+// this file decides only whether the endpoint exists.
 export interface CreateDebugRouterOptions {
-  /**
-   * Daemon-token-only, resolved through the one resolver so there is no
-   * second place a secret is compared.
-   *
-   * REQUIRED. It was optional for one iteration and every test that built the
-   * router without one went from open to 401 — an absent resolver silently
-   * CLOSING a route is the mirror image of the defect this work removes, and
-   * just as quiet. An open daemon is `createCredentialResolver({})`, said out
-   * loud.
-   */
-  credentialResolver: CredentialResolver
   /** The directory whose workspaces, documents and cache the dump describes. */
   scope: StoreScope
   enabled?: boolean
@@ -62,18 +52,6 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
     )
     return app
   }
-
-  app.use('/api/debug', async (c, next) => {
-    const grant = await options.credentialResolver.resolve({
-      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-    })
-    // Judged by KIND, not scopes: a debug dump of live documents is not
-    // something a narrow credential gets, however wide its scope set.
-    if (grant?.kind !== 'daemon-token' && grant?.kind !== 'anonymous') {
-      return c.json({ error: 'unauthorized' }, 401)
-    }
-    return next()
-  })
 
   app.get('/api/debug', async (c) => {
     const workspaces = await listWorkspaces(options.scope)

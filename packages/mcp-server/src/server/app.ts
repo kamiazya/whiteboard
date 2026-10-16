@@ -373,7 +373,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
   app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
-  app.route('/', createDebugRouter({ credentialResolver, scope }))
+  app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())
   app.route(
     '/',

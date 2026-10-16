@@ -23,14 +23,13 @@ import type { AuthScope } from './auth-strategy.js'
 export type RouteScopeDecision =
   | { kind: 'scoped'; scopes: readonly AuthScope[] }
   | { kind: 'public' }
-  // Never satisfiable by an OAuth access token, regardless of its granted
-  // scopes — only the literal shared daemon token authorizes this route.
-  // Reserved for a route whose whole purpose is to hand out daemon-level
-  // authority: a scope-limited hosted-origin grant that could reach such a
-  // route would let itself mint a path back to the full, unscoped daemon
-  // token, escaping the very scopes it was approved for. No route currently
-  // produces this decision today, but it is kept as defense-in-depth for a
-  // future daemon-authority route rather than deleted.
+  // Judged by the credential's KIND, never its scopes: only full authority
+  // (the daemon token, or an open daemon) reaches the route, and server mode,
+  // having no daemon token, refuses it outright. For a route no scope set
+  // should open however wide it is — `/api/debug`'s dump of every live
+  // document today, and any route that hands out daemon-level authority, where
+  // a scope-limited grant reaching it could mint a path back to the full,
+  // unscoped token and escape the scopes it was approved for.
   | { kind: 'daemon-token-only' }
 
 function isWriteMethod(method: string): boolean {
@@ -278,11 +277,11 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // workspace's key+salt outright, denying every document key derived from
   // the OLD pair and every browser replica sealed under it — at least as
   // consequential as the tier change below, so it sits at the same admin
-  // bar rather than the plain key route's workspace:read. Placed above
-  // `workspace replica-key` in this file for readability only: the plain
-  // route's pattern is `$`-anchored and does not match a `/rotate` suffix,
-  // so ordering between the two rules cannot shadow either one — pinned by
-  // `CLAIMED_BY` below rather than assumed.
+  // bar rather than the plain key route's workspace:read. Its place below
+  // `workspace replica-key` is not load-bearing: the plain route's pattern is
+  // `$`-anchored and does not match a `/rotate` suffix, so neither rule can
+  // shadow the other in either order — pinned by `CLAIMED_BY` in the test
+  // rather than assumed.
   {
     name: 'workspace replica-key rotate',
     claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key\/rotate$/, 'POST'),
@@ -340,7 +339,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
 
   { name: 'runtime (rest)', claims: under('/api/runtime/'), decide: always('runtime:read') },
 
-  { name: 'debug', claims: under('/api/debug'), decide: always('runtime:admin') },
+  { name: 'debug', claims: under('/api/debug'), decide: () => ({ kind: 'daemon-token-only' }) },
 
   // Fonts (ADR-0012). Installing one makes the daemon issue an outbound
   // request and write to its own data directory, changing what every later
