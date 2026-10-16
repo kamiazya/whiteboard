@@ -31,6 +31,13 @@ function snapshotRoute() {
   return { state, failing, answer }
 }
 
+/** Whether a subscribe body asks for any of `docs`. */
+const names = (body: { subscribe?: string[] }, docs: ReadonlySet<string>): boolean =>
+  (body.subscribe ?? []).some((doc) => docs.has(doc))
+
+/** The daemon refusing the credential for one workspace. */
+const forbidden = () => new Response('{"title":"forbidden"}', { status: 403 })
+
 /** A daemon stand-in: mints a stream id, records the POSTs, pushes frames. */
 function createHarness(): SseStreamSourceHarness {
   let streamSeq = 0
@@ -42,6 +49,7 @@ function createHarness(): SseStreamSourceHarness {
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
   let refuseStreams = false
+  const refusedDocs = new Set<string>()
 
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -81,6 +89,7 @@ function createHarness(): SseStreamSourceHarness {
     }
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     if (url.includes('/api/sync/subscribe')) subscribeBodies.push(body)
+    if (url.includes('/api/sync/subscribe') && names(body, refusedDocs)) return forbidden()
     if (url.includes('/api/sync/message')) controlMessages.push(body)
     return new Response('{}', { status: 200 })
   })
@@ -114,6 +123,7 @@ function createHarness(): SseStreamSourceHarness {
     refuseAuth: () => {
       refuseStreams = true
     },
+    refuseSubscribe: (doc) => refusedDocs.add(doc),
     cleanup: () => hub.close(),
   }
 }
