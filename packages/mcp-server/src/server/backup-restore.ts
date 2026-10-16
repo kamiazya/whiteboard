@@ -134,16 +134,29 @@ async function lstatIfPresent(p: string): Promise<Stats | undefined> {
 // chain that long, or a loop, is refused rather than followed.
 const MAX_SYMLINK_HOPS = 40
 
-// Whether only root or this user could have created an entry in `dir`: it is
-// owned by one of them and neither group- nor other-writable. A sticky bit
-// does not help — in a sticky `/tmp` anyone may still add a NEW link. Where
-// there are no POSIX owners to ask (Windows: `process.getuid` is absent) no
-// directory is trusted, so every symlink in the path is refused there.
 async function isTrustedLinkParent(dir: string): Promise<boolean> {
-  const uid = process.getuid?.()
-  if (uid === undefined) return false
-  const st = await stat(dir)
-  return (st.uid === 0 || st.uid === uid) && (st.mode & 0o022) === 0
+  const currentUid = process.getuid?.()
+  if (currentUid === undefined) return false
+  return trustsLinkParent(await stat(dir), currentUid)
+}
+
+/**
+ * Whether only root or the user `currentUid` could have created an entry in
+ * a directory with this owner and mode: it is owned by one of them and
+ * neither group- nor other-writable. A sticky bit does not help — in a sticky
+ * `/tmp` anyone may still add a NEW link. Where there are no POSIX owners to
+ * ask (`currentUid` undefined: Windows has no `process.getuid`) no directory
+ * is trusted, so every symlink in the path is refused there.
+ *
+ * Pure, so the owner half can be checked by a process that cannot stage a
+ * directory another user owns.
+ */
+export function trustsLinkParent(
+  dir: { readonly uid: number; readonly mode: number },
+  currentUid: number | undefined,
+): boolean {
+  if (currentUid === undefined) return false
+  return (dir.uid === 0 || dir.uid === currentUid) && (dir.mode & 0o022) === 0
 }
 
 export type OutputPathState = 'missing' | 'present' | 'unsafe'
