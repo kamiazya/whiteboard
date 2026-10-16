@@ -11,12 +11,12 @@ import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
-import { sessionHealthOf } from '../lib/connection-state.js'
+import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
-import { daemonFaviconStatus } from '../lib/favicon.js'
+import { faviconStatusOf } from '../lib/favicon.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
@@ -337,7 +337,6 @@ function useDaemonDocument(
     [fileAdapter, controller.documents],
   )
 
-  // Tab favicon: sync state as the status dot, scene content as the minimap.
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
   // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
   // keeps its own in the frontmatter facets, which are no canvas value and
@@ -350,15 +349,18 @@ function useDaemonDocument(
       resolveOpenDocumentSymbol({ kind: documentKind, canvas: canvasValue, facets: sync.facets }),
     [documentKind, canvasValue, sync.facets],
   )
-  // One judgement feeds both the tab and the shell mark.
-  const session = sessionHealthOf(authError, syncStatus, persistence)
+  // One state feeds both the tab and the shell mark. A withdrawn membership
+  // builds no session, so nothing is reconnecting: it reads sync-off.
+  const withdrawn = controller.refusal !== null
+  const session = sessionHealthOf(authError, syncStatus, persistence, withdrawn)
+  const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
   useDocumentFavicon({
     settingsStore,
     documentId: contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    status: daemonFaviconStatus(session),
+    status: faviconStatusOf(connection),
     symbol: documentSymbol,
   })
 
@@ -367,9 +369,9 @@ function useDaemonDocument(
   // unmount — an index page has no live session, and a latched chip would
   // keep claiming one.
   useEffect(() => {
-    setShellConnection({ state: { keeper: 'daemon', session }, daemonBaseUrl })
+    setShellConnection({ state: connection, daemonBaseUrl })
     return () => setShellConnection(null)
-  }, [session, daemonBaseUrl])
+  }, [connection, daemonBaseUrl])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one

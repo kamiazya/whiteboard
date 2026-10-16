@@ -28,6 +28,11 @@ describe('the daemon session a page reports', () => {
   ] as const)('authError=%s, status=%s, writeFailed=%s is %s', (authError, status, writeFailed, health) => {
     expect(sessionHealthOf(authError, status, writeFailed ? FAILED : SAVED)).toBe(health)
   })
+  // A withdrawn membership builds no session, so its status never leaves
+  // `idle` — which would otherwise read as a reconnect nothing is making.
+  it('reads a withdrawn membership as sync-off', () => {
+    expect(sessionHealthOf(false, 'idle', SAVED, true)).toBe('sync-off')
+  })
 })
 
 describe('a keeper that is not keeping', () => {

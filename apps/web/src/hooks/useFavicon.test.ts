@@ -34,6 +34,25 @@ describe('useFavicon lifecycle', () => {
     expect(links[0]?.getAttribute('href')).toBe(favicon.STATIC_FAVICON_HREF)
   })
 
+  it('clears the app badge on unmount, so leaving unsaved work does not keep it', () => {
+    const setAppBadge = vi.fn(() => Promise.resolve())
+    const clearAppBadge = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'setAppBadge', { value: setAppBadge, configurable: true })
+    Object.defineProperty(navigator, 'clearAppBadge', { value: clearAppBadge, configurable: true })
+    try {
+      const { unmount } = renderHook(() =>
+        useFavicon({ style: 'dot', status: 'unsaved', rects: [] }),
+      )
+      expect(setAppBadge).toHaveBeenCalledTimes(1)
+      expect(clearAppBadge).not.toHaveBeenCalled()
+      unmount()
+      expect(clearAppBadge).toHaveBeenCalledTimes(1)
+    } finally {
+      Reflect.deleteProperty(navigator, 'setAppBadge')
+      Reflect.deleteProperty(navigator, 'clearAppBadge')
+    }
+  })
+
   it('does not install a broken icon where canvas 2D is unavailable (jsdom)', () => {
     const { unmount } = renderHook(() =>
       useFavicon({ style: 'minimap', status: 'quiet', rects: [] }),

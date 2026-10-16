@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { isNotKeeping, type SessionHealth, sessionHealthOf } from './connection-state.js'
+import {
+  type ConnectionState,
+  isNotKeeping,
+  type SessionHealth,
+  sessionHealthOf,
+} from './connection-state.js'
 import {
   applyFavicon,
-  browserFaviconStatus,
-  daemonFaviconStatus,
   type FaviconStatus,
+  faviconStatusOf,
   projectRectsToBoard,
   resolveRectColor,
   STATIC_FAVICON_HREF,
 } from './favicon.js'
+import type { ReplicaSaveHealth } from './replica-save-queue.js'
+import type { StorageHealth } from './storage-health.js'
 
 describe('projectRectsToBoard', () => {
   it('returns no rects for an empty scene (favicon falls back to the logo squiggle)', () => {
@@ -99,43 +105,67 @@ describe('resolveRectColor', () => {
   })
 })
 
-describe('status mappings', () => {
+describe('faviconStatusOf', () => {
   // A healthy keeper is QUIET — no dot — for the same reason the shell mark
-  // draws none: the routine state asks nothing of a tab strip.
-  // Every session health, so a new one cannot reach the tab unjudged.
-  const DAEMON_EXPECTED = {
-    synced: 'quiet',
-    reconnecting: 'syncing',
-    'sync-off': 'offline',
-    'write-failed': 'unsaved',
-  } as const satisfies Record<SessionHealth, FaviconStatus>
-  const healths = Object.keys(DAEMON_EXPECTED) as SessionHealth[]
+  // draws none: the routine state asks nothing of a tab strip. Every arm of
+  // every keeper, so a new one cannot reach the shell and not the tab.
+  const EXPECTED = {
+    browser: { ok: 'quiet', stuck: 'unsaved', failed: 'offline' },
+    daemon: {
+      synced: 'quiet',
+      reconnecting: 'syncing',
+      'sync-off': 'offline',
+      'write-failed': 'unsaved',
+    },
+    replica: { ok: 'quiet', failed: 'unsaved' },
+  } as const satisfies {
+    browser: Record<StorageHealth, FaviconStatus>
+    daemon: Record<SessionHealth, FaviconStatus>
+    replica: Record<ReplicaSaveHealth, FaviconStatus>
+  } & Record<ConnectionState['keeper'], unknown>
 
-  it.each(healths)('daemon: the %s session reads as its tab status', (session) => {
-    expect(daemonFaviconStatus(session)).toBe(DAEMON_EXPECTED[session])
+  const states: ConnectionState[] = [
+    ...(Object.keys(EXPECTED.browser) as StorageHealth[]).map(
+      (storage): ConnectionState => ({ keeper: 'browser', storage }),
+    ),
+    ...(Object.keys(EXPECTED.daemon) as SessionHealth[]).map(
+      (session): ConnectionState => ({ keeper: 'daemon', session }),
+    ),
+    ...(Object.keys(EXPECTED.replica) as ReplicaSaveHealth[]).map(
+      (storage): ConnectionState => ({ keeper: 'replica', storage }),
+    ),
+  ]
+  const expectedOf = (state: ConnectionState): FaviconStatus =>
+    state.keeper === 'daemon'
+      ? EXPECTED.daemon[state.session]
+      : state.keeper === 'browser'
+        ? EXPECTED.browser[state.storage]
+        : EXPECTED.replica[state.storage]
+
+  it.each(
+    states.map((state) => [JSON.stringify(state), state] as const),
+  )('%s reads as its tab status', (_label, state) => {
+    expect(faviconStatusOf(state)).toBe(expectedOf(state))
   })
 
-  it('daemon: a keeper that is not keeping never reads quiet or syncing', () => {
-    const notKeeping = healths.filter((session) => isNotKeeping({ keeper: 'daemon', session }))
-    expect(notKeeping.length).toBeGreaterThan(0)
-    for (const session of notKeeping) {
-      expect(['quiet', 'syncing']).not.toContain(daemonFaviconStatus(session))
+  it('a keeper that is not keeping never reads quiet or syncing', () => {
+    const notKeeping = states.filter(isNotKeeping)
+    expect(notKeeping.map((state) => state.keeper)).toEqual(
+      expect.arrayContaining(['browser', 'daemon', 'replica']),
+    )
+    for (const state of notKeeping) {
+      expect(['quiet', 'syncing']).not.toContain(faviconStatusOf(state))
     }
   })
 
-  it('daemon: a connected session whose write failed reads unsaved', () => {
+  it('a connected daemon session whose write failed reads unsaved', () => {
     const writeFailed = {
       kind: 'degraded',
       reason: 'write-failed',
       message: 'The daemon did not take this write',
       lastSavedAt: null,
     } as const
-    expect(daemonFaviconStatus(sessionHealthOf(false, 'connected', writeFailed))).toBe('unsaved')
-  })
-
-  it('browser: the storage judgement maps one-to-one, ok being quiet', () => {
-    expect(browserFaviconStatus('ok')).toBe('quiet')
-    expect(browserFaviconStatus('stuck')).toBe('unsaved')
-    expect(browserFaviconStatus('failed')).toBe('offline')
+    const session = sessionHealthOf(false, 'connected', writeFailed)
+    expect(faviconStatusOf({ keeper: 'daemon', session })).toBe('unsaved')
   })
 })

@@ -43,10 +43,13 @@ import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTr
 import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
+import type { ConnectionState } from '../lib/connection-state.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
+import { type FaviconRect, faviconStatusOf } from '../lib/favicon.js'
 import { type LinkableDocument, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
 import { loadReplicaImagesRetrying } from '../lib/replica-images.js'
@@ -459,12 +462,19 @@ interface ReplicaReaderProps {
 }
 
 /**
- * Whether the replica's last save landed, said to both audiences: the page,
- * through the notice below, and the shell, through its one store — the way
- * the document pages publish theirs. The tab-wide readers (the leave prompt,
- * the unasked reload a waiting update would take, the shell mark) read only
- * that store, so a failure kept to this page would let a reload drop the
- * only copy of the edits.
+ * No outline: the tab draws the logo, which reads the same in either style,
+ * so the style setting has nothing to choose here.
+ */
+const NO_OUTLINE: readonly FaviconRect[] = []
+
+/**
+ * Whether the replica's last save landed, said to every audience: the page,
+ * through the notice below; the shell, through its one store — the way the
+ * document pages publish theirs; and the tab icon and app badge, from the
+ * same state. The tab-wide readers (the leave prompt, the unasked reload a
+ * waiting update would take, the shell mark) read only that store, so a
+ * failure kept to this page would let a reload drop the only copy of the
+ * edits.
  *
  * Mounted with the readable page alone: that is where edits are made, and
  * the only state the "Offline copy" word is true of.
@@ -475,10 +485,15 @@ interface ReplicaReaderProps {
  * held" — a reload or a close taken then drops the edits the notice is about.
  */
 function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  const state = useMemo(
+    (): ConnectionState => ({ keeper: 'replica', storage: failed ? 'failed' : 'ok' }),
+    [failed],
+  )
   useLayoutEffect(() => {
-    setShellConnection({ state: { keeper: 'replica', storage: failed ? 'failed' : 'ok' } })
+    setShellConnection({ state })
     return () => setShellConnection(null)
-  }, [failed])
+  }, [state])
+  useFavicon({ style: 'dot', status: faviconStatusOf(state), rects: NO_OUTLINE })
   return failed ? <ReplicaSaveFailedNotice onRetry={onRetry} /> : null
 }
 
