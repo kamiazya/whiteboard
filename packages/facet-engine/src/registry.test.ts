@@ -285,3 +285,79 @@ describe('a facet carries its own human name', () => {
     )
   })
 })
+
+// A plugin whose declaration could only ever fail later — one write at a
+// time, far from its author — is refused when it is defined or registered.
+describe('a declaration that would fail later is refused at build', () => {
+  const versioned = definePlugin({
+    id: 'paint',
+    displayName: 'Paint',
+    facets: [
+      defineFacet({
+        name: 'shape',
+        displayName: 'Shape',
+        version: 'v1',
+        targets: ['node'],
+        schema: z.object({ kind: z.string().min(1) }),
+        compat: { v0: { schema: z.object({ kind: z.string() }), migrate: (old) => old } },
+      }),
+    ],
+  })
+
+  it.each<{ declaration: string; build: () => unknown; refusal: RegExp }>([
+    {
+      // migrateForward looks each step up as `v<n>`, so a tag off that
+      // grammar is never found and every payload stored under it is dropped.
+      declaration: 'a compat tag off the v<n> grammar',
+      build: () =>
+        defineFacet({
+          name: 'shape',
+          displayName: 'Shape',
+          version: 'v1',
+          targets: ['node'],
+          schema: z.object({ kind: z.string() }),
+          compat: { zero: { schema: z.object({ kind: z.string() }), migrate: (old) => old } },
+        }),
+      refusal: /facet "shape" compat tag "zero" must match/,
+    },
+    {
+      // A write under an older key is refused, so such a stencil would be
+      // refused on every node it is applied to.
+      declaration: 'a stencil naming an older version of a registered facet',
+      build: () =>
+        createFacetRegistry([
+          versioned,
+          definePlugin({
+            id: 'pack',
+            displayName: 'Pack',
+            facets: [],
+            assets: {
+              stencils: {
+                db: { displayName: 'Database', facets: { 'paint.shape/v0': { kind: 'cylinder' } } },
+              },
+            },
+          }),
+        ]),
+      refusal:
+        /stencil asset "pack\.db" names facet "paint\.shape\/v0", which is not the current version — use "paint\.shape\/v1"/,
+    },
+  ])('refuses $declaration', ({ build, refusal }) => {
+    expect(build).toThrow(refusal)
+  })
+
+  it('registers the same stencil once it names the current version', () => {
+    const current = definePlugin({
+      id: 'pack',
+      displayName: 'Pack',
+      facets: [],
+      assets: {
+        stencils: {
+          db: { displayName: 'Database', facets: { 'paint.shape/v1': { kind: 'cylinder' } } },
+        },
+      },
+    })
+    expect(createFacetRegistry([versioned, current]).stencilAsset('pack.db')?.displayName).toBe(
+      'Database',
+    )
+  })
+})

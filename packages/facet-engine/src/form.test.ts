@@ -4,7 +4,7 @@
 // rendering vessel is each surface's own.
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { deriveFacetForm } from './form.js'
+import { deriveFacetForm, type FacetPickerSpec } from './form.js'
 import { defineFacet } from './registry.js'
 
 describe('deriveFacetForm', () => {
@@ -273,6 +273,16 @@ describe('an editor spec refines the derived form', () => {
     expect(control?.kind === 'segmented' && control.options[0]?.value).toBeNull()
   })
 
+  // `choice` names the control the schema already derives, and a field spec
+  // carries no options for it — so the spec may relabel the field but must
+  // keep the derived enum options rather than replace them with none.
+  it('a choice widget keeps the options the schema derives', () => {
+    const form = deriveFacetForm(schema, { fields: { kind: { widget: 'choice', label: 'Shape' } } })
+    if (form.kind !== 'fields') throw new Error('unreachable')
+    expect(form.fields[0]?.label).toBe('Shape')
+    expect(form.fields[0]?.control).toEqual({ kind: 'choice', options: ['ellipse', 'diamond'] })
+  })
+
   it('a spec naming a field the schema does not have is rejected at definition time', () => {
     expect(() =>
       defineFacet({
@@ -297,5 +307,46 @@ describe('an editor spec refines the derived form', () => {
         editor: { fields: { kind: { widget: 'text' } } },
       }),
     ).toThrow(/form/)
+  })
+})
+
+// Each of these is a plugin author's mistake whose only other symptom is a
+// control that offers nothing or does nothing, so it is refused when the
+// facet is defined rather than when somebody opens the editor.
+describe('a picker declaration that could not work is refused at definition time', () => {
+  const symbolSchema = z.union([
+    z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
+    z.object({ kind: z.literal('emoji'), char: z.string().min(1) }),
+  ])
+  const define = (picker: FacetPickerSpec) => () =>
+    defineFacet({
+      name: 'symbol',
+      displayName: 'Symbol',
+      version: 'v0',
+      targets: ['node'],
+      schema: symbolSchema,
+      editor: { picker },
+    })
+
+  it.each<{ declaration: string; picker: FacetPickerSpec; refusal: RegExp }>([
+    {
+      declaration: 'a picker with an empty option list',
+      picker: { options: [] },
+      refusal: /facet "symbol" declares a picker with no options/,
+    },
+    {
+      declaration: 'a free entry with a blank label',
+      picker: {
+        options: [{ payload: null, label: 'No symbol' }],
+        catalog: {
+          label: 'Search symbols',
+          load: async () => [],
+          entry: { label: '  ', payload: { kind: 'emoji' }, field: 'char' },
+        },
+      },
+      refusal: /facet "symbol" needs a non-blank free-entry label/,
+    },
+  ])('refuses $declaration', ({ picker, refusal }) => {
+    expect(define(picker)).toThrow(refusal)
   })
 })
