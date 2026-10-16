@@ -379,16 +379,14 @@ the table alone.
    so it would be strictly more machinery for the same result while
    reintroducing exactly the multi-producer divergence this decision exists
    to delete. The editor's dark palette (contrast-tested against the WCAG
-   1.4.11/1.4.3 floors) is the shared theme's dark palette; viewer and export
-   both pin `mode: 'light'` at their call sites, preserving the invariant
-   that a user's UI theme can never change exported bytes. `headless-renderer`'s
-   `theme: 'dark'` now builds the scene with `createSpatialTheme({ mode:
+   1.4.11/1.4.3 floors) is the shared theme's dark palette. The MCP scene
+   and its digest pin `mode: 'light'`; the viewer and the daemon export take
+   the mode as an explicit argument defaulting to light, so ambient UI theme
+   never changes exported bytes. `headless-renderer`'s
+   `theme: 'dark'` builds the scene with `createSpatialTheme({ mode:
    'dark' })` and sets `SvgDocumentOptions.textFill` (an inheritable root
    `fill` — the document-level analogue of the editor host's inherited CSS
-   fill) so body runs stay legible on the dark background. `theme` is an
-   explicit per-request argument; the invariant that ambient UI theme never
-   changes exported bytes still holds, and light exports are byte-identical
-   to before.
+   fill) so body runs stay legible on the dark background.
    `theme/font-family.ts`'s
    `SPATIAL_THEME_FONT_FAMILY` ('Roboto') is now what every
    `resolveLabel()` declares. `VIEWER_FONT_FAMILY` (canvas-viewer) and
@@ -1009,6 +1007,8 @@ plugin adding a silhouette adds it to its own rather than widening
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+  Baselines are linux-only (CI's platform): off linux it skips, and
+  `svg/pixel-golden-baselines.test.ts` holds the set.
   Two of its fixtures are THEMED — one canvas drawn under `visual.sketch`
   and under `visual.neon`, each on its own paper — because every other
   golden here is crisp, so a change to sketch's jitter or neon's blur moved
