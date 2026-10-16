@@ -67,8 +67,10 @@ paths:
   follows the same rule: a document subscribing to a stream-refused hub is
   told at once, and once every subscription is released the next subscribe
   opens the stream again. `onAuthRefused` carries its cause
-  (`authRefusalCauseSchema`: stream, subscribe or push); a refused push is
-  only announced, never state a joiner is told, and a stream refusal is
+  (`authRefusalCauseSchema`: stream, subscribe or push), and `SseBackend`
+  hands it to `onAuthError`; a refused push is only announced, never state a
+  joiner is told — a page reads it as a write that did not land, not as
+  live sync off — and a stream refusal is
   recorded only for the subscribers its open was asked for — one subscribing
   after the last release, even while that open is pending, gets its own. The sync wire key grammar and
   the document route URLs are `sync-key.ts` (`./sync-key`), not the hub.
