@@ -5,9 +5,8 @@ import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
- * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
- * field is accepted for API symmetry with workspace-scoped tools and as a
- * future authorization-scoping hook, not passed to the store.
+ * `workspaceId` is passed to the store inside the `DocRef`: the daemon's
+ * workspace plane resolves the document through that workspace's tree.
  */
 const exportJsonCanvasInputSchema = z
   .object({

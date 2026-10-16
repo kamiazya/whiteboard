@@ -1,11 +1,11 @@
 /**
  * What identifies one rendered picture of one document (ADR-0027 decision 2).
  *
- * The key crosses a worker boundary — and, once persistence lands, a storage
- * boundary — so it is a declared value type rather than a string built at each
- * call site, per this repo's Zod discipline. Three call sites concatenating
- * their own key is three chances to disagree, and the two that disagree serve
- * the wrong picture rather than failing.
+ * The key crosses a worker boundary and a storage boundary (the OPFS render
+ * store, through `renderKeyPath`), so it is a declared value type rather than
+ * a string built at each call site, per this repo's Zod discipline. Three
+ * call sites concatenating their own key is three chances to disagree, and
+ * the two that disagree serve the wrong picture rather than failing.
  */
 
 import { spatialThemeModeSchema } from '@kamiazya/whiteboard-canvas-render'
@@ -28,8 +28,8 @@ export const RENDERER_BUILD_ID: string = __RENDERER_BUILD_ID__
  * The families the broker holds, which is NOT every pipeline a surface can
  * take: `png-raster` is absent because nothing asks the broker for one, and
  * naming it here would claim a storage shape this key cannot address.
- * `render-surfaces.ts` widens this by exactly that member, so the two say the
- * same thing about the families they share.
+ * `render-surfaces.ts` uses this same set as its pipelines, so the ledger
+ * cannot name a family the broker does not hold.
  */
 const brokeredPipelineSchema = z.enum(['svg', 'outline'])
 
