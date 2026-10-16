@@ -611,7 +611,7 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
 
   // The rail is shut until now: this press is what opens it.
   expect(screen.queryByTestId('comments-panel')).toBeNull()
-  marker.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+  marker.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
   await waitFor(() => expect(screen.getByText('by the reviewer')).toBeInTheDocument(), {
     timeout: 15_000,
