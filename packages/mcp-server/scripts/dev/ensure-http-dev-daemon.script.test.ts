@@ -90,6 +90,11 @@ function reapedPid(): Promise<number> {
   )
 }
 
+/** The one stderr line a hook that gave up on a running daemon prints. */
+function giveUpLine(stderr: string): string | undefined {
+  return stderr.split('\n').find((line) => line.includes('no second daemon was started'))
+}
+
 function readSentinel<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
 }
@@ -308,8 +313,13 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       expect(exitCode).not.toBe(0)
       expect(countSpawns()).toBe(0)
-      expect(stderr).toContain(`pid ${process.pid}`)
-      expect(stderr).toContain('MCP tools will be unavailable')
+      // The give-up line follows whichever silence the daemon met — here a
+      // socket that is not there, not a wait — and still reads as a sentence.
+      expect(giveUpLine(stderr)).toBe(
+        `[ensure-http-dev-daemon] daemon (pid ${process.pid}) is running but has no socket at ${join(dataDir, 'silent.sock')}, ` +
+          'and was still not answering after 800ms; no second daemon was started. ' +
+          'MCP tools will be unavailable for this session — `pnpm mcp:http:stop` and reopen the session to restart it.',
+      )
     },
   )
 
@@ -343,12 +353,14 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       expect(exitCode).not.toBe(0)
       expect(countSpawns()).toBe(0)
-      expect(stderr).toContain('no second daemon was started')
       // The status ask is what went unanswered here, not the ping, so the
       // line names that ask's own wait and does not vouch for the pid.
-      expect(stderr).toContain('did not answer /api/runtime/status within 1500ms')
+      expect(giveUpLine(stderr)).toBe(
+        `[ensure-http-dev-daemon] daemon (recorded pid ${process.pid}, unconfirmed) is running but did not answer /api/runtime/status within 1500ms, ` +
+          'and was still not answering after 800ms; no second daemon was started. ' +
+          'MCP tools will be unavailable for this session — `pnpm mcp:http:stop` and reopen the session to restart it.',
+      )
       expect(stderr).not.toContain('3000ms')
-      expect(stderr).toContain(`recorded pid ${process.pid}, unconfirmed`)
     },
     30_000,
   )

@@ -35,7 +35,6 @@ import {
  *   isAlive: (pid: number) => boolean,
  *   kill: (pid: number, signal: string) => unknown,
  *   sleep: (ms: number) => Promise<unknown>,
- *   answers?: (record: { socketPath: string }) => Promise<boolean>,
  *   request?: NonNullable<Parameters<typeof assessRecordedDaemon>[1]>['request'],
  *   startMs?: (pid: number) => number | null,
  *   timeoutMs?: number,
@@ -56,7 +55,6 @@ export async function stopDevDaemon({
   isAlive,
   kill,
   sleep,
-  answers,
   request,
   startMs = readProcessStartMs,
   timeoutMs = 10_000,
@@ -66,7 +64,7 @@ export async function stopDevDaemon({
   const wrapper = readWrapper(dataDir)
   const record = readRecord(dataDir)
   if (record === null) return stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock })
-  const daemon = await assessRecordedDaemon(record, { answers, isAlive, startMs, request })
+  const daemon = await assessRecordedDaemon(record, { isAlive, startMs, request })
   if (daemon.process === 'foreign') {
     const refusal = unconfirmedForeign(record, daemon.liveness)
     if (refusal !== null) return refusal

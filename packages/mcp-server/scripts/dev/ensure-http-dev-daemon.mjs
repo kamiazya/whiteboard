@@ -182,8 +182,11 @@ async function waitForRunningDaemon(busyMessage) {
     info('[ensure-http-dev-daemon] the running dev daemon answered')
     process.exit(0)
   }
+  // The busy message ends in whichever silence the daemon met — a wait, a
+  // refusal, a missing socket, a status — so what follows it names the
+  // daemon again rather than continuing any one of those clauses.
   console.error(
-    `[ensure-http-dev-daemon] ${busyMessage}, and still had not after ${READY_TIMEOUT_MS}ms; no second daemon was started. ` +
+    `[ensure-http-dev-daemon] ${busyMessage}, and was still not answering after ${READY_TIMEOUT_MS}ms; no second daemon was started. ` +
       'MCP tools will be unavailable for this session — `pnpm mcp:http:stop` and reopen the session to restart it.',
   )
   process.exit(1)

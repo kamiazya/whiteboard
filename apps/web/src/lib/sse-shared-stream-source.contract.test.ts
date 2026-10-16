@@ -29,6 +29,7 @@ const daemonWrites: { doc: string; body: Uint8Array }[] = []
 const daemonState = new Map<string, Uint8Array>()
 const failingReads = new Set<string>()
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
+const refusedDocs = new Set<string>()
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
 let endStream: (() => void) | null = null
@@ -53,7 +54,11 @@ const server = setupServer(
     )
   }),
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
-    subscribeBodies.push((await request.json()) as (typeof subscribeBodies)[number])
+    const body = (await request.json()) as (typeof subscribeBodies)[number]
+    subscribeBodies.push(body)
+    if (body.subscribe?.some((doc) => refusedDocs.has(doc))) {
+      return HttpResponse.json({ title: 'forbidden' }, { status: 403 })
+    }
     return HttpResponse.json({ ok: true })
   }),
   // The daemon's snapshot route: what the worker seeds its replica from on
@@ -129,6 +134,7 @@ function createHarness(): SseStreamSourceHarness {
     // so teardown is a no-op; the contract's per-case document keys are what
     // keep one case's traffic from being read as another's.
     dropStream: () => endStream?.(),
+    refuseSubscribe: (doc) => refusedDocs.add(doc),
     cleanup: () => {},
   }
 }

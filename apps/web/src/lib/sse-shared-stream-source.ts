@@ -73,46 +73,84 @@ interface Claim {
 }
 
 /**
+ * What this tab was last told of a document it holds, kept so a listener
+ * joining after the first is told it too. The worker announces to a PORT, and
+ * a tab subscribes its port to a document once, so a later listener in the
+ * same tab is someone the worker never knew to tell.
+ */
+interface Relayed {
+  connected?: boolean
+  authRefused: boolean
+  /** Only a failing write is state; one that landed is news nobody joining needs. */
+  writeFailing: boolean
+}
+
+/** Records what `evt` says of its document, for a listener that joins later. */
+function remember(relayed: Map<string, Relayed>, evt: WorkerNews): void {
+  const prior = relayed.get(evt.doc) ?? { authRefused: false, writeFailing: false }
+  if (evt.type === 'status') {
+    // Routed again means served again: a refusal before it no longer describes the document.
+    const authRefused = evt.connected ? false : prior.authRefused
+    relayed.set(evt.doc, { ...prior, connected: evt.connected, authRefused })
+  } else if (evt.type === 'auth-refused') {
+    relayed.set(evt.doc, { ...prior, authRefused: true })
+  } else if (evt.type === 'write-state') {
+    relayed.set(evt.doc, { ...prior, writeFailing: !evt.landed })
+  }
+}
+
+/** Tells a joining listener the state everyone already holding the document was told. */
+function announceTo(listener: DocListener, state: Relayed | undefined): void {
+  if (!state) return
+  const { connected } = state
+  if (connected !== undefined) tellEach([listener], (l) => l.onConnectionChange?.(connected))
+  if (state.authRefused) tellEach([listener], (l) => l.onAuthRefused?.())
+  if (state.writeFailing) tellEach([listener], (l) => l.onWriteState?.(false))
+}
+
+/** One listener's throw is its own: everyone after it is still told. */
+function tellEach(set: readonly DocListener[], tell: (listener: DocListener) => void): void {
+  for (const l of set) {
+    try {
+      tell(l)
+    } catch {
+      // A listener's own failure is not this source's to propagate.
+    }
+  }
+}
+
+type WorkerNews = Exclude<SseWorkerEvent, { type: 'snapshot' }>
+
+/**
  * The ONE inbound channel. Every byte a tab applies has been through the
  * worker's replica — ordered and deduplicated against the daemon's frames and
  * every sibling tab's pushes — so all tabs observe the same sequence.
  */
-function deliverToListeners(
-  claims: ReadonlyMap<DocListener, Claim>,
-  evt: Exclude<ReturnType<typeof sseWorkerEventSchema.parse>, { type: 'snapshot' }>,
-): void {
+function deliverToListeners(claims: ReadonlyMap<DocListener, Claim>, evt: WorkerNews): void {
   const set = [...claims.keys()]
   if (evt.type === 'authority-update') {
     const bytes = base64ToBytes(evt.update)
     if (bytes === null) return
-    for (const l of set) l.onUpdate(bytes)
+    tellEach(set, (l) => l.onUpdate(bytes))
     return
   }
   if (evt.type === 'status') {
-    for (const l of set) l.onConnectionChange?.(evt.connected)
+    tellEach(set, (l) => l.onConnectionChange?.(evt.connected))
     return
   }
-  if (evt.type === 'write-state' || evt.type === 'write-refused') {
-    deliverWriteNews(set, evt)
+  if (evt.type === 'write-state') {
+    tellEach(set, (l) => l.onWriteState?.(evt.landed))
+    return
+  }
+  if (evt.type === 'write-refused') {
+    tellEach(set, (l) => l.onWriteRefused?.(evt.refusal))
     return
   }
   if (evt.type === 'auth-refused') {
-    for (const l of set) l.onAuthRefused?.()
+    tellEach(set, (l) => l.onAuthRefused?.())
     return
   }
-  for (const l of set) l.onMessage(evt.raw)
-}
-
-/** What the worker says of the writes a tab handed it. */
-function deliverWriteNews(
-  set: readonly DocListener[],
-  evt: Extract<SseWorkerEvent, { type: 'write-state' | 'write-refused' }>,
-): void {
-  if (evt.type === 'write-state') {
-    for (const l of set) l.onWriteState?.(evt.landed)
-  } else {
-    for (const l of set) l.onWriteRefused?.(evt.refusal)
-  }
+  tellEach(set, (l) => l.onMessage(evt.raw))
 }
 
 /**
@@ -149,6 +187,32 @@ function retire(
     if (leftEarly) leave()
     else claim.leave = leave
   }
+}
+
+/** What one tab's port holds while its worker is alive. */
+interface PortHolding {
+  listeners: ReadonlyMap<string, ReadonlyMap<DocListener, Claim>>
+  snapshotWaiters: Map<string, Set<SnapshotWaiter>>
+  relayed: Map<string, Relayed>
+}
+
+/** One event from the worker, to whoever in this tab it concerns. */
+function receive(raw: unknown, { listeners, snapshotWaiters, relayed }: PortHolding): void {
+  const parsed = sseWorkerEventSchema.safeParse(raw)
+  if (!parsed.success) return
+  const evt = parsed.data
+  // Answered ahead of the listener gate below: a snapshot answers a
+  // request, not a subscription, and a caller may ask for one with no
+  // listener at all — gating it on one would leave that caller waiting
+  // forever.
+  if (evt.type === 'snapshot') {
+    answerSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
+    return
+  }
+  const claims = listeners.get(evt.doc)
+  if (!claims) return
+  remember(relayed, evt)
+  deliverToListeners(claims, evt)
 }
 
 const workerFailed = (baseUrl: string) =>
@@ -190,6 +254,8 @@ export function createSharedSseStreamSource(
    * gotten asking separately.
    */
   const snapshotWaiters = new Map<string, Set<SnapshotWaiter>>()
+  /** Beside `listeners`, and let go with a document's last claim. */
+  const relayed = new Map<string, Relayed>()
   const port = worker.port
 
   /** The page's own stream, once the worker has failed; every call goes to it from then on. */
@@ -213,21 +279,7 @@ export function createSharedSseStreamSource(
     own = new SseStreamHub({ fetch, baseUrl })
     retire(baseUrl, listeners, snapshotWaiters, own)
   }
-  port.onmessage = (e: MessageEvent) => {
-    const parsed = sseWorkerEventSchema.safeParse(e.data)
-    if (!parsed.success) return
-    const evt = parsed.data
-    // Answered ahead of the listener gate below: a snapshot answers a
-    // request, not a subscription, and a caller may ask for one with no
-    // listener at all — gating it on one would leave that caller waiting
-    // forever.
-    if (evt.type === 'snapshot') {
-      answerSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
-      return
-    }
-    const claims = listeners.get(evt.doc)
-    if (claims) deliverToListeners(claims, evt)
-  }
+  port.onmessage = (e: MessageEvent) => receive(e.data, { listeners, snapshotWaiters, relayed })
   port.start()
   postWorkerRequest(port, { type: 'init', baseUrl })
 
@@ -237,6 +289,7 @@ export function createSharedSseStreamSource(
     if (!current?.delete(listener)) return
     if (current.size > 0) return
     listeners.delete(doc)
+    relayed.delete(doc)
     postWorkerRequest(port, { type: 'unsubscribe', doc })
   }
 
@@ -253,6 +306,7 @@ export function createSharedSseStreamSource(
       }
       const claim = claims.get(listener) ?? { leave: () => leaveWorker(doc, listener) }
       claims.set(listener, claim)
+      announceTo(listener, relayed.get(doc))
       return () => claim.leave()
     },
     sendMessage(doc, message) {
@@ -293,6 +347,7 @@ export function createSharedSseStreamSource(
   globalThis.addEventListener?.('pagehide', () => {
     for (const doc of listeners.keys()) postWorkerRequest(port, { type: 'unsubscribe', doc })
     listeners.clear()
+    relayed.clear()
   })
 
   sources.set(baseUrl, source)

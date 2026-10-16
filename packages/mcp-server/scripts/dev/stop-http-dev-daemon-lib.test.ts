@@ -33,9 +33,8 @@ function world({
         daemon === null || !recorded
           ? null
           : { pid: daemon, socketPath: '/gone.sock', startedAt: STARTED_AT, launch, token },
-      answers: async () => false,
       request: async (): Promise<{ status: number; contentType: string; text: string }> => {
-        throw new Error('ENOENT')
+        throw Object.assign(new Error('connect ENOENT /gone.sock'), { code: 'ENOENT' })
       },
       startMs: (pid: number) =>
         startedAfter.includes(pid) ? RECORDED_AT + 60_000 : RECORDED_AT - 1,
@@ -102,7 +101,6 @@ describe('stopDevDaemon', () => {
     const w = world({ wrapper: 50, startedAfter: [100], token: 'tok' })
     const input = {
       ...w.input,
-      answers: async () => true,
       request: async () => ({
         status: 200,
         contentType: 'application/json',
@@ -121,11 +119,36 @@ describe('stopDevDaemon', () => {
 
   it('stops a daemon too busy to answer its ping', async () => {
     const w = world()
-    expect(await stopDevDaemon({ ...w.input, answers: async () => false })).toEqual({
+    const request = vi.fn(async (_record: unknown, req: { timeoutMs?: number }): Promise<never> => {
+      throw Object.assign(new Error('no answer'), { code: NO_ANSWER, timeoutMs: req.timeoutMs })
+    })
+    expect(await stopDevDaemon({ ...w.input, request })).toEqual({
       kind: 'stopped',
       via: 'daemon',
       pid: 100,
     })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ socketPath: '/gone.sock' }),
+      expect.objectContaining({ path: '/api/runtime/ping' }),
+    )
+    expect(w.signalled).toEqual([[100, 'SIGTERM']])
+  })
+
+  // Something still serves the socket, so this record is no leftover, yet
+  // the pid it names is gone: there is no process this stop may signal.
+  it('signals nothing when the socket answers its ping but the recorded pid is gone', async () => {
+    const w = world({ wrapper: 50 })
+    const input = {
+      ...w.input,
+      isAlive: (pid: number) => pid === 50,
+      request: async () => ({ status: 200, contentType: 'text/plain', text: 'ok' }),
+    }
+    expect(await stopDevDaemon(input)).toEqual({
+      kind: 'unsignallable',
+      pid: 100,
+      reason: 'a daemon answers on /gone.sock, but the pid its record names (100) is not running',
+    })
+    expect(w.signalled).toEqual([])
   })
 
   it('reports a process that outlives the timeout rather than claiming it stopped', async () => {
@@ -197,7 +220,6 @@ describe('stopDevDaemon', () => {
       const input = {
         ...w.input,
         startMs: stepped,
-        answers: async () => true,
         request: servingAs(100),
       }
       expect(await stopDevDaemon(input)).toEqual({ kind: 'stopped', via: 'wrapper', pid: 50 })
@@ -207,7 +229,6 @@ describe('stopDevDaemon', () => {
       const alone = {
         ...bare.input,
         startMs: stepped,
-        answers: async () => true,
         request: servingAs(100),
       }
       expect(await stopDevDaemon(alone)).toEqual({ kind: 'stopped', via: 'daemon', pid: 100 })
@@ -219,7 +240,6 @@ describe('stopDevDaemon', () => {
       const input = {
         ...w.input,
         startMs: stepped,
-        answers: async () => true,
         request: servingAs(4242),
       }
       expect(await stopDevDaemon(input)).toEqual({
@@ -234,14 +254,14 @@ describe('stopDevDaemon', () => {
     // wedged on its loop, not a pid somebody else has taken: its record stays.
     it('refuses, signalling nothing, when the socket accepts and never answers', async () => {
       const w = world({ wrapper: 50, token: 'tok' })
-      // Each ask of a wedged socket costs its whole timeout, so it is asked once.
-      const answers = vi.fn(async () => false)
+      // Each ask of a wedged socket costs its whole timeout, so it is asked
+      // once: the status ask, with no ping after it through the same seam.
       const request = vi.fn(
         async (): Promise<{ status: number; contentType: string; text: string }> => {
           throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
         },
       )
-      const input = { ...w.input, startMs: stepped, answers, request }
+      const input = { ...w.input, startMs: stepped, request }
       expect(await stopDevDaemon(input)).toEqual({
         kind: 'unsignallable',
         pid: 100,
@@ -249,7 +269,6 @@ describe('stopDevDaemon', () => {
       })
       expect(w.signalled).toEqual([])
       expect(request).toHaveBeenCalledTimes(1)
-      expect(answers).not.toHaveBeenCalled()
     })
   })
 })

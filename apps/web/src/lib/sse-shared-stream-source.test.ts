@@ -411,3 +411,54 @@ describe('a SharedWorker the browser refuses to construct', () => {
     expect(createSharedSseStreamSource(origin('refused'))).toBeNull()
   })
 })
+
+// The worker tells a PORT that arrives mid-retry its writes are failing; a
+// second listener in a tab already subscribed has no port of its own to be
+// told on, so the tab's source tells it.
+describe('a listener joining a document in this tab', () => {
+  const tell = (data: Record<string, unknown>) =>
+    FakeSharedWorker.instances[0]?.port.onmessage?.({ data } as MessageEvent)
+
+  it('is told the writes are failing while they are', () => {
+    const source = createSharedSseStreamSource(origin('joiner-write-state'))
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'write-state', doc: 'w/doc', landed: false })
+
+    const failing = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: failing })
+    expect(failing.mock.calls).toEqual([[false]])
+
+    tell({ type: 'write-state', doc: 'w/doc', landed: true })
+    const later = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: later })
+    expect(later).not.toHaveBeenCalled()
+  })
+
+  it('is not told of a refusal the document has since recovered from', () => {
+    const source = createSharedSseStreamSource(origin('joiner-recovered'))
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'auth-refused', doc: 'w/doc' })
+    tell({ type: 'status', doc: 'w/doc', connected: true })
+
+    const refused = vi.fn()
+    const states: boolean[] = []
+    source?.subscribe('w/doc', {
+      onUpdate: vi.fn(),
+      onMessage: vi.fn(),
+      onAuthRefused: refused,
+      onConnectionChange: (connected) => states.push(connected),
+    })
+    expect({ refused: refused.mock.calls.length, states }).toEqual({ refused: 0, states: [true] })
+  })
+
+  it('starts from nothing once the tab has let the document go', () => {
+    const source = createSharedSseStreamSource(origin('joiner-released'))
+    const off = source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'status', doc: 'w/doc', connected: true })
+    off?.()
+
+    const onConnectionChange = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
+    expect(onConnectionChange).not.toHaveBeenCalled()
+  })
+})

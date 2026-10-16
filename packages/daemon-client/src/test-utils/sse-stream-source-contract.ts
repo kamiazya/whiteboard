@@ -16,7 +16,7 @@
  */
 import { LoroDoc } from 'loro-crdt'
 import { expect, it, vi } from 'vitest'
-import type { SseStreamSource } from '../sse-stream-hub.js'
+import type { DocListener, SseStreamSource } from '../sse-stream-hub.js'
 
 /**
  * Real Loro bytes, so an implementation that merges the push through a replica
@@ -80,6 +80,13 @@ export interface SseStreamSourceHarness {
    * implementation owes its own suite the relay.
    */
   refuseAuth?(): void
+  /**
+   * Make the daemon refuse the credential for any subscribe naming `doc`,
+   * leaving the stream and every other document alone — a workspace the
+   * credential may not enter. Scoped to one document so even a harness whose
+   * stream outlives the case can offer it.
+   */
+  refuseSubscribe(doc: string): void
   cleanup(): void
 }
 
@@ -96,6 +103,13 @@ const nextDoc = (): string => `contract-ws/doc-${++seq}`
  * a replica — what it delivers frames through — for no other kind of key.
  */
 const nextWorkspaceDoc = (): string => `workspace:contract-ws-${++seq}`
+
+/**
+ * A document in a workspace of its own, for the cases where the daemon refuses
+ * one workspace: a refusal is answered per workspace, so sharing one with
+ * another case's document would refuse that one too.
+ */
+const nextIsolatedDoc = (): string => `contract-refused-ws-${++seq}/doc`
 
 const until = (predicate: () => boolean): Promise<void> =>
   vi.waitFor(() => expect(predicate()).toBe(true)) as unknown as Promise<void>
@@ -290,6 +304,8 @@ export function sseStreamSourceContract(
     h.cleanup()
   })
 
+  joinerCases(create)
+  isolationCases(create)
   it('stops delivering to a listener that unsubscribed', async () => {
     const h = await create()
     const doc = nextWorkspaceDoc()
@@ -365,6 +381,85 @@ function snapshotCases(
     const reconstructed = new LoroDoc()
     reconstructed.import(bytes as Uint8Array)
     expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
+    h.cleanup()
+  })
+}
+
+/** A listener that hears nothing but what `hooks` asks for. */
+const listenerOf = (hooks: Partial<DocListener> = {}): DocListener => ({
+  onUpdate: () => {},
+  onMessage: () => {},
+  ...hooks,
+})
+
+/**
+ * What a listener joining a document someone else already holds is told.
+ * Announced on transitions alone, the state would never reach it: a second
+ * view of one document would show an unknown connection, or never learn its
+ * credential was refused, for as long as nothing changed.
+ */
+function joinerCases(create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>): void {
+  it('tells a listener joining a routed document it is connected, at once', async () => {
+    const h = await create()
+    const doc = nextDoc()
+    const firstStates: boolean[] = []
+    const offFirst = h.source.subscribe(
+      doc,
+      listenerOf({ onConnectionChange: (connected) => firstStates.push(connected) }),
+    )
+    await until(() => firstStates.includes(true))
+
+    const secondStates: boolean[] = []
+    const offSecond = h.source.subscribe(
+      doc,
+      listenerOf({ onConnectionChange: (connected) => secondStates.push(connected) }),
+    )
+
+    expect(secondStates).toEqual([true])
+    offFirst()
+    offSecond()
+    h.cleanup()
+  })
+
+  it('tells a listener joining a refused document it was refused, at once', async () => {
+    const h = await create()
+    const doc = nextIsolatedDoc()
+    h.refuseSubscribe(doc)
+    const refused = { first: 0, second: 0 }
+    const offFirst = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refused.first++ }))
+    await until(() => refused.first === 1)
+
+    const offSecond = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refused.second++ }))
+
+    expect(refused.second).toBe(1)
+    offFirst()
+    offSecond()
+    h.cleanup()
+  })
+}
+
+/** What every listener on a document is owed whatever the others do. */
+function isolationCases(
+  create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>,
+): void {
+  it('still tells every listener when one of them throws', async () => {
+    // One view's failure is its own: letting it escape would leave every
+    // listener after it on the document believing the stale state.
+    const h = await create()
+    const doc = nextDoc()
+    const fails = () => {
+      throw new Error('a listener that fails')
+    }
+    const offThrowing = h.source.subscribe(doc, listenerOf({ onConnectionChange: fails }))
+    const states: boolean[] = []
+    const offOther = h.source.subscribe(
+      doc,
+      listenerOf({ onConnectionChange: (connected) => states.push(connected) }),
+    )
+
+    await until(() => states.includes(true))
+    offThrowing()
+    offOther()
     h.cleanup()
   })
 }
