@@ -6,34 +6,16 @@
  * the first moment this client can trust that nothing it is waiting on was
  * lost, and the full state it re-sends is what the server merges.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import { openTestSession } from '../test-utils/document-sync-session.js'
 
 function setup() {
-  let handlers: DocumentBackendHandlers | null = null
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-    },
-    disconnect() {},
-    pushLocalUpdate: () => Promise.resolve(),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
   const restore: Array<[boolean, string | null]> = []
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange: () => {},
-    onBackendError: () => {},
-    onRestoreChange: (inProgress, label) => restore.push([inProgress, label]),
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
+  const { handlers, session } = openTestSession({
+    connected: false,
+    deps: { onRestoreChange: (inProgress, label) => restore.push([inProgress, label]) },
   })
-  session.connect()
-  return { handlers: () => handlers!, restore, session }
+  return { handlers, restore, session }
 }
 
 const lastState = (restore: Array<[boolean, string | null]>) => restore.at(-1)

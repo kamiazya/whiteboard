@@ -3,17 +3,14 @@
  * it lands. The person may have stopped typing, so no later write of this
  * session's will come to clear the failure — the landing has to.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserPersistenceState } from './browser-persistence-state.js'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import {
+  flushMicrotasks,
+  openTestSession,
+  snapshotOf,
+} from '../test-utils/document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
@@ -21,55 +18,20 @@ const canvas: SpatialCanvas = {
   edges: [],
 }
 
-function snapshotOf(value: SpatialCanvas): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, value)
-  return doc.export({ mode: 'snapshot' })
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 30; i++) await Promise.resolve()
-}
-
 afterEach(() => {
   vi.useRealTimers()
 })
 
 function openSession() {
-  let handlers: DocumentBackendHandlers | null = null
   let releasePush: () => void = () => {}
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () =>
+  const s = openTestSession({
+    push: () =>
       new Promise<void>((resolve) => {
         releasePush = resolve
       }),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const persistence: BrowserPersistenceState['kind'][] = []
-  const statuses: string[] = []
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange: (status) => statuses.push(status),
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-    onPersistenceChange: (state) => persistence.push(state.kind),
+    snapshot: snapshotOf(canvas),
   })
-  session.connect()
-  handlers!.onSnapshot(snapshotOf(canvas))
-  return {
-    session,
-    persistence,
-    statuses,
-    handlers: () => handlers!,
-    releasePush: () => releasePush(),
-  }
+  return { ...s, releasePush: () => releasePush() }
 }
 
 async function editAndPush(session: ReturnType<typeof openSession>['session']) {

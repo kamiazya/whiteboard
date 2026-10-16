@@ -7,32 +7,19 @@
  * not saved yet" for the rest of the session, over a document the keeper
  * holds in full.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { BrowserPersistenceState } from './browser-persistence-state.js'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import {
+  flushMicrotasks,
+  openTestSession,
+  snapshotOf,
+} from '../test-utils/document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
   edges: [],
-}
-
-function snapshotOf(value: SpatialCanvas): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, value)
-  return doc.export({ mode: 'snapshot' })
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 30; i++) await Promise.resolve()
 }
 
 afterEach(() => {
@@ -41,33 +28,14 @@ afterEach(() => {
 
 it('a failed write is settled by the full re-send a reconnect makes', async () => {
   vi.useFakeTimers()
-  let handlers: DocumentBackendHandlers | null = null
   let daemonUp = true
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () =>
-      daemonUp ? Promise.resolve() : Promise.reject(new Error('daemon unreachable')),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const persistence: BrowserPersistenceState['kind'][] = []
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange: () => {},
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-    onPersistenceChange: (state) => persistence.push(state.kind),
+  const { session, handlers, persistence } = openTestSession({
+    push: () => (daemonUp ? Promise.resolve() : Promise.reject(new Error('daemon unreachable'))),
+    snapshot: snapshotOf(canvas),
   })
-  session.connect()
-  handlers!.onSnapshot(snapshotOf(canvas))
 
   daemonUp = false
-  handlers!.onDisconnected?.()
+  handlers().onDisconnected?.()
   const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
   session.onChange(applyCommand(canvas, edit), edit)
   await vi.advanceTimersByTimeAsync(300)
@@ -75,7 +43,7 @@ it('a failed write is settled by the full re-send a reconnect makes', async () =
   expect(persistence).toEqual(['pending', 'degraded'])
 
   daemonUp = true
-  handlers!.onConnected()
+  handlers().onConnected()
   await flushMicrotasks()
   expect(persistence).toEqual(['pending', 'degraded', 'saved'])
   session.dispose()
