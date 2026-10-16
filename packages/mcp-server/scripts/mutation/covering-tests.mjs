@@ -83,11 +83,27 @@ function importersOf(files) {
 }
 
 /**
+ * The modules this lane mutates: `STRYKER_MUTATE` when set, read the way
+ * Stryker reads `--mutate` (comma-separated, a `:line-range` suffix dropped),
+ * else the configured list. The vitest config is loaded in a worker that never
+ * sees Stryker's arguments, so a run that narrows `--mutate` to a file outside
+ * the configured list must name it here too, or that file's own tests are
+ * never selected and its mutants read as survivors.
+ */
+export function mutatedModules(env = process.env) {
+  const named = (env.STRYKER_MUTATE ?? '')
+    .split(',')
+    .map((entry) => entry.trim().replace(/:\d+(?::\d+)?-\d+(?::\d+)?$/, ''))
+    .filter((entry) => entry !== '')
+  return named.length > 0 ? named : config.mutate
+}
+
+/**
  * Every test file under `src` that imports one of `mutated` (paths relative to
  * the package) within `depth` imports, as package-relative POSIX paths, sorted.
  */
 export function coveringTests(
-  mutated = config.mutate,
+  mutated = mutatedModules(),
   packageDir = PACKAGE_DIR,
   depth = COVERING_DEPTH,
 ) {

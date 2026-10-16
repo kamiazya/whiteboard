@@ -30,6 +30,7 @@ export default mergeConfig(
         // unsupported; these change into a directory holding a config file.
         '**/cli/dispatcher-config-file.test.ts',
         '**/cli/dispatcher-daemon-run-auto-open.test.ts',
+        '**/server/index.test.ts',
         // They measure how long the event loop is blocked, which a mutant
         // cannot change and a loaded box does: any failure ends the initial run.
         '**/*-loop-availability.test.ts',

@@ -5,3 +5,6 @@ export declare function coveringTests(
   packageDir?: string,
   depth?: number,
 ): string[]
+export declare function mutatedModules(
+  env?: Readonly<Record<string, string | undefined>>,
+): readonly string[]
