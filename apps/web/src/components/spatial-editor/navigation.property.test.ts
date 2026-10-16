@@ -579,17 +579,18 @@ const fingerReach = {
 }
 
 afterAllFloor(['every finger matches the model of what it means'], () => {
-  // Floors, not targets: about a third of the lowest of three measured runs
-  // (secondMemberJoined 235-244, memberReleased 188-204, bystander 25-33,
-  // thirdFinger 446-469, stranded 25-44), so a generator change that stops
-  // reaching an arm fails here by name rather than passing over it.
+  // Floors, not targets: each sits under the lowest of 8,000 sampled runs
+  // (minimum / median: secondMemberJoined 172/234, memberReleased 145/201,
+  // bystander 9/25, thirdFinger 349/454, stranded 12/32), so a generator
+  // change that stops reaching an arm fails here by name rather than passing
+  // over it. A floor read off a few runs sat on bystander's minimum.
   expect(fingerReach.secondMemberJoined, 'no gather ever grew past one member').toBeGreaterThan(80)
   expect(
     fingerReach.memberReleasedMidGather,
     'no member lifted while its gather held',
   ).toBeGreaterThan(60)
   expect(fingerReach.bystanderReleasedMidGather, 'no non-member lifted mid-gather').toBeGreaterThan(
-    8,
+    4,
   )
   expect(
     fingerReach.thirdFingerInPinch,
