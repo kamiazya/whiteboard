@@ -20,6 +20,7 @@
 // codec's remark pipeline onto the critical path for a module that only needs
 // the font loader. The bundle-size gate fails if this regresses.
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
+import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { createElement, lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -55,12 +56,21 @@ const ServerModeApp = lazy(() =>
   import('./pages/ServerModeApp.js').then((m) => ({ default: m.ServerModeApp })),
 )
 
-/** A server-mode keeper marks the shell it serves (ADR-0047). A plain read,
- *  not the runtime-config schema, for the same entry-chunk reason. */
+/**
+ * The marker a server-mode keeper writes into the shell it serves (ADR-0047),
+ * bound to the runtime-config schema's literal by a type-only import: the
+ * schema itself stays off the entry chunk, and a renamed literal still fails
+ * to compile here instead of silently booting the hosted app.
+ */
+export const SERVER_KEEPER = 'server' satisfies NonNullable<RuntimeConfig['keeper']>
+
+/** A plain read, not the runtime-config schema, for the same entry-chunk reason. */
 function servedByServerKeeper(): boolean {
   const raw = (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
   return (
-    typeof raw === 'object' && raw !== null && (raw as { keeper?: unknown }).keeper === 'server'
+    typeof raw === 'object' &&
+    raw !== null &&
+    (raw as { keeper?: unknown }).keeper === SERVER_KEEPER
   )
 }
 
