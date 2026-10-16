@@ -87,20 +87,23 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
  * optional: shape-validated here via the model schemas, but their PERSISTENCE
  * and — for `segment` — their per-keeper UNIQUENESS are the registry
  * implementation's job, not this contract's. An implementation is free to
- * accept and currently ignore both fields — the conformance suite's base
- * case stays satisfiable that way, which is what apps/web's browser registry
- * and the in-memory double still rely on. mcp-server's daemon
- * (`CacheCoherentDocumentIndex`) is the first implementation that actually
- * PERSISTS and SERVES them: the `workspaces` table carries a `segment`
- * column with a unique index (a collision throws
- * `WorkspaceSegmentTakenError`, below), and `workspaceSummarySchema` serves
- * both fields through daemon-client's `api-contracts/document`.
+ * accept and ignore both fields: the bare tree-backed
+ * `LoroWorkspaceDocumentIndex` does, because a workspace's Loro tree keeps
+ * neither identity layer and its registry is a different collaborator. Each
+ * keeper that composes it supplies that registry and stores both fields —
+ * mcp-server's `CacheCoherentDocumentIndex` in the `workspaces` table, whose
+ * `segment` column carries a unique index (a collision throws
+ * `WorkspaceSegmentTakenError`, below), and apps/web's
+ * `FoldingBrowserIndex` through `IdbDocumentIndex`'s registry store — as
+ * does the in-memory double. The daemon also serves both through
+ * `workspaceSummarySchema` in daemon-client's `api-contracts/document`.
  *
  * No `canonicalId` field: ADR-0019's canonical layer already IS
  * `workspaceId`. Its schema tightens from `workspaceIdSchema` to the
- * stricter `workspaceCanonicalIdSchema` only after both keepers' minting
- * migrations land (tightening first would reject live data such as
- * `'default'`/`'local'`) — a separate `canonicalId` field would just be a
+ * stricter `workspaceCanonicalIdSchema` only after the daemon's minting
+ * migration lands (tightening first would reject its live `'default'`; the
+ * browser's `'local'` is already re-keyed onto a ULID by its IndexedDB
+ * upgrade) — a separate `canonicalId` field would just be a
  * second spelling of the same layer racing that migration.
  */
 export const createWorkspaceInputSchema = z

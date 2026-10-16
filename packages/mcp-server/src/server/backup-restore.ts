@@ -68,15 +68,15 @@ export interface BackupRestoreOptions {
 // Walk every existing path component of `p` from the deepest toward the root.
 // Returns true when the path's own final component is a symbolic link, or an
 // ancestor is one that someone other than root or this user could have placed.
-// Used by CLI callers to fail-closed before passing paths to the helper, so a
-// planted ancestor symlink (e.g. `<shared>/link → /outside`) cannot redirect
-// writes outside the operator's intended storage zone.
+// `inspectOutputPath` and `isSafeSourcePath` fail closed on it, so a planted
+// ancestor symlink (e.g. `<shared>/link → /outside`) cannot redirect a read or
+// write outside the operator's intended storage zone.
 //
 // An ancestor link is not refused outright because operating systems ship them
 // where nobody else can write: macOS's `/tmp → /private/tmp` and
 // `/var → /private/var` sit in a root-owned `/` that no one else may write, so
 // refusing every link would refuse the temp directory itself.
-async function hasAncestorSymlink(p: string): Promise<boolean> {
+async function hasUntrustedSymlink(p: string): Promise<boolean> {
   const target = resolve(p)
   let current = target
   while (true) {
@@ -112,9 +112,10 @@ export type OutputPathState = 'missing' | 'present' | 'unsafe'
 
 /**
  * Judge a path a command is about to WRITE to, before any byte moves. A
- * symlinked ancestor (`<safe>/link -> /outside`) would redirect the write
- * outside the operator's intended storage zone, so it is refused rather than
- * followed.
+ * symlinked ancestor (`<shared>/link -> /outside`) would redirect the write
+ * outside the operator's intended storage zone, so one that someone other
+ * than root or this user could have placed is refused; a link in a directory
+ * only they can write (macOS's `/tmp -> /private/tmp`) is followed.
  *
  * What the final component may be is the one thing callers differ on: a
  * backup or restore target refuses a symlink or plain file and lets anything
@@ -129,7 +130,7 @@ export async function inspectOutputPath(
   p: string,
   options: { requireDirectory: boolean },
 ): Promise<OutputPathState> {
-  if (await hasAncestorSymlink(p)) return 'unsafe'
+  if (await hasUntrustedSymlink(p)) return 'unsafe'
   let st: Awaited<ReturnType<typeof lstat>>
   try {
     st = await lstat(p)
@@ -148,7 +149,7 @@ export async function inspectOutputPath(
  */
 export async function isSafeSourcePath(p: string): Promise<boolean> {
   try {
-    return !(await hasAncestorSymlink(p))
+    return !(await hasUntrustedSymlink(p))
   } catch {
     return false
   }

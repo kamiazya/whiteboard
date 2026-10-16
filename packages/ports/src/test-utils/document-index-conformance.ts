@@ -553,14 +553,13 @@ function describeListWorkspaces(makeIndex: MakeIndex, withIndex: WithIndex): voi
 
     // ADR-0019's identity layers ride along on createWorkspace/listWorkspaces
     // without every implementation SERVING them: this base case only proves
-    // segment/displayName do not break an implementation that accepts and
-    // ignores them (apps/web's browser registry, the in-memory double), so
-    // it deliberately does NOT assert echo-back. mcp-server's daemon DOES
-    // persist and serve these fields now — that echo is pinned by its own
-    // tests (document-store.test.ts), not by this shared suite, because
-    // adding the assertion here would fail the implementations that still
-    // legitimately ignore them.
-    it('accepts a createWorkspace carrying segment and displayName, currently ignored', async () => {
+    // segment/displayName are accepted, idempotently, by every implementation,
+    // so it deliberately does NOT assert echo-back. The bare tree-backed
+    // `LoroWorkspaceDocumentIndex` runs this suite too and legitimately keeps
+    // neither layer. The daemon, apps/web's `FoldingBrowserIndex` and the
+    // in-memory double all store both; of those, only the daemon pins the
+    // echo (document-store.test.ts).
+    it('accepts a createWorkspace carrying segment and displayName, idempotently', async () => {
       await withIndex(async (index) => {
         await index.createWorkspace({
           workspaceId: 'ws-identity',
