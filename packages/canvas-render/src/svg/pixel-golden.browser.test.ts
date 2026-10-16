@@ -7,8 +7,8 @@
 // ../test-utils/pixel-golden-scenes.ts.
 
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import { afterEach, describe, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { page, server } from 'vitest/browser'
 import {
   buildArrowheadsScene,
   buildIconSetScene,
@@ -51,7 +51,24 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
+// The committed baselines are `-chromium-linux` only, because CI is the one
+// place a baseline is checked and CI is linux. Anywhere else Vitest finds no
+// baseline, writes one from the local render and fails — and the next run is
+// green against a PNG nobody reviewed. So off linux this skips, saying why;
+// `server.platform` is the browser server's own `process.platform`, the same
+// value Vitest suffixes the baseline name with. `pixel-golden-baselines.test.ts`
+// holds the committed set to linux-only and complete.
+const BASELINE_PLATFORM = 'linux'
+
 describe('pixel-level golden regression (real browser)', () => {
+  beforeEach(({ skip }) => {
+    skip(
+      server.platform !== BASELINE_PLATFORM,
+      `pixel baselines are ${BASELINE_PLATFORM}-only (CI); this browser server runs on ${server.platform}. ` +
+        'Regenerate on linux as test-utils/pixel-golden-scenes.ts describes.',
+    )
+  })
+
   it('jump-hop: the later edge hops over the earlier, bulging to the drawn side', async () => {
     mountScene(buildJumpHopScene(), 'jump-hop')
     await expect.element(page.getByTestId('jump-hop')).toMatchScreenshot('jump-hop')

@@ -49,9 +49,8 @@ import { createExportTextMeasurer, loadExportFonts } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
 import { unresolvedFamilies } from './unresolved-families.js'
 
-// Export never has its own theme switch (the composition root always
-// exports light, see package-canvas-render.md decision #8), so this
-// theme table is built once and reused across renders.
+// Both modes are built once and reused across renders: the resolver is
+// stateless, and `theme` is chosen per request (defaulting to light).
 const EXPORT_APPEARANCE_BY_MODE = {
   light: createSpatialTheme({ mode: 'light' }),
   dark: createSpatialTheme({ mode: 'dark' }),
