@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as favicon from '../lib/favicon.js'
-import { useFavicon } from './useFavicon.js'
+import { stubAppBadge } from '../test-utils/app-badge.js'
+import { useAppBadge, useFavicon } from './useFavicon.js'
 
 // The dynamic favicon exists only while a canvas page is mounted. Every
 // other surface (gallery, error pages) must see the static icon —
@@ -35,21 +36,15 @@ describe('useFavicon lifecycle', () => {
   })
 
   it('clears the app badge on unmount, so leaving unsaved work does not keep it', () => {
-    const setAppBadge = vi.fn(() => Promise.resolve())
-    const clearAppBadge = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'setAppBadge', { value: setAppBadge, configurable: true })
-    Object.defineProperty(navigator, 'clearAppBadge', { value: clearAppBadge, configurable: true })
+    const badge = stubAppBadge()
     try {
-      const { unmount } = renderHook(() =>
-        useFavicon({ style: 'dot', status: 'unsaved', rects: [] }),
-      )
-      expect(setAppBadge).toHaveBeenCalledTimes(1)
-      expect(clearAppBadge).not.toHaveBeenCalled()
+      const { unmount } = renderHook(() => useAppBadge({ keeper: 'browser', storage: 'failed' }))
+      expect(badge.set).toHaveBeenCalledTimes(1)
+      expect(badge.clear).not.toHaveBeenCalled()
       unmount()
-      expect(clearAppBadge).toHaveBeenCalledTimes(1)
+      expect(badge.clear).toHaveBeenCalledTimes(1)
     } finally {
-      Reflect.deleteProperty(navigator, 'setAppBadge')
-      Reflect.deleteProperty(navigator, 'clearAppBadge')
+      badge.restore()
     }
   })
 

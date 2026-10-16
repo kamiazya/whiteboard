@@ -60,11 +60,11 @@ export function resolveRectColor(color: string | undefined): string {
 }
 
 // A healthy keeper is quiet. A write that did not land and is still held for
-// a later one reads `unsaved`, the one state the app badge carries: a stuck
-// browser write; a daemon write the backend reported failed (it reports both
-// outcomes, so a later landed write clears it); a refused append to the
-// offline replica. A refused browser write and a rejected daemon session are
-// `offline`.
+// a later one reads `unsaved`: a stuck browser write; a daemon write the
+// backend reported failed (it reports both outcomes, so a later landed write
+// clears it); a refused append to the offline replica. A refused browser
+// write and a rejected daemon session are `offline`. The app badge is not
+// read off this table (`updateAppBadge` takes the connection state itself).
 const BROWSER_STATUS: Record<StorageHealth, FaviconStatus> = {
   ok: 'quiet',
   stuck: 'unsaved',

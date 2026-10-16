@@ -101,6 +101,27 @@ describe('the daemon page answers a requires_person_session refusal', () => {
     expect(credentialsGet).not.toHaveBeenCalled()
     expect(sentPaths.some((p) => p.includes('/pairing/'))).toBe(false)
   })
+
+  it('tells the shell sync is off for an unbound session', async () => {
+    const { fetchDouble } = daemonFetchDouble('requires_person_session')
+    vi.stubGlobal('fetch', fetchDouble)
+
+    renderPage(
+      <DaemonDocumentPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspaceId={WORKSPACE_ID}
+        path="board"
+        createBackend={() => new FakeDocumentBackend(seededSnapshot)}
+      />,
+    )
+
+    await expect.poll(() => document.body.textContent).toContain('this session is not bound')
+    // The refused load builds no session and nothing retries it, so the
+    // shell must not claim a reconnect: signing in is the only way out.
+    await expect
+      .poll(() => getShellConnection()?.state)
+      .toEqual({ keeper: 'daemon', session: 'sync-off' })
+  })
 })
 
 describe('the daemon page answers a not_a_member refusal', () => {

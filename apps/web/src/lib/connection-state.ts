@@ -12,7 +12,7 @@ export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-fail
 
 /**
  * What a daemon-kept page reports from what its session knows. A refusal —
- * the credential rejected, or the membership withdrawn, where no session runs
+ * the credential rejected, or a load refused or failed, where no session runs
  * at all — outranks everything, because reconnecting is the only way out of
  * it; then a write that did not land (the session's persistence account, not
  * its `error` status, which an unreadable document reports too); synced is
@@ -23,9 +23,9 @@ export function sessionHealthOf(
   authError: boolean,
   status: SyncStatus,
   persistence: BrowserPersistenceState,
-  membershipRefused = false,
+  noSession = false,
 ): SessionHealth {
-  if (authError || membershipRefused) return 'sync-off'
+  if (authError || noSession) return 'sync-off'
   if (persistence.kind === 'degraded' && persistence.reason === 'write-failed')
     return 'write-failed'
   return status === 'connected' ? 'synced' : 'reconnecting'
@@ -53,7 +53,7 @@ export function sessionHealthOf(
  * landed. It is an arm of its own rather than `daemon` with another session
  * value because no session runs — and a refused append there is the one
  * copy of the edits failing, which the tab-wide signals must see, the tab
- * icon and app badge among them (`faviconStatusOf`).
+ * icon and app badge among them (`faviconStatusOf`, `updateAppBadge`).
  */
 export type ConnectionState =
   | { readonly keeper: 'browser'; readonly storage: StorageHealth }

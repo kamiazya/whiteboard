@@ -1,6 +1,7 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect } from 'react'
 import { updateAppBadge } from '../lib/app-badge.js'
+import type { ConnectionState } from '../lib/connection-state.js'
 import {
   applyFavicon,
   type FaviconRect,
@@ -10,13 +11,15 @@ import {
 } from '../lib/favicon.js'
 
 /**
- * Keeps the tab favicon in sync with the canvas page: status dot (saved /
- * unsaved / syncing / offline) plus the mark — the document's own symbol
- * when it has one, else, in 'minimap' style, an abstract map of the scene's
- * node boxes. Debounced so a continuous drag repaints the icon
- * once it settles, not per pointer move; unmount restores the static icon.
- * Where canvas 2D is unavailable (jsdom), renderFavicon returns null and
- * the static icon stays.
+ * Keeps the tab favicon in step with a page's status: no dot while quiet, a
+ * dot for unsaved / syncing / offline, plus the mark — the document's own
+ * symbol when it has one, else, in 'minimap' style, an abstract map of the
+ * scene's node boxes. Mounted by the document pages (through
+ * `useDocumentFavicon`) and by the offline replica page, which has no
+ * outline and draws the 'dot' style. Debounced so a continuous drag repaints
+ * the icon once it settles, not per pointer move; unmount restores the
+ * static icon. Where canvas 2D is unavailable (jsdom), renderFavicon returns
+ * null and the static icon stays.
  */
 export function useFavicon({
   style,
@@ -37,16 +40,17 @@ export function useFavicon({
     return () => clearTimeout(id)
   }, [style, status, rects, symbol])
 
-  // The installed app's icon mirrors the same status (Badging API).
-  useEffect(() => {
-    updateAppBadge(status)
-  }, [status])
+  useEffect(() => () => applyFavicon(null), [])
+}
 
-  useEffect(
-    () => () => {
-      applyFavicon(null)
-      updateAppBadge('quiet')
-    },
-    [],
-  )
+/**
+ * The installed app's badge (Badging API), from the same state the page
+ * publishes to the shell: set while the keeper is not keeping, on every
+ * keeper. Its own hook rather than useFavicon's, because the favicon's status
+ * cannot answer it — a refused browser write draws `offline`. Unmount clears
+ * it, so leaving a page that held unsaved work does not keep the badge.
+ */
+export function useAppBadge(state: ConnectionState): void {
+  useEffect(() => updateAppBadge(state), [state])
+  useEffect(() => () => updateAppBadge(null), [])
 }

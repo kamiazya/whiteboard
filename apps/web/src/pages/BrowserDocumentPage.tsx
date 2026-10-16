@@ -16,6 +16,7 @@ import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useAppBadge } from '../hooks/useFavicon.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
@@ -392,9 +393,8 @@ function useBrowserDocument(
     setShellConnection({ state: connection, lastWrittenAt })
     return () => setShellConnection(null)
   }, [connection, lastWrittenAt])
+  useAppBadge(connection)
 
-  // Tab favicon: the state the shell mark draws, the outline off the session.
-  const readDocumentOutlineSource = readOutlineSource
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
   // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
   // keeps its own in the frontmatter facets, which are no canvas value and
@@ -406,12 +406,13 @@ function useBrowserDocument(
     () => resolveOpenDocumentSymbol({ kind: documentKind, canvas, facets: sync.facets }),
     [documentKind, canvas, sync.facets],
   )
+  // Tab favicon: the state the shell mark draws, the outline off the session.
   useDocumentFavicon({
     settingsStore,
     documentId,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvas,
-    readSource: readDocumentOutlineSource,
+    readSource: readOutlineSource,
     status: faviconStatusOf(connection),
     symbol: documentSymbol,
   })
