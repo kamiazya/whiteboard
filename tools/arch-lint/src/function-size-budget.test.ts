@@ -126,12 +126,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 54,
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
   'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
-  'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 74,
+  'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 56,
   // The `ViewPlugin.define` callback of a module-level constant: one closure over the
   // tap's state and the three listeners that read it.
   'apps/web/src/components/markdown-editor/completion-popup.ts#completionTouchAccept': 98,
   'apps/web/src/components/markdown-editor/editor-verbs.ts#wrapSelectionWith': 63,
-  'apps/web/src/components/markdown-editor/proposal-decorations.ts#proposalDecorations': 71,
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
   // A Settings card of the same shape as its two neighbours below: the rows,
   // the shared confirm dialog and the two-step delete are one screen's worth of
