@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import { getAppContextInputSchema } from '../commands/types.js'
 import { webMcpTools } from './tool-definitions.js'
+
+// The Zod input schema each tool's command validates against, named here
+// independently of the tool definition so the check cannot borrow the
+// definition's own derivation as its oracle.
+const COMMAND_INPUT_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  whiteboard_get_app_context: getAppContextInputSchema,
+}
 
 describe('webMcpTools manifest', () => {
   // Blocking metaguard: any change to a tool's name, description, or input
@@ -27,6 +36,22 @@ describe('webMcpTools manifest', () => {
         },
       },
     ])
+  })
+
+  // What the host is told it may send has to be what the command accepts: a
+  // compliant host never sends an argument the advertised schema forbids, so
+  // an advertised schema stricter than the command's silently removes it.
+  it('advertises the JSON Schema derived from its command input schema', () => {
+    expect(Object.keys(COMMAND_INPUT_SCHEMAS).sort()).toEqual(
+      webMcpTools.map((tool) => tool.name).sort(),
+    )
+    for (const tool of webMcpTools) {
+      const commandSchema = COMMAND_INPUT_SCHEMAS[tool.name]
+      expect(commandSchema, tool.name).toBeDefined()
+      const { $schema: _root, ...derived } = z.toJSONSchema(commandSchema as z.ZodType)
+      expect(tool.inputSchema, tool.name).toEqual(derived)
+      expect(tool.input, tool.name).toBe(commandSchema)
+    }
   })
 
   it('every tool name uses the whiteboard_ prefix', () => {

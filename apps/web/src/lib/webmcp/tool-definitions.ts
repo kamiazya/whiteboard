@@ -1,16 +1,14 @@
-import type { z } from 'zod'
+import { z } from 'zod'
 import type { WhiteboardCommands } from '../commands/index.js'
-import type { getAppContextInputSchema, getAppContextResultSchema } from '../commands/types.js'
+import { getAppContextInputSchema, type getAppContextResultSchema } from '../commands/types.js'
 
-// Every WebMCP tool this app exposes takes no arguments today — a
-// literal, not derived from a Zod schema, because there is no input schema
-// to keep in sync with yet. If a future tool needs an argument, give it a
-// proper Zod input schema next to its command instead of reusing this.
-const emptyObjectJsonSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {},
-} as const
+// The host is told exactly what the command accepts: derived from the
+// command's own Zod input schema, so the advertised contract cannot fall out
+// of step with the validation the call actually meets.
+function advertisedInputSchema(schema: z.ZodType): Record<string, unknown> {
+  const { $schema: _root, ...advertised } = z.toJSONSchema(schema)
+  return advertised
+}
 
 /**
  * A read-only WebMCP tool this app registers via `useBrowserToolRegistry`.
@@ -32,6 +30,8 @@ const emptyObjectJsonSchema = {
 export interface WebMcpToolDefinition<Result extends z.ZodTypeAny = z.ZodTypeAny> {
   readonly name: string
   readonly description: string
+  // The Zod schema the underlying command validates `input` against.
+  readonly input: z.ZodType
   readonly inputSchema: Record<string, unknown>
   // Every tool this app exposes only reads state — never mutates the
   // canvas, settings, or anything else — so this is required rather than
@@ -45,7 +45,8 @@ const whiteboardGetAppContextTool: WebMcpToolDefinition<typeof getAppContextResu
   name: 'whiteboard_get_app_context',
   description:
     'Read-only: reports which provider mode this whiteboard is running in and which canvas is currently open. Never includes secrets, tokens, or connection details.',
-  inputSchema: emptyObjectJsonSchema,
+  input: getAppContextInputSchema,
+  inputSchema: advertisedInputSchema(getAppContextInputSchema),
   readOnlyHint: true,
   execute: (commands, input) =>
     commands.getAppContext(input as z.infer<typeof getAppContextInputSchema>),
