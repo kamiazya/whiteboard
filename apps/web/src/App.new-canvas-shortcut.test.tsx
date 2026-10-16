@@ -19,10 +19,13 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { pwaOptions } from '../vite-pwa-options.js'
 import { App } from './App.js'
+import { BRIDGE_DAEMON_BASE_URL } from './lib/bridge-address.js'
 import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
+import type { ExtensionConnection } from './lib/extension-connection.js'
 import { sharedFoldingBrowserIndex } from './lib/folding-browser-index.js'
 import type { ProviderState } from './lib/provider.js'
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
+import { createUserSettingsStore } from './lib/user-settings-store.js'
 // The real list page, imported so its lazy() settles in a microtask: it is
 // the page under test here.
 import './pages/BrowserIndexPage.js'
@@ -41,6 +44,14 @@ vi.mock('./pages/DaemonDocumentPage.js', () => ({
   DaemonDocumentPage: () => <div data-testid="daemon-document-page" />,
 }))
 
+// A remembered daemon is renewed through the extension, which jsdom lacks; a
+// test that needs the renewal held in flight sets this to a pending promise.
+let extensionAnswer: () => Promise<ExtensionConnection> = async () => ({ status: 'none' })
+vi.mock('./lib/extension-connection.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/extension-connection.js')>()),
+  connectThroughExtension: () => extensionAnswer(),
+}))
+
 const BROWSER_STATE: ProviderState = { kind: 'browser' }
 const DAEMON_STATE: ProviderState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' }
 
@@ -55,6 +66,8 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'launchQueue')
   resetShellStatusForTests()
   vi.unstubAllGlobals()
+  extensionAnswer = async () => ({ status: 'none' })
+  localStorage.clear()
 })
 
 async function documentCount(): Promise<number> {
@@ -205,5 +218,23 @@ describe('the New canvas launcher shortcut while the app is already open', () =>
 
     expect(router.state.location).toBe(before)
     expect(screen.getByTestId('daemon-document-page')).toBeDefined()
+  })
+
+  it('a daemon reconnect still in flight keeps the window where it is', async () => {
+    extensionAnswer = () => new Promise(() => {})
+    const settings = createUserSettingsStore()
+    const loaded = settings.load()
+    settings.save({
+      ...loaded,
+      storage: { ...loaded.storage, daemonBaseUrl: BRIDGE_DAEMON_BASE_URL },
+    })
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('Connecting to the daemon…')
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
   })
 })

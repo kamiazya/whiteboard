@@ -118,7 +118,7 @@ export function App({ providerState }: AppProps) {
     connected: connection !== null,
     effectiveState,
   })
-  useNewCanvasLaunches(navigate, daemonKept)
+  useNewCanvasLaunches(navigate, { daemonKept, awaitingDaemonRenewal })
   useWorkspaceAddressSync({
     location,
     navigate,

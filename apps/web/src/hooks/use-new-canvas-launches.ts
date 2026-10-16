@@ -19,7 +19,13 @@ function tabHoldsWork(): boolean {
  * open: the manifest's `focus-existing` delivers the launch here rather than
  * navigating the window, so without a consumer the shortcut only focuses it.
  */
-export function useNewCanvasLaunches(navigate: NavigateFunction, daemonKept: boolean): void {
+export function useNewCanvasLaunches(
+  navigate: NavigateFunction,
+  keeper: { readonly daemonKept: boolean; readonly awaitingDaemonRenewal: boolean },
+): void {
+  // Undecided is not browser-kept: a renewal that lands hands the session to
+  // a daemon whose list does not act on the request.
+  const keptByBrowser = !keeper.daemonKept && !keeper.awaitingDaemonRenewal
   useEffect(() => {
     const queue = launchQueueOf(window)
     if (queue === null) return
@@ -27,11 +33,11 @@ export function useNewCanvasLaunches(navigate: NavigateFunction, daemonKept: boo
       newCanvasLaunchConsumer(window, {
         documentUrl: DOCUMENT_URL_AT_LOAD,
         holdsWork: tabHoldsWork,
-        keptByBrowser: () => !daemonKept,
+        keptByBrowser: () => keptByBrowser,
         open: () => {
           void navigate(NEW_CANVAS_SHORTCUT.url)
         },
       }),
     )
-  }, [navigate, daemonKept])
+  }, [navigate, keptByBrowser])
 }
