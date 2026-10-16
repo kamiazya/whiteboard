@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { validParse } from '../daemon/_test-daemon-record.js'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
@@ -89,7 +90,7 @@ describe('runDaemonDoctor: token missing', () => {
 })
 
 describe('runDaemonDoctor: valid record, process alive', () => {
-  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+  const parseValid: ParseRecord = validParse(validRecord)
 
   it('returns exitCode 0 and ok=true when process is alive', async () => {
     const { result, exitCode } = await runDoctor(parseValid, () => true)
@@ -119,7 +120,7 @@ describe('runDaemonDoctor: valid record, process alive', () => {
 })
 
 describe('runDaemonDoctor: valid record, process dead', () => {
-  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+  const parseValid: ParseRecord = validParse(validRecord)
 
   it('returns exitCode 1 and ok=false when process is dead', async () => {
     const { result, exitCode } = await runDoctor(parseValid, () => false)
@@ -143,7 +144,7 @@ describe('runDaemonDoctor: valid record, process dead', () => {
 })
 
 describe('runDaemonDoctor: valid record, its pid taken by a later process', () => {
-  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+  const parseValid: ParseRecord = validParse(validRecord)
   const reused = () =>
     runDaemonDoctor({
       dataDir: '/fake',
@@ -171,10 +172,7 @@ describe('runDaemonDoctor: a socket that answers as another pid', () => {
     const daemon = await answeringDaemonSocket(validRecord.pid + 1, validRecord.token)
     const { result, exitCode } = await runDaemonDoctor({
       dataDir: '/fake',
-      parseRecord: async () => ({
-        kind: 'valid',
-        record: { ...validRecord, socketPath: daemon.socketPath },
-      }),
+      parseRecord: validParse({ ...validRecord, socketPath: daemon.socketPath }),
       isPidAlive: () => true,
       processStartMs: () => Date.parse(validRecord.startedAt) + 6_000,
       runningVersion: validRecord.version,
@@ -192,7 +190,7 @@ describe('runDaemonDoctor: a socket that answers as another pid', () => {
 })
 
 describe('runDaemonDoctor: version skew', () => {
-  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+  const parseValid: ParseRecord = validParse(validRecord)
 
   it('reports a warning finding naming both versions when the daemon runs another build', async () => {
     const { result, exitCode } = await runDoctor(parseValid, () => true, '2.0.0')
@@ -241,7 +239,7 @@ describe('runDaemonDoctor: remediation is the human form of the command', () => 
     async () => ({ kind: 'missing' }),
     async () => ({ kind: 'malformed', message: 'not json' }),
     async () => ({ kind: 'token-missing', record: baseRecord, liveness: { state: 'dead' } }),
-    async () => ({ kind: 'valid', record: validRecord }),
+    validParse(validRecord),
   ]
 
   it('names `daemon run` without `--json` in every finding that tells a person to start it', async () => {

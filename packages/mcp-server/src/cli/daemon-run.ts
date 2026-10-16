@@ -7,9 +7,8 @@
 // removed and `stopped` settles; the dispatcher waits on it.
 
 import { nanoid } from 'nanoid'
-import { daemonLiveness } from '../daemon/daemon-liveness.js'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
-import { describeUnconfirmed } from '../daemon/daemon-record.js'
+import { describeUnconfirmed, opensSentence } from '../daemon/daemon-record.js'
 import { daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
 import {
   deleteDaemonRecord,
@@ -184,14 +183,14 @@ async function resolveStartupToken(
 }
 
 // A daemon.json that outlived its daemon can name a pid a later process took;
-// `daemonLiveness` answers 'running' only for the process that wrote it, so
+// the liveness it is read with answers 'running' only for the process that wrote it, so
 // the refusal is never over an unrelated process — and 'unconfirmed' when a
 // daemon answers on the record's socket regardless, which a start would only
 // collide with.
 async function refusalOverRecord(dataDir: string): Promise<DaemonRunOutcome | null> {
   const existing = await loadDaemonRecord(dataDir)
   if (existing === null) return null
-  const liveness = await daemonLiveness(existing)
+  const { record, liveness } = existing
   if (liveness.state === 'running') {
     return {
       kind: 'refused',
@@ -199,10 +198,10 @@ async function refusalOverRecord(dataDir: string): Promise<DaemonRunOutcome | nu
     }
   }
   if (liveness.state !== 'unconfirmed') return null
-  const { pid, socketPath } = existing
+  const { pid, socketPath } = record
   return {
     kind: 'refused',
-    message: `${describeUnconfirmed(liveness, pid, socketPath)}, which daemon.json names. Stop the process serving that socket first.`,
+    message: `${opensSentence(describeUnconfirmed(liveness, pid, socketPath))}, which daemon.json names. Stop the process serving that socket first.`,
   }
 }
 

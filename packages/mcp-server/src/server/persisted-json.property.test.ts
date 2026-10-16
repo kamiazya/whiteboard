@@ -104,8 +104,15 @@ describe('the daemon record', () => {
     async (record) => {
       const dataDir = await freshDir('daemon')
       await saveDaemonRecord(record, dataDir)
-      expect(await loadDaemonRecord(dataDir)).toEqual(viaJson(record))
-      expect(await parseDaemonRecord(dataDir)).toEqual({ kind: 'valid', record: viaJson(record) })
+      // A generated pid can be a live one; its daemon's liveness is not what this reads back.
+      const gone = { isAlive: () => false }
+      const liveness = { state: 'dead' }
+      expect(await loadDaemonRecord(dataDir, gone)).toEqual({ record: viaJson(record), liveness })
+      expect(await parseDaemonRecord(dataDir, gone)).toEqual({
+        kind: 'valid',
+        record: viaJson(record),
+        liveness,
+      })
     },
   )
 

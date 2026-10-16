@@ -3,19 +3,25 @@ import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { writeFileAtomic } from '../shared/write-file-atomic.js'
 import type { DaemonLivenessSeams } from './daemon-liveness.js'
 import {
+  type DaemonRecordParseResult,
   describeOccupant,
   getDaemonRecordPath,
   isOccupying,
   parseDaemonRecord,
 } from './daemon-record.js'
-import type { DaemonRecord, DaemonRecordWrite } from './daemon-record-schema.js'
+import type { DaemonRecordWrite } from './daemon-record-schema.js'
 
 export { DAEMON_RECORD_FILENAME, getDaemonRecordPath } from './daemon-record.js'
-export type { DaemonRecord } from './daemon-record-schema.js'
+
+/** A usable record and whether the daemon it names is still there. */
+export type LoadedDaemonRecord = Omit<Extract<DaemonRecordParseResult, { kind: 'valid' }>, 'kind'>
 
 /**
- * The running daemon's record, or `null` when there is none — a projection of
- * `parseDaemonRecord`, so it never reaches a verdict the other commands do not.
+ * A usable daemon record with its daemon's liveness, or `null` when there is
+ * none — a projection of `parseDaemonRecord`, so it never reaches a verdict
+ * the other commands do not. A usable record is not a running daemon: one
+ * that did not stop cleanly leaves its record behind, so a caller switches on
+ * `liveness` before it relays to or signals what the record names.
  *
  * `null` is what a caller reads as "no daemon is running" before it deletes
  * the record and starts a new daemon, so it is only returned where that is
@@ -38,12 +44,12 @@ export type { DaemonRecord } from './daemon-record-schema.js'
 export async function loadDaemonRecord(
   dataDir: string = DATA_DIR,
   seams: DaemonLivenessSeams = {},
-): Promise<DaemonRecord | null> {
+): Promise<LoadedDaemonRecord | null> {
   const parsed = await parseDaemonRecord(dataDir, seams)
   const path = getDaemonRecordPath(dataDir)
   switch (parsed.kind) {
     case 'valid':
-      return parsed.record
+      return { record: parsed.record, liveness: parsed.liveness }
     case 'missing':
       return null
     case 'unreadable':
@@ -54,7 +60,7 @@ export async function loadDaemonRecord(
       const { liveness, record } = parsed
       if (!isOccupying(liveness)) return null
       throw new Error(
-        `the daemon record ${path} carries no token, but ${describeOccupant(liveness, record.pid, record.socketPath)}. ` +
+        `the daemon record ${path} carries no token, and ${describeOccupant(liveness, record.pid, itsSocket(record.socketPath))}. ` +
           'Stop that daemon with the build that started it; if it is not a daemon, remove the file.',
       )
     }
@@ -63,11 +69,15 @@ export async function loadDaemonRecord(
       const unlessNotADaemon =
         liveness.state === 'running' ? '; if it is not a daemon, remove the file' : ''
       throw new Error(
-        `the daemon record ${path} cannot be interpreted by this version, but ${describeOccupant(liveness, recorded.pid, recorded.socketPath)}. ` +
+        `the daemon record ${path} cannot be interpreted by this version, and ${describeOccupant(liveness, recorded.pid, itsSocket(recorded.socketPath))}. ` +
           `If that is a whiteboard daemon of another version, stop it with that version${unlessNotADaemon}.`,
       )
     }
   }
+}
+
+function itsSocket(socketPath: string | undefined): string {
+  return socketPath === undefined ? 'its socket' : `its socket ${socketPath}`
 }
 
 /**

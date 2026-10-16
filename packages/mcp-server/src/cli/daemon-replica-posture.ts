@@ -29,7 +29,7 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType, z } from 'zod'
-import { type DaemonLivenessSeams, daemonLiveness } from '../daemon/daemon-liveness.js'
+import type { DaemonLivenessSeams } from '../daemon/daemon-liveness.js'
 import {
   type DaemonRecordParseResult,
   describeOccupant,
@@ -98,17 +98,18 @@ async function runningDaemon(
       `the daemon record cannot be interpreted by this version, and ${describeOccupant(parsed.liveness, parsed.recorded.pid)}; stop it with the version that started it`,
     )
   }
-  const { pid } = parsed.record
-  const liveness = await daemonLiveness(parsed.record, seams)
+  const { liveness, record } = parsed
+  const { pid } = record
   if (liveness.state === 'dead') return none(`daemon pid ${pid} is not running`)
   if (liveness.state === 'pid-reused') {
     return none(`daemon pid ${pid} now belongs to another process`)
   }
   if (liveness.state === 'unconfirmed') {
-    const occupant = describeUnconfirmed(liveness, pid, 'the recorded socket')
-    return none(`${occupant.charAt(0).toLowerCase()}${occupant.slice(1)}, which the record names`)
+    return none(
+      `${describeUnconfirmed(liveness, pid, 'the recorded socket')}, which the record names`,
+    )
   }
-  return { record: parsed.record }
+  return { record }
 }
 
 /**

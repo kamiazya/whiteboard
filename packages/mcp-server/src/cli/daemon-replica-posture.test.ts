@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { DaemonRecordParseResult } from '../daemon/daemon-record.js'
+import { validParse } from '../daemon/_test-daemon-record.js'
 import type { DaemonRequest } from '../daemon/daemon-request.js'
 import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
 
@@ -10,7 +10,7 @@ const record = {
   socketPath: '/tmp/wb.sock',
   token: 'the-daemon-token',
 }
-const running: DaemonRecordParseResult = { kind: 'valid', record }
+const running = validParse(record)
 
 /**
  * A daemon that answers one canned response, recording what it was asked. The
@@ -43,7 +43,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'ws-1',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -88,7 +88,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'ws-1',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => false,
       request: daemon.request,
     })
@@ -101,7 +101,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'ws-1',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       processStartMs: () => Date.parse(record.startedAt) + 60_000,
       request: async (req) => {
@@ -121,7 +121,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'ws-1',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       processStartMs: () => Date.parse(record.startedAt) + 6_000,
       request: async (req) => {
@@ -165,7 +165,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'nope',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -188,7 +188,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'nope',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -203,7 +203,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'ws-1',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -220,7 +220,7 @@ describe('a workspace addressed by its segment', () => {
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'default',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -237,7 +237,7 @@ describe('a workspace addressed by its segment', () => {
       dataDir: '/data',
       workspaceId: 'default',
       tier: 'bounded',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -254,7 +254,7 @@ describe('a workspace addressed by its segment', () => {
     const { result } = await runDaemonRotateReplicaKey({
       dataDir: '/data',
       workspaceId: 'nope',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -270,7 +270,7 @@ describe('whiteboard daemon set-replica-tier', () => {
       dataDir: '/data',
       workspaceId: 'ws-1',
       tier: 'bounded',
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })
@@ -298,7 +298,7 @@ describe('whiteboard daemon set-replica-tier', () => {
       dataDir: '/data',
       workspaceId: 'ws-1',
       tier: null,
-      parseRecord: async () => running,
+      parseRecord: running,
       isPidAlive: () => true,
       request: daemon.request,
     })

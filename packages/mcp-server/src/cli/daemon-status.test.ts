@@ -2,6 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { validParse } from '../daemon/_test-daemon-record.js'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import type { DaemonLiveness } from '../daemon/daemon-liveness.js'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
@@ -114,7 +115,7 @@ describe('runDaemonStatus: valid record, process dead', () => {
   it('returns exitCode 1, ok=false, reason=process-not-running', async () => {
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => false,
     })
     expect(exitCode).toBe(1)
@@ -128,7 +129,7 @@ describe('runDaemonStatus: valid record, process dead', () => {
   it('includes record fields when process is dead', async () => {
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => false,
     })
     expect(result.record?.pid).toBe(validRecord.pid)
@@ -140,7 +141,7 @@ describe('runDaemonStatus: valid record, process alive', () => {
   it('returns exitCode 0 and ok=true', async () => {
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => true,
       processStartMs: () => null,
     })
@@ -151,7 +152,7 @@ describe('runDaemonStatus: valid record, process alive', () => {
   it('sets reason=null, recordFresh=true, pidAlive=true', async () => {
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => true,
       processStartMs: () => null,
     })
@@ -163,7 +164,7 @@ describe('runDaemonStatus: valid record, process alive', () => {
   it('includes record fields when healthy', async () => {
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => true,
       processStartMs: () => null,
     })
@@ -179,7 +180,7 @@ describe('runDaemonStatus: valid record, its pid taken by a later process', () =
   it('reports the daemon not running', async () => {
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      parseRecord: validParse(validRecord),
       isPidAlive: () => true,
       processStartMs: () => Date.parse(validRecord.startedAt) + 60_000,
     })
@@ -204,10 +205,7 @@ describe('runDaemonStatus: a live daemon after the wall clock stepped forward', 
     const daemon = await answeringDaemonSocket(validRecord.pid, validRecord.token)
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({
-        kind: 'valid',
-        record: { ...validRecord, socketPath: daemon.socketPath },
-      }),
+      parseRecord: validParse({ ...validRecord, socketPath: daemon.socketPath }),
       isPidAlive: () => true,
       processStartMs: steppedStart,
     })
@@ -219,10 +217,7 @@ describe('runDaemonStatus: a live daemon after the wall clock stepped forward', 
     const daemon = await answeringDaemonSocket(validRecord.pid + 1, validRecord.token)
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({
-        kind: 'valid',
-        record: { ...validRecord, socketPath: daemon.socketPath },
-      }),
+      parseRecord: validParse({ ...validRecord, socketPath: daemon.socketPath }),
       isPidAlive: () => true,
       processStartMs: steppedStart,
     })
@@ -246,10 +241,7 @@ describe('runDaemonStatus: a live daemon after the wall clock stepped forward', 
     const daemon = await answeringDaemonSocket(validRecord.pid, validRecord.token)
     await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({
-        kind: 'valid',
-        record: { ...validRecord, socketPath: daemon.socketPath },
-      }),
+      parseRecord: validParse({ ...validRecord, socketPath: daemon.socketPath }),
       isPidAlive: () => true,
       processStartMs: () => Date.parse(validRecord.startedAt) - 1_000,
     })
@@ -353,10 +345,7 @@ describe('runDaemonStatus: a socket answering with a pid no process can have', (
     const daemon = await answeringDaemonSocket(0, validRecord.token)
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({
-        kind: 'valid',
-        record: { ...validRecord, socketPath: daemon.socketPath },
-      }),
+      parseRecord: validParse({ ...validRecord, socketPath: daemon.socketPath }),
       isPidAlive: () => true,
       processStartMs: () => Date.parse(validRecord.startedAt) + 6_000,
     })
@@ -382,36 +371,40 @@ describe('runDaemonStatus: pidAlive across every liveness and both record arms',
       ? { servingPid: liveness.servingPid }
       : {}
 
+  // The valid arm reads a real daemon.json, so what it reports is the liveness
+  // the record's reader asked, not one a double stated.
+  const dirs: string[] = []
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+  async function recordAt(socketPath: string): Promise<string> {
+    const dataDir = await mkdtemp(join(tmpdir(), 'daemon-status-liveness-'))
+    dirs.push(dataDir)
+    await writeFile(join(dataDir, 'daemon.json'), JSON.stringify({ ...validRecord, socketPath }))
+    return dataDir
+  }
+
   /** Options under which a valid record's own liveness check reaches `liveness`. */
   async function validArm(liveness: DaemonLiveness): Promise<DaemonStatusOptions> {
-    const valid = (socketPath: string) => async () =>
-      ({ kind: 'valid', record: { ...validRecord, socketPath } }) as const
     switch (liveness.state) {
       case 'running':
         return {
-          dataDir: '/fake',
-          parseRecord: valid(validRecord.socketPath),
+          dataDir: await recordAt(validRecord.socketPath),
           isPidAlive: () => true,
           processStartMs: () => null,
         }
       case 'dead':
-        return {
-          dataDir: '/fake',
-          parseRecord: valid(validRecord.socketPath),
-          isPidAlive: () => false,
-        }
+        return { dataDir: await recordAt(validRecord.socketPath), isPidAlive: () => false }
       case 'pid-reused':
         return {
-          dataDir: '/fake',
-          parseRecord: valid(validRecord.socketPath),
+          dataDir: await recordAt(validRecord.socketPath),
           isPidAlive: () => true,
           processStartMs: laterStart,
         }
       case 'unconfirmed': {
         const daemon = await answeringDaemonSocket(liveness.servingPid ?? 0, validRecord.token)
         return {
-          dataDir: '/fake',
-          parseRecord: valid(daemon.socketPath),
+          dataDir: await recordAt(daemon.socketPath),
           isPidAlive: () => true,
           processStartMs: laterStart,
         }

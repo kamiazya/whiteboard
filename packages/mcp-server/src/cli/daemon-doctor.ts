@@ -1,13 +1,10 @@
-import {
-  type DaemonLiveness,
-  type DaemonLivenessSeams,
-  daemonLiveness,
-} from '../daemon/daemon-liveness.js'
+import type { DaemonLiveness, DaemonLivenessSeams } from '../daemon/daemon-liveness.js'
 import {
   type DaemonRecordParseResult,
   describeOccupant,
   describeUnconfirmed,
   isOccupying,
+  opensSentence,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../daemon/version-skew.js'
@@ -118,7 +115,7 @@ function processCheck(liveness: DaemonLiveness, pid: number): DaemonDoctorCheck 
       return {
         id: 'daemon.process',
         status: 'error',
-        summary: `${describeUnconfirmed(liveness, pid, 'the recorded socket')}, which the record names.`,
+        summary: `${opensSentence(describeUnconfirmed(liveness, pid, 'the recorded socket'))}, which the record names.`,
         remediation:
           'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
       }
@@ -148,7 +145,7 @@ export async function runDaemonDoctor(
     return errorResult()
   }
 
-  const liveness = await daemonLiveness(parsed.record, seams)
+  const { liveness } = parsed
   const alive = liveness.state === 'running'
 
   checks.push({

@@ -9,27 +9,25 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { DaemonRecordParseResult } from '../daemon/daemon-record.js'
+import { validParse } from '../daemon/_test-daemon-record.js'
+import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
 import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
 
 const KEY_ID = 'AAAAAAAAAAAAAAAAAAAAAA'
 let dir: string
 let server: Server
-let record: DaemonRecordParseResult
+let record: DaemonRecord
 let seen: { method?: string; url?: string; headers: IncomingMessage['headers']; body: string }[]
 let respond: (url: string, method: string) => { status: number; body: string }
 let listing: { status: number; body: string }
 
-const recordAt = (socketPath: string): DaemonRecordParseResult => ({
-  kind: 'valid',
-  record: {
-    // This process stands in for the daemon, and wrote the record after it started.
-    pid: process.pid,
-    version: '0.0.1',
-    startedAt: new Date().toISOString(),
-    socketPath,
-    token: 'the-daemon-token',
-  },
+const recordAt = (socketPath: string): DaemonRecord => ({
+  // This process stands in for the daemon, and wrote the record after it started.
+  pid: process.pid,
+  version: '0.0.1',
+  startedAt: new Date().toISOString(),
+  socketPath,
+  token: 'the-daemon-token',
 })
 
 beforeEach(async () => {
@@ -64,7 +62,7 @@ afterEach(async () => {
 const options = () => ({
   dataDir: dir,
   workspaceId: 'ws-1',
-  parseRecord: async () => record,
+  parseRecord: validParse(record),
   isPidAlive: () => true,
 })
 

@@ -1,9 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import {
-  type DaemonLiveness,
-  daemonLiveness,
-  servingPidOf,
-} from '../../../daemon/daemon-liveness.js'
+import { type DaemonLiveness, servingPidOf } from '../../../daemon/daemon-liveness.js'
 import { isOccupying, parseDaemonRecord } from '../../../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../../../daemon/version-skew.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
@@ -98,11 +94,9 @@ async function liveNeighbour(dataDir: string): Promise<Neighbour | null> {
     }
     case 'valid': {
       const { pid, version } = parsed.record
-      // Checked before liveness, so the common unskewed start asks no socket.
       if (pid === process.pid) return null
       if (describeDaemonVersionSkew(version, PACKAGE_VERSION) === null) return null
-      const liveness = await daemonLiveness(parsed.record)
-      return occupyingNeighbour(liveness, { pid, version, uninterpretable: false })
+      return occupyingNeighbour(parsed.liveness, { pid, version, uninterpretable: false })
     }
   }
 }

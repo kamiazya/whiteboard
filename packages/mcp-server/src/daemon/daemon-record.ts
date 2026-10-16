@@ -50,7 +50,9 @@ export type OccupyingLiveness = Extract<DaemonLiveness, { state: 'running' | 'un
  * - `uninterpretable`: a record this build cannot interpret whose daemon is
  *   still there — likeliest one of another version. Removing it would leave
  *   that daemon serving with no record, so it is reported, never discarded.
- * - `valid`: a record this build can use.
+ * - `valid`: a record this build can use — of a daemon that may since have
+ *   died or lost its pid to another process, which `liveness` says. A record
+ *   outlives a daemon that did not stop cleanly, so usable is not running.
  */
 export type DaemonRecordParseResult =
   | { kind: 'missing' }
@@ -58,32 +60,36 @@ export type DaemonRecordParseResult =
   | { kind: 'malformed'; message: string }
   | { kind: 'token-missing'; record: DaemonRecordBase; liveness: DaemonLiveness }
   | { kind: 'uninterpretable'; recorded: RecordedDaemon; liveness: OccupyingLiveness }
-  | { kind: 'valid'; record: DaemonRecord }
+  | { kind: 'valid'; record: DaemonRecord; liveness: DaemonLiveness }
 
 export function isOccupying(liveness: DaemonLiveness): liveness is OccupyingLiveness {
   return liveness.state === 'running' || liveness.state === 'unconfirmed'
 }
 
 /**
- * Who still holds a record, for a sentence saying why it is nobody's to
- * remove. Under `unconfirmed` the recorded pid failed its start-time check,
- * so the pid that answered on the socket is named instead, where it said one.
+ * Who still holds a record, as a clause following `and` or `but`. Under
+ * `unconfirmed` the recorded pid failed its start-time check, so the pid that
+ * answered on the socket is named instead, where it said one; where none
+ * answered, the recorded pid is the only one there is to name.
+ *
+ * `socket` names the socket as the sentence refers to it.
  */
 export function describeOccupant(
   liveness: OccupyingLiveness,
   pid: number,
-  socketPath?: string,
+  socket = 'its socket',
 ): string {
   if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
-  const where = socketPath === undefined ? '' : ` ${socketPath}`
-  return `a daemon answers on its socket${where}${asServingPid(liveness)}`
+  return liveness.servingPid === undefined
+    ? holdsUnconfirmed(socket, pid)
+    : `a daemon answers on ${socket} as pid ${liveness.servingPid}`
 }
 
 /**
- * Why a record's own pid is not the daemon serving `socket`, opening a
- * sentence that refuses to start or reports the process unconfirmed. Only a
- * socket that named a pid is said to answer: one that stayed silent, or
- * answered without naming one, merely holds the socket.
+ * Why a record's own pid is not the daemon serving `socket`, as a clause —
+ * `opensSentence` makes it the start of one. Only a socket that named a pid
+ * is said to answer: one that stayed silent, or answered without naming one,
+ * merely holds the socket. `describeOccupant` follows the same rule.
  */
 export function describeUnconfirmed(
   liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>,
@@ -91,12 +97,17 @@ export function describeUnconfirmed(
   socket: string,
 ): string {
   return liveness.servingPid === undefined
-    ? `A process holds ${socket} but did not confirm it is pid ${pid}`
-    : `A daemon answers on ${socket}${asServingPid(liveness)}, not as pid ${pid}`
+    ? holdsUnconfirmed(socket, pid)
+    : `a daemon answers on ${socket} as pid ${liveness.servingPid}, not as pid ${pid}`
 }
 
-function asServingPid(liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>): string {
-  return liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
+function holdsUnconfirmed(socket: string, pid: number): string {
+  return `a process holds ${socket} but did not confirm it is pid ${pid}`
+}
+
+/** A clause built above, opening a sentence: every builder here writes clauses. */
+export function opensSentence(clause: string): string {
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`
 }
 
 type ReadOutcome =
@@ -140,8 +151,10 @@ async function readRecordText(dataDir: string): Promise<ReadOutcome> {
 
 /**
  * Reads and classifies the record, asking `daemonLiveness` — through `seams`
- * — of any record it cannot use, since only that answer says whether the
- * record is a leftover or the only name a running daemon has.
+ * — of every record that names a daemon. Of one it cannot use, only that
+ * answer says whether the record is a leftover or the only name a running
+ * daemon has; of a usable one, whether there is a daemon to reach. The
+ * question is asked here, once, so no reader can act on a record without it.
  */
 export async function parseDaemonRecord(
   dataDir: string,
@@ -163,7 +176,8 @@ export async function parseDaemonRecord(
 
   const fullResult = daemonRecordSchema.safeParse(parsed)
   if (fullResult.success) {
-    return { kind: 'valid', record: fullResult.data }
+    const liveness = await daemonLiveness(fullResult.data, seams)
+    return { kind: 'valid', record: fullResult.data, liveness }
   }
 
   // The full schema also fails for missing/empty token, so re-check against

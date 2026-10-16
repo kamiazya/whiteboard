@@ -9,7 +9,9 @@ import { readProcessStartMs } from '../shared/process-identity.js'
 import { captureSignalListeners } from '../shared/test-utils/signal-listeners.js'
 
 const { loadDaemonRecordMock, isPidAliveMock, startHttpServerMock } = vi.hoisted(() => ({
-  loadDaemonRecordMock: vi.fn(async (): Promise<unknown> => null),
+  loadDaemonRecordMock: vi.fn(
+    async (_dataDir?: string, _seams?: unknown): Promise<unknown> => null,
+  ),
   isPidAliveMock: vi.fn((_pid: number) => false),
   startHttpServerMock: vi.fn(async () => ({
     socketPath: '/run/user/1000/whiteboard/d.sock',
@@ -34,6 +36,7 @@ vi.mock('../server/http-server.js', () => ({
 
 const { runDaemonRun } = await import('./daemon-run.js')
 const { answeringDaemonSocket } = await import('../daemon/_test-daemon-socket.js')
+const { loadedRecord } = await import('../daemon/_test-daemon-record.js')
 const { LOCAL_DAEMON_TAIL_INTERVAL_MS, resolveWorkspaceTailIntervalMs } = await import(
   '../server/store/workspace-tail.js'
 )
@@ -105,7 +108,7 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
   const RECORD = { pid: 4242, socketPath: '/run/user/1000/whiteboard/other.sock' }
 
   it('refuses, naming how to stop it, and never starts a server', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(RECORD))
     isPidAliveMock.mockReturnValueOnce(true)
     const outcome = await runDaemonRun({
       tokenStdin: false,
@@ -132,11 +135,13 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
         later.once('spawn', resolve)
         later.once('error', reject)
       })
-      loadDaemonRecordMock.mockResolvedValueOnce({
-        ...RECORD,
-        pid: later.pid,
-        startedAt: new Date(Date.now() - 30_000).toISOString(),
-      })
+      loadDaemonRecordMock.mockImplementationOnce(
+        loadedRecord({
+          ...RECORD,
+          pid: later.pid as number,
+          startedAt: new Date(Date.now() - 30_000).toISOString(),
+        }),
+      )
       isPidAliveMock.mockReturnValue(true)
       try {
         const outcome = await runDaemonRun({
@@ -167,12 +172,14 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
       })
       const pid = later.pid as number
       const daemon = await answeringDaemonSocket(pid, 'tok')
-      loadDaemonRecordMock.mockResolvedValueOnce({
-        pid,
-        socketPath: daemon.socketPath,
-        token: 'tok',
-        startedAt: new Date(Date.now() - 30_000).toISOString(),
-      })
+      loadDaemonRecordMock.mockImplementationOnce(
+        loadedRecord({
+          pid,
+          socketPath: daemon.socketPath,
+          token: 'tok',
+          startedAt: new Date(Date.now() - 30_000).toISOString(),
+        }),
+      )
       isPidAliveMock.mockReturnValue(true)
       try {
         const outcome = await runDaemonRun({
@@ -198,12 +205,14 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     'refuses over a socket another pid serves, naming that pid',
     async () => {
       const daemon = await answeringDaemonSocket(process.pid, 'tok')
-      loadDaemonRecordMock.mockResolvedValueOnce({
-        pid: process.ppid,
-        socketPath: daemon.socketPath,
-        token: 'tok',
-        startedAt: '2024-01-01T00:00:00.000Z',
-      })
+      loadDaemonRecordMock.mockImplementationOnce(
+        loadedRecord({
+          pid: process.ppid,
+          socketPath: daemon.socketPath,
+          token: 'tok',
+          startedAt: '2024-01-01T00:00:00.000Z',
+        }),
+      )
       isPidAliveMock.mockReturnValueOnce(true)
       const outcome = await runDaemonRun({
         tokenStdin: false,
@@ -224,12 +233,14 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     'refuses over a socket that answers without naming the recorded pid',
     async () => {
       const daemon = await answeringDaemonSocket(process.ppid, 'another-token')
-      loadDaemonRecordMock.mockResolvedValueOnce({
-        pid: process.ppid,
-        socketPath: daemon.socketPath,
-        token: 'tok',
-        startedAt: '2024-01-01T00:00:00.000Z',
-      })
+      loadDaemonRecordMock.mockImplementationOnce(
+        loadedRecord({
+          pid: process.ppid,
+          socketPath: daemon.socketPath,
+          token: 'tok',
+          startedAt: '2024-01-01T00:00:00.000Z',
+        }),
+      )
       isPidAliveMock.mockReturnValueOnce(true)
       const outcome = await runDaemonRun({
         tokenStdin: false,
@@ -245,7 +256,7 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
   )
 
   it('starts over a record whose process is gone', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(RECORD))
     isPidAliveMock.mockReturnValueOnce(false)
     const outcome = await runDaemonRun({
       tokenStdin: false,
