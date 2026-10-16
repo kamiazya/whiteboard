@@ -3,6 +3,7 @@
 // reinstall without devDependencies (or abort without a TTY); this puts the
 // file back as it was.
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -10,8 +11,7 @@ export const WORKSPACE_STATE_FILE = '.pnpm-workspace-state-v1.json'
 
 /**
  * The `pnpm` arguments that deploy `filter`'s production dependencies into
- * `target`. One definition, so the real-pnpm test deploys with the flags the
- * SBOM script actually passes rather than a copy of them.
+ * `target`.
  *
  * --legacy: the workspace does not set `inject-workspace-packages`, which a
  *   non-legacy deploy requires.
@@ -21,8 +21,39 @@ export const WORKSPACE_STATE_FILE = '.pnpm-workspace-state-v1.json'
  * @param {string} target
  * @returns {string[]}
  */
-export function deployArgs(filter, target) {
+function deployArgs(filter, target) {
   return ['--filter', filter, 'deploy', '--legacy', '--prod', '--ignore-scripts', target]
+}
+
+/**
+ * How every `pnpm` spawn here is launched. pnpm on Windows is a `.cmd` shim,
+ * which only a shell can launch; elsewhere no shell sits between the
+ * arguments and pnpm.
+ *
+ * @param {NodeJS.Platform} [platform]
+ * @returns {{ encoding: 'utf-8', shell: boolean }}
+ */
+export function pnpmSpawnOptions(platform = process.platform) {
+  return { encoding: 'utf-8', shell: platform === 'win32' }
+}
+
+/**
+ * Deploys `filter`'s production dependencies into `target` from
+ * `workspaceRoot`. The one launcher, so the real-pnpm test exercises the
+ * spawn the SBOM script makes, options included, and not only its flags.
+ * Output is captured, never relayed.
+ *
+ * @param {string} workspaceRoot
+ * @param {string} filter
+ * @param {string} target
+ * @returns {import('node:child_process').SpawnSyncReturns<string>}
+ */
+export function runDeploy(workspaceRoot, filter, target) {
+  return spawnSync('pnpm', deployArgs(filter, target), {
+    ...pnpmSpawnOptions(),
+    cwd: workspaceRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 }
 
 /**

@@ -12,8 +12,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
-  deployArgs,
+  pnpmSpawnOptions,
   preservingWorkspaceInstallState,
+  runDeploy,
   WORKSPACE_STATE_FILE,
 } from './workspace-install-state.mjs'
 
@@ -78,6 +79,26 @@ describe('preservingWorkspaceInstallState', () => {
   })
 })
 
+describe('the pnpm launcher', () => {
+  // pnpm on Windows is a `.cmd` shim, which only a shell can launch.
+  it.each([
+    ['win32', true],
+    ['linux', false],
+    ['darwin', false],
+  ] as const)('on %s launches pnpm with shell: %s', (platform, shell) => {
+    expect(pnpmSpawnOptions(platform)).toEqual({ encoding: 'utf-8', shell })
+  })
+
+  // The real-pnpm cases below deploy through `runDeploy`; they pin the SBOM
+  // script only if it launches its deploy through the same function.
+  it('is the one the SBOM script deploys through', () => {
+    const script = readFileSync(join(import.meta.dirname, 'generate-npm-sbom.mjs'), 'utf-8')
+
+    expect(script).toMatch(/\brunDeploy\(/)
+    expect(script).not.toMatch(/spawnSync\(\s*'pnpm'/)
+  })
+})
+
 // The helper names pnpm's file by a literal, so a pnpm that renamed it would
 // leave the helper restoring nothing while every case above stays green. This
 // runs the real deploy, with the script's flags, against a workspace with no
@@ -98,8 +119,7 @@ const PINNED_PNPM_VERSION = PINNED_PACKAGE_MANAGER.replace(/^pnpm@/, '').replace
 // version it has not cached, so with an empty cache and no network the
 // premise of the cases below is absent; they skip and say why rather than
 // failing on a module corepack never downloaded. Probed, never inferred.
-// pnpm on Windows is a `.cmd` shim, which only a shell can launch.
-const PNPM_SPAWN = { encoding: 'utf-8', shell: process.platform === 'win32' } as const
+const PNPM_SPAWN = pnpmSpawnOptions()
 const PROBE_TIMEOUT_MS = 60_000
 
 function probePinnedPnpm(): { runs: true } | { runs: false; reason: string } {
@@ -161,7 +181,10 @@ describe('a real pnpm deploy --legacy --prod', () => {
     return root
   }
 
-  const deploy = (root: string) => pnpm(root, deployArgs('app', join(root, 'out')))
+  function deploy(root: string): void {
+    const result = runDeploy(root, 'app', join(root, 'out'))
+    expect(result.status, `${result.error ?? ''}${result.stderr}${result.stdout}`).toBe(0)
+  }
 
   it('runs the pnpm version the repo pins', ({ skip }) => {
     requirePinnedPnpm(skip)
