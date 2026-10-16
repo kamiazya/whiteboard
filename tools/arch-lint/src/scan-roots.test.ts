@@ -13,6 +13,7 @@ import {
   readWorkspaceEntries,
   SCAN_ROOTS,
   scriptFiles,
+  scriptTypeScriptFiles,
   WORKTREES_PATH,
   walk,
   workspaceDirs,
@@ -54,6 +55,36 @@ describe('scan roots', () => {
       ]),
     )
     expect(scripts.filter((path) => /(^|\/)(node_modules|dist)\//.test(path))).toEqual([])
+  })
+
+  it('lists the TypeScript outside every source tree, and nothing a source tree holds', () => {
+    const files = scriptTypeScriptFiles()
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'packages/mcp-server/scripts/dev/dev-daemon-socket-lib.test.ts',
+        'apps/web/scripts/strip-wasm-sourcemap.ts',
+        'apps/web/vite.config.ts',
+        '.claude/scripts/fixtures/biome-plugin/good.test.tsx',
+      ]),
+    )
+    const roots = SCAN_ROOTS.map((root) => `${root.replaceAll('\\', '/')}/`)
+    expect(files.filter((path) => roots.some((root) => path.startsWith(root)))).toEqual([])
+    expect(files.filter((path) => /\.d\.(m|c)?ts$/.test(path))).toEqual([])
+  })
+
+  it('leaves no tracked TypeScript below the repo root outside both size scans', () => {
+    // The `.mjs`-only script scan once left every `.ts` script in no ledger,
+    // and a scan that reads nothing reads exactly like a clean tree. The repo
+    // root's own configs sit outside every script root, `.mjs` and `.ts` alike.
+    const roots = SCAN_ROOTS.map((root) => `${root.replaceAll('\\', '/')}/`)
+    const scanned = new Set(scriptTypeScriptFiles())
+    expect(scanned.size).toBeGreaterThan(100)
+    const unscanned = trackedFiles(REPO_ROOT, '*.ts', '*.tsx', '*.mts', '*.cts')
+      .filter((file) => file.includes('/') && !/\.d\.(m|c)?ts$/.test(file))
+      .filter((file) => !roots.some((root) => file.startsWith(root)))
+      .filter((file) => !isExcludedPath(join(REPO_ROOT, file)))
+      .filter((file) => !scanned.has(file))
+    expect(unscanned).toEqual([])
   })
 
   it('excludes history, vendored and worktree directories by their path inside the repo', () => {

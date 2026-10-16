@@ -7,6 +7,7 @@ import {
   relativeToRepo,
   SCAN_ROOTS,
   scriptFiles,
+  scriptTypeScriptFiles,
   walk,
 } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
@@ -104,7 +105,10 @@ function scanTestFiles(): string[] {
 }
 
 function scanScriptFiles(): string[] {
-  return scriptFiles().filter((path) => path.endsWith('.mjs'))
+  return [
+    ...scriptFiles().filter((path) => path.endsWith('.mjs')),
+    ...scriptTypeScriptFiles(),
+  ].sort()
 }
 
 function scanFiles(): string[] {
@@ -476,12 +480,15 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
 })
 
 /**
- * Plain-Node `.mjs` scripts over the SAME 800-line budget, on the same
- * shrink-only contract: the smokes under `tests/` and each package's
- * `scripts/`. They were outside both ledgers above only because the scan
- * looked for TypeScript, and the largest of them grew to 2668 lines unwatched.
- * An entry is a ceiling, both sides are guarded, and growing a listed file
- * means raising its ceiling here in the same diff.
+ * Scripts over the SAME 800-line budget, on the same shrink-only contract:
+ * the `.mjs` smokes under `tests/` and each package's `scripts/`, and every
+ * `.ts`/`.tsx` file outside a workspace's `src` — its scripts, root-level
+ * configs and tests. Each half was once outside every ledger because a scan
+ * looked for the other language: the largest `.mjs` grew to 2668 lines
+ * unwatched, a `.ts` script test from 324 to 765. Tests share this ledger
+ * rather than a sibling one, since nothing here is shipped source. An entry
+ * is a ceiling, both sides are guarded, and growing a listed file means
+ * raising its ceiling here in the same diff.
  */
 const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The errands the LLM-driven tool-surface eval asks a model to run, each
@@ -509,7 +516,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1070,
 }
 
-describe('file-size budget: .mjs scripts, same 800-line budget, same shrink-only contract', () => {
+describe('file-size budget: scripts, same 800-line budget, same shrink-only contract', () => {
   const scripts = scanScriptFiles()
 
   // Same guard-that-never-reaches-its-subject discipline as above: a root that
@@ -518,6 +525,13 @@ describe('file-size budget: .mjs scripts, same 800-line budget, same shrink-only
     expect(scripts.length).toBeGreaterThan(20)
     expect(scripts).toContain('packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs')
     expect(scripts).toContain('tests/e2e/distribution/smoke-helpers.mjs')
+  })
+
+  // TypeScript outside a workspace's `src` is no source ledger's either, so a
+  // scan narrowed to `.mjs` left it in no ledger at all.
+  it('reaches the TypeScript under the script trees, tests included', () => {
+    expect(scripts).toContain('packages/mcp-server/scripts/dev/dev-daemon-socket-lib.test.ts')
+    expect(scripts).toContain('apps/web/scripts/strip-wasm-sourcemap.ts')
   })
 
   registerSizeLedgerAssertions({

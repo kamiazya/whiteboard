@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 /**
  * Every file the contract is written across: the case families, and the
- * harness whose delivery helpers they all wait through. Globbed, so a family
- * split out later is read without anyone remembering to list it here.
+ * harness whose delivery helpers they all wait through. Globbed, so every
+ * `document-backend-*.ts` is read; the first case below pins the exact list,
+ * so a family split out later fails it until it is named there — adding a
+ * file is a deliberate one-line edit, never a silent one.
  */
 const sources = import.meta.glob<string>('./test-utils/document-backend-*.ts', {
   query: '?raw',

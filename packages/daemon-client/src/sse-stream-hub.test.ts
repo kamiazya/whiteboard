@@ -443,7 +443,9 @@ describe('SseStreamHub', () => {
         const joined = vi.fn()
         hub.subscribe('gone/b', { ...quiet, onAuthRefused: joined })
 
-        expect(joined).toHaveBeenCalledTimes(1)
+        // As a subscribe refusal: a relay remembers that cause for the next
+        // joiner, and would forget a push.
+        expect(joined.mock.calls).toEqual([['subscribe']])
         // The refusal is the joiner's news alone; whoever already heard it is not told again.
         expect(refused).toHaveBeenCalledTimes(1)
         expect(goneAsks()).toBe(1)
