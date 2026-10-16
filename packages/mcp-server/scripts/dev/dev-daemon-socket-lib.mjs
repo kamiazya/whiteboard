@@ -144,18 +144,30 @@ export function requestDaemon(
 const PING_TIMEOUT_MS = 3_000
 
 /**
- * Whether the daemon a record names answers its unauthenticated liveness ping.
+ * The two routes these scripts ask, spelled here because bare `node` cannot
+ * import `runtimePingApiUrl`/`runtimeStatusApiUrl`;
+ * `dev-daemon-socket-lib.test.ts` holds them to those builders.
+ */
+export const PING_PATH = '/api/runtime/ping'
+export const STATUS_PATH = '/api/runtime/status'
+
+/**
+ * The daemon's unauthenticated liveness ping, with what became of it when it
+ * went unanswered.
  *
  * @param {{ socketPath: string }} record
- * @param {number} [timeoutMs]
- * @returns {Promise<boolean>}
+ * @param {typeof requestDaemon} request
+ * @param {number} timeoutMs
+ * @returns {Promise<{ answered: boolean, silence?: string }>}
  */
-export async function answersPing(record, timeoutMs = PING_TIMEOUT_MS) {
+async function askPing(record, request, timeoutMs) {
   try {
-    const { status } = await requestDaemon(record, { path: '/api/runtime/ping', timeoutMs })
+    const { status } = await request(record, { path: PING_PATH, timeoutMs })
     return status === 200
-  } catch {
-    return false
+      ? { answered: true }
+      : { answered: false, silence: `answered ${PING_PATH} with HTTP ${status}` }
+  } catch (error) {
+    return { answered: false, silence: unanswered(PING_PATH, record, error) }
   }
 }
 
@@ -253,7 +265,6 @@ export function isPidFileWriter(pid, writtenAtMs, seams) {
  * daemon's own `daemonLiveness` waits as long.
  */
 const STATUS_ASK_TIMEOUT_MS = 1_500
-const STATUS_PATH = '/api/runtime/status'
 
 /**
  * Whether the daemon a record names is running, by the daemon's own rule
@@ -324,7 +335,12 @@ async function judgeLiveness(
     )
   } catch (error) {
     const liveness = error?.code === NO_ANSWER ? 'unconfirmed' : 'pid-reused'
-    return { liveness, process: identity, answered: false, silence: statusSilence(error) }
+    return {
+      liveness,
+      process: identity,
+      answered: false,
+      silence: unanswered(STATUS_PATH, { socketPath }, error),
+    }
   }
   const confirmed = answer.status === 200 && statusPid(answer.text) === record.pid
   return { liveness: confirmed ? 'running' : 'unconfirmed', process: identity, answered: true }
@@ -343,9 +359,11 @@ async function judgeLiveness(
  *
  * `answering` is for telling a healthy daemon from a busy one. The socket is
  * asked once: where the liveness verdict already asked it, whether anything
- * replied is the answer; otherwise the unauthenticated ping is. `silence`,
- * present when nothing answered, says which ask went unanswered and how, so a
- * line reporting a busy daemon names the wait that actually ran.
+ * replied is the answer; otherwise the unauthenticated ping is. `silence` is
+ * present only for a daemon that is running and did not answer — the one case
+ * a line reports — and says which ask went unanswered and how, so the line
+ * names what actually happened rather than a wait that may never have run.
+ * An `answers` seam can only say whether, so its silence names no cause.
  *
  * @param {{ pid: number, socketPath: string, startedAt?: string, token?: string }} record
  * @param {{
@@ -356,33 +374,42 @@ async function judgeLiveness(
  * }} [seams]
  * @returns {Promise<{ running: boolean, answering: boolean, process: 'daemon' | 'foreign' | 'dead', liveness: 'running' | 'unconfirmed' | 'pid-reused' | 'dead', silence?: string }>}
  */
-export async function assessRecordedDaemon(record, { answers = answersPing, ...seams } = {}) {
+export async function assessRecordedDaemon(record, { answers, ...seams } = {}) {
   const judged = await judgeLiveness(record, seams)
-  const answering = judged.answered ?? (await answers(record))
+  const asked =
+    judged.answered !== undefined
+      ? { answered: judged.answered, silence: judged.silence }
+      : answers !== undefined
+        ? { answered: await answers(record), silence: `did not answer ${PING_PATH}` }
+        : await askPing(record, seams.request ?? requestDaemon, PING_TIMEOUT_MS)
   const occupied = judged.liveness === 'running' || judged.liveness === 'unconfirmed'
-  const silence = judged.silence ?? `did not answer /api/runtime/ping within ${PING_TIMEOUT_MS}ms`
+  const running = occupied || asked.answered
   return {
-    running: occupied || answering,
-    answering,
+    running,
+    answering: asked.answered,
     process: judged.process,
     liveness: judged.liveness,
-    ...(answering ? {} : { silence }),
+    ...(running && !asked.answered ? { silence: asked.silence } : {}),
   }
 }
 
 /**
- * What became of an unanswered status ask, worded to follow "is running but".
+ * What became of an ask that got no answer, worded to follow "is running but".
  * `requestDaemon` marks its own timeout with the wait it used; a NO_ANSWER
- * without one is a connection the socket took and then closed.
+ * without one is a connection the socket took and then closed. Anything else
+ * failed before a connection was taken.
  *
+ * @param {string} path
+ * @param {{ socketPath: string }} record
  * @param {{ code?: string, timeoutMs?: number } | undefined} error
  * @returns {string}
  */
-function statusSilence(error) {
-  if (error?.code !== NO_ANSWER) return `refused ${STATUS_PATH}`
+function unanswered(path, record, error) {
+  if (error?.code === 'ENOENT') return `has no socket at ${record.socketPath}`
+  if (error?.code !== NO_ANSWER) return `refused ${path}`
   return error.timeoutMs === undefined
-    ? `took the connection to ${STATUS_PATH} and dropped it`
-    : `did not answer ${STATUS_PATH} within ${error.timeoutMs}ms`
+    ? `took the connection to ${path} and dropped it`
+    : `did not answer ${path} within ${error.timeoutMs}ms`
 }
 
 /**
