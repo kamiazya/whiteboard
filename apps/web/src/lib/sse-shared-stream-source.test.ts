@@ -434,6 +434,16 @@ describe('a listener joining a document in this tab', () => {
     expect(later).not.toHaveBeenCalled()
   })
 
+  it('is told of a stream refusal, as one', () => {
+    const source = createSharedSseStreamSource(origin('joiner-stream-refused'))
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'stream' })
+
+    const refused = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: refused })
+    expect(refused.mock.calls).toEqual([['stream']])
+  })
+
   it('is not told of a refusal the document has since recovered from', () => {
     const source = createSharedSseStreamSource(origin('joiner-recovered'))
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
