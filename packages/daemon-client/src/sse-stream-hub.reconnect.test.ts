@@ -334,6 +334,23 @@ describe('stream connect refusals', () => {
     hub.close()
   })
 
+  it('keeps the halt while another document still holds the refusal', async () => {
+    const d = statusDaemon([401, 'open'])
+    const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const b = vi.fn()
+    const releaseA = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: b })
+    await vi.waitFor(() => expect(b).toHaveBeenCalledTimes(1))
+    releaseA()
+
+    const newcomer = vi.fn()
+    hub.subscribe('w/c', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: newcomer })
+    // Told at once, so the halt held: a cleared one would have started a new stream instead.
+    expect(newcomer.mock.calls).toEqual([['stream']])
+    expect(d.requests()).toBe(1)
+    hub.close()
+  })
+
   // A refusal that lands once nobody is subscribed describes nobody: kept, it
   // would refuse the next subscriber without the daemon being asked again.
   it('asks again for a document subscribing after a refusal nobody was left to hear', async () => {
