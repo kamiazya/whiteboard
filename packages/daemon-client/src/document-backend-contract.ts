@@ -23,6 +23,7 @@ export type { VersionCreatedPayload } from './sync-frames.js'
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
 import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
+import type { AuthRefusalCause } from './sse-stream-hub.js'
 import type {
   AgentActivityMessage,
   RestoreStartedMessage,
@@ -105,12 +106,20 @@ export interface DocumentBackendHandlers {
    */
   onWriteRefused?: (refusal: SyncWriteRefusal) => void
   /**
-   * The keeper refused this backend's credential (a 401 or 403 on the sync
-   * stream or on a push). The backend does NOT retry — the caller surfaces
-   * the state so the person can reconnect; a new connection is how it
-   * clears.
+   * The keeper refused this backend's credential (a 401 or 403), on the
+   * request `cause` names — `SseStreamSource`'s `onAuthRefused` says what
+   * each one leaves running:
+   *
+   * - `stream` / `subscribe`: this document no longer follows the keeper,
+   *   and nothing re-asks until it is released. The caller surfaces it so
+   *   the person can reconnect; a new connection, or a renewed credential
+   *   once every subscription is released, is how it clears.
+   * - `push`: a write was refused while the stream may still follow the
+   *   document — writing needs a scope reading does not. The write is also
+   *   reported as one that did not land (`onError('storage-failure')`), and
+   *   retried like any failed write.
    */
-  onAuthError?: () => void
+  onAuthError?: (cause: AuthRefusalCause) => void
   /**
    * Optional error callback for backend-level failures, since a backend
    * may have none of them to report.

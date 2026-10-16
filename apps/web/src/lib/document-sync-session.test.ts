@@ -2025,7 +2025,7 @@ describe('createDocumentSyncSession', () => {
     )
     session.connect()
 
-    backend._ctrl.handlers!.onAuthError?.()
+    backend._ctrl.handlers!.onAuthError?.('stream')
 
     expect(onStatusChange).toHaveBeenCalledWith('error')
     expect(onAuthError).toHaveBeenCalledTimes(1)

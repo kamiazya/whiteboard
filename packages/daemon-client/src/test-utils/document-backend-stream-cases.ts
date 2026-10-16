@@ -52,6 +52,10 @@ function streamRefusalCases(
     const joined = recorder()
     joiner.connect(joined.handlers)
     await called(joined, 'authError')
+    // Told it was the stream, which a page reads as "sign in again" — a
+    // refused push would leave it reading as following.
+    expect(first.authCauses).toEqual(['stream'])
+    expect(joined.authCauses).toEqual(['stream'])
 
     renew()
     h.backend.disconnect()
