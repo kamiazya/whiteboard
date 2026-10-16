@@ -1,11 +1,11 @@
 ---
 name: workflow-authoring
-description: Conventions and hard-won gotchas for authoring/maintaining the whiteboard repo's Dynamic Workflows (.claude/workflows/*.workflow.mjs) — dev-loop, review, dogfood-triage, reconcile. Use when editing or adding a Workflow script, debugging args not arriving, composing workflows, or running parallel dev-loops.
+description: Conventions and hard-won gotchas for authoring/maintaining the whiteboard repo's Dynamic Workflows (.claude/workflows/*.workflow.mjs) — dev-loop, review, dogfood-triage, reconcile, plan-initiative, consult-adversarial, investigate, audit-triage, ci-triage, pr-feedback, dependabot-triage. Use when editing or adding a Workflow script, debugging args not arriving, composing workflows, or running parallel dev-loops.
 ---
 
 # Workflow Authoring (whiteboard)
 
-The repo's Dynamic Workflows live in `.claude/workflows/*.workflow.mjs` and are run via the Workflow tool. Roles: `dev-loop` (one task's inner loop) composes `review` (change-review gate, which has an optional inline dogfood phase); `plan-initiative` (multi-perspective planning) optionally composes `consult-adversarial` (Vet) and `investigate` (ground policy/hygiene/portability questions); `dogfood-triage` (standalone persona dogfooding); `reconcile` (pre-merge intent/conflict reconciliation); `investigate` (read-only, lightweight: fan out one investigator per concern dimension → synthesize a go/no-go with required-before-adopting steps; reusable for any "is it safe to commit/track X" question). The **main session is the single integrator** — it holds human gates (design approval, commit, PR, merge), git, and CI monitoring; workflows automate the rest and return `needsHumanGate`.
+The repo's Dynamic Workflows live in `.claude/workflows/*.workflow.mjs` and are run via the Workflow tool. Roles: `dev-loop` (one task's inner loop) composes `review` (change-review gate, which has an optional inline dogfood phase); `plan-initiative` (multi-perspective planning) optionally composes `consult-adversarial` (Vet) and `investigate` (ground policy/hygiene/portability questions); `dogfood-triage` (standalone persona dogfooding); `reconcile` (pre-merge intent/conflict reconciliation); `investigate` (read-only, lightweight: fan out one investigator per concern dimension → synthesize a go/no-go with required-before-adopting steps; reusable for any "is it safe to commit/track X" question); `audit-triage` (standing whole-codebase health audit → triaged backlog); `ci-triage` (a PR's post-push CI and review-bot surface → deduped backlog); `pr-feedback` (refute and fix a PR's post-push findings as commits on its branch, plus a gate gap per finding); `dependabot-triage` (open Dependabot PRs and security alerts → a merge-ordered plan). The **main session is the single integrator** — it holds human gates (design approval, commit, PR, merge), git, and CI monitoring; workflows automate the rest and return `needsHumanGate`.
 
 ## Gotchas (verified)
 
@@ -31,7 +31,7 @@ The repo's Dynamic Workflows live in `.claude/workflows/*.workflow.mjs` and are 
 
 ## Conventions
 
-- **Specialize phases via `agentType`.** Pass `{agentType:'reviewer-dimension'|'qa-scenario'|'security-scanner'|'code-simplifier:code-simplifier'|'plan-reviewer'|'developer'|...}`. It composes with `schema` (StructuredOutput appended). Default (no agentType) = generic agent + inherited AGENTS.md.
+- **Specialize phases via `agentType`.** Pass `{agentType:'reviewer-dimension'|'qa-scenario'|'security-scanner'|'simplifier'|'plan-reviewer'|'developer'|...}`. It composes with `schema` (StructuredOutput appended). Default (no agentType) = generic agent + inherited AGENTS.md. A simplify phase runs the repo-owned `simplifier`, never the plugin `code-simplifier`, whose prompt carries another project's coding standards.
 - **Structured output**: pass a JSON-Schema `schema` so the agent returns validated data, not prose.
 - **cwd/baseRef**: cwd-aware scripts prepend `git -C <cwd>`; review diffs `${baseRef}..HEAD`. The integrator captures `baseRef` (pre-task HEAD) before launching.
 - **Cost**: tune `dimensions`/`qaScenarios`/persona counts down for small increments. A full `review` is ~600k tokens; a full `dev-loop` more.

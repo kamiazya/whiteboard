@@ -25,12 +25,9 @@ the whole day-to-day surface.
 ## Stack order is not a choice here
 
 This repo's dependency direction is already fixed by `.claude/rules/architecture-map.md`,
-and a stack must follow it — a lower layer cannot depend on a higher one:
-
-```
-model → codec / canvas-render / ports → workspace
-             → server-core → mcp-server | apps/web
-```
+and a stack must follow it — a lower layer cannot depend on a higher one. Order the layers
+by that file's table, which `tools/arch-lint` holds to the manifests; a copy of it here is
+what goes stale.
 
 The composition roots (`mcp-server`, `apps/web`) are therefore always at the TOP of a
 stack, never the bottom. That is what makes "split the MCP, CLI and web parts into

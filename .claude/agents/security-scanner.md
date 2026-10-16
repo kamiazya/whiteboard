@@ -1,6 +1,6 @@
 ---
 name: security-scanner
-description: Security scanner for one specific attack vector (path-traversal/auth-bypass/CORS/SSRF/info-leak/injection). Spawned by security-reviewer to parallelize security analysis. Pass the vector name and target files in the task prompt.
+description: Security scanner for one specific attack vector (path-traversal/auth-bypass/CORS/SSRF/info-leak/injection). Spawned by the review workflow's (review.workflow.mjs) security lane, beside the reviewer dimensions. Pass the vector name and target files in the task prompt.
 model: sonnet
 tools:
   - Read
