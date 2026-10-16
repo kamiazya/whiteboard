@@ -16,7 +16,6 @@ import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useAppBadge } from '../hooks/useFavicon.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
@@ -393,7 +392,6 @@ function useBrowserDocument(
     setShellConnection({ state: connection, lastWrittenAt })
     return () => setShellConnection(null)
   }, [connection, lastWrittenAt])
-  useAppBadge(connection)
 
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
   // envelope, the same bucket the edge-style facet uses; a MARKDOWN one

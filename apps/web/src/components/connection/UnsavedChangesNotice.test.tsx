@@ -85,3 +85,19 @@ it('asks before leaving a browser-kept page whose storage refused a write, witho
   publish({ keeper: 'browser', storage: 'ok' })
   expect(leaving().defaultPrevented).toBe(false)
 })
+
+// The prompt asks exactly when the app badge does: a refused session holds
+// whatever was typed since in this tab alone, and a stuck browser edit is
+// not stored yet. Each states itself elsewhere, so neither gets the banner.
+it.each([
+  ['a daemon session that is off', { keeper: 'daemon', session: 'sync-off' }],
+  ['a browser edit that is stuck unsaved', { keeper: 'browser', storage: 'stuck' }],
+] as const)('asks before leaving %s, without a banner', (_label, state) => {
+  publish(state)
+  render(<UnsavedChangesNotice />)
+  expect(leaving().defaultPrevented).toBe(true)
+  expect(screen.queryByText(/Changes not saved yet/)).toBeNull()
+
+  publish(state.keeper === 'daemon' ? SYNCED : { keeper: 'browser', storage: 'ok' })
+  expect(leaving().defaultPrevented).toBe(false)
+})

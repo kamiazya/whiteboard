@@ -1,6 +1,7 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { KeeperNotices } from '../components/connection/KeeperNotices.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
 import { stubAppBadge } from '../test-utils/app-badge.js'
@@ -29,20 +30,24 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 const created: FakeDocumentBackend[] = []
 
 // The favicon itself is a canvas jsdom cannot draw; the installed app's
-// badge is set from the same state, while the keeper is not keeping.
+// badge is set from the same state, while the keeper is not keeping — by the
+// frame's notices, which every frame holding this page mounts beside it.
 let badge: ReturnType<typeof stubAppBadge>
 
 async function renderPageAndEdit(): Promise<FakeDocumentBackend> {
   await act(async () => {
     rtlRender(
-      <DaemonDocumentPage
-        daemonBaseUrl="http://127.0.0.1:3099"
-        createBackend={() => {
-          const backend = new FakeDocumentBackend()
-          created.push(backend)
-          return backend
-        }}
-      />,
+      <>
+        <KeeperNotices />
+        <DaemonDocumentPage
+          daemonBaseUrl="http://127.0.0.1:3099"
+          createBackend={() => {
+            const backend = new FakeDocumentBackend()
+            created.push(backend)
+            return backend
+          }}
+        />
+      </>,
       { wrapper: MemoryRouterWrapper, container: document.body },
     )
   })

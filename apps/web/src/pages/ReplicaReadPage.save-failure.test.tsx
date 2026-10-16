@@ -61,7 +61,8 @@ function seedRecord(): LoroDoc {
 
 async function openPlanAndEdit(): Promise<void> {
   // Beside the shell's notices, as every frame that holds a page mounts
-  // them: the leave prompt is theirs, read from the one shell store.
+  // them: the leave prompt and the app badge are theirs, read from the one
+  // shell store.
   render(
     <>
       <KeeperNotices />

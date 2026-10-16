@@ -5,6 +5,10 @@ import { type Mock, vi } from 'vitest'
  * the page's badge calls reach. Defined `configurable` and removed by
  * `restore` (or put back, where `navigator` already had its own), so a test
  * leaves no stale spy on `navigator` for the rest of its file.
+ *
+ * Not for a rejecting Badging API: a spy records how its promise settles,
+ * which handles a rejection itself, so a writer that let one escape would
+ * still pass. Define a plain function for that case.
  */
 export function stubAppBadge(): {
   set: Mock<() => Promise<void>>
