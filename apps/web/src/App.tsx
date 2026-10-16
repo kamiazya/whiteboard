@@ -10,6 +10,7 @@ import {
 } from './app-screens.js'
 import { useDaemonReconnect } from './hooks/use-daemon-reconnect.js'
 import { useDaemonShellTarget, useReplicaKeeper } from './hooks/use-daemon-session.js'
+import { useNewCanvasLaunches } from './hooks/use-new-canvas-launches.js'
 import { useShellWorkspaces } from './hooks/use-shell-workspaces.js'
 import { useWorkspaceAddressSync } from './hooks/use-workspace-address-sync.js'
 import { useDaemonThemeFonts } from './hooks/useDaemonThemeFonts.js'
@@ -117,6 +118,7 @@ export function App({ providerState }: AppProps) {
     connected: connection !== null,
     effectiveState,
   })
+  useNewCanvasLaunches(navigate, { daemonKept, awaitingDaemonRenewal })
   useWorkspaceAddressSync({
     location,
     navigate,

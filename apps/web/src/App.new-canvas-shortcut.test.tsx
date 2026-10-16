@@ -19,9 +19,13 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { pwaOptions } from '../vite-pwa-options.js'
 import { App } from './App.js'
+import { BRIDGE_DAEMON_BASE_URL } from './lib/bridge-address.js'
 import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
+import type { ExtensionConnection } from './lib/extension-connection.js'
 import { sharedFoldingBrowserIndex } from './lib/folding-browser-index.js'
 import type { ProviderState } from './lib/provider.js'
+import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
+import { createUserSettingsStore } from './lib/user-settings-store.js'
 // The real list page, imported so its lazy() settles in a microtask: it is
 // the page under test here.
 import './pages/BrowserIndexPage.js'
@@ -36,7 +40,20 @@ vi.mock('./pages/BrowserDocumentPage.js', () => ({
   },
 }))
 
+vi.mock('./pages/DaemonDocumentPage.js', () => ({
+  DaemonDocumentPage: () => <div data-testid="daemon-document-page" />,
+}))
+
+// A remembered daemon is renewed through the extension, which jsdom lacks; a
+// test that needs the renewal held in flight sets this to a pending promise.
+let extensionAnswer: () => Promise<ExtensionConnection> = async () => ({ status: 'none' })
+vi.mock('./lib/extension-connection.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/extension-connection.js')>()),
+  connectThroughExtension: () => extensionAnswer(),
+}))
+
 const BROWSER_STATE: ProviderState = { kind: 'browser' }
+const DAEMON_STATE: ProviderState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' }
 
 beforeEach(async () => {
   openedPath = undefined
@@ -46,6 +63,11 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup()
+  Reflect.deleteProperty(window, 'launchQueue')
+  resetShellStatusForTests()
+  vi.unstubAllGlobals()
+  extensionAnswer = async () => ({ status: 'none' })
+  localStorage.clear()
 })
 
 async function documentCount(): Promise<number> {
@@ -70,9 +92,9 @@ function carriesShortcutParam(search: string): boolean {
   return [...shortcut.keys()].some((key) => now.has(key))
 }
 
-function renderAt(entry: string) {
+function renderAt(entry: string, providerState: ProviderState = BROWSER_STATE) {
   const router = createMemoryRouter(
-    [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+    [{ path: '*', element: <App providerState={providerState} /> }],
     { initialEntries: [entry] },
   )
   render(<RouterProvider router={router} />)
@@ -111,5 +133,108 @@ describe('the New canvas launcher shortcut', () => {
     renderAt(landed)
     await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
     await waitFor(async () => expect(await documentCount()).toBe(1))
+  })
+})
+
+// With the installed app already open, `launch_handler: focus-existing` only
+// focuses the window: the shortcut's URL arrives as LaunchParams on
+// `window.launchQueue` (WICG Web App Launch Handler), never as a navigation.
+describe('the New canvas launcher shortcut while the app is already open', () => {
+  type Consumer = (params: { targetURL?: string | null }) => void
+  function stubLaunchQueue(): { launch: (url: string) => void } {
+    let consumer: Consumer | undefined
+    Object.defineProperty(window, 'launchQueue', {
+      configurable: true,
+      value: { setConsumer: (next: Consumer) => (consumer = next) },
+    })
+    return {
+      launch(url) {
+        if (consumer === undefined) throw new Error('nothing consumes window.launchQueue')
+        const targetURL = new URL(url, window.location.origin).href
+        act(() => consumer?.({ targetURL }))
+      },
+    }
+  }
+
+  it('creates and opens a document from the list', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+
+    queue.launch(manifestShortcutUrl())
+
+    await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
+    expect(await documentCount()).toBe(1)
+    expect(carriesShortcutParam(router.state.location.search)).toBe(false)
+  })
+
+  it('creates and opens a second document from an open one', async () => {
+    const queue = stubLaunchQueue()
+    renderAt(manifestShortcutUrl())
+    await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
+    const first = openedPath
+
+    queue.launch(manifestShortcutUrl())
+
+    await waitFor(async () => expect(await documentCount()).toBe(2), { timeout: 10_000 })
+    await waitFor(() => expect(openedPath).not.toBe(first))
+    expect(screen.getByTestId('browser-document-page')).toBeDefined()
+  })
+
+  it('a plain launch only focuses: it creates nothing and stays put', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+    const before = router.state.location
+
+    queue.launch('/')
+
+    expect(router.state.location).toBe(before)
+    expect(await documentCount()).toBe(0)
+  })
+
+  it('a tab holding a write that did not land stays where it is', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+    setShellConnection({ state: { keeper: 'browser', storage: 'failed' } })
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
+    expect(await documentCount()).toBe(0)
+  })
+
+  it('a daemon-kept document stays open: the daemon list would create nothing', async () => {
+    // No daemon answers: what is under test is the launch, not the keeper.
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    const queue = stubLaunchQueue()
+    const router = renderAt('/w/team/d/plan', DAEMON_STATE)
+    await screen.findByTestId('daemon-document-page', {}, { timeout: 10_000 })
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
+    expect(screen.getByTestId('daemon-document-page')).toBeDefined()
+  })
+
+  it('a daemon reconnect still in flight keeps the window where it is', async () => {
+    extensionAnswer = () => new Promise(() => {})
+    const settings = createUserSettingsStore()
+    const loaded = settings.load()
+    settings.save({
+      ...loaded,
+      storage: { ...loaded.storage, daemonBaseUrl: BRIDGE_DAEMON_BASE_URL },
+    })
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('Connecting to the daemon…')
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
   })
 })
