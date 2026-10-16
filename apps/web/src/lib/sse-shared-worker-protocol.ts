@@ -6,6 +6,7 @@
  * rather than at build time.
  */
 import { syncWriteRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
+import { authRefusalCauseSchema } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { z } from 'zod'
 
@@ -77,8 +78,10 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // The daemon refused the worker's credential for this document. Distinct
   // from a `status` of disconnected: the worker stops reconnecting, and a tab
   // told only that the stream is down would report a reconnect in progress
-  // for as long as it stays open.
-  z.object({ type: z.literal('auth-refused'), doc: z.string() }),
+  // for as long as it stays open. The cause is the hub's own, relayed rather
+  // than re-derived: a refused push is announced and never remembered, so a
+  // tab replaying refusals to a later listener has to tell it apart.
+  z.object({ type: z.literal('auth-refused'), doc: z.string(), cause: authRefusalCauseSchema }),
 ])
 
 export type SseWorkerRequest = z.infer<typeof sseWorkerRequestSchema>

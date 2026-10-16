@@ -366,13 +366,17 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     const doc = nextDoc()
     const refused: string[] = []
     port.addEventListener('message', (e: MessageEvent) => {
-      const data = e.data as { type?: string; doc?: string }
-      if (data.type === 'auth-refused' && data.doc !== undefined) refused.push(data.doc)
+      const data = e.data as { type?: string; doc?: string; cause?: string }
+      if (data.type === 'auth-refused' && data.doc !== undefined) {
+        refused.push(`${data.doc} ${data.cause}`)
+      }
     })
     port.postMessage({ type: 'init', baseUrl: REFUSING_BASE })
     port.postMessage({ type: 'subscribe', doc })
 
-    await until(() => refused.includes(doc))
+    // The hub's own cause, relayed: a tab tells a stream refusal to a later
+    // listener, and a push refusal to nobody but who heard it.
+    await until(() => refused.includes(`${doc} stream`))
   })
 
   it('keeps a port’s subscriptions across a re-init', async () => {
