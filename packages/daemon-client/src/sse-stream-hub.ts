@@ -242,7 +242,12 @@ export class SseStreamHub implements SseStreamSource {
   private streamSeq = 0
   private started = false
   private closed = false
-  /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
+  /**
+   * Set by a 401/403 on the stream open: the reconnect loop halts on it while
+   * anything is still subscribed, and a document subscribing meanwhile is told.
+   * Cleared once the last subscription is released, so releasing and reopening
+   * asks again — a hub can outlive every page that heard the refusal.
+   */
   private streamRefused = false
   /**
    * Set when the open stream is ended because a subscribe on it went
@@ -276,7 +281,7 @@ export class SseStreamHub implements SseStreamSource {
     // tab would show an unknown connection for as long as nothing went wrong.
     const joiner = { listeners: new Set([listener]) }
     this.announceTo(joiner, entry.routed)
-    if (entry.authRefused) this.announceAuthRefused([joiner])
+    if (entry.authRefused || this.streamRefused) this.announceAuthRefused([joiner])
     void this.start()
 
     return () => {
@@ -288,6 +293,7 @@ export class SseStreamHub implements SseStreamSource {
       // here and keep declaring every reconnected stream ready for a canvas
       // nobody is watching.
       this.docs.delete(doc)
+      if (this.docs.size === 0) this.streamRefused = false
       void this.send({ unsubscribe: [doc] })
     }
   }

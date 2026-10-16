@@ -51,6 +51,21 @@ export interface DocumentBackendHarness {
    */
   refuseAuth?(): void
   /**
+   * Make the keeper refuse the stream open itself for the credential, until
+   * the returned function is called — the credential renewed, as a sign-in
+   * does. Unlike `refuseAuth` it refuses the transport every backend on it
+   * shares, so a harness whose stream is shared must not keep a claim of its
+   * own on it from here on. Omitted, with `anotherBackend`, by an
+   * implementation with no stream.
+   */
+  refuseStream?(): () => void
+  /**
+   * A further backend on the same keeper and transport, for a document no
+   * backend has open — another page opening another document. Each call is a
+   * new document, and the case that asks for one disconnects it.
+   */
+  anotherBackend?(): DocumentBackend
+  /**
    * How many times this backend has opened its stream to the keeper, refused
    * opens included — so a case can tell a backend that stopped from one
    * still retrying. Omitted, with `failsNextStreamOpen`, by an implementation
@@ -223,6 +238,7 @@ export function documentBackendContract(
   teardownCases(create)
   transportCases(create)
   authCases(create)
+  streamRefusalCases(create)
   catchUpCases(create)
   routingGapCases(create)
   unroutedCases(create)
@@ -399,6 +415,49 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
     if (opensBefore !== undefined) expect(h.streamOpens?.()).toBe(opensBefore + 1)
     clock?.cleanup()
     h.backend.disconnect()
+    h.cleanup()
+  })
+}
+
+/** What a caller is told when the keeper refuses the stream open itself. */
+function streamRefusalCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  it('reports a refused stream to a backend opened later, and asks again once every backend is released', {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    // A transport can outlive every page that heard its refusal — the
+    // SharedWorker keeps one per origin — so a page opened later that hears
+    // nothing reads "offline" instead of "sign in again", and pages opened
+    // after every one of them was released and the credential renewed must
+    // not inherit the halt.
+    const h = await create()
+    if (!h.refuseStream || !h.dropTransport || !h.anotherBackend) {
+      h.cleanup()
+      return
+    }
+    const first = recorder()
+    h.backend.connect(first.handlers)
+    await called(first, 'connected')
+    const renew = h.refuseStream()
+    h.dropTransport()
+    await called(first, 'authError')
+
+    const joiner = h.anotherBackend()
+    const joined = recorder()
+    joiner.connect(joined.handlers)
+    await called(joined, 'authError')
+
+    renew()
+    h.backend.disconnect()
+    joiner.disconnect()
+    const reopened = h.anotherBackend()
+    const again = recorder()
+    reopened.connect(again.handlers)
+    await vi.waitFor(() => expect(again.calls).toContain('connected'), {
+      timeout: BOUNDED_OPEN_TIMEOUT_MS,
+    })
+    reopened.disconnect()
     h.cleanup()
   })
 }
