@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fc, fcTest } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import { coveringTests } from '../../../scripts/mutation/covering-tests.mjs'
+import { coveringTests, mutatedModules } from '../../../scripts/mutation/covering-tests.mjs'
 import strykerConfig from '../../../stryker.config.mjs'
 import strykerVitestConfig from '../../../vitest.stryker.config.js'
 import { STRYKER_PROPERTY_SEED } from '../../../vitest.stryker-setup.js'
@@ -35,6 +35,12 @@ describe('the mutation lane selects property tests by a stable title', () => {
 
 const PACKAGE_DIR = resolve(import.meta.dirname, '../../..')
 
+const everyFile = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    return entry.isDirectory() ? everyFile(path) : [path]
+  })
+
 describe('the mutation lane runs the tests that reach a mutated module', () => {
   const included = [strykerVitestConfig.test?.include ?? []].flat()
 
@@ -47,13 +53,20 @@ describe('the mutation lane runs the tests that reach a mutated module', () => {
     expect(included.length).toBeGreaterThan(50)
   })
 
-  // An exclusion that names nothing the derivation selects is a reason that
-  // outlived its test. Smoke and distribution tests are excluded by suffix
-  // whatever the graph holds, so they are not held to this.
-  it('excludes only tests the derivation selects', () => {
+  // An exclusion that names nothing the lane could select is a reason that
+  // outlived its test. A one-file run (`STRYKER_MUTATE`) can name any module,
+  // so what the lane could select is the derivation over every module in
+  // `src`, not over the configured list alone. Smoke and distribution tests
+  // are excluded by suffix whatever the graph holds, so they are not held to
+  // this.
+  it('excludes only tests some run of the lane can select', () => {
     const exclude: string[] = strykerVitestConfig.test?.exclude ?? []
     const named = exclude.filter((glob) => !/\.(smoke|distribution)\.test\.ts$/.test(glob))
     expect(named.length).toBeGreaterThan(3)
+    const modules = everyFile(join(PACKAGE_DIR, 'src'))
+      .filter((path) => /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path))
+      .map((path) => relative(PACKAGE_DIR, path))
+    const selectable = coveringTests(modules, PACKAGE_DIR)
     for (const glob of named) {
       const pattern = new RegExp(
         `^(?:.*/)?${glob
@@ -62,7 +75,7 @@ describe('the mutation lane runs the tests that reach a mutated module', () => {
           .replaceAll('*', '[^/]*')}$`,
       )
       expect(
-        included.filter((file) => pattern.test(file)),
+        selectable.filter((file) => pattern.test(file)),
         glob,
       ).not.toEqual([])
     }
@@ -71,13 +84,36 @@ describe('the mutation lane runs the tests that reach a mutated module', () => {
   // Listing every test again would satisfy a coverage check; the point of the
   // derivation is that most of the suite never reaches the mutated modules.
   it('leaves most of the suite out', () => {
-    const everyTest = (dir: string): string[] =>
-      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        const path = join(dir, entry.name)
-        if (entry.isDirectory()) return everyTest(path)
-        return entry.name.endsWith('.test.ts') ? [path] : []
-      })
-    expect(included.length).toBeLessThan(everyTest(join(PACKAGE_DIR, 'src')).length * 0.6)
+    const everyTest = everyFile(join(PACKAGE_DIR, 'src')).filter((path) =>
+      path.endsWith('.test.ts'),
+    )
+    expect(included.length).toBeLessThan(everyTest.length * 0.6)
+  })
+})
+
+// A one-file run names its file twice — to Stryker's `--mutate` and to this
+// lane's selection — because the vitest config is read in a process that
+// never sees Stryker's arguments. Without the override the selection stays
+// on the configured list and the named file's own tests never run.
+describe('a one-file run selects the tests of the file it names', () => {
+  it('takes the mutated modules from STRYKER_MUTATE when it is set', () => {
+    const mutated = mutatedModules({ STRYKER_MUTATE: 'src/server/export/installed-fonts.ts' })
+    expect(mutated).toEqual(['src/server/export/installed-fonts.ts'])
+    expect(coveringTests(mutated, PACKAGE_DIR)).toContain(
+      'src/server/export/installed-fonts.test.ts',
+    )
+  })
+
+  it('reads the list the way --mutate does: comma-separated, line ranges dropped', () => {
+    expect(mutatedModules({ STRYKER_MUTATE: ' src/a.ts:3-9 , src/b.ts,' })).toEqual([
+      'src/a.ts',
+      'src/b.ts',
+    ])
+  })
+
+  it('falls back to the configured list when the override is unset or blank', () => {
+    expect(mutatedModules({})).toEqual(strykerConfig.mutate)
+    expect(mutatedModules({ STRYKER_MUTATE: '  ' })).toEqual(strykerConfig.mutate)
   })
 })
 

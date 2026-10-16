@@ -29,6 +29,20 @@ Nothing is sent anywhere by itself. The trace leaves your device only when you c
 
 Each pointer entry records the element it landed on and whether it reached the editor at all, so
 a trace shows a press consumed by another element in front of it. The canvas's gesture decisions
-are also made by a pure function over these events, which a developer can fold over a pasted
-trace in a test to reproduce the decisions away from your device. The app has no screen or
-command that replays a trace for you.
+are also made by a pure function over these events, so a developer can replay a pasted trace in a
+test to reproduce the decisions away from your device. The app has no screen or command that
+replays a trace for you.
+
+For a developer, the test reads the trace with `parseGestureTrace` and folds it with
+`replayNavigation`, both from `apps/web/src/components/spatial-editor/gesture-trace.ts`:
+
+```ts
+const trace = parseGestureTrace(pastedText)
+const modes = replayNavigation(trace.entries)
+```
+
+Each trace carries a `format` number. `parseGestureTrace` throws if the format is missing or is
+not the one the current build reads, and also if an entry carries an event type or field the
+current build does not know. A trace recorded by an older bundle is refused instead of being
+replayed against events whose fields have since changed. If it is refused, ask for a fresh trace
+from a device running the current deploy.

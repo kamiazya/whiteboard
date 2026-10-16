@@ -1,97 +1,96 @@
 /**
- * The hosted app's origin is spelled by three packages that cannot import one
- * another, so nothing but this test makes them one value.
+ * The hosted app's origin is spelled in ONE place, and this scan is the
+ * executable half of that.
  *
- * - the extension's manifest admits the page that may message it
- *   (`externally_connectable`), as a match pattern;
- * - the web app's origin policy names the one origin it treats as production;
- * - the daemon opens it in a browser on first run.
+ * Three parties must agree on it: the extension's manifest admits the page
+ * that may message it (a match pattern), the web app's origin policy names
+ * the one origin it treats as production, and the daemon opens it in a
+ * browser on first run. A rename of the deployment that reached two of them
+ * leaves an extension refusing the page it was built for, or a daemon opening
+ * a host nobody serves. All three import `daemon-client`, so the value lives
+ * there and each derives its own shape from it; what this scan finds is the
+ * host spelled again by hand in code.
  *
- * Each is pinned by its own package's literal, so a rename of the deployment
- * that updates two of the three still passes every one of those tests, and
- * what breaks is the third surface: an extension that refuses the page it was
- * built for, or a daemon that opens a host nobody serves. The `index.html`
- * `og:url` carries the same origin and rides along, since it too is a copy.
- *
- * Read as text: the three live in a root that may not import the others
- * (`architecture-map.md` rule 2), and one is a `.html`.
+ * Comments are not read: a comment naming the host as an example is not a
+ * value anything acts on. `index.html`'s `og:url` cannot import, so it is the
+ * one copy left, compared against the owner instead.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
+import { isShippedPath, walkSourceFiles } from './source-scan.js'
+import { stripComments } from './strip-comments.js'
 
-interface Spelling {
-  readonly label: string
-  readonly file: string
-  /** One capture group: the quoted value, in the shape that file writes it. */
-  readonly pattern: RegExp
-}
+/** Where the one spelling lives. Exempt by construction: it IS the place. */
+const OWNER = 'packages/daemon-client/src/hosted-app.ts'
 
-const SPELLINGS: readonly Spelling[] = [
-  {
-    label: 'extension manifest match pattern',
-    file: 'apps/extension/src/manifest.ts',
-    pattern: /const HOSTED_APP = '([^']+)'/,
-  },
-  {
-    label: 'web origin policy (origin)',
-    file: 'apps/web/src/lib/pages-origin-policy.ts',
-    pattern: /export const PROVISIONAL_PRODUCTION_ORIGIN = '([^']+)'/,
-  },
-  {
-    label: 'web origin policy (pages domain)',
-    file: 'apps/web/src/lib/pages-origin-policy.ts',
-    pattern: /const PAGES_DOMAIN = '([^']+)'/,
-  },
-  {
-    label: 'daemon auto-open URL',
-    file: 'packages/mcp-server/src/cli/daemon-run-auto-open.ts',
-    pattern: /const OFFICIAL_HOSTED_APP_URL = '([^']+)'/,
-  },
+const sourceOf = (rel: string) => readFileSync(join(REPO_ROOT, rel), 'utf8')
+
+const ownerOrigin = /export const HOSTED_APP_ORIGIN = '([^']+)'/.exec(sourceOf(OWNER))?.[1]
+const ownerHost = ownerOrigin === undefined ? undefined : new URL(ownerOrigin).host
+
+/** Copies that cannot import the owner, each compared against it instead. */
+const COPIES = [
   {
     label: 'index.html og:url',
     file: 'apps/web/index.html',
     pattern: /<meta property="og:url" content="([^"]+)"/,
   },
-]
+] as const
 
-/** `https://host/*` (a match pattern), `https://host/`, `https://host` and a bare `host` all name one host. */
-function hostOf(value: string): string {
-  const withScheme = value.includes('://') ? value : `https://${value}`
-  return new URL(withScheme.replace(/\/\*$/, '/')).host
+/**
+ * Shipped source only. A smoke's preview host is a fixture that a move would
+ * fail loudly, not a value that silently keeps working.
+ */
+const files = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root)))
+  .map((path) => relativeToRepo(path))
+  .filter(isShippedPath)
+
+/** The code in `source`, comments removed, that spells `host`. */
+function spellsHost(source: string, host: string, fileName?: string): boolean {
+  // The plain search first: stripping parses the file, and almost none match.
+  return source.includes(host) && stripComments(source, fileName).includes(host)
 }
 
-const found = SPELLINGS.map((spelling) => {
-  const match = spelling.pattern.exec(readFileSync(join(REPO_ROOT, spelling.file), 'utf8'))
-  return { ...spelling, value: match?.[1] }
-})
+describe('the hosted app origin is spelled in one place', () => {
+  it('reads the owner and a tree worth scanning', () => {
+    // A renamed owner constant would leave nothing to look for, and every
+    // file would pass a scan for `undefined`.
+    expect(ownerOrigin, `${OWNER} no longer exports HOSTED_APP_ORIGIN as a literal`).toBeDefined()
+    expect(ownerHost && spellsHost(sourceOf(OWNER), ownerHost)).toBe(true)
+    expect(files.length).toBeGreaterThan(500)
+    expect(files).toContain(OWNER)
+    expect(files).toContain('apps/extension/src/manifest.ts')
+  })
 
-describe('the hosted app origin is one value', () => {
-  it('finds every spelling it exists to compare', () => {
-    // A pattern that stopped matching would drop its spelling from the
-    // comparison below and read as agreement.
+  it('no other shipped source spells the host', () => {
+    const host = ownerHost as string
+    const hits = files.filter((rel) => rel !== OWNER && spellsHost(sourceOf(rel), host, rel))
     expect(
-      found.filter(({ value }) => value === undefined).map(({ label }) => label),
-      'a spelling was renamed or reshaped — update its pattern here',
+      hits,
+      `derive it from HOSTED_APP_ORIGIN (${OWNER}): a second spelling is one a rename misses`,
     ).toEqual([])
   })
 
-  it('has every spelling name the same host', () => {
-    const hosts = found.map(({ label, value }) => ({ label, host: hostOf(value as string) }))
-    const distinct = new Set(hosts.map(({ host }) => host))
-    expect(
-      [...distinct],
-      `the hosted app is spelled with more than one host:\n${JSON.stringify(hosts, null, 2)}`,
-    ).toHaveLength(1)
+  it('has every copy that cannot import name the owner host over https', () => {
+    const found = COPIES.map(({ label, file, pattern }) => ({
+      label,
+      value: pattern.exec(sourceOf(file))?.[1],
+    }))
+    expect(found.filter(({ value }) => value === undefined).map(({ label }) => label)).toEqual([])
+    for (const { label, value } of found) {
+      const url = new URL(value as string)
+      expect({ label, host: url.host, protocol: url.protocol }).toEqual({
+        label,
+        host: ownerHost,
+        protocol: 'https:',
+      })
+    }
   })
 
-  it('has every spelling that carries a scheme use https', () => {
-    // A downgraded scheme in the extension's pattern would admit a page an
-    // attacker can serve over plain http.
-    const insecure = found
-      .filter(({ value }) => (value as string).includes('://'))
-      .filter(({ value }) => !(value as string).startsWith('https://'))
-    expect(insecure.map(({ label }) => label)).toEqual([])
+  it('finds a spelling in code but not in a comment', () => {
+    expect(spellsHost("const A = 'https://x.example/*'", 'x.example')).toBe(true)
+    expect(spellsHost('// e.g. "x.example"\nconst A = 1', 'x.example')).toBe(false)
   })
 })

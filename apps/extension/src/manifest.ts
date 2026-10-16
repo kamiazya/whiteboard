@@ -4,6 +4,7 @@
  * https://developer.chrome.com/docs/extensions/reference/manifest
  */
 import { WHITEBOARD_GECKO_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { version } from '../package.json' with { type: 'json' }
 
 /**
@@ -14,7 +15,7 @@ import { version } from '../package.json' with { type: 'json' }
 const EXTENSION_KEY =
   'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnUvZtXWvNjLEOfD+ohEovcqQUeLSMkkASGgA/vrhRDMMLuLrc38I1X371rgYutJ/RfjncF/NKxx4YVavgVl5R2s7LJutdfukxUIlLF8628Nv3S3oQOOh1GgRlDRragxtdTx8PLM5Tb+JH7mW928IxSwnVY3nEE/JXMlPxrb1KI9t8xj2b+zpt1dnPoLPbrU2hSMrOqgVrfjfA7u+AeusPt1Yrng+x+P7pxEogCbcepzf24/njM5BRyT5vmT+LwvckSNDwONV5eN1Of78arQCbj+OTaf5ZoM3jVsvVY6ZbMoQp1gkMxmK/34OcIo1sjokh/noQbcDchwLGlDrJS+6HQIDAQAB'
 
-const HOSTED_APP = 'https://kamiazya-whiteboard.pages.dev/*'
+const HOSTED_APP = `${HOSTED_APP_ORIGIN}/*`
 
 /** Development servers; never in a build meant for everyday use. */
 const DEVELOPMENT_PAGES = ['http://localhost/*', 'http://127.0.0.1/*']

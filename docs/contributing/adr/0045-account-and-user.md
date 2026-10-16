@@ -21,6 +21,13 @@ Waiting for a keeper with more than one tenant:
 
 Decision 9's invitations can be redeemed, but nothing creates one yet.
 
+> **Note (2026-10-16):** the line above stopped being true. An administrator
+> creates an invitation link to the server with `POST /api/invitations`
+> (`routes/tenant-people.ts`), and a workspace owner creates one to a
+> workspace with `POST /api/workspaces/:workspace/invitations`
+> (`routes/workspace-people.ts`); ADR-0046's 2026-10-04 note records the same
+> correction. Revoking an invitation is still not built.
+
 ## Context
 
 The tenant boundary landed as a database mechanism: a keeper holds tenants

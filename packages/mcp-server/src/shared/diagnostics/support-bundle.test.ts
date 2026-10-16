@@ -36,24 +36,20 @@ const minimalInput: SupportBundleInput = {
 function bundleAsConcatenatedText(bundle: ReturnType<typeof buildSupportBundle>): string {
   // Concatenated view of every file in the bundle. Used as the leak
   // probe: a leak in any section is a leak in the bundle as a whole.
-  return Object.values(bundle.files).join('')
+  return JSON.stringify(bundle.manifest) + Object.values(bundle.sections).join('')
 }
 
 describe('support bundle v0', () => {
   it('produces a deterministic manifest + status + doctor section set with stable filenames', () => {
     const bundle = buildSupportBundle(minimalInput)
-    expect(Object.keys(bundle.files).sort()).toEqual([
-      'doctor.json',
-      'manifest.json',
-      'status.json',
-    ])
+    expect(Object.keys(bundle.sections).sort()).toEqual(['doctor.json', 'status.json'])
     expect(bundle.manifest.schemaVersion).toBe(SUPPORT_BUNDLE_SCHEMA_VERSION)
     expect(bundle.manifest.sections).toEqual(['status.json', 'doctor.json'])
     expect(bundle.manifest.platform).toEqual({ os: 'darwin', nodeVersion: 'v22.0.0' })
 
     // Each JSON file must independently parse and end with a newline.
-    for (const name of ['manifest.json', 'status.json', 'doctor.json'] as const) {
-      const text = bundle.files[name]
+    for (const name of ['status.json', 'doctor.json'] as const) {
+      const text = bundle.sections[name]
       expect(text.endsWith('\n')).toBe(true)
       expect(() => JSON.parse(text.trim())).not.toThrow()
     }
@@ -112,6 +108,10 @@ describe('support bundle v0', () => {
     ).toThrow()
     expect(() =>
       supportBundleManifestSchema.parse({ ...manifest, sections: ['record.json'] }),
+    ).toThrow()
+    // The manifest is the file that lists sections, never one of them.
+    expect(() =>
+      supportBundleManifestSchema.parse({ ...manifest, sections: ['manifest.json'] }),
     ).toThrow()
   })
 
@@ -180,16 +180,14 @@ describe('support bundle v0', () => {
   it('produces deterministic byte-for-byte output for the same input (replay friendly)', () => {
     const a = buildSupportBundle(minimalInput)
     const b = buildSupportBundle(minimalInput)
-    for (const name of ['manifest.json', 'status.json', 'doctor.json'] as const) {
-      expect(b.files[name]).toBe(a.files[name])
+    expect(b.manifest).toEqual(a.manifest)
+    for (const name of ['status.json', 'doctor.json'] as const) {
+      expect(b.sections[name]).toBe(a.sections[name])
     }
   })
 
-  it('manifest.sections is exactly the file map keys minus the manifest itself', () => {
+  it('manifest.sections is exactly the section map keys', () => {
     const bundle = buildSupportBundle(minimalInput)
-    const filesWithoutManifest = Object.keys(bundle.files)
-      .filter((k) => k !== 'manifest.json')
-      .sort()
-    expect([...bundle.manifest.sections].sort()).toEqual(filesWithoutManifest)
+    expect([...bundle.manifest.sections].sort()).toEqual(Object.keys(bundle.sections).sort())
   })
 })

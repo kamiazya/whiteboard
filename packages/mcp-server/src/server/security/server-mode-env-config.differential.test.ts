@@ -225,7 +225,10 @@ const VALUES: Record<string, readonly (string | undefined)[]> = {
     '*.example.com',
   ],
   [ENV_KEYS.HOST]: [undefined, '', '   ', '127.0.0.1'],
-  [ENV_KEYS.PORT]: [undefined, '', '0', '1', '3099', '65535', '65536', '-1', 'abc', '80.5'],
+  // No blank PORT: the oracle refused one, and the live parser now reads a
+  // blank port as unset like every other optional field. That case is pinned
+  // in server-mode-env-config.test.ts instead.
+  [ENV_KEYS.PORT]: [undefined, '0', '1', '3099', '65535', '65536', '-1', 'abc', '80.5'],
   [ENV_KEYS.JWT_CLOCK_SKEW_SECONDS]: [
     undefined,
     '',

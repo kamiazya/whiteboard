@@ -1,6 +1,7 @@
 // `whiteboard server support-bundle --json` helper.
 //
-// Collects a redacted diagnostic bundle for server-mode operators.
+// Collects a redacted diagnostic bundle for server-mode operators and hands
+// it to the writer both support-bundle commands share.
 // Sections: status.json, doctor.json, record.json, manifest.json.
 //
 // Output contract (same as daemon-support-bundle.ts):
@@ -15,17 +16,14 @@
 //     (redactDiagnosticText + auth-marker scrub on every stringy field)
 //   - Authorization / Bearer / JWKS URI never appear in any section
 
-import { mkdir, readdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { z } from 'zod'
-import { inspectOutputPath } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   buildDoctorSection,
   SUPPORT_BUNDLE_SCHEMA_VERSION,
+  type SupportBundle,
   supportBundleDoctorSectionSchema,
-  supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
@@ -35,6 +33,7 @@ import {
 } from './operator-json.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
+import { writeSupportBundle } from './support-bundle-writer.js'
 
 export interface ServerSupportBundleOptions {
   /** Resolved absolute path to server-mode data directory. */
@@ -65,12 +64,12 @@ export interface ServerSupportBundleOutcome {
   exitCode: 0 | 1
 }
 
-function succeeded(): ServerSupportBundleOutcome {
+function succeeded(files: readonly string[]): ServerSupportBundleOutcome {
   const stdout = operatorJsonLine(serverSupportBundleOutputSchema, {
     schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
     ok: true,
     operation: 'support-bundle',
-    files: [...ALL_FILES],
+    files: [...files],
   })
   return { stdout, stderr: '', exitCode: 0 }
 }
@@ -205,17 +204,16 @@ function buildRecordSection(
   }
 }
 
-// Stable write order. manifest.json is last so a reader that sees the
-// manifest can trust every section it lists already exists on disk.
-const SECTION_WRITE_ORDER = ['status.json', 'doctor.json', 'record.json'] as const
-const ALL_FILES = [...SECTION_WRITE_ORDER, 'manifest.json'] as const
-
 export async function runServerSupportBundle(
   options: ServerSupportBundleOptions,
 ): Promise<ServerSupportBundleOutcome> {
+  const written = await writeSupportBundle(options.outputDir, () => collectBundle(options))
+  return written.kind === 'not-written' ? fail(written.message) : succeeded(written.files)
+}
+
+async function collectBundle(options: ServerSupportBundleOptions): Promise<SupportBundle> {
   const {
     dataDir,
-    outputDir,
     env = process.env,
     now = () => new Date().toISOString(),
     packageVersion = PACKAGE_VERSION,
@@ -225,73 +223,36 @@ export async function runServerSupportBundle(
     doReadRecord = readServerModeRecord,
   } = options
 
-  // ── Output-dir path safety ────────────────────────────────────────
-
-  // The bundle is written INTO a directory, so anything but a real, empty one
-  // (or a missing one, created here) is refused.
-  try {
-    const state = await inspectOutputPath(outputDir, { requireDirectory: true })
-    if (state === 'unsafe') {
-      return fail('support bundle refused: output path is not a safe directory.')
-    }
-    if (state === 'present') {
-      if ((await readdir(outputDir)).length > 0) {
-        return fail('Could not write support bundle. The output directory must be empty.')
-      }
-    } else {
-      await mkdir(outputDir, { recursive: true })
-    }
-  } catch {
-    return fail('support bundle failed')
-  }
-
-  // ── Collect data ─────────────────────────────────────────────────
-
   const [statusOutcome, doctorOutcome] = await Promise.all([
     doRunStatus(dataDir),
     doRunDoctor({ dataDir, env }),
   ])
   const readResult = doReadRecord(dataDir)
 
-  // ── Build sections ───────────────────────────────────────────────
-
-  const statusSection = buildStatusSection(statusOutcome)
   // Re-allow-list and run redactStrict on all stringy fields so Authorization /
   // Bearer markers that runServerDoctor preserves for its own diagnostic surface
   // never reach the bundle files.
   const doctorSection = buildDoctorSection(doctorOutcome.result)
-  const recordSection = buildRecordSection(readResult, statusOutcome)
 
-  const sectionContents: Record<(typeof SECTION_WRITE_ORDER)[number], string> = {
-    'status.json': operatorJsonLine(serverSupportBundleStatusSectionSchema, statusSection),
-    'doctor.json': operatorJsonLine(supportBundleDoctorSectionSchema, doctorSection),
-    'record.json': operatorJsonLine(serverSupportBundleRecordSectionSchema, recordSection),
-  }
-
-  const manifestContent = operatorJsonLine(supportBundleManifestSchema, {
-    schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
-    mode: 'server-mode',
-    createdAt: now(),
-    packageVersion,
-    platform,
-    sections: [...SECTION_WRITE_ORDER],
-  })
-
-  // ── Write to disk (manifest last, wx race guard) ─────────────────
-
-  try {
-    await Promise.all(
-      SECTION_WRITE_ORDER.map((name) =>
-        writeFile(join(outputDir, name), sectionContents[name], { encoding: 'utf-8', flag: 'wx' }),
+  return {
+    manifest: {
+      schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
+      mode: 'server-mode',
+      createdAt: now(),
+      packageVersion,
+      platform,
+      sections: ['status.json', 'doctor.json', 'record.json'],
+    },
+    sections: {
+      'status.json': operatorJsonLine(
+        serverSupportBundleStatusSectionSchema,
+        buildStatusSection(statusOutcome),
       ),
-    )
-    await writeFile(join(outputDir, 'manifest.json'), manifestContent, {
-      encoding: 'utf-8',
-      flag: 'wx',
-    })
-  } catch {
-    return fail('support bundle failed')
+      'doctor.json': operatorJsonLine(supportBundleDoctorSectionSchema, doctorSection),
+      'record.json': operatorJsonLine(
+        serverSupportBundleRecordSectionSchema,
+        buildRecordSection(readResult, statusOutcome),
+      ),
+    },
   }
-
-  return succeeded()
 }

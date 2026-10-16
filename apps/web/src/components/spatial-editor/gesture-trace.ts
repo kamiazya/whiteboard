@@ -20,6 +20,7 @@
  * recorder that unmounts with the crash it recorded is decoration; the ring
  * is bounded, so surviving costs a fixed few KB.
  */
+import { z } from 'zod'
 import {
   createIdleNavigation,
   type NavigationEvent,
@@ -28,57 +29,175 @@ import {
   reduceNavigation,
 } from './navigation.js'
 
-/** Where a pointer landed, compressed to what a reader can act on. */
-export interface TargetDescriptor {
-  readonly tag: string
-  readonly testId?: string
-  /**
-   * The element's explicit ARIA role. Never its accessible name: names
-   * interpolate content (`Load ${url}`, `Editing ${title}`), and this
-   * recorder promises to hold none.
-   */
-  readonly role?: string
-  /** The `data-editor-overlay` ancestor that would swallow a press, if any. */
-  readonly overlay?: string
-}
+/**
+ * The serialized trace's format. A trace is recorded by whatever bundle the
+ * device runs — often a stale service-worker one — and read by a developer's
+ * current reducer, so the two disagree exactly when it matters. Bump this
+ * whenever the shape below changes meaning, not only when it changes keys.
+ */
+const GESTURE_TRACE_FORMAT = 1
 
-export type TraceEntry =
-  | {
-      kind: 'navigation'
-      at: number
-      /** When the newest coalesced move landed; absent until one does. */
-      lastAt?: number
-      /** Further moves merged into this entry — see recordNavigation. */
-      coalescedMoves: number
-      event: NavigationEvent
-      modeBefore: string
-      modeAfter: string
-      effects: readonly string[]
-      fallThrough: boolean
-    }
-  | {
-      kind: 'doc-pointer'
-      at: number
-      type: string
-      pointerId: number
-      pointerType: string
-      isPrimary: boolean
-      x: number
-      y: number
-      /** False is the finding: a press some portal took before the editor could see it. */
-      insideRoot: boolean
-      target: TargetDescriptor
-    }
-  | {
-      kind: 'overlay-rejected'
-      at: number
-      pointerId: number
-      pointerType: string
-      target: TargetDescriptor
-    }
-  | { kind: 'lost-capture'; at: number; pointerId: number }
+// Every object below is strict: a field this build does not know is a field
+// the replay would silently drop, which is a different event than the one
+// the device saw.
+const pointSchema = z.strictObject({ x: z.number(), y: z.number() }).readonly()
+const pointerKindSchema = z.enum(['mouse', 'pen', 'touch'])
+
+// `navigation.ts` owns the event types; this mirrors them for the one place
+// they arrive as untrusted text, and gesture-trace.test.ts pins the two equal.
+const pressContextSchema = z
+  .strictObject({
+    handMode: z.boolean(),
+    spaceDown: z.boolean(),
+    // JSON drops an undefined value, so the key may be absent on the wire;
+    // the reducer's type requires it present, so it is restored here.
+    hitId: z.string().optional(),
+    anchorPrimaryId: z.string().nullable(),
+    manipulating: z.boolean(),
+  })
+  .transform(({ hitId, ...rest }) => ({ ...rest, hitId }))
+  .readonly()
+
+const navigationEventSchema = z.discriminatedUnion('type', [
+  z
+    .strictObject({
+      type: z.literal('pointerdown'),
+      pointerId: z.number(),
+      pointerType: pointerKindSchema,
+      isPrimary: z.boolean(),
+      button: z.number(),
+      point: pointSchema,
+      timeStamp: z.number(),
+      context: pressContextSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      type: z.literal('pointermove'),
+      pointerId: z.number(),
+      pointerType: pointerKindSchema,
+      point: pointSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      type: z.literal('pointerup'),
+      pointerId: z.number(),
+      pointerType: pointerKindSchema,
+    })
+    .readonly(),
+  z.strictObject({ type: z.literal('external-press'), pointerId: z.number() }).readonly(),
+  z
+    .strictObject({
+      type: z.literal('pointercancel'),
+      pointerId: z.number(),
+      pointerType: pointerKindSchema,
+    })
+    .readonly(),
+])
+
+/** Where a pointer landed, compressed to what a reader can act on. */
+const targetDescriptorSchema = z
+  .strictObject({
+    tag: z.string(),
+    testId: z.string().optional(),
+    /**
+     * The element's explicit ARIA role. Never its accessible name: names
+     * interpolate content (`Load ${url}`, `Editing ${title}`), and this
+     * recorder promises to hold none.
+     */
+    role: z.string().optional(),
+    /** The `data-editor-overlay` ancestor that would swallow a press, if any. */
+    overlay: z.string().optional(),
+  })
+  .readonly()
+
+export type TargetDescriptor = z.infer<typeof targetDescriptorSchema>
+
+const traceEntrySchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('navigation'),
+    at: z.number(),
+    /** When the newest coalesced move landed; absent until one does. */
+    lastAt: z.number().optional(),
+    /** Further moves merged into this entry — see recordNavigation. */
+    coalescedMoves: z.number(),
+    event: navigationEventSchema,
+    modeBefore: z.string(),
+    modeAfter: z.string(),
+    effects: z.array(z.string()).readonly(),
+    fallThrough: z.boolean(),
+  }),
+  z.strictObject({
+    kind: z.literal('doc-pointer'),
+    at: z.number(),
+    type: z.string(),
+    pointerId: z.number(),
+    pointerType: z.string(),
+    isPrimary: z.boolean(),
+    x: z.number(),
+    y: z.number(),
+    /** False is the finding: a press some portal took before the editor could see it. */
+    insideRoot: z.boolean(),
+    target: targetDescriptorSchema,
+  }),
+  z.strictObject({
+    kind: z.literal('overlay-rejected'),
+    at: z.number(),
+    pointerId: z.number(),
+    pointerType: z.string(),
+    target: targetDescriptorSchema,
+  }),
+  z.strictObject({ kind: z.literal('lost-capture'), at: z.number(), pointerId: z.number() }),
   /** The one place the component resets the machine outside the reducer. */
-  | { kind: 'reset'; at: number; reason: string }
+  z.strictObject({ kind: z.literal('reset'), at: z.number(), reason: z.string() }),
+])
+
+export type TraceEntry = z.infer<typeof traceEntrySchema>
+
+const gestureTraceSchema = z.strictObject({
+  format: z.literal(GESTURE_TRACE_FORMAT),
+  recordedAt: z.string(),
+  bundle: z.string(),
+  userAgent: z.string(),
+  viewport: z.strictObject({ width: z.number(), height: z.number(), dpr: z.number() }).optional(),
+  entries: z.array(traceEntrySchema).readonly(),
+})
+
+type SerializedGestureTrace = z.infer<typeof gestureTraceSchema>
+
+/**
+ * Reads a pasted trace for replay, or throws saying why it cannot. A trace
+ * from another format is refused rather than coerced: folding the reducer
+ * over events whose fields moved answers modes computed from `undefined`,
+ * which reads like a reproduction and is not one.
+ */
+export function parseGestureTrace(text: string): SerializedGestureTrace {
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new Error('Not a gesture trace: the text is not JSON.')
+  }
+  const format = typeof json === 'object' && json !== null ? Reflect.get(json, 'format') : undefined
+  if (format === undefined) {
+    throw new Error(
+      `Not a gesture trace this build can read: it has no \`format\` field (expected format ${GESTURE_TRACE_FORMAT}).`,
+    )
+  }
+  if (format !== GESTURE_TRACE_FORMAT) {
+    throw new Error(
+      `Gesture trace format ${String(format)} cannot be replayed by this build, which reads format ${GESTURE_TRACE_FORMAT}.`,
+    )
+  }
+  const parsed = gestureTraceSchema.safeParse(json)
+  if (!parsed.success) {
+    throw new Error(
+      `Gesture trace does not match format ${GESTURE_TRACE_FORMAT}:\n${z.prettifyError(parsed.error)}`,
+    )
+  }
+  return parsed.data
+}
 
 interface RecordedNavigation {
   readonly at: number
@@ -97,6 +216,28 @@ export interface GestureTrace {
   recordReset(reason: string, at: number): void
   entries(): readonly TraceEntry[]
   serialize(): string
+}
+
+function serializeGestureTrace(entries: readonly TraceEntry[]): string {
+  const trace: SerializedGestureTrace = {
+    format: GESTURE_TRACE_FORMAT,
+    recordedAt: new Date().toISOString(),
+    // The recorder module's own URL: hash-named in a production build,
+    // which is what tells a trace from a stale service-worker bundle
+    // apart from one running the deploy it claims to.
+    bundle: import.meta.url,
+    userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
+    viewport:
+      typeof window === 'undefined'
+        ? undefined
+        : {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            dpr: window.devicePixelRatio,
+          },
+    entries,
+  }
+  return JSON.stringify(trace)
 }
 
 /** Effects that mean "the same gesture, continuing" rather than a decision. */
@@ -165,23 +306,7 @@ export function createGestureTrace(capacity = 200): GestureTrace {
       return ring.slice()
     },
     serialize() {
-      return JSON.stringify({
-        recordedAt: new Date().toISOString(),
-        // The recorder module's own URL: hash-named in a production build,
-        // which is what tells a trace from a stale service-worker bundle
-        // apart from one running the deploy it claims to.
-        bundle: import.meta.url,
-        userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
-        viewport:
-          typeof window === 'undefined'
-            ? undefined
-            : {
-                width: window.innerWidth,
-                height: window.innerHeight,
-                dpr: window.devicePixelRatio,
-              },
-        entries: ring,
-      })
+      return serializeGestureTrace(ring)
     },
   }
 }

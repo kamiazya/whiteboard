@@ -7,6 +7,7 @@ import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import { serverRestoreOutputSchema } from './operator-json.js'
 import { runServerRestore } from './server-restore.js'
 
@@ -96,9 +97,9 @@ describe('runServerRestore', () => {
     expect(outcome.kind).toBe('ok')
   })
 
-  it('ancestor-symlink: path through a symlink ancestor is rejected (fail-closed)', async () => {
+  it('ancestor-symlink: path through a symlink ancestor others could have planted is rejected (fail-closed)', async () => {
     const realOutside = join(tmpRoot, 'real-outside')
-    const link = join(tmpRoot, 'link-to-real')
+    const link = join(await makeWritableByOthers(join(tmpRoot, 'shared')), 'link-to-real')
     const backupDir = join(tmpRoot, 'backup')
     await mkdir(realOutside)
     await symlink(realOutside, link)

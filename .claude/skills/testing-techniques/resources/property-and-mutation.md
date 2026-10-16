@@ -54,7 +54,7 @@ every gate except this loop.
 
 | Lane | Command | Scope | Reports |
 |---|---|---|---|
-| contracts | `pnpm mutation:contracts` | `packages/mcp-server/stryker.config.mjs`'s twelve files: redaction, path guard, security config, api contracts, two routes | local; `check:release-candidate:local` |
+| contracts | `pnpm mutation:contracts` | the `mutate` list in `packages/mcp-server/stryker.config.mjs` (read it there; a copy here goes stale) | local; `check:release-candidate:local` |
 | render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched, run in the weekly leg each falls in, and posted by `pr-report` as a sticky comment that also names any leg that stopped early; weekly, six legs dealt by recorded minutes (`MINUTES`) and merged by `weekly-report` into one `mutation-canvas-render` artifact |
 
 **Locally, scope the run to the file you changed.** The bare `pnpm mutation:render` is the
@@ -65,8 +65,14 @@ machine it does not finish in a working session. The PR leg runs exactly this in
 
 ```bash
 pnpm --filter @kamiazya/whiteboard-canvas-render exec stryker run --mutate src/<file>.ts
-pnpm --filter @kamiazya/whiteboard-mcp exec stryker run --mutate src/<file>.ts
+STRYKER_MUTATE=src/<file>.ts pnpm --filter @kamiazya/whiteboard-mcp exec stryker run --mutate src/<file>.ts
 ```
+
+mcp-server's lane runs only the tests that import a mutated module (`packages/mcp-server/scripts/mutation/covering-tests.mjs`),
+and its vitest config is read where `--mutate` never reaches, so it takes the same list from
+`STRYKER_MUTATE`. Without it the tests come from the configured list, and a file outside that list
+reports NoCoverage and survivors for mutants its own tests kill. canvas-render's lane includes every
+test, so `--mutate` alone is enough there.
 
 A file's figure in `MINUTES` (`stryker-targets.mjs`) is what its scoped run costs on a runner.
 

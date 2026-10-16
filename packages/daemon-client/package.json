@@ -146,6 +146,10 @@
       "types": "./src/extension-names.ts",
       "import": "./src/extension-names.ts"
     },
+    "./hosted-app": {
+      "types": "./src/hosted-app.ts",
+      "import": "./src/hosted-app.ts"
+    },
     "./sync-frames": {
       "types": "./src/sync-frames.ts",
       "import": "./src/sync-frames.ts"
