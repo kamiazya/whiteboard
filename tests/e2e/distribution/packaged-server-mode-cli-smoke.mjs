@@ -33,6 +33,7 @@
 
 import { spawn } from 'node:child_process'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -41,6 +42,7 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { request } from 'node:http'
@@ -152,9 +154,12 @@ console.log('[server-cli-smoke] Starting server backup/restore CLI smoke.')
 
 // ── Shared temp dirs ──────────────────────────────────────────────────────────
 
-// Canonicalize so paths don't traverse system-level symlinks (e.g. /var →
-// /private/var on macOS) that would trip the ancestor-symlink guard in the CLI.
+// The ancestor-symlink scenarios plant their links in `sharedDir`, which anyone
+// may write: the CLI follows a link only in a folder no one else could write.
 const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wb-cli-smoke-')))
+const sharedDir = join(tmpRoot, 'shared')
+mkdirSync(sharedDir)
+chmodSync(sharedDir, 0o777)
 const certsDir = join(tmpRoot, 'certs')
 const srcDataDir = join(tmpRoot, 'src-data')
 const backupDir = join(tmpRoot, 'backup')
@@ -482,7 +487,6 @@ try {
     writeFileSync(outsideFile, 'outside-content')
     // Plant a symlink inside the data dir pointing to the outside file.
     // Node.js symlink(target, path): creates `path` → `target`.
-    const { symlinkSync } = await import('node:fs')
     symlinkSync(outsideFile, join(symlinkSrc, 'evil-link.png'))
 
     const r = runRecorded([
@@ -502,8 +506,7 @@ try {
 
   {
     const realOut = join(tmpRoot, 'anc-real-out')
-    const ancLink = join(tmpRoot, 'anc-link-out')
-    const { symlinkSync } = await import('node:fs')
+    const ancLink = join(sharedDir, 'anc-link-out')
     mkdirSync(realOut)
     symlinkSync(realOut, ancLink)
 
@@ -527,8 +530,7 @@ try {
 
   {
     const realTarget = join(tmpRoot, 'anc-real-target')
-    const ancLinkT = join(tmpRoot, 'anc-link-target')
-    const { symlinkSync } = await import('node:fs')
+    const ancLinkT = join(sharedDir, 'anc-link-target')
     mkdirSync(realTarget)
     symlinkSync(realTarget, ancLinkT)
 
@@ -890,7 +892,6 @@ try {
   {
     const sbRealOut = join(tmpRoot, 'sb-real-out')
     const sbLinkOut = join(tmpRoot, 'sb-link-out')
-    const { symlinkSync } = await import('node:fs')
     mkdirSync(sbRealOut)
     symlinkSync(sbRealOut, sbLinkOut)
 
@@ -911,8 +912,7 @@ try {
 
   {
     const sbAncReal = join(tmpRoot, 'sb-anc-real')
-    const sbAncLink = join(tmpRoot, 'sb-anc-link')
-    const { symlinkSync } = await import('node:fs')
+    const sbAncLink = join(sharedDir, 'sb-anc-link')
     mkdirSync(sbAncReal)
     symlinkSync(sbAncReal, sbAncLink)
 

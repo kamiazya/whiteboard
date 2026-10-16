@@ -1,20 +1,20 @@
 // `whiteboard daemon support-bundle --json` helper.
 //
 // Funnels the redacted v0 support bundle through the existing status
-// / doctor helpers and the side-effect-free
-// `buildSupportBundle` + `writeSupportBundle` pair. The CLI never
+// / doctor helpers, the side-effect-free `buildSupportBundle`, and the
+// writer both support-bundle commands share (`support-bundle-writer.ts`). The CLI never
 // stringifies raw status / doctor objects directly; everything
 // goes through the funnel so the manifest / sections inherit the
 // allow-list, redaction, and ISO-timestamp validation contracts. There is no
 // log section: the daemon writes its records to stderr and keeps no file.
 
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import {
   buildSupportBundle,
+  type SupportBundle,
   SupportBundleError,
   type SupportBundleInput,
 } from '../shared/diagnostics/support-bundle.js'
-import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonStatus } from './daemon-status.js'
@@ -23,6 +23,7 @@ import {
   OPERATOR_JSON_SCHEMA_VERSION,
   operatorJsonLine,
 } from './operator-json.js'
+import { writeSupportBundle } from './support-bundle-writer.js'
 
 export interface DaemonSupportBundleOptions {
   dataDir: string
@@ -50,12 +51,12 @@ export interface DaemonSupportBundleOutcome {
   exitCode: 0 | 1
 }
 
-function succeeded(written: { outputDir: string; files: string[] }): DaemonSupportBundleOutcome {
+function succeeded(outputDir: string, files: readonly string[]): DaemonSupportBundleOutcome {
   const stdout = operatorJsonLine(daemonSupportBundleOutputSchema, {
     schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
     ok: true,
-    outputDir: written.outputDir,
-    files: written.files,
+    outputDir,
+    files: [...files],
   })
   return { stdout, stderr: '', exitCode: 0 }
 }
@@ -67,7 +68,26 @@ function fail(message: string): DaemonSupportBundleOutcome {
 export async function runDaemonSupportBundle(
   options: DaemonSupportBundleOptions,
 ): Promise<DaemonSupportBundleOutcome> {
-  const { dataDir, outputDir } = options
+  // `--output-dir` is self-authorising, NOT a sandbox: the writer refuses
+  // only what is unsafe whoever chose it (a symlink in the path, a file, a
+  // non-empty folder).
+  const resolvedOutput = resolve(options.outputDir)
+  try {
+    const written = await writeSupportBundle(resolvedOutput, () => collectBundle(options))
+    if (written.kind === 'not-written') return fail(written.message)
+    return succeeded(resolvedOutput, written.files)
+  } catch (err) {
+    if (err instanceof SupportBundleError) {
+      // Generic copy: the helper has already stripped the input
+      // value from its own message.
+      return fail('Support bundle could not be built. Check the data directory.')
+    }
+    throw err
+  }
+}
+
+async function collectBundle(options: DaemonSupportBundleOptions): Promise<SupportBundle> {
+  const { dataDir } = options
   const now = options.now ?? (() => new Date().toISOString())
   const packageVersion = options.packageVersion ?? PACKAGE_VERSION
   const platform = options.platform ?? { os: process.platform, nodeVersion: process.version }
@@ -111,47 +131,5 @@ export async function runDaemonSupportBundle(
       })),
     },
   }
-
-  let bundle: ReturnType<typeof buildSupportBundle>
-  try {
-    bundle = buildSupportBundle(input)
-  } catch (err) {
-    if (err instanceof SupportBundleError) {
-      // Generic copy: the helper has already stripped the input
-      // value from its own message.
-      return fail('Support bundle could not be built. Check the data directory.')
-    }
-    throw err
-  }
-
-  // The CLI deliberately allows callers to write into any local
-  // path they choose — `--output-dir` is self-authorising, NOT a
-  // sandbox. We pass `dirname(resolvedOutput)` as the writer's
-  // `allowedRoots` entry so the writer's own contract still kicks
-  // in: ancestor symlinks are rejected (the writer canonicalises
-  // through `realpath` before the containment check), the target
-  // must be empty / missing, the target itself must not be a
-  // symlink or a regular file, and writes are validate-then-write
-  // with `wx` race protection. A real per-user sandbox would
-  // require a separate `--output-root=<path>` flag; that is not a
-  // v0 goal.
-  const resolvedOutput = resolve(outputDir)
-  const allowedRoot = dirname(resolvedOutput)
-
-  let writeResult: Awaited<ReturnType<typeof writeSupportBundle>>
-  try {
-    writeResult = await writeSupportBundle(bundle, resolvedOutput, {
-      allowedRoots: [allowedRoot],
-    })
-  } catch (err) {
-    if (err instanceof SupportBundleError) {
-      // Map to a generic failure — never echo the resolved path or
-      // the wrapped error message; both could carry the local path
-      // back through stderr.
-      return fail('Could not write support bundle. The output directory must be empty.')
-    }
-    throw err
-  }
-
-  return succeeded(writeResult)
+  return buildSupportBundle(input)
 }

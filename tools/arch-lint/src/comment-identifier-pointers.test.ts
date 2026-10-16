@@ -205,6 +205,7 @@ const FOREIGN_NAMES: Readonly<Record<string, readonly string[]>> = {
     'TestContext',
     'noExportsInTest',
     'toBeFasterThan',
+    'writeResult',
     'samplesCount',
     'testFilter',
     'getTaskFullName',

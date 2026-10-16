@@ -6,6 +6,7 @@ import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.
 import { BackupError } from '../server/server-mode-backup-restore.js'
 import { backupIsInProgress } from '../server/store/backup-in-progress.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import { type RunServerBackupOptions, runServerBackup } from './server-backup.js'
 
 let tmpRoot: string
@@ -103,9 +104,9 @@ describe('runServerBackup', () => {
     expect(existedWhenDelegated).toBe(false)
   })
 
-  it('ancestor-symlink: path through a symlink ancestor is rejected (fail-closed)', async () => {
+  it('ancestor-symlink: path through a symlink ancestor others could have planted is rejected (fail-closed)', async () => {
     const realOutside = join(tmpRoot, 'real-outside')
-    const link = join(tmpRoot, 'link-to-real')
+    const link = join(await makeWritableByOthers(join(tmpRoot, 'shared')), 'link-to-real')
     await mkdir(realOutside)
     await symlink(realOutside, link)
 

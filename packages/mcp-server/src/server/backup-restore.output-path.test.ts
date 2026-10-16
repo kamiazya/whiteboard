@@ -1,9 +1,34 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmodSync, chownSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { chmod, chown, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
+import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import { inspectOutputPath, isSafeSourcePath } from './backup-restore.js'
+
+// A uid that is neither root nor this process, for a directory another user
+// owns. Staging one takes the privilege to chown, so it is PROBED by trying
+// rather than inferred from `getuid() === 0`: a user namespace can grant or
+// withhold it either way.
+const OTHER_UID = 65534
+function probeCanChownToAnotherUser(): boolean {
+  const uid = process.getuid?.()
+  if (uid === undefined || uid === OTHER_UID) return false
+  const dir = mkdtempSync(join(tmpdir(), 'wb-chown-probe-'))
+  try {
+    chownSync(dir, OTHER_UID, OTHER_UID)
+    return statSync(dir).uid === OTHER_UID
+  } catch {
+    return false
+  } finally {
+    chmodSync(dir, 0o700)
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+const CAN_CHOWN_TO_ANOTHER_USER = probeCanChownToAnotherUser()
+const HAS_POSIX_OWNERS = process.getuid !== undefined && CHMOD_IS_OBSERVABLE
 
 let base: string
 
@@ -49,10 +74,10 @@ describe.each([
     expect(await inspectOutputPath(link, { requireDirectory })).toBe('unsafe')
   })
 
-  it('refuses a path under a symlinked ancestor, even a missing one', async () => {
+  it('refuses a path under a symlinked ancestor others could have planted, even a missing one', async () => {
     const real = join(base, 'real')
     await mkdir(real)
-    const link = join(base, 'link')
+    const link = join(await makeWritableByOthers(join(base, 'shared')), 'link')
     await symlink(real, link)
     expect(await inspectOutputPath(join(link, 'child'), { requireDirectory })).toBe('unsafe')
   })
@@ -126,11 +151,74 @@ describe('isSafeSourcePath', () => {
     expect(await isSafeSourcePath(link)).toBe(false)
   })
 
-  it('refuses a source under a symlinked ancestor', async () => {
+  it('refuses a source under a symlinked ancestor others could have planted', async () => {
     const real = join(base, 'real')
     await mkdir(join(real, 'data'), { recursive: true })
-    const link = join(base, 'link')
+    const link = join(await makeWritableByOthers(join(base, 'shared')), 'link')
     await symlink(real, link)
     expect(await isSafeSourcePath(join(link, 'data'))).toBe(false)
   })
+})
+
+// A symlink ABOVE the path is judged by the directory holding it: only root or
+// this user may have been able to create it there. That is what admits macOS's
+// `/tmp -> /private/tmp` (in a root-owned `/` nobody else may write) and still
+// refuses a link planted in a shared directory. A link that IS the path stays
+// refused wherever it sits.
+describe.skipIf(!HAS_POSIX_OWNERS)('a symlink above the path, judged by its directory', () => {
+  async function linkIn(dir: string, mode: number): Promise<string> {
+    await mkdir(dir, { recursive: true })
+    await chmod(dir, mode)
+    const real = join(base, 'real')
+    await mkdir(join(real, 'data'), { recursive: true })
+    const link = join(dir, 'link')
+    await symlink(real, link)
+    return link
+  }
+
+  it.each([
+    '700',
+    '755',
+  ])('follows one in a directory this user owns with mode %s', async (mode) => {
+    const link = await linkIn(join(base, 'own'), Number.parseInt(mode, 8))
+    for (const requireDirectory of [false, true]) {
+      expect(await inspectOutputPath(join(link, 'out'), { requireDirectory })).toBe('missing')
+      expect(await inspectOutputPath(join(link, 'data'), { requireDirectory })).toBe('present')
+    }
+    expect(await isSafeSourcePath(join(link, 'data'))).toBe(true)
+  })
+
+  it.each([
+    '777',
+    '775',
+    '757',
+    '1777',
+  ])('refuses one in a directory with mode %s', async (mode) => {
+    const link = await linkIn(join(base, 'shared'), Number.parseInt(mode, 8))
+    for (const requireDirectory of [false, true]) {
+      expect(await inspectOutputPath(join(link, 'out'), { requireDirectory })).toBe('unsafe')
+    }
+    expect(await isSafeSourcePath(join(link, 'data'))).toBe(false)
+  })
+
+  it('still refuses a path that is itself a symlink in a directory this user owns', async () => {
+    const link = await linkIn(join(base, 'own'), 0o755)
+    for (const requireDirectory of [false, true]) {
+      expect(await inspectOutputPath(link, { requireDirectory })).toBe('unsafe')
+    }
+    expect(await isSafeSourcePath(link)).toBe(false)
+  })
+
+  it.skipIf(!CAN_CHOWN_TO_ANOTHER_USER)(
+    'refuses one in a directory another user owns, even with mode 755',
+    async () => {
+      const dir = join(base, 'theirs')
+      const link = await linkIn(dir, 0o755)
+      await chown(dir, OTHER_UID, OTHER_UID)
+      for (const requireDirectory of [false, true]) {
+        expect(await inspectOutputPath(join(link, 'out'), { requireDirectory })).toBe('unsafe')
+      }
+      expect(await isSafeSourcePath(join(link, 'data'))).toBe(false)
+    },
+  )
 })

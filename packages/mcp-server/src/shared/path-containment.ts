@@ -82,7 +82,7 @@ export function isSafeRelativePosixPath(path: string): boolean {
   return path.split('/').every(isSafePathSegment)
 }
 
-export async function lstatOrNull(path: string) {
+async function lstatOrNull(path: string) {
   try {
     return await lstat(path)
   } catch (err) {

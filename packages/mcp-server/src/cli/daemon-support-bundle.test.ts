@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -11,7 +11,9 @@ import { main } from './dispatcher.js'
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'whiteboard-daemon-support-bundle-cli-'))
+  // Resolved: the output folder may have no symlink anywhere in its path, and
+  // some platforms reach the temp dir through one.
+  root = await realpath(await mkdtemp(join(tmpdir(), 'whiteboard-daemon-support-bundle-cli-')))
 })
 
 afterEach(async () => {
