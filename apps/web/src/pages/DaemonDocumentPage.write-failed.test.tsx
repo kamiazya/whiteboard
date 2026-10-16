@@ -52,10 +52,7 @@ async function renderPageAndEdit(): Promise<FakeDocumentBackend> {
   )
   const node = textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
   await act(async () => {
-    latestEditorProps()?.onChange?.({ nodes: [node], edges: [] }, {
-      kind: 'add-node',
-      node,
-    } as never)
+    latestEditorProps()?.onChange?.({ nodes: [node], edges: [] }, { kind: 'create-node', node })
   })
   const backend = created[0]
   if (backend === undefined) throw new Error('the page created no backend')
