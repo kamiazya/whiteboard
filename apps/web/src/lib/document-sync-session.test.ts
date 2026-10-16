@@ -57,7 +57,9 @@ vi.mock('./app-logger.js', async (importOriginal) => {
   }
 })
 
+import { flushMicrotasks } from '../test-utils/document-sync-session.js'
 import {
+  COMMIT_DEBOUNCE_MS,
   createDocumentSyncSession,
   createGenerationCounters,
   type SessionDeps,
@@ -71,16 +73,6 @@ function makeSnapshot(canvas: SpatialCanvas = emptyCanvas()): Uint8Array {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, canvas)
   return doc.export({ mode: 'snapshot' })
-}
-
-// Drains several microtask turns with real awaits. dispose()'s drain phase
-// schedules the flush-triggered push and the deferred disconnect across a few
-// microtask turns; fake timers do not control microtasks, so a generous number
-// of turns is the reliable way to let that chain settle.
-async function flushMicrotasks(turns = 30): Promise<void> {
-  for (let i = 0; i < turns; i++) {
-    await Promise.resolve()
-  }
 }
 
 type FakeBackendControl = {
@@ -207,10 +199,10 @@ describe('createDocumentSyncSession', () => {
     const moveA: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const afterA = applyCommand(twoNodeCanvas(), moveA)
     session.onChange(afterA, moveA)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     const moveB: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
     session.onChange(applyCommand(afterA, moveB), moveB)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     expect(backend._ctrl.pushLocalUpdateCalls).toEqual([])
 
     backend._ctrl.transportDown = false
@@ -280,7 +272,7 @@ describe('createDocumentSyncSession', () => {
       expect(session.getCanvas().nodes.find((n) => n.id === 'n-a')?.x).toBe(10)
       expect(session.getContentState()).toBe(hydrated)
 
-      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
       expect(session.getContentState()).not.toBe(hydrated)
     } finally {
       vi.useRealTimers()
@@ -430,7 +422,7 @@ describe('createDocumentSyncSession', () => {
         session.onChange(applyCommand(twoNodeCanvas(), move), move)
         expect(kinds(onPersistenceChange)).toEqual(['pending'])
         // The debounce firing and the commit running are not landing.
-        await vi.advanceTimersByTimeAsync(299)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS - 1)
         expect(kinds(onPersistenceChange)).toEqual(['pending'])
 
         await vi.advanceTimersByTimeAsync(1)
@@ -460,13 +452,13 @@ describe('createDocumentSyncSession', () => {
         const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
         const afterFirst = applyCommand(twoNodeCanvas(), first)
         session.onChange(afterFirst, first)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
 
         const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
         session.onChange(applyCommand(afterFirst, second), second)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(2)
 
@@ -492,7 +484,7 @@ describe('createDocumentSyncSession', () => {
         backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
         const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
         session.onChange(applyCommand(twoNodeCanvas(), move), move)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded'])
         session.dispose()
@@ -518,7 +510,7 @@ describe('createDocumentSyncSession', () => {
         const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
         const afterFirst = applyCommand(twoNodeCanvas(), first)
         session.onChange(afterFirst, first)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
         // The order the browser backend produces: the push is in flight, its
@@ -533,7 +525,7 @@ describe('createDocumentSyncSession', () => {
         // what clears the condition.
         const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
         session.onChange(applyCommand(afterFirst, second), second)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         backend._ctrl.releasePushes()
         await flushMicrotasks()
@@ -557,7 +549,7 @@ describe('createDocumentSyncSession', () => {
         const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
         const afterFirst = applyCommand(twoNodeCanvas(), first)
         session.onChange(afterFirst, first)
-        await vi.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
         await flushMicrotasks()
         const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
         session.onChange(applyCommand(afterFirst, second), second)
@@ -723,7 +715,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'create-comment', comment }
     const next = applyCommand(emptyCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations().map((thread) => thread.messages[0]?.body)).toEqual([
       'made right here',
@@ -763,7 +755,7 @@ describe('createDocumentSyncSession', () => {
       { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'right word?' },
     ])
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations()[0]?.anchor).toEqual(command.thread.anchor)
     expect(session.getCanvas().comments?.[0]).toMatchObject({
@@ -810,7 +802,7 @@ describe('createDocumentSyncSession', () => {
       opening: true,
     }
     session.onChange(applyCommand(before, editCommand), editCommand)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const [held] = session.getAnnotations()
     expect(held?.status).toBe('resolved')
@@ -855,7 +847,7 @@ describe('createDocumentSyncSession', () => {
       message: { id: 'm2', body: 'and the answer' },
     }
     session.onChange(applyCommand(before, command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual([
       'the opening question',
@@ -908,7 +900,7 @@ describe('createDocumentSyncSession', () => {
     ]) {
       session.onChange(canvas, { kind: 'reply-to-thread', threadId: 't1', message })
     }
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual([
       'the opening question',
@@ -947,7 +939,7 @@ describe('createDocumentSyncSession', () => {
     }
     const command: EditorCommand = { kind: 'create-thread', thread }
     session.onChange(applyCommand(before, command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // Read back through the session's own annotations rather than the doc:
     // that is what the rail and the body projection both render, so a write
@@ -986,7 +978,7 @@ describe('createDocumentSyncSession', () => {
       },
     }
     session.onChange(session.getCanvas(), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getThreadMarks().get('t-marked')).toEqual(at)
   })
@@ -1016,11 +1008,11 @@ describe('createDocumentSyncSession', () => {
         messages: [{ id: 'm1', body: 'why Friday?' }],
       },
     })
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const prefix = 'URGENT: '
     session.onChange(session.getCanvas(), { kind: 'set-body', text: `${prefix}${body}` })
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getThreadMarks().get('t-marked')).toEqual({
       start: at.start + prefix.length,
@@ -1104,7 +1096,7 @@ describe('createDocumentSyncSession', () => {
         },
       })
     }
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-a', 't-b'])
   })
@@ -1124,7 +1116,7 @@ describe('createDocumentSyncSession', () => {
 
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     session.onChange(applyCommand(twoNodeCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(listener).not.toHaveBeenCalled()
     unsubscribe()
@@ -1140,7 +1132,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const next = applyCommand(twoNodeCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
 
@@ -1196,7 +1188,7 @@ describe('createDocumentSyncSession', () => {
     }
     const next = applyCommand(initial, command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // subscribeLocalUpdates callbacks are true incremental deltas (relative
     // to the doc's own last export point), not a self-sufficient full
@@ -1232,7 +1224,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'create-node', node: newNode }
     const next = applyCommand(twoNodeCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     const doc = new LoroDoc()
@@ -1262,7 +1254,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'delete-node', id: 'n-a' }
     const next = applyCommand(initial, command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     const doc = new LoroDoc()
@@ -1293,7 +1285,7 @@ describe('createDocumentSyncSession', () => {
     const next: SpatialCanvas = { ...emptyCanvas(), comments: [localComment] }
     const command: EditorCommand = { kind: 'create-comment', comment: localComment }
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // The fallback's tell: if the comment command fell through to the full
     // resync, this fires — see commitToDoc's doc comment.
@@ -1323,7 +1315,7 @@ describe('createDocumentSyncSession', () => {
     const afterResolve = applyCommand(afterCreate, resolveCmd)
     session.onChange(afterResolve, resolveCmd)
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // commandTargetKey maps both commands to `comment:c-1` — proof the
     // comment case is not falling into the default arm's fresh-key-per-call
@@ -1357,7 +1349,7 @@ describe('createDocumentSyncSession', () => {
     const afterText = applyCommand(afterMove, textCmd)
     session.onChange(afterText, textCmd)
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // Both map to `comment:c-1`, so one write; and it is the fine-grained
     // path — the full-resync fallback's tell (the warning) must not fire.
@@ -1402,7 +1394,7 @@ describe('createDocumentSyncSession', () => {
       comments: [localComment],
     }
     session.onChange(next, batch)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
@@ -1445,7 +1437,7 @@ describe('createDocumentSyncSession', () => {
     }
     const next = batch.commands.reduce(applyCommand, initial)
     session.onChange(next, batch)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
@@ -1498,7 +1490,7 @@ describe('createDocumentSyncSession', () => {
       ],
     }
     session.onChange(next, batch)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
@@ -1537,7 +1529,7 @@ describe('createDocumentSyncSession', () => {
     const afterMove = applyCommand(afterCreate, moveCmd)
     session.onChange(afterMove, moveCmd)
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
     const doc = new LoroDoc()
@@ -1563,7 +1555,7 @@ describe('createDocumentSyncSession', () => {
     const afterDelete = applyCommand(afterMove, deleteCmd)
     session.onChange(afterDelete, deleteCmd)
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
@@ -1584,7 +1576,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'does-not-exist', x: 1, y: 1 }
     const next: SpatialCanvas = { nodes: [TEXT_NODE_A], edges: [] }
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
@@ -1614,7 +1606,7 @@ describe('createDocumentSyncSession', () => {
     const poisoned: SpatialCanvas = { ...twoNodeCanvas(), nodes: [poisonedNode, TEXT_NODE_B] }
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 5, y: 5 }
     session.onChange(poisoned, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // The firing's own commit may have been skipped or fallen back — either
     // way the chain must not be wedged: a subsequent, well-formed firing
@@ -1622,7 +1614,7 @@ describe('createDocumentSyncSession', () => {
     const command2: EditorCommand = { kind: 'move-node', id: 'n-b', x: 9, y: 9 }
     const next2 = applyCommand(twoNodeCanvas(), command2)
     session.onChange(next2, command2)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
@@ -1645,7 +1637,7 @@ describe('createDocumentSyncSession', () => {
     session.onChange(applyCommand(twoNodeCanvas(), c2), c2)
     const next3 = applyCommand(twoNodeCanvas(), c3)
     session.onChange(next3, c3)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
     const doc = new LoroDoc()
@@ -1676,7 +1668,7 @@ describe('createDocumentSyncSession', () => {
     const afterB = applyCommand(afterA, cB)
     session.onChange(afterB, cB)
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
@@ -1697,7 +1689,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
     session.onChange(applyCommand(twoNodeCanvas(), command), command)
 
-    // Debounce (300ms) has not fired yet.
+    // The commit debounce has not fired yet.
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
 
     session.dispose()
@@ -1740,14 +1732,14 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
     sessionA.onChange(applyCommand(twoNodeCanvas(), command), command)
 
-    // Before the 300ms debounce fires, session A is disposed and a new
+    // Before the commit debounce fires, session A is disposed and a new
     // session B is constructed against a different backend/doc.
     sessionA.dispose()
     const sessionB = createDocumentSyncSession(backendB, makeDeps({ generations }))
     sessionB.connect()
     backendB._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await Promise.resolve()
 
     // A's flush (triggered by its own dispose) already pushed into A;
@@ -1768,7 +1760,7 @@ describe('createDocumentSyncSession', () => {
 
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     session.onChange(applyCommand(twoNodeCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(historyListener).toHaveBeenCalled()
     expect(session.canUndo()).toBe(true)
@@ -1783,7 +1775,7 @@ describe('createDocumentSyncSession', () => {
 
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     session.onChange(applyCommand(twoNodeCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     expect(session.canUndo()).toBe(true)
 
     const historyListener = vi.fn()
@@ -1809,7 +1801,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const next = applyCommand(twoNodeCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     expect(session.getCanvas()).toEqual(next)
 
     const listener = vi.fn()
@@ -1832,7 +1824,7 @@ describe('createDocumentSyncSession', () => {
     const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const afterFirst = applyCommand(twoNodeCanvas(), first)
     session.onChange(afterFirst, first)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     // A second edit, still inside its debounce window — on screen, not yet in
     // the document. Undo is offered (the first edit committed), and the most
@@ -1842,7 +1834,7 @@ describe('createDocumentSyncSession', () => {
 
     session.undo()
     // The window the queued write was waiting out.
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await flushMicrotasks()
 
     const stored = new LoroDoc()
@@ -1863,7 +1855,7 @@ describe('createDocumentSyncSession', () => {
     const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const afterFirst = applyCommand(twoNodeCanvas(), first)
     session.onChange(afterFirst, first)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     session.undo()
 
     // A new edit inside its window — it has not committed, so the redo stack
@@ -1872,7 +1864,7 @@ describe('createDocumentSyncSession', () => {
     session.onChange(applyCommand(twoNodeCanvas(), second), second)
 
     expect(session.redo()).toBe(true)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await flushMicrotasks()
 
     const stored = new LoroDoc()
@@ -1892,7 +1884,7 @@ describe('createDocumentSyncSession', () => {
 
     const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     session.onChange(applyCommand(twoNodeCanvas(), first), first)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await flushMicrotasks()
 
     const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
@@ -1918,7 +1910,7 @@ describe('createDocumentSyncSession', () => {
     const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const next = applyCommand(twoNodeCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     session.undo()
 
     const listener = vi.fn()
@@ -2093,9 +2085,9 @@ describe('createDocumentSyncSession', () => {
             session.onChange(canvas, command)
             // Interleave a settle so debounced firings actually get chained,
             // not merely coalesced into the final one.
-            await vi.advanceTimersByTimeAsync(300)
+            await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
           }
-          await vi.advanceTimersByTimeAsync(300)
+          await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
           // The published canvas mirrors every applied command exactly (the
           // command/state agreement property) — the session forwards `next`
@@ -2145,7 +2137,7 @@ describe('createDocumentSyncSession', () => {
         for (const command of commands) {
           canvas = applyCommand(canvas, command)
           session.onChange(canvas, command)
-          await vi.advanceTimersByTimeAsync(1000)
+          await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
           await flushMicrotasks()
         }
         await session.dispose()
@@ -2193,7 +2185,7 @@ describe('createDocumentSyncSession', () => {
       }
       const next = applyCommand(twoNodeCanvas(), command)
       session.onChange(next, command)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
       // One flush of one batch → exactly one pushed payload.
       expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
@@ -2223,7 +2215,7 @@ describe('createDocumentSyncSession', () => {
       }
       const next = applyCommand(twoNodeCanvas(), command)
       session.onChange(next, command)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
       const doc = new LoroDoc()
       doc.import(snapshotBytes)
@@ -2255,7 +2247,7 @@ describe('createDocumentSyncSession', () => {
       }
       const next = applyCommand(base, command)
       session.onChange(next, command)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
       // Peer concurrently edits node B from the same lineage; the batched
       // fine-grained delete must not clobber it (a full resync would).
@@ -2307,7 +2299,7 @@ describe('createDocumentSyncSession', () => {
 
       const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
       session.onChange(applyCommand(twoNodeCanvas(), command), command)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
       const replay = new LoroDoc()
       replay.import(snapshotBytes)
@@ -2333,7 +2325,7 @@ describe('createDocumentSyncSession', () => {
       const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 5, y: 5 }
       const next = applyCommand(twoNodeCanvas(), command)
       session.onChange(next, command)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
       expect(session.getCanvas()).toEqual(next)
 
       // Undo runs on the workspace doc's UndoManager but the published value
@@ -2359,7 +2351,7 @@ describe('createDocumentSyncSession', () => {
 
       const body: EditorCommand = { kind: 'set-body', text: '# scoped body' }
       session.onChange(session.getCanvas(), body)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
       expect(session.getMarkdownBody()).toBe('# scoped body')
 
       const replay = new LoroDoc()
@@ -2408,7 +2400,7 @@ describe('createDocumentSyncSession', () => {
       session.subscribeLocks(lockListener)
 
       session.setNodeLock('n-b', true)
-      await vi.advanceTimersByTimeAsync(300)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
       expect(session.getNodeLocks()).toEqual(new Set(['n-b']))
       expect(lockListener).toHaveBeenCalled()
@@ -2474,7 +2466,7 @@ describe('deciding a proposal', () => {
     }
     const next = applyCommand(session.getCanvas(), command)
     session.onChange(next, command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getCanvas().nodes[0]?.x).toBe(240)
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
@@ -2493,7 +2485,7 @@ describe('deciding a proposal', () => {
       changes: proposal.changes,
     }
     session.onChange(applyCommand(session.getCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getCanvas().nodes[0]?.x).toBe(0)
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('dismissed')
@@ -2515,7 +2507,7 @@ describe('deciding a proposal', () => {
       changes: proposal.changes,
     }
     session.onChange(applyCommand(session.getCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(listener).toHaveBeenCalled()
     expect(listener.mock.lastCall?.[0][0].changes[0].status).toBe('dismissed')
@@ -2580,7 +2572,7 @@ describe('deciding ONE change of a proposal', () => {
       changes: [moveN2],
     }
     session.onChange(applyCommand(session.getCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     const canvas = session.getCanvas()
     expect(canvas.nodes.find((n) => n.id === 'n2')?.x).toBe(480)
@@ -2603,7 +2595,7 @@ describe('deciding ONE change of a proposal', () => {
       changes: [moveN1],
     }
     session.onChange(applyCommand(session.getCanvas(), command), command)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getCanvas().nodes.find((n) => n.id === 'n1')?.x).toBe(0)
     const stored = session.getProposals()[0]?.changes ?? []

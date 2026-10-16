@@ -10,12 +10,13 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  editAndPush,
   flushMicrotasks,
   openTestSession,
   snapshotOf,
 } from '../test-utils/document-sync-session.js'
 import { sessionHealthOf } from './connection-state.js'
-import { applyCommand, type EditorCommand } from './spatial/commands.js'
+import type { EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
@@ -54,18 +55,13 @@ function openSession() {
   }
 }
 
-async function editAndPush(session: ReturnType<typeof openSession>['session']) {
-  const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-  session.onChange(applyCommand(canvas, edit), edit)
-  await vi.advanceTimersByTimeAsync(300)
-  await flushMicrotasks()
-}
+const MOVE: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
 
 describe('a refused credential', () => {
   it('reads a refused push as changes not saved, not as live sync off', async () => {
     vi.useFakeTimers()
     const s = openSession()
-    await editAndPush(s.session)
+    await editAndPush(s.session, canvas, MOVE)
     // The order a refused push produces with the stream still open: the
     // refusal, then the write that did not land.
     s.handlers().onAuthError?.('push')
@@ -83,7 +79,7 @@ describe('a refused credential', () => {
   ] as const)('reads a refused %s as live sync off', async (cause) => {
     vi.useFakeTimers()
     const s = openSession()
-    await editAndPush(s.session)
+    await editAndPush(s.session, canvas, MOVE)
     s.handlers().onAuthError?.(cause)
     await flushMicrotasks()
 

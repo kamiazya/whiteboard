@@ -427,18 +427,12 @@ jobs:
       - name: Generate npm SBOM
         run: pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm
 
-      # generate:sbom:npm runs `pnpm deploy --legacy --prod` to produce an
-      # isolated production-only copy for the SBOM tool. That --legacy deploy
-      # writes its "production, no dev deps" settings into the *workspace's*
-      # shared install-state record (not just the deploy target's), so pnpm's
-      # pre-run dependency check on the next command believes the whole
-      # workspace was last installed with --production and "corrects" it by
-      # reinstalling without devDependencies (vitest included) before running.
-      # Re-running the frozen-lockfile install resets that shared state back
-      # to a normal (dev-included) install before vitest needs to resolve.
-      - name: Restore full dependency install (undo deploy's prod-only state)
-        run: pnpm install --frozen-lockfile
-
+      # No reinstall between the two steps, on purpose: the script's
+      # `pnpm deploy --legacy --prod` marks the whole workspace prod-only, and
+      # the script restores that record itself. If it ever stops, the next
+      # top-level pnpm command below reinstalls without devDependencies or
+      # aborts, so this job fails the way a developer's next command would.
+      #
       # These tests run conditionally on the generated artifact and assert it
       # is non-empty and contains real production components (not silently
       # empty/partial from a swallowed or fatal npm ls error).

@@ -25,7 +25,11 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import {
+  COMMIT_DEBOUNCE_MS,
+  createDocumentSyncSession,
+  createGenerationCounters,
+} from './document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -147,7 +151,7 @@ describe('a page leaving a document straight after an edit', () => {
     const e1: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     shown = applyCommand(shown, e1)
     s.session.onChange(shown, e1)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
     const e2: EditorCommand = { kind: 'move-node', id: 'n-b', x: 555, y: 5 }
     shown = applyCommand(shown, e2)
@@ -177,13 +181,13 @@ describe('a page writing straight to the daemon', () => {
     const e1: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     shown = applyCommand(shown, e1)
     s.session.onChange(shown, e1)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
 
     const e2: EditorCommand = { kind: 'move-node', id: 'n-b', x: 555, y: 5 }
     shown = applyCommand(shown, e2)
     s.session.onChange(shown, e2)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
 
     await vi.advanceTimersByTimeAsync(60_000)
@@ -209,7 +213,7 @@ describe('a page writing straight to the daemon', () => {
     const e1: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     shown = applyCommand(shown, e1)
     s.session.onChange(shown, e1)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
     expect(s.states).toContain('degraded')
 
@@ -274,7 +278,7 @@ describe('a page writing through the SharedWorker', () => {
     const e1: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
     const c1 = applyCommand(canvas0, e1)
     session.onChange(c1, e1)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
     worker.writeState(false)
     await turns()
@@ -282,7 +286,7 @@ describe('a page writing through the SharedWorker', () => {
 
     const e2: EditorCommand = { kind: 'move-node', id: 'n-b', x: 555, y: 5 }
     session.onChange(applyCommand(c1, e2), e2)
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     await turns()
     expect(states.at(-1)).toBe('degraded')
 
