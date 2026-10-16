@@ -448,11 +448,13 @@ describe('SseStreamHub', () => {
       })
 
       it('tells a listener joining the refused document, without asking again', async () => {
-        const { hub, goneAsks } = await refusedOnce()
+        const { hub, refused, goneAsks } = await refusedOnce()
         const joined = vi.fn()
         hub.subscribe('gone/b', { ...quiet, onAuthRefused: joined })
 
         expect(joined).toHaveBeenCalledTimes(1)
+        // The refusal is the joiner's news alone; whoever already heard it is not told again.
+        expect(refused).toHaveBeenCalledTimes(1)
         expect(goneAsks()).toBe(1)
         hub.close()
       })
@@ -503,6 +505,33 @@ describe('SseStreamHub', () => {
       const late: boolean[] = []
       hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => late.push(c) })
       expect(late).toEqual([false])
+      hub.close()
+    })
+
+    // 404 is a stream the daemon no longer knows (a restart race), 400 a
+    // request past its limit: neither is the credential, so the next stream
+    // asks again and nobody is told the session was refused.
+    it.each([
+      404, 400,
+    ])('asks again on the next stream after a %i refusal, never calling it the credential', async (status) => {
+      const { fake, fetch, asked } = refusing('full', status)
+      const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+      const refused = vi.fn()
+      const live: boolean[] = []
+      hub.subscribe('full/b', { ...quiet, onAuthRefused: refused })
+      hub.subscribe('live/a', { ...quiet, onConnectionChange: (c) => live.push(c) })
+      await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(1))
+      const joined = vi.fn()
+      hub.subscribe('full/b', { ...quiet, onAuthRefused: joined })
+      fake.endStream()
+      // `full/b` is asked before `live/a`, so `live/a` routed on the new
+      // stream means the re-ask for `full/b` has already been sent.
+      await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(2))
+      await flush()
+
+      expect(asked.filter((docs) => docs.includes('full/b'))).toHaveLength(2)
+      expect(refused).not.toHaveBeenCalled()
+      expect(joined).not.toHaveBeenCalled()
       hub.close()
     })
 

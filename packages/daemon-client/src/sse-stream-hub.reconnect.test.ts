@@ -305,6 +305,12 @@ describe('stream connect refusals', () => {
     const joiner = vi.fn()
     hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: joiner })
     expect(joiner).toHaveBeenCalledTimes(1)
+    // A second listener on the document that already heard it: only the
+    // newcomer is told, not the listener told at the refusal.
+    const sameDoc = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: sameDoc })
+    expect(sameDoc).toHaveBeenCalledTimes(1)
+    expect(first).toHaveBeenCalledTimes(1)
     // Someone still holds the refusal, so the halt holds too.
     expect(d.requests()).toBe(1)
     hub.close()
