@@ -70,8 +70,9 @@ export const syncSubscribeRequestSchema = z
   .object({
     streamId: z.string().min(1),
     // Doc keys are `workspace:<id>` (the workspace document, the only key
-    // binary frames travel on) or `${workspaceId}/${path}` (one document's
-    // text messages), matching the connection registry.
+    // binary frames travel on) or `${handle}/${path}` (one document's text
+    // messages), matching the connection registry once the daemon has
+    // resolved the handle to an id.
     subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
     unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
   })

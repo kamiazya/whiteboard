@@ -455,8 +455,8 @@ export class SseStreamHub implements SseStreamSource {
     if (streamId === null) return
     const byWorkspace = new Map<string, string[]>()
     for (const doc of docs) {
-      const workspaceId = workspaceHandleOfSyncKey(doc) ?? ''
-      byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), doc])
+      const handle = workspaceHandleOfSyncKey(doc) ?? ''
+      byWorkspace.set(handle, [...(byWorkspace.get(handle) ?? []), doc])
     }
     for (const group of byWorkspace.values()) {
       for (let from = 0; from < group.length; from += MAX_DOCS_PER_STREAM) {
