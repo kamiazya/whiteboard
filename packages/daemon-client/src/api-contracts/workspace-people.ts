@@ -7,7 +7,7 @@ import { z } from 'zod'
  * free of any node:* import — the browser consumes these schemas directly.
  */
 
-/** The one spelling of a workspace role; the server's role types are this `z.infer`. */
+// The one spelling of a workspace role; the server's role types are its `z.infer`.
 const workspaceRoleSchema = z.enum(['owner', 'member'])
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>
 
