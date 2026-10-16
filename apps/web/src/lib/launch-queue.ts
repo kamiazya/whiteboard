@@ -33,6 +33,8 @@ export interface NewCanvasLaunchOptions {
   readonly documentUrl: string
   /** Whether the tab holds work an in-app leave would lose. */
   readonly holdsWork: () => boolean
+  /** Whether the browser keeps the session, the one keeper whose list creates on the request. */
+  readonly keptByBrowser: () => boolean
   readonly open: () => void
 }
 
@@ -40,13 +42,16 @@ export interface NewCanvasLaunchOptions {
  * The consumer for one queue: a launch whose target asks for a new canvas
  * opens the shortcut's URL in-app, so the list's own create path runs.
  *
- * Two launches are deliberately left alone:
+ * Three launches are deliberately left alone:
  * - The one that LOADED this document. The spec enqueues LaunchParams on every
  *   launch, a cold start included, and that document already sits at the
  *   target URL — acting on it as well would create a second document.
  * - Any launch while the tab holds work a leave would lose (the rule the
  *   tab-close prompt follows): leaving the document drops a write still
  *   waiting for a retry, and the window is only focused instead.
+ * - Any launch while a daemon keeps the session. The daemon's list does not
+ *   act on the request, so routing there would close the open document and
+ *   create nothing.
  *
  * Other targets only focus the window, which the manifest's `focus-existing`
  * has already done.
@@ -62,6 +67,7 @@ export function newCanvasLaunchConsumer(
     if (typeof target !== 'string') return
     if (first && target === options.documentUrl) return
     if (!NEW_CANVAS_SHORTCUT.isRequestedBy(searchParamsOf(target))) return
+    if (!options.keptByBrowser()) return
     if (options.holdsWork()) return
     options.open()
   }

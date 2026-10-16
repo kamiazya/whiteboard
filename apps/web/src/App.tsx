@@ -65,7 +65,6 @@ export function App({ providerState }: AppProps) {
   const [forcedBrowser, setForcedBrowser] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  useNewCanvasLaunches(navigate)
 
   const state = providerState ?? defaultProviderState
   const { connection, renewal, attemptRenewal, awaitingDaemonRenewal } = useDaemonReconnect({
@@ -119,6 +118,7 @@ export function App({ providerState }: AppProps) {
     connected: connection !== null,
     effectiveState,
   })
+  useNewCanvasLaunches(navigate, daemonKept)
   useWorkspaceAddressSync({
     location,
     navigate,

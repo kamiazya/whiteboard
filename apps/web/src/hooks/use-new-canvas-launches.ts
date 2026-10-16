@@ -19,7 +19,7 @@ function tabHoldsWork(): boolean {
  * open: the manifest's `focus-existing` delivers the launch here rather than
  * navigating the window, so without a consumer the shortcut only focuses it.
  */
-export function useNewCanvasLaunches(navigate: NavigateFunction): void {
+export function useNewCanvasLaunches(navigate: NavigateFunction, daemonKept: boolean): void {
   useEffect(() => {
     const queue = launchQueueOf(window)
     if (queue === null) return
@@ -27,10 +27,11 @@ export function useNewCanvasLaunches(navigate: NavigateFunction): void {
       newCanvasLaunchConsumer(window, {
         documentUrl: DOCUMENT_URL_AT_LOAD,
         holdsWork: tabHoldsWork,
+        keptByBrowser: () => !daemonKept,
         open: () => {
           void navigate(NEW_CANVAS_SHORTCUT.url)
         },
       }),
     )
-  }, [navigate])
+  }, [navigate, daemonKept])
 }

@@ -37,7 +37,12 @@ vi.mock('./pages/BrowserDocumentPage.js', () => ({
   },
 }))
 
+vi.mock('./pages/DaemonDocumentPage.js', () => ({
+  DaemonDocumentPage: () => <div data-testid="daemon-document-page" />,
+}))
+
 const BROWSER_STATE: ProviderState = { kind: 'browser' }
+const DAEMON_STATE: ProviderState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' }
 
 beforeEach(async () => {
   openedPath = undefined
@@ -49,6 +54,7 @@ afterEach(() => {
   cleanup()
   Reflect.deleteProperty(window, 'launchQueue')
   resetShellStatusForTests()
+  vi.unstubAllGlobals()
 })
 
 async function documentCount(): Promise<number> {
@@ -73,9 +79,9 @@ function carriesShortcutParam(search: string): boolean {
   return [...shortcut.keys()].some((key) => now.has(key))
 }
 
-function renderAt(entry: string) {
+function renderAt(entry: string, providerState: ProviderState = BROWSER_STATE) {
   const router = createMemoryRouter(
-    [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+    [{ path: '*', element: <App providerState={providerState} /> }],
     { initialEntries: [entry] },
   )
   render(<RouterProvider router={router} />)
@@ -185,5 +191,19 @@ describe('the New canvas launcher shortcut while the app is already open', () =>
 
     expect(router.state.location).toBe(before)
     expect(await documentCount()).toBe(0)
+  })
+
+  it('a daemon-kept document stays open: the daemon list would create nothing', async () => {
+    // No daemon answers: what is under test is the launch, not the keeper.
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    const queue = stubLaunchQueue()
+    const router = renderAt('/w/team/d/plan', DAEMON_STATE)
+    await screen.findByTestId('daemon-document-page', {}, { timeout: 10_000 })
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
+    expect(screen.getByTestId('daemon-document-page')).toBeDefined()
   })
 })

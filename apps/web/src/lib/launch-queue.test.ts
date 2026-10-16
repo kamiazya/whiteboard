@@ -5,9 +5,12 @@ import { NEW_CANVAS_SHORTCUT } from './new-canvas-shortcut.js'
 const ORIGIN = 'https://app.example'
 const SHORTCUT = `${ORIGIN}${NEW_CANVAS_SHORTCUT.url}`
 
-function consumerFor(documentUrl: string, holdsWork = false) {
+function consumerFor(documentUrl: string, { holdsWork = false, keptByBrowser = true } = {}) {
   const open = vi.fn()
-  const consume = newCanvasLaunchConsumer({}, { documentUrl, holdsWork: () => holdsWork, open })
+  const consume = newCanvasLaunchConsumer(
+    {},
+    { documentUrl, holdsWork: () => holdsWork, keptByBrowser: () => keptByBrowser, open },
+  )
   return { open, consume }
 }
 
@@ -30,14 +33,25 @@ describe('the launch consumer for the New canvas shortcut', () => {
   it('a consumer registered again does not take a later launch for the first', () => {
     const win = {}
     const open = vi.fn()
-    const options = { documentUrl: SHORTCUT, holdsWork: () => false, open }
+    const options = {
+      documentUrl: SHORTCUT,
+      holdsWork: () => false,
+      keptByBrowser: () => true,
+      open,
+    }
     newCanvasLaunchConsumer(win, options)({ targetURL: SHORTCUT })
     newCanvasLaunchConsumer(win, options)({ targetURL: SHORTCUT })
     expect(open).toHaveBeenCalledTimes(1)
   })
 
   it('does not leave a tab holding work a leave would lose', () => {
-    const { open, consume } = consumerFor(`${ORIGIN}/`, true)
+    const { open, consume } = consumerFor(`${ORIGIN}/`, { holdsWork: true })
+    consume({ targetURL: SHORTCUT })
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('does not leave a document a daemon keeps: its list would create nothing', () => {
+    const { open, consume } = consumerFor(`${ORIGIN}/`, { keptByBrowser: false })
     consume({ targetURL: SHORTCUT })
     expect(open).not.toHaveBeenCalled()
   })
