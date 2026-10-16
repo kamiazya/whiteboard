@@ -9,6 +9,7 @@ import {
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { describe, expect, it } from 'vitest'
 import { admitsOrigin, admittedMatches, firefoxManifestFor, manifestFor } from './manifest.js'
 
@@ -53,6 +54,16 @@ describe('manifestFor', () => {
     expect(manifest.permissions).toEqual(['nativeMessaging'])
     expect(manifest).not.toHaveProperty('host_permissions')
     expect(manifest).not.toHaveProperty('content_scripts')
+  })
+
+  // The web app calls this origin production and the daemon opens it, both
+  // from the one shared value; a copy here would admit some other page.
+  it('admits the hosted app origin the web app and the daemon share', () => {
+    expect(manifestFor('production').externally_connectable.matches).toEqual([
+      `${HOSTED_APP_ORIGIN}/*`,
+    ])
+    expect(admittedMatches(firefoxManifestFor('production'))).toEqual([`${HOSTED_APP_ORIGIN}/*`])
+    expect(admitsOrigin(admittedMatches(manifestFor('production')), HOSTED_APP_ORIGIN)).toBe(true)
   })
 
   // A loopback page can be served by any user of the machine, and a preview

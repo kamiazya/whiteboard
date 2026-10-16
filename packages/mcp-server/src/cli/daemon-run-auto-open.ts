@@ -7,6 +7,7 @@
 // itself) are injected so every guard combination is a plain unit test with
 // no real terminal, filesystem, or subprocess involved.
 
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import open from 'open'
 import { decideAutoOpenBrowser } from '../daemon/browser-open-policy.js'
 import {
@@ -18,7 +19,7 @@ import { getLogger } from '../server/log.js'
 const log = getLogger('daemon-run-auto-open')
 
 /** The hosted app — the one place a person uses the daemon from. */
-const OFFICIAL_HOSTED_APP_URL = 'https://kamiazya-whiteboard.pages.dev/'
+const OFFICIAL_HOSTED_APP_URL = `${HOSTED_APP_ORIGIN}/`
 
 export interface MaybeOpenDaemonBrowserInput {
   /** Resolved --no-open flag. */

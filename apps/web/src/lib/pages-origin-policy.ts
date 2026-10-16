@@ -1,10 +1,12 @@
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 
-// Provisional production origin for the hosted app.
-// Update to the confirmed canonical domain once it is assigned.
-export const PROVISIONAL_PRODUCTION_ORIGIN = 'https://kamiazya-whiteboard.pages.dev' as const
+// Provisional production origin for the hosted app. It is shared with the
+// extension, which admits only this page, and the daemon, which opens it, so
+// a move to the canonical domain is made in daemon-client, not here.
+export const PROVISIONAL_PRODUCTION_ORIGIN = HOSTED_APP_ORIGIN
 
-const PAGES_DOMAIN = 'kamiazya-whiteboard.pages.dev'
+const PAGES_DOMAIN = new URL(HOSTED_APP_ORIGIN).hostname
 
 // Classification of an origin candidate against the Cloudflare Pages hosting policy.
 // 'production'             — exact provisional production origin; accepted.

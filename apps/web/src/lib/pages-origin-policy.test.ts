@@ -1,10 +1,22 @@
 // @vitest-environment node
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { describe, expect, it } from 'vitest'
 import { classifyPagesOrigin, PROVISIONAL_PRODUCTION_ORIGIN } from './pages-origin-policy.js'
 
 describe('PROVISIONAL_PRODUCTION_ORIGIN', () => {
   it('is the provisional pages.dev production origin', () => {
     expect(PROVISIONAL_PRODUCTION_ORIGIN).toBe('https://kamiazya-whiteboard.pages.dev')
+  })
+
+  // The extension admits and the daemon opens the same origin, read from the
+  // one shared value; a copy here would let the three disagree.
+  it('is the hosted app origin the extension and the daemon share', () => {
+    expect(PROVISIONAL_PRODUCTION_ORIGIN).toBe(HOSTED_APP_ORIGIN)
+  })
+
+  it('treats a subdomain of the shared origin as a preview deploy', () => {
+    const host = new URL(HOSTED_APP_ORIGIN).hostname
+    expect(classifyPagesOrigin(`https://abc123.${host}`)).toBe('preview')
   })
 })
 

@@ -1,3 +1,4 @@
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { describe, expect, it, vi } from 'vitest'
 import { maybeOpenDaemonBrowser } from './daemon-run-auto-open.js'
 
@@ -18,6 +19,14 @@ describe('maybeOpenDaemonBrowser', () => {
     const input = baseInput()
     await maybeOpenDaemonBrowser(input)
     expect(input.openFn).toHaveBeenCalledWith('https://kamiazya-whiteboard.pages.dev/')
+  })
+
+  // The extension admits the page at this same origin; opening any other
+  // would land a person on a page that cannot reach the daemon.
+  it('opens the hosted app origin the extension admits', async () => {
+    const input = baseInput()
+    await maybeOpenDaemonBrowser(input)
+    expect(input.openFn).toHaveBeenCalledWith(`${HOSTED_APP_ORIGIN}/`)
   })
 
   it('does not open when --no-open was passed', async () => {
