@@ -43,7 +43,9 @@ export interface DocumentBackendHarness {
   dropTransport?(): void
   /**
    * Make the keeper refuse this backend's credential from now on, so the
-   * reconnect `dropTransport` provokes is answered 401. Omitted by an
+   * reconnect `dropTransport` provokes is refused — on the stream, or, where
+   * the stream is shared with other backends, on this backend's subscribe,
+   * as the daemon refuses a workspace the credential may not enter. Omitted by an
    * implementation with no credential to refuse (the backend over a workspace kept in the
    * browser).
    */
@@ -700,7 +702,9 @@ function upstreamDeliveryCases(
     void Promise.resolve(h.backend.pushLocalUpdate(edit.bytes)).catch(() => {})
     h.backend.disconnect()
 
-    await vi.waitFor(async () => expect(await edit.landed()).toBe(true))
+    await vi.waitFor(async () => expect(await edit.landed()).toBe(true), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
     h.cleanup()
   })
 }

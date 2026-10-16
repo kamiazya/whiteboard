@@ -249,6 +249,8 @@ interface DocEntry {
   ready: boolean
   /** The daemon has answered a subscribe for it on the stream that is open. */
   routed: boolean
+  /** Refused for the credential: no later stream asks again; a fresh subscription does. */
+  authRefused: boolean
 }
 
 /** The two answers that mean the credential, not the connection, is the problem. */
@@ -390,7 +392,7 @@ export class SseStreamHub implements SseStreamSource {
   subscribe(doc: string, listener: DocListener): () => void {
     let entry = this.docs.get(doc)
     if (!entry) {
-      entry = { listeners: new Set(), ready: false, routed: false }
+      entry = { listeners: new Set(), ready: false, routed: false, authRefused: false }
       this.docs.set(doc, entry)
       void this.follow([doc])
     }
@@ -399,6 +401,7 @@ export class SseStreamHub implements SseStreamSource {
     // joins a document that is already routed — a second canvas in the same
     // tab would show an unknown connection for as long as nothing went wrong.
     listener.onConnectionChange?.(entry.routed)
+    if (entry.authRefused) listener.onAuthRefused?.()
     void this.start()
 
     return () => {
@@ -565,32 +568,30 @@ export class SseStreamHub implements SseStreamSource {
     streamId: string,
     streamSeq: number,
   ): Promise<boolean> {
-    const asked = chunk.map((doc) => this.docs.get(doc))
+    // Answers go to the entries asked about, not to whatever holds the key by
+    // then: one released and subscribed again is answered by its own subscribe.
+    const asked = chunk.flatMap((doc) => this.docs.get(doc) ?? [])
     const status = await this.send({ subscribe: [...chunk] }, streamId)
     if (this.streamId === null || this.streamSeq !== streamSeq) return false
     if (status === null) {
       // Unanswered, so whether the daemon routes these is unknown, and their
       // subscribers would wait on a routing nobody re-asks for. A new stream
-      // re-asks for everything.
+      // re-asks for every document not refused its credential.
       this.endedUnanswered = true
       this.abort?.abort()
       return false
     }
-    if (status >= 200 && status < 300) this.announceRouted(chunk, asked)
-    else this.refuse(status, chunk)
+    if (status >= 200 && status < 300) this.announceRouted(asked)
+    else this.refuse(status, asked)
     return true
   }
 
   /** Tell each document's subscribers, once, that the daemon now routes it. */
-  private announceRouted(docs: readonly string[], asked: readonly (DocEntry | undefined)[]): void {
-    docs.forEach((doc, i) => {
-      const entry = this.docs.get(doc)
-      // A document released and subscribed again meanwhile is a new entry,
-      // and its own subscribe answers for it.
-      if (entry === undefined || entry !== asked[i] || entry.routed) return
+  private announceRouted(entries: readonly DocEntry[]): void {
+    for (const entry of entries.filter((e) => !e.routed)) {
       entry.routed = true
       this.announceTo(entry, true)
-    })
+    }
   }
 
   /**
@@ -599,9 +600,11 @@ export class SseStreamHub implements SseStreamSource {
    * the document without a live stream, which is what "not connected" means
    * to its subscriber. The stream itself stays: it still carries the rest.
    */
-  private refuse(status: number, docs: readonly string[]): void {
-    const entries = docs.map((doc) => this.docs.get(doc))
-    for (const entry of entries) if (entry) entry.routed = false
+  private refuse(status: number, entries: readonly DocEntry[]): void {
+    for (const entry of entries) {
+      entry.routed = false
+      entry.authRefused = isAuthRefusal(status)
+    }
     if (isAuthRefusal(status)) {
       this.announceAuthRefused(entries)
       return
@@ -696,7 +699,7 @@ export class SseStreamHub implements SseStreamSource {
     this.streamId = payload.streamId
     this.streamSeq += 1
 
-    const docs = [...this.docs.keys()]
+    const docs = [...this.docs].filter(([, entry]) => !entry.authRefused).map(([doc]) => doc)
     if (docs.length > 0) void this.follow(docs)
     for (const [doc, entry] of this.docs) {
       if (!entry.ready) continue
