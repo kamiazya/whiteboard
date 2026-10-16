@@ -69,7 +69,8 @@ paths:
   opens the stream again. `onAuthRefused` carries its cause
   (`authRefusalCauseSchema`: stream, subscribe or push); a refused push is
   only announced, never state a joiner is told, and a stream refusal is
-  recorded only while something is subscribed. The sync wire key grammar and
+  recorded only for the subscribers its open was asked for — one subscribing
+  after the last release, even while that open is pending, gets its own. The sync wire key grammar and
   the document route URLs are `sync-key.ts` (`./sync-key`), not the hub.
 - The sync write refusal (`api-contracts/sync-write-refusal`): the codes are
   model's `syncWriteRefusalCodeSchema`, which also types server-core's
