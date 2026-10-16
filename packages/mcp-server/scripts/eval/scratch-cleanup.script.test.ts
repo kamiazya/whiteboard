@@ -16,6 +16,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const EVAL = resolve(import.meta.dirname, 'mcp-tool-surface-eval.mjs')
+const LAUNCHER = resolve(import.meta.dirname, 'lib', 'server-launcher.mjs')
 
 let privateTmp: string | undefined
 
@@ -28,20 +29,30 @@ interface ProcessRow {
   readonly pid: number
   readonly ppid: number
   readonly zombie: boolean
+  readonly args: string
 }
 
 function processTable(): ProcessRow[] {
-  const out = execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat='], { encoding: 'utf8' })
+  const out = execFileSync('ps', ['-A', '-ww', '-o', 'pid=,ppid=,stat=,args='], {
+    encoding: 'utf8',
+  })
   return out
     .split('\n')
     .map((line) => line.trim().split(/\s+/))
     .filter((cols) => cols.length >= 3)
-    .map(([pid, ppid, stat]) => ({
+    .map(([pid, ppid, stat, ...args]) => ({
       pid: Number(pid),
       ppid: Number(ppid),
       zombie: (stat ?? '').startsWith('Z'),
+      args: args.join(' '),
     }))
 }
+
+/** The eval's whiteboard servers that are running now, by the launcher every one is started through. */
+const runningServers = (evalPid: number) =>
+  processTable()
+    .filter((row) => row.ppid === evalPid && !row.zombie && row.args.includes(LAUNCHER))
+    .map((row) => row.pid)
 
 function descendantsOf(root: number): number[] {
   const rows = processTable()
@@ -90,16 +101,31 @@ function interruptAfterSeeding(signal: NodeJS.Signals, tmp: string) {
       output += chunk.toString()
     })
     const signalOnceServing = async () => {
-      // The seeding server child must exist at the signal, or there is no
-      // child for the handler to have failed to close.
+      // The seeding server must be running at the signal, or there is no child
+      // for the handler to have failed to close. Neither "the eval has
+      // children" nor "it has a server" says so: it holds a compiler service
+      // child for its whole run, and a dry run starts a server per verified
+      // task once seeding is done. The seeding server is the first one, so
+      // the first server seen is held, and the signal waits for that pid.
+      let seedingServer: number | undefined
       await vi.waitFor(
         () => {
-          if (!output.includes('[eval] seeding')) throw new Error('not seeding yet')
+          const servers = runningServers(child.pid ?? -1)
+          seedingServer ??= servers[0]
+          if (seedingServer === undefined || !output.includes('[eval] seeding')) {
+            throw new Error('not seeding yet')
+          }
+          // Gone already: settle, so the check below fails the run rather
+          // than a retry signalling whichever server came next.
+          if (!servers.includes(seedingServer)) return
           spawned = descendantsOf(child.pid ?? -1)
-          if (spawned.length === 0) throw new Error('no server child yet')
         },
         { timeout: 60_000, interval: 20 },
       )
+      if (!spawned.includes(seedingServer ?? -1)) {
+        child.kill('SIGKILL')
+        throw new Error(`seeding server ${seedingServer} ended before the signal:\n${output}`)
+      }
       seeding = true
       // Present at the moment of the signal, so an absence afterwards is the
       // handler's doing rather than a directory that was never made.
