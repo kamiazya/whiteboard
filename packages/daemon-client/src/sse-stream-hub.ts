@@ -268,6 +268,9 @@ export class SseStreamHub implements SseStreamSource {
    * asks again — a hub can outlive every page that heard the refusal.
    */
   private streamRefused = false
+  /** Bumped when the last subscription is released, so an answer to an open
+   *  asked for an earlier set of subscribers can tell it describes nobody now. */
+  private lifetime = 0
   /**
    * Set when the open stream is ended because a subscribe on it went
    * unanswered. Such a stream does not count as one that opened for the
@@ -313,7 +316,10 @@ export class SseStreamHub implements SseStreamSource {
       // here and keep declaring every reconnected stream ready for a canvas
       // nobody is watching.
       this.docs.delete(doc)
-      if (this.docs.size === 0) this.streamRefused = false
+      if (this.docs.size === 0) {
+        this.streamRefused = false
+        this.lifetime += 1
+      }
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -546,6 +552,7 @@ export class SseStreamHub implements SseStreamSource {
     const abort = new AbortController()
     this.abort = abort
     this.endedUnanswered = false
+    const lifetime = this.lifetime
 
     let res: Response
     try {
@@ -559,10 +566,11 @@ export class SseStreamHub implements SseStreamSource {
       // An unconsumed body holds the connection open under undici, and the
       // reconnect loop would repeat that on every failed attempt.
       void res.body?.cancel().catch(() => {})
-      // Only while something is subscribed: a refusal that lands after the
-      // last release describes nobody, and kept it would refuse the next
-      // subscriber without the daemon being asked again.
-      if (isAuthRefusal(res.status) && this.docs.size > 0) {
+      // Only for the subscribers it was asked for: a refusal that lands after
+      // the last release describes nobody, and kept it would refuse the next
+      // subscriber — even one that joined while it was pending — without the
+      // daemon being asked again.
+      if (isAuthRefusal(res.status) && lifetime === this.lifetime) {
         this.streamRefused = true
         this.announceAuthRefused(this.docs.values(), 'stream')
       }

@@ -380,4 +380,29 @@ describe('stream connect refusals', () => {
     expect(refused).not.toHaveBeenCalled()
     hub.close()
   })
+
+  // The open was asked for a lifetime that ended at the release, so its answer
+  // describes that lifetime alone: the document subscribing meanwhile gets an
+  // open of its own rather than the old one's verdict.
+  it('asks again for a document that subscribed while a released open was pending', async () => {
+    let requests = 0
+    let answerFirst: (res: Response) => void = () => {}
+    const fetch = async (input: string | URL | Request): Promise<Response> => {
+      if (!String(input).includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      requests += 1
+      if (requests === 1) return new Promise<Response>((resolve) => (answerFirst = resolve))
+      return new Response(new ReadableStream<Uint8Array>(), { status: 200 })
+    }
+    const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const release = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(requests).toBe(1))
+    release()
+    const refused = vi.fn()
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
+    answerFirst(new Response('', { status: 401 }))
+
+    await vi.waitFor(() => expect(requests).toBe(2))
+    expect(refused).not.toHaveBeenCalled()
+    hub.close()
+  })
 })
