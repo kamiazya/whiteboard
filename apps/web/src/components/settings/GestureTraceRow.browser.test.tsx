@@ -6,7 +6,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { gestureTrace, type TraceEntry } from '../../components/spatial-editor/gesture-trace.js'
+import { gestureTrace, parseGestureTrace } from '../../components/spatial-editor/gesture-trace.js'
 import { GestureTraceRow } from './GestureTraceRow'
 
 afterEach(() => {
@@ -45,11 +45,7 @@ it('copies the serialized trace: parseable, replayable entries plus the bundle i
   await userEvent.click(screen.getByRole('button', { name: 'Copy trace' }))
 
   expect(written).toHaveLength(1)
-  const parsed = JSON.parse(written[0] ?? '') as {
-    bundle: string
-    userAgent: string
-    entries: TraceEntry[]
-  }
+  const parsed = parseGestureTrace(written[0] ?? '')
   expect(parsed.bundle.length).toBeGreaterThan(0)
   expect(parsed.userAgent.length).toBeGreaterThan(0)
   const mine = parsed.entries.filter(
