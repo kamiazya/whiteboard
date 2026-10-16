@@ -2,12 +2,18 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
-import { createCredentialResolver, type ResolvedGrant } from '../security/credential-resolver.js'
+import {
+  type CredentialResolver,
+  createCredentialResolver,
+  type ResolvedGrant,
+} from '../security/credential-resolver.js'
 import { testStoreScope } from './_test-helpers.js'
+import { createDaemonAuthMiddleware } from './auth.js'
 
 let tempDir: string
 
@@ -47,11 +53,16 @@ function makeDocWithRetiredElements(count: number): LoroDoc {
   return doc
 }
 
+/** The router behind the /api/* gate `createApp` mounts in front of it. */
+function guardedDebugApp(resolver: CredentialResolver): Hono {
+  const app = new Hono()
+  app.use('/api/*', createDaemonAuthMiddleware(resolver))
+  app.route('/', createDebugRouter({ scope: testStoreScope() }))
+  return app
+}
+
 async function nodeCountsAt(workspaceId: string): Promise<Record<string, number>> {
-  const app = createDebugRouter({
-    scope: testStoreScope(),
-    credentialResolver: createCredentialResolver({}),
-  })
+  const app = createDebugRouter({ scope: testStoreScope() })
   const res = await app.request('/api/debug')
   expect(res.status).toBe(200)
   const json = (await res.json()) as {
@@ -127,10 +138,7 @@ describe('GET /api/debug', () => {
     // Only touched documents should appear in cache.
     await getDoc('sess-cache', 'touched')
 
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
+    const app = createDebugRouter({ scope: testStoreScope() })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
       workspaces: Array<{
@@ -149,21 +157,14 @@ describe('GET /api/debug', () => {
   })
 
   it('returns workspaces: [] when no sessions exist', async () => {
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
+    const app = createDebugRouter({ scope: testStoreScope() })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as { workspaces: unknown[] }
     expect(json.workspaces).toEqual([])
   })
 
   it('requires bearer auth when a daemon token is configured', async () => {
-    process.env.WHITEBOARD_DEBUG = '1'
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({ daemonToken: 'secret' }),
-    })
+    const app = guardedDebugApp(createCredentialResolver({ daemonToken: 'secret' }))
 
     const unauthenticated = await app.request('/api/debug')
     expect(unauthenticated.status).toBe(401)
@@ -181,32 +182,37 @@ describe('GET /api/debug', () => {
     'external-bearer',
   ] as const)('refuses a %s grant even when it carries every scope', async (kind) => {
     const grant: ResolvedGrant = { kind, scopes: ALL_AUTH_SCOPES }
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: { resolve: async () => grant },
-    })
+    const app = guardedDebugApp({ resolve: async () => grant })
 
     const res = await app.request('/api/debug', { headers: { Authorization: 'Bearer anything' } })
 
     expect(res.status).toBe(401)
   })
 
+  // The refusal is the /api/* middleware's, read from the route-scope
+  // registry: a handler that would answer anyone still never runs for a
+  // narrow credential, so the router carries no policy of its own to drift.
+  it('refuses a runtime:admin macaroon at the /api middleware, before any handler', async () => {
+    const grant: ResolvedGrant = { kind: 'macaroon', scopes: ['runtime:admin'] }
+    const app = new Hono()
+    app.use('/api/*', createDaemonAuthMiddleware({ resolve: async () => grant }))
+    app.get('/api/debug', (c) => c.json({ reached: true }))
+
+    const res = await app.request('/api/debug', { headers: { Authorization: 'Bearer anything' } })
+
+    expect(res.status).toBe(401)
+    await expect(res.json()).resolves.toEqual({ error: 'unauthorized' })
+  })
+
   it('remains public when no daemon token is configured', async () => {
-    process.env.WHITEBOARD_DEBUG = '1'
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
+    const app = guardedDebugApp(createCredentialResolver({}))
     const res = await app.request('/api/debug')
     expect(res.status).toBe(200)
   })
 
   it('returns 404 unless WHITEBOARD_DEBUG=1 is enabled', async () => {
     delete process.env.WHITEBOARD_DEBUG
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({ daemonToken: 'secret' }),
-    })
+    const app = guardedDebugApp(createCredentialResolver({ daemonToken: 'secret' }))
 
     const res = await app.request('/api/debug', {
       headers: { Authorization: 'Bearer secret' },

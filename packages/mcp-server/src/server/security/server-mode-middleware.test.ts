@@ -43,4 +43,16 @@ describe('createServerModeApiAuthMiddleware', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({ error: 'auth.route-undeclared' })
   })
+
+  // Server mode has no daemon token, so a daemon-token-only route is refused
+  // whatever the strategy would have said — the allow-all strategy is the
+  // witness that the refusal is the decision's, not the credential's.
+  it('refuses /api/debug outright, the route the registry holds daemon-token-only', async () => {
+    const app = new Hono()
+    app.use('/api/*', createServerModeApiAuthMiddleware(allowAllStrategy, people))
+    app.get('/api/debug', (c) => c.json({ reached: true }))
+    const res = await app.request('/api/debug')
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toEqual({ error: 'forbidden' })
+  })
 })
