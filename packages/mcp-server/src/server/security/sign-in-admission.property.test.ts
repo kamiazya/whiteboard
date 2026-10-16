@@ -41,13 +41,47 @@ const claimsArb = fc.record(
   { requiredKeys: ['sub'] },
 )
 
-const inputArb: fc.Arbitrary<AdmissionInput> = fc.record({
+/**
+ * Claims that meet every rule the admission declares, read off the admission's
+ * own fields rather than off `admit`, so no answer of the code under test
+ * decides what is drawn.
+ */
+const claimsMeetingArb = (admission: ProviderAdmission) =>
+  fc.record({
+    sub: fc.constant('s-1'),
+    email: fc.constantFrom(...(admission.allowedEmailDomains ?? DOMAINS)).map((d) => `ada@${d}`),
+    email_verified: fc.constant(true),
+    hd: fc.constantFrom(...(admission.googleHostedDomains ?? DOMAINS)),
+    groups: fc.constantFrom(...(admission.requiredClaims?.groups ?? GROUPS)).map((g) => [g]),
+  })
+
+const routeArb = {
   providerId: fc.constant('corp'),
-  admission: admissionArb,
-  claims: claimsArb,
   account: fc.constantFrom('exists' as const, 'new' as const),
   invitation: fc.constantFrom('none' as const, 'link' as const),
-})
+}
+
+// Random claims meet a random rule set on only a few percent of draws, and
+// the counters below need a met rule set — `uninvited` on top of that needs a
+// provider that creates no accounts — so drawn only that way a 200-run property
+// reached it not at all about once in 7,000 runs. A quarter of the draws carry
+// claims that meet their rules, which keeps every refusal in the draw.
+const inputArb: fc.Arbitrary<AdmissionInput> = fc.oneof(
+  {
+    arbitrary: fc.record({ ...routeArb, admission: admissionArb, claims: claimsArb }),
+    weight: 3,
+  },
+  {
+    arbitrary: admissionArb.chain((admission) =>
+      fc.record({
+        ...routeArb,
+        admission: fc.constant(admission),
+        claims: claimsMeetingArb(admission),
+      }),
+    ),
+    weight: 1,
+  },
+)
 
 const usesEmail = (a: ProviderAdmission) =>
   a.allowedEmailDomains !== undefined || a.googleHostedDomains !== undefined

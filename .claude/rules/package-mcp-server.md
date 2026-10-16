@@ -308,15 +308,17 @@ by `daemon/daemon-liveness.ts`'s `daemonLiveness`, whose `.state` is
 `running | unconfirmed | pid-reused | dead` (an `unconfirmed` answer carries
 the `servingPid` the socket named). The record itself has ONE reader,
 `daemon/daemon-record.ts`'s `parseDaemonRecord`: it asks `daemonLiveness` of
-any record it cannot use, so a record this build cannot interpret whose
-daemon is still there is `uninterpretable` (status `record-other-version`,
-never "remove it"), and `loadDaemonRecord` (stop, run, native host) is a
-projection of it. `daemon stop`/`run`/`status`/`doctor`, the replica-posture
+every record that names a daemon and hands the verdict over (`valid` carries
+`liveness` too; `loadDaemonRecord` — stop, run, native host — answers
+`{ record, liveness }`), so no reader acts on a record without its liveness,
+and a record this build cannot interpret whose daemon is still there is
+`uninterpretable` (status `record-other-version`, never "remove it"). `daemon stop`/`run`/`status`/`doctor`, the replica-posture
 commands and the startup version-skew warning all read through it.
 `tools/arch-lint`'s `daemon-liveness-one-place.test.ts` fails a reader that
 imports `isPidAlive` or `recordedProcess`, imports them dynamically, or calls
 a bare `process.kill(pid, 0)`, and fails any module but `daemon-record.ts`
-importing a record schema. Start time decides on the plain path; only when
+importing a record schema or `daemonLiveness` itself (`daemon stop`'s
+re-ask before SIGKILL is the one ledgered exception). Start time decides on the plain path; only when
 it says the pid started after the record is the record's socket asked
 (`/api/runtime/status` under the record's token), because a stepped wall
 clock moves `btime` and not a process's start ticks. A socket naming the

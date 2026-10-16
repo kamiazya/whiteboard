@@ -11,10 +11,17 @@
  * `sse-shared-worker-resend.test.ts`'s header), and the source is cached per
  * origin anyway.
  *
- * No `refuseAuth`: a refused credential ends the worker's stream for the
- * origin for the worker's life, which would end it for every later case
- * here. The worker's refusal path is the SseStreamSource contract's
- * (`sse-shared-stream-source.contract.test.ts`). No `sentUpdates` either: the
+ * `refuseAuth` refuses the case's workspace on its subscribe, as the daemon
+ * refuses a workspace the credential may not enter, rather than on the
+ * stream: a stream refused ends the worker's stream for the origin for the
+ * worker's life, which would end it for every later case here — that path is
+ * the SseStreamSource contract's (`sse-shared-stream-source.contract.test.ts`).
+ * For the same reason `streamOpens` counts the case's own subscribes, not
+ * stream opens: on a shared stream, being asked for again IS a backend's
+ * reconnect, and a refused workspace must not be asked for again on the
+ * reopens other cases cause. `failsNextStreamOpen` fails that subscribe as a
+ * dropped request, which the hub answers by reopening the stream after its
+ * backoff. No `sentUpdates`: the
  * worker merges a push into its replica before writing onward, so arbitrary
  * bytes never reach the daemon — `localEdit` is a real Loro edit instead.
  * No `refusesNextWrite`: the worker announces a refusal only once it has
@@ -59,6 +66,12 @@ const unroutable = new Map<string, 'refused' | 'silent'>()
  * fails: the worker's feed seeds on routing, and the tab's request seeds again.
  */
 const failingSnapshots = new Map<string, number>()
+/** Workspace keys whose subscribe the daemon refuses as one the credential may not enter. */
+const authRefused = new Set<string>()
+/** Subscribes asked for each workspace key, refused ones included. */
+const subscribesAsked = new Map<string, number>()
+/** Workspace keys whose next subscribe fails as a dropped request does, as a daemon restarting under it. */
+const failNextSubscribe = new Set<string>()
 /** Answers the subscribes `silent` is holding, so none outlives its case. */
 const heldSubscribes = new Map<string, () => void>()
 let pushFrame: ((frame: string) => void) | null = null
@@ -86,7 +99,10 @@ const server = setupServer(
       start(controller) {
         controller.enqueue(enc.encode(sseFrame('ready', { streamId: 'worker-contract' })))
         pushFrame = (frame) => controller.enqueue(enc.encode(frame))
+        // Every case's transport is this one stream, so two backends dropped
+        // in the same tick are one drop, not a second close of it.
         endStream = () => {
+          endStream = null
           pushFrame = null
           routed.clear()
           controller.close()
@@ -101,6 +117,13 @@ const server = setupServer(
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
     const body = (await request.json()) as { subscribe?: string[]; unsubscribe?: string[] }
     for (const doc of body.unsubscribe ?? []) routed.delete(doc)
+    for (const doc of body.subscribe ?? [])
+      subscribesAsked.set(doc, (subscribesAsked.get(doc) ?? 0) + 1)
+    if ((body.subscribe ?? []).some((doc) => failNextSubscribe.delete(doc)))
+      return HttpResponse.error()
+    if ((body.subscribe ?? []).some((doc) => authRefused.has(doc))) {
+      return HttpResponse.json({ error: 'not_a_member' }, { status: 403 })
+    }
     const refusing = (body.subscribe ?? []).find((doc) => unroutable.has(doc))
     if (refusing !== undefined && unroutable.get(refusing) === 'refused') {
       return HttpResponse.json({ error: 'unknown_stream' }, { status: 404 })
@@ -194,6 +217,19 @@ function seededKeeper(workspaceId: string): LoroDoc {
   return keeper
 }
 
+/** A real Loro edit built against `snapshot`, as a tab's is, and whether the keeper took it. */
+function tabEdit(workspaceId: string, keeper: LoroDoc, snapshot: Uint8Array | null) {
+  const tab = new LoroDoc()
+  if (snapshot !== null) tab.import(snapshot)
+  const from = tab.oplogVersion()
+  tab.getMap('tab').set('edit', workspaceId)
+  tab.commit()
+  return {
+    bytes: tab.export({ mode: 'update', from }),
+    landed: () => keeper.getMap('tab').get('edit') === workspaceId,
+  }
+}
+
 async function harness(): Promise<DocumentBackendHarness> {
   const source = createSharedSseStreamSource(BASE, fetch)
   if (!source) throw new Error('SharedWorker unavailable')
@@ -213,17 +249,14 @@ async function harness(): Promise<DocumentBackendHarness> {
   return {
     backend,
     dropTransport: () => endStream?.(),
-    localEdit: (snapshot) => {
-      const tab = new LoroDoc()
-      if (snapshot !== null) tab.import(snapshot)
-      const from = tab.oplogVersion()
-      tab.getMap('tab').set('edit', workspaceId)
-      tab.commit()
-      return {
-        bytes: tab.export({ mode: 'update', from }),
-        landed: () => keeper.getMap('tab').get('edit') === workspaceId,
-      }
+    refuseAuth: () => {
+      authRefused.add(`workspace:${workspaceId}`)
     },
+    streamOpens: () => subscribesAsked.get(`workspace:${workspaceId}`) ?? 0,
+    failsNextStreamOpen: () => {
+      failNextSubscribe.add(`workspace:${workspaceId}`)
+    },
+    localEdit: (snapshot) => tabEdit(workspaceId, keeper, snapshot),
     keeperWrites,
     keeperWritesAfterNextSnapshot: () => {
       writeAfterSnapshot.add(workspaceId)

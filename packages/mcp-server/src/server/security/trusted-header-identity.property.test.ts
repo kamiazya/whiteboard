@@ -37,12 +37,23 @@ interface Shape {
   readonly iss: 'right' | 'wrong'
 }
 
-const shapeArb: fc.Arbitrary<Shape> = fc.record({
+const anyShapeArb: fc.Arbitrary<Shape> = fc.record({
   exp: fc.constantFrom('none', 'future', 'past'),
   sub: fc.constantFrom('none', 'present'),
   aud: fc.constantFrom('right', 'wrong'),
   iss: fc.constantFrom('right', 'wrong'),
 })
+
+const SOUND_SHAPE: Shape = { exp: 'future', sub: 'present', aud: 'right', iss: 'right' }
+
+// The one admitted shape is one of twenty-four, so a uniform draw left it out
+// of a whole run about once in 2,500 runs and the `admitted` floor failed with
+// nothing broken. A quarter of the draws are pinned to it, which leaves every
+// refused shape in the draw at its old relative odds.
+const shapeArb: fc.Arbitrary<Shape> = fc.oneof(
+  { arbitrary: anyShapeArb, weight: 3 },
+  { arbitrary: fc.constant(SOUND_SHAPE), weight: 1 },
+)
 
 const sound = (s: Shape) =>
   s.exp === 'future' && s.sub === 'present' && s.aud === 'right' && s.iss === 'right'

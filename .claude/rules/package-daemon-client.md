@@ -60,7 +60,10 @@ paths:
   never replaces a newer one. The SharedWorker seeds or catches up its replica on
   the same signals, and keeps a replica only for `workspace:` keys.
   `documentBackendContract`'s catch-up and routing-gap cases hold it, over
-  the owned hub and the SharedWorker source.
+  the owned hub and the SharedWorker source. A subscribe refused for the
+  credential (401/403) is not re-asked on later streams — releasing the
+  document and subscribing again is what retries it — and a listener joining
+  a refused document is told at once.
 - The sync write refusal (`api-contracts/sync-write-refusal`): the codes are
   model's `syncWriteRefusalCodeSchema`, which also types server-core's
   `SyncWriteRefusalError.code`, so a code renamed on one side fails typecheck

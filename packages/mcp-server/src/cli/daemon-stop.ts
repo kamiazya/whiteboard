@@ -68,9 +68,9 @@ export async function runDaemonStop(
   const removeRecord = options.removeRecord ?? deleteDaemonRecord
 
   const seams = { isAlive: options.isPidAlive, startMs: options.processStartMs }
-  const record = await loadDaemonRecord(options.dataDir, seams)
+  const loaded = await loadDaemonRecord(options.dataDir, seams)
 
-  if (record === null) {
+  if (loaded === null) {
     return {
       result: daemonStopResultSchema.parse({
         schemaVersion: 1,
@@ -83,11 +83,10 @@ export async function runDaemonStop(
     }
   }
 
+  const { record, liveness } = loaded
   const { pid } = record
   // A record that outlived its daemon can name a pid another process has
   // since taken; that process is not the daemon and must not be signalled.
-  const judge = () => daemonLiveness(record, seams)
-  const liveness = await judge()
   if (liveness.state !== 'running') {
     // An unconfirmed daemon serves the record's socket without confirming
     // this pid — answering as another, or accepting and staying silent:
@@ -105,7 +104,9 @@ export async function runDaemonStop(
     timeoutMs: stopTimeoutMs,
     pollMs: POLL_INTERVAL_MS,
     killWaitMs,
-    confirmKill: async () => (await judge()).state === 'running',
+    // Asked again: the pid can change hands inside the SIGTERM window, so the
+    // answer the record came with no longer covers a SIGKILL.
+    confirmKill: async () => (await daemonLiveness(record, seams)).state === 'running',
   })
   if (stopped.kind === 'signal-failed') {
     return {

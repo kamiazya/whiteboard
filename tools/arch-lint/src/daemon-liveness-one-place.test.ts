@@ -26,6 +26,13 @@
  * `describeUnconfirmed` say it in a sentence. Each liveness field had to reach
  * every hand-written copy of that projection by hand, and nothing failed when
  * one was missed, so a `.servingPid` read anywhere else fails here.
+ *
+ * And the question itself is ASKED in that one reader: `parseDaemonRecord`
+ * hands every arm that names a daemon its liveness, `valid` included. While
+ * `valid` carried none, each reader had to remember to ask, one forgot, and a
+ * crashed daemon's socket reached the person as `connect ENOENT` where "start
+ * one" was owed. So a module importing `daemonLiveness` other than the reader
+ * fails here, unless the ledger below says why it needs a later answer.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -96,6 +103,44 @@ const LEDGER: Readonly<Record<string, { imports: readonly string[]; why: string 
     imports: ['isPidAlive'],
     why: "polls the SIGTERM window for the pid's exit after daemonLiveness confirmed it, and re-asks daemonLiveness before SIGKILL",
   },
+}
+
+const LIVENESS_MODULE = /(^|\/)daemon-liveness\.js$/
+
+/** Relative path -> why it asks again after the reader answered. Both-sided. */
+const RE_ASK_LEDGER: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/cli/daemon-stop.ts':
+    "re-asks before SIGKILL: the reader's answer predates the SIGTERM window, and the pid can change hands inside it",
+}
+
+/** Where `source` reaches `daemonLiveness`: by name, alias, namespace or dynamic import. */
+function livenessAsks(fileName: string, source: string): string[] {
+  const file = parseSource(fileName, source)
+  const imported = importBindingsOf(file)
+    .filter((binding) => LIVENESS_MODULE.test(binding.spec))
+    .flatMap((binding) =>
+      binding.kind === 'namespace'
+        ? ['* (namespace)']
+        : binding.imported === 'daemonLiveness'
+          ? ['daemonLiveness']
+          : [],
+    )
+  const dynamic: string[] = []
+  const visit = (node: ts.Node): void => {
+    const [first] = ts.isCallExpression(node) ? node.arguments : []
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      first !== undefined &&
+      ts.isStringLiteralLike(first) &&
+      LIVENESS_MODULE.test(first.text)
+    ) {
+      dynamic.push(`import(${first.text})`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return [...imported, ...dynamic]
 }
 
 /**
@@ -219,6 +264,43 @@ describe("a daemon record's liveness is judged in one place", () => {
         : [`${rel}: records ${imports.join(', ')}, found ${found.join(', ') || 'none'}`]
     })
     expect(drift, 'an entry that outlives its site is how a ledger stops being read').toEqual([])
+  })
+
+  it('only the one reader asks whether the daemon a record names is running', () => {
+    expect(livenessAsks(ONE_READER, sourceOf(ONE_READER))).toEqual(['daemonLiveness'])
+    const askers = files
+      .map(relOf)
+      .filter((rel) => rel !== ONE_READER && rel !== ONE_PLACE && RE_ASK_LEDGER[rel] === undefined)
+      .flatMap((rel) => livenessAsks(rel, sourceOf(rel)).map((name) => `${rel}: ${name}`))
+    expect(
+      askers,
+      'switch on the `liveness` `parseDaemonRecord` / `loadDaemonRecord` hand you: a reader that asks for itself is one that can forget to',
+    ).toEqual([])
+  })
+
+  it('every re-ask ledger entry still asks', () => {
+    const drift = Object.keys(RE_ASK_LEDGER).filter(
+      (rel) => !livenessAsks(rel, sourceOf(rel)).includes('daemonLiveness'),
+    )
+    expect(drift, 'an entry that outlives its site is how a ledger stops being read').toEqual([])
+  })
+
+  it('recognises daemonLiveness imported by name, alias, namespace or dynamically', () => {
+    expect(
+      livenessAsks('f.ts', "import { daemonLiveness as ask } from '../daemon/daemon-liveness.js'"),
+    ).toEqual(['daemonLiveness'])
+    expect(livenessAsks('f.ts', "import * as l from './daemon-liveness.js'")).toEqual([
+      '* (namespace)',
+    ])
+    expect(livenessAsks('f.ts', "const m = import('./daemon-liveness.js')")).toEqual([
+      'import(./daemon-liveness.js)',
+    ])
+    expect(
+      livenessAsks(
+        'f.ts',
+        "import { servingPidOf, type DaemonLiveness } from './daemon-liveness.js'",
+      ),
+    ).toEqual([])
   })
 
   it('only the one reader parses daemon.json against its schemas', () => {

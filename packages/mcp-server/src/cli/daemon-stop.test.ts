@@ -1,23 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { DaemonLiveness } from '../daemon/daemon-liveness.js'
+import type { RecordedDaemon } from '../daemon/daemon-record-schema.js'
 import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 
 // loadDaemonRecord is a hard import in daemon-stop.ts and is not injectable
 // via options. Mock the registry module so each test controls what record
-// is returned without touching the filesystem.
+// is returned without touching the filesystem; `loadedRecord` asks its
+// liveness through the seams the command passes, as the real reader does.
 const { loadDaemonRecordMock } = vi.hoisted(() => ({
   loadDaemonRecordMock:
     vi.fn<
       (
         dataDir: string,
         seams?: unknown,
-      ) => Promise<null | {
-        pid: number
-        port: number
-        version: string
-        startedAt: string
-        token: string
-        socketPath?: string
-      }>
+      ) => Promise<null | { record: RecordedDaemon & { token: string }; liveness: DaemonLiveness }>
     >(),
 }))
 
@@ -30,6 +26,7 @@ vi.mock('../daemon/daemon-registry.js', () => ({
 
 const { runDaemonStop } = await import('./daemon-stop.js')
 const { answeringDaemonSocket } = await import('../daemon/_test-daemon-socket.js')
+const { loadedRecord } = await import('../daemon/_test-daemon-record.js')
 
 const fakeRecord = {
   pid: 12345,
@@ -83,7 +80,7 @@ describe('runDaemonStop: record not found', () => {
 
 describe('runDaemonStop: process not running', () => {
   it('returns exitCode 1, action=not-running, reason=process-not-running', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     const removeRecord = vi.fn(async () => undefined)
 
     const { result, exitCode } = await runDaemonStop(
@@ -101,7 +98,7 @@ describe('runDaemonStop: process not running', () => {
   })
 
   it('removes the stale record when process is dead', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     const removeRecord = vi.fn(async () => undefined)
 
     await runDaemonStop(baseOpts({ isPidAlive: () => false, removeRecord }))
@@ -117,7 +114,7 @@ describe('runDaemonStop: process not running', () => {
 
 describe('runDaemonStop: process alive → stopped', () => {
   it('returns exitCode 0, ok=true, action=stopped when SIGTERM succeeds', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     let aliveCallCount = 0
     // Pre-kill check: alive. Poll loop: dead immediately.
@@ -140,7 +137,7 @@ describe('runDaemonStop: process alive → stopped', () => {
   })
 
   it('sends SIGTERM to the process pid', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     let aliveCallCount = 0
     const isPidAlive = () => {
@@ -155,7 +152,7 @@ describe('runDaemonStop: process alive → stopped', () => {
   })
 
   it('removes the record after stopping', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     let aliveCallCount = 0
     const isPidAlive = () => {
@@ -176,7 +173,7 @@ describe('runDaemonStop: process alive → stopped', () => {
 
 describe('runDaemonStop: kill fails', () => {
   it('returns exitCode 1, ok=false, action=refused, reason=kill-failed', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     const killFn = vi.fn(() => {
       throw new Error('EPERM')
@@ -203,7 +200,7 @@ describe('runDaemonStop: kill fails', () => {
 
 describe('runDaemonStop: process survives SIGTERM → SIGKILL', () => {
   it('sends SIGKILL when process does not die within the timeout', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     // Process stays alive throughout (simulates stubborn daemon).
     const isPidAlive = vi.fn(() => true)
@@ -227,7 +224,7 @@ describe('runDaemonStop: process survives SIGTERM → SIGKILL', () => {
   })
 
   it('still removes the record after SIGKILL escalation', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
 
     const killFn = vi.fn()
     const removeRecord = vi.fn(async () => undefined)
@@ -252,7 +249,7 @@ describe('runDaemonStop: process survives SIGTERM → SIGKILL', () => {
 // window is read off the default path — nothing here passes `stopTimeoutMs`.
 describe('runDaemonStop: the default SIGTERM window', () => {
   it('outlasts the file sweeper stop cap before it escalates to SIGKILL', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     vi.useFakeTimers()
     try {
       const startedAt = Date.now()
@@ -284,7 +281,7 @@ describe('runDaemonStop: the default SIGTERM window', () => {
 // `killWaitMs`.
 describe('runDaemonStop: the default wait after SIGKILL', () => {
   it('gives up on a process that stays alive after 200 ms', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     vi.useFakeTimers()
     try {
       let killedAt: number | null = null
@@ -318,7 +315,7 @@ describe('runDaemonStop: a stale record whose pid another process took', () => {
   const recordedAtMs = Date.parse(fakeRecord.startedAt)
 
   it('signals nothing, reports the daemon not running, and drops the record', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     const killFn = vi.fn()
     const removeRecord = vi.fn(async () => undefined)
     const { result, exitCode } = await runDaemonStop(
@@ -336,7 +333,7 @@ describe('runDaemonStop: a stale record whose pid another process took', () => {
   })
 
   it('withholds SIGKILL from a pid another process took during the SIGTERM window', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     const signals: string[] = []
     const starts = [recordedAtMs - 1_000, recordedAtMs + 60_000]
     await runDaemonStop(
@@ -352,7 +349,7 @@ describe('runDaemonStop: a stale record whose pid another process took', () => {
   })
 
   it('still stops a process that started before its record was written', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    loadDaemonRecordMock.mockImplementationOnce(loadedRecord(fakeRecord))
     const killFn = vi.fn()
     const { result } = await runDaemonStop(
       baseOpts({
@@ -376,7 +373,9 @@ describe('runDaemonStop: a live daemon after the wall clock stepped forward', ()
 
   it('stops the daemon its socket confirms rather than dropping its record', async () => {
     const daemon = await answeringDaemonSocket(fakeRecord.pid, fakeRecord.token)
-    loadDaemonRecordMock.mockResolvedValueOnce({ ...fakeRecord, socketPath: daemon.socketPath })
+    loadDaemonRecordMock.mockImplementationOnce(
+      loadedRecord({ ...fakeRecord, socketPath: daemon.socketPath }),
+    )
     const killFn = vi.fn()
     const alive = [true, false]
     const { result, exitCode } = await runDaemonStop(
@@ -394,7 +393,9 @@ describe('runDaemonStop: a live daemon after the wall clock stepped forward', ()
 
   it('keeps the record and signals nothing when the socket answers for another pid', async () => {
     const daemon = await answeringDaemonSocket(fakeRecord.pid + 1, fakeRecord.token)
-    loadDaemonRecordMock.mockResolvedValueOnce({ ...fakeRecord, socketPath: daemon.socketPath })
+    loadDaemonRecordMock.mockImplementationOnce(
+      loadedRecord({ ...fakeRecord, socketPath: daemon.socketPath }),
+    )
     const killFn = vi.fn()
     const removeRecord = vi.fn(async () => undefined)
     const { result, exitCode } = await runDaemonStop(

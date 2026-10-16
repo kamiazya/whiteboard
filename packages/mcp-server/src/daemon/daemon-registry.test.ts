@@ -15,6 +15,8 @@ import {
 
 // ESRCH on every platform: no pid is this large.
 const DEAD_PID = 999_999_999
+// A fake pid's liveness is the double's, never a real process's under that number.
+const gone = { isAlive: () => false }
 
 describe('daemon-registry', () => {
   let dataDir: string
@@ -40,13 +42,16 @@ describe('daemon-registry', () => {
       dataDir,
     )
 
-    await expect(loadDaemonRecord(dataDir)).resolves.toEqual({
-      pid: 123,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
-      token: 'secret',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:00:00.000Z',
-      launch: 'built',
+    await expect(loadDaemonRecord(dataDir, gone)).resolves.toEqual({
+      record: {
+        pid: 123,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
+        token: 'secret',
+        version: '0.1.0',
+        startedAt: '2026-04-23T00:00:00.000Z',
+        launch: 'built',
+      },
+      liveness: { state: 'dead' },
     })
   })
 
@@ -61,9 +66,9 @@ describe('daemon-registry', () => {
       startedAt: '2026-04-23T00:00:00.000Z',
     }
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(legacy))
-    const loaded = await loadDaemonRecord(dataDir)
-    expect(loaded).toEqual(legacy)
-    expect(loaded).not.toHaveProperty('launch')
+    const loaded = await loadDaemonRecord(dataDir, gone)
+    expect(loaded?.record).toEqual(legacy)
+    expect(loaded?.record).not.toHaveProperty('launch')
   })
 
   it.skipIf(!CAN_DENY_FILE_READ)(
@@ -211,7 +216,7 @@ describe('daemon-registry', () => {
   )
 
   it.skipIf(readProcessStartMs(process.pid) === null)(
-    'throws for a record it cannot interpret while a daemon answers on its socket',
+    'throws for a record it cannot interpret while a process holds its socket',
     async () => {
       const daemon = await answeringDaemonSocket(process.pid + 1, 'tok')
       await writeFile(
@@ -224,7 +229,13 @@ describe('daemon-registry', () => {
           version: '9.0.0',
         }),
       )
-      await expect(loadDaemonRecord(dataDir)).rejects.toThrow(/answers on its socket/)
+      // The record's token is not a string, so the socket refuses the ask and
+      // names no pid: nothing there is known to be a daemon answering.
+      const refused = loadDaemonRecord(dataDir)
+      await expect(refused).rejects.toThrow(
+        `a process holds its socket ${daemon.socketPath} but did not confirm it is pid ${process.pid}`,
+      )
+      await expect(refused).rejects.not.toThrow(/answers/)
     },
   )
 

@@ -4,6 +4,10 @@ import { createServer } from 'node:http'
 import { createServer as createSocketServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  runtimePingApiUrl,
+  runtimeStatusApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,10 +27,12 @@ import {
   isPidAlive,
   isRecordWriter,
   NO_ANSWER,
+  PING_PATH,
   readDaemonRecord,
   readProcessStartMs,
   recordedDaemonLiveness,
   requestDaemon,
+  STATUS_PATH,
 } from './dev-daemon-socket-lib.mjs'
 
 const dirs: string[] = []
@@ -172,13 +178,47 @@ describe('assessRecordedDaemon', () => {
   })
 
   it('is running, not answering, when the recorded pid is the daemon but the ping times out', async () => {
-    expect(await assessRecordedDaemon(record, seams())).toEqual({
+    const request = vi.fn(async (_record: unknown, req: { timeoutMs?: number }) => {
+      throw Object.assign(new Error('no answer'), { code: NO_ANSWER, timeoutMs: req.timeoutMs })
+    })
+    const { answers: _ping, ...asked } = seams({ request })
+    expect(await assessRecordedDaemon(record, asked)).toEqual({
       running: true,
       answering: false,
       process: 'daemon',
       liveness: 'running',
       silence: 'did not answer /api/runtime/ping within 3000ms',
     })
+    expect(request).toHaveBeenCalledWith(
+      record,
+      expect.objectContaining({ path: '/api/runtime/ping', timeoutMs: 3_000 }),
+    )
+  })
+
+  // A ping that failed at once names what it met, not a wait that never ran.
+  it.each([
+    ['a refused connection', refused, 'refused /api/runtime/ping'],
+    [
+      'a socket that is gone',
+      async (): Promise<never> => {
+        throw Object.assign(new Error('connect ENOENT /s'), { code: 'ENOENT' })
+      },
+      'has no socket at /s',
+    ],
+    [
+      'an answer other than 200',
+      async () => ({ status: 503, contentType: 'text/plain', text: '' }),
+      'answered /api/runtime/ping with HTTP 503',
+    ],
+  ])('words a running daemon’s ping failing with %s as what it was', async (_, request, silence) => {
+    const { answers: _ping, ...asked } = seams({ request })
+    expect((await assessRecordedDaemon(record, asked)).silence).toBe(silence)
+  })
+
+  it('names no wait for a ping seam that can only say it went unanswered', async () => {
+    expect((await assessRecordedDaemon(record, seams())).silence).toBe(
+      'did not answer /api/runtime/ping',
+    )
   })
 
   it('is not running when the recorded pid started after the record was written', async () => {
@@ -189,7 +229,6 @@ describe('assessRecordedDaemon', () => {
       answering: false,
       process: 'foreign',
       liveness: 'pid-reused',
-      silence: 'refused /api/runtime/status',
     })
   })
 
@@ -199,7 +238,6 @@ describe('assessRecordedDaemon', () => {
       answering: false,
       process: 'dead',
       liveness: 'dead',
-      silence: 'did not answer /api/runtime/ping within 3000ms',
     })
   })
 
@@ -253,7 +291,6 @@ describe('assessRecordedDaemon', () => {
           answering: false,
           process: 'foreign',
           liveness: 'pid-reused',
-          silence: 'refused /api/runtime/status',
         })
         const current = { ...stale, startedAt: new Date(Date.now() + 1_000).toISOString() }
         expect((await assessRecordedDaemon(current)).process).toBe('daemon')
@@ -262,6 +299,72 @@ describe('assessRecordedDaemon', () => {
       }
     },
   )
+})
+
+// The scripts run under bare node and cannot import the URL builders, so they
+// spell the two routes they ask; the builders are what the daemon's routes are
+// held to, so a route moved on the server fails here rather than leaving every
+// healthy dev daemon reading as busy.
+describe('the routes the dev scripts ask', () => {
+  it('are the ones the daemon serves', () => {
+    expect({ ping: PING_PATH, status: STATUS_PATH }).toEqual({
+      ping: runtimePingApiUrl(),
+      status: runtimeStatusApiUrl(),
+    })
+  })
+})
+
+// A daemon whose own pid is confirmed but whose ping fails is reported as busy,
+// so the line has to say how the ping failed — over a real socket, not a seam.
+describe('a running daemon whose ping fails', () => {
+  const confirmed = (socketPath: string) => ({
+    pid: process.pid,
+    socketPath,
+    startedAt: new Date(Date.now() + 60_000).toISOString(),
+  })
+
+  it('says its socket is gone when the file is', async () => {
+    const socketPath = join(dataDirWith(null), 'gone.sock')
+    expect(await assessRecordedDaemon(confirmed(socketPath))).toMatchObject({
+      running: true,
+      answering: false,
+      silence: `has no socket at ${socketPath}`,
+    })
+  })
+
+  it('names the status a ping was answered with', async () => {
+    const socketPath = join(dataDirWith(null), 'unready.sock')
+    const server = createServer((_req, res) => res.writeHead(503).end())
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    try {
+      expect((await assessRecordedDaemon(confirmed(socketPath))).silence).toBe(
+        `answered ${PING_PATH} with HTTP 503`,
+      )
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
+  })
+
+  // A late-starting pid is judged by the status ask, and a refusal there is
+  // no more an answer than a refused ping: the hook must not call it healthy.
+  it('names the status the status ask was answered with', async () => {
+    const socketPath = join(dataDirWith(null), 'unready-status.sock')
+    const server = createServer((_req, res) => res.writeHead(503).end())
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+    try {
+      const record = { pid: 42, startedAt, socketPath, token: 't' }
+      expect(await assessRecordedDaemon(record, late)).toMatchObject({
+        running: true,
+        answering: false,
+        liveness: 'unconfirmed',
+        silence: `answered ${STATUS_PATH} with HTTP 503`,
+      })
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
+  })
 })
 
 describe('requestDaemon', () => {

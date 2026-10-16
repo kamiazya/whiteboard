@@ -1,8 +1,4 @@
-import {
-  type DaemonLivenessSeams,
-  daemonLiveness,
-  servingPidOf,
-} from '../daemon/daemon-liveness.js'
+import { type DaemonLivenessSeams, servingPidOf } from '../daemon/daemon-liveness.js'
 import {
   type DaemonRecordParseResult,
   isOccupying,
@@ -91,7 +87,7 @@ export async function runDaemonStatus(
   }
   if (parsed.kind !== 'valid') return answer(1, true, unusableRecord(parsed))
 
-  const liveness = await daemonLiveness(parsed.record, seams)
+  const { liveness } = parsed
   if (liveness.state !== 'running') {
     return answer(1, true, {
       reason: STATUS_REASON[liveness.state],
