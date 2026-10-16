@@ -15,10 +15,32 @@
 /** The most automatic checkpoints a document keeps, before the oldest go. */
 export const MAX_AUTO_PER_DOCUMENT = 50
 
-export interface CapCandidate {
+/** A row as lineage sees it: its id, and the version it restored, if any. */
+export interface LineageCandidate {
   readonly id: string
   /** The version this one restored, when it is a restore's merge point. */
   readonly restoredFrom: string | null
+}
+
+/**
+ * Whether a row is lineage, which neither pass may take: a restore's merge
+ * point, or a point some merge names. `referenced` is every id some row of
+ * the document names as `restoredFrom`.
+ */
+function isLineage(row: LineageCandidate, referenced: ReadonlySet<string>): boolean {
+  return row.restoredFrom !== null || referenced.has(row.id)
+}
+
+/**
+ * The options a keeper saves a restore's merge point with. Automatic, because
+ * the system recorded it rather than a person asking for it — and lineage, so
+ * neither retention pass may take it.
+ */
+export function restorePointOptions(restoredFrom: string): {
+  readonly auto: true
+  readonly restoredFrom: string
+} {
+  return { auto: true, restoredFrom }
 }
 
 /**
@@ -30,26 +52,27 @@ export interface CapCandidate {
  * A merge is rare, so the cap it stretches is stretched by very little.
  */
 export function autoVersionsOverCap(
-  autosNewestFirst: readonly CapCandidate[],
+  autosNewestFirst: readonly LineageCandidate[],
   referenced: ReadonlySet<string>,
   cap: number = MAX_AUTO_PER_DOCUMENT,
 ): string[] {
   if (autosNewestFirst.length <= cap) return []
   return autosNewestFirst
     .slice(cap)
-    .filter((r) => r.restoredFrom === null && !referenced.has(r.id))
+    .filter((r) => !isLineage(r, referenced))
     .map((r) => r.id)
 }
 
-export interface SandwichCandidate {
-  readonly id: string
+export interface SandwichCandidate extends LineageCandidate {
   readonly auto: boolean
 }
 
 /**
  * The automatic checkpoints strictly BETWEEN a document's first and last
  * manual save — the sandwich a person's own saves already bracket, where an
- * automatic one adds a row and no information.
+ * automatic one adds a row and no information. Lineage is spared here as in
+ * the cap pass; `rows` being the whole document, the ids merges name are read
+ * from them.
  *
  * `rows` are every row of the document in the order they are kept (time,
  * then id). A document with fewer than two manual saves has no sandwich and
@@ -60,8 +83,11 @@ export function sandwichedAutoVersionIds(rows: readonly SandwichCandidate[]): st
   const first = manual[0]
   const last = manual.at(-1)
   if (first === undefined || last === undefined) return []
+  const referenced = new Set(
+    rows.flatMap((row) => (row.restoredFrom === null ? [] : [row.restoredFrom])),
+  )
   return rows
     .slice(first + 1, last)
-    .filter((row) => row.auto)
+    .filter((row) => row.auto && !isLineage(row, referenced))
     .map((row) => row.id)
 }
