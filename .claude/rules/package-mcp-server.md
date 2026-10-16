@@ -97,13 +97,13 @@ scan says.
   browser twin's first version could not fail at all.
 - **A route refuses in JSON, and `c.notFound()` does not**
   (`tools/biome-plugins/route-refusal-shapes.grit`, scoped to
-  `server/routes/**`). Hono's built-in 404 answers `text/plain`, so a caller
+  `server/routes/**` and server-core's source). Hono's built-in 404 answers `text/plain`, so a caller
   parsing the body gets a SyntaxError instead of the reason — the shape the
   files router shipped until the fuzz lane found it. The lint rule is the
   rung that stops a new one being written; it caught one live instance, the
-  disabled `/api/debug` router. It is scoped to `routes/` because
-  `c.notFound()` is CORRECT twice outside `routes/`: the two UI catch-alls
-  in `app.ts` serve a browser. An `/api` path nothing routes is answered by
+  disabled `/api/debug` router. It is scoped to the route code because
+  `c.notFound()` is CORRECT outside it: `mountServerModeWebApp`'s UI
+  catch-all serves a browser. An `/api` path nothing routes is answered by
   `createApp`'s `app.notFound` (`answerNotFound`) as JSON `not_found`. An
   uncaught throw is server-core's `answerUnhandled`, mounted by `createApp`
   and `createServer` alike: JSON 500 `internal_error`, or 503 `database_busy`
