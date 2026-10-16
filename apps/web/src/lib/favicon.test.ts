@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { isNotKeeping, type SessionHealth, sessionHealthOf } from './connection-state.js'
 import {
   applyFavicon,
   browserFaviconStatus,
   daemonFaviconStatus,
+  type FaviconStatus,
   projectRectsToBoard,
   resolveRectColor,
   STATIC_FAVICON_HREF,
@@ -100,11 +102,35 @@ describe('resolveRectColor', () => {
 describe('status mappings', () => {
   // A healthy keeper is QUIET — no dot — for the same reason the shell mark
   // draws none: the routine state asks nothing of a tab strip.
-  it('daemon: quiet while synced, transport trouble shows, auth beats all', () => {
-    const base = { authError: false, syncStatus: 'connected' as const }
-    expect(daemonFaviconStatus(base)).toBe('quiet')
-    expect(daemonFaviconStatus({ ...base, syncStatus: 'reconnecting' })).toBe('syncing')
-    expect(daemonFaviconStatus({ ...base, authError: true })).toBe('offline')
+  // Every session health, so a new one cannot reach the tab unjudged.
+  const DAEMON_EXPECTED = {
+    synced: 'quiet',
+    reconnecting: 'syncing',
+    'sync-off': 'offline',
+    'write-failed': 'unsaved',
+  } as const satisfies Record<SessionHealth, FaviconStatus>
+  const healths = Object.keys(DAEMON_EXPECTED) as SessionHealth[]
+
+  it.each(healths)('daemon: the %s session reads as its tab status', (session) => {
+    expect(daemonFaviconStatus(session)).toBe(DAEMON_EXPECTED[session])
+  })
+
+  it('daemon: a keeper that is not keeping never reads quiet or syncing', () => {
+    const notKeeping = healths.filter((session) => isNotKeeping({ keeper: 'daemon', session }))
+    expect(notKeeping.length).toBeGreaterThan(0)
+    for (const session of notKeeping) {
+      expect(['quiet', 'syncing']).not.toContain(daemonFaviconStatus(session))
+    }
+  })
+
+  it('daemon: a connected session whose write failed reads unsaved', () => {
+    const writeFailed = {
+      kind: 'degraded',
+      reason: 'write-failed',
+      message: 'The daemon did not take this write',
+      lastSavedAt: null,
+    } as const
+    expect(daemonFaviconStatus(sessionHealthOf(false, 'connected', writeFailed))).toBe('unsaved')
   })
 
   it('browser: the storage judgement maps one-to-one, ok being quiet', () => {
