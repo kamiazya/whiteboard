@@ -1,4 +1,5 @@
 import type {
+  AuthRefusalCause,
   DocListener,
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
@@ -42,6 +43,7 @@ function follow() {
     subscribedTo: () => subscribedTo,
     frame: () => listener?.onUpdate(new Uint8Array([1])),
     connection: (connected: boolean) => listener?.onConnectionChange?.(connected),
+    refused: (cause: AuthRefusalCause) => listener?.onAuthRefused?.(cause),
   }
 }
 
@@ -101,6 +103,34 @@ describe('followWorkspaceWrites', () => {
     f.connection(true)
     vi.advanceTimersByTime(1000)
     expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'stream',
+    'subscribe',
+  ] as const)('reads once when the daemon refuses the %s, so the list meets the refusal', (cause) => {
+    const f = follow()
+    f.connection(true)
+    vi.advanceTimersByTime(1000)
+    f.onMoved.mockClear()
+
+    f.connection(false)
+    f.refused(cause)
+    vi.advanceTimersByTime(60)
+    expect(f.onMoved).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not read again for a refused write, since following needs no write scope', () => {
+    const f = follow()
+    f.connection(true)
+    vi.advanceTimersByTime(1000)
+    f.onMoved.mockClear()
+
+    f.refused('push')
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).not.toHaveBeenCalled()
   })
 
   it('cancels a read still waiting out a burst when it is stopped', () => {

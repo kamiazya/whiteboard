@@ -69,21 +69,27 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
   story, the spark on the OG card). Do not use it decoratively; its meaning
   is the point.
 - **Badges** — the small round dot on a control, ringed in the page
-  background — carry the spark too, for the same reason the syncing dot
-  does: a badge says the system has something for you. Two exist, the
+  background — carry the spark too: a badge says the system has something
+  for you. Two exist, the
   settings nudge ("a setup step is waiting") and the card's
   changed-since-you-opened-it dot, and `badge-colour-surface.test.ts` holds
   them to one literal so a third cannot invent a second blue. Note the
   settings nudge stretches the spark's meaning further than the card's does
   — a setup step is not the AI acting — so if the spark is ever reserved
   more strictly, that badge is the one to move.
-- **Status colors** (favicon dot): green `#16a34a` saved / amber `#d97706`
-  unsaved / blue `#3b6ecc` syncing / gray + **dashed frame** + faded mark =
-  offline. These are *state* colors, not accents; the syncing dot reuses
-  the spark's hue deliberately — "the system is at work" is the same
-  semantic family as the AI acting. The dashed frame is the load-bearing
-  metaphor: the frame is the connection, and offline breaks it. Legible
-  even at 16px.
+- **Status colors** (favicon dot): **no dot** while quiet — writes land and
+  the session is up, which asks nothing of a tab strip / amber `#d97706`
+  unsaved (a write that is stuck) and syncing (a session reconnecting) /
+  gray `#7c7c7c` + **dashed frame** + faded mark = offline (a refused write
+  or a rejected session). These are *state* colors, not accents, and none
+  of them is the spark: a routine state painted in colour is what makes a
+  status surface restless, so saved and saving draw nothing. The dashed
+  frame is the load-bearing metaphor: the frame is the connection, and
+  offline breaks it. Legible even at 16px.
+- **The OS app badge** (the installed app's icon) carries no colour, so it
+  encodes one thing only: the state asks for the user's return — what they
+  typed is in this tab and nowhere else, or a browser edit is stuck unsaved.
+  Otherwise there is no badge.
 - **The app-header mark carries state too**, and takes its tones from the
   app chrome's amber rather than from the favicon's — the header sits
   inside the themed page, where `emerald-500` / `amber-500` already mean
@@ -105,8 +111,9 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
 In-app chrome state colors are DESIGN.md's domain and use a different
 palette (emerald/amber on the connection chip — picked against chrome
 surfaces, not a 16px tab strip). What the favicon mirrors is the header's
-*signals* (`useStorageHealth`, sync status), never its exact colors, so tab
-and header always agree on state even where their palettes differ.
+*signal* — the page's `ConnectionState`, read through `faviconStatusOf` —
+never its exact colors, so tab and header always agree on state even where
+their palettes differ.
 
 ## Motion grammar
 

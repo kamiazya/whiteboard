@@ -53,7 +53,7 @@ export function sessionHealthOf(
  * landed. It is an arm of its own rather than `daemon` with another session
  * value because no session runs — and a refused append there is the one
  * copy of the edits failing, which the tab-wide signals must see, the tab
- * icon and app badge among them (`faviconStatusOf`, `updateAppBadge`).
+ * icon and app badge among them (`faviconStatusOf`, `createAppBadgeWriter`).
  */
 export type ConnectionState =
   | { readonly keeper: 'browser'; readonly storage: StorageHealth }
@@ -80,6 +80,18 @@ export function isNotKeeping(state: ConnectionState): boolean {
     return state.session === 'sync-off' || state.session === 'write-failed'
   }
   return state.storage === 'failed'
+}
+
+/**
+ * The state asks for the person's return and for them not to leave yet: the
+ * keeper is not keeping, or a browser edit has stayed unsaved past any write
+ * (`stuck`). What the app badge and the leave prompt both key on, so the
+ * badge never says "come back" to a tab that would close without asking.
+ * Unlike the states `isNotKeeping` names, a stuck edit does not hold a
+ * waiting reload (`nothingHeldInTab`): reloading is its panel's own way out.
+ */
+export function asksForReturn(state: ConnectionState): boolean {
+  return isNotKeeping(state) || (state.keeper === 'browser' && state.storage === 'stuck')
 }
 
 /**

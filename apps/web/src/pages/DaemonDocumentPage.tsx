@@ -10,7 +10,6 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useAppBadge } from '../hooks/useFavicon.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
@@ -374,10 +373,9 @@ function useDaemonDocument(
     documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
     refusal: controller.refusal,
   })
-  // One state feeds the tab, the badge and the shell mark.
+  // One state feeds the tab and the shell, which raises the badge from it.
   const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(pageState))
   const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
-  useAppBadge(connection)
   useDocumentFavicon({
     settingsStore,
     documentId: contentDocumentId ?? null,

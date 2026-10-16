@@ -44,6 +44,12 @@ function inBursts(onMoved: () => void): { soon: () => void; cancel: () => void }
  * that dropped and came back: frames sent while it was away are not replayed,
  * so "nothing arrived" says nothing about the list.
  *
+ * A refused stream or subscription calls it once as well: the source stops
+ * asking, so nothing arrives again and the list would read as live while it
+ * no longer follows anything. The read meets the same refusal and the page
+ * shows its failure. A refused WRITE does not, because following needs no
+ * write scope and the frames keep coming.
+ *
  * Answers the unsubscribe, which also cancels a call still waiting out the
  * burst.
  */
@@ -57,6 +63,9 @@ export function followWorkspaceWrites(
     onUpdate: soon,
     onMessage: () => {},
     onConnectionChange: routingTransitions({ first: soon, resumed: soon }),
+    onAuthRefused: (cause) => {
+      if (cause !== 'push') soon()
+    },
   })
   return () => {
     cancel()

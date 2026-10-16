@@ -1,14 +1,16 @@
 // The tab icon over a real document kept in this browser: the page feeds the
 // favicon from the same connection state it publishes to the shell, so a
 // write the store refuses draws the offline icon in the tab strip — the
-// surface someone sees with the tab in the background — and sets the installed
-// app's badge, since the edits are now in this tab and nowhere else. The `dot`
-// style keeps the expected icon independent of the document's outline.
+// surface someone sees with the tab in the background — and the frame's
+// notices set the installed app's badge from that state, since the edits are
+// now in this tab and nowhere else. The `dot` style keeps the expected icon
+// independent of the document's outline.
 
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppShell } from '../components/AppShell.js'
+import { KeeperNotices } from '../components/connection/KeeperNotices.js'
 import { renderFavicon } from '../lib/favicon.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { resetShellStatusForTests } from '../lib/shell-status-store.js'
@@ -48,6 +50,7 @@ describe('the browser page tab icon', () => {
     rtlRender(
       <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <AppShell daemon={false} />
+        <KeeperNotices />
         <BrowserDocumentPage store={new FoldingBrowserIndex()} />
       </MemoryRouter>,
     )

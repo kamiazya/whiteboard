@@ -1,8 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as favicon from '../lib/favicon.js'
-import { stubAppBadge } from '../test-utils/app-badge.js'
-import { useAppBadge, useFavicon } from './useFavicon.js'
+import { useFavicon } from './useFavicon.js'
 
 // The dynamic favicon exists only while a canvas page is mounted. Every
 // other surface (gallery, error pages) must see the static icon —
@@ -33,19 +32,6 @@ describe('useFavicon lifecycle', () => {
     const links = document.head.querySelectorAll('link[rel="icon"]')
     expect(links).toHaveLength(1)
     expect(links[0]?.getAttribute('href')).toBe(favicon.STATIC_FAVICON_HREF)
-  })
-
-  it('clears the app badge on unmount, so leaving unsaved work does not keep it', () => {
-    const badge = stubAppBadge()
-    try {
-      const { unmount } = renderHook(() => useAppBadge({ keeper: 'browser', storage: 'failed' }))
-      expect(badge.set).toHaveBeenCalledTimes(1)
-      expect(badge.clear).not.toHaveBeenCalled()
-      unmount()
-      expect(badge.clear).toHaveBeenCalledTimes(1)
-    } finally {
-      badge.restore()
-    }
   })
 
   it('does not install a broken icon where canvas 2D is unavailable (jsdom)', () => {

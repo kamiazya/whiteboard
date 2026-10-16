@@ -1,7 +1,5 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect } from 'react'
-import { updateAppBadge } from '../lib/app-badge.js'
-import type { ConnectionState } from '../lib/connection-state.js'
 import {
   applyFavicon,
   type FaviconRect,
@@ -41,16 +39,4 @@ export function useFavicon({
   }, [style, status, rects, symbol])
 
   useEffect(() => () => applyFavicon(null), [])
-}
-
-/**
- * The installed app's badge (Badging API), from the same state the page
- * publishes to the shell: set while the keeper is not keeping, on every
- * keeper. Its own hook rather than useFavicon's, because the favicon's status
- * cannot answer it — a refused browser write draws `offline`. Unmount clears
- * it, so leaving a page that held unsaved work does not keep the badge.
- */
-export function useAppBadge(state: ConnectionState): void {
-  useEffect(() => updateAppBadge(state), [state])
-  useEffect(() => () => updateAppBadge(null), [])
 }

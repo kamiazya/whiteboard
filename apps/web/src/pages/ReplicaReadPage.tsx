@@ -43,7 +43,7 @@ import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTr
 import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
-import { useAppBadge, useFavicon } from '../hooks/useFavicon.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
@@ -470,8 +470,8 @@ const NO_OUTLINE: readonly FaviconRect[] = []
 /**
  * Whether the replica's last save landed, said to every audience: the page,
  * through the notice below; the shell, through its one store — the way the
- * document pages publish theirs; and the tab icon and app badge, from the
- * same state. The tab-wide readers (the leave prompt, the unasked reload a
+ * document pages publish theirs; and the tab icon, from the same state. The
+ * tab-wide readers (the leave prompt, the app badge, the unasked reload a
  * waiting update would take, the shell mark) read only that store, so a
  * failure kept to this page would let a reload drop the only copy of the
  * edits.
@@ -494,7 +494,6 @@ function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetr
     return () => setShellConnection(null)
   }, [state])
   useFavicon({ style: 'dot', status: faviconStatusOf(state), rects: NO_OUTLINE })
-  useAppBadge(state)
   return failed ? <ReplicaSaveFailedNotice onRetry={onRetry} /> : null
 }
 
