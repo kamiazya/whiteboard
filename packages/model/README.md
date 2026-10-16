@@ -11,10 +11,11 @@ rendering or serialization. Private; not published to npm.
 - `ids.ts` — document and workspace identity (canonical ULIDs, the workspace
   segment and display name, a document's path) and the node ID schema.
 - `document-kind.ts` — what a document is, and so which structure it carries.
-- `facets.ts` — core facets (`type`/`title`/`tags`/`view`), the
-  `{domain}/{version}`-keyed extension facet bucket, and `facetsRaw` for
-  unrecognized root frontmatter keys. The schema layer enforces that a key
-  can never legally live in more than one of these buckets.
+- `facets.ts` — core facets (`type`/`title`/`tags`/`view`), the extension
+  facet bucket keyed `{namespace}.{name}/v{n}` (`EXTENSION_FACET_KEY_PATTERN`,
+  ADR-0013), and `facetsRaw` for unrecognized root frontmatter keys. The
+  schema layer enforces that a key can never legally live in more than one
+  of these buckets.
 - `spatial.ts` — JSON Canvas 1.0-aligned node/edge schemas plus the
   `x-whiteboard` namespaced extension (canvas embeds only).
 - `markdown.ts` — the markdown-format document envelope (plain-text body).
