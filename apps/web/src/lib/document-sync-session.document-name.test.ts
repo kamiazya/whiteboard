@@ -4,10 +4,6 @@
  * note after its heading, an agent's rename, another tab's — reaches the open
  * page as the record changes, with no request of its own.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   setWorkspaceDocumentName,
@@ -15,32 +11,14 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import { openTestSession } from '../test-utils/document-sync-session.js'
 
 const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 function openSession(contentDocumentId?: string) {
-  let handlers: DocumentBackendHandlers | null = null
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () => Promise.resolve(),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange: () => {},
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-    ...(contentDocumentId === undefined ? {} : { contentDocumentId }),
+  return openTestSession({
+    deps: contentDocumentId === undefined ? {} : { contentDocumentId },
   })
-  session.connect()
-  return { session, handlers: () => handlers as unknown as DocumentBackendHandlers }
 }
 
 function workspaceRecord(name?: string): LoroDoc {

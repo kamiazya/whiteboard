@@ -231,6 +231,33 @@ describe('readRepoSources over a fixture checkout', () => {
   })
 })
 
+describe('the script scan over a fixture checkout', () => {
+  it('reads nothing under a .wrangler directory, whatever wrangler names inside it', () => {
+    // `wrangler pages dev` writes bundles there, gitignored; read by the size
+    // ledger, a large one would block a push of code that is itself fine.
+    const root = mkdtempSync(join(tmpdir(), 'scan-roots-scripts-'))
+    try {
+      const files = [
+        'apps/web/scripts/kept.mjs',
+        'apps/web/scripts/kept.ts',
+        'apps/web/.wrangler/pages-shim.js',
+        'apps/web/.wrangler/state/v3/entry.ts',
+      ]
+      for (const file of files) {
+        mkdirSync(join(root, file, '..'), { recursive: true })
+        writeFileSync(join(root, file), '')
+      }
+      for (const dir of ['packages', 'tests', 'tools', '.claude/scripts']) {
+        mkdirSync(join(root, dir), { recursive: true })
+      }
+      expect(scriptFiles(root)).toEqual(['apps/web/scripts/kept.mjs'])
+      expect(scriptTypeScriptFiles(root)).toEqual(['apps/web/scripts/kept.ts'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('readWorkspaceEntries', () => {
   it('maps every package entry to the source file it lands on', () => {
     const entries = readWorkspaceEntries()

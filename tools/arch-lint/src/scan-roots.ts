@@ -136,13 +136,19 @@ export const SCAN_ROOTS: readonly string[] = [
  */
 const SCRIPT_ROOTS: readonly string[] = ['apps', 'packages', 'tests', 'tools', '.claude/scripts']
 
-/** Directories under those roots that hold no script of this repo's own. */
+/**
+ * Directories under those roots that hold no script of this repo's own.
+ * `.wrangler` is the Cloudflare CLI's generated state and bundles (`wrangler
+ * pages dev` writes there), named whole rather than left to its `tmp`
+ * subdirectory's name, which is wrangler's choice and not this repo's.
+ */
 const SCRIPT_SKIPPED_DIRS: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
   'tmp',
   '.git',
   'public',
+  '.wrangler',
 ])
 
 /**
@@ -153,8 +159,8 @@ const SCRIPT_SKIPPED_DIRS: ReadonlySet<string> = new Set([
  * its own filter. Kept as separate lists, the size ledger's roots left every
  * app's `scripts/`, `tools/*.mjs` and `.claude/scripts` outside the budget.
  */
-export function scriptFiles(): string[] {
-  return walkScriptRoots((path) => /\.(mjs|cjs|js)$/.test(path))
+export function scriptFiles(repoRoot: string = REPO_ROOT): string[] {
+  return walkScriptRoots((path) => /\.(mjs|cjs|js)$/.test(path), repoRoot)
 }
 
 /**
@@ -165,21 +171,22 @@ export function scriptFiles(): string[] {
  * plain Node, so without this list a `.ts` script sat in neither and grew
  * past the budget unwatched.
  */
-export function scriptTypeScriptFiles(): string[] {
+export function scriptTypeScriptFiles(repoRoot: string = REPO_ROOT): string[] {
   const sourceRoots = SCAN_ROOTS.map((root) => `${root.replaceAll('\\', '/')}/`)
   return walkScriptRoots(
     (path) => /\.(m|c)?tsx?$/.test(path) && !/\.d\.(m|c)?ts$/.test(path),
+    repoRoot,
   ).filter((path) => !sourceRoots.some((root) => path.startsWith(root)))
 }
 
-function walkScriptRoots(include: (absolutePath: string) => boolean): string[] {
+function walkScriptRoots(include: (absolutePath: string) => boolean, repoRoot: string): string[] {
   return SCRIPT_ROOTS.flatMap((root) =>
-    walk(join(REPO_ROOT, root), {
-      include: (path) => include(path) && !isExcludedPath(path),
+    walk(join(repoRoot, root), {
+      include: (path) => include(path) && !isExcludedPath(path, repoRoot),
       skip: (_path, name) => SCRIPT_SKIPPED_DIRS.has(name),
     }),
   )
-    .map((path) => relativeToRepo(path))
+    .map((path) => relativeToRepo(path, repoRoot))
     .sort()
 }
 

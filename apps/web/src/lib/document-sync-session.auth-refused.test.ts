@@ -6,34 +6,20 @@
  * know is that their changes are not being kept, which the write path
  * already says.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserPersistenceState } from './browser-persistence-state.js'
+import {
+  flushMicrotasks,
+  openTestSession,
+  snapshotOf,
+} from '../test-utils/document-sync-session.js'
 import { sessionHealthOf } from './connection-state.js'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
-import type { SyncStatus } from './document-sync-types.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
   edges: [],
-}
-
-function snapshotOf(value: SpatialCanvas): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, value)
-  return doc.export({ mode: 'snapshot' })
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 30; i++) await Promise.resolve()
 }
 
 afterEach(() => {
@@ -42,44 +28,28 @@ afterEach(() => {
 
 /** A session over a backend whose pushes never settle, as a refused one's do not. */
 function openSession() {
-  let handlers: DocumentBackendHandlers | null = null
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () => new Promise<void>(() => {}),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const persistence: BrowserPersistenceState[] = []
-  const statuses: SyncStatus[] = []
   let authErrors = 0
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({
-      onAuthError: () => {
-        authErrors += 1
-      },
-    }),
-    onStatusChange: (status) => statuses.push(status),
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-    onPersistenceChange: (state) => persistence.push(state),
+  const { session, handlers, statuses, persistenceStates } = openTestSession({
+    push: () => new Promise<void>(() => {}),
+    snapshot: snapshotOf(canvas),
+    deps: {
+      getOptions: () => ({
+        onAuthError: () => {
+          authErrors += 1
+        },
+      }),
+    },
   })
-  session.connect()
-  handlers!.onSnapshot(snapshotOf(canvas))
   return {
     session,
-    handlers: () => handlers!,
+    handlers,
     authErrors: () => authErrors,
     // What a daemon-kept page derives from the same three facts.
     health: () =>
       sessionHealthOf(
         authErrors > 0,
         statuses.at(-1) ?? 'idle',
-        persistence.at(-1) ?? { kind: 'saved', lastSavedAt: null },
+        persistenceStates.at(-1) ?? { kind: 'saved', lastSavedAt: null },
       ),
   }
 }

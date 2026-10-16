@@ -68,7 +68,12 @@ describe('useDaemonDocumentBackend', () => {
   })
 
   it('uses an injected backend and gives it no content id', () => {
-    const injected = { name: 'injected' } as unknown as DocumentBackend
+    const injected = {
+      connect() {},
+      disconnect() {},
+      pushLocalUpdate() {},
+      sendClientReady() {},
+    } satisfies DocumentBackend
     const { result } = renderHook(() =>
       useDaemonDocumentBackend(options({ createBackend: () => injected })),
     )

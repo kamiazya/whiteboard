@@ -350,13 +350,15 @@ function useDaemonDocument(
       resolveOpenDocumentSymbol({ kind: documentKind, canvas: canvasValue, facets: sync.facets }),
     [documentKind, canvasValue, sync.facets],
   )
+  // One judgement feeds both the tab and the shell mark.
+  const session = sessionHealthOf(authError, syncStatus, persistence)
   useDocumentFavicon({
     settingsStore,
     documentId: contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    status: daemonFaviconStatus({ authError, syncStatus }),
+    status: daemonFaviconStatus(session),
     symbol: documentSymbol,
   })
 
@@ -365,15 +367,9 @@ function useDaemonDocument(
   // unmount — an index page has no live session, and a latched chip would
   // keep claiming one.
   useEffect(() => {
-    setShellConnection({
-      state: {
-        keeper: 'daemon',
-        session: sessionHealthOf(authError, syncStatus, persistence),
-      },
-      daemonBaseUrl,
-    })
+    setShellConnection({ state: { keeper: 'daemon', session }, daemonBaseUrl })
     return () => setShellConnection(null)
-  }, [authError, syncStatus, persistence, daemonBaseUrl])
+  }, [session, daemonBaseUrl])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one

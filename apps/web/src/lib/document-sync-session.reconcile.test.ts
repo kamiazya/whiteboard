@@ -4,16 +4,12 @@
  * schema cannot read, so a write that treated every stored id absent from it
  * as removed would erase a newer client's records as an op that ships.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeSpatialCanvas, writeSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
+import { openTestSession } from '../test-utils/document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
@@ -28,27 +24,7 @@ function snapshotWithUnreadable(): Uint8Array {
 }
 
 function openSession(snapshot: Uint8Array) {
-  let handlers: DocumentBackendHandlers | null = null
-  const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-      h.onConnected()
-    },
-    disconnect() {},
-    pushLocalUpdate: () => Promise.resolve(),
-    sendClientReady() {},
-  } as unknown as DocumentBackend
-  const session = createDocumentSyncSession(backend, {
-    getOptions: () => ({}),
-    onStatusChange: () => {},
-    onBackendError: () => {},
-    onRestoreChange: () => {},
-    dispatchIdentityEvent: () => {},
-    generations: createGenerationCounters(),
-  })
-  session.connect()
-  handlers!.onSnapshot(snapshot)
-  return { session, handlers: () => handlers! }
+  return openTestSession({ snapshot })
 }
 
 function storedNodeIds(session: ReturnType<typeof openSession>['session']): string[] {

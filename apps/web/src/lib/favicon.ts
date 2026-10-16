@@ -30,7 +30,7 @@ export type FaviconStyle = 'minimap' | 'dot'
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { LUCIDE_ICONS } from '@kamiazya/whiteboard-plugin-visual'
-import type { SyncStatus } from './document-sync-types.js'
+import type { SessionHealth } from './connection-state.js'
 import { fitLargestRects } from './spatial/minimap.js'
 import type { StorageHealth } from './storage-health.js'
 
@@ -59,21 +59,20 @@ export function resolveRectColor(color: string | undefined): string {
 }
 
 /**
- * Status for the daemon document page: the live session's health, and
- * nothing about the document's own edits — the daemon's writes are sent
- * over the socket and never acknowledged, so there is no landed/unlanded
- * fact to draw. A rejected session outranks a dropped one.
+ * Status for the daemon document page: the session health the shell mark
+ * draws, so the tab and the shell cannot disagree. A write the daemon did
+ * not take reads `unsaved` (the session reports a landed write and a failed
+ * one alike), the way a stuck browser write does; a rejected session is
+ * `offline`.
  */
-export function daemonFaviconStatus({
-  authError,
-  syncStatus,
-}: {
-  authError: boolean
-  syncStatus: SyncStatus
-}): FaviconStatus {
-  if (authError) return 'offline'
-  if (syncStatus !== 'connected') return 'syncing'
-  return 'quiet'
+export function daemonFaviconStatus(session: SessionHealth): FaviconStatus {
+  const by: Record<SessionHealth, FaviconStatus> = {
+    synced: 'quiet',
+    reconnecting: 'syncing',
+    'sync-off': 'offline',
+    'write-failed': 'unsaved',
+  }
+  return by[session]
 }
 
 /**
