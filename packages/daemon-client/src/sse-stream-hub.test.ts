@@ -457,6 +457,27 @@ describe('SseStreamHub', () => {
         hub.close()
       })
 
+      it('declares readiness on a reconnect only for the documents it asks for again', async () => {
+        // The new stream never carries the refused document, so its readiness
+        // would address a routing that does not exist, under the credential
+        // that was just refused.
+        const { fake, hub, live } = await refusedOnce()
+        hub.sendMessage('gone/b', { type: 'client_ready' })
+        hub.sendMessage('live/a', { type: 'client_ready' })
+        fake.endStream()
+        await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(2))
+        const replayed = () =>
+          fake
+            .messageBodies()
+            .map((b) => JSON.parse(b) as { streamId: string; doc: string })
+            .filter((m) => m.streamId === 'server-2')
+            .map((m) => m.doc)
+        await vi.waitFor(() => expect(replayed()).toContain('live/a'))
+
+        expect(replayed()).not.toContain('gone/b')
+        hub.close()
+      })
+
       it('hands a joiner its unsubscribe even when its refusal listener throws', async () => {
         const { hub } = await refusedOnce()
         const throwing = vi.fn(() => {
@@ -516,6 +537,23 @@ describe('SseStreamHub', () => {
 
     expect(refused).toHaveBeenCalledTimes(1)
     expect(other).not.toHaveBeenCalled()
+    hub.close()
+  })
+
+  it('still asks for a document on a reconnect after a push for it was refused', async () => {
+    // Reading and writing are separate scopes: a credential holding only the
+    // read one is refused every push and still entitled to the stream, so a
+    // refused push must not stop the document being followed.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: () => {} })
+    const asks = () => fake.subscribeBodies().filter((b) => b.includes('"subscribe":["w/a"]'))
+    await vi.waitFor(() => expect(asks()).toHaveLength(1))
+    fake.refuse({ update: 403 })
+    await expect(hub.push('w/a', new Uint8Array([1]))).rejects.toThrow('403')
+
+    fake.endStream()
+    await vi.waitFor(() => expect(asks()).toHaveLength(2))
     hub.close()
   })
 

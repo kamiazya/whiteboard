@@ -340,6 +340,9 @@ export class SseStreamHub implements SseStreamSource {
     // well: the stream can stay open under a credential the daemon no longer
     // accepts for writes (a membership revoked mid-session), so the push is
     // the only place that refusal is visible.
+    // Announced, never marked on the entry: writing needs a scope reading does
+    // not, so a credential refused every push may still follow the document,
+    // and a later stream must keep asking for it.
     if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)])
     // A refusal of the BYTES is told apart from the rest, with the keeper's
     // reason: sending them again gets the same answer, so a caller that
@@ -583,7 +586,8 @@ export class SseStreamHub implements SseStreamSource {
     const docs = [...this.docs].filter(([, entry]) => !entry.authRefused).map(([doc]) => doc)
     if (docs.length > 0) void this.follow(docs)
     for (const [doc, entry] of this.docs) {
-      if (!entry.ready) continue
+      // A refused document is not on this stream, so its readiness has no routing to apply to.
+      if (!entry.ready || entry.authRefused) continue
       void this.post(syncMessageApiUrl(), {
         streamId: payload.streamId,
         doc,
