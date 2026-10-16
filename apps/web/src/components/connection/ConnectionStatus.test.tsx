@@ -112,6 +112,25 @@ describe('ConnectionStatus chip', () => {
     expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
+  // A daemon page that never opened a session is DRAWN as sync off — the same
+  // word, the same panel and the same way out — but it holds nothing, so only
+  // the session that ran may say edits are waiting in this browser.
+  it.each([
+    ['sync-off', true],
+    ['not-opened', false],
+  ] as const)('%s reads as sync off in the chip and the popover', async (session, holds) => {
+    render(<ConnectionStatus state={{ keeper: 'daemon', session }} onWorkInBrowser={vi.fn()} />)
+
+    const chip = screen.getByTestId('shell-mark-trigger')
+    expect(chip.getAttribute('aria-label')).toMatch(/Sync off$/)
+    fireEvent.click(chip)
+    expect(await screen.findByText('Live sync is off')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /work in this browser instead/i })).toBeTruthy()
+    const popover = screen.getByTestId('shell-mark-popover')
+    expect(/edits stay in this browser/i.test(popover.textContent ?? '')).toBe(holds)
+    if (!holds) expect(popover.textContent).toMatch(/nothing is held in this browser/i)
+  })
+
   it('sync-off announces itself to assistive tech without a visual banner', () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} />)
     // A polite live region replaces the old role="alert" banner.

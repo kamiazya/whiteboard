@@ -34,8 +34,7 @@
 import type { ReactNode } from 'react'
 import {
   type ConnectionState,
-  isSyncOff,
-  notKeepingAnnouncement,
+  givenUpAnnouncement,
   type SessionHealth,
 } from '../../lib/connection-state.js'
 import type { ReplicaSaveHealth } from '../../lib/replica-save-queue.js'
@@ -170,11 +169,9 @@ export function ConnectionStatus({
   workspaceMenu,
 }: ConnectionStatusProps) {
   const label = connectionLabel(state)
-  const syncOff = state !== null && isSyncOff(state)
-  // Empty while the keeper is keeping: the region has to exist BEFORE the
-  // message, but an empty one must not claim a name either. Both not-keeping
-  // states announce, because both mean the same thing to the person typing.
-  const announcement = notKeepingAnnouncement(state)
+  // Empty unless the state is drawn given up: the region has to exist BEFORE
+  // the message, but an empty one must not claim a name either.
+  const announcement = givenUpAnnouncement(state)
 
   return (
     <Popover>
@@ -213,7 +210,7 @@ export function ConnectionStatus({
           {children}
         </BrowserStoragePanel>
         <ReplicaCopyPanel state={state} />
-        <SyncOffPanel show={syncOff} onWorkInBrowser={onWorkInBrowser} />
+        <SyncOffPanel state={state} onWorkInBrowser={onWorkInBrowser} />
       </PopoverContent>
     </Popover>
   )

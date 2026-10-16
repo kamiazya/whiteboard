@@ -213,15 +213,20 @@ describe('AppShell', () => {
     expect(screen.getByTestId('settings-nudge')).toBeTruthy()
   })
 
-  it('lights the nudge when the daemon page reports a live auth error', async () => {
+  // Sync off IS the auth error: reconnecting is the only way out of it, so it
+  // counts as disconnected for the attention dot. Transient reconnects do not.
+  // A page that never opened a session has the same only exit and is drawn
+  // the same.
+  it.each([
+    'sync-off',
+    'not-opened',
+  ] as const)('lights the nudge when the daemon page reports %s', async (session) => {
     Object.defineProperty(navigator, 'storage', {
       value: { persisted: () => Promise.resolve(true) },
       configurable: true,
     })
-    // Sync off IS the auth error: reconnecting is the only way out of it, so it
-    // counts as disconnected for the attention dot. Transient reconnects do not.
     setShellConnection({
-      state: { keeper: 'daemon', session: 'sync-off' },
+      state: { keeper: 'daemon', session },
       daemonBaseUrl: 'http://127.0.0.1:3099',
     })
     renderShell(true)
