@@ -30,7 +30,8 @@ export type FaviconStyle = 'minimap' | 'dot'
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { LUCIDE_ICONS } from '@kamiazya/whiteboard-plugin-visual'
-import type { SessionHealth } from './connection-state.js'
+import type { ConnectionState, SessionHealth } from './connection-state.js'
+import type { ReplicaSaveHealth } from './replica-save-queue.js'
 import { fitLargestRects } from './spatial/minimap.js'
 import type { StorageHealth } from './storage-health.js'
 
@@ -58,35 +59,43 @@ export function resolveRectColor(color: string | undefined): string {
   return preset?.stroke ?? GRAY
 }
 
-/**
- * Status for the daemon document page: the session health the shell mark
- * draws, so the tab and the shell cannot disagree. A write the daemon did
- * not take reads `unsaved` (the session reports a landed write and a failed
- * one alike), the way a stuck browser write does; a rejected session is
- * `offline`.
- */
-export function daemonFaviconStatus(session: SessionHealth): FaviconStatus {
-  const by: Record<SessionHealth, FaviconStatus> = {
-    synced: 'quiet',
-    reconnecting: 'syncing',
-    'sync-off': 'offline',
-    'write-failed': 'unsaved',
-  }
-  return by[session]
+// A healthy keeper is quiet. A write that did not land and is still held for
+// a later one reads `unsaved`, the one state the app badge carries: a stuck
+// browser write; a daemon write the backend reported failed (it reports both
+// outcomes, so a later landed write clears it); a refused append to the
+// offline replica. A refused browser write and a rejected daemon session are
+// `offline`.
+const BROWSER_STATUS: Record<StorageHealth, FaviconStatus> = {
+  ok: 'quiet',
+  stuck: 'unsaved',
+  failed: 'offline',
+}
+const DAEMON_STATUS: Record<SessionHealth, FaviconStatus> = {
+  synced: 'quiet',
+  reconnecting: 'syncing',
+  'sync-off': 'offline',
+  'write-failed': 'unsaved',
+}
+const REPLICA_STATUS: Record<ReplicaSaveHealth, FaviconStatus> = {
+  ok: 'quiet',
+  failed: 'unsaved',
 }
 
 /**
- * Status for the browser page: the same judgement the shell mark draws.
- * `ok` is quiet — the ordinary unsaved moments while typing are not a
- * condition and never reach the tab.
+ * The tab's status, read off the same `ConnectionState` a page publishes to
+ * the shell, so the tab and the shell mark cannot disagree. Total over the
+ * keepers: a keeper added to `ConnectionState` fails to typecheck here until
+ * it says what its tab shows, rather than reaching the shell and not the tab.
  */
-export function browserFaviconStatus(health: StorageHealth): FaviconStatus {
-  const by: Record<StorageHealth, FaviconStatus> = {
-    ok: 'quiet',
-    stuck: 'unsaved',
-    failed: 'offline',
+export function faviconStatusOf(state: ConnectionState): FaviconStatus {
+  switch (state.keeper) {
+    case 'browser':
+      return BROWSER_STATUS[state.storage]
+    case 'daemon':
+      return DAEMON_STATUS[state.session]
+    case 'replica':
+      return REPLICA_STATUS[state.storage]
   }
-  return by[health]
 }
 
 export const STATIC_FAVICON_HREF = '/favicon.svg'

@@ -31,6 +31,7 @@ vi.mock('@kamiazya/whiteboard-canvas-viewer', async (importOriginal) => ({
 }))
 
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
+import { COMMIT_DEBOUNCE_MS } from '../lib/document-sync-session.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { applyCommand } from '../lib/spatial/commands.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -137,7 +138,7 @@ async function edit(
     result.current.onChange(next, command)
   })
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(400)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
   })
 }
 
@@ -231,7 +232,7 @@ describe('useDocumentSync', () => {
     expect(result.current.persistence.kind).toBe('pending')
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(400)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     })
     expect(result.current.persistence.kind).toBe('saved')
     expect(result.current.persistence.lastSavedAt).not.toBeNull()
@@ -264,7 +265,7 @@ describe('useDocumentSync', () => {
     expect(result.current.canvas).toEqual(next)
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(400)
+      await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
     })
 
     expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)

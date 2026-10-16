@@ -174,6 +174,25 @@ describe('ReplicaReadPage save failure', () => {
     expect(getShellConnection()).toBeNull()
   })
 
+  it('sets the app badge while a refused edit is the only copy', async () => {
+    const setAppBadge = vi.fn(() => Promise.resolve())
+    const clearAppBadge = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'setAppBadge', { value: setAppBadge, configurable: true })
+    Object.defineProperty(navigator, 'clearAppBadge', { value: clearAppBadge, configurable: true })
+    try {
+      store.save.mockRejectedValue(new Error('QuotaExceededError'))
+      await openPlanAndEdit()
+      expect(setAppBadge).not.toHaveBeenCalled()
+      await screen.findByRole('alert')
+      await expectLoggedFailure('replica save failed')
+      // jsdom draws no favicon, but the badge is set from the same status.
+      await vi.waitFor(() => expect(setAppBadge).toHaveBeenCalledTimes(1))
+    } finally {
+      Reflect.deleteProperty(navigator, 'setAppBadge')
+      Reflect.deleteProperty(navigator, 'clearAppBadge')
+    }
+  })
+
   it('shows nothing while saves land', async () => {
     store.save.mockResolvedValue(undefined)
     await openPlanAndEdit()

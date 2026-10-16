@@ -10,6 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
@@ -78,6 +79,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  resetShellStatusForTests()
 })
 
 describe('the daemon page answers a requires_person_session refusal', () => {
@@ -125,5 +127,26 @@ describe('the daemon page answers a not_a_member refusal', () => {
     expect(status.textContent).toContain('removed from this workspace')
 
     expect(sentPaths.some((p) => p.includes('/pairing/'))).toBe(false)
+  })
+
+  it('tells the shell sync is off, not that it is reconnecting', async () => {
+    const { fetchDouble } = daemonFetchDouble('not_a_member')
+    vi.stubGlobal('fetch', fetchDouble)
+
+    renderPage(
+      <DaemonDocumentPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspaceId={WORKSPACE_ID}
+        path="board"
+        createBackend={() => new FakeDocumentBackend(seededSnapshot)}
+      />,
+    )
+
+    await screen.findByTestId('replica-state-removed')
+    // No session runs for a removed member, so nothing is reconnecting:
+    // reconnecting as someone admitted is the only way out.
+    await expect
+      .poll(() => getShellConnection()?.state)
+      .toEqual({ keeper: 'daemon', session: 'sync-off' })
   })
 })

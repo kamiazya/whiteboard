@@ -29,11 +29,12 @@ import {
   browserWorkspaceIdOrNull,
   getBrowserWorkspaceId,
 } from '../lib/browser-workspace-id.js'
+import type { ConnectionState } from '../lib/connection-state.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
-import { browserFaviconStatus } from '../lib/favicon.js'
+import { faviconStatusOf } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -383,14 +384,16 @@ function useBrowserDocument(
   // A passive effect runs in a later task, and in between the notice is on
   // screen while every tab-wide reader still answers "nothing held".
   const lastWrittenAt = writes.lastSavedAt
+  const connection = useMemo(
+    (): ConnectionState => ({ keeper: 'browser', storage: storageHealth }),
+    [storageHealth],
+  )
   useLayoutEffect(() => {
-    setShellConnection({ state: { keeper: 'browser', storage: storageHealth }, lastWrittenAt })
+    setShellConnection({ state: connection, lastWrittenAt })
     return () => setShellConnection(null)
-  }, [storageHealth, lastWrittenAt])
+  }, [connection, lastWrittenAt])
 
-  // Tab favicon: the same judgement as the shell mark (quiet unless a write
-  // is stuck or refused), scene content as the minimap — both kinds read off
-  // the session that holds the document.
+  // Tab favicon: the state the shell mark draws, the outline off the session.
   const readDocumentOutlineSource = readOutlineSource
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
   // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
@@ -409,7 +412,7 @@ function useBrowserDocument(
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvas,
     readSource: readDocumentOutlineSource,
-    status: browserFaviconStatus(storageHealth),
+    status: faviconStatusOf(connection),
     symbol: documentSymbol,
   })
 

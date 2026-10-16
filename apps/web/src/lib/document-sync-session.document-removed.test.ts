@@ -20,6 +20,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { heldHandlers } from '../test-utils/document-sync-session.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
   type BackendErrorReason,
@@ -50,11 +51,11 @@ function added(canvas: SpatialCanvas, id: string): [SpatialCanvas, EditorCommand
 }
 
 function openSession() {
-  let handlers: DocumentBackendHandlers | null = null
+  const { hold, handlers } = heldHandlers()
   const pushed: Uint8Array[] = []
   const backend = {
     connect(h: DocumentBackendHandlers) {
-      handlers = h
+      hold(h)
       h.onConnected()
     },
     disconnect() {},
@@ -78,13 +79,11 @@ function openSession() {
   })
   session.connect()
   const peer = workspaceRecord()
-  ;(handlers as unknown as DocumentBackendHandlers).onSnapshot(peer.export({ mode: 'snapshot' }))
+  handlers().onSnapshot(peer.export({ mode: 'snapshot' }))
   const deleteByPeer = () => {
     const from = peer.oplogVersion()
     deleteWorkspaceDocument(peer, { documentId: DOC })
-    ;(handlers as unknown as DocumentBackendHandlers).onRemoteUpdate(
-      peer.export({ mode: 'update', from }),
-    )
+    handlers().onRemoteUpdate(peer.export({ mode: 'update', from }))
   }
   // A restore from the trash re-mints the node under the documentId it had,
   // with the content the trash kept.
@@ -93,9 +92,7 @@ function openSession() {
     createWorkspaceDocumentAtPath(peer, { path: 'design', documentId: DOC, kind: 'spatial' })
     writeSpatialCanvas(documentContainers(peer, DOC), { nodes: [before], edges: [] })
     peer.commit()
-    ;(handlers as unknown as DocumentBackendHandlers).onRemoteUpdate(
-      peer.export({ mode: 'update', from }),
-    )
+    handlers().onRemoteUpdate(peer.export({ mode: 'update', from }))
   }
   return { session, errors, persistence, pushed, deleteByPeer, restoreByPeer }
 }
@@ -372,11 +369,9 @@ describe('a session whose document a peer deletes', () => {
 })
 
 function openReconnecting() {
-  let handlers: DocumentBackendHandlers | null = null
+  const { hold, handlers } = heldHandlers()
   const backend = {
-    connect(h: DocumentBackendHandlers) {
-      handlers = h
-    },
+    connect: hold,
     disconnect() {},
     pushLocalUpdate: () => Promise.resolve(),
     sendClientReady() {},
@@ -392,7 +387,7 @@ function openReconnecting() {
     contentDocumentId: DOC,
   })
   session.connect()
-  const h = handlers as unknown as DocumentBackendHandlers
+  const h = handlers()
   const peer = workspaceRecord()
   h.onSnapshot(peer.export({ mode: 'snapshot' }))
   return {

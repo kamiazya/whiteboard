@@ -32,6 +32,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildSbomSidecar, computeSbomInputFingerprint, sha512Hex } from './sbom-fingerprint.mjs'
+import { preservingWorkspaceInstallState } from './workspace-install-state.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -65,22 +66,26 @@ try {
 // versions are pinned to the same graph that check:release-candidate validated,
 // not re-resolved from ^ / ~ ranges at generation time.
 // --ignore-scripts: no lifecycle scripts needed for SBOM generation.
-const deployResult = spawnSync(
-  'pnpm',
-  [
-    '--filter',
-    '@kamiazya/whiteboard-mcp',
-    'deploy',
-    '--legacy',
-    '--prod',
-    '--ignore-scripts',
-    TMP_DIR,
-  ],
-  {
-    cwd: WORKSPACE_ROOT,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  },
+// The deploy marks the whole workspace prod-only; the wrapper undoes that
+// before any exit, so the developer's next pnpm command keeps devDependencies.
+const deployResult = preservingWorkspaceInstallState(WORKSPACE_ROOT, () =>
+  spawnSync(
+    'pnpm',
+    [
+      '--filter',
+      '@kamiazya/whiteboard-mcp',
+      'deploy',
+      '--legacy',
+      '--prod',
+      '--ignore-scripts',
+      TMP_DIR,
+    ],
+    {
+      cwd: WORKSPACE_ROOT,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  ),
 )
 
 if (deployResult.status !== 0 || deployResult.error) {

@@ -11,8 +11,9 @@ import type { StorageHealth } from './storage-health.js'
 export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-failed'
 
 /**
- * What a daemon-kept page reports from what its session knows. An auth
- * rejection outranks everything, because reconnecting is the only way out of
+ * What a daemon-kept page reports from what its session knows. A refusal —
+ * the credential rejected, or the membership withdrawn, where no session runs
+ * at all — outranks everything, because reconnecting is the only way out of
  * it; then a write that did not land (the session's persistence account, not
  * its `error` status, which an unreadable document reports too); synced is
  * claimed only while the session is connected; everything else — `idle`,
@@ -22,8 +23,9 @@ export function sessionHealthOf(
   authError: boolean,
   status: SyncStatus,
   persistence: BrowserPersistenceState,
+  membershipRefused = false,
 ): SessionHealth {
-  if (authError) return 'sync-off'
+  if (authError || membershipRefused) return 'sync-off'
   if (persistence.kind === 'degraded' && persistence.reason === 'write-failed')
     return 'write-failed'
   return status === 'connected' ? 'synced' : 'reconnecting'
@@ -39,17 +41,19 @@ export function sessionHealthOf(
  *
  * Each keeper's health is the health IT can answer for. The daemon's is the
  * live session (transport liveness, plus whether its writes are landing —
- * the backend reports a landed write and a failed one alike). The browser's is its storage: whether the writes behind the
- * open document are landing (`StorageHealth`, judged from the persistence
- * facts the session reports). Both are quiet when healthy; the shell mark
- * draws only a condition.
+ * the backend reports both outcomes, a landed write and a failed one). The
+ * browser's is its storage: whether the writes behind the open document are
+ * landing (`StorageHealth`, judged from the persistence facts the session
+ * reports). Both are quiet when healthy; the shell mark draws only a
+ * condition.
  *
  * `replica` is the daemon-kept workspace read offline: the daemon is
  * unreachable, so what keeps the edits until it returns is this browser's
  * replica copy, and its health is whether the last append to that copy
  * landed. It is an arm of its own rather than `daemon` with another session
  * value because no session runs — and a refused append there is the one
- * copy of the edits failing, which the tab-wide signals must see.
+ * copy of the edits failing, which the tab-wide signals must see, the tab
+ * icon and app badge among them (`faviconStatusOf`).
  */
 export type ConnectionState =
   | { readonly keeper: 'browser'; readonly storage: StorageHealth }

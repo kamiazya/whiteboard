@@ -11,11 +11,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
+  editAndPush,
   flushMicrotasks,
   openTestSession,
   snapshotOf,
 } from '../test-utils/document-sync-session.js'
-import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const canvas: SpatialCanvas = {
   nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
@@ -36,10 +36,7 @@ it('a failed write is settled by the full re-send a reconnect makes', async () =
 
   daemonUp = false
   handlers().onDisconnected?.()
-  const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-  session.onChange(applyCommand(canvas, edit), edit)
-  await vi.advanceTimersByTimeAsync(300)
-  await flushMicrotasks()
+  await editAndPush(session, canvas, { kind: 'move-node', id: 'n-a', x: 10, y: 20 })
   expect(persistence).toEqual(['pending', 'degraded'])
 
   daemonUp = true

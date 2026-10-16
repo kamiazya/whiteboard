@@ -1,9 +1,9 @@
 /**
  * The tab-identity favicon wiring, shared by the browser and daemon
  * document pages, so the two cannot drift. What stays keeper-specific
- * arrives as VALUES: the
- * status (`browserFaviconStatus` / `daemonFaviconStatus`), the document
- * identity, the revision trigger, and the outline reader.
+ * arrives as VALUES: the status (`faviconStatusOf` over the state the page
+ * publishes to the shell), the document identity, the revision trigger, and
+ * the outline reader.
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'

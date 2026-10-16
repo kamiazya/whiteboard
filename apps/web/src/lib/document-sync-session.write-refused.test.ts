@@ -5,11 +5,7 @@
  * while the page read "saved" and a reload lost all of it. Through the real
  * browser keeper, which refuses a markdown body past its limit.
  */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-  SyncWriteRefusal,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import type { SyncWriteRefusal } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -20,10 +16,12 @@ import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
+import { flushMicrotasks, openTestSession } from '../test-utils/document-sync-session.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
+  COMMIT_DEBOUNCE_MS,
   createDocumentSyncSession,
   createGenerationCounters,
   type DocumentSyncSession,
@@ -38,6 +36,10 @@ vi.mock('./fold-workspace.js', () => ({
 vi.mock('./loro-store.js', () => ({ LoroStore: class {}, touchContentTimestamp: async () => {} }))
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+// These run on real timers, so a wait that spans an edit's commit debounce
+// has to outlast it rather than vitest's one-second default.
+const PAST_THE_DEBOUNCE = { timeout: COMMIT_DEBOUNCE_MS + 1_000 }
 
 function markdownRecord(body: string): LoroDoc {
   const record = new LoroDoc()
@@ -93,13 +95,16 @@ describe('a session whose browser keeper refuses a write', () => {
     await vi.waitFor(() => expect(s.session.getMarkdownBody()).toBe('hello'))
 
     s.typed((text) => text.insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)))
+    await vi.waitFor(
+      () => expect(s.refusals.map((r) => r.code)).toEqual(['markdown_too_large']),
+      PAST_THE_DEBOUNCE,
+    )
     await expectLoggedFailure('refused an update past a text limit')
-    await vi.waitFor(() => expect(s.refusals.map((r) => r.code)).toEqual(['markdown_too_large']))
     // The refused text is gone from the page, not kept as if it were saved.
     await vi.waitFor(() => expect(s.session.getMarkdownBody()).toBe('hello'))
 
     s.typed((text) => text.insert(5, '!'))
-    await vi.waitFor(() => expect(s.stored()).toBe('hello!'))
+    await vi.waitFor(() => expect(s.stored()).toBe('hello!'), PAST_THE_DEBOUNCE)
     await vi.waitFor(() => expect(s.persistence.at(-1)).toBe('saved'))
 
     expect(s.session.getMarkdownBody()).toBe('hello!')
@@ -114,52 +119,37 @@ describe('a session whose keeper answers a refusal from across a round trip', ()
   // and a write failure that was being retried is not one any more, since
   // what it was retrying has been dropped.
   it('reads saved only once the keeper state has replaced its copy', async () => {
-    let handlers: DocumentBackendHandlers | null = null
     let held: () => void = () => {}
     let pushed = false
-    const backend = {
-      connect: (h: DocumentBackendHandlers) => {
-        handlers = h
-        h.onConnected()
-      },
-      disconnect: () => {},
+    const {
+      session,
+      handlers: keeper,
+      persistenceStates: persistence,
+    } = openTestSession({
       // A push the keeper refuses is answered by the refusal and then
       // resolves, the way a backend that recovers on its own answers it.
-      pushLocalUpdate: () =>
+      push: () =>
         new Promise<void>((resolve) => {
           held = resolve
           pushed = true
         }),
-      sendClientReady: () => {},
-    } satisfies DocumentBackend
-    const persistence: BrowserPersistenceState[] = []
-    const session = createDocumentSyncSession(backend, {
-      getOptions: () => ({}),
-      onStatusChange: () => {},
-      onBackendError: () => {},
-      onRestoreChange: () => {},
-      dispatchIdentityEvent: () => {},
-      generations: createGenerationCounters(),
-      contentDocumentId: ID,
-      onPersistenceChange: (state) => persistence.push(state),
+      snapshot: markdownRecord('kept').export({ mode: 'snapshot' }),
+      deps: { contentDocumentId: ID },
     })
-    session.connect()
-    const keeper = () => handlers as unknown as DocumentBackendHandlers
-    keeper().onSnapshot(markdownRecord('kept').export({ mode: 'snapshot' }))
     const type = (text: string) => {
       const binding = session.getBodyBinding()
       binding?.readText(binding.doc)?.insert(0, text)
       binding?.commit()
     }
     type('refused ')
-    await vi.waitFor(() => expect(pushed).toBe(true))
+    await vi.waitFor(() => expect(pushed).toBe(true), PAST_THE_DEBOUNCE)
     // Reported as a failure being retried first, as a worker reports it.
     keeper().onError?.('storage-failure')
     expect(persistence.at(-1)?.kind).toBe('degraded')
     keeper().onWriteRefused?.({ code: 'markdown_too_large', message: 'too long' })
     expect(persistence.at(-1)?.kind).toBe('pending')
     held()
-    for (let turn = 0; turn < 30; turn++) await Promise.resolve()
+    await flushMicrotasks()
     expect(persistence.at(-1)?.kind).toBe('pending')
 
     keeper().onSnapshot(markdownRecord('kept').export({ mode: 'snapshot' }))
