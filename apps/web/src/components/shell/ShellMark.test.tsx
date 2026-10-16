@@ -1,13 +1,11 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ConnectionState } from '../../lib/connection-state.js'
+import type { ConnectionState, SessionHealth } from '../../lib/connection-state.js'
 import { ShellMark } from './ShellMark.js'
 
 afterEach(cleanup)
 
-const DAEMON = (
-  session: 'synced' | 'reconnecting' | 'sync-off' | 'write-failed',
-): ConnectionState => ({
+const DAEMON = (session: SessionHealth): ConnectionState => ({
   keeper: 'daemon',
   session,
 })
@@ -49,6 +47,19 @@ describe('ShellMark', () => {
   ])('paints %s with the attention cap', (_name, state) => {
     render(<ShellMark state={state} />)
     expect(screen.getByTestId('shell-mark-cap').getAttribute('data-tone')).toBe('attention')
+  })
+
+  // A session that never opened holds nothing in the tab, but what the person
+  // sees is the same as sync off: only reconnecting gets them past it.
+  it('paints a daemon session that never opened exactly as sync-off', () => {
+    const { container: off } = render(<ShellMark state={DAEMON('sync-off')} />)
+    const { container: notOpened } = render(<ShellMark state={DAEMON('not-opened')} />)
+    const drawn = (root: HTMLElement) => ({
+      stroke: root.querySelector('[data-testid="shell-mark-stroke"]')?.getAttribute('class'),
+      cap: root.querySelector('[data-testid="shell-mark-cap"]')?.getAttribute('data-shape'),
+    })
+    expect(drawn(notOpened)).toEqual(drawn(off))
+    expect(drawn(off).stroke).toMatch(/wb-mark-broken/)
   })
 
   // The browser's store refusing a write is the browser not keeping — the

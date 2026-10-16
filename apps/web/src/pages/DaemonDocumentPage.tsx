@@ -73,7 +73,8 @@ const pathOf = (document: { readonly path: string }): string => document.path
 /**
  * A load the daemon refused — on membership of either kind — or that failed
  * builds no session, and nothing retries it: the shell reads sync-off, never
- * reconnecting, since only the person acting can get past it.
+ * reconnecting, since only the person acting can get past it — but as
+ * `not-opened`, since with no editor mounted the tab holds nothing to lose.
  */
 const buildsNoSession = (state: DaemonPageState): boolean =>
   state.kind === 'membership-refused' || state.kind === 'load-degraded'

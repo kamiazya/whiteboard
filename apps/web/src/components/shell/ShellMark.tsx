@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   type ConnectionState,
   isNotKeeping,
+  isSyncOff,
   type SessionHealth,
 } from '../../lib/connection-state.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
@@ -70,6 +71,7 @@ function capOf(state: ConnectionState): CapShape | undefined {
     reconnecting: 'filled',
     'sync-off': 'filled',
     'write-failed': 'ring',
+    'not-opened': 'filled',
   }
   return by[state.session]
 }
@@ -125,7 +127,7 @@ function useRecoveryGesture(session: SessionHealth | undefined): boolean {
       setRecovered(false)
       return
     }
-    if (before !== 'reconnecting' && before !== 'sync-off' && before !== 'write-failed') return
+    if (before === undefined || before === 'synced') return
     setRecovered(true)
     const timer = setTimeout(() => setRecovered(false), RECOVERED_MS)
     return () => clearTimeout(timer)
@@ -158,12 +160,17 @@ function MarkCap({ cap }: { cap: 'filled' | 'ring' | undefined }) {
   )
 }
 
+/**
+ * The stroke is broken while the keeper is not keeping, and for sync off
+ * whether or not a session ever opened: the mark shows what the person sees,
+ * not what the tab holds.
+ */
 export function ShellMark({ state, className }: ShellMarkProps) {
   const session = sessionOf(state)
   const storage = storageOf(state)
   const recovered = useRecoveryGesture(session)
   const cap = state === undefined ? undefined : capOf(state)
-  const broken = state !== undefined && isNotKeeping(state)
+  const broken = state !== undefined && (isNotKeeping(state) || isSyncOff(state))
   // Gated on the session as well as on the flag. `useEffect` is PASSIVE — it
   // runs after paint — so between the render that carries the new session and
   // the effect that clears the flag there is a real painted frame showing the

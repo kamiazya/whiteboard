@@ -1,9 +1,15 @@
+import { cleanup, render } from '@testing-library/react'
+import { createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { UnsavedChangesNotice } from '../components/connection/UnsavedChangesNotice.js'
+import { ShellMark } from '../components/shell/ShellMark.js'
+import { stubAppBadge } from '../test-utils/app-badge.js'
+import { createAppBadgeWriter } from './app-badge.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
-  asksForReturn,
   type ConnectionState,
   isNotKeeping,
+  isSyncOff,
   notKeepingAnnouncement,
   type SessionHealth,
   sessionHealthOf,
@@ -39,10 +45,19 @@ describe('the daemon session a page reports', () => {
   ] as const)('authError=%s, status=%s, writeFailed=%s is %s', (authError, status, writeFailed, health) => {
     expect(sessionHealthOf(authError, status, writeFailed ? FAILED : SAVED)).toBe(health)
   })
-  // A withdrawn membership builds no session, so its status never leaves
-  // `idle` — which would otherwise read as a reconnect nothing is making.
-  it('reads a withdrawn membership as sync-off', () => {
-    expect(sessionHealthOf(false, 'idle', SAVED, true)).toBe('sync-off')
+  // A withdrawn membership or a failed load builds no session, so its status
+  // never leaves `idle` — which would otherwise read as a reconnect nothing is
+  // making. It is drawn as sync off, but nothing was opened to hold an edit.
+  it('reads a load that built no session as not-opened, drawn as sync-off', () => {
+    expect(sessionHealthOf(false, 'idle', SAVED, true)).toBe('not-opened')
+    expect(isSyncOff({ keeper: 'daemon', session: 'not-opened' })).toBe(true)
+    expect(notKeepingAnnouncement({ keeper: 'daemon', session: 'not-opened' })).toBe(
+      'Live sync off',
+    )
+  })
+  // A credential refused mid-session may have stranded what was typed.
+  it('reads a refused credential as sync-off even with no session built', () => {
+    expect(sessionHealthOf(true, 'idle', SAVED, true)).toBe('sync-off')
   })
 })
 
@@ -77,22 +92,30 @@ describe('a keeper that is not keeping', () => {
 })
 
 // Every tab-wide signal that answers "is the user's work held only here?",
-// side by side over every arm of every keeper. Each column is read through
-// the predicate its consumer calls, so a consumer that grows a rule of its
-// own disagrees with a row someone wrote down rather than drifting unseen.
-//   mark   — the broken shell mark (`isNotKeeping`)
-//   badge  — the installed app's badge (`asksForReturn`)
-//   reload — a waiting update is held rather than applied (`nothingHeldInTab`)
-//   leave  — the browser asks before the tab goes (`asksForReturn`)
+// side by side over every arm of every keeper. Each column is read off the
+// consumer itself, never off the predicate it is meant to call, so a consumer
+// that grows a rule of its own disagrees with a row someone wrote down rather
+// than drifting unseen.
+//   mark   — `ShellMark` draws its stroke broken
+//   badge  — `createAppBadgeWriter` sets the installed app's badge
+//   reload — `nothingHeldInTab` holds a waiting update rather than apply it
+//   leave  — `UnsavedChangesNotice` cancels `beforeunload`
 // A stuck browser edit asks the person to come back and not to leave, but
-// does not hold a reload: reloading is what its own panel advises.
+// does not hold a reload: reloading is what its own panel advises. A daemon
+// session that never opened is drawn broken like sync off, and holds nothing.
 describe('the tab-wide signals over every connection state', () => {
   type Row = { mark: boolean; badge: boolean; reload: boolean; leave: boolean }
   const NONE: Row = { mark: false, badge: false, reload: false, leave: false }
   const HELD: Row = { mark: true, badge: true, reload: true, leave: true }
   const SIGNALS = {
     browser: { ok: NONE, stuck: { ...NONE, badge: true, leave: true }, failed: HELD },
-    daemon: { synced: NONE, reconnecting: NONE, 'sync-off': HELD, 'write-failed': HELD },
+    daemon: {
+      synced: NONE,
+      reconnecting: NONE,
+      'sync-off': HELD,
+      'write-failed': HELD,
+      'not-opened': { ...NONE, mark: true },
+    },
     replica: { ok: NONE, failed: HELD },
   } as const satisfies {
     browser: Record<StorageHealth, Row>
@@ -115,17 +138,34 @@ describe('the tab-wide signals over every connection state', () => {
     ]),
   ]
 
-  afterEach(() => resetShellStatusForTests())
+  let badge: ReturnType<typeof stubAppBadge> | undefined
+  afterEach(() => {
+    cleanup()
+    badge?.restore()
+    resetShellStatusForTests()
+  })
 
   it.each(
     rows.map(([state, row]) => [JSON.stringify(state), state, row] as const),
   )('%s', (_label, state, row) => {
     setShellConnection({ state })
+    badge = stubAppBadge()
+    createAppBadgeWriter().write(state)
+    const { getByTestId } = render(
+      createElement(
+        'div',
+        null,
+        createElement(ShellMark, { state }),
+        createElement(UnsavedChangesNotice),
+      ),
+    )
+    const leaving = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leaving)
     expect({
-      mark: isNotKeeping(state),
-      badge: asksForReturn(state),
+      mark: /wb-mark-broken/.test(getByTestId('shell-mark-stroke').getAttribute('class') ?? ''),
+      badge: badge.set.mock.calls.length > 0,
       reload: !nothingHeldInTab(),
-      leave: asksForReturn(state),
+      leave: leaving.defaultPrevented,
     }).toEqual(row)
   })
 })

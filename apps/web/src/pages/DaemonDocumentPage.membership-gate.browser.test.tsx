@@ -10,6 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
@@ -117,10 +118,11 @@ describe('the daemon page answers a requires_person_session refusal', () => {
 
     await expect.poll(() => document.body.textContent).toContain('this session is not bound')
     // The refused load builds no session and nothing retries it, so the
-    // shell must not claim a reconnect: signing in is the only way out.
+    // shell must not claim a reconnect: signing in is the only way out. It
+    // is drawn as sync off, and opened nothing that could hold an edit.
     await expect
       .poll(() => getShellConnection()?.state)
-      .toEqual({ keeper: 'daemon', session: 'sync-off' })
+      .toEqual({ keeper: 'daemon', session: 'not-opened' })
   })
 })
 
@@ -165,9 +167,11 @@ describe('the daemon page answers a not_a_member refusal', () => {
 
     await screen.findByTestId('replica-state-removed')
     // No session runs for a removed member, so nothing is reconnecting:
-    // reconnecting as someone admitted is the only way out.
+    // reconnecting as someone admitted is the only way out. Nor is anything
+    // typed here, so the tab does not ask before it goes.
     await expect
       .poll(() => getShellConnection()?.state)
-      .toEqual({ keeper: 'daemon', session: 'sync-off' })
+      .toEqual({ keeper: 'daemon', session: 'not-opened' })
+    expect(nothingHeldInTab()).toBe(true)
   })
 })
