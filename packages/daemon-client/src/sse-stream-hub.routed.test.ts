@@ -12,14 +12,14 @@ import { flush } from './test-utils/flush.js'
 
 /** A daemon whose subscribe answers wait until the case releases them, in order. */
 function heldSubscribes() {
-  const held: (() => void)[] = []
+  const held: ((status: number) => void)[] = []
   let endStream: (() => void) | null = null
   let streamSeq = 0
   const fetch = vi.fn(async (input: string | URL | Request) => {
     const url = String(input)
     if (url.includes('/api/sync/subscribe')) {
-      await new Promise<void>((answer) => held.push(answer))
-      return new Response('{}', { status: 200 })
+      const status = await new Promise<number>((answer) => held.push(answer))
+      return new Response('{}', { status })
     }
     if (url.includes('/api/sync/stream')) {
       const id = `routed-${++streamSeq}`
@@ -39,8 +39,8 @@ function heldSubscribes() {
   return {
     fetch: fetch as unknown as typeof globalThis.fetch,
     held: () => held.length,
-    /** Answer the oldest subscribe still waiting. */
-    answer: () => held.shift()?.(),
+    /** Answer the oldest subscribe still waiting, with `status`. */
+    answer: (status = 200) => held.shift()?.(status),
     endStream: () => endStream?.(),
   }
 }
@@ -182,6 +182,38 @@ describe('SseStreamHub routing', () => {
     daemon.answer()
     daemon.answer()
     await vi.waitFor(() => expect(states).toEqual([false, true]))
+    hub.close()
+  })
+
+  it('takes no refused credential for a released subscription as refusing the one that replaced it', async () => {
+    // A membership granted between the two subscribes is answered by the
+    // second; the first's refusal must not stop every later stream asking.
+    const daemon = heldSubscribes()
+    const hub = new SseStreamHub({
+      fetch: daemon.fetch,
+      baseUrl: 'http://d',
+      retryDelayMs: () => 0,
+    })
+    const off = hub.subscribe('workspace:a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(daemon.held()).toBe(1))
+    off()
+    const refused = vi.fn()
+    hub.subscribe('workspace:a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onAuthRefused: refused,
+    })
+    await vi.waitFor(() => expect(daemon.held()).toBe(3))
+
+    daemon.answer(403)
+    daemon.answer()
+    daemon.answer()
+    await flush()
+    expect(refused).not.toHaveBeenCalled()
+
+    daemon.endStream()
+    // The new stream asks for it again.
+    await vi.waitFor(() => expect(daemon.held()).toBe(1))
     hub.close()
   })
 })

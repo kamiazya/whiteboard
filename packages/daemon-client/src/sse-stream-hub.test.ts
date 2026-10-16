@@ -403,6 +403,61 @@ describe('SseStreamHub', () => {
       hub.close()
     })
 
+    describe('after a workspace refuses the credential', () => {
+      /** A hub following `gone/b` (refused) before `live/a`, so a reconnect asks for `gone/b` first. */
+      async function refusedOnce() {
+        const { fake, fetch, asked } = refusing('gone', 403)
+        const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+        const refused = vi.fn()
+        const live: boolean[] = []
+        const offGone = hub.subscribe('gone/b', { ...quiet, onAuthRefused: refused })
+        hub.subscribe('live/a', { ...quiet, onConnectionChange: (c) => live.push(c) })
+        await vi.waitFor(() => expect(refused).toHaveBeenCalledTimes(1))
+        await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(1))
+        const goneAsks = () => asked.filter((docs) => docs.includes('gone/b')).length
+        return { fake, hub, refused, live, offGone, goneAsks }
+      }
+
+      it('asks for it no more on a reconnect, and reports the refusal once', async () => {
+        // The same credential gets the same answer on every stream, so asking
+        // again only tells the page a refusal it already shows, once per drop.
+        const { fake, hub, refused, live, goneAsks } = await refusedOnce()
+        fake.endStream()
+        // `live/a` is asked after `gone/b`, so its routing on the new stream
+        // means a re-ask for `gone/b` would already have been sent.
+        await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(2))
+        await flush()
+
+        expect(fake.streamOpens()).toBe(2)
+        expect(goneAsks()).toBe(1)
+        expect(refused).toHaveBeenCalledTimes(1)
+        hub.close()
+      })
+
+      it('asks again once the document is released and subscribed afresh', async () => {
+        // Reopening is how a membership granted since is reached.
+        const { hub, refused, offGone, goneAsks } = await refusedOnce()
+        offGone()
+        const again = vi.fn()
+        hub.subscribe('gone/b', { ...quiet, onAuthRefused: again })
+        await vi.waitFor(() => expect(again).toHaveBeenCalledTimes(1))
+
+        expect(goneAsks()).toBe(2)
+        expect(refused).toHaveBeenCalledTimes(1)
+        hub.close()
+      })
+
+      it('tells a listener joining the refused document, without asking again', async () => {
+        const { hub, goneAsks } = await refusedOnce()
+        const joined = vi.fn()
+        hub.subscribe('gone/b', { ...quiet, onAuthRefused: joined })
+
+        expect(joined).toHaveBeenCalledTimes(1)
+        expect(goneAsks()).toBe(1)
+        hub.close()
+      })
+    })
+
     it('says a document is not live when the daemon would not follow it, for a late subscriber too', async () => {
       const { fetch } = refusing('full', 400)
       const hub = new SseStreamHub({ fetch, baseUrl: 'http://d' })
