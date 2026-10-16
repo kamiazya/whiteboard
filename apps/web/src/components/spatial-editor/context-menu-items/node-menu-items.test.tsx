@@ -84,6 +84,7 @@ function baseInput(
     duplicateSelection: vi.fn(),
     reorderSelection: vi.fn(),
     groupSelection: vi.fn(),
+    frameSelection: vi.fn(),
     openLinkNode: vi.fn(),
     onOpenDocument: undefined,
     onAddImage: undefined,
@@ -128,6 +129,16 @@ describe('nodeMenuItems', () => {
     expect(groupItem).toBeDefined()
     ;(groupItem as { onSelect: () => void }).onSelect()
     expect(groupSelection).toHaveBeenCalledWith(['a', 'b'])
+  })
+
+  it('offers Zoom to selection on an unlocked node, framing through frameSelection', () => {
+    const frameSelection = vi.fn(() => true)
+    const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
+    const items = nodeMenuItems(baseInput(textNode, canvas, { frameSelection }))
+    const zoomItem = items.find((item) => labelOf(item) === 'Zoom to selection')
+    expect(zoomItem).toBeDefined()
+    ;(zoomItem as { onSelect: () => void }).onSelect()
+    expect(frameSelection).toHaveBeenCalledTimes(1)
   })
 
   it('offers Align at >=2 alignable boxes and Distribute at >=3, never before', () => {
