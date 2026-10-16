@@ -222,3 +222,77 @@ describe.skipIf(!HAS_POSIX_OWNERS)('a symlink above the path, judged by its dire
     },
   )
 })
+
+// A link is judged by the directory it REALLY sits in, which for a link reached
+// through another link's target is somewhere the path never spells. Judging by
+// the lexical parent alone would let a link this user placed hand the walk to
+// a second link anyone could have planted.
+describe.skipIf(!HAS_POSIX_OWNERS)('a symlink reached through the target of another', () => {
+  async function ownDir(name: string): Promise<string> {
+    const dir = join(base, name)
+    await mkdir(dir, { recursive: true })
+    await chmod(dir, 0o755)
+    return dir
+  }
+
+  async function realWithData(dir: string): Promise<string> {
+    await mkdir(join(dir, 'data'), { recursive: true })
+    return dir
+  }
+
+  async function expectRefused(link: string): Promise<void> {
+    for (const requireDirectory of [false, true]) {
+      expect(await inspectOutputPath(join(link, 'out'), { requireDirectory })).toBe('unsafe')
+    }
+    expect(await isSafeSourcePath(join(link, 'data'))).toBe(false)
+  }
+
+  async function expectFollowed(link: string): Promise<void> {
+    for (const requireDirectory of [false, true]) {
+      expect(await inspectOutputPath(join(link, 'out'), { requireDirectory })).toBe('missing')
+      expect(await inspectOutputPath(join(link, 'data'), { requireDirectory })).toBe('present')
+    }
+    expect(await isSafeSourcePath(join(link, 'data'))).toBe(true)
+  }
+
+  it('refuses a trusted link whose target is a link in a directory others can write', async () => {
+    const real = await realWithData(join(base, 'real'))
+    const planted = join(await makeWritableByOthers(join(base, 'shared')), 'planted')
+    await symlink(real, planted)
+    const link = join(await ownDir('own'), 'link')
+    await symlink(planted, link)
+    await expectRefused(link)
+  })
+
+  it('refuses a planted link reached through a relative target', async () => {
+    const real = await realWithData(join(base, 'real'))
+    await makeWritableByOthers(join(base, 'shared'))
+    await symlink(real, join(base, 'shared', 'planted'))
+    const link = join(await ownDir('own'), 'link')
+    await symlink(join('..', 'shared', 'planted'), link)
+    await expectRefused(link)
+  })
+
+  it('follows a trusted link into a real directory that sits in a shared one', async () => {
+    const real = await realWithData(join(await makeWritableByOthers(join(base, 'shared')), 'real'))
+    const link = join(await ownDir('own'), 'link')
+    await symlink(real, link)
+    await expectFollowed(link)
+  })
+
+  it('follows a chain whose every link sits in a directory this user owns', async () => {
+    await realWithData(join(base, 'real'))
+    const second = join(await ownDir('second'), 'hop')
+    await symlink(join('..', 'real'), second)
+    const link = join(await ownDir('own'), 'link')
+    await symlink(second, link)
+    await expectFollowed(link)
+  })
+
+  it('refuses a loop of trusted links instead of failing to examine it', async () => {
+    const dir = await ownDir('own')
+    await symlink(join(dir, 'b'), join(dir, 'a'))
+    await symlink(join(dir, 'a'), join(dir, 'b'))
+    await expectRefused(join(dir, 'a'))
+  })
+})
