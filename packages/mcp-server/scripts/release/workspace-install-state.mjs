@@ -26,22 +26,11 @@ function deployArgs(filter, target) {
 }
 
 /**
- * How every `pnpm` spawn here is launched. pnpm on Windows is a `.cmd` shim,
- * which only a shell can launch; elsewhere no shell sits between the
- * arguments and pnpm.
- *
- * @param {NodeJS.Platform} [platform]
- * @returns {{ encoding: 'utf-8', shell: boolean }}
- */
-export function pnpmSpawnOptions(platform = process.platform) {
-  return { encoding: 'utf-8', shell: platform === 'win32' }
-}
-
-/**
  * Deploys `filter`'s production dependencies into `target` from
  * `workspaceRoot`. The one launcher, so the real-pnpm test exercises the
  * spawn the SBOM script makes, options included, and not only its flags.
- * Output is captured, never relayed.
+ * Output is captured, never relayed. No shell: Windows contributors work in
+ * WSL2 (docs/contributing/development.md), where pnpm is a plain executable.
  *
  * @param {string} workspaceRoot
  * @param {string} filter
@@ -50,7 +39,7 @@ export function pnpmSpawnOptions(platform = process.platform) {
  */
 export function runDeploy(workspaceRoot, filter, target) {
   return spawnSync('pnpm', deployArgs(filter, target), {
-    ...pnpmSpawnOptions(),
+    encoding: 'utf-8',
     cwd: workspaceRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
