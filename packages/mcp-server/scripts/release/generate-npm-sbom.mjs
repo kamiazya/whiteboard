@@ -32,7 +32,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildSbomSidecar, computeSbomInputFingerprint, sha512Hex } from './sbom-fingerprint.mjs'
-import { deployArgs, preservingWorkspaceInstallState } from './workspace-install-state.mjs'
+import { preservingWorkspaceInstallState, runDeploy } from './workspace-install-state.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -68,11 +68,7 @@ try {
 // The deploy marks the whole workspace prod-only; the wrapper undoes that
 // before any exit, so the developer's next pnpm command keeps devDependencies.
 const deployResult = preservingWorkspaceInstallState(WORKSPACE_ROOT, () =>
-  spawnSync('pnpm', deployArgs('@kamiazya/whiteboard-mcp', TMP_DIR), {
-    cwd: WORKSPACE_ROOT,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }),
+  runDeploy(WORKSPACE_ROOT, '@kamiazya/whiteboard-mcp', TMP_DIR),
 )
 
 if (deployResult.status !== 0 || deployResult.error) {
