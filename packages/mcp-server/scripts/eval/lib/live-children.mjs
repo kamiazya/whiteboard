@@ -77,3 +77,25 @@ export async function stopLiveChildren(closeMs, killWaitMs = 2_000) {
     if (!isRunning(pid)) live.delete(child)
   }
 }
+
+/**
+ * Turns SIGINT/SIGTERM into a clean exit with `code`: `stop` runs first (a
+ * second signal stops waiting for it), and the exit hook does the rest.
+ *
+ * Stopping a child closes the client the main flow may be awaiting — its
+ * connect, mid-handshake, rejects with "Not connected" — and that rejection
+ * reaches the top level while `stop` is still waiting. Once interrupted, such
+ * a failure is the interrupt's own consequence, so it is swallowed rather than
+ * left to end the run with exit 1.
+ */
+export function exitOnSignal(code, stop) {
+  let interrupted = false
+  const interrupt = async () => {
+    if (interrupted) process.exit(code)
+    interrupted = true
+    process.on('uncaughtException', () => {})
+    await stop()
+    process.exit(code)
+  }
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, interrupt)
+}

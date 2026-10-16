@@ -30,7 +30,12 @@ import { register } from 'tsx/esm/api'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
-import { killLiveChildren, stopLiveChildren, trackChild } from './lib/live-children.mjs'
+import {
+  exitOnSignal,
+  killLiveChildren,
+  stopLiveChildren,
+  trackChild,
+} from './lib/live-children.mjs'
 import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
@@ -245,14 +250,7 @@ process.once('exit', () => {
   killLiveChildren()
   rmSync(scratch, { recursive: true, force: true })
 })
-let interrupted = false
-const interrupt = async () => {
-  if (interrupted) process.exit(130)
-  interrupted = true
-  await stopLiveChildren(CLOSE_ON_SIGNAL_MS)
-  process.exit(130)
-}
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, interrupt)
+exitOnSignal(130, () => stopLiveChildren(CLOSE_ON_SIGNAL_MS))
 
 console.log('[eval] seeding the fixture workspace')
 const seeded = await connectWhiteboard(template)

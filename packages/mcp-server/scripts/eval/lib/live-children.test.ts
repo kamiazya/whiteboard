@@ -35,3 +35,26 @@ describe('stopLiveChildren', () => {
     expect(stubborn.child.signalCode).toBe('SIGKILL')
   })
 })
+
+describe('exitOnSignal', () => {
+  // The eval's top level awaits a client's connect; a signal closes that
+  // client under it, and the rejection that follows reaches the top level.
+  // The run must still end as the interrupt it was, not as that failure.
+  it('exits with its code even when the interrupted work then rejects', async () => {
+    const lib = new URL('./live-children.mjs', import.meta.url).href
+    const script = [
+      `import { exitOnSignal } from ${JSON.stringify(lib)}`,
+      // As stopLiveChildren does, the stop outlasts the rejection it causes.
+      'exitOnSignal(130, () => new Promise((resolve) => setTimeout(resolve, 300)))',
+      "process.kill(process.pid, 'SIGTERM')",
+      "await new Promise((_, reject) => setTimeout(() => reject(new Error('Not connected')), 20))",
+      'await new Promise((resolve) => setTimeout(resolve, 5_000))',
+    ].join('\n')
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: 'ignore',
+    })
+    const code = await new Promise<number | null>((resolve) => child.once('exit', resolve))
+
+    expect(code).toBe(130)
+  })
+})
