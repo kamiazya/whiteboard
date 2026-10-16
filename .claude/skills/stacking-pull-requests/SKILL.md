@@ -26,8 +26,10 @@ the whole day-to-day surface.
 
 This repo's dependency direction is already fixed by `.claude/rules/architecture-map.md`,
 and a stack must follow it — a lower layer cannot depend on a higher one. Order the layers
-by that file's table, which `tools/arch-lint` holds to the manifests; a copy of it here is
-what goes stale.
+by that table's dependency EDGES (each row's "Checked dependencies" column, which
+`tools/arch-lint` holds to the manifests), not by its row order: the rows are not
+topological — `canvas-render` is listed above `plugin-visual`, which it depends on, so
+`plugin-visual` goes lower in the stack. A copy of the order here is what goes stale.
 
 The composition roots (`mcp-server`, `apps/web`) are therefore always at the TOP of a
 stack, never the bottom. That is what makes "split the MCP, CLI and web parts into
