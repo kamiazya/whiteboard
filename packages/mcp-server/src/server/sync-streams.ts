@@ -134,7 +134,7 @@ function deliver(
       for (const frame of frames) stream.send(frame)
       return
     }
-    streams.delete(streamId)
+    forget(streamId)
     stream.end()
     log.info(
       { streamId, workspaceId },
@@ -187,6 +187,103 @@ export function syncStreamCapReached(
   return held >= caps.perUser ? 'per_user' : null
 }
 
+/**
+ * How much undelivered frame data (characters, as `MAX_QUEUED_STREAM_CHARS`)
+ * all of one user's streams may hold together, and all of this instance's.
+ * Each stream stays under its own ceiling, so without these a user holding
+ * `SYNC_STREAM_CAPS.perUser` streams and reading none would pin that many
+ * ceilings' worth. Past either, the oldest stream holding a queue — that
+ * user's, or anyone's — is ended until the total fits again; like any ended
+ * stream, its page reconnects and reads what it missed from the keeper. A
+ * user's budget still fits one stream at its ceiling, so a single slow reader
+ * is ended by its own ceiling first.
+ */
+export const SYNC_QUEUE_BUDGET = {
+  perUser: 2 * MAX_QUEUED_STREAM_CHARS,
+  total: 8 * MAX_QUEUED_STREAM_CHARS,
+} as const
+export type SyncQueueBudget = { perUser: number; total: number }
+
+/** What each registered stream has written and its reader not yet taken. */
+const queued = new Map<string, number>()
+const queuedByUser = new Map<string, number>()
+let queuedTotal = 0
+
+function addQueued(streamId: string, userId: string | null, chars: number): void {
+  queued.set(streamId, (queued.get(streamId) ?? 0) + chars)
+  queuedTotal += chars
+  if (userId !== null) queuedByUser.set(userId, (queuedByUser.get(userId) ?? 0) + chars)
+}
+
+// Removes a stream and everything it was counted for, so a budget is freed
+// the moment a stream ends, not when its writes eventually settle.
+function forget(streamId: string): void {
+  const stream = streams.get(streamId)
+  streams.delete(streamId)
+  const held = queued.get(streamId) ?? 0
+  queued.delete(streamId)
+  if (held === 0 || stream === undefined) return
+  queuedTotal -= held
+  if (stream.userId === null) return
+  const left = (queuedByUser.get(stream.userId) ?? 0) - held
+  if (left > 0) queuedByUser.set(stream.userId, left)
+  else queuedByUser.delete(stream.userId)
+}
+
+// The oldest registered stream holding a queue, of `userId` when given.
+function oldestQueued(userId?: string): [string, SyncStream] | undefined {
+  for (const entry of streams) {
+    if (userId !== undefined && entry[1].userId !== userId) continue
+    if ((queued.get(entry[0]) ?? 0) > 0) return entry
+  }
+  return undefined
+}
+
+function endForBudget(streamId: string, stream: SyncStream, over: 'per_user' | 'total'): void {
+  forget(streamId)
+  stream.end()
+  log.warning({ streamId, over }, 'sync stream ended: its readers fell too far behind together')
+}
+
+/**
+ * Counts `chars` just written down a stream against the budgets, ending the
+ * oldest queued streams past either. The stream itself may be among them.
+ */
+export function chargeSyncStreamQueue(
+  streamId: string,
+  chars: number,
+  budget: SyncQueueBudget = SYNC_QUEUE_BUDGET,
+): void {
+  const stream = streams.get(streamId)
+  if (stream === undefined) return
+  addQueued(streamId, stream.userId, chars)
+  const userId = stream.userId
+  while (userId !== null && (queuedByUser.get(userId) ?? 0) > budget.perUser) {
+    const oldest = oldestQueued(userId)
+    if (oldest === undefined) break
+    endForBudget(oldest[0], oldest[1], 'per_user')
+  }
+  while (queuedTotal > budget.total) {
+    const oldest = oldestQueued()
+    if (oldest === undefined) break
+    endForBudget(oldest[0], oldest[1], 'total')
+  }
+}
+
+/** Releases `chars` a stream's reader has taken. A stream already ended was released whole. */
+export function releaseSyncStreamQueue(streamId: string, chars: number): void {
+  const held = queued.get(streamId)
+  const stream = streams.get(streamId)
+  if (held === undefined || stream === undefined) return
+  const taken = Math.min(held, chars)
+  queued.set(streamId, held - taken)
+  queuedTotal -= taken
+  if (stream.userId === null) return
+  const left = (queuedByUser.get(stream.userId) ?? 0) - taken
+  if (left > 0) queuedByUser.set(stream.userId, left)
+  else queuedByUser.delete(stream.userId)
+}
+
 /** Holds a stream open under the id its first frame carried. */
 export function registerSyncStream(streamId: string, stream: SyncStream): void {
   streams.set(streamId, stream)
@@ -194,7 +291,7 @@ export function registerSyncStream(streamId: string, stream: SyncStream): void {
 
 /** Forgets a stream that closed. */
 export function unregisterSyncStream(streamId: string): void {
-  streams.delete(streamId)
+  forget(streamId)
 }
 
 /** The stream an id names on this instance, if it holds one. */
@@ -334,7 +431,7 @@ export function endSyncStreamsOf(userId: string, workspaceId?: string): void {
   for (const [streamId, stream] of streams) {
     if (stream.userId !== userId) continue
     if (workspaceId !== undefined && !follows(stream, workspaceId)) continue
-    streams.delete(streamId)
+    forget(streamId)
     stream.end()
     log.info({ streamId, workspaceId }, 'sync stream ended: its user lost access')
   }
@@ -344,4 +441,7 @@ export function endSyncStreamsOf(userId: string, workspaceId?: string): void {
 // test that opens a stream would otherwise leak a subscriber into the next one.
 export function resetSyncStreamsForTests(): void {
   streams.clear()
+  queued.clear()
+  queuedByUser.clear()
+  queuedTotal = 0
 }

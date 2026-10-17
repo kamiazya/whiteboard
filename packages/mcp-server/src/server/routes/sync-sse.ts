@@ -28,9 +28,12 @@ import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
 import {
+  chargeSyncStreamQueue,
   docKey,
   MAX_QUEUED_STREAM_CHARS,
   registerSyncStream,
+  releaseSyncStreamQueue,
+  type SyncQueueBudget,
   type SyncStream,
   type SyncStreamCaps,
   type SyncStreamDoc,
@@ -110,6 +113,9 @@ export interface SyncSseRouterOptions {
   /** How many streams one user, and everyone, may hold open. Absent: no cap
    *  (the local daemon, whose one person's tabs must never be refused). */
   streamCaps?: SyncStreamCaps
+  /** How much undelivered data one user's streams, and every stream, may
+   *  hold together. Absent: `SYNC_QUEUE_BUDGET`, on both keepers. */
+  queueBudget?: SyncQueueBudget
 }
 
 /**
@@ -302,8 +308,9 @@ function streamEntry(
   stream: SSEStreamingApi,
   streamId: string,
   userId: string | null,
-  holdsAccess: SyncSseRouterOptions['holdsAccess'],
+  options: Pick<SyncSseRouterOptions, 'holdsAccess' | 'queueBudget'>,
 ): SyncStream {
+  const { holdsAccess } = options
   // What has been written and not yet taken by the reader: a write settles
   // once the response body is read past it.
   let queued = 0
@@ -321,7 +328,9 @@ function streamEntry(
       }
       void stream.writeSSE({ event, data: payload }).finally(() => {
         queued -= payload.length
+        releaseSyncStreamQueue(streamId, payload.length)
       })
+      chargeSyncStreamQueue(streamId, payload.length, options.queueBudget)
     },
     userId,
     ...(userId === null || holdsAccess === undefined
@@ -354,21 +363,28 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     c.header('X-Accel-Buffering', 'no')
 
     return streamSSE(c, async (stream) => {
-      registerSyncStream(streamId, streamEntry(stream, streamId, userId, options.holdsAccess))
+      registerSyncStream(streamId, streamEntry(stream, streamId, userId, options))
+      // Listening before the first await: an abort that lands while the ready
+      // frame is written fires no listener added after it, which would leave
+      // the stream registered and this callback waiting forever.
+      const closed = new Promise<void>((resolve) => {
+        stream.onAbort(() => {
+          unregisterSyncStream(streamId)
+          log.info({ streamId }, 'sync stream closed')
+          resolve()
+        })
+      })
       const ready: SyncReadyEvent = { streamId }
       await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
-      log.info({ streamId }, 'sync stream opened')
-
-      stream.onAbort(() => {
+      if (stream.aborted) {
         unregisterSyncStream(streamId)
-        log.info({ streamId }, 'sync stream closed')
-      })
+        return
+      }
+      log.info({ streamId }, 'sync stream opened')
 
       // Hold the stream open. streamSSE resolves the callback -> closes the
       // response, so the connection lives exactly as long as this promise.
-      await new Promise<void>((resolve) => {
-        stream.onAbort(resolve)
-      })
+      await closed
     })
   })
 

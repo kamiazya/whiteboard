@@ -178,6 +178,8 @@ each tab opens its own. These limits are fixed, not configurable:
 | Open streams per user | 16 | server mode | The next open is refused with `429 too_many_streams` and `Retry-After: 5`. The page keeps retrying with backoff and connects once one of that user's streams closes. |
 | Open streams in total, per instance | 1024 | server mode | Same refusal, for everyone, until a stream closes. |
 | Data written to a stream and not yet read by the page | about 43.7 MiB (two of the largest possible updates) | server mode and the local daemon | The keeper ends that stream. The page reconnects, subscribes again and reads what it missed from the keeper, so a slow reader loses nothing. |
+| Data written to all of one user's streams and not yet read | about 87.3 MiB (two streams' worth) | server mode | The keeper ends that user's oldest stream that has data waiting, and keeps doing so until the total fits. Each page reconnects as above, so nothing is lost. |
+| Data written to every stream on the instance and not yet read | about 349.3 MiB (eight streams' worth) | server mode and the local daemon | The keeper ends the oldest stream on the instance that has data waiting, whoever holds it, until the total fits. |
 
 In server mode a stream belongs to the user who opened it: only that user may
 subscribe it to a workspace, and a credential that names no user of the
