@@ -265,6 +265,9 @@ describe('sign-in through an OIDC provider', () => {
     ['an absolute URL', 'https://evil.example/'],
     ['a scheme-relative URL', '//evil.example/'],
     ['a backslash path', '/\\evil.example'],
+    ['a path that a stripped tab makes scheme-relative', '/\t/evil.example'],
+    ['a path that a stripped newline makes scheme-relative', '/\n/evil.example'],
+    ['a path that a stripped carriage return makes scheme-relative', '/\r//evil'],
   ])('does not redirect to %s after signing in', async ([, target]) => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })

@@ -62,12 +62,22 @@ export interface SignInRoutesDeps {
   readonly peerAddress?: (c: Context) => string | undefined
 }
 
-// Only a path on this origin. `//host` and `/\host` are read as another host
-// by browsers, and anything absolute is somebody else's page.
-function safeReturnPath(requested: string | undefined): string {
+// Only a path on this origin, decided the way the browser will read it: the
+// URL parser strips tab and newline and turns `\` into `/`, so `/\t/host`
+// and `/\host` are another host once parsed. Resolving against our own
+// origin and keeping the result only when the origin survives covers every
+// such spelling; a control character is refused outright, since nothing
+// legitimate carries one.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
+
+function safeReturnPath(requested: string | undefined, publicBaseUrl: string): string {
   if (requested === undefined || !requested.startsWith('/')) return '/'
-  if (requested.startsWith('//') || requested.includes('\\')) return '/'
-  return requested
+  if (CONTROL_CHARACTER.test(requested)) return '/'
+  const ours = new URL(publicBaseUrl)
+  const resolved = URL.parse(requested, ours)
+  if (resolved === null || resolved.origin !== ours.origin) return '/'
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`
 }
 
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
@@ -84,7 +94,7 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
   const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
-    returnTo: safeReturnPath(returnTo),
+    returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),
     ...(invitation === undefined ? {} : { invitationToken: invitation }),
     now: now(),
     ttlMs: ATTEMPT_TTL_MS,
