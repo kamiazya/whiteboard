@@ -424,6 +424,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   a PNG only from a `data:` URL — the exporter never reads a file the URL
   names on the server, nor fetches a remote one. Both are in
   [Export formats](../reference/export-formats.md).
+- **A render lays out a bounded number of embedded documents.** Embeds nest
+  three levels deep, and one render lays out at most 128 embedded documents
+  across every level and both kinds of embed (a file node's canvas preview,
+  a `![[…]]` in a body). So a workspace whose documents each embed many
+  others cannot make one render cost the cube of its fan-out. Past the
+  budget an embed draws as its placeholder or card. The budget holds for
+  `wb_scene_render`, export and the web app's preview alike.
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user and make it
   owner-only. Server mode leaves its ownership and mode as the operator set

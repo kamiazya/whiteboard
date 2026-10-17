@@ -114,7 +114,12 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
         mdastOptionsFor(maxWidth, options),
       )
       body = fitTextBody(laid, node, options)
-      if (cacheKey !== undefined) options.contentCache?.set(cacheKey, body)
+      // A body laid out with the nested-layout budget spent may hold an embed
+      // drawn as its placeholder only because THIS render ran out; caching it
+      // would hand that degradation to a later render that has budget left.
+      if (cacheKey !== undefined && options.nestedLayoutBudget.remaining > 0) {
+        options.contentCache?.set(cacheKey, body)
+      }
     } catch (err) {
       options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
       body = fitTextBody({ nodes: [labelRun(text, options, maxWidth)] }, node, options)

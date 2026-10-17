@@ -16,6 +16,7 @@ import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
 import type { ReferenceSeams } from '../../references/seams.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
+import type { NestedLayoutBudget } from './embed-budget.js'
 
 export const BODY_FONT_SIZE_PX = MARKDOWN_THEME_NODE.bodyFontSizePx
 export const BODY_LINE_HEIGHT_PX = bodyLineHeightPx(MARKDOWN_THEME_NODE)
@@ -201,6 +202,12 @@ export interface MdastLayoutOptions {
    */
   readonly embedPath?: readonly string[]
   /**
+   * The nested-layout budget an embedded body spends from, shared with the
+   * render that embeds it; absent at the top level, which opens a fresh one.
+   * Past it an embed degrades to `embedPlaceholder('budget')`.
+   */
+  readonly nestedLayoutBudget?: NestedLayoutBudget
+  /**
    * The current display name for a linked document, labeling a bare
    * `[[path]]` at render time (an explicit `|label` always wins). Separate
    * from `resolveEmbed` because a label lookup must not cost a content
@@ -238,7 +245,10 @@ export interface EmbeddedCanvasMiniature {
 }
 
 /** `MdastLayoutOptions` after `resolveTheme` — `theme` is no longer optional. */
-export type ResolvedMdastOptions = MdastLayoutOptions & { readonly theme: MarkdownTheme }
+export type ResolvedMdastOptions = MdastLayoutOptions & {
+  readonly theme: MarkdownTheme
+  readonly nestedLayoutBudget: NestedLayoutBudget
+}
 
 export interface Cursor {
   y: number

@@ -36,6 +36,7 @@ import type { ReferenceSeams } from '../references/seams.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
+import type { NestedLayoutBudget } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 import type { ShapeTable } from './nodes/node-outline.js'
@@ -119,6 +120,13 @@ export interface SpatialLayoutOptions {
    * markdown/canvas boundary; absent for a top-level canvas.
    */
   readonly embedPath?: readonly string[]
+  /**
+   * The nested-layout budget this canvas spends from when it is itself
+   * embedded content, so one render's embeds share one pool across the
+   * markdown/canvas boundary. Absent for a top-level canvas, which opens a
+   * fresh one (`NESTED_LAYOUT_BUDGET`).
+   */
+  readonly nestedLayoutBudget?: NestedLayoutBudget
   /**
    * Nodes whose BODY the scene must not draw this pass, because a DOM
    * editor overlay owns their text right now. The chrome — silhouette,
@@ -395,6 +403,8 @@ export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   /** Document references on the CURRENT recursion path, plus its depth. */
   readonly activeEmbedPath: ReadonlySet<string>
   readonly embedDepth: number
+  /** The one account every nested layout of this render spends from. */
+  readonly nestedLayoutBudget: NestedLayoutBudget
   readonly geometry: SpatialGeometry
   readonly parseBody: (text: string) => MdastRoot
   /**
