@@ -63,3 +63,36 @@ describe('the image hrefs resvg is given', () => {
     )
   })
 })
+
+describe('the size of the target resvg is asked for', () => {
+  const huge: SpatialCanvas = {
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 1e6, height: 1e6, text: 'big' })],
+    edges: [],
+  }
+
+  it('refuses a board past the pixel budget without constructing resvg', async () => {
+    await expect(renderSpatialCanvasToPng(huge, FONTS_DIR, { scale: 8 })).rejects.toMatchObject({
+      name: 'ExportTooLargeError',
+    })
+    expect(constructed.svgs).toHaveLength(0)
+  })
+
+  it('measures the target after the scale', async () => {
+    const wide: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 3000, height: 100, text: 'wide' })],
+      edges: [],
+    }
+    await expect(renderSpatialCanvasToPng(wide, FONTS_DIR, { scale: 8 })).rejects.toMatchObject({
+      name: 'ExportTooLargeError',
+    })
+    expect(constructed.svgs).toHaveLength(0)
+    await renderSpatialCanvasToPng(wide, FONTS_DIR)
+    expect(constructed.svgs).toHaveLength(1)
+  })
+
+  it('renders an ordinary board at the largest scale', async () => {
+    const result = await renderSpatialCanvasToPng(canvasNaming('data:,'), FONTS_DIR, { scale: 8 })
+    expect(constructed.svgs).toHaveLength(1)
+    expect(result.width).toBeGreaterThan(240 * 8)
+  })
+})

@@ -43,6 +43,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { errnoCode } from '../../shared/errno.js'
 
 import { getLogger } from '../log.js'
+import { refuseOversizedTarget } from './export-budget.js'
 import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
 import { withoutExternalImages } from './external-images.js'
 import { installedFontFiles } from './installed-fonts.js'
@@ -272,6 +273,18 @@ async function availableFamilies(fontsDir: string): Promise<readonly string[]> {
   })
 }
 
+/**
+ * resvg's `fitTo` for a requested scale. A non-finite, zero, or negative
+ * scale is not a valid zoom factor for resvg (it throws on a zero/negative
+ * target size) — degrade to an unscaled render rather than propagating a
+ * crash from a bad request.
+ */
+function fitToScale(scale: number) {
+  return Number.isFinite(scale) && scale > 0 && scale !== 1
+    ? ({ mode: 'zoom', value: scale } as const)
+    : ({ mode: 'original' } as const)
+}
+
 async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
   const { measure, measurableFamilies } = await createExportTextMeasurer({ fontsDir })
   const { Resvg } = await import('@resvg/resvg-js')
@@ -308,14 +321,8 @@ async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
   return {
     async render(canvas, options) {
       const { svg, scene, background } = buildSvg(canvas, options, measure, fontAvailable)
-      const scale = options.scale ?? 1
-      // A non-finite, zero, or negative scale is not a valid zoom factor for
-      // resvg (it throws on a zero/negative target size) — degrade to an
-      // unscaled render rather than propagating a crash from a bad request.
-      const fitTo =
-        Number.isFinite(scale) && scale > 0 && scale !== 1
-          ? ({ mode: 'zoom', value: scale } as const)
-          : ({ mode: 'original' } as const)
+      const fitTo = fitToScale(options.scale ?? 1)
+      refuseOversizedTarget(svg, fitTo.mode === 'zoom' ? fitTo.value : 1)
       const installed = await installedFontFiles(fontsDir)
       const resvg = new Resvg(withoutExternalImages(svg), {
         background,
