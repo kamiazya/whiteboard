@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest'
 import { warnWhenDataDirIsTempFallback } from './data-dir-fallback.js'
 import { captureLogsForTests } from './log.js'
 
-const TMP = resolve(tmpdir(), '.whiteboard')
+// The temp fallback is per user: a fixed name in the shared temp dir is one
+// another user can create first. Spelled out here rather than imported, so
+// the expectation is not the code under test.
+const TMP_FALLBACK_NAME = process.getuid ? `.whiteboard-${process.getuid()}` : '.whiteboard'
+
+const TMP = resolve(tmpdir(), TMP_FALLBACK_NAME)
 
 function warningsFor(dataDir: string, env: NodeJS.ProcessEnv) {
   const capture = captureLogsForTests('warning')

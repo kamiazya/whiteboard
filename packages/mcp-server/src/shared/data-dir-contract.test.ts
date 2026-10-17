@@ -27,6 +27,11 @@ import {
   WHITEBOARD_ROOT,
 } from './data-dir-secure.js'
 
+// The temp fallback is per user: a fixed name in the shared temp dir is one
+// another user can create first. Spelled out here rather than imported, so
+// the expectation is not the code under test.
+const TMP_FALLBACK_NAME = process.getuid ? `.whiteboard-${process.getuid()}` : '.whiteboard'
+
 describe('data-dir contract: probe and create resolvers agree in steady state', () => {
   let tempHome: string
   let tempTmp: string
@@ -101,7 +106,7 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
 
     // The probe uses real filesystem check — ~/.whiteboard doesn't exist → falls to tmp
     const probeBeforeCreate = resolveDefaultDataDir({}, dirs)
-    expect(probeBeforeCreate).toBe(join(tempTmp, '.whiteboard'))
+    expect(probeBeforeCreate).toBe(join(tempTmp, TMP_FALLBACK_NAME))
 
     // The create-side resolver calls canWriteDir(homeCandidate) which does mkdirSync → home
     const createResult = resolveDataDir({}, dirs)
@@ -118,7 +123,7 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     // creating or hardening it. The create-side isWritableDir stub proves this.
     let mkdirCalledOnTmp = false
 
-    const tmpWhiteboard = join(tempTmp, '.whiteboard')
+    const tmpWhiteboard = join(tempTmp, TMP_FALLBACK_NAME)
 
     const result = resolveDataDir(
       {},
@@ -148,7 +153,7 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     const probeResult = resolveDefaultDataDir({}, dirs)
     const createResult = resolveDataDir({}, dirs)
 
-    const expectedTmp = join(tempTmp, '.whiteboard')
+    const expectedTmp = join(tempTmp, TMP_FALLBACK_NAME)
     expect(probeResult).toBe(expectedTmp)
     expect(createResult).toBe(expectedTmp)
   })

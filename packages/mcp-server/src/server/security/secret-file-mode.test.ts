@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -137,6 +138,20 @@ describe('writeSecretFileAtomicSync', () => {
       expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
     },
   )
+
+  // The staging name is fixed, so a link left there would otherwise carry the
+  // secret to wherever it points; the stale name is replaced, never followed.
+  it('never writes the secret through a symlink left at the temp name', () => {
+    const file = join(dir, 'key.json')
+    const outside = join(dir, 'outside.txt')
+    writeFileSync(outside, 'untouched')
+    symlinkSync(outside, `${file}.tmp`)
+
+    writeSecretFileAtomicSync(file, '{"a":1}\n')
+
+    expect(readFileSync(outside, 'utf8')).toBe('untouched')
+    expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
+  })
 
   it.skipIf(!CHMOD_IS_OBSERVABLE)(
     'tightens a pre-existing directory instead of inheriting its bits',

@@ -3,7 +3,12 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from './log.js'
 
-const FALLBACK = resolve(tmpdir(), '.whiteboard')
+// The temp fallback is per user: a fixed name in the shared temp dir is one
+// another user can create first. Spelled out here rather than imported, so
+// the expectation is not the code under test.
+const TMP_FALLBACK_NAME = process.getuid ? `.whiteboard-${process.getuid()}` : '.whiteboard'
+
+const FALLBACK = resolve(tmpdir(), TMP_FALLBACK_NAME)
 
 vi.mock('./config.js', () => ({
   getDataDir: () => FALLBACK,

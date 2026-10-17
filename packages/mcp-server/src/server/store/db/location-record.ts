@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../../log.js'
@@ -83,7 +84,21 @@ export async function writeDatabaseLocationRecord(
     database: { inDataDir },
   }
   try {
-    await writeFile(recordPath(dataDir), `${JSON.stringify(record, null, 2)}\n`, 'utf8')
+    // O_NOFOLLOW so a name planted as a symlink cannot carry the write out of
+    // the data dir; it is undefined on Windows, where the flag is absent.
+    const handle = await open(
+      recordPath(dataDir),
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_TRUNC |
+        (fsConstants.O_NOFOLLOW ?? 0),
+      0o600,
+    )
+    try {
+      await handle.writeFile(`${JSON.stringify(record, null, 2)}\n`, 'utf8')
+    } finally {
+      await handle.close()
+    }
   } catch (err) {
     log.warning({ dataDir, err }, 'could not record the database location')
   }

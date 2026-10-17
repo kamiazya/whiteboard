@@ -4,6 +4,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveDefaultDataDir } from './data-dir.js'
 
+// The temp fallback is per user: a fixed name in the shared temp dir is one
+// another user can create first. Spelled out here rather than imported, so
+// the expectation is not the code under test.
+const TMP_FALLBACK_NAME = process.getuid ? `.whiteboard-${process.getuid()}` : '.whiteboard'
+
 describe('resolveDefaultDataDir', () => {
   it('returns the env-override path when WHITEBOARD_DATA_DIR is set', () => {
     const result = resolveDefaultDataDir(
@@ -28,7 +33,7 @@ describe('resolveDefaultDataDir', () => {
       {},
       { checkWritable: () => false, homeDir: '/home/user', tmpDir: '/tmp' },
     )
-    expect(result).toBe('/tmp/.whiteboard')
+    expect(result).toBe(join('/tmp', TMP_FALLBACK_NAME))
   })
 
   it('resolves relative env-override to absolute path', () => {
@@ -90,6 +95,6 @@ describe('resolveDefaultDataDir — defaultCheckWritable filesystem behavior', (
     const whiteboardFile = join(tempHome, '.whiteboard')
     await writeFile(whiteboardFile, 'not a directory')
     const result = resolveDefaultDataDir({}, { homeDir: tempHome, tmpDir: tempTmp })
-    expect(result).toBe(join(tempTmp, '.whiteboard'))
+    expect(result).toBe(join(tempTmp, TMP_FALLBACK_NAME))
   })
 })
