@@ -258,6 +258,7 @@ describe('workflow hygiene: a job holding Cloudflare secrets', () => {
       'jobs:',
       '  deploy:',
       '    env:',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
       '      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
       '    steps:',
       '      - name: Deploy',
@@ -279,6 +280,7 @@ describe('workflow hygiene: a job holding Cloudflare secrets', () => {
       '      - name: Deploy',
       '        uses: cloudflare/wrangler-action@x',
       '        with:',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
       '          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
       '',
     ].join('\n')
