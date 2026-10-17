@@ -43,9 +43,9 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { errnoCode } from '../../shared/errno.js'
 
 import { getLogger } from '../log.js'
+import { boundedDataImages } from './data-image-budget.js'
 import { refuseOversizedTarget } from './export-budget.js'
 import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
-import { withoutExternalImages } from './external-images.js'
 import { installedFontFiles } from './installed-fonts.js'
 import { createExportTextMeasurer, loadExportFonts } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
@@ -323,8 +323,9 @@ async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
       const { svg, scene, background } = buildSvg(canvas, options, measure, fontAvailable)
       const fitTo = fitToScale(options.scale ?? 1)
       refuseOversizedTarget(svg, fitTo.mode === 'zoom' ? fitTo.value : 1)
+      const drawable = boundedDataImages(svg)
       const installed = await installedFontFiles(fontsDir)
-      const resvg = new Resvg(withoutExternalImages(svg), {
+      const resvg = new Resvg(drawable, {
         background,
         font: { ...fontOption, fontFiles: [...(fontOption.fontFiles ?? []), ...installed] },
         fitTo,
