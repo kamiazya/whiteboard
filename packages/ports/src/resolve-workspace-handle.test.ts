@@ -9,7 +9,11 @@
 import { formatWorkspaceAddress } from '@kamiazya/whiteboard-model'
 import { canonicalUlidArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { resolveWorkspaceHandle, type WorkspaceEntry } from './document-index.js'
+import {
+  resolveWorkspaceHandle,
+  storedWorkspaceEntrySchema,
+  type WorkspaceEntry,
+} from './document-index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -155,4 +159,45 @@ describe('resolveWorkspaceHandle', () => {
       }
     },
   )
+})
+
+describe('storedWorkspaceEntrySchema', () => {
+  it('keeps a stored namespace, so a read-back row stays out of `me`', () => {
+    const row = storedWorkspaceEntrySchema.parse({
+      workspaceId: '01JAAAAAAAAAAAAAAAAAAAAAAA',
+      namespace: 'ada',
+      segment: 'plans',
+    })
+    expect(row.namespace).toBe('ada')
+    expect(resolveWorkspaceHandle([row], 'plans')).toBeNull()
+    expect(resolveWorkspaceHandle([row], 'ada/plans')).toEqual(row)
+  })
+
+  it('reads a refused namespace as absent instead of failing the row', () => {
+    const row = storedWorkspaceEntrySchema.parse({
+      workspaceId: '01JAAAAAAAAAAAAAAAAAAAAAAA',
+      namespace: '01JAAAAAAAAAAAAAAAAAAAAAAA',
+    })
+    expect(row).toEqual({ workspaceId: '01JAAAAAAAAAAAAAAAAAAAAAAA' })
+  })
+})
+
+describe('a legacy id is an id', () => {
+  it('reaches its workspace from any namespace, like a canonical id', () => {
+    // An opaque link an outsider opens (ADR-0053) names a workspace by id. A
+    // legacy id is not ULID-shaped, so it parses as bare; confining it to the
+    // caller's namespace would turn every such link away from an invitee.
+    const ada: WorkspaceEntry = { workspaceId: 'default', namespace: 'ada' }
+    expect(resolveWorkspaceHandle([ada], 'default', 'bob')).toEqual(ada)
+  })
+
+  it('still loses to a segment of the same spelling in the caller namespace', () => {
+    const ada: WorkspaceEntry = { workspaceId: 'plans', namespace: 'ada' }
+    const bob: WorkspaceEntry = {
+      workspaceId: '01JBBBBBBBBBBBBBBBBBBBBBBB',
+      namespace: 'bob',
+      segment: 'plans',
+    }
+    expect(resolveWorkspaceHandle([ada, bob], 'plans', 'bob')).toEqual(bob)
+  })
 })

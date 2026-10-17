@@ -105,15 +105,16 @@ export const workspaceAddressInputSchema = z
 
 /** The address an input string spells, or null when it spells none of the three forms. */
 export function parseWorkspaceAddress(input: string): WorkspaceAddress | null {
-  const parts = input.split('/')
-  const candidate =
-    parts.length === 2
-      ? { form: 'qualified', namespace: parts[0], segment: parts[1] }
-      : workspaceCanonicalIdSchema.safeParse(input).success
-        ? { form: 'id', workspaceId: input }
-        : { form: 'bare', handle: input }
-  const parsed = workspaceAddressSchema.safeParse(candidate)
+  const parsed = workspaceAddressSchema.safeParse(addressCandidate(input))
   return parsed.success ? parsed.data : null
+}
+
+/** Which form `input` would be read as; `workspaceAddressSchema` decides whether it is one. */
+function addressCandidate(input: string): Record<string, string> {
+  const parts = input.split('/')
+  if (parts.length === 2) return { form: 'qualified', namespace: parts[0], segment: parts[1] }
+  if (workspaceCanonicalIdSchema.safeParse(input).success) return { form: 'id', workspaceId: input }
+  return { form: 'bare', handle: input }
 }
 
 /** The string `parseWorkspaceAddress` reads back as `address`. */
