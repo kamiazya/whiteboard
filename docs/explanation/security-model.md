@@ -329,6 +329,10 @@ that SVG, so it is held to what SVG text can do:
   diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
   loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
   one shows as its source.
+- MathJax runs without its `html` extension, so `\href`, `\class`, `\cssId`
+  and `\style` are not commands: math cannot carry a link, or put an id, a
+  class or an inline style of its choosing into the page. Written in a math
+  block, they show as unknown commands.
 - Whatever either engine returns is checked before it is used: a fragment
   carrying an HTML island (`<foreignObject>`), a form, a script, an event
   handler, an `action` or `formaction` attribute, or any `href`, `src` or
