@@ -18,10 +18,13 @@
 // These assertions pin the two properties that make that impossible, rather
 // than the wording around them.
 
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
 
 const ROOT = REPO_ROOT
@@ -214,6 +217,69 @@ describe('the stress lane shards its node leg', () => {
     expect(commands).toHaveLength(2)
     for (const command of commands) {
       expect(command).toMatch(/--shard=\$\{\{ matrix\.shard \}\}\/\$\{\{ matrix\.shards \}\}/)
+    }
+  })
+})
+
+// The changed-file list is file NAMES from the PR, and a name may hold `$(…)`
+// or a backtick. Interpolated with `${{ }}` the runner pastes it into the
+// script before bash parses it, so a test file named for a command runs that
+// command; through `env:` it stays data.
+describe('the stress steps take the changed files as data, not script', () => {
+  interface Step {
+    name?: string
+    if?: string
+    run?: string
+    env?: Record<string, string>
+  }
+  const steps = (parseYaml(ciYaml) as { jobs: Record<string, { steps: Step[] }> }).jobs[
+    'stress-changed-tests'
+  ].steps.filter((s) => s.if?.includes('steps.changed.outputs.files'))
+
+  const dirs: string[] = []
+  afterAll(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('finds both stress steps', () => {
+    expect(steps).toHaveLength(2)
+  })
+
+  it('no stress step interpolates the file list into its script', () => {
+    for (const step of steps) {
+      expect(step.run, step.name).not.toMatch(/\$\{\{\s*steps\.changed\.outputs\.files/)
+    }
+  })
+
+  it('a file name carrying a command substitution reaches vitest verbatim and runs nothing', () => {
+    const hostile = 'a.test.ts $(>pwned).test.ts `>pwned2`.test.ts'
+    const matrix: Record<string, string> = { leg: 'node', shard: '1', shards: '2', projects: 'p' }
+    for (const step of steps) {
+      const cwd = mkdtempSync(join(tmpdir(), 'stress-files-'))
+      dirs.push(cwd)
+      const argvLog = join(cwd, 'argv.log')
+      // A stand-in pnpm that records each argument on its own line.
+      writeFileSync(join(cwd, 'pnpm'), `#!/bin/bash\nprintf '%s\\n' "$@" >> "${argvLog}"\n`)
+      chmodSync(join(cwd, 'pnpm'), 0o755)
+      const env: Record<string, string> = { PATH: `${cwd}:${process.env.PATH ?? '/usr/bin:/bin'}` }
+      const resolve = (text: string) =>
+        text
+          .replace(/\$\{\{\s*matrix\.(\w+)\s*\}\}/g, (_, k: string) => matrix[k] ?? '')
+          .replace(/\$\{\{\s*steps\.changed\.outputs\.files\s*\}\}/g, hostile)
+      for (const [k, v] of Object.entries(step.env ?? {})) env[k] = resolve(v)
+      const res = spawnSync('bash', ['-e', '-c', resolve(step.run ?? '')], {
+        cwd,
+        env,
+        encoding: 'utf-8',
+      })
+      expect(res.status, `${step.name}: ${res.stderr}`).toBe(0)
+      expect(existsSync(join(cwd, 'pwned')), `${step.name} ran $(…) from a file name`).toBe(false)
+      expect(existsSync(join(cwd, 'pwned2')), `${step.name} ran a backtick from a file name`).toBe(
+        false,
+      )
+      const args = readFileSync(argvLog, 'utf-8').split('\n')
+      expect(args).toContain('$(>pwned).test.ts')
+      expect(args).toContain('a.test.ts')
     }
   })
 })

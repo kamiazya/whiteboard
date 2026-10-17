@@ -43,12 +43,13 @@ function stepRun(job: Job, namePrefix: string): string {
 }
 
 /** The job's vitest invocation with what a local run does not share (the shard, the project and
- * the file list) replaced by placeholders, so only the flags are compared. */
+ * the file list) replaced by placeholders, so only the flags are compared. The job spells the
+ * list `"${files[@]}"`, an array split from env; the local plan prints the interpolated form. */
 function normalise(command: string): string {
   return command
     .replace(/ --shard=\$\{\{[^}]*\}\}\/\$\{\{[^}]*\}\}/, '')
     .replace(/--project ('[^']*'|\S+)/, '--project <project>')
-    .replace(/\$\{\{ steps\.changed\.outputs\.files \}\}/, '<files>')
+    .replace(/\$\{\{ steps\.changed\.outputs\.files \}\}|"\$\{files\[@\]\}"/, '<files>')
     .replace(/\s+/g, ' ')
     .trim()
 }

@@ -391,10 +391,16 @@ jobs:
         # cached, median 47.6s -> 39.8s. The cache lives under
         # node_modules/.vitest-cache and is not carried between CI runs, so
         # the first process of each job still pays full transform cost.
+        #
+        # The file list is PR-chosen names, so it arrives through env and is
+        # split by `read -a`: interpolated, a name holding `$(…)` would run.
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
         run: |
+          read -r -a files <<< "$CHANGED_FILES"
           for i in 1 2 3 4 5; do
             echo "=== stress run $i/5 (${{ matrix.leg }} ${{ matrix.shard }}/${{ matrix.shards }}) ==="
-            pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+            pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --fsModuleCache --passWithNoTests "${files[@]}"
           done
 
       - name: Repeat changed tests in-process (3x)
@@ -403,7 +409,11 @@ jobs:
         # SAME test in one process (a leaked timer, a module-level cache, a
         # handle that was "most recent" last time). `--repeats` runs the
         # passes too, which is what separates it from `retry`.
-        run: pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          read -r -a files <<< "$CHANGED_FILES"
+          pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --repeats=3 --fsModuleCache --passWithNoTests "${files[@]}"
 
       # The browser leg's traces, for the reason `test-browser` uploads its
       # own: a stress failure is CI-only by construction, so the trace is all
