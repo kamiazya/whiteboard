@@ -17,7 +17,12 @@ const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
 const WORD = /[\p{L}\p{N}]+/gu
 
 export function tokenize(text: string): string[] {
-  return tokenizeRuns(text, false)
+  const tokens: string[] = []
+  tokenizeRuns(text, false, (token) => {
+    tokens.push(token)
+    return true
+  })
+  return tokens
 }
 
 /**
@@ -30,40 +35,65 @@ export function tokenize(text: string): string[] {
  * widen what a document is FOUND BY, not what a query demands.
  */
 export function tokenizeForIndex(text: string): string[] {
-  return tokenizeRuns(text, true)
+  const tokens: string[] = []
+  tokenizeRuns(text, true, (token) => {
+    tokens.push(token)
+    return true
+  })
+  return tokens
 }
 
-function tokenizeRuns(text: string, unigrams: boolean): string[] {
-  const tokens: string[] = []
+/**
+ * Feeds each token to `emit` in text order, stopping as soon as `emit`
+ * answers false; answers false itself when it was stopped.
+ */
+function tokenizeRuns(text: string, unigrams: boolean, emit: (token: string) => boolean): boolean {
   for (const match of text.toLowerCase().matchAll(WORD)) {
-    const run = match[0]
-    // Split the run into CJK and non-CJK stretches: "bm25で検索" arrives as
-    // one \p{L}\p{N} run, and word-tokenizing it whole would glue the
-    // scripts together into a token nobody types.
-    let latin = ''
-    let cjk = ''
-    const flushLatin = () => {
-      if (latin !== '') tokens.push(latin)
-      latin = ''
+    for (const stretch of scriptStretches(match[0])) {
+      if (!emitStretch(stretch, unigrams, emit)) return false
     }
-    const flushCjk = () => {
-      if (unigrams || cjk.length === 1) for (const char of cjk) tokens.push(char)
-      for (let i = 0; i + 1 < cjk.length; i++) tokens.push(cjk.slice(i, i + 2))
-      cjk = ''
-    }
-    for (const char of run) {
-      if (CJK.test(char)) {
-        flushLatin()
-        cjk += char
-      } else {
-        flushCjk()
-        latin += char
-      }
-    }
-    flushLatin()
-    flushCjk()
   }
-  return tokens
+  return true
+}
+
+interface Stretch {
+  readonly text: string
+  readonly cjk: boolean
+}
+
+/**
+ * A run split into its CJK and non-CJK stretches: "bm25で検索" arrives as one
+ * \p{L}\p{N} run, and word-tokenizing it whole would glue the scripts
+ * together into a token nobody types.
+ */
+function scriptStretches(run: string): Stretch[] {
+  const stretches: Stretch[] = []
+  let current = ''
+  let cjk = false
+  for (const char of run) {
+    const isCjk = CJK.test(char)
+    if (current !== '' && isCjk !== cjk) {
+      stretches.push({ text: current, cjk })
+      current = ''
+    }
+    cjk = isCjk
+    current += char
+  }
+  if (current !== '') stretches.push({ text: current, cjk })
+  return stretches
+}
+
+function emitStretch(
+  { text, cjk }: Stretch,
+  unigrams: boolean,
+  emit: (token: string) => boolean,
+): boolean {
+  if (!cjk) return emit(text)
+  if (unigrams || text.length === 1) {
+    for (const char of text) if (!emit(char)) return false
+  }
+  for (let i = 0; i + 1 < text.length; i++) if (!emit(text.slice(i, i + 2))) return false
+  return true
 }
 
 export interface SearchableDocument {
@@ -113,11 +143,30 @@ function addTo(text: string, alsoIndex: AlsoIndex): string {
 }
 
 /**
+ * The most distinct terms one document contributes to the index.
+ *
+ * Without a ceiling a document's size in the index is its vocabulary, and a
+ * MARKDOWN_MAX_CHARS body of unrelated CJK ideographs has about 283,000
+ * distinct terms — 21.5 MB of token bag, against 2,849 for the largest
+ * document in this repository (a 110K-character changelog). A workspace
+ * multiplies that by its document ceiling.
+ *
+ * At the ceiling indexing STOPS, rather than skipping new terms and counting
+ * on: a document is found by what it says up to that point, and the path and
+ * name come first so they are always indexed. Stopping also bounds the time
+ * spent on such a document, since the rest of it is never tokenized. A
+ * document under the ceiling is indexed whole and ranks exactly as it did.
+ */
+export const DOCUMENT_TERMS_MAX = 8192
+
+/**
  * What one document contributes to the index: how often each index token
  * occurs across its path, name and texts, and how many tokens that is.
  *
- * A pure function of the document's text and the expander, so what it costs
- * per document can be measured without running a query.
+ * A pure function of the document's text and the expander, so a caller that
+ * knows when a document changed can build it once per version and hand it
+ * back through `fullTextSearch`'s `termsOf` — this package has no notion of
+ * a version to key it on.
  */
 export interface DocumentTerms {
   readonly counts: ReadonlyMap<string, number>
@@ -130,17 +179,33 @@ export function documentTerms(
 ): DocumentTerms {
   const counts = new Map<string, number>()
   let length = 0
+  const count = (token: string): boolean => {
+    const held = counts.get(token)
+    if (held === undefined && counts.size >= DOCUMENT_TERMS_MAX) return false
+    counts.set(token, (held ?? 0) + 1)
+    length++
+    return true
+  }
   for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
-    for (const token of tokenizeForIndex(alsoIndex === undefined ? text : addTo(text, alsoIndex))) {
-      counts.set(token, (counts.get(token) ?? 0) + 1)
-      length++
-    }
+    const indexed = alsoIndex === undefined ? text : addTo(text, alsoIndex)
+    if (!tokenizeRuns(indexed, true, count)) break
   }
   return { counts, length }
 }
 
 interface TokenBag extends DocumentTerms {
   readonly doc: SearchableDocument
+}
+
+interface SearchOptions {
+  readonly limit?: number
+  readonly alsoIndex?: AlsoIndex
+  /**
+   * Where each document's terms come from, for a caller that holds them
+   * between queries. Supplied, it owns indexing outright: `alsoIndex` is
+   * then the caller's to have applied when it built them.
+   */
+  readonly termsOf?: (doc: SearchableDocument) => DocumentTerms
 }
 
 /**
@@ -151,12 +216,12 @@ interface TokenBag extends DocumentTerms {
 export function fullTextSearch(
   documents: readonly SearchableDocument[],
   query: string,
-  { limit = 10, alsoIndex }: { limit?: number; alsoIndex?: AlsoIndex } = {},
+  { limit = 10, alsoIndex, termsOf = (doc) => documentTerms(doc, alsoIndex) }: SearchOptions = {},
 ): SearchHit[] {
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
 
-  const bags: TokenBag[] = documents.map((doc) => ({ doc, ...documentTerms(doc, alsoIndex) }))
+  const bags: TokenBag[] = documents.map((doc) => ({ doc, ...termsOf(doc) }))
   const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
   // Once per query token, not per (document, token) pair: counting the
   // documents that hold a token inside the scoring loop made one query
