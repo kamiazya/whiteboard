@@ -12,7 +12,7 @@ import {
   documentMissingBody,
   readExportBody,
   resolveRequestedOutputPath,
-  writeExportFile,
+  writeExportAnswer,
 } from './export-request.js'
 
 /** A layout whose every workspace exports into `dir`. */
@@ -132,7 +132,17 @@ describe('the shared bodies', () => {
   })
 })
 
-describe('writeExportFile', () => {
+const NOTHING_UNDRAWN = { undrawable: [], unresolvedFamilies: [] }
+
+/** Where the export landed, as the local daemon answers it. */
+async function writeExportFile(
+  data: string,
+  target: Parameters<typeof writeExportAnswer>[1],
+): Promise<string> {
+  return (await writeExportAnswer(data, target, NOTHING_UNDRAWN)).filePath
+}
+
+describe('writeExportAnswer', () => {
   it('lands two default exports taken in the same instant at distinct paths', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
     onTestFinished(() => rm(dir, { recursive: true, force: true }))
@@ -174,6 +184,34 @@ describe('writeExportFile', () => {
 
     expect(written).toBe(outputPath)
     await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg/>')
+  })
+
+  it('names the file within the exports directory when answering exports-relative', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
+    const target = {
+      layout: exportsAt(dir),
+      workspaceId: 'ws',
+      path: 'notes/board',
+      extension: 'svg',
+    }
+
+    const chosen = await writeExportAnswer(
+      '<svg/>',
+      { ...target, outputPath: join(dir, 'nested', 'board.svg') },
+      NOTHING_UNDRAWN,
+      'exports-relative',
+    )
+    const byDefault = await writeExportAnswer(
+      '<svg/>',
+      { ...target, outputPath: undefined },
+      NOTHING_UNDRAWN,
+      'exports-relative',
+    )
+
+    expect(chosen.filePath).toBe(join('nested', 'board.svg'))
+    expect(byDefault.filePath).toMatch(/^notes\/board-.*\.svg$/)
+    await expect(readFile(join(dir, byDefault.filePath), 'utf-8')).resolves.toBe('<svg/>')
   })
 })
 

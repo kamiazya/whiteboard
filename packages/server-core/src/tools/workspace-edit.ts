@@ -17,6 +17,14 @@ import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
 
+/** A `document.move` that names neither where to move nor what to rename to. */
+class DocumentMoveNeedsTargetError extends Error {
+  constructor() {
+    super('a move needs a `path` to move it, a `name` to rename it, or both')
+    this.name = 'DocumentMoveNeedsTargetError'
+  }
+}
+
 /**
  * Thrown when one op in a batch cannot apply.
  *
@@ -312,7 +320,7 @@ const WORKSPACE_EDIT_HANDLERS: {
 
   'document.move': async (ctx, op) => {
     if (op.path === undefined && op.name === undefined) {
-      throw new Error('a move needs a `path` to move it, a `name` to rename it, or both')
+      throw new DocumentMoveNeedsTargetError()
     }
     const { workspaceId } = ctx
     const moved =

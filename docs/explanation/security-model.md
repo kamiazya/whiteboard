@@ -100,11 +100,13 @@ A browser can ask the daemon for a workspace's read-plane content key
 (`POST /api/workspaces/:workspaceId/replica-key`), so it can keep an
 encrypted offline replica and read it while the daemon is unreachable. What
 this protects: a replica sitting on a device is ciphertext without the key.
-On a local daemon the request arrives through the extension under the
-daemon's own credential, so it is the machine's owner asking; the key is
-kept per workspace so that the same mechanism serves server mode, where a
-member who is removed must lose what their browser cached
-([ADR-0050](../contributing/adr/0050-local-daemon-trust.md) decision 8).
+The request arrives through the extension under the daemon's own
+credential, so it is the machine's owner asking. **Only the local daemon
+serves the replica-key routes**: server mode does not mount them, so it hands
+out no read-plane key. The key is kept per workspace so that a keeper with
+members could withhold it from one who was removed
+([ADR-0050](../contributing/adr/0050-local-daemon-trust.md) decision 8), but
+no shipped keeper does that today.
 
 **The daemon holds the key in plaintext.** It mints and stores the key itself,
 so this is not end-to-end encryption from the daemon's point of view, and
@@ -232,10 +234,11 @@ directly:
   sits beside it, so one gesture opens it with the daemon unreachable. The
   offer is withdrawn if the attempt shows nothing here can open the copy,
   rather than repeated.
-- **Removed** — a keeper that has members (server mode) reached this
-  device and refused the key as a membership refusal. The person is told
-  plainly and offered no export and no retry that would send anything. A
-  local daemon has one person and never answers this.
+- **Removed** — a keeper that has members reached this device and refused
+  the key as a membership refusal. The person is told plainly and offered no
+  export and no retry that would send anything. No shipped keeper answers
+  this: the local daemon has one person, and server mode serves no replica
+  key.
 - **Download again** — the daemon rotated the workspace key after this copy
   was saved, so nothing on this device can open it. The copy is not damaged;
   the page says it has to be downloaded again from the daemon, and offers a
@@ -269,7 +272,7 @@ the boundary described above.
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
 - **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today). A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
-- **Security headers**: every response carries `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, and same-origin cross-origin headers.
+- **Security headers**: every response carries `frame-ancestors 'none'` (unless the route sets its own CSP), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 - **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 10s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
 
@@ -369,9 +372,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - Every request is authenticated with a JWT issued by an external Identity
   Provider (OAuth/JWT resource-server validation); the server itself does
   not issue or manage user credentials.
-- Cross-origin access is restricted by `WHITEBOARD_SERVER_ALLOWED_ORIGINS`,
-  an explicit `https://` allowlist (defaulting to
-  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset). Entries may be exact origins
+- Cross-origin access to **`/mcp`** is restricted by
+  `WHITEBOARD_SERVER_ALLOWED_ORIGINS`, an explicit `https://` allowlist
+  (defaulting to `WHITEBOARD_SERVER_EXTERNAL_URL` when unset); `/mcp` is the
+  only path that answers CORS. `/api` and `/auth` answer no CORS at all, and a
+  sign-in session authenticates a write (any method but `GET`, `HEAD` or
+  `OPTIONS`) only when the request's `Origin` is the server's own origin —
+  otherwise the session is ignored and the request needs a bearer token.
+  Allowlist entries may be exact origins
   or a `https://*.example.com` leftmost-label wildcard subdomain pattern for
   deployment-preview shapes (e.g. Cloudflare Pages branch previews); bare `*`
   is always rejected. See
@@ -397,6 +405,30 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS=true` to opt out —
   only do this when you have confirmed the IdP truly never issues typed
   access tokens.
+
+- **Each MCP tool needs its `/api` counterpart's scope.** `/mcp` needs
+  `mcp:call`, and a tool call also needs the scope the same operation needs
+  over HTTP, or it is refused with `insufficient_scope` before it runs. The
+  table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **A live-sync stream belongs to the user who opened it.** Only that user
+  may subscribe it to a workspace, the instance re-checks membership and
+  deactivation before sending each update and ends the stream when either
+  fails, and open streams are capped per user and per instance. The limits
+  are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
+- **What a member is answered carries no storage detail.** A fault answers a
+  fixed message and goes to the operator's log with its detail; an export
+  names its file within the workspace's exports directory, not the absolute
+  path.
+- **A PNG export is bounded, and reads no host file.** A render past the pixel
+  budget is refused before it is drawn, and an inline Markdown image draws in
+  a PNG only from a `data:` URL — the exporter never reads a file the URL
+  names on the server, nor fetches a remote one. Both are in
+  [Export formats](../reference/export-formats.md).
+- **The data directory answers to the operator.** The stdio entry and the
+  local daemon require a data directory owned by this user and make it
+  owner-only. Server mode leaves its ownership and mode as the operator set
+  them — a platform volume may be owned by another user and shared through a
+  group — and refuses only one that every user can write.
 
 ## Current limitations
 

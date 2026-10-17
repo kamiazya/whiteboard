@@ -37,6 +37,7 @@ import { createDaemonIdentity } from './security/daemon-identity.js'
 import { createLocalTokenMcpHttpAuthStrategy } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware } from './security/mcp-http.js'
 import {
+  callerGrant,
   callerUserId,
   creatorAsFirstMember,
   type FirstMember,
@@ -56,7 +57,7 @@ import { createServerModeStoredDataRedaction } from './security/server-mode-reda
 import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { readLatestCompactedAt } from './store/document-store.js'
-import { storeScope } from './store/store-scope.js'
+import { type StoreScope, storeScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
 import { SYNC_STREAM_CAPS } from './sync-streams.js'
 import { computeStorageReport } from './tenant/storage-report.js'
@@ -279,6 +280,32 @@ function appWiring(options: AppOptions) {
   return { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus }
 }
 
+/**
+ * `/api/runtime/*`. On server mode the router judges the grant the server-mode
+ * `/api/*` middleware authenticated, since the resolver there holds no daemon
+ * token and would answer every caller as the owner.
+ */
+function runtimeRouter(
+  options: AppOptions,
+  scope: StoreScope,
+  wiring: Pick<
+    ReturnType<typeof appWiring>,
+    'instanceId' | 'identity' | 'credentialResolver' | 'serverModeGetStatus'
+  >,
+) {
+  const serverMode = options.authMode === 'server-mode'
+  return createRuntimeRouter({
+    instanceId: wiring.instanceId,
+    identity: wiring.identity,
+    touch: options.touch,
+    getStatus: serverMode ? wiring.serverModeGetStatus! : options.getStatus,
+    credentialResolver: wiring.credentialResolver,
+    ...(serverMode ? { serverModeGrant: callerGrant } : {}),
+    storageReport: () => computeStorageReport(scope.dataDir),
+    readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
+  })
+}
+
 export function createApp(options: AppOptions) {
   // Both HTTP roots build their app here, so this is where server-core's
   // fail-open records are given somewhere to go; see `routeServerCoreLogs`.
@@ -357,6 +384,7 @@ export function createApp(options: AppOptions) {
   // the deps whenever the keeper serves another. One scope, built here, is
   // what `split-dir` holds: `app.split-dir.test.ts`.
   const scope = storeScope(options.dataLayout.dataDir, options.dataLayout.tenantId)
+  const exportPaths = options.authMode === 'server-mode' ? 'exports-relative' : 'absolute'
   // The document router's checkpoints and the files router's version-aware
   // purge read the same rows, so they share one store.
   const versionStore = new FileVersionStore(scope)
@@ -371,6 +399,7 @@ export function createApp(options: AppOptions) {
       serverDeps: options.serverDeps,
       scope,
       versionStore,
+      exportPaths,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
@@ -381,21 +410,19 @@ export function createApp(options: AppOptions) {
     }),
   )
   app.route('/', createFilesRouter({ versionStore, scope }))
-  app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
+  const { liveDocuments } = options.serverDeps
+  app.route('/', createExportRouter({ liveDocuments, scope, exportPaths }))
   app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())
   app.route(
     '/',
-    createRuntimeRouter({
+    runtimeRouter(options, scope, {
       instanceId,
       identity,
-      touch: options.touch,
-      getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
-      storageReport: () => computeStorageReport(scope.dataDir),
-      readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
+      serverModeGetStatus,
     }),
   )
   if (options.authMode === 'server-mode') {

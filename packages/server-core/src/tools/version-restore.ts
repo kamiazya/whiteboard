@@ -87,6 +87,14 @@ export class SubtreeTakesNoTargetError extends Error {
   }
 }
 
+/** A `targetPath` that is not a document path. */
+export class InvalidRestoreTargetPathError extends Error {
+  constructor(public readonly targetPath: string | undefined) {
+    super(`invalid targetPath: ${targetPath}`)
+    this.name = 'InvalidRestoreTargetPathError'
+  }
+}
+
 /** A kind-crossing overwrite refused in `document.set`'s voice: what the write would have replaced, and where to go instead. */
 function kindMismatchRefusal(result: {
   targetPath: string
@@ -135,7 +143,7 @@ function restoreOutput(
       // Unreachable through this surface: the input schema validated the
       // path before the operation saw it. Kept as a refusal rather than
       // an assertion so a schema that loosens later still refuses.
-      throw new Error(`invalid targetPath: ${targetPath}`)
+      throw new InvalidRestoreTargetPathError(targetPath)
   }
 }
 

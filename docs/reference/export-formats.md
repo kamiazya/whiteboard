@@ -354,6 +354,10 @@ therefore answer with the characters they could not draw:
 { "filePath": "…/canvas-a-8f3.png", "undrawable": ["日", "本"] }
 ```
 
+`filePath` is absolute on the local daemon. A self-hosted server answers it
+relative to the workspace's exports directory instead, so a member is not told
+where the server keeps its data.
+
 Empty is the normal answer. What the report means differs by format:
 
 | Format | What was lost |

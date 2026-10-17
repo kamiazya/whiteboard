@@ -1,7 +1,6 @@
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import type { ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
@@ -11,9 +10,10 @@ import { getLogger } from '../../log.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import {
   documentMissingBody,
+  type ExportPathAnswer,
   readExportBody,
   resolveRequestedOutputPath,
-  writeExportFile,
+  writeExportAnswer,
 } from '../export-request.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -35,6 +35,8 @@ import { onDocumentAction } from './path-route.js'
 export interface DocumentSvgExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
   scope: StoreScope
+  /** Defaults to `absolute`, the local daemon's answer. */
+  exportPaths?: ExportPathAnswer
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -82,22 +84,17 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       return c.json(errBody, 500)
     }
 
-    const filePath = await writeExportFile(svg, {
-      outputPath,
-      layout,
-      workspaceId,
-      path,
-      extension: 'svg',
-    })
-    // Typed rather than a bare literal so the contract, not this handler,
-    // decides what an export answers with — the PNG route and this one had
-    // already drifted into two different response shapes.
-    const response: ExportResponse = {
-      filePath,
-      undrawable: [...undrawable],
-      unresolvedFamilies: [...unresolvedFamilies],
-    }
-    return c.json(response)
+    // Through the shared answer rather than a literal of its own, so the
+    // contract decides what an export answers with — the PNG route and this
+    // one had already drifted into two different response shapes.
+    return c.json(
+      await writeExportAnswer(
+        svg,
+        { outputPath, layout, workspaceId, path, extension: 'svg' },
+        { undrawable, unresolvedFamilies },
+        options.exportPaths,
+      ),
+    )
   })
 
   return app
