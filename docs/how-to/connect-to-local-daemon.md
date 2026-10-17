@@ -286,7 +286,10 @@ the move finishes, and the browser copy is kept so nothing is lost.
 
 One move carries at most 2000 documents, the most a browser keeps on a
 desktop. The daemon refuses a larger workspace whole, with the error
-`promote_too_many_documents`, and keeps none of it.
+`promote_too_many_documents`, and keeps none of it. The same 2000 is the most
+a daemon workspace holds, so a move into a workspace that already holds
+documents is refused, with `too_many_documents`, when the two together would
+hold more.
 
 Once the daemon confirms it holds every document, image, trashed document
 and saved version that moved, the old browser copy is removed — its Trash

@@ -42,6 +42,8 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would add a comment thread, a proposal or another part of a document under an id longer than one may be.',
   unreadable_document_meta:
     'It would leave documents in this workspace that could not be read, hiding them.',
+  too_many_documents:
+    'It would leave this workspace holding more documents than one workspace may. Move some documents to another workspace first.',
 }
 
 export function writeRefusalReason(refused: SyncWriteRefusal): string {

@@ -11,8 +11,10 @@ import {
   DocumentNameTooLongError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
+  TooManyDocumentsError,
   textBreachRefusal,
   UnreadableDocumentMetaError,
+  WORKSPACE_MAX_DOCUMENTS,
 } from './sync-write-refusals.js'
 
 const log = getLogger('sync-write-limit')
@@ -43,11 +45,12 @@ function placementOf(doc: LoroDoc): Placement {
 }
 
 /**
- * The refusal an update's placement writes earn: a node it left unreadable, a
- * document it MOVED onto a path the grammar refuses, or a name it grew past
- * the bound. What was already so before the update is not its doing — and
- * moving a document off a bad path, or shortening a long name, is how it gets
- * repaired — so each is judged against the state before.
+ * The refusal an update's placement writes earn: a record it grew past
+ * `WORKSPACE_MAX_DOCUMENTS`, a node it left unreadable, a document it MOVED
+ * onto a path the grammar refuses, or a name it grew past the bound. What
+ * was already so before the update is not its doing — and deleting
+ * documents, moving one off a bad path, or shortening a long name is how it
+ * gets repaired — so each is judged against the state before.
  *
  * One walk of the tree in the usual case, where nothing is suspect. Only when
  * something is does the state go back to `before` for a second walk, which
@@ -64,10 +67,15 @@ function placementRefusal(
     ([, path]) => !documentPathSchema.safeParse(path).success,
   )
   const longNames = [...after.names].filter(([, length]) => length > DOCUMENT_NAME_MAX_LENGTH)
-  if (offGrammar.length === 0 && longNames.length === 0 && after.unreadable.size === 0) return null
+  const crowded = after.paths.size > WORKSPACE_MAX_DOCUMENTS
+  if (!crowded && offGrammar.length === 0 && longNames.length === 0 && after.unreadable.size === 0)
+    return null
   doc.checkout(before)
   const earlier = placementOf(doc)
   runEvictingOnEngineTrap(target, 'importing an update into', () => doc.attach())
+  if (crowded && after.paths.size > earlier.paths.size) {
+    return new TooManyDocumentsError(after.paths.size)
+  }
   const unreadable = [...after.unreadable].filter((node) => !earlier.unreadable.has(node))
   if (unreadable.length > 0) return new UnreadableDocumentMetaError(unreadable)
   const moved = offGrammar.filter(([documentId, path]) => earlier.paths.get(documentId) !== path)

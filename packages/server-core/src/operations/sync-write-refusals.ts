@@ -315,6 +315,35 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
   }
 }
 
+/**
+ * The most documents a workspace record held by this keeper may list. A
+ * browser keeper refuses to grow past 2000 documents on any device (ADR-0044's
+ * 2026-09-28 addendum), so a record the editor produced never arrives larger.
+ * Counted in documents because that is the axis the cost follows — the
+ * record's memory is super-linear in document count, and each edited document
+ * takes a checkpoint — while the body ceilings already bound the bytes. One
+ * number for every way documents arrive: a sync update and a promote alike.
+ */
+export const WORKSPACE_MAX_DOCUMENTS = 2000
+
+/**
+ * A sync write refused because it would leave the workspace record listing
+ * more than `WORKSPACE_MAX_DOCUMENTS` documents, and more than it listed
+ * before — so a record already past the bound still takes an edit that adds
+ * none, and deleting is how it shrinks. Nothing of the write was kept.
+ */
+export class TooManyDocumentsError extends SyncWriteRefusalError {
+  readonly code = 'too_many_documents'
+  readonly status = 413
+
+  constructor(public readonly documents: number) {
+    super(
+      `This update would leave the workspace holding ${documents} documents; a workspace holds at most ${WORKSPACE_MAX_DOCUMENTS}. Move some documents to another workspace first`,
+    )
+    this.name = 'TooManyDocumentsError'
+  }
+}
+
 /** What a surface answers a sync write's throw with, or `undefined` for one it does not answer. */
 export function syncWriteAnswer(err: unknown):
   | {

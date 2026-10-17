@@ -122,6 +122,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 bounds a name through documentNameSchema before any write',
   OffGrammarPathError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
+  TooManyDocumentsError:
+    'raised by applyWorkspaceDocumentUpdate on a CRDT update (the sync update and promote); /api/v1 takes no CRDT bytes and creates one document per request',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

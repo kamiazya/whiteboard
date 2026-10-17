@@ -10,6 +10,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
+import { armContentSlots, CONTENT_REQUEST_CAPS, createContentSlots } from './content-slots.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -204,6 +205,24 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
   }
 }
 
+/**
+ * Server mode's bound on content-sized bodies in flight, per user and per
+ * instance (`content-slots.ts`): one count for the whole app, so every
+ * route reading such a body draws on it. The local daemon has one person and
+ * arms none.
+ */
+function mountContentSlots(app: Hono, options: AppOptions): void {
+  if (options.authMode !== 'server-mode') return
+  const { members } = options.people
+  const arm = armContentSlots({
+    slots: createContentSlots(CONTENT_REQUEST_CAPS),
+    userOf: (c) => callerUserId(c, members),
+    refused: (userId, cap) =>
+      requestLog.warning({ userId, cap }, 'content request refused: too many in flight'),
+  })
+  app.use('*', arm)
+}
+
 /** The routers only server mode mounts: a workspace's people as its owners manage them (ADR-0049). */
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode') return
@@ -349,6 +368,7 @@ export function createApp(options: AppOptions) {
   })
 
   mountApiAuth(app, options, credentialResolver)
+  mountContentSlots(app, options)
 
   mountMcpMiddleware(app, options, mcpAuth)
 

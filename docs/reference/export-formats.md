@@ -91,7 +91,11 @@ not:
   which would hide it and everything below it — and, with
   `400 {"error":"document_name_too_long"}`, one that gives a document a name
   longer than 200 characters. A name stored longer before that bound can
-  still be kept or shortened.
+  still be kept or shortened. The workspace document's `update` and `promote`
+  refuse, with `413 {"error":"too_many_documents"}`, an update or record that
+  would leave the workspace holding more than 2000 documents; a workspace that
+  already holds more still takes edits that add no document, and deleting is
+  how it shrinks.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 
@@ -217,9 +221,9 @@ over-long node.
 
 ## How many ops one call may carry
 
-One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit` and
-`wb_thread_edit` — carries at most **200** ops. A larger batch is refused
-before any op is applied, with "more ops than the 200-op limit for one call"
+One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit`,
+`wb_thread_edit` and `wb_workspace_edit` — carries at most **200** ops. A
+larger batch is refused before any op is applied, with "more ops than the 200-op limit for one call"
 (`wb_body_edit` says "passages"); split it across calls, and pass the same
 `proposalId` to `wb_body_edit` to keep the passages in one proposal. A text
 op whose offsets do not select its quote is found by searching the whole body,
