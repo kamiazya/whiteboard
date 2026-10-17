@@ -37,6 +37,11 @@ export const exportRequestSchema = z
   .strict()
 
 export const exportResponseSchema = z.object({
+  /**
+   * Where the export was written. Absolute on the local daemon, whose caller
+   * owns the machine; on server mode, relative to the workspace's exports
+   * directory, so a member is not handed the operator's directory layout.
+   */
   filePath: z.string(),
   /**
    * Characters this daemon's export fonts have no glyph for, in first-seen

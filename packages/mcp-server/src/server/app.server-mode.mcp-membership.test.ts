@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
@@ -55,6 +56,7 @@ beforeAll(async () => {
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let app: ReturnType<typeof createApp>
 let layout: ReturnType<typeof testDataLayout>
+let options: ServerModeAppOptions
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-mcp-membership-'))
@@ -73,7 +75,7 @@ beforeEach(async () => {
       ],
     }).providers,
   )
-  const options: ServerModeAppOptions = {
+  options = {
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
@@ -280,6 +282,51 @@ describe('server mode /mcp — a refusal reaches the member in its own words', (
       })
       expect(moved.isError).toBe(true)
       expect(textOf(moved)).toMatch(/a move needs a `path` to move it, a `name` to rename it/)
+    } finally {
+      await ada.close()
+    }
+  })
+})
+
+// Where the server keeps a member's export is the operator's layout, not the
+// member's: the answer names the file within the workspace's exports.
+describe('server mode — an export answers no server path', () => {
+  // The export renders from the directory the deps were booted over, so the
+  // document has to be in it rather than in the in-memory index.
+  beforeEach(async () => {
+    const boot = await bootSelfHostDeps(tempDir)
+    app = createApp({ ...options, serverDeps: boot.serverDeps, dataLayout: boot.dataLayout })
+  })
+
+  it.each([
+    'export',
+    'export-svg',
+  ])('POST …/%s names the file without the data directory', async (action) => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'board', kind: 'spatial' }],
+      })
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { workspaceId } = created.structuredContent as { workspaceId: string }
+
+      const res = await app.request(`${PUBLIC_URL}/api/w/${workspaceId}/document/board/${action}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await tokenFor('ada', 'canvas:write canvas:read')}`,
+          'content-type': 'application/json',
+          origin: PUBLIC_URL,
+        },
+        body: '{}',
+      })
+      const text = await res.text()
+      expect(res.status, text).toBe(200)
+      expect(text).not.toContain(tempDir)
+      const { filePath } = JSON.parse(text) as { filePath: string }
+      expect(filePath).not.toMatch(/^\//)
+      expect(filePath).toMatch(new RegExp(`^board-.*\\.${action === 'export' ? 'png' : 'svg'}$`))
     } finally {
       await ada.close()
     }

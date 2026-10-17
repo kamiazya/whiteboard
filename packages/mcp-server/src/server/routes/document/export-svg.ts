@@ -10,7 +10,9 @@ import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { getLogger } from '../../log.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import {
+  answeredExportPath,
   documentMissingBody,
+  type ExportPathAnswer,
   readExportBody,
   resolveRequestedOutputPath,
   writeExportFile,
@@ -35,6 +37,8 @@ import { onDocumentAction } from './path-route.js'
 export interface DocumentSvgExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
   scope: StoreScope
+  /** Defaults to `absolute`, the local daemon's answer. */
+  exportPaths?: ExportPathAnswer
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -93,7 +97,12 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
     // decides what an export answers with — the PNG route and this one had
     // already drifted into two different response shapes.
     const response: ExportResponse = {
-      filePath,
+      filePath: answeredExportPath(
+        filePath,
+        options.exportPaths ?? 'absolute',
+        layout,
+        workspaceId,
+      ),
       undrawable: [...undrawable],
       unresolvedFamilies: [...unresolvedFamilies],
     }

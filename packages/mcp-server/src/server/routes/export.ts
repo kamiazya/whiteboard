@@ -10,7 +10,9 @@ import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
+  answeredExportPath,
   documentMissingBody,
+  type ExportPathAnswer,
   readExportBody,
   resolveRequestedOutputPath,
   writeExportFile,
@@ -70,6 +72,8 @@ async function renderedExport(
 export interface ExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
   scope: StoreScope
+  /** Defaults to `absolute`, the local daemon's answer. */
+  exportPaths?: ExportPathAnswer
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -111,7 +115,12 @@ export function createExportRouter(options: ExportRouterOptions) {
       extension: 'png',
     })
     const response: ExportResponse = {
-      filePath,
+      filePath: answeredExportPath(
+        filePath,
+        options.exportPaths ?? 'absolute',
+        layout,
+        workspaceId,
+      ),
       undrawable: [...undrawable],
       unresolvedFamilies: [...unresolvedFamilies],
     }

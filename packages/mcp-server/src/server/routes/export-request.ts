@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   type ApiErrorBody,
@@ -128,6 +128,24 @@ export async function writeExportFile(
   throw new Error(
     `failed to generate a unique export filename after ${MAX_DEFAULT_PATH_ATTEMPTS} attempts (last tried: ${lastFilePath})`,
   )
+}
+
+/**
+ * How an export's answer names the file it wrote. The local daemon's caller
+ * is the machine's owner and opens the file at that path, so it gets the
+ * absolute one. A server-mode caller is a member, for whom the absolute path
+ * is only the operator's directory layout, so it gets the path within the
+ * workspace's exports directory.
+ */
+export type ExportPathAnswer = 'absolute' | 'exports-relative'
+
+export function answeredExportPath(
+  filePath: string,
+  answer: ExportPathAnswer,
+  layout: ExportsLayout,
+  workspaceId: string,
+): string {
+  return answer === 'absolute' ? filePath : relative(layout.exportsDir(workspaceId), filePath)
 }
 
 /**

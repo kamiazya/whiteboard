@@ -357,6 +357,7 @@ export function createApp(options: AppOptions) {
   // the deps whenever the keeper serves another. One scope, built here, is
   // what `split-dir` holds: `app.split-dir.test.ts`.
   const scope = storeScope(options.dataLayout.dataDir, options.dataLayout.tenantId)
+  const exportPaths = options.authMode === 'server-mode' ? 'exports-relative' : 'absolute'
   // The document router's checkpoints and the files router's version-aware
   // purge read the same rows, so they share one store.
   const versionStore = new FileVersionStore(scope)
@@ -371,6 +372,7 @@ export function createApp(options: AppOptions) {
       serverDeps: options.serverDeps,
       scope,
       versionStore,
+      exportPaths,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
@@ -381,7 +383,10 @@ export function createApp(options: AppOptions) {
     }),
   )
   app.route('/', createFilesRouter({ versionStore, scope }))
-  app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
+  app.route(
+    '/',
+    createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope, exportPaths }),
+  )
   app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
