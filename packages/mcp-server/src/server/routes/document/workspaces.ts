@@ -309,7 +309,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // PATCH, not PUT: a field ABSENT means "leave this layer alone", which is
   // the port's contract and something PUT cannot express — under PUT a body
   // carrying only a name would be asking to drop the address.
-  const owns = options.ownsWorkspace ?? (async () => true)
+  const owns = options.ownsWorkspace ?? (() => Promise.resolve(true))
   app.patch('/api/workspaces/:workspaceId', async (c) => {
     const handle = c.req.param('workspaceId')
     const malformed = refuseMalformedHandle(c, handle)
