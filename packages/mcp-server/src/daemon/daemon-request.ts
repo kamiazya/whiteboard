@@ -13,6 +13,14 @@ export interface DaemonRequest {
   readonly body?: unknown
   /** Abandons the exchange when no answer lands within this; none waits as long as it takes. */
   readonly timeoutMs?: number
+  /**
+   * Abandons the exchange this long after it starts, however steadily bytes
+   * arrive — `timeoutMs` restarts on each one, so a server trickling its
+   * answer outlasts it indefinitely.
+   */
+  readonly deadlineMs?: number
+  /** Abandons the exchange once the body passes this many bytes, rather than holding all of it. */
+  readonly maxBodyBytes?: number
 }
 
 export interface DaemonAnswer {
@@ -52,8 +60,10 @@ function bodyOf(text: string): unknown {
 export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
   return new Promise((resolve, reject) => {
     let connected = false
-    const fail = (err: Error) =>
+    const fail = (err: Error) => {
+      clearTimeout(deadline)
       reject(connected ? new DaemonNoAnswerError(err.message, { cause: err }) : err)
+    }
     const payload = req.body === undefined ? undefined : JSON.stringify(req.body)
     const outgoing = httpRequest(
       {
@@ -64,14 +74,30 @@ export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
       },
       (res) => {
         const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
+        let received = 0
+        res.on('data', (chunk: Buffer) => {
+          received += chunk.length
+          if (req.maxBodyBytes !== undefined && received > req.maxBodyBytes) {
+            outgoing.destroy(new Error(`answer exceeds ${req.maxBodyBytes} bytes`))
+            return
+          }
+          chunks.push(chunk)
+        })
         res.on('error', fail)
         res.on('end', () => {
+          clearTimeout(deadline)
           const body = bodyOf(Buffer.concat(chunks).toString('utf8'))
           resolve({ status: res.statusCode ?? 0, body })
         })
       },
     )
+    const deadline =
+      req.deadlineMs === undefined
+        ? undefined
+        : setTimeout(
+            () => outgoing.destroy(new Error(`no complete answer within ${req.deadlineMs}ms`)),
+            req.deadlineMs,
+          )
     outgoing.on('socket', (socket) => {
       // A kept-alive socket is handed over already connected.
       if (!socket.connecting) connected = true

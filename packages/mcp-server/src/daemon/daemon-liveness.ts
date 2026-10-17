@@ -90,6 +90,13 @@ const answeredPidSchema = z.object({ pid: z.number().int().positive() })
  */
 const SOCKET_ASK_TIMEOUT_MS = 1_500
 
+/**
+ * The proof is asked of a server that has not yet shown it is the daemon, so
+ * it gets no more time than the ask timeout in total, and no room for more
+ * than a proof: `{"proof":"<43 chars>"}` is under 64 bytes.
+ */
+const PROOF_MAX_BODY_BYTES = 1_024
+
 type Ask = (req: DaemonRequest) => Promise<DaemonAnswer>
 
 /**
@@ -125,6 +132,8 @@ async function provenPipe(
     method: 'GET',
     path: endpointProofUrl(nonce),
     timeoutMs: SOCKET_ASK_TIMEOUT_MS,
+    deadlineMs: SOCKET_ASK_TIMEOUT_MS,
+    maxBodyBytes: PROOF_MAX_BODY_BYTES,
   })
   if ('liveness' in asked) return asked.liveness
   const body = endpointProofResponseSchema.safeParse(asked.answer.body)
