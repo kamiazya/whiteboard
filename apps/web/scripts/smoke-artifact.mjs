@@ -138,6 +138,7 @@ function main() {
     assert(csp.includes("default-src 'self'"), "CSP: default-src 'self'")
     assert(csp.includes("base-uri 'none'"), "CSP: base-uri 'none'")
     assert(csp.includes("object-src 'none'"), "CSP: object-src 'none'")
+    assert(csp.includes("form-action 'none'"), "CSP: form-action 'none'")
     assert(csp.includes("script-src 'self'"), "CSP: script-src 'self'")
     // loro-crdt is WASM; without 'wasm-unsafe-eval' the app dies at bootstrap (blank page).
     assert(
