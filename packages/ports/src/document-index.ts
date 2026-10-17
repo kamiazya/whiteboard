@@ -4,6 +4,9 @@ import {
   documentKindSchema,
   documentNameSchema,
   documentPathSchema,
+  namespaceHandleSchema,
+  parseWorkspaceAddress,
+  SINGLE_PERSON_NAMESPACE,
   workspaceDisplayNameSchema,
   workspaceIdSchema,
   workspaceSegmentSchema,
@@ -124,6 +127,12 @@ export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
 export const workspaceEntrySchema = z
   .object({
     workspaceId: workspaceIdSchema,
+    /**
+     * The handle of the namespace holding this workspace, as of this listing
+     * (ADR-0053). Absent means the single-person keeper's one namespace,
+     * `me`: a keeper with one person has nothing else to name.
+     */
+    namespace: namespaceHandleSchema.optional(),
     segment: workspaceSegmentSchema.optional(),
     displayName: workspaceDisplayNameSchema.optional(),
   })
@@ -149,46 +158,70 @@ export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
 export const storedWorkspaceEntrySchema = z
   .object({
     workspaceId: workspaceIdSchema,
+    namespace: namespaceHandleSchema.optional().catch(undefined),
     segment: workspaceSegmentSchema.optional().catch(undefined),
     displayName: workspaceDisplayNameSchema.optional().catch(undefined),
   })
   .transform(
-    ({ workspaceId, segment, displayName }): WorkspaceEntry => ({
+    ({ workspaceId, namespace, segment, displayName }): WorkspaceEntry => ({
       workspaceId,
+      ...(namespace === undefined ? {} : { namespace }),
       ...(segment === undefined ? {} : { segment }),
       ...(displayName === undefined ? {} : { displayName }),
     }),
   )
 
 /**
- * Turns an incoming address string into the workspace it names: `segment`
- * first, then `workspaceId`, else null.
+ * Turns an incoming address string into the workspace it names, or null.
  *
- * The ONE definition of that order. Every surface that accepts a handle — an
- * HTTP path parameter, a sync-stream target, an MCP tool argument — shares a single
- * namespace between ADR-0019's canonical and user-facing layers, so a rule
- * spelled out per surface is a rule that will eventually be spelled
- * differently at one of them.
+ * The ONE definition of how an address resolves. Every surface that accepts a
+ * handle — an HTTP path parameter, a sync-stream target, an MCP tool argument
+ * — reads the same three forms (`parseWorkspaceAddress`), so a rule spelled
+ * out per surface is a rule that will eventually be spelled differently at
+ * one of them:
  *
- * Segment wins the one collision that can arise. It cannot happen against a
- * CANONICAL id, since `workspaceSegmentSchema` structurally forbids a
- * ULID-shaped segment, but a LEGACY id is any `[a-zA-Z0-9_-]+` string and can
- * equal somebody's segment. The segment is what a human chose on purpose; the
- * shadowed workspace stays reachable by its own id.
+ * - a canonical id names its workspace, whatever namespace holds it;
+ * - `<handle>/<segment>` names the segment inside that namespace only;
+ * - a bare segment means `callerNamespace`'s, and only then a legacy id.
  *
- * Total, and never turns a handle away for its SHAPE: the daemon's live ids
+ * A segment is unique per namespace (ADR-0053), so a bare segment is looked
+ * up inside ONE namespace — never across the registry, which would answer
+ * with somebody else's workspace. The default is the single-person
+ * namespace, and a row without a `namespace` sits in it, so a single-person
+ * keeper resolves exactly as it did before namespaces. A keeper with many
+ * people whose call site forgets the caller therefore reaches nothing rather
+ * than another person's segment.
+ *
+ * Segment beats legacy id in the one collision that can arise: a legacy id is
+ * any `[a-zA-Z0-9_-]+` string and can equal a segment. The segment is what a
+ * human chose on purpose; the shadowed workspace stays reachable by its own
+ * id. A canonical id cannot collide, since no segment is ULID-shaped.
+ *
+ * Never turns a handle away for being legacy-shaped: the daemon's live ids
  * include `default` and nanoid-minted strings carrying `_`, none of which are
  * valid segments, and all of which must still resolve.
  */
 export function resolveWorkspaceHandle(
   entries: readonly WorkspaceEntry[],
   handle: string,
+  callerNamespace: string = SINGLE_PERSON_NAMESPACE,
 ): WorkspaceEntry | null {
-  return (
-    entries.find((entry) => entry.segment === handle) ??
-    entries.find((entry) => entry.workspaceId === handle) ??
-    null
-  )
+  const address = parseWorkspaceAddress(handle)
+  if (address === null) return null
+  const inNamespace = (namespace: string, segment: string) =>
+    entries.find(
+      (entry) =>
+        (entry.namespace ?? SINGLE_PERSON_NAMESPACE) === namespace && entry.segment === segment,
+    )
+  const byId = (workspaceId: string) => entries.find((entry) => entry.workspaceId === workspaceId)
+  switch (address.form) {
+    case 'id':
+      return byId(address.workspaceId) ?? null
+    case 'qualified':
+      return inNamespace(address.namespace, address.segment) ?? null
+    case 'bare':
+      return inNamespace(callerNamespace, address.handle) ?? byId(address.handle) ?? null
+  }
 }
 
 /**
@@ -348,8 +381,20 @@ export function isWorkspaceSegmentTakenError(error: unknown): error is Workspace
  * table, today) rather than by this contract.
  */
 export class WorkspaceSegmentTakenError extends Error {
-  constructor(readonly segment: string) {
-    super(`Workspace segment "${segment}" is already taken`)
+  /**
+   * `namespace` is the one the segment is unique in (ADR-0053). A
+   * single-person keeper has only one, so naming it would tell nobody
+   * anything.
+   */
+  constructor(
+    readonly segment: string,
+    readonly namespace?: string,
+  ) {
+    super(
+      namespace === undefined
+        ? `Workspace segment "${segment}" is already taken`
+        : `Workspace segment "${segment}" is already taken in namespace "${namespace}"`,
+    )
     this.name = 'WorkspaceSegmentTakenError'
   }
 }
@@ -464,8 +509,8 @@ export interface DocumentIndex {
    */
   listWorkspaces(): Promise<WorkspaceEntry[]>
   /**
-   * The workspace an incoming ADDRESS names — `segment` first, then
-   * `workspaceId` — or null when nothing answers to it.
+   * The workspace an incoming ADDRESS names — in any of the forms
+   * `resolveWorkspaceHandle` reads — or null when nothing answers to it.
    *
    * Separate from `listWorkspaces` because a caller holding a handle should
    * not have to know the resolution order to use it; `resolveWorkspaceHandle`
