@@ -137,10 +137,13 @@ function announceComment(
   text: string,
 ): void {
   if (app.getHostCapabilities()?.message === undefined) return
+  // A node id is chosen by whoever wrote the document, and a user-role
+  // message would present it as the user's own words, so the node is named
+  // by position only. The comment written to the document keeps its target.
   const where =
     anchor.targetNodeId === undefined
       ? `at (${anchor.x}, ${anchor.y})`
-      : `on node "${anchor.targetNodeId}" at (${anchor.x}, ${anchor.y})`
+      : `on a node at (${anchor.x}, ${anchor.y})`
   void app
     .sendMessage({
       role: 'user',
