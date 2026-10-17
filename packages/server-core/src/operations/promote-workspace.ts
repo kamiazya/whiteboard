@@ -12,6 +12,17 @@ import {
 } from './promote-carried.js'
 import { TextBreachRefusalError, textBreachRefusal } from './sync-write-refusals.js'
 
+/**
+ * The most documents one promote carries. A promote is the browser keeper's
+ * whole record, and that keeper refuses to grow past 2000 documents on any
+ * device (ADR-0044's 2026-09-28 addendum), so a legitimate record never
+ * arrives larger. Counted in documents because that is the axis the cost
+ * follows — the record's memory is super-linear in document count, and the
+ * move writes a checkpoint per document — while the body ceiling already
+ * bounds the bytes. A record past it is refused before any of it merges.
+ */
+export const PROMOTE_MAX_DOCUMENTS = 2000
+
 export interface PromoteWorkspaceInput {
   readonly workspaceId: string
   /** The browser keeper's whole record, as a Loro snapshot. */
@@ -26,6 +37,8 @@ export interface PromoteWorkspaceInput {
 
 export type PromoteWorkspaceResult =
   | { kind: 'malformed-snapshot' }
+  /** The record holds more documents than a promote carries; nothing was merged. */
+  | { kind: 'too-many-documents'; documents: number; limit: number }
   /** What was carried beside the record does not match it; nothing was merged. */
   | { kind: 'unmatched-carried'; reason: string }
   | {
@@ -142,6 +155,9 @@ export async function promoteWorkspace(
   const incoming = readIncoming(input)
   if (incoming === null) return { kind: 'malformed-snapshot' }
   const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)
+  if (promoted.length > PROMOTE_MAX_DOCUMENTS) {
+    return { kind: 'too-many-documents', documents: promoted.length, limit: PROMOTE_MAX_DOCUMENTS }
+  }
   const carried = await judgeCarried(incoming, {
     trash: input.trash ?? [],
     versions: input.versions ?? [],

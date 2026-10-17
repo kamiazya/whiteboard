@@ -431,6 +431,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   others cannot make one render cost the cube of its fan-out. Past the
   budget an embed draws as its placeholder or card. The budget holds for
   `wb_scene_render`, export and the web app's preview alike.
+- **A move into the daemon is bounded.** Moving a browser workspace to the
+  daemon is one request of at most 24 MiB carrying at most 2000 documents.
+  The daemon counts the documents before it merges anything, and refuses a
+  larger record whole (`promote_too_many_documents`). So one request cannot
+  make the daemon write an unbounded number of saved versions.
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user and make it
   owner-only. Server mode leaves its ownership and mode as the operator set
