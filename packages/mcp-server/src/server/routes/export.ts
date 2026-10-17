@@ -17,10 +17,11 @@ import {
 } from './export-request.js'
 
 /**
- * The render, with the one failure that belongs to the REQUEST rather than
- * to the renderer separated out: a positive scale can still size the target
- * below one pixel, and the size came from the caller — so that is a 400,
- * a busy database is left to the app's 503, and everything else here is a 500.
+ * The render, with the failures that belong to the REQUEST rather than to
+ * the renderer separated out: a positive scale can still size the target
+ * below one pixel, or past the pixel budget, and the size came from the
+ * caller — so those are a 400, a busy database is left to the app's 503, and
+ * everything else here is a 500.
  */
 async function renderedExport(
   workspaceId: string,
@@ -33,6 +34,11 @@ async function renderedExport(
   try {
     return await renderHeadless(workspaceId, path, body, scope)
   } catch (err) {
+    // Matched by name: an adapter reaches the export mechanics only through
+    // `headless-export`, and the refusal is the renderer's `ExportTooLargeError`.
+    if (err instanceof Error && err.name === 'ExportTooLargeError') {
+      return { error: { error: 'invalid_request', message: err.message }, status: 400 }
+    }
     const message = messageOf(err)
     if (/target size is zero/i.test(message)) {
       return {

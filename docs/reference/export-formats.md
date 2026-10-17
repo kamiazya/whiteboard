@@ -35,6 +35,13 @@ gives it one.
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+An inline Markdown image (`![alt](url)`) in a body draws its picture when the
+surface resolves the URL to a workspace attachment, or when the URL is
+`http:`, `https:` or `data:`. Any other URL — a bare or relative file path,
+`file:` — draws as its alt text. The daemon's PNG export goes one step
+further and draws only `data:` images: it never reads a file the URL names on
+the daemon's host, and never fetches a remote one.
+
 ## How large a markdown document may be
 
 One markdown write — the `markdown` field of a `wb_workspace_edit`
@@ -403,6 +410,11 @@ colour.
 Both request bodies refuse a field they do not define, naming it in a `400 invalid_request` —
 `POST …/export` takes `padding`, `scale`, `theme`, `style`, `outputPath` and `overwrite`, and
 `POST …/export-svg` the same without `scale`, since vector output has no resolution to set.
+
+A PNG is at most **16384 pixels a side** and **67,108,864 pixels** (64 Mi) in all, measured
+after `scale` and `padding`. A document whose export would be larger is refused with a
+`400 invalid_request` naming the size it would have been, before anything is drawn; lower
+`scale`, or export SVG, which has no limit.
 
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face
