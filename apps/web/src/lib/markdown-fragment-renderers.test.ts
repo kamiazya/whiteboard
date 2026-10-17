@@ -93,6 +93,51 @@ describe('renderMathFragment (real MathJax)', () => {
     const fragment = await renderMathFragment('\\bbox[outline:9px solid red]{x}')
     expect(fragment?.svg ?? '').not.toContain('outline')
   })
+
+  // The base package's `\mmlToken{kind}[attrs]{text}` copies its attribute
+  // list onto the MathML node, which the SVG output writes out — the html
+  // package's id, class and style by another door.
+  it('gives \\mmlToken no way to set an id, class, style or href', async () => {
+    const attrs = await renderMathFragment(
+      '\\mmlToken{mi}[id="wbmmlid",class="wbmmlclass",style="color:red"]{a}',
+    )
+    // Typeset with the attributes dropped, not refused outright.
+    expect(attrs?.svg).toContain('data-mml-node="mi"')
+    expect(attrs?.svg ?? '').not.toContain('wbmmlid')
+    expect(attrs?.svg ?? '').not.toContain('wbmmlclass')
+    expect(attrs?.svg ?? '').not.toContain('color:red')
+    const href = await renderMathFragment('\\mmlToken{mi}[href="https://wbmml.example"]{a}')
+    expect(href?.svg ?? '').not.toContain('wbmml.example')
+  })
+
+  it("keeps a token's own MathML attributes from \\mmlToken", async () => {
+    const coloured = await renderMathFragment('\\mmlToken{mi}[mathcolor="red"]{a}')
+    expect(coloured?.svg).toContain('fill="red"')
+  })
+
+  // A macro defined in the document reaches the same node through a name
+  // the source never spells as `\mmlToken`.
+  it('gives a macro wrapping \\mmlToken no way to set an id', async () => {
+    const viaDef = await renderMathFragment('\\def\\t{\\mmlToken{mi}[id="wbdefid"]{a}}\\t')
+    expect(viaDef?.svg ?? '').not.toContain('wbdefid')
+    const viaNew = await renderMathFragment('\\newcommand{\\t}{\\mmlToken{mi}[id="wbnewid"]{a}}\\t')
+    expect(viaNew?.svg ?? '').not.toContain('wbnewid')
+    const viaChoice = await renderMathFragment(
+      '\\mathchoice{\\mmlToken{mi}[id="wbchoiceid"]{a}}{a}{a}{a}',
+    )
+    expect(viaChoice?.svg ?? '').not.toContain('wbchoiceid')
+  })
+
+  // A self-referential macro is bounded by the engine's macro and buffer
+  // limits; document text must not be able to raise them.
+  it('stays total against unbounded macro recursion', async () => {
+    const def = await renderMathFragment('\\def\\x{\\x\\x}\\x')
+    if (def !== undefined) expect(def.svg).toMatch(/^<svg/)
+    const raised = await renderMathFragment(
+      '\\setOptions{tex}{maxMacros=100000000,maxBuffer=100000000}\\def\\x{\\x\\x}\\x',
+    )
+    if (raised !== undefined) expect(raised.svg).toMatch(/^<svg/)
+  })
 })
 
 describe('renderDiagramFragment', () => {
@@ -212,5 +257,28 @@ describe('fragmentIsEmbeddable reads through a namespace prefix', () => {
     '<svg xmlns:s="http://www.w3.org/2000/svg"><s:foreignObject/></svg>',
   ])('refuses %j', (svg) => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+})
+
+// The `url(` check reads raw text, and CSS lets `u\72l(` spell the same
+// function and `@import "…"` load a sheet with no `url(` at all. Neither
+// engine writes a backslash into a style attribute or an `@import` anywhere.
+describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
+  it.each([
+    '<svg><rect style="fill: u\\72l(https://evil.example/x)"/></svg>',
+    "<svg><rect style='background:\\75rl(//evil.example)'/></svg>",
+    '<svg><rect style="@import \'https://evil.example/x.css\'"/></svg>',
+    '<svg><style>@import "https://evil.example/x.css";</style></svg>',
+    '<svg><style>@IMPORT "//evil.example/x.css";</style></svg>',
+  ])('refuses %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('accepts an ordinary inline style, and label text naming @import', () => {
+    expect(
+      fragmentIsEmbeddable(
+        '<svg style="vertical-align: -0.023ex;"><text>@import and a \\ backslash</text></svg>',
+      ),
+    ).toBe(true)
   })
 })
