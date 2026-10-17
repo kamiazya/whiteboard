@@ -39,6 +39,33 @@ describe('onDocumentAction', () => {
     const res = await appWith('client-count').request('/api/w/ws1/document/client-count')
     expect(res.status).toBe(404)
   })
+
+  // Every action shares one wildcard, so a middleware the route lists has to
+  // be scoped to its own action: an update's body ceiling and content slot
+  // must not run for a sibling action's request.
+  it("runs a route's middleware only for its own action", async () => {
+    const app = new Hono()
+    const ran: string[] = []
+    onDocumentAction(
+      app,
+      'post',
+      'update',
+      (c) => c.json({ hit: 'update' }),
+      async (_c, next) => {
+        ran.push('update middleware')
+        await next()
+      },
+    )
+    onDocumentAction(app, 'post', 'export', (c) => c.json({ hit: 'export' }))
+
+    const exported = await app.request('/api/w/ws1/document/doc/export', { method: 'POST' })
+    expect(await exported.json()).toEqual({ hit: 'export' })
+    expect(ran).toEqual([])
+
+    const updated = await app.request('/api/w/ws1/document/doc/update', { method: 'POST' })
+    expect(await updated.json()).toEqual({ hit: 'update' })
+    expect(ran).toEqual(['update middleware'])
+  })
 })
 
 describe('onDocumentFile', () => {
@@ -51,6 +78,25 @@ describe('onDocumentFile', () => {
     expect(res.status).toBe(200)
     // Greedy: the LAST /file/<id> is the file tail, the rest is the path.
     expect(await res.json()).toEqual({ workspaceId: 'ws1', path: 'a/file/b', fileId: 'c' })
+  })
+
+  it("runs a route's middleware only for a file tail", async () => {
+    const app = new Hono()
+    const ran: string[] = []
+    onDocumentFile(
+      app,
+      'put',
+      (c) => c.json({ hit: 'file' }),
+      async (_c, next) => {
+        ran.push('file middleware')
+        await next()
+      },
+    )
+    onDocumentAction(app, 'put', 'update', (c) => c.json({ hit: 'update' }))
+
+    const updated = await app.request('/api/w/ws1/document/doc/update', { method: 'PUT' })
+    expect(await updated.json()).toEqual({ hit: 'update' })
+    expect(ran).toEqual([])
   })
 })
 

@@ -31,6 +31,7 @@ import {
   OffGrammarPathError,
   type SyncWriteRefusalError,
   syncWriteAnswer,
+  TooManyDocumentsError,
   textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './sync-write-refusals.js'
@@ -42,6 +43,7 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
+  TooManyDocumentsError: () => new TooManyDocumentsError(2001),
 }
 
 /**

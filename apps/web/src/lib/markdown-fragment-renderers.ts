@@ -58,10 +58,12 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     // fontCache 'local' keeps each fragment self-contained: 'global' would
     // put shared glyph <defs> outside the fragment, which cannot survive
     // being embedded into the preview's larger SVG document.
-    // `href` is excluded from the package set: \href{javascript:...}{x}
-    // would put an attacker-controlled URL into SVG this app injects
-    // verbatim (see fragmentHrefsAreLocal for the output-side guard).
-    const tex = new TeX({ packages: AllPackages.filter((name) => name !== 'href') })
+    // The `html` package is excluded: it provides \href, \class, \cssId and
+    // \style, which put an attacker-chosen URL, class, id or inline style
+    // into SVG this app injects into its own DOM (an id can clobber a
+    // global, a class can borrow the app's CSS). fragmentHrefsAreLocal is
+    // the output-side guard for the URL alone.
+    const tex = new TeX({ packages: AllPackages.filter((name) => name !== 'html') })
     const svg = new SVG({ fontCache: 'local' })
     const doc = mathjax.document('', { InputJax: tex, OutputJax: svg })
     return (value: string) => {

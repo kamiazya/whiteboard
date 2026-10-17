@@ -13,9 +13,24 @@
 // runtime status, asked under the record's token, names its pid; naming the
 // recorded one makes it the writer whatever /proc says. The socket is asked
 // on that ambiguous path alone, so the plain path costs no connection.
+//
+// Where no start time can be read at all (no /proc), a live pid proves
+// nothing. On Unix the socket sits in a directory only its owner can enter, so
+// whatever serves it is this user's and the pid is taken as the writer. A
+// Windows named pipe has no such directory: once a daemon dies without
+// removing its record, another OS user can create a pipe under the recorded
+// name. So a pipe is asked to prove it holds the record's token
+// (`../shared/endpoint-proof.ts`) without being sent it, and only a proof makes
+// it `running`.
 
 import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { z } from 'zod'
+import {
+  endpointProofResponseSchema,
+  endpointProofUrl,
+  isEndpointProof,
+  newEndpointProofNonce,
+} from '../shared/endpoint-proof.js'
 import { type ProcessIdentitySeams, recordedProcess } from '../shared/process-identity.js'
 import type { RecordedDaemon } from './daemon-record-schema.js'
 import {
@@ -24,6 +39,7 @@ import {
   type DaemonRequest,
   requestDaemon,
 } from './daemon-request.js'
+import { isNamedPipe } from './daemon-socket.js'
 
 /**
  * - `running`: the pid is the process that wrote the record.
@@ -74,6 +90,76 @@ const answeredPidSchema = z.object({ pid: z.number().int().positive() })
  */
 const SOCKET_ASK_TIMEOUT_MS = 1_500
 
+/**
+ * The proof is asked of a server that has not yet shown it is the daemon, so
+ * it gets no more time than the ask timeout in total, and no room for more
+ * than a proof: `{"proof":"<43 chars>"}` is under 64 bytes.
+ */
+const PROOF_MAX_BODY_BYTES = 1_024
+
+type Ask = (req: DaemonRequest) => Promise<DaemonAnswer>
+
+/**
+ * The record's socket's answer, or the verdict its silence gives: only a
+ * connection nobody accepted means nothing serves the socket.
+ */
+async function askSocket(
+  request: Ask,
+  req: DaemonRequest,
+): Promise<{ answer: DaemonAnswer } | { liveness: DaemonLiveness }> {
+  try {
+    return { answer: await request(req) }
+  } catch (err) {
+    return {
+      liveness:
+        err instanceof DaemonNoAnswerError ? { state: 'unconfirmed' } : { state: 'pid-reused' },
+    }
+  }
+}
+
+/**
+ * Whether the pipe's server holds `token`, asked WITHOUT the token: sending it
+ * is exactly what a server that has not proved itself must not receive.
+ */
+async function provenPipe(
+  request: Ask,
+  socketPath: string,
+  token: string | undefined,
+): Promise<DaemonLiveness> {
+  const nonce = newEndpointProofNonce()
+  const asked = await askSocket(request, {
+    record: { socketPath },
+    method: 'GET',
+    path: endpointProofUrl(nonce),
+    timeoutMs: SOCKET_ASK_TIMEOUT_MS,
+    deadlineMs: SOCKET_ASK_TIMEOUT_MS,
+    maxBodyBytes: PROOF_MAX_BODY_BYTES,
+  })
+  if ('liveness' in asked) return asked.liveness
+  const body = endpointProofResponseSchema.safeParse(asked.answer.body)
+  const proven =
+    asked.answer.status === 200 &&
+    body.success &&
+    token !== undefined &&
+    (await isEndpointProof(token, nonce, body.data.proof))
+  return proven ? { state: 'running' } : { state: 'unconfirmed' }
+}
+
+/** Whether the socket names the recorded pid, asked under the record's token. */
+async function confirmedPid(request: Ask, record: RecordedDaemon, socketPath: string) {
+  const asked = await askSocket(request, {
+    record: { socketPath, ...(record.token === undefined ? {} : { token: record.token }) },
+    method: 'GET',
+    path: runtimeStatusApiUrl(),
+    timeoutMs: SOCKET_ASK_TIMEOUT_MS,
+  })
+  if ('liveness' in asked) return asked.liveness
+  const status = answeredPidSchema.safeParse(asked.answer.body)
+  if (asked.answer.status !== 200 || !status.success) return { state: 'unconfirmed' } as const
+  if (status.data.pid === record.pid) return { state: 'running' } as const
+  return { state: 'unconfirmed', servingPid: status.data.pid } as const
+}
+
 export async function daemonLiveness(
   record: RecordedDaemon,
   { request = requestDaemon, ...identitySeams }: DaemonLivenessSeams = {},
@@ -83,21 +169,10 @@ export async function daemonLiveness(
   if (identity === 'writer') return { state: 'running' }
   if (identity === 'dead') return { state: 'dead' }
   const { socketPath } = record
-  if (socketPath === undefined) return { state: 'pid-reused' }
-  let answer: DaemonAnswer
-  try {
-    answer = await request({
-      record: { socketPath, ...(record.token === undefined ? {} : { token: record.token }) },
-      method: 'GET',
-      path: runtimeStatusApiUrl(),
-      timeoutMs: SOCKET_ASK_TIMEOUT_MS,
-    })
-  } catch (err) {
-    // Only a connection nobody accepted means nothing serves the socket.
-    return err instanceof DaemonNoAnswerError ? { state: 'unconfirmed' } : { state: 'pid-reused' }
+  if (identity === 'unknown') {
+    if (socketPath === undefined || !isNamedPipe(socketPath)) return { state: 'running' }
+    return provenPipe(request, socketPath, record.token)
   }
-  const status = answeredPidSchema.safeParse(answer.body)
-  if (answer.status !== 200 || !status.success) return { state: 'unconfirmed' }
-  if (status.data.pid === record.pid) return { state: 'running' }
-  return { state: 'unconfirmed', servingPid: status.data.pid }
+  if (socketPath === undefined) return { state: 'pid-reused' }
+  return confirmedPid(request, record, socketPath)
 }

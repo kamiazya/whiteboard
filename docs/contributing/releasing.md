@@ -16,6 +16,11 @@ Three protected environments must exist before a release run reaches its publish
 
 The two publish environments should require at least one reviewer before the job runs.
 Without the environment protection, the `release.yml` publish guard is incomplete.
+A forced re-publish runs the tag's own copy of `release.yml`, so a tag ruleset restricting
+`mcp-server-v*` tags to maintainers (creation, update and deletion) is required too; see
+**Docker SBOM and Provenance** for what it protects. Until that ruleset exists, do not
+trust a signature or provenance naming the `refs/tags/<tag>` identity: trust only the
+`refs/heads/main` identity.
 `production-web` carries the Cloudflare secrets, so protect it the same way.
 `release-please` and `advance-stable` bind no environment: neither holds a registry or
 deploy credential. The PR-preview deploys use a separate `preview-web` environment, which
@@ -138,8 +143,10 @@ Steps (in order):
 
 1. Validate `mcp-server-v<semver>` tag shape via `TAG` env var (same guard as npm job).
 2. Checkout the release tag.
-3. Install dependencies.
-4. `pnpm publish-gate`, the same publishability tier the npm job runs (see "Publish gate
+3. On a forced re-publish, refuse when the checked-out tag is not `GITHUB_SHA`, the commit
+   the dispatch ran from, which the image's provenance and the cosign certificate name.
+4. Install dependencies.
+5. `pnpm publish-gate`, the same publishability tier the npm job runs (see "Publish gate
    scope" above), then `pnpm smoke:docker` and `pnpm smoke:docker-backup-restore`, the
    checks only a container can answer. It does **not** run `check:release-candidate:docker`:
    that aggregate chains `pnpm test`, the full matrix verify CI already ran at this SHA.
@@ -147,8 +154,8 @@ Steps (in order):
    different load-dependent tests, and a re-run checks out the same tag, so a flake there
    blocks the image for that whole release. `check:release-candidate:docker` stays the
    local, full pre-release pass.
-5. `docker/build-push-action` with `sbom: true` and `provenance: true` (OCI attestations).
-6. `cosign sign --yes` using `DIGEST` and `IMAGE_REPO` env vars (not inline shell
+6. `docker/build-push-action` with `sbom: true` and `provenance: true` (OCI attestations).
+7. `cosign sign --yes` using `DIGEST` and `IMAGE_REPO` env vars (not inline shell
    expansion); keyless signing via Sigstore OIDC, no private key material.
 
 Permissions: `contents: read`, `id-token: write`, `packages: write` (job-scoped).
@@ -279,20 +286,50 @@ identity is tied to the GitHub Actions OIDC token of the `production-docker`
 environment, not to any stored private key.
 
 The certificate identity is the signing workflow's URL at the ref it ran
-from: `release.yml` on `refs/heads/main` for a release-please release, or on
-the dispatched ref for a forced re-publish (dispatch it with `--ref <tag>`;
-see **Force-publish via release.yml** below). Pin both ends of the identity
-and the repository — an unanchored `--certificate-identity-regexp` accepts
-any workflow whose URL merely contains the repository path, such as one in a
-fork on a branch named after it.
+from, and the certificate also records the event that started the run. A
+release has exactly two shapes, so verify against the one the image came
+from rather than a pattern that accepts both:
 
-Verification:
+- a release-please release signs as `release.yml` on `refs/heads/main`,
+  triggered by `push`;
+- a forced re-publish signs as `release.yml` on `refs/tags/<tag>`, triggered
+  by `workflow_dispatch`. `docker-publish-sign` refuses a forced run whose
+  checked-out tag is not the commit the run was dispatched from, or that was
+  dispatched from any ref but `refs/tags/<tag>` itself, so a forced
+  re-publish is always dispatched with `--ref <tag>` (see
+  **Force-publish via release.yml** below) and never signs a tag under
+  `main`'s identity.
+
+Pin the whole identity, the trigger and the repository. An unanchored
+`--certificate-identity-regexp` accepts any workflow whose URL merely contains
+the repository path, such as one in a fork on a branch named after it.
+
+Verification of a release-please release:
 ```bash
 cosign verify ghcr.io/kamiazya/whiteboard:<tag> \
-  --certificate-identity-regexp '^https://github\.com/kamiazya/whiteboard/\.github/workflows/release\.yml@refs/(heads/main|tags/mcp-server-v[0-9]+\.[0-9]+\.[0-9]+)$' \
+  --certificate-identity 'https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@refs/heads/main' \
+  --certificate-github-workflow-trigger push \
   --certificate-github-workflow-repository kamiazya/whiteboard \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
+
+Verification of a forced re-publish, with `<tag>` the same tag in both places:
+```bash
+cosign verify ghcr.io/kamiazya/whiteboard:<tag> \
+  --certificate-identity 'https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@refs/tags/<tag>' \
+  --certificate-github-workflow-trigger workflow_dispatch \
+  --certificate-github-workflow-repository kamiazya/whiteboard \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+The tag identity is only as strong as control over who can create the tag. A
+dispatch from a tag runs **that tag's** copy of `release.yml`, so anyone who
+can push `mcp-server-v9.9.9` at a commit carrying an edited workflow can drop
+the `environment:` binding, sign, and produce a certificate this second check
+accepts. A tag ruleset restricting creation, update and deletion of
+`mcp-server-v*` tags to maintainers is therefore **required** for the forced
+re-publish identity to mean anything; without one, trust only the
+`refs/heads/main` identity.
 
 ---
 
@@ -347,11 +384,13 @@ only a failed image push with `publish_npm` off, and `docker-publish-sign` re-ta
 `mcp-server-v<semver>` and the `production-npm` and `production-docker` environments
 must approve.
 
-Dispatch a forced npm publish **from the tag itself**:
-`gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance
-attests the commit the run was dispatched from, so `publish-mcp` fails before
-`npm publish --provenance` when the checked-out tag is a different commit — a
-dispatch from `main` would otherwise publish the tag's tarball under `main`'s provenance.
+Dispatch a forced publish **from the tag itself**:
+`gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance,
+the image's provenance and the cosign certificate all name the commit and ref the run
+was dispatched from, so both `publish-mcp` and `docker-publish-sign` fail right after
+checkout when the checked-out tag is a different commit, or when the run was dispatched
+from any ref but `refs/tags/<tag>` — a dispatch from `main` would otherwise publish the
+tag's tarball and image under `main`'s identity, even at the tag's own commit.
 
 ---
 

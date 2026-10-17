@@ -613,8 +613,12 @@ describe("the pid-reuse judgement against the daemon's own", () => {
     withDefaults({ numRuns: 200 }),
   )('agrees on whether a pid still names its writer', (alive, startMs, writtenAtMs) => {
     const seams = { isAlive: () => alive, startMs: () => startMs }
+    // The daemon's `unknown` (no start time) is the copy's writer: the copy
+    // judges pid files and Unix-socket records, where the daemon too takes an
+    // unknown live pid as the writer; only a named pipe is asked for a proof.
+    const verdict = daemonRecordedProcess(7, writtenAtMs, seams)
     expect(isRecordWriter(7, new Date(writtenAtMs).toISOString(), seams)).toBe(
-      daemonRecordedProcess(7, writtenAtMs, seams) === 'writer',
+      verdict === 'writer' || verdict === 'unknown',
     )
   })
 })

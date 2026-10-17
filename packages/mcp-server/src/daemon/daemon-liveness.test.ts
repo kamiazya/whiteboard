@@ -1,13 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { createServer, type ServerResponse } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
+import { endpointProof } from '../shared/endpoint-proof.js'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
-import { DaemonNoAnswerError, requestDaemon } from './daemon-request.js'
+import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
 
 const startedAt = '2026-01-01T00:00:00.000Z'
 const writtenAtMs = Date.parse(startedAt)
@@ -165,6 +166,70 @@ describe('daemonLiveness', () => {
     const daemon = await answeringDaemonSocket(pid, TOKEN)
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
     expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'unconfirmed' })
+  })
+})
+
+type ProofReply = (res: ServerResponse, body: string) => void
+
+/**
+ * A listener answering the endpoint proof for TOKEN, `reply` deciding how the
+ * answer is sent. Returned as the `request` seam that reaches it under a
+ * named-pipe record, since a pipe cannot be listened on here.
+ */
+async function provingSocket(reply: ProofReply) {
+  const socketPath = testSocketPath()
+  const server = createServer((req, res) => {
+    const nonce = new URL(req.url ?? '/', 'http://daemon').searchParams.get('nonce') ?? ''
+    void endpointProof(TOKEN, nonce).then((proof) => reply(res, JSON.stringify({ proof })))
+  })
+  await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
+  onTestFinished(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve())
+        server.closeAllConnections()
+      }),
+  )
+  return (req: DaemonRequest) => requestDaemon({ ...req, record: { ...req.record, socketPath } })
+}
+
+const PIPE = String.raw`\\.\pipe\wb-liveness-test`
+const noStartTime = { ...alive, startMs: () => null }
+
+describe('daemonLiveness over a named pipe', () => {
+  const record = { pid: PID, startedAt, socketPath: PIPE, token: TOKEN }
+
+  it('answers running when the pipe proves it holds the token', async () => {
+    const request = await provingSocket((res, body) =>
+      res.writeHead(200, { 'content-type': 'application/json' }).end(body),
+    )
+    expect(await daemonLiveness(record, { ...noStartTime, request })).toEqual({
+      state: 'running',
+    })
+  })
+
+  // An inactivity timeout restarts on every byte, so a server trickling one
+  // keeps the ask open for as long as it likes.
+  it('answers unconfirmed within a deadline when the pipe trickles its answer', async () => {
+    const request = await provingSocket((res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.write('{"proof":')
+      const drip = setInterval(() => res.write(' '), 100)
+      res.on('close', () => clearInterval(drip))
+    })
+    const asked = daemonLiveness(record, { ...noStartTime, request })
+    expect(await settlesWithin(asked, 4_000)).toEqual({ state: 'unconfirmed' })
+  }, 10_000)
+
+  it('answers unconfirmed when the proof arrives inside an oversized body', async () => {
+    const request = await provingSocket((res, body) =>
+      res
+        .writeHead(200, { 'content-type': 'application/json' })
+        .end(`${body}${' '.repeat(256 * 1024)}`),
+    )
+    expect(await daemonLiveness(record, { ...noStartTime, request })).toEqual({
+      state: 'unconfirmed',
+    })
   })
 })
 

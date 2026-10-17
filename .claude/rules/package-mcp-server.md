@@ -325,7 +325,11 @@ clock moves `btime` and not a process's start ticks. A socket naming the
 recorded pid is the writer; one that answers otherwise, or accepts the
 connection and stays silent past the ask's timeout, is `unconfirmed` — only
 a connection nobody accepts is `pid-reused` — and `daemon stop` then refuses
-without signalling or deleting the record. A `daemon.json` that cannot be READ
+without signalling or deleting the record. Where no start time can be read
+(Windows), `recordedProcess` answers `unknown`, never `writer`, and a named
+pipe must answer `/api/runtime/proof` (an HMAC over a fresh nonce, keyed by
+the token, asked WITHOUT it) before anything attaches the token — a pipe name
+is listable and any user can serve it once the daemon is gone. A `daemon.json` that cannot be READ
 (the data dir's ownership or mode, a read error, a file not owned by the user)
 is its own `unreadable` verdict — status `record-unreadable`, doctor naming the
 cause — and is never advised removed. The dev scripts

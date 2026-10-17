@@ -6,6 +6,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { bodyEditInputSchema } from './body-edit.js'
 import { canvasEditInputSchema } from './canvas-edit-ops.js'
 import { createThreadEditTool } from './thread-edit.js'
+import { workspaceEditInputSchema } from './workspace-edit.js'
 
 const target = { workspaceId: 'ws-1', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' }
 const passage = { kind: 'text', quote: { exact: 'ab' }, start: 0, end: 2 }
@@ -22,6 +23,8 @@ const BATCH_TOOLS: readonly {
   readonly name: string
   readonly schema: z.ZodType
   readonly op: (index: number) => unknown
+  /** What the call names besides its ops; a workspace-scoped tool names no document. */
+  readonly scope?: Readonly<Record<string, string>>
 }[] = [
   {
     name: 'wb_canvas_edit',
@@ -44,10 +47,16 @@ const BATCH_TOOLS: readonly {
     schema: threadEditInputSchema,
     op: () => ({ op: 'thread.add', anchor: passage, body: 'note' }),
   },
+  {
+    name: 'wb_workspace_edit',
+    schema: workspaceEditInputSchema,
+    scope: { workspaceId: target.workspaceId },
+    op: () => ({ op: 'document.delete', documentId: target.documentId }),
+  },
 ]
 
-describe.each(BATCH_TOOLS)('$name — the op batch ceiling', ({ schema, op }) => {
-  const batch = (length: number) => ({ ...target, ops: Array.from({ length }, (_, i) => op(i)) })
+describe.each(BATCH_TOOLS)('$name — the op batch ceiling', ({ schema, op, scope = target }) => {
+  const batch = (length: number) => ({ ...scope, ops: Array.from({ length }, (_, i) => op(i)) })
 
   test('accepts a batch at the ceiling', () => {
     expect(schema.safeParse(batch(OPS_PER_CALL_MAX)).success).toBe(true)

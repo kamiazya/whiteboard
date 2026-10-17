@@ -178,6 +178,10 @@ export const RULES: Record<string, Rule> = {
     body: syncClientMessageRequestSchema,
   },
   'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
+  'GET /api/runtime/proof': {
+    refusesOnly:
+      'this lane sends no query string and the proof needs its nonce; the answer and its contract are routes/runtime.test.ts',
+  },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
   'GET /api/runtime/storage': { answers: 'json', response: storageReportPayloadSchema },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },

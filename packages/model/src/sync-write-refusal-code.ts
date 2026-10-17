@@ -19,5 +19,6 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'unreadable_document_meta',
   'document_name_too_long',
   'invalid_path',
+  'too_many_documents',
 ])
 export type SyncWriteRefusalCode = z.infer<typeof syncWriteRefusalCodeSchema>

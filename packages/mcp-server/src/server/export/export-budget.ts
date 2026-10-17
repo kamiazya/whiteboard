@@ -21,14 +21,6 @@ export const EXPORT_MAX_PIXELS = 64 * 1024 * 1024
  */
 class ExportTooLargeError extends Error {
   override readonly name = 'ExportTooLargeError'
-  constructor(
-    readonly width: number,
-    readonly height: number,
-  ) {
-    super(
-      `the PNG would be ${width}x${height}px; an export is at most ${EXPORT_MAX_SIDE_PX}px a side and ${EXPORT_MAX_PIXELS} pixels — lower scale or export SVG`,
-    )
-  }
 }
 
 const ROOT_SIZE = /^<svg\b[^>]*?\swidth="([^"]+)"[^>]*?\sheight="([^"]+)"/
@@ -47,6 +39,21 @@ export function refuseOversizedTarget(svg: string, zoom: number): void {
     !(width <= EXPORT_MAX_SIDE_PX && height <= EXPORT_MAX_SIDE_PX) ||
     width * height > EXPORT_MAX_PIXELS
   ) {
-    throw new ExportTooLargeError(width, height)
+    throw new ExportTooLargeError(
+      `the PNG would be ${width}x${height}px; an export is at most ${EXPORT_MAX_SIDE_PX}px a side and ${EXPORT_MAX_PIXELS} pixels — lower scale or export SVG`,
+    )
+  }
+}
+
+/**
+ * Throws `ExportTooLargeError` when the inline images a PNG export would
+ * decode declare more than `EXPORT_MAX_PIXELS` between them. A decoder
+ * allocates what the header declares, not what the bytes hold.
+ */
+export function refuseOversizedImages(pixels: number): void {
+  if (pixels > EXPORT_MAX_PIXELS) {
+    throw new ExportTooLargeError(
+      `the images in this document declare ${pixels} pixels between them; a PNG export decodes at most ${EXPORT_MAX_PIXELS} — shrink or remove an image, or export SVG`,
+    )
   }
 }
