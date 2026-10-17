@@ -94,6 +94,85 @@ function fragmentHrefsAreLocal(svg: string): boolean {
   return true
 }
 
+const SCRIPT_ELEMENT = /<script\b/i
+const WHITESPACE = /\s/
+const TAG_NAME_END = /[\s/>]/
+const ATTR_NAME_END = /[\s=>/]/
+const UNQUOTED_VALUE_END = /[\s>]/
+const HANDLER_FOUND = -1
+
+/** The first index at or after `from` whose character `stop` matches. */
+function scanUntil(svg: string, from: number, stop: RegExp): number {
+  let i = from
+  while (i < svg.length && !stop.test(svg.charAt(i))) i++
+  return i
+}
+
+function skipWhitespace(svg: string, from: number): number {
+  let i = from
+  while (i < svg.length && WHITESPACE.test(svg.charAt(i))) i++
+  return i
+}
+
+/** The index just past the attribute value starting at `from`. */
+function skipAttributeValue(svg: string, from: number): number {
+  const quote = svg.charAt(from)
+  if (quote !== '"' && quote !== "'") return scanUntil(svg, from, UNQUOTED_VALUE_END)
+  const close = svg.indexOf(quote, from + 1)
+  return close < 0 ? svg.length : close + 1
+}
+
+/**
+ * Walks the attributes of the tag starting at `from`: `HANDLER_FOUND` when
+ * one is an `on<event>=`, otherwise the index where the tag ends, so the
+ * caller resumes there and the whole walk stays linear.
+ */
+function scanTagForEventHandler(svg: string, from: number): number {
+  let i = from
+  while (i < svg.length && svg.charAt(i) !== '>') {
+    const nameStart = i
+    i = scanUntil(svg, i, ATTR_NAME_END)
+    if (i === nameStart) {
+      i++
+      continue
+    }
+    const afterName = skipWhitespace(svg, i)
+    if (svg.charAt(afterName) !== '=') {
+      i = afterName
+      continue
+    }
+    if (/^on/i.test(svg.slice(nameStart, i))) return HANDLER_FOUND
+    i = skipAttributeValue(svg, skipWhitespace(svg, afterName + 1))
+  }
+  return i
+}
+
+/**
+ * Whether any tag carries an `on<event>=` attribute. A linear walk rather
+ * than one regex: a pattern that follows quoted values (so a `>` inside an
+ * earlier value does not end the tag) backtracks catastrophically, and one
+ * that does not is bypassed by that `>`. Only tags are read, so label TEXT
+ * that happens to say `onclick=` does not refuse a diagram.
+ */
+function hasEventHandlerAttribute(svg: string): boolean {
+  for (let open = svg.indexOf('<'); open >= 0; open = svg.indexOf('<', open + 1)) {
+    if (!/[a-zA-Z]/.test(svg.charAt(open + 1))) continue
+    const end = scanTagForEventHandler(svg, scanUntil(svg, open + 1, TAG_NAME_END))
+    if (end === HANDLER_FOUND) return true
+    open = end
+  }
+  return false
+}
+
+/**
+ * Whether an engine's SVG may be embedded verbatim: every reference is
+ * local, and nothing in it runs script. `<foreignObject>` is deliberately
+ * not refused — mermaid draws most diagram kinds' labels through it.
+ */
+export function fragmentIsEmbeddable(svg: string): boolean {
+  return fragmentHrefsAreLocal(svg) && !SCRIPT_ELEMENT.test(svg) && !hasEventHandlerAttribute(svg)
+}
+
 /** Parses `width="12.5ex"`-style MathJax root attributes into px. */
 function exAttrToPx(svg: string, attr: 'width' | 'height'): number | undefined {
   const match = svg.match(new RegExp(`${attr}="([0-9.]+)ex"`))
@@ -108,7 +187,7 @@ async function renderMathFragment(value: string): Promise<RenderedSvgFragment | 
   if (convert === undefined) return undefined
   try {
     const svg = convert(value)
-    if (!svg.startsWith('<svg') || !fragmentHrefsAreLocal(svg)) return undefined
+    if (!svg.startsWith('<svg') || !fragmentIsEmbeddable(svg)) return undefined
     const width = exAttrToPx(svg, 'width')
     const height = exAttrToPx(svg, 'height')
     return {
@@ -193,7 +272,7 @@ async function renderDiagramFragment(
   if (mermaid === undefined) return undefined
   try {
     const { svg } = await mermaid.render(`wb-mermaid-${mermaidRenderSeq++}`, value)
-    if (!fragmentHrefsAreLocal(svg)) return undefined
+    if (!fragmentIsEmbeddable(svg)) return undefined
     const width = svgDimension(svg, 'width')
     const height = svgDimension(svg, 'height')
     return {
