@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sha256Hex } from '../../shared/sha256.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInAttemptStore, type SignInAttemptStore } from './sign-in-attempt-store.js'
 
@@ -56,15 +57,39 @@ describe('sign-in attempts', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('carries the invitation a newcomer arrived with', async () => {
+  // The invitation store keeps only a token's hash, so an attempt holding
+  // the token itself would be the one place a live link could be read back.
+  it('carries the invitation a newcomer arrived with as its hash alone', async () => {
+    const token = 'inv-token-that-must-not-be-stored'
     const begun = await attempts.begin({
       providerId: 'corp',
       returnTo: '/',
-      invitationToken: 'inv-token',
+      invitationToken: token,
       now: T0,
       ttlMs: TTL,
     })
+    const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+    expect(JSON.stringify(rows)).not.toContain(token)
     const taken = await attempts.take(begun.state, begun.browserBinding, T0 + 1)
-    expect(taken?.invitationToken).toBe('inv-token')
+    expect(taken?.invitationTokenHash).toBe(sha256Hex(token))
+  })
+
+  // Beginning needs no credential, so a flood must not grow the table without
+  // bound; the OLDEST attempt goes, so a sign-in begun just now still lands.
+  it('keeps no more than its ceiling of attempts, shedding the oldest', async () => {
+    const capped = createSignInAttemptStore(handle.db, { maxPending: 3 })
+    const begun = []
+    for (let i = 0; i < 6; i++) {
+      begun.push(await capped.begin({ providerId: 'corp', returnTo: '/', now: T0 + i, ttlMs: TTL }))
+    }
+    const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+    expect(rows.length).toBeLessThanOrEqual(3)
+    const newest = begun.at(-1)
+    expect(newest).toBeDefined()
+    expect(
+      await capped.take(newest?.state ?? '', newest?.browserBinding ?? '', T0 + 7),
+    ).not.toBeNull()
+    const oldest = begun[0]
+    expect(await capped.take(oldest?.state ?? '', oldest?.browserBinding ?? '', T0 + 7)).toBeNull()
   })
 })

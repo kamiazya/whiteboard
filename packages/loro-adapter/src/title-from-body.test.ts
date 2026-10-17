@@ -49,6 +49,41 @@ describe('titleFromMarkdownBody', () => {
     expect(titleFromMarkdownBody(`# ${longest}`)).toBe(longest)
   })
 
+  it('reads a CRLF body’s heading the way it reads an LF one', () => {
+    expect(titleFromMarkdownBody('# Weekly review\r\n\r\nnotes')).toBe('Weekly review')
+    expect(titleFromMarkdownBody('\r\n# Weekly review ##\r\nnotes')).toBe('Weekly review')
+  })
+
+  // The body is document text any writer controls, and this runs on every
+  // write touching an unnamed document. A 200k-space line cost ~20s under
+  // backtracking patterns; a linear scan answers in well under a millisecond,
+  // so the ceiling below is loose against load and still far from quadratic.
+  const SPACES = ' '.repeat(200_000)
+  it.each([
+    ['a space run before a trailing word', `# a${SPACES}b`],
+    ['a space run ending in a carriage return', `#${SPACES}\r`],
+    ['a space run before a carriage return mid-line', `#${SPACES}\rx`],
+    ['a space run between marker runs', `# a${' #'.repeat(100_000)} b`],
+  ])('answers a hostile first line with %s in linear time', (_label, body) => {
+    const started = performance.now()
+    expect(titleFromMarkdownBody(body)).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(200)
+  })
+
+  fcTest.prop(
+    [
+      fc.string({ minLength: 1, maxLength: 20 }),
+      fc.constantFrom(' ', '\t', '#', ' #', ' \r'),
+      fc.integer({ min: 480, max: 4_000 }),
+    ],
+    withDefaults(),
+  )(
+    'a first line too long to be a title answers no title, whatever pads it',
+    (raw, filler, count) => {
+      expect(titleFromMarkdownBody(`# ${raw}${filler.repeat(count)}x\nbody`)).toBeUndefined()
+    },
+  )
+
   // A name is written into the workspace tree and rendered in a single-line
   // card, a browser tab and a search result. These are what it may never be.
   fcTest.prop([fc.string({ minLength: 1, maxLength: 100 })], withDefaults())(

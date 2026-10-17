@@ -85,7 +85,7 @@ import {
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
 /**
@@ -220,6 +220,12 @@ export class LoroWorkspaceDocumentIndex
       // only record that the document existed, and a listing that dropped it
       // would answer "there was never anything to restore".
       if (stored === null) return null
+      // A trash row is synced data, so the blob it names is whatever the row's
+      // writer chose — another row's bytes included. Read on a scratch copy, so
+      // bytes holding some other document are refused before anything is placed.
+      if (importWorkspaceSubtree(new LoroDoc(), stored.bytes)?.documentId !== input.documentId) {
+        return null
+      }
       const segments = entry.path.split('/')
       const restored = importWorkspaceSubtree(
         doc,

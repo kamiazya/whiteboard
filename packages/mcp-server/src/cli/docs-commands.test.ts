@@ -157,7 +157,17 @@ afterAll(() => {
 
 /** Why the dispatcher refused the command, or undefined when it parsed. */
 async function usageErrorOf(command: string): Promise<string | undefined> {
-  const argv = command.replace(/^whiteboard /, '').split(' ')
+  // A command that runs for real must not write into the checkout: a
+  // relative directory a reader fills in is rooted in the scratch dir.
+  const argv = command
+    .replace(/^whiteboard /, '')
+    .split(' ')
+    .map((arg) =>
+      arg.replace(
+        /^(--[\w-]+-dir=)(?!\/)(.+)$/,
+        (_, flag: string, dir: string) => `${flag}${join(scratch, dir)}`,
+      ),
+    )
   const { result, stderr } = await captureStdio(() => main(argv).catch(() => 1))
   return result === 64 ? stderr.trim() : undefined
 }

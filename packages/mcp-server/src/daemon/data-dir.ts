@@ -1,6 +1,7 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir, tmpdir as osTmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { tempFallbackDataDir } from '../shared/data-dir-secure.js'
 
 function defaultCheckWritable(path: string): boolean {
   try {
@@ -36,5 +37,5 @@ export function resolveDefaultDataDir(
   if (checkWritable(homeCandidate)) {
     return homeCandidate
   }
-  return join(tmpDir, '.whiteboard')
+  return tempFallbackDataDir(tmpDir)
 }

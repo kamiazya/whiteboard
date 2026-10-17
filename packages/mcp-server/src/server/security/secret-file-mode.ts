@@ -122,7 +122,12 @@ export function writeSecretFileAtomicSync(filepath: string, contents: string): v
   chmodBestEffort(dir, OWNER_ONLY_DIR)
   const tmpPath = `${filepath}.tmp`
   try {
-    const fd = openSync(tmpPath, 'w', OWNER_ONLY_FILE)
+    // A leftover at the fixed staging name — a crashed write's file, or a link
+    // somebody left there — is removed rather than opened, and `wx` creates
+    // the file exclusively, so a link is never followed and a fresh inode
+    // always takes the owner-only mode.
+    rmSync(tmpPath, { force: true })
+    const fd = openSync(tmpPath, 'wx', OWNER_ONLY_FILE)
     try {
       writeFileSync(fd, contents)
       chmodBestEffort(tmpPath, OWNER_ONLY_FILE)

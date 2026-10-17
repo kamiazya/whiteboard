@@ -55,13 +55,59 @@ export function resolveDataDir(
 
   // In the Codex sandbox, the home directory may not be writable.
   // Fall back to tmp only when there is no explicit env override.
-  return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
+  return tempFallbackDataDir(options.tmpDir)
+}
+
+/**
+ * The data dir used when the home directory cannot be written. Every local
+ * user shares the temp dir, so a fixed name there is one another user can
+ * create first and then read or rewrite every document in; the uid in the
+ * name gives each user their own, and `secureDataDir` refuses one somebody
+ * else prepared anyway. Without a uid (Windows) the temp dir is per-user.
+ */
+export function tempFallbackDataDir(
+  tmpDir: string = tmpdir(),
+  uid: number | undefined = process.getuid?.(),
+): string {
+  return resolve(tmpDir, uid === undefined ? '.whiteboard' : `.whiteboard-${uid}`)
+}
+
+/**
+ * Who a data dir answers to. `owner` is a single-user root (stdio, the local
+ * daemon), whose dir must be this user's own. `operator` is server mode,
+ * where the operator names the dir and a platform may hand the process one
+ * it does not own — a Kubernetes volume is root-owned and shared through
+ * `fsGroup`, and a bind mount is often opened to every uid so the
+ * container's own user can write it — so the dir is created if missing and
+ * otherwise left exactly as the operator set it.
+ */
+export type DataDirTrust = 'owner' | 'operator'
+
+/**
+ * Makes the data dir owner-only and refuses one this user cannot trust —
+ * another user's, or one other users can write — before anything is written
+ * into it. Every self-hosting root boots through this, so the stdio entry is
+ * held to what the daemon's startup lock already demands.
+ */
+export function secureDataDir(dir: string, trust: DataDirTrust = 'owner'): void {
+  if (trust === 'operator') {
+    mkdirSync(dir, { recursive: true })
+    return
+  }
+  mkdirSync(dir, { recursive: true, mode: POSIX_DATA_DIR_MODE })
+  assertDataDirOwnedByUser(dir)
+  if (platform() === 'win32') return
+  try {
+    chmodSync(dir, POSIX_DATA_DIR_MODE)
+  } catch {
+    /* Tightening permissions is best-effort, as in canWriteDir. */
+  }
 }
 
 /**
  * Refuses a data dir another user owns. Whoever owns it controls `daemon.json`
  * and so the socket and token a client trusts — a real risk when the dir is
- * `$TMPDIR/.whiteboard`, which any user can create first. Mode bits say
+ * a directory in the shared temp dir, which any user can create first. Mode bits say
  * nothing here: an owner-only dir is exactly what that user would make.
  * A dir that does not exist yet is fine; where there is no uid (Windows)
  * there is nothing to compare.

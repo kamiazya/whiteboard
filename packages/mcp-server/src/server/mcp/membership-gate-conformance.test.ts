@@ -10,6 +10,7 @@ import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboa
 import { createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { FakeVersionHistory } from '@kamiazya/whiteboard-server-core/test-utils/fake-version-history'
 import { describe, expect, it } from 'vitest'
+import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import type { ResolvedGrant } from '../security/credential-resolver.js'
 import { gatedByMembership, runAsMcpCaller } from '../security/mcp-caller.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
@@ -56,9 +57,9 @@ describe('the membership gate over the registered tools', () => {
   })
 
   it('refuses every tool to a caller who is not signed in as a person', async () => {
-    const index = { resolveWorkspace: async () => null }
+    const index = { resolveWorkspace: async () => null, createWorkspace: async () => {} }
     const gated = gatedByMembership(realTools(), index)
-    const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ['mcp:call'] }
+    const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
     const members = {
       membersOnly: async () => true,
       profileForBinding: async () => null,
@@ -76,8 +77,11 @@ describe('the membership gate over the registered tools', () => {
   })
 
   it('lets through, naming no workspace, exactly the tools whose schema allows it', async () => {
-    const gated = gatedByMembership(realTools(), { resolveWorkspace: async () => null })
-    const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ['mcp:call'] }
+    const gated = gatedByMembership(realTools(), {
+      resolveWorkspace: async () => null,
+      createWorkspace: async () => {},
+    })
+    const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
     const members = { membersOnly: async () => true } as unknown as MemberProfileStore
     const passed: string[] = []
     for (const tool of Object.values(gated)) {

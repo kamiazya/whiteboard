@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createInvitationStore, type InvitationStore } from './invitation-store.js'
+import { isInvitationTokenShaped } from './invitation-token.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -28,6 +29,16 @@ afterEach(async () => {
 })
 
 describe('invitation links', () => {
+  // The sign-in route refuses anything else before storing it, so a minted
+  // token outside the shape would be a link nobody can use.
+  it('mints only tokens of the shape the sign-in route accepts', async () => {
+    for (let i = 0; i < 20; i++) {
+      const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+      expect(isInvitationTokenShaped(token), token).toBe(true)
+    }
+    expect(isInvitationTokenShaped(`${'A'.repeat(43)}x`)).toBe(false)
+  })
+
   // ADR-0049 decision 3: a link may invite into a workspace; one that names
   // none invites to the tenant alone.
   it('carries the workspace it invites into, or none', async () => {

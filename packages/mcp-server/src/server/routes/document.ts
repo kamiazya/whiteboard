@@ -17,6 +17,7 @@ import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createDuplicateRouter, createWorkspacesRouter } from './document/workspaces.js'
+import type { ExportPathAnswer } from './export-request.js'
 
 export type { AutoVersionTrigger }
 
@@ -41,6 +42,8 @@ export interface DocumentRouterOptions {
    * it whenever the keeper serves another.
    */
   scope: StoreScope
+  /** How an export names the file it wrote; see `ExportPathAnswer`. */
+  exportPaths?: ExportPathAnswer
   /**
    * Hands the caller the checkpoint trigger this router created, so a
    * composition root can flush it when the process is going away.
@@ -145,6 +148,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     createDocumentSvgExportRouter({
       liveDocuments: options.serverDeps.liveDocuments,
       scope: options.scope,
+      ...(options.exportPaths === undefined ? {} : { exportPaths: options.exportPaths }),
     }),
   )
   const restoreProgress: RestoreProgress = async (event) => {

@@ -38,6 +38,12 @@ describe('resolveDataDir', () => {
           isWritableDir: () => false,
         },
       ),
-    ).toBe('/tmp/demo/.whiteboard')
+    ).toBe(
+      // The fallback is per user wherever there is a uid, so another user
+      // cannot prepare it first.
+      process.getuid === undefined
+        ? '/tmp/demo/.whiteboard'
+        : `/tmp/demo/.whiteboard-${process.getuid()}`,
+    )
   })
 })

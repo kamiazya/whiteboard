@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
+import { toolErrorText } from '../security/mcp-caller.js'
 import { runWithRequestLog } from './logging.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { TOOL_PROFILES, UNPROFILED_TOOL_PROFILE } from './tool-profiles.js'
@@ -152,7 +153,7 @@ export function registerToolWithAnnotations<
     try {
       return await tracedHandler(args, extra)
     } catch (err) {
-      const message = describeThrown(err)
+      const message = toolErrorText(name, err)
       return {
         isError: true,
         content: [{ type: 'text' as const, text: message }],

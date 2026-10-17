@@ -6,6 +6,8 @@
  * locale- and engine-dependent and would break that guarantee).
  */
 
+import { stripXmlInvalidChars } from '../xml-escape.js'
+
 /** Fixed decimal precision for all emitted coordinates. */
 const COORD_PRECISION = 3
 
@@ -48,6 +50,14 @@ const SAFE_URL_SCHEMES = new Set(['http', 'https', 'mailto', 'tel'])
 const URL_SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
 
 /**
+ * A scheme-less href that still names another host (`//host/x`). Under an
+ * http(s) base the URL parser reads `\` as `/`, so `\\host` and `/\host`
+ * are the same address. Refused because it is not the relative link a
+ * scheme-less href is allowed through as.
+ */
+const NETWORK_PATH_PATTERN = /^[/\\]{2}/
+
+/**
  * The URL parser strips ASCII tab/LF/CR anywhere in the input and trims
  * leading C0-control-or-space before resolving a scheme (WHATWG URL §4.4,
  * "remove all ASCII tab or newline" / "remove leading C0 control or space").
@@ -78,14 +88,22 @@ declare const safeHrefBrand: unique symbol
 export type SafeHref = string & { readonly [safeHrefBrand]: true }
 
 /**
- * Returns `href` unchanged when it has no scheme (relative/hash link) or an
- * allow-listed scheme, otherwise `#` — never throws, degrades to a safe
+ * Returns `href` when it is a relative/hash link or has an allow-listed
+ * scheme, otherwise `#` — never throws, degrades to a safe
  * same-page anchor rather than rejecting the whole render.
+ *
+ * The check runs on the href with XML-invalid characters already removed,
+ * and that stripped form is what is returned: the serializer removes them
+ * anyway, so judging the raw input lets `java\u0085script:` pass as relative
+ * and reach the document as `javascript:`.
  */
 export function sanitizeHref(href: string): SafeHref {
-  const match = URL_SCHEME_PATTERN.exec(normalizeHrefForSchemeCheck(href))
-  if (!match) return href as SafeHref
-  return (SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#') as SafeHref
+  const emitted = stripXmlInvalidChars(href)
+  const normalized = normalizeHrefForSchemeCheck(emitted)
+  if (NETWORK_PATH_PATTERN.test(normalized)) return '#' as SafeHref
+  const match = URL_SCHEME_PATTERN.exec(normalized)
+  if (!match) return emitted as SafeHref
+  return (SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? emitted : '#') as SafeHref
 }
 
 /**

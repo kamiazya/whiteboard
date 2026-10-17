@@ -119,8 +119,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     'narrates a defect and its fix in the state the code no longer carries under that name',
   'packages/mcp-server/src/server/export/headless-renderer.test.ts#LABEL_APPEARANCE':
     'narrates the verified export defect the test guards, by the constant it involved',
-  'packages/mcp-server/src/server/security/secret-file-mode.test.ts#O_TRUNC':
-    'a POSIX open flag Node exposes on `fs.constants`, named to explain a mode check',
   'tools/arch-lint/src/root-composite-scripts.test.ts#ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT':
     "pnpm's own error code, the failure the guard exists to prevent",
   'tools/arch-lint/src/test-only-exports.test.ts#resolveEdgeStyle':

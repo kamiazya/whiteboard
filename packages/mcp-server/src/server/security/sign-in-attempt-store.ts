@@ -20,7 +20,8 @@ interface Attempt {
   readonly providerId: string
   readonly nonce: string
   readonly codeVerifier: string
-  readonly invitationToken: string | null
+  /** The hash of the invitation token the attempt began with: what the invitation store keys by. */
+  readonly invitationTokenHash: string | null
   readonly returnTo: string
 }
 
@@ -29,13 +30,48 @@ export interface SignInAttemptStore {
   take(state: string, browserBinding: string, now: number): Promise<Attempt | null>
 }
 
+interface SignInAttemptStoreOptions {
+  /** The most attempts kept in flight for one tenant at once. */
+  readonly maxPending?: number
+}
+
+// Beginning an attempt needs no credential, so without a ceiling a flood of
+// begins grows the table for as long as it lasts. When full, the OLDEST
+// attempt goes rather than the new one being refused: refusing would let a
+// flood of this size every ten minutes lock everybody out of signing in,
+// while eviction only costs a person whose attempt is older than the last
+// ten thousand begun, which takes a flood far faster than that to reach.
+// The returnTo and invitation the route stores are both bounded, so a full
+// table is a few tens of megabytes at most.
+const DEFAULT_MAX_PENDING = 10_000
+
 const random = () => randomBytes(32).toString('base64url')
-export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore {
+
+// Leaves room for one more attempt. An attempt nobody finished is otherwise
+// never removed; beginning one sheds them, at the rate of sign-ins and with
+// no worker to declare — the expired first, then the oldest past the ceiling.
+async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<void> {
+  await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
+  const overflow = await db
+    .selectFrom('signInAttempts')
+    .select('state')
+    .orderBy('expiresAt', 'desc')
+    .limit(-1)
+    .offset(keep)
+    .execute()
+  if (overflow.length === 0) return
+  const states = overflow.map((row) => row.state)
+  await db.deleteFrom('signInAttempts').where('state', 'in', states).execute()
+}
+
+export function createSignInAttemptStore(
+  db: TenantDatabase,
+  { maxPending = DEFAULT_MAX_PENDING }: SignInAttemptStoreOptions = {},
+): SignInAttemptStore {
+  const keep = Math.max(maxPending - 1, 0)
   return {
     async begin({ providerId, returnTo, invitationToken, now, ttlMs }) {
-      // An attempt nobody finished is otherwise never removed; beginning one
-      // sheds them, at the rate of sign-ins and with no worker to declare.
-      await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
+      await makeRoom(db, now, keep)
       const minted = {
         state: random(),
         browserBinding: random(),
@@ -43,7 +79,7 @@ export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore
         // RFC 7636 section 4.1: 43-128 characters of the unreserved set;
         // 32 random bytes in base64url are 43.
         codeVerifier: random(),
-        invitationToken: invitationToken ?? null,
+        invitationTokenHash: invitationToken === undefined ? null : sha256Hex(invitationToken),
         providerId,
         returnTo,
       }
@@ -55,7 +91,7 @@ export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore
           providerId,
           nonce: minted.nonce,
           codeVerifier: minted.codeVerifier,
-          invitationToken: minted.invitationToken,
+          invitationTokenHash: minted.invitationTokenHash,
           returnTo,
           expiresAt: now + ttlMs,
         })
@@ -71,7 +107,7 @@ export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore
         .where('state', '=', state)
         .where('browserBindingHash', '=', sha256Hex(browserBinding))
         .where('expiresAt', '>', now)
-        .returning(['providerId', 'nonce', 'codeVerifier', 'invitationToken', 'returnTo'])
+        .returning(['providerId', 'nonce', 'codeVerifier', 'invitationTokenHash', 'returnTo'])
         .execute()
       return row ?? null
     },

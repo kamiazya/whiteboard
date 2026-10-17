@@ -24,10 +24,10 @@
  * decision 2026-09-21): once a workspace has had a member, `membersOnly`
  * stays true even after the last one is removed, so a workspace never falls
  * back to origin trust by emptying. Nothing clears it. Every workspace is
- * members-only regardless (ADR-0046 d10), so the gate does not consult the
- * marker; what it decides is whether a workspace's creator is added as
- * its first member (`mcp-caller.ts`). See the 0030 migration for why
- * it is its own table rather than a column on `workspaces`.
+ * members-only regardless (ADR-0046 d10), so no gate consults the marker:
+ * `/mcp` admits a workspace's creator when it mints the workspace
+ * (`mcp-caller.ts`). See the 0030 migration for why it is its own table
+ * rather than a column on `workspaces`.
  *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
  * caller never consults `isWorkspaceMember` for an `anonymous` or
@@ -114,6 +114,9 @@ export interface MemberProfileStore {
   membershipRole(workspaceId: string, profileId: string): Promise<WorkspaceRole | null>
   /** True once this workspace has ever had a member — never reverts on removal. */
   membersOnly(workspaceId: string): Promise<boolean>
+  /** True while this user exists, is not deactivated, and is a member of the
+   *  workspace — what an open stream is re-checked against, in one read. */
+  holdsAccess(workspaceId: string, profileId: string): Promise<boolean>
 }
 
 // Inserts the membership row and, on a workspace's FIRST membership ever,
@@ -300,6 +303,18 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       (await roleIn(db, workspaceId, profileId)) === null ? 'not-a-member' : 'member',
 
     membershipRole: (workspaceId, profileId) => roleIn(db, workspaceId, profileId),
+
+    async holdsAccess(workspaceId, profileId) {
+      const row = await db
+        .selectFrom('workspaceMemberships')
+        .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
+        .select('workspaceMemberships.profileId')
+        .where('workspaceMemberships.workspaceId', '=', workspaceId)
+        .where('workspaceMemberships.profileId', '=', profileId)
+        .where('memberProfiles.deactivatedAt', 'is', null)
+        .executeTakeFirst()
+      return row !== undefined
+    },
 
     async membersOnly(workspaceId) {
       const row = await db

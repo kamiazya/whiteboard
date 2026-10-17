@@ -51,7 +51,7 @@ Any font already on your machine works. Copy the `.ttf`, `.otf`, or `.ttc` into 
 
 That is the location on every platform. If you set `WHITEBOARD_DATA_DIR`, it is
 `$WHITEBOARD_DATA_DIR/fonts/` instead. (Where the home directory is not writable — some
-sandboxes — the daemon falls back to `<temp>/.whiteboard`.)
+sandboxes — the daemon falls back to `<temp>/.whiteboard-<uid>`.)
 
 `.woff2` is deliberately **not** accepted: the export renderer cannot decode it, so a file
 dropped in that format would sit there and never draw anything.

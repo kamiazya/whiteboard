@@ -72,8 +72,8 @@ interface CompleteSignInInput {
   readonly provider: SignInProvider
   /** Claims the relying party has already verified (signature, iss, aud, nonce). */
   readonly claims: VerifiedClaims
-  /** The link token a newcomer arrived with, if any. */
-  readonly invitationToken?: string
+  /** The hash of the link token a newcomer arrived with, if any. */
+  readonly invitationTokenHash?: string
   readonly now: number
 }
 
@@ -92,10 +92,10 @@ type ArrivedWith =
 
 async function arrivedWith(
   deps: CompleteSignInDeps,
-  { invitationToken, now }: CompleteSignInInput,
+  { invitationTokenHash, now }: CompleteSignInInput,
 ): Promise<ArrivedWith> {
-  if (invitationToken === undefined) return { kind: 'none' }
-  const opened = await deps.invitations.openLink(invitationToken, now)
+  if (invitationTokenHash === undefined) return { kind: 'none' }
+  const opened = await deps.invitations.openLinkByHash(invitationTokenHash, now)
   if (!opened.ok) return { kind: 'unusable' }
   return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
 }
@@ -104,10 +104,10 @@ async function arrivedWith(
 // for whoever it was meant for; one into a workspace is theirs to accept.
 async function joiningWith(
   deps: CompleteSignInDeps,
-  { invitationToken, now }: CompleteSignInInput,
+  { invitationTokenHash, now }: CompleteSignInInput,
 ): Promise<ArrivedWith> {
-  if (invitationToken === undefined) return { kind: 'none' }
-  const opened = await deps.invitations.openLink(invitationToken, now)
+  if (invitationTokenHash === undefined) return { kind: 'none' }
+  const opened = await deps.invitations.openLinkByHash(invitationTokenHash, now)
   if (!opened.ok || opened.invitation.workspaceId === null) return { kind: 'none' }
   return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
 }

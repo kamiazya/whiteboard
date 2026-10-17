@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   type ApiErrorBody,
@@ -11,6 +11,7 @@ import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
+import type { ExportResponse } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
@@ -128,6 +129,36 @@ export async function writeExportFile(
   throw new Error(
     `failed to generate a unique export filename after ${MAX_DEFAULT_PATH_ATTEMPTS} attempts (last tried: ${lastFilePath})`,
   )
+}
+
+/**
+ * How an export's answer names the file it wrote. The local daemon's caller
+ * is the machine's owner and opens the file at that path, so it gets the
+ * absolute one. A server-mode caller is a member, for whom the absolute path
+ * is only the operator's directory layout, so it gets the path within the
+ * workspace's exports directory.
+ */
+export type ExportPathAnswer = 'absolute' | 'exports-relative'
+
+/**
+ * Writes a rendered export and answers it: where it landed, named as
+ * `answer` says, and what the render could not draw.
+ */
+export async function writeExportAnswer(
+  data: string | Uint8Array,
+  target: Parameters<typeof writeExportFile>[1],
+  report: { undrawable: readonly string[]; unresolvedFamilies: readonly string[] },
+  answer: ExportPathAnswer = 'absolute',
+): Promise<ExportResponse> {
+  const filePath = await writeExportFile(data, target)
+  return {
+    filePath:
+      answer === 'absolute'
+        ? filePath
+        : relative(target.layout.exportsDir(target.workspaceId), filePath),
+    undrawable: [...report.undrawable],
+    unresolvedFamilies: [...report.unresolvedFamilies],
+  }
 }
 
 /**

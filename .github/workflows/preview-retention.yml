@@ -56,14 +56,22 @@ jobs:
             exit 0
           fi
 
-          # Branch names are untrusted (PR authors choose them): sanitized to
-          # [a-z0-9-] with the same rules preview-pr-deploy.yml uses, so they
-          # match the --branch labels it deployed with.
+          # Branch names are untrusted (PR authors choose them): mapped by the
+          # same preview_label() preview-pr-deploy.yml deploys with, so they
+          # match the --branch labels it used.
           keep_branches="latest"
-          while IFS= read -r raw; do
-            label=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+          preview_label() {
+            local label
+            label=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+            case "$label" in
+              ''|main|latest|stable) label="pr-$2" ;;
+            esac
+            printf '%s' "$label"
+          }
+          while IFS=$'\t' read -r number raw; do
+            label=$(preview_label "$raw" "$number")
             [ -n "$label" ] && keep_branches="$keep_branches $label"
-          done < <(gh pr list -R "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          done < <(gh pr list -R "$REPO" --state open --json number,headRefName --jq '.[] | "\(.number)\t\(.headRefName)"')
           echo "keeping newest deployment for branches: $keep_branches"
 
           cf() {
@@ -141,10 +149,18 @@ jobs:
         run: |
           set -euo pipefail
           keep_urls=""
-          while IFS= read -r raw; do
-            label=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+          preview_label() {
+            local label
+            label=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+            case "$label" in
+              ''|main|latest|stable) label="pr-$2" ;;
+            esac
+            printf '%s' "$label"
+          }
+          while IFS=$'\t' read -r number raw; do
+            label=$(preview_label "$raw" "$number")
             [ -n "$label" ] && keep_urls="$keep_urls https://$label.kamiazya-whiteboard.pages.dev"
-          done < <(gh pr list -R "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          done < <(gh pr list -R "$REPO" --state open --json number,headRefName --jq '.[] | "\(.number)\t\(.headRefName)"')
           latest_url="https://latest.kamiazya-whiteboard.pages.dev"
           echo "keeping records under:$keep_urls + newest $latest_url"
 

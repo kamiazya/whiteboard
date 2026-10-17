@@ -1,9 +1,8 @@
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { tempFallbackDataDir } from '../shared/data-dir-secure.js'
 import { getLogger } from './log.js'
 
 /**
- * `resolveDataDir` falls back to `$TMPDIR/.whiteboard` when the home directory
+ * `resolveDataDir` falls back to `$TMPDIR/.whiteboard-<uid>` when the home directory
  * is unwritable (the Codex sandbox). That is not durable storage and it is not
  * where the user's daemon and browser look, so a tool call that "succeeds" into
  * it loses the work without a sign. The fallback is silent by construction
@@ -15,7 +14,7 @@ export function warnWhenDataDirIsTempFallback(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   if (env.WHITEBOARD_DATA_DIR) return
-  if (dataDir !== resolve(tmpdir(), '.whiteboard')) return
+  if (dataDir !== tempFallbackDataDir()) return
   getLogger('data-dir').warning(
     { dataDir },
     'the home directory is not writable, so data is going to a temp directory that a daemon or browser running elsewhere will not see; set WHITEBOARD_DATA_DIR to a durable directory',

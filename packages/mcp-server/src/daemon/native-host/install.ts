@@ -15,6 +15,8 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
+  WHITEBOARD_DEV_EXTENSION_ID,
+  WHITEBOARD_DEV_GECKO_ID,
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
@@ -118,11 +120,25 @@ export function nativeHostManifestDirs(
     }))
 }
 
+/**
+ * Which extension build the host is installed for. A manifest allows exactly
+ * one: the development build admits loopback pages any user of the machine
+ * can serve, so a host installed for everyday use must never start for it.
+ */
+type ExtensionBuild = 'production' | 'development'
+
+const ALLOWED: Record<ExtensionBuild, { chromium: string; firefox: string }> = {
+  production: { chromium: WHITEBOARD_EXTENSION_ID, firefox: WHITEBOARD_GECKO_ID },
+  development: { chromium: WHITEBOARD_DEV_EXTENSION_ID, firefox: WHITEBOARD_DEV_GECKO_ID },
+}
+
 interface InstallOptions {
   dataDir: string
   manifestDirs: readonly ManifestDir[]
   launcher: { execPath: string; execArgv: readonly string[]; entry: string }
   platform?: NodeJS.Platform
+  /** Defaults to the production build. */
+  extensionBuild?: ExtensionBuild
   /** Sets a registry key's default value; `reg add` unless a test substitutes it. */
   register?: (key: string, value: string) => Promise<void>
 }
@@ -171,6 +187,7 @@ export async function installNativeHost(
 ): Promise<{ launcher: string; manifests: ManifestDir[] }> {
   const launcher = await writeLauncher(options)
   const register = options.register ?? regAdd
+  const allowed = ALLOWED[options.extensionBuild ?? 'production']
 
   for (const { dir, engine, registryKey } of options.manifestDirs) {
     const manifest = {
@@ -181,8 +198,8 @@ export async function installNativeHost(
       // Only the engine's own key: Firefox refuses a manifest that also
       // carries Chromium's, as "No such native application".
       ...(engine === 'firefox'
-        ? { allowed_extensions: [WHITEBOARD_GECKO_ID] }
-        : { allowed_origins: [`chrome-extension://${WHITEBOARD_EXTENSION_ID}/`] }),
+        ? { allowed_extensions: [allowed.firefox] }
+        : { allowed_origins: [`chrome-extension://${allowed.chromium}/`] }),
     }
     const manifestPath = join(dir, `${NATIVE_HOST_NAME}.json`)
     await mkdir(dir, { recursive: true })

@@ -40,7 +40,11 @@ const XML_INVALID_CHARS = new RegExp(
   'g',
 )
 
-function stripXmlInvalidChars(value: string): string {
+/**
+ * Exported so a check that must judge the EMITTED bytes (`sanitizeHref`'s
+ * scheme check) applies the same removal first rather than a copy of it.
+ */
+export function stripXmlInvalidChars(value: string): string {
   return value.replace(XML_INVALID_CHARS, '')
 }
 

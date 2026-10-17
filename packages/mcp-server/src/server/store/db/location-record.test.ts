@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { lstat, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -70,4 +71,23 @@ describe('the database location record', () => {
       writeDatabaseLocationRecord(join(dir, 'does', 'not', 'exist'), true),
     ).resolves.toBeUndefined()
   })
+
+  /**
+   * The data dir's own files are trusted only when they are this directory's,
+   * so a name planted as a symlink must not carry the write somewhere else.
+   * O_NOFOLLOW is what refuses it, and is absent where symlinks are not POSIX.
+   */
+  it.skipIf(fsConstants.O_NOFOLLOW === undefined)(
+    'never writes through a symlink planted at the record path',
+    async () => {
+      const outside = join(dir, 'outside.txt')
+      await writeFile(outside, 'untouched')
+      await symlink(outside, join(dir, 'storage.json'))
+
+      await writeDatabaseLocationRecord(dir, true)
+
+      expect(await readFile(outside, 'utf8')).toBe('untouched')
+      expect((await lstat(join(dir, 'storage.json'))).isSymbolicLink()).toBe(true)
+    },
+  )
 })

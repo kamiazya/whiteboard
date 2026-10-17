@@ -5,12 +5,13 @@
  * "creating" it again.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
@@ -54,10 +55,13 @@ beforeAll(async () => {
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let app: ReturnType<typeof createApp>
+let layout: ReturnType<typeof testDataLayout>
+let options: ServerModeAppOptions
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-mcp-membership-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
+  layout = testDataLayout()
   const members = createMemberProfileStore(handle.db)
   const providers = oidcProviders(
     signInConfigSchema.parse({
@@ -71,7 +75,7 @@ beforeEach(async () => {
       ],
     }).providers,
   )
-  const options: ServerModeAppOptions = {
+  options = {
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
@@ -83,7 +87,7 @@ beforeEach(async () => {
       }),
     }),
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
-    dataLayout: testDataLayout(),
+    dataLayout: layout,
     people: {
       members,
       sessions: createSignInSessionStore(handle.db),
@@ -114,9 +118,14 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-/** An MCP client for `sub`, holding a typed access token from `claude-code`. */
-async function agentOf(sub: string) {
-  const token = await new SignJWT({ azp: 'claude-code', scope: 'mcp:call', name: sub })
+// Everything a tool on /mcp can need, so the membership cases below are about
+// membership alone.
+const FULL_SCOPE =
+  'mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write'
+
+/** A typed access token from `claude-code` for `sub`. */
+function tokenFor(sub: string, scope: string) {
+  return new SignJWT({ azp: 'claude-code', scope, name: sub })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
     .setIssuer(ISSUER)
     .setAudience(PUBLIC_URL)
@@ -124,6 +133,11 @@ async function agentOf(sub: string) {
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(privateKey)
+}
+
+/** An MCP client for `sub`, holding a typed access token from `claude-code`. */
+async function agentOf(sub: string, scope = FULL_SCOPE) {
+  const token = await tokenFor(sub, scope)
   const client = new Client({ name: `agent-${sub}`, version: '1.0.0' })
   const transport = new StreamableHTTPClientTransport(new URL(`${PUBLIC_URL}/mcp`), {
     fetch: async (input, init) => {
@@ -141,6 +155,7 @@ async function agentOf(sub: string) {
       client.callTool({ name, arguments: args }) as Promise<{
         isError?: boolean
         content: Array<{ text?: string }>
+        structuredContent?: Record<string, unknown>
       }>,
     close: () => transport.close(),
   }
@@ -175,6 +190,145 @@ describe('server mode /mcp — a workspace belongs to the people in it', () => {
     } finally {
       await ada.close()
       await eve.close()
+    }
+  })
+})
+
+describe('server mode /mcp — a tool needs the scope its /api twin needs', () => {
+  it('refuses a delete to a read-scoped token and still answers its reads', async () => {
+    const owner = await agentOf('ada')
+    const reader = await agentOf('ada', 'canvas:read mcp:call')
+    try {
+      const created = await owner.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { results } = created.structuredContent as { results: Array<{ documentId: string }> }
+      const documentId = results[0]?.documentId
+
+      const deleted = await reader.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        ops: [{ op: 'document.delete', documentId }],
+      })
+      expect(deleted.isError).toBe(true)
+      expect(textOf(deleted)).toMatch(/insufficient_scope/)
+
+      const read = await reader.call('wb_document_get', {
+        workspaceId: 'plans',
+        documentIds: [documentId],
+      })
+      expect(read.isError, textOf(read)).toBeFalsy()
+      expect(read.structuredContent?.documents).toEqual([
+        expect.objectContaining({ documentId, content: expect.stringContaining('hello') }),
+      ])
+    } finally {
+      await owner.close()
+      await reader.close()
+    }
+  })
+})
+
+// A member can make a read fail as corrupt (an empty stored file, a read
+// racing a purge); the answer must not hand them where this server keeps its
+// data. The operator reads the detail in the log.
+describe('server mode — a corrupt stored file is refused without its storage path', () => {
+  it('answers corrupt_stored_data with no path and no data directory in the body', async () => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { workspaceId } = created.structuredContent as { workspaceId: string }
+      const dir = layout.workspaceFilesDir(workspaceId)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'empty1.png'), new Uint8Array(0))
+
+      const res = await app.request(
+        `${PUBLIC_URL}/api/w/${workspaceId}/document/notes/file/empty1`,
+        {
+          headers: { Authorization: `Bearer ${await tokenFor('ada', 'files:read')}` },
+        },
+      )
+      const text = await res.text()
+      expect(res.status, text).toBe(500)
+      expect(JSON.parse(text)).toMatchObject({ error: 'corrupt_stored_data' })
+      expect(text).not.toContain(tempDir)
+      expect(text).not.toContain('/')
+    } finally {
+      await ada.close()
+    }
+  })
+})
+
+// Server mode answers a fault with a fixed internal-error text, so a refusal
+// the member could act on reaches them only when it is a named error class.
+describe('server mode /mcp — a refusal reaches the member in its own words', () => {
+  it('answers an unknown render style and a move with nothing to do verbatim', async () => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { results } = created.structuredContent as { results: Array<{ documentId: string }> }
+      const documentId = results[0]?.documentId
+
+      const rendered = await ada.call('wb_scene_render', {
+        workspaceId: 'plans',
+        documentId,
+        style: 'visual.nope',
+      })
+      expect(rendered.isError).toBe(true)
+      expect(textOf(rendered)).toMatch(/no theme "visual\.nope" is registered/)
+
+      const moved = await ada.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        ops: [{ op: 'document.move', documentId }],
+      })
+      expect(moved.isError).toBe(true)
+      expect(textOf(moved)).toMatch(/a move needs a `path` to move it, a `name` to rename it/)
+    } finally {
+      await ada.close()
+    }
+  })
+})
+
+// Where the server keeps a member's export is the operator's layout, not the
+// member's: the answer names the file within the workspace's exports.
+describe('server mode — an export answers no server path', () => {
+  // The export renders from the directory the deps were booted over, so the
+  // document has to be in it rather than in the in-memory index.
+  beforeEach(async () => {
+    const boot = await bootSelfHostDeps(tempDir)
+    app = createApp({ ...options, serverDeps: boot.serverDeps, dataLayout: boot.dataLayout })
+  })
+
+  it.each([
+    'export',
+    'export-svg',
+  ])('POST …/%s names the file without the data directory', async (action) => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'board', kind: 'spatial' }],
+      })
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { workspaceId } = created.structuredContent as { workspaceId: string }
+
+      const res = await app.request(`${PUBLIC_URL}/api/w/${workspaceId}/document/board/${action}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await tokenFor('ada', 'canvas:write canvas:read')}`,
+          'content-type': 'application/json',
+          origin: PUBLIC_URL,
+        },
+        body: '{}',
+      })
+      const text = await res.text()
+      expect(res.status, text).toBe(200)
+      expect(text).not.toContain(tempDir)
+      const { filePath } = JSON.parse(text) as { filePath: string }
+      expect(filePath).not.toMatch(/^\//)
+      expect(filePath).toMatch(new RegExp(`^board-.*\\.${action === 'export' ? 'png' : 'svg'}$`))
+    } finally {
+      await ada.close()
     }
   })
 })

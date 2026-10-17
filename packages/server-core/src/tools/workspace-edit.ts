@@ -17,6 +17,14 @@ import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
 
+/** A `document.move` that names neither where to move nor what to rename to. */
+class DocumentMoveNeedsTargetError extends Error {
+  constructor() {
+    super('a move needs a `path` to move it, a `name` to rename it, or both')
+    this.name = 'DocumentMoveNeedsTargetError'
+  }
+}
+
 /**
  * Thrown when one op in a batch cannot apply.
  *
@@ -40,12 +48,14 @@ class WorkspaceEditError extends Error {
     readonly opIndex: number,
     readonly op: string,
     readonly applied: number,
-    detail: string,
+    cause: unknown,
   ) {
     super(
-      `ops[${opIndex}] (${op}) could not be applied: ${detail.replace(/\.$/, '')}. ` +
+      `ops[${opIndex}] (${op}) could not be applied: ${describeThrown(cause).replace(/\.$/, '')}. ` +
         `${applied} op(s) before it were applied and stand; ops after it were not run. ` +
         'Resume from this index rather than resending the batch.',
+      // Kept so a surface that must not quote a fault can see what it quotes.
+      { cause },
     )
     this.name = 'WorkspaceEditError'
   }
@@ -310,7 +320,7 @@ const WORKSPACE_EDIT_HANDLERS: {
 
   'document.move': async (ctx, op) => {
     if (op.path === undefined && op.name === undefined) {
-      throw new Error('a move needs a `path` to move it, a `name` to rename it, or both')
+      throw new DocumentMoveNeedsTargetError()
     }
     const { workspaceId } = ctx
     const moved =
@@ -432,7 +442,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
           if (outcome.workspaceId !== undefined) workspaceId = outcome.workspaceId
           results.push(outcome.result)
         } catch (err) {
-          throw new WorkspaceEditError(index, op.op, results.length, describeThrown(err))
+          throw new WorkspaceEditError(index, op.op, results.length, err)
         }
       }
 

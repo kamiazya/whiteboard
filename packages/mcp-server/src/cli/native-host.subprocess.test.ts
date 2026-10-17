@@ -22,7 +22,10 @@ import {
   type HostToPage,
   hostToPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  NATIVE_HOST_NAME,
+  WHITEBOARD_DEV_EXTENSION_ID,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodeNativeMessage, readNativeMessages } from '../daemon/native-host/native-messaging.js'
 import { nativeHostInstallOutputSchema } from './operator-json.js'
@@ -74,6 +77,14 @@ async function pingThroughHost(dataDir: string): Promise<HostToPage[]> {
   host.stdin.end()
   await new Promise((done) => host.once('exit', done))
   return received
+}
+
+function installCli(args: readonly string[]) {
+  return spawnSync(
+    process.execPath,
+    ['--import', 'tsx/esm', CLI_SOURCE, 'native-host', 'install', '--json', ...args],
+    { cwd: MCP_SERVER_DIR, encoding: 'utf8', env: { ...process.env, HOME: scratch } },
+  )
 }
 
 function ownerOnlyDataDir(): string {
@@ -170,6 +181,33 @@ describe('whiteboard native-host', () => {
     )
     expect(Buffer.concat(body).toString()).toBe('pong')
   }, 30_000)
+  it('installs for the development build only into a directory it is named', () => {
+    const manifestDir = join(scratch, 'profile', 'NativeMessagingHosts')
+    const installed = installCli([
+      '--development',
+      `--data-dir=${join(scratch, 'data')}`,
+      `--manifest-dir=${manifestDir}`,
+    ])
+    expect(installed.status, installed.stderr).toBe(0)
+    const manifest = JSON.parse(readFileSync(join(manifestDir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
+    expect(manifest.allowed_origins).toEqual([`chrome-extension://${WHITEBOARD_DEV_EXTENSION_ID}/`])
+  }, 30_000)
+
+  // Without a named directory the install replaces the registration each
+  // browser's everyday profile relies on, which would let any loopback page
+  // reach the daemon through a development build loaded there.
+  it('refuses a development install into every browser the user has run', () => {
+    mkdirSync(join(scratch, '.config', 'google-chrome'), { recursive: true })
+    const installed = installCli(['--development', `--data-dir=${join(scratch, 'data')}`])
+    expect(installed.status).toBe(64)
+    expect(installed.stderr).toContain('--manifest-dir')
+    expect(() =>
+      readFileSync(
+        join(scratch, '.config/google-chrome/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
+      ),
+    ).toThrow()
+  }, 30_000)
+
   it('relays a refused daemon record as a refusal naming the record', async () => {
     const dataDir = ownerOnlyDataDir()
     writeFileSync(join(dataDir, 'elsewhere.json'), '{}')

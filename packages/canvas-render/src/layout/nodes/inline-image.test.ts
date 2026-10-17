@@ -35,12 +35,12 @@ describe('an inline image is painted, and still reads as its alt', () => {
     const runs = runsOf(
       paragraph([
         { type: 'text', value: 'see ' },
-        { type: 'image', url: 'diagram.png', alt: 'a diagram' },
+        { type: 'image', url: 'https://example.com/diagram.png', alt: 'a diagram' },
         { type: 'text', value: ' here' },
       ]),
     )
     const image = runs.find((run) => run.paints !== undefined)
-    expect(image?.paints).toEqual({ kind: 'image', src: 'diagram.png' })
+    expect(image?.paints).toEqual({ kind: 'image', src: 'https://example.com/diagram.png' })
     // The alt survives as the run's text — this is the whole contract with
     // passage anchoring and the outline, both of which read `text`.
     expect(image?.text).toBe('a diagram')
@@ -56,9 +56,9 @@ describe('an inline image is painted, and still reads as its alt', () => {
    * width and paint the image into nothing.
    */
   it('still occupies a box when the image has no alt', () => {
-    const runs = runsOf(paragraph([{ type: 'image', url: 'x.png' }]))
+    const runs = runsOf(paragraph([{ type: 'image', url: 'https://example.com/x.png' }]))
     const image = runs.find((run) => run.paints !== undefined)
-    expect(image?.paints).toEqual({ kind: 'image', src: 'x.png' })
+    expect(image?.paints).toEqual({ kind: 'image', src: 'https://example.com/x.png' })
     // `w`, not `width` — the scene's BoundingBox spells it short.
     expect(image?.bbox.w).toBeGreaterThan(0)
     expect(image?.text).not.toBe('')
@@ -151,22 +151,56 @@ describe('an inline image asks the caller where its picture is', () => {
     })
   })
 
+  /**
+   * A written URL is kept only in a scheme every painter treats as a URL.
+   * A bare path is not one: a rasteriser reads it from the host it runs on,
+   * so an unresolved `/etc/…` or `../x.png` would draw that host's file. The
+   * run still reads as its alt; it just paints nothing.
+   */
+  it.each([
+    '/abs/red.png',
+    'relative/x.png',
+    '../up.png',
+    'file:///etc/hosts',
+    'C:\\x.png',
+    'javascript:alert(1)',
+  ])('paints nothing for an unresolved %s', (url) => {
+    const runs = withSeam(url, undefined)
+    expect(runs.some((run) => run.paints !== undefined)).toBe(false)
+    expect(runs.map((run) => run.text).join(' ')).toBe('a diagram')
+  })
+
+  it.each([
+    'http://example.com/x.png',
+    'HTTPS://example.com/x.png',
+    'data:image/png;base64,AA',
+    'DATA:image/png;base64,AA',
+  ])('keeps an unresolved %s', (url) => {
+    expect(withSeam(url, undefined).find((run) => run.paints !== undefined)?.paints).toEqual({
+      kind: 'image',
+      src: url,
+    })
+  })
+
   /** A seam that throws is a seam, not a crash — the never-throw rule. */
   it('keeps the written URL when the seam throws', () => {
-    const runs = typesetMdastBlocks(paragraph([{ type: 'image', url: 'x.png', alt: 'a' }]), {
-      ...options,
-      references: {
-        resolveAlias: () => null,
-        resolveTitle: () => undefined,
-        resolveEmbed: () => undefined,
-        resolveReference: () => {
-          throw new Error('boom')
+    const runs = typesetMdastBlocks(
+      paragraph([{ type: 'image', url: 'https://example.com/x.png', alt: 'a' }]),
+      {
+        ...options,
+        references: {
+          resolveAlias: () => null,
+          resolveTitle: () => undefined,
+          resolveEmbed: () => undefined,
+          resolveReference: () => {
+            throw new Error('boom')
+          },
         },
       },
-    }).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+    ).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
     expect(runs.find((run) => run.paints !== undefined)?.paints).toEqual({
       kind: 'image',
-      src: 'x.png',
+      src: 'https://example.com/x.png',
     })
   })
 })

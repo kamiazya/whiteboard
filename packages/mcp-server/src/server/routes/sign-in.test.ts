@@ -20,6 +20,7 @@ import {
   type FakeOidcProvider,
   fakeOidcProvider,
 } from '../../shared/test-utils/fake-oidc-provider.js'
+import { captureLogsForTests } from '../log.js'
 import { oidcProviders, resolvedForTest } from '../security/_test-helpers.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
@@ -265,11 +266,44 @@ describe('sign-in through an OIDC provider', () => {
     ['an absolute URL', 'https://evil.example/'],
     ['a scheme-relative URL', '//evil.example/'],
     ['a backslash path', '/\\evil.example'],
+    ['a path that a stripped tab makes scheme-relative', '/\t/evil.example'],
+    ['a path that a stripped newline makes scheme-relative', '/\n/evil.example'],
+    ['a path that a stripped carriage return makes scheme-relative', '/\r//evil'],
   ])('does not redirect to %s after signing in', async ([, target]) => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })
     const res = await signInThrough(app, `?return=${encodeURIComponent(target as string)}`)
     expect(res.headers.get('location')).toBe('/')
+  })
+
+  // Beginning a sign-in needs no credential and stores a row, so what one
+  // request can make the keeper hold is bounded by the route, not by the
+  // header limit of whatever server is in front.
+  describe('what an unauthenticated begin can store', () => {
+    const SIXTY_FOUR_KB = 64 * 1024
+    const stored = () => handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+
+    it('keeps a return path up to 2048 characters and drops a longer one', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const longest = `/${'a'.repeat(2047)}`
+      for (const target of [longest, `/${'a'.repeat(SIXTY_FOUR_KB)}`]) {
+        await app.request(`${BASE}/auth/sign-in/corp?return=${encodeURIComponent(target)}`)
+      }
+      expect((await stored()).map((row) => row.returnTo).sort()).toEqual(['/', longest].sort())
+    })
+
+    it.for([
+      ['a 64 KB value', 'x'.repeat(64 * 1024)],
+      ['a value one character past the token', 'A'.repeat(44)],
+      ['a value outside the token alphabet', `${'A'.repeat(42)}=`],
+    ])('refuses an invitation that is %s and stores nothing', async ([, invitation]) => {
+      const { app } = appFor({ createAccounts: true })
+      const res = await app.request(
+        `${BASE}/auth/sign-in/corp?invitation=${encodeURIComponent(invitation as string)}`,
+      )
+      expect(res.headers.get('location')).toBe('/sign-in?error=invitation_unusable')
+      expect(await stored()).toEqual([])
+    })
   })
 
   // The web app's sign-in screen lists these; it never learns an issuer or
@@ -309,6 +343,48 @@ describe('sign-in through an OIDC provider', () => {
     expect(await res.json()).toMatchObject({ user: { administrator: true } })
   })
 
+  // A provider's failed answer can carry tokens, and openid-client keeps the
+  // body it refused as the error's cause; what reaches the log must not.
+  describe('what a provider failure logs', () => {
+    const SECRET = 'leaked-provider-token'
+    let logs: ReturnType<typeof captureLogsForTests>
+    beforeEach(() => {
+      logs = captureLogsForTests('warning')
+    })
+    afterEach(() => logs.restore())
+    const logged = () => JSON.stringify(logs.records.filter((r) => r.scope === 'sign-in'))
+
+    it('keeps the tokens of a refused token response out of the log', async () => {
+      const refusing: CustomFetch = async (url, init) => {
+        if (!String(url).endsWith('/token')) return idp.fetch(url, init)
+        return new Response(
+          JSON.stringify({
+            error: 'invalid_grant',
+            id_token: SECRET,
+            access_token: SECRET,
+            refresh_token: SECRET,
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      const { app } = appFor({ createAccounts: true }, refusing)
+      idp.next({ sub: 'ada-1' })
+      const res = await signInThrough(app)
+      expect(res.headers.get('location')).toBe('/sign-in?error=provider_refused')
+      expect(logged()).toContain('the provider answer failed a check')
+      expect(logged()).not.toContain(SECRET)
+    })
+
+    it('keeps what an unreachable provider failed with out of the log', async () => {
+      const failing: CustomFetch = () =>
+        Promise.reject(Object.assign(new TypeError('fetch failed'), { body: { id_token: SECRET } }))
+      const { app } = appFor({ createAccounts: true }, failing)
+      await app.request(`${BASE}/auth/sign-in/corp`)
+      expect(logged()).toContain('the provider could not be reached')
+      expect(logged()).not.toContain(SECRET)
+    })
+  })
+
   it('returns to the sign-in screen when the provider cannot be reached', async () => {
     const { app } = appFor({ createAccounts: true }, () =>
       Promise.reject(new TypeError('fetch failed')),
@@ -346,15 +422,51 @@ describe('sign-in through an OIDC provider', () => {
     expect(unproduced).toEqual([])
   })
 
+  // A browser signing in anew, as itself or as somebody else, leaves nothing
+  // behind that the cookie it is about to overwrite could still open.
+  it('ends the session the browser held before signing in again', async () => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const before = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    idp.next({ sub: 'bob-1' })
+    const started = await app.request(`${BASE}/auth/sign-in/corp`)
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    const res = await app.request(idp.authorize(started.headers.get('location') as string), {
+      headers: { cookie: `__Host-wb_signin=${binding}; ${SESSION_COOKIE}=${before}` },
+    })
+    const after = cookieFrom(res, SESSION_COOKIE) as string
+    expect(after).toBeTruthy()
+    expect(await signIn.sessions.resolve(before, Date.now())).toBeNull()
+    expect(await signIn.sessions.resolve(after, Date.now())).toMatchObject({ subject: 'bob-1' })
+  })
+
   it('ends the session on sign-out', async () => {
     const { app, signIn } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })
     const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
     const res = await app.request(`${BASE}/auth/sign-out`, {
       method: 'POST',
-      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+      headers: { cookie: `${SESSION_COOKIE}=${session}`, origin: BASE },
     })
     expect(res.status).toBe(204)
     expect(await signIn.sessions.resolve(session, Date.now())).toBeNull()
+  })
+
+  // The cookie rides along on a POST any page makes to this host, a sibling
+  // subdomain's included, so only this host's own pages may end the session.
+  it.for([
+    ['no Origin', {}],
+    ['a sibling origin', { origin: 'https://evil.board.example' }],
+  ])('keeps the session when sign-out arrives with %s', async ([, extra]) => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const res = await app.request(`${BASE}/auth/sign-out`, {
+      method: 'POST',
+      headers: { cookie: `${SESSION_COOKIE}=${session}`, ...(extra as object) },
+    })
+    expect(res.status).toBe(403)
+    expect(res.headers.getSetCookie()).toEqual([])
+    expect(await signIn.sessions.resolve(session, Date.now())).not.toBeNull()
   })
 })

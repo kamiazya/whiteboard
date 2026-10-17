@@ -70,7 +70,7 @@ const cdpRefusal = await cdpPortRefusal(Number(options['cdp-port']))
 if (cdpRefusal !== undefined) fail(cdpRefusal)
 if (process.platform === 'win32') {
   fail(
-    'Windows registers a native host only through a per-user registry key, which a throwaway profile cannot scope — run `whiteboard native-host install --json` yourself instead (development.md).',
+    'Windows registers a native host only through a per-user registry key, which a throwaway profile cannot scope, and the development build is allowed only by a host installed into a directory you name (`whiteboard native-host install --json --development --manifest-dir=<path>`), which Windows does not read without that key (development.md).',
   )
 }
 

@@ -230,7 +230,11 @@ call that names a workspace the caller is not a member of fails with
 reveal which workspaces exist. A call that creates a workspace
 (`wb_workspace_edit` with `createWorkspace: true`) makes the caller its first
 member; on a workspace that already exists it is an ordinary write, and a
-non-member is refused.
+non-member is refused. The workspace is created, with the caller as its
+member, before any document is written. If two people create the same new
+workspace at once, one of them gets it and the other is refused with
+`not_a_member`, and nothing of theirs is written into it. A batch that fails
+after that still leaves the caller with the workspace, so they can retry.
 
 A person must be a **user** of this keeper before they can be a member. A
 browser sign-in makes one. A bearer token makes one only when its issuer is a
@@ -281,6 +285,31 @@ owner remains, it adds an ordinary member.
 > `bearerClients`. Add each person with `add-user`, or turn `createAccounts` on
 > and narrow it with `requiredClaims`. Then grant each existing workspace its
 > first member with `grant-member`.
+
+### Scopes a bearer token needs on `/mcp`
+
+Membership decides which workspaces a caller reaches. The token's `scope`
+claim decides what it may do there. `/mcp` itself needs `mcp:call`. Each
+tool also needs the scope its HTTP API counterpart needs, so a token can do
+the same things through either surface:
+
+| Scope | Tools |
+| --- | --- |
+| `canvas:read` | `wb_document_get`, `wb_document_search`, `wb_canvas_snapshot`, `wb_scene_render`, `wb_facet_list`, `canvas_view` |
+| `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
+| `workspace:read` | `wb_document_list` |
+| `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
+| `versions:read` | `wb_version_list` |
+| `versions:write` | `wb_version_save`, `wb_version_restore` |
+
+A call without the scope fails with `insufficient_scope` and changes nothing.
+A token scoped `mcp:call canvas:read` can read documents but cannot edit or
+delete them. To give an agent everything, ask your identity provider for
+`mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write`.
+Before this, `mcp:call` alone allowed every tool. A token that carries only
+`mcp:call` now has no tool it can call.
+
+The local daemon is unchanged: its token can do everything.
 
 ### Administrators
 
@@ -877,6 +906,14 @@ deployment state.
   variables must be supplied at run time via `--env-file` or `-e`.
 - The local-daemon token (`WHITEBOARD_DAEMON_TOKEN`) is not used in server
   mode and must not appear in the container environment.
-- Raw JWT values, Authorization/Bearer headers, JWKS URI credentials, full
-  filesystem paths, and stack traces are never written to stdout, stderr, or
-  the Docker logs surface.
+- Raw JWT values, Authorization/Bearer headers and JWKS URI credentials are
+  never written to stdout, stderr, or the Docker logs surface.
+- Filesystem paths are kept out of what a member receives: an export answers
+  its file's path within the workspace's exports directory, and a fault
+  answers a fixed message (below). The server log is the operator's, and it
+  does carry that detail — a failure is logged with its error, which can
+  name a path under the data directory and include a stack trace.
+- What a member sees of a server fault carries no storage detail. A stored
+  file or record the server cannot read answers `corrupt_stored_data` with a
+  fixed message, and an MCP tool call that fails for any reason other than a
+  refusal answers `internal_error`. The detail goes to the server log.

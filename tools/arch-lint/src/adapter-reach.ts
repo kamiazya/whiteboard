@@ -114,9 +114,10 @@ export const ADAPTER_ENTITLED_MECHANICS: readonly {
       'security/sign-in-config',
       'security/sign-in-admission',
       'security/oidc-relying-party',
+      'security/invitation-token',
     ],
     reason:
-      'the sign-in operation and its policy: completing a sign-in runs its own transaction over deps the root builds (`createCompleteSignInDeps`), so the route translates the callback and holds no row',
+      "the sign-in operation and its policy: completing a sign-in runs its own transaction over deps the root builds (`createCompleteSignInDeps`), so the route translates the callback and holds no row; the invitation token's shape is a pure check the route applies before storing anything",
   },
   {
     modules: ['tenant/data-layout-seam'],

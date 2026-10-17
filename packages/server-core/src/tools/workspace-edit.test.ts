@@ -125,6 +125,27 @@ describe('wb_workspace_edit', () => {
     ).rejects.toThrow(/1 op\(s\) before it were applied and stand/)
   })
 
+  // The refusal quotes the op's own error, so a surface that must not quote a
+  // fault has to be able to see which error that was.
+  it("keeps the failing op's error as the refusal's cause", async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'held', kind: 'markdown' }],
+    })
+    const refused = await tool
+      .execute({
+        workspaceId: WS,
+        ops: [{ op: 'document.create', path: 'held', kind: 'markdown' }],
+      })
+      .catch((err: unknown) => err)
+    expect(refused).toBeInstanceOf(Error)
+    const { cause } = refused as Error
+    expect(cause).toBeInstanceOf(Error)
+    expect((refused as Error).message).toContain((cause as Error).message.replace(/\.$/, ''))
+  })
+
   it('ends a refusal that already carries a full stop without doubling it', async () => {
     const deps = await makeDeps()
     const tool = createWorkspaceEditTool(deps)

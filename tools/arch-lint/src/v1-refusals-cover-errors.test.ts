@@ -91,6 +91,11 @@ const EXEMPT: Readonly<Record<string, string>> = {
   RestoreTargetExistsError: VERSION_TOOLS,
   SubtreeNeedsWorkspaceVersionError: VERSION_TOOLS,
   SubtreeTakesNoTargetError: VERSION_TOOLS,
+  InvalidRestoreTargetPathError: VERSION_TOOLS,
+  RestoredDocumentIdMissingError:
+    'raised by the restore operation, which wb_version_restore and the daemon restore route call; /api/v1 mounts no restore',
+  UnknownRenderStyleError: CANVAS_TOOLS,
+  DocumentMoveNeedsTargetError: WORKSPACE_EDIT,
   WorkspaceEditError: WORKSPACE_EDIT,
   DocumentKindUnknownError: 'raised by wb_document_get reading a document of no known kind',
   MarkdownBodyTooLargeError:

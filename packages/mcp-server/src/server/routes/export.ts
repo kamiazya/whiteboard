@@ -4,23 +4,25 @@ import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-co
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { z } from 'zod'
-import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
   documentMissingBody,
+  type ExportPathAnswer,
   readExportBody,
   resolveRequestedOutputPath,
-  writeExportFile,
+  writeExportAnswer,
 } from './export-request.js'
 
 /**
- * The render, with the one failure that belongs to the REQUEST rather than
- * to the renderer separated out: a positive scale can still size the target
- * below one pixel, and the size came from the caller — so that is a 400,
- * a busy database is left to the app's 503, and everything else here is a 500.
+ * The render, with the failures that belong to the REQUEST rather than to
+ * the renderer separated out: a positive scale can still size the target
+ * below one pixel, or past the pixel budget, and the size came from the
+ * caller — so those are a 400, a busy database is left to the app's 503, and
+ * everything else here is a 500.
  */
 async function renderedExport(
   workspaceId: string,
@@ -33,6 +35,11 @@ async function renderedExport(
   try {
     return await renderHeadless(workspaceId, path, body, scope)
   } catch (err) {
+    // Matched by name: an adapter reaches the export mechanics only through
+    // `headless-export`, and the refusal is the renderer's `ExportTooLargeError`.
+    if (err instanceof Error && err.name === 'ExportTooLargeError') {
+      return { error: { error: 'invalid_request', message: err.message }, status: 400 }
+    }
     const message = messageOf(err)
     if (/target size is zero/i.test(message)) {
       return {
@@ -64,6 +71,8 @@ async function renderedExport(
 export interface ExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
   scope: StoreScope
+  /** Defaults to `absolute`, the local daemon's answer. */
+  exportPaths?: ExportPathAnswer
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -95,21 +104,14 @@ export function createExportRouter(options: ExportRouterOptions) {
 
     const rendered = await renderedExport(workspaceId, path, body, options.scope)
     if ('error' in rendered) return c.json(rendered.error, rendered.status)
-    const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
-
-    const filePath = await writeExportFile(pngBuffer, {
-      outputPath,
-      layout,
-      workspaceId,
-      path,
-      extension: 'png',
-    })
-    const response: ExportResponse = {
-      filePath,
-      undrawable: [...undrawable],
-      unresolvedFamilies: [...unresolvedFamilies],
-    }
-    return c.json(response)
+    return c.json(
+      await writeExportAnswer(
+        rendered.png,
+        { outputPath, layout, workspaceId, path, extension: 'png' },
+        rendered,
+        options.exportPaths,
+      ),
+    )
   })
 
   return app

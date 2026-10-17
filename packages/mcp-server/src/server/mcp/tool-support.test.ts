@@ -8,6 +8,10 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
+import type { ResolvedGrant } from '../security/credential-resolver.js'
+import { runAsMcpCaller } from '../security/mcp-caller.js'
+import type { MemberProfileStore } from '../security/member-profile-store.js'
+import { corruptStoredData } from '../store/corrupt-stored-data.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { registerToolWithAnnotations } from './tool-support.js'
 
@@ -164,5 +168,72 @@ describe('a tool call span', () => {
       'mcp.tool.name': 'canvas_open',
       'mcp.request.id': String(sentIds[0]),
     })
+  })
+})
+
+class FakeRefusalError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'FakeRefusalError'
+  }
+}
+
+/** The handler a tool that throws `thrown` registers, as the SDK would call it. */
+function throwingHandler(thrown: unknown) {
+  const server = fakeServer()
+  registerToolWithAnnotations(
+    server,
+    'wb_document_get',
+    { inputSchema: {}, outputSchema: z.object({ ok: z.boolean() }) },
+    async () => {
+      throw thrown
+    },
+  )
+  const handler = vi.mocked(server.registerTool).mock.calls[0]?.[2] as (
+    args: unknown,
+    extra: unknown,
+  ) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>
+  return () => handler({}, {})
+}
+
+const serverModeCaller = {
+  grant: { kind: 'external-bearer', scopes: [] } satisfies ResolvedGrant,
+  members: {} as MemberProfileStore,
+}
+const asServerMode = <T>(fn: () => Promise<T>) => runAsMcpCaller(serverModeCaller, fn)
+const STORED = '/srv/whiteboard/tenants/self-host/workspaces/w1/files/a.png'
+
+describe('tool error text on server mode', () => {
+  it('keeps a corrupt stored file out of the text, while the local daemon still names it', async () => {
+    const call = throwingHandler(corruptStoredData(STORED, 'stored file is empty'))
+    const remote = await asServerMode(call)
+    expect(remote.isError).toBe(true)
+    expect(remote.content[0]?.text).toMatch(/^internal_error:/)
+    expect(remote.content[0]?.text).not.toContain('/')
+    expect((await call()).content[0]?.text).toContain(STORED)
+  })
+
+  it('passes a named refusal through verbatim', async () => {
+    const call = throwingHandler(new FakeRefusalError('node n1 is not on this canvas'))
+    expect((await asServerMode(call)).content[0]?.text).toBe('node n1 is not on this canvas')
+  })
+
+  it('hides a refusal that quotes a fault it wraps', async () => {
+    const fault = corruptStoredData(STORED, 'stored file is empty')
+    const call = throwingHandler(
+      new FakeRefusalError(`ops[0] (document.set) could not be applied: ${fault.message}`, {
+        cause: fault,
+      }),
+    )
+    expect((await asServerMode(call)).content[0]?.text).not.toContain('/')
+  })
+
+  it('hides an unnamed error and a raw filesystem error', async () => {
+    const enoent = Object.assign(new FakeRefusalError(`ENOENT: open '${STORED}'`), {
+      syscall: 'open',
+    })
+    for (const thrown of [new Error(`failed at ${STORED}`), enoent]) {
+      expect((await asServerMode(throwingHandler(thrown))).content[0]?.text).not.toContain('/')
+    }
   })
 })
