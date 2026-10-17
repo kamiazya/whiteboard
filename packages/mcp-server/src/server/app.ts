@@ -57,6 +57,7 @@ import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { readLatestCompactedAt } from './store/document-store.js'
 import { storeScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
+import { SYNC_STREAM_CAPS } from './sync-streams.js'
 import { computeStorageReport } from './tenant/storage-report.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
@@ -188,7 +189,14 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
   return {
     workspaceDocuments: options.serverDeps.workspaceDocuments,
     ...(admit === undefined ? {} : { admit }),
-    ...(members === undefined ? {} : { userOf: (c: Context) => callerUserId(c, members) }),
+    ...(members === undefined
+      ? {}
+      : {
+          userOf: (c: Context) => callerUserId(c, members),
+          holdsAccess: (userId: string, workspaceId: string) =>
+            members.holdsAccess(workspaceId, userId),
+          streamCaps: SYNC_STREAM_CAPS,
+        }),
   }
 }
 

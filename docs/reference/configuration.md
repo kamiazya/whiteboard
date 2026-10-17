@@ -166,6 +166,28 @@ convenience — treat it like a `.env` file with a secret in it (do not commit
 it, restrict its file permissions). Prefer `WHITEBOARD_DAEMON_TOKEN` (or
 `--token-stdin`) for anything beyond local development.
 
+## Live-sync stream limits
+
+A page receives live edits over one event stream (`GET /api/sync/stream`).
+The web app opens **one stream per browser profile**, shared by all of its tabs
+through a SharedWorker; where SharedWorker is unavailable (Chrome on Android)
+each tab opens its own. These limits are fixed, not configurable:
+
+| Limit | Value | Applies to | When it is reached |
+|---|---|---|---|
+| Open streams per user | 16 | server mode | The next open is refused with `429 too_many_streams` and `Retry-After: 5`. The page keeps retrying with backoff and connects once one of that user's streams closes. |
+| Open streams in total, per instance | 1024 | server mode | Same refusal, for everyone, until a stream closes. |
+| Data written to a stream and not yet read by the page | about 43.7 MiB (two of the largest possible updates) | server mode and the local daemon | The keeper ends that stream. The page reconnects, subscribes again and reads what it missed from the keeper, so a slow reader loses nothing. |
+
+In server mode a stream belongs to the user who opened it: only that user may
+subscribe it to a workspace, and a credential that names no user of the
+tenant cannot open one (`403 requires_person_session`). Before each update is
+sent down a stream, the instance holding it re-checks that its user is still a
+member of the workspace and not deactivated, and ends the stream if not — so a
+removal or deactivation made on another instance, or with
+`whiteboard server deactivate-user`, takes effect on streams that are already
+open.
+
 ## Codex sandbox constraints
 
 Inside the Codex sandbox, two issues are common:

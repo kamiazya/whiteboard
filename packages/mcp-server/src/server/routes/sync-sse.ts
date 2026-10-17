@@ -20,20 +20,23 @@ import {
   syncClientMessageRequestSchema,
   syncSubscribeRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
-import { invalidRequestBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { errorBody, invalidRequestBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { streamSSE } from 'hono/streaming'
+import { type SSEStreamingApi, streamSSE } from 'hono/streaming'
 import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
 import {
   docKey,
+  MAX_QUEUED_STREAM_CHARS,
   registerSyncStream,
   type SyncStream,
+  type SyncStreamCaps,
   type SyncStreamDoc,
   sseBroadcastWorkspaceUpdate,
   syncStreamById,
+  syncStreamCapReached,
   unregisterSyncStream,
 } from '../sync-streams.js'
 import { cachedViewportRequest } from '../viewport-requests.js'
@@ -101,6 +104,12 @@ export interface SyncSseRouterOptions {
   admit?: WorkspaceAdmit
   /** Whose stream this is, so losing access can end it. Absent: nobody's. */
   userOf?: (c: Context) => Promise<string | null>
+  /** Whether a user still reaches a workspace — re-asked before a broadcast
+   *  goes down their stream. Absent: nobody can lose access. */
+  holdsAccess?: (userId: string, workspaceId: string) => Promise<boolean>
+  /** How many streams one user, and everyone, may hold open. Absent: no cap
+   *  (the local daemon, whose one person's tabs must never be refused). */
+  streamCaps?: SyncStreamCaps
 }
 
 /**
@@ -168,7 +177,33 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
 
 const SYNC_BODY: ReadJsonBodyOptions = { voice: 'code', refuseShape: invalidRequestBody }
 
-async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
+/**
+ * The stream a sync POST addresses, or the refusal to answer instead.
+ *
+ * Losing access ends the streams of the user who OPENED them, so a stream
+ * answers to that user alone: subscribed by anyone else — a second account, a
+ * bearer naming nobody — it would outlive its subscriber's removal and keep
+ * delivering a workspace they may no longer read.
+ */
+async function callersStream(
+  c: Context,
+  options: SyncSseRouterOptions,
+  streamId: string,
+): Promise<SyncStream | Response> {
+  const stream = syncStreamById(streamId)
+  // A request for a stream that is not open is a client bug (a race with
+  // reconnect, a stale streamId). Answering 200 would leave the caller
+  // believing it is subscribed and waiting forever for updates.
+  if (!stream) return unknownStream(c, streamId)
+  if (options.userOf === undefined) return stream
+  const caller = await options.userOf(c)
+  if (caller !== null && caller === stream.userId) return stream
+  log.warning({ streamId }, 'sync request refused: the stream is not the caller’s')
+  return c.json(errorBody('not_stream_owner', 'this stream was opened by someone else'), 403)
+}
+
+async function handleSubscribe(c: Context, options: SyncSseRouterOptions) {
+  const { admit } = options
   const parsed = await readJsonBody(c, syncSubscribeRequestSchema, SYNC_BODY)
   if ('refusal' in parsed) return parsed.refusal
 
@@ -185,11 +220,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   )
   if (refusal) return c.json(refusal, 403)
 
-  const stream = syncStreamById(parsed.data.streamId)
-  // A subscribe for a stream that is not open is a client bug (a race with
-  // reconnect, a stale streamId). Answering 200 would leave the caller
-  // believing it is subscribed and waiting forever for updates.
-  if (!stream) return unknownStream(c, parsed.data.streamId)
+  const stream = await callersStream(c, options, parsed.data.streamId)
+  if (stream instanceof Response) return stream
 
   if (
     exceedsStreamCap(
@@ -219,7 +251,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
 
 // The client->server half of the sync protocol: an SSE client has no
 // upstream channel of its own, so its messages arrive here.
-async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
+async function handleMessage(c: Context, options: SyncSseRouterOptions) {
+  const { admit } = options
   const parsed = await readJsonBody(c, syncClientMessageRequestSchema, SYNC_BODY)
   if ('refusal' in parsed) return parsed.refusal
 
@@ -227,8 +260,8 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   const refusal = await firstMembershipRefusal(c, admit, [doc.key])
   if (refusal) return c.json(refusal, 403)
 
-  const stream = syncStreamById(parsed.data.streamId)
-  if (!stream) return unknownStream(c, parsed.data.streamId)
+  const stream = await callersStream(c, options, parsed.data.streamId)
+  if (stream instanceof Response) return stream
 
   // `client_ready` is the one message a client sends: a viewport request is
   // fired once and never awaited, so there is no acknowledgement message.
@@ -240,6 +273,62 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   // document either way.
   markReady(stream, doc)
   return c.json({ ok: true })
+}
+
+/**
+ * The refusal to answer a stream open with, if any. Where the keeper knows
+ * people, a stream nobody owns is one no revocation could ever end; and one
+ * user, or everyone together, may hold only so many.
+ */
+function openRefusal(c: Context, options: SyncSseRouterOptions, userId: string | null) {
+  if (options.userOf === undefined) return null
+  if (userId === null) {
+    log.warning({}, 'sync stream refused: the caller is no user of this keeper')
+    return c.json(membershipRefusal('requires_person_session'), 403)
+  }
+  const cap = options.streamCaps && syncStreamCapReached(userId, options.streamCaps)
+  if (!cap) return null
+  log.warning({ userId, cap }, 'sync stream refused: too many open')
+  c.header('Retry-After', '5')
+  const message =
+    cap === 'per_user'
+      ? 'this user already holds as many sync streams as the keeper allows'
+      : 'the keeper holds as many sync streams as it allows'
+  return c.json(errorBody('too_many_streams', message), 429)
+}
+
+/** The registry's handle on one open stream. */
+function streamEntry(
+  stream: SSEStreamingApi,
+  streamId: string,
+  userId: string | null,
+  holdsAccess: SyncSseRouterOptions['holdsAccess'],
+): SyncStream {
+  // What has been written and not yet taken by the reader: a write settles
+  // once the response body is read past it.
+  let queued = 0
+  return {
+    docs: new Map(),
+    send: ({ event, data }) => {
+      if (stream.aborted) return
+      const payload = JSON.stringify(data)
+      queued += payload.length
+      if (queued > MAX_QUEUED_STREAM_CHARS) {
+        unregisterSyncStream(streamId)
+        log.warning({ streamId, queued }, 'sync stream ended: its reader fell too far behind')
+        stream.abort()
+        return
+      }
+      void stream.writeSSE({ event, data: payload }).finally(() => {
+        queued -= payload.length
+      })
+    },
+    userId,
+    ...(userId === null || holdsAccess === undefined
+      ? {}
+      : { admits: (workspaceId: string) => holdsAccess(userId, workspaceId) }),
+    end: () => stream.abort(),
+  }
 }
 
 export function createSyncSseRouter(options: SyncSseRouterOptions) {
@@ -259,19 +348,13 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     // it is what proves the stream is yours.
     const streamId = globalThis.crypto.randomUUID()
     const userId = (await options.userOf?.(c)) ?? null
+    const refusal = openRefusal(c, options, userId)
+    if (refusal) return refusal
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
     return streamSSE(c, async (stream) => {
-      const entry: SyncStream = {
-        docs: new Map(),
-        send: ({ event, data }) => {
-          void stream.writeSSE({ event, data: JSON.stringify(data) })
-        },
-        userId,
-        end: () => stream.abort(),
-      }
-      registerSyncStream(streamId, entry)
+      registerSyncStream(streamId, streamEntry(stream, streamId, userId, options.holdsAccess))
       const ready: SyncReadyEvent = { streamId }
       await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
       log.info({ streamId }, 'sync stream opened')
@@ -289,8 +372,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     })
   })
 
-  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options.admit))
-  app.post('/api/sync/message', (c) => handleMessage(c, options.admit))
+  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))
+  app.post('/api/sync/message', (c) => handleMessage(c, options))
 
   return app
 }

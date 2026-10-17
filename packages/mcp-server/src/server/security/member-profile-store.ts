@@ -114,6 +114,9 @@ export interface MemberProfileStore {
   membershipRole(workspaceId: string, profileId: string): Promise<WorkspaceRole | null>
   /** True once this workspace has ever had a member — never reverts on removal. */
   membersOnly(workspaceId: string): Promise<boolean>
+  /** True while this user exists, is not deactivated, and is a member of the
+   *  workspace — what an open stream is re-checked against, in one read. */
+  holdsAccess(workspaceId: string, profileId: string): Promise<boolean>
 }
 
 // Inserts the membership row and, on a workspace's FIRST membership ever,
@@ -300,6 +303,18 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       (await roleIn(db, workspaceId, profileId)) === null ? 'not-a-member' : 'member',
 
     membershipRole: (workspaceId, profileId) => roleIn(db, workspaceId, profileId),
+
+    async holdsAccess(workspaceId, profileId) {
+      const row = await db
+        .selectFrom('workspaceMemberships')
+        .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
+        .select('workspaceMemberships.profileId')
+        .where('workspaceMemberships.workspaceId', '=', workspaceId)
+        .where('workspaceMemberships.profileId', '=', profileId)
+        .where('memberProfiles.deactivatedAt', 'is', null)
+        .executeTakeFirst()
+      return row !== undefined
+    },
 
     async membersOnly(workspaceId) {
       const row = await db

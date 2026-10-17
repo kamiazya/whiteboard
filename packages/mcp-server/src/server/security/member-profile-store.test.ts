@@ -10,6 +10,7 @@ import {
   type MemberProfileStore,
   passkeyBinding,
 } from './member-profile-store.js'
+import { createUserDeactivation } from './user-deactivation.js'
 import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 let root: string
@@ -293,5 +294,31 @@ describe('membershipRole', () => {
     await store.addMember('ws-1', bob.id)
     await store.addMember('ws-1', ada.id)
     expect(await store.membershipRole('ws-1', ada.id)).toBe('owner')
+  })
+})
+
+describe('holdsAccess', () => {
+  it('holds for a member, and stops on removal or deactivation', async () => {
+    const ada = await store.ensureProfile({
+      binding: passkeyBinding('https://a.example', 'cred-1'),
+      displayName: 'Ada',
+    })
+    const bob = await store.ensureProfile({
+      binding: passkeyBinding('https://a.example', 'cred-2'),
+      displayName: 'Bob',
+    })
+    await store.addMember('ws-1', ada.id)
+    await store.addMember('ws-2', ada.id)
+    await store.addMember('ws-1', bob.id)
+
+    expect(await store.holdsAccess('ws-1', ada.id)).toBe(true)
+    expect(await store.holdsAccess('ws-2', bob.id)).toBe(false)
+
+    await dropMembership('ws-1', bob.id)
+    expect(await store.holdsAccess('ws-1', bob.id)).toBe(false)
+
+    await createUserDeactivation(handle.db).deactivate(ada.id, 1)
+    expect(await store.holdsAccess('ws-1', ada.id)).toBe(false)
+    expect(await store.holdsAccess('ws-2', ada.id)).toBe(false)
   })
 })
