@@ -88,7 +88,7 @@ export class SubtreeTakesNoTargetError extends Error {
 }
 
 /** A `targetPath` that is not a document path. */
-export class InvalidRestoreTargetPathError extends Error {
+class InvalidRestoreTargetPathError extends Error {
   constructor(public readonly targetPath: string | undefined) {
     super(`invalid targetPath: ${targetPath}`)
     this.name = 'InvalidRestoreTargetPathError'
