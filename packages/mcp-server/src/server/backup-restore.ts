@@ -472,11 +472,17 @@ export async function restoreDataDir(
     // with the materialisation below, which writes each blob to where it
     // actually belongs. A backup with no manifest predates the mirror and
     // carries its real `blobs/` tree, so nothing is excluded there.
+    //
+    // What a backup never takes is never restored either: a backup is an
+    // artifact somebody else may have written, and a planted native-host
+    // launcher is code the browser extension runs, a planted root key one
+    // every act-plane token verifies against.
     filter: (src: string) =>
-      references === null ||
-      !MIRROR_STORE_DIRNAMES.some(
-        (name) => src === join(backupDir, name) || src.startsWith(join(backupDir, name) + sep),
-      ),
+      !NEVER_COPIED.some((name) => src === join(backupDir, name)) &&
+      (references === null ||
+        !MIRROR_STORE_DIRNAMES.some(
+          (name) => src === join(backupDir, name) || src.startsWith(join(backupDir, name) + sep),
+        )),
   })
 
   if (references) {
