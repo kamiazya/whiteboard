@@ -385,9 +385,27 @@ describe('sign-in through an OIDC provider', () => {
     const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
     const res = await app.request(`${BASE}/auth/sign-out`, {
       method: 'POST',
-      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+      headers: { cookie: `${SESSION_COOKIE}=${session}`, origin: BASE },
     })
     expect(res.status).toBe(204)
     expect(await signIn.sessions.resolve(session, Date.now())).toBeNull()
+  })
+
+  // The cookie rides along on a POST any page makes to this host, a sibling
+  // subdomain's included, so only this host's own pages may end the session.
+  it.for([
+    ['no Origin', {}],
+    ['a sibling origin', { origin: 'https://evil.board.example' }],
+  ])('keeps the session when sign-out arrives with %s', async ([, extra]) => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const res = await app.request(`${BASE}/auth/sign-out`, {
+      method: 'POST',
+      headers: { cookie: `${SESSION_COOKIE}=${session}`, ...(extra as object) },
+    })
+    expect(res.status).toBe(403)
+    expect(res.headers.getSetCookie()).toEqual([])
+    expect(await signIn.sessions.resolve(session, Date.now())).not.toBeNull()
   })
 })

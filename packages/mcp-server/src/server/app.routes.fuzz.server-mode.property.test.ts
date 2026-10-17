@@ -390,7 +390,9 @@ function targetFor(seed: Seed, key: string, pattern: string): fc.Arbitrary<Targe
   const happy = fillPattern(seed, key, pattern, true).chain((path): fc.Arbitrary<Target> => {
     if (key === 'GET /auth/callback/:providerId') return happyCallback(seed, path)
     const cookie = signedInByProvider ? seed.cookies.oidc : seed.cookies.admin
-    const headers: Headers = isAuth ? { cookie } : { cookie, origin: PUBLIC_URL }
+    // A navigation carries no Origin; a write from this host's own page does.
+    const navigation = isAuth && key.startsWith('GET ')
+    const headers: Headers = navigation ? { cookie } : { cookie, origin: PUBLIC_URL }
     return fc.constant({ path, headers })
   })
   const drawn = fc

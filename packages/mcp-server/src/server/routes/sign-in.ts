@@ -23,6 +23,7 @@ import type {
   SignInRefusal,
   SignInSessionResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
+import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { getLogger } from '../log.js'
@@ -249,7 +250,14 @@ async function session(c: Context, deps: SignInRoutesDeps, now: () => number) {
   return c.json(body)
 }
 
+// The browser attaches the session cookie to a POST any page makes to this
+// host — a sibling subdomain's included, which SameSite=Lax does not stop —
+// so, as for every session write, only this host's own pages may sign out.
+// Browsers send `Origin` on every POST, same-origin ones too.
 async function signOut(c: Context, deps: SignInRoutesDeps) {
+  if (c.req.header('origin') !== new URL(deps.publicBaseUrl).origin) {
+    return c.json(errorBody('forbidden', 'Sign out from this server’s own pages.'), 403)
+  }
   const session = getCookie(c, SESSION_COOKIE)
   if (session !== undefined) await deps.signIn.sessions.end(session)
   deleteCookie(c, SESSION_COOKIE, cookieOptions)
