@@ -44,9 +44,10 @@ import {
   type FirstMember,
   membershipAdmit,
   type WorkspaceAdmit,
+  type WorkspaceOwnership,
 } from './security/membership-gate.js'
 import { createWorkspacePeopleAdministration } from './security/people-administration.js'
-import { serverModePeopleKeeper } from './security/people-keepers.js'
+import { callerOwns, serverModePeopleKeeper } from './security/people-keepers.js'
 import { resolveServerModeExposure } from './security/server-mode-exposure.js'
 import {
   createServerModeApiAuthMiddleware,
@@ -94,13 +95,15 @@ if (shouldLogMcpHttpDebug()) {
 function membershipWiring(options: AppOptions): {
   admit: WorkspaceAdmit | undefined
   firstMember: FirstMember | undefined
+  ownsWorkspace: WorkspaceOwnership | undefined
 } {
   const members = options.authMode === 'server-mode' ? options.people.members : undefined
   return members === undefined
-    ? { admit: undefined, firstMember: undefined }
+    ? { admit: undefined, firstMember: undefined, ownsWorkspace: undefined }
     : {
         admit: membershipAdmit(members),
         firstMember: creatorAsFirstMember(members),
+        ownsWorkspace: (c, workspaceId) => callerOwns(c, members, workspaceId),
       }
 }
 
@@ -110,6 +113,7 @@ function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>
   return {
     ...(membership.admit === undefined ? {} : { admit: membership.admit }),
     ...(membership.firstMember === undefined ? {} : { firstMember: membership.firstMember }),
+    ...(membership.ownsWorkspace === undefined ? {} : { ownsWorkspace: membership.ownsWorkspace }),
   }
 }
 

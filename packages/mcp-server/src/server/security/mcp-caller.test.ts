@@ -175,10 +175,15 @@ describe('gatedByMembership', () => {
     expect(await members.isWorkspaceMember(idOf('fresh'), profile.id)).toBe('member')
   })
 
-  it('leaves a handle that cannot be a segment to the tool, minting nothing', async () => {
+  // Minting nothing leaves nothing the caller is a member of, so the tool
+  // must not run: left to it, a createWorkspace call would write ungated.
+  it('refuses a handle that cannot be a segment, minting and running nothing', async () => {
     await members.ensureProfile({ binding: ada, displayName: 'Ada' })
-    await asAda(() => tools().execute({ workspaceId: '-', createWorkspace: true }))
-    expect(executed).toEqual([{ workspaceId: '-', createWorkspace: true }])
+    await expect(
+      asAda(() => tools().execute({ workspaceId: '-', createWorkspace: true })),
+    ).rejects.toThrow(/not_a_member/)
+    expect(executed).toEqual([])
+    expect(workspaces.has('-')).toBe(false)
   })
 
   // The gate selects on the workspace field, so a call without it must not be

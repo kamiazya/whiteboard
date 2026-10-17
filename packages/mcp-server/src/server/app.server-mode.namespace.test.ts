@@ -246,6 +246,139 @@ describe('server mode — inside one namespace a segment still collides', () => 
   })
 })
 
+// ADR-0053 decision 3 gives a segment change to owners. A plain member is
+// refused before the rename runs, so a taken and a free segment answer alike
+// and the address others use stays where it is.
+describe('server mode — only an owner changes a segment', () => {
+  async function planWithMember() {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    await create(ada, 'Design')
+    const plans = await create(ada, 'Plans')
+    await members.addMember(plans.workspaceId, await userIdOf('bob'))
+    return { ada, bob, plans }
+  }
+
+  it("refuses a member's segment change, taken or free, leaving it unchanged", async () => {
+    const { ada, bob, plans } = await planWithMember()
+
+    const taken = await rename(bob, plans.workspaceId, { segment: 'design' })
+    const free = await rename(bob, plans.workspaceId, { segment: 'roadmap' })
+
+    expect(taken.status).toBe(403)
+    expect(free.status).toBe(403)
+    expect(await taken.json()).toEqual(await free.json())
+    const listed = await app.request(`${PUBLIC_URL}/api/workspaces`, { headers: ada })
+    const { workspaces } = (await listed.json()) as {
+      workspaces: { workspaceId: string; segment?: string }[]
+    }
+    expect(workspaces.find((w) => w.workspaceId === plans.workspaceId)?.segment).toBe('plans')
+  })
+
+  it("refuses a member's segment change carried beside a display name", async () => {
+    const { bob, plans } = await planWithMember()
+
+    const res = await rename(bob, plans.workspaceId, { segment: 'roadmap', displayName: 'X' })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'not_an_owner' })
+  })
+
+  it('lets a member change the display name alone', async () => {
+    const { bob, plans } = await planWithMember()
+
+    const res = await rename(bob, plans.workspaceId, { displayName: 'Plans 2027' })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ segment: 'plans', displayName: 'Plans 2027' })
+  })
+})
+
+// ADR-0053 decision 4's rule, applied when the namespace holder stops being
+// an owner: the workspace moves to its oldest remaining owner, so the former
+// holder's later creates and renames say nothing about its segment.
+describe('server mode — a workspace leaves the namespace of a holder who stops owning it', () => {
+  function people(headers: Headers, workspaceId: string, userId: string, init: RequestInit) {
+    return app.request(`${PUBLIC_URL}/api/workspaces/${workspaceId}/people/${userId}`, {
+      ...init,
+      headers: { ...headers, ...json },
+    })
+  }
+
+  it.each([
+    ['removed', { method: 'DELETE' }],
+    ['demoted', { method: 'PATCH', body: JSON.stringify({ role: 'member' }) }],
+  ] as const)('moves the workspace to the remaining owner when its holder is %s', async (_, init) => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const plans = await create(ada, 'Plans')
+    const bobId = await userIdOf('bob')
+    await members.addMember(plans.workspaceId, bobId)
+    await createWorkspaceRoles(handle.db).setRole(plans.workspaceId, bobId, 'owner')
+
+    expect((await people(bob, plans.workspaceId, await userIdOf('ada'), init)).status).toBe(200)
+    const renamed = await rename(bob, plans.workspaceId, { segment: 'secret' })
+
+    expect(await renamed.json()).toMatchObject({ namespace: 'bob', segment: 'secret' })
+    expect((await create(ada, 'secret')).segment).toBe('secret')
+  })
+
+  it('leaves the workspace where it is when an owner who does not hold it is demoted', async () => {
+    const ada = await signedIn('ada')
+    const plans = await create(ada, 'Plans')
+    await signedIn('bob')
+    const bobId = await userIdOf('bob')
+    await members.addMember(plans.workspaceId, bobId)
+    await createWorkspaceRoles(handle.db).setRole(plans.workspaceId, bobId, 'owner')
+
+    const init = { method: 'PATCH', body: JSON.stringify({ role: 'member' }) }
+    expect((await people(ada, plans.workspaceId, bobId, init)).status).toBe(200)
+
+    const renamed = await rename(ada, plans.workspaceId, { segment: 'roadmap' })
+    expect(await renamed.json()).toMatchObject({ namespace: 'ada', segment: 'roadmap' })
+  })
+
+  // The holder is not always the oldest owner: once a workspace has moved,
+  // an older owner may still be in it, and demoting somebody else must not
+  // hand it to them.
+  it('keeps a moved workspace with its holder when another owner is demoted', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    await signedIn('cy')
+    const plans = await create(ada, 'Plans')
+    const adaId = await userIdOf('ada')
+    const bobId = await userIdOf('bob')
+    const cyId = await userIdOf('cy')
+    const roles = createWorkspaceRoles(handle.db)
+    await members.addMember(plans.workspaceId, bobId)
+    await members.addMember(plans.workspaceId, cyId)
+    await roles.setRole(plans.workspaceId, bobId, 'owner')
+    await roles.setRole(plans.workspaceId, adaId, 'member')
+    await roles.setRole(plans.workspaceId, adaId, 'owner')
+    await roles.setRole(plans.workspaceId, cyId, 'owner')
+
+    expect(await roles.setRole(plans.workspaceId, cyId, 'member')).toBe('ok')
+
+    const renamed = await rename(bob, plans.workspaceId, { segment: 'roadmap' })
+    expect(await renamed.json()).toMatchObject({ namespace: 'bob', segment: 'roadmap' })
+  })
+
+  it('leaves the workspace with its holder when the holder is made an owner again', async () => {
+    const ada = await signedIn('ada')
+    await signedIn('bob')
+    const plans = await create(ada, 'Plans')
+    const bobId = await userIdOf('bob')
+    await members.addMember(plans.workspaceId, bobId)
+    const roles = createWorkspaceRoles(handle.db)
+    await roles.setRole(plans.workspaceId, bobId, 'owner')
+
+    expect(await roles.setRole(plans.workspaceId, await userIdOf('ada'), 'owner')).toBe('ok')
+
+    const renamed = await rename(ada, plans.workspaceId, { segment: 'roadmap' })
+    expect(await renamed.json()).toMatchObject({ namespace: 'ada', segment: 'roadmap' })
+  })
+})
+
 // ADR-0053 decision 1: whether a handle, a segment or a workspace exists may
 // be visible to the tenant's signed-in users, never to a request with no
 // session. Every route the app mounts is asked twice with no credential —

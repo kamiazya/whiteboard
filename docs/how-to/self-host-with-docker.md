@@ -261,6 +261,19 @@ member, before any document is written. If two people create the same new
 workspace at once, one of them gets it and the other is refused with
 `not_a_member`, and nothing of theirs is written into it. A batch that fails
 after that still leaves the caller with the workspace, so they can retry.
+A `createWorkspace` call whose `workspaceId` names nothing and cannot be a
+workspace segment (an id that does not exist, say) creates nothing and is
+refused with `not_a_member` too.
+
+A workspace's address, `/w/<handle>/<workspace>`, changes only for an owner:
+a member's `PATCH /api/workspaces/<workspace>` carrying `segment` is refused
+with `403 not_an_owner` before the new segment is checked, so the answer is
+the same whether it is free or taken. Any member can change the workspace's
+display name alone. The address lives under the handle of the person who
+holds it, at first its creator. If that person is removed from the
+workspace or made a member, it moves to its longest-standing remaining
+owner's handle, as it does when they are deleted; links in the id form keep
+working.
 
 A person must be a **user** of this keeper before they can be a member. A
 browser sign-in makes one. A bearer token makes one only when its issuer is a

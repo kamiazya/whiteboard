@@ -10,6 +10,7 @@ import {
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import {
   deriveWorkspaceSegment,
   generateDocumentId,
@@ -35,7 +36,11 @@ import {
 import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
-import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
+import type {
+  FirstMember,
+  WorkspaceAdmit,
+  WorkspaceOwnership,
+} from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath } from '../../validators.js'
 import {
@@ -85,6 +90,21 @@ async function countDocuments(index: DocumentIndex, workspaceId: string): Promis
   }
 }
 
+// The refusal the owner-only people routes answer, in the same shape.
+const SEGMENT_NOT_OWNED = {
+  error: 'not_an_owner',
+  message: 'only an owner of this workspace can change its segment',
+} as const satisfies WorkspacePeopleRefusal
+
+function renamedSummary(renamed: WorkspaceEntry): WorkspaceSummary {
+  return {
+    workspaceId: renamed.workspaceId,
+    ...(renamed.namespace === undefined ? {} : { namespace: renamed.namespace }),
+    ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
+    ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),
+  }
+}
+
 export interface WorkspacesRouterOptions {
   /** The operations this router adapts onto, handed down by the root. */
   serverDeps: ServerDeps
@@ -101,6 +121,9 @@ export interface WorkspacesRouterOptions {
   /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
    *  on the local daemon, where an unclaimed workspace is open by design. */
   firstMember?: FirstMember
+  /** ADR-0053 decision 3: a segment changes for an owner only. Absent on the
+   *  local daemon, whose one person owns everything. */
+  ownsWorkspace?: WorkspaceOwnership
 }
 
 // GET /api/workspaces
@@ -285,6 +308,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // PATCH, not PUT: a field ABSENT means "leave this layer alone", which is
   // the port's contract and something PUT cannot express — under PUT a body
   // carrying only a name would be asking to drop the address.
+  const owns = options.ownsWorkspace ?? (async () => true)
   app.patch('/api/workspaces/:workspaceId', async (c) => {
     const handle = c.req.param('workspaceId')
     const malformed = refuseMalformedHandle(c, handle)
@@ -300,14 +324,13 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // Resolved through the handle, so this route accepts either layer in
       // the address exactly as every other addressed surface does.
       const workspaceId = await workspaceIdFromHandle(c, handle)
-      const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
-      const response: WorkspaceSummary = {
-        workspaceId: renamed.workspaceId,
-        ...(renamed.namespace === undefined ? {} : { namespace: renamed.namespace }),
-        ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
-        ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),
+      // Asked before the rename, so a member never reaches the collision
+      // check: a taken and a free segment answer alike.
+      if (parsed.data.segment !== undefined && !(await owns(c, workspaceId))) {
+        return c.json(SEGMENT_NOT_OWNED, 403)
       }
-      return c.json(response)
+      const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
+      return c.json(renamedSummary(renamed))
     } catch (err) {
       const owned = firstOwned(err, [segmentTaken, workspaceNotFound, corruptStored])
       if (owned) return c.json(owned.body, owned.status)
