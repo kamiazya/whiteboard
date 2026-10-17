@@ -97,6 +97,30 @@ describe('a workspace-document sync update and the document ceiling', () => {
     expect(storedCount(store)).toBe(WORKSPACE_MAX_DOCUMENTS)
   })
 
+  // The listing holds one entry per document NODE, and nothing stops a
+  // client's node from carrying an id another node already has.
+  it('refuses an update past the ceiling whose new document reuses an existing id', async () => {
+    const seed = recordOf(WORKSPACE_MAX_DOCUMENTS)
+    const store = new StoredDoc(seed)
+    const update = updateFrom(seed, (doc) => {
+      const node = doc.getTree(WORKSPACE_TREE_KEY).createNode()
+      node.data.set('documentId', idOf(0))
+      node.data.set('segment', 'same-id')
+      node.data.set('kind', 'markdown')
+      node.data.set('createdAt', 1_000)
+      node.data.set('updatedAt', 1_000)
+    })
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(syncWriteAnswer(refusal)).toEqual({ code: 'too_many_documents', status: 413 })
+    expect(store.saves).toBe(0)
+    expect(storedCount(store)).toBe(WORKSPACE_MAX_DOCUMENTS)
+  })
+
   it('takes an update that brings the record exactly to the ceiling', async () => {
     const seed = recordOf(WORKSPACE_MAX_DOCUMENTS - 1)
     const store = new StoredDoc(seed)
