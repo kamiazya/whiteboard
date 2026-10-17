@@ -1,7 +1,9 @@
 # PR preview — BUILD half (untrusted). Runs the PR's code to build apps/web but
-# has NO secrets, so a malicious PR cannot exfiltrate deploy credentials. The
-# built static site + PR metadata are uploaded as artifacts; preview-pr-deploy.yml
-# (workflow_run, trusted) publishes them with the Cloudflare secrets.
+# has NO secrets, so a malicious PR cannot exfiltrate deploy credentials. Only the
+# built static site is uploaded; preview-pr-deploy.yml (workflow_run, trusted)
+# publishes it with the Cloudflare secrets, taking the PR number and branch from
+# the workflow_run event — this job runs the PR's own copy of this file, so
+# anything else it uploaded would be attacker-written.
 name: Preview PR Build
 
 on:
@@ -31,28 +33,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build apps/web
         run: pnpm --filter @kamiazya/whiteboard-web build
-      - name: Save PR metadata
-        env:
-          # Untrusted; read via env and only written to a file here. The deploy
-          # workflow re-sanitizes these before using them.
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          mkdir -p pr-meta
-          {
-            printf 'pr=%s\n' "$PR_NUMBER"
-            printf 'branch=%s\n' "$HEAD_REF"
-          } > pr-meta/pr.txt
       - name: Upload built site
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: preview-pr-dist
           path: apps/web/dist
-          retention-days: 3
-      - name: Upload PR metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: preview-pr-meta
-          path: pr-meta
           retention-days: 3
