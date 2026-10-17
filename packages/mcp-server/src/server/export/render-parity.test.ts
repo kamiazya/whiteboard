@@ -21,8 +21,6 @@ const renderSpatialCanvasToSvg = (
   options?: Parameters<typeof renderSvgIn>[2],
 ) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
-const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-
 // Glyph-width sensitive on purpose: a constant-ratio measurer cannot tell
 // 'MMMM' from 'iiii', so a canvas built only from average-width text would
 // let the two producers agree by accident.
@@ -62,11 +60,18 @@ function textRuns(svg: string): string[] {
 describe('wb_scene_render / export parity', () => {
   it('wraps text at the same points as the exporter, because both measure with the real font', async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
+    // Placed, since the tool reads only a document its named workspace holds.
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    const { documentId } = await deps.documentIndex.createDocument({
+      workspaceId: 'ws-1',
+      path: 'board',
+      kind: 'spatial',
+    })
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, canvas)
     const snapshot = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1 << 20)
     await deps.documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-1', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: 'ws-1', documentId },
       manifest: snapshot.manifest,
       chunks: snapshot.chunks,
       frontier: new Uint8Array(),
@@ -74,7 +79,7 @@ describe('wb_scene_render / export parity', () => {
 
     const viaTool = await createCanvasRenderSvgTool(deps).execute({
       workspaceId: 'ws-1',
-      documentId: DOCUMENT_ID,
+      documentId,
       embedReferences: false,
       style: 'clean',
     })

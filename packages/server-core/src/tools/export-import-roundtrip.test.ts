@@ -8,6 +8,7 @@ import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
+  placeUnlessPlaced,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
@@ -19,7 +20,9 @@ import { exportOkf } from './export-okf.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+/** Places the document under test, since every read tool refuses one its workspace does not hold. */
+async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
+  await placeUnlessPlaced(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   return makeTestDeps({
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
@@ -39,7 +42,7 @@ async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<Lo
 async function setupTools() {
   const store = new FakeDocumentStore()
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-  const deps = makeDeps(store)
+  const deps = await makeDeps(store)
   return {
     store,
     deps,
@@ -361,7 +364,7 @@ describe('error paths do not silently produce corrupt output', () => {
   })
 
   test('export_okf on a canvas with no stored snapshot surfaces a clean error', async () => {
-    const deps = makeDeps(new FakeDocumentStore())
+    const deps = await makeDeps(new FakeDocumentStore())
 
     await expect(
       exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
@@ -369,7 +372,7 @@ describe('error paths do not silently produce corrupt output', () => {
   })
 
   test('export_json_canvas on a canvas with no stored snapshot surfaces a clean error', async () => {
-    const deps = makeDeps(new FakeDocumentStore())
+    const deps = await makeDeps(new FakeDocumentStore())
 
     await expect(
       exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),

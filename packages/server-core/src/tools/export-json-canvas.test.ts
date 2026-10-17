@@ -3,7 +3,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
@@ -20,7 +20,9 @@ const NODE_WITH_EXTENSION = textNode({
   embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const },
 })
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+/** Places the document under test, since every read tool refuses one its workspace does not hold. */
+async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
+  await placeUnlessPlaced(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   return makeTestDeps({
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
@@ -33,7 +35,7 @@ describe('exportJsonCanvas', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
-    const result = await exportJsonCanvas(makeDeps(store), {
+    const result = await exportJsonCanvas(await makeDeps(store), {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       options: { strict: true },
@@ -48,7 +50,7 @@ describe('exportJsonCanvas', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
-    const result = await exportJsonCanvas(makeDeps(store), {
+    const result = await exportJsonCanvas(await makeDeps(store), {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
     })
@@ -62,7 +64,7 @@ describe('exportJsonCanvas', () => {
 
   test('rejects when the canvas has no stored snapshot', async () => {
     await expect(
-      exportJsonCanvas(makeDeps(new FakeDocumentStore()), {
+      exportJsonCanvas(await makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
       }),

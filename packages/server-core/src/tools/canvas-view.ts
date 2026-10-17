@@ -23,6 +23,7 @@ import { loadDocument } from '../document-io.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { taggedDrawingLibrary } from './tag-library.js'
 
 export const canvasViewInputSchema = z
@@ -152,6 +153,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
     inputSchema: canvasViewInputSchema,
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
