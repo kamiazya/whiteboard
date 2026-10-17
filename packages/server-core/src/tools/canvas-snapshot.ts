@@ -354,6 +354,23 @@ export function projectCanvasSnapshot(
   }
 }
 
+/** The canvas the snapshot reads: placed in the named workspace, and spatial. */
+async function loadOwnedCanvas(
+  deps: ServerDeps,
+  input: CanvasSnapshotInput,
+): Promise<Awaited<ReturnType<typeof loadDocument>>> {
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const loaded = await loadDocument(deps, input.workspaceId, input.documentId)
+  await assertSpatialDocument(
+    deps,
+    input.workspaceId,
+    input.documentId,
+    loaded.doc,
+    'wb_canvas_snapshot',
+  )
+  return loaded
+}
+
 /**
  * The compact, semantic read of a spatial canvas — what an agent should
  * reach for before editing one.
@@ -373,23 +390,6 @@ export function projectCanvasSnapshot(
  * ponytail: stored order, viewport- or selection-scoped windowing if
  * reading past the cap turns out to matter.
  */
-/** The canvas the snapshot reads: placed in the named workspace, and spatial. */
-async function loadOwnedCanvas(
-  deps: ServerDeps,
-  input: CanvasSnapshotInput,
-): Promise<Awaited<ReturnType<typeof loadDocument>>> {
-  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const loaded = await loadDocument(deps, input.workspaceId, input.documentId)
-  await assertSpatialDocument(
-    deps,
-    input.workspaceId,
-    input.documentId,
-    loaded.doc,
-    'wb_canvas_snapshot',
-  )
-  return loaded
-}
-
 export function createCanvasSnapshotTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_snapshot' as const,
