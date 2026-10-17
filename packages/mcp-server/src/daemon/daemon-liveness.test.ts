@@ -8,7 +8,7 @@ import { endpointProof } from '../shared/endpoint-proof.js'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
-import { type DaemonRequest, DaemonNoAnswerError, requestDaemon } from './daemon-request.js'
+import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
 
 const startedAt = '2026-01-01T00:00:00.000Z'
 const writtenAtMs = Date.parse(startedAt)
