@@ -41,6 +41,7 @@ function serverModeCsp(nonce: string): string {
     "connect-src 'self'",
     "worker-src 'self'",
     "frame-src 'none'",
+    "form-action 'none'",
   ].join('; ')
 }
 
