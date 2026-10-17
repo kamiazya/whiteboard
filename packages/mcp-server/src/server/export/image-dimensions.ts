@@ -172,14 +172,23 @@ const svgRootAttributes = (text: string): ReadonlyMap<string, string> | undefine
   }
 }
 
-/** `width`/`height` in user units, else the `viewBox`'s; a percentage or unit is unreadable. */
+/**
+ * `width`/`height` in user units, else — only when neither is given — the
+ * `viewBox`'s. An explicit length this reader cannot convert (a percentage,
+ * a unit, a value carrying a reference) is unreadable rather than replaced by
+ * the viewBox, which resvg would not use in its place.
+ */
 const svg: Reader = (b) => {
   const root = svgRootAttributes(new TextDecoder().decode(b))
   if (root === undefined) return undefined
-  const width = SVG_LENGTH.exec(root.get('width') ?? '')?.[1]
-  const height = SVG_LENGTH.exec(root.get('height') ?? '')?.[1]
-  if (width !== undefined && height !== undefined) {
-    return area(Math.ceil(Number(width)), Math.ceil(Number(height)))
+  const givenWidth = root.get('width')
+  const givenHeight = root.get('height')
+  if (givenWidth !== undefined || givenHeight !== undefined) {
+    const width = SVG_LENGTH.exec(givenWidth ?? '')?.[1]
+    const height = SVG_LENGTH.exec(givenHeight ?? '')?.[1]
+    return width === undefined || height === undefined
+      ? undefined
+      : area(Math.ceil(Number(width)), Math.ceil(Number(height)))
   }
   const box = (root.get('viewBox') ?? '')
     .trim()

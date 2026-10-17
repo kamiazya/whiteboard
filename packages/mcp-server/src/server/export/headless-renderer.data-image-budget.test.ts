@@ -239,6 +239,20 @@ describe('a data: image the exporter cannot size', () => {
       'an SVG whose root repeats an attribute',
       dataUrl('image/svg+xml', ascii('<svg width="1" height="1" width="20000"/>')),
     ],
+    // An explicit size this reader cannot convert is resvg's to decide, not
+    // the viewBox's: 20000pt is 26667px however small the viewBox says.
+    [
+      'an SVG sized in a unit besides px',
+      dataUrl('image/svg+xml', ascii('<svg width="20000pt" height="20000pt" viewBox="0 0 1 1"/>')),
+    ],
+    [
+      'an SVG sized in percent of its viewBox',
+      dataUrl('image/svg+xml', ascii('<svg width="100%" height="100%" viewBox="0 0 1 1"/>')),
+    ],
+    [
+      'an SVG giving one explicit length',
+      dataUrl('image/svg+xml', ascii('<svg width="20000" viewBox="0 0 1 1"/>')),
+    ],
     [
       'an SVG sized in percent',
       dataUrl('image/svg+xml', ascii('<svg width="100%" height="100%"/>')),
