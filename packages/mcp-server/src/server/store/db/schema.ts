@@ -218,6 +218,8 @@ interface SignInAttemptsTable {
   invitationTokenHash: string | null
   returnTo: string
   expiresAt: Timestamp
+  /** SHA-256 of the client's network source, never the address itself. */
+  source: string
 }
 
 // Whether a workspace has ever had a member — set once by `addMember`'s

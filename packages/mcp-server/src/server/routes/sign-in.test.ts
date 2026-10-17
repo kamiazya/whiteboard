@@ -57,7 +57,17 @@ let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let idp: FakeOidcProvider
 
-function appFor(admission: object, fetchFn: CustomFetch = idp.fetch, now?: () => number) {
+interface AttemptLimits {
+  readonly maxPending: number
+  readonly peer: () => string
+}
+
+function appFor(
+  admission: object,
+  fetchFn: CustomFetch = idp.fetch,
+  now?: () => number,
+  limits?: AttemptLimits,
+) {
   const db = handle.db
   const signIn = createCompleteSignInDeps(db, HOUR)
   const app = new Hono()
@@ -66,7 +76,10 @@ function appFor(admission: object, fetchFn: CustomFetch = idp.fetch, now?: () =>
     createSignInRoutes({
       providers: providerConfig(admission).map(resolvedForTest),
       rp: createRelyingParty({ fetch: fetchFn }),
-      attempts: createSignInAttemptStore(db),
+      attempts: createSignInAttemptStore(
+        db,
+        limits === undefined ? {} : { maxPending: limits.maxPending },
+      ),
       signIn,
       administrators: createAdministratorCheck({
         admins: createTenantAdministratorStore(db),
@@ -75,6 +88,7 @@ function appFor(admission: object, fetchFn: CustomFetch = idp.fetch, now?: () =>
       }),
       publicBaseUrl: BASE,
       ...(now === undefined ? {} : { now }),
+      ...(limits === undefined ? {} : { peerAddress: limits.peer }),
     }),
   )
   return { app, signIn }
@@ -269,11 +283,31 @@ describe('sign-in through an OIDC provider', () => {
     ['a path that a stripped tab makes scheme-relative', '/\t/evil.example'],
     ['a path that a stripped newline makes scheme-relative', '/\n/evil.example'],
     ['a path that a stripped carriage return makes scheme-relative', '/\r//evil'],
+    ['a dot segment the parser collapses to scheme-relative', '/.//evil.example'],
+    ['an encoded dot segment collapsing to scheme-relative', '/%2e//evil.example'],
+    ['a parent segment collapsing to scheme-relative', '/a/..//evil.example'],
+    ['a dot segment before a backslash', '/./\\evil.example'],
   ])('does not redirect to %s after signing in', async ([, target]) => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })
     const res = await signInThrough(app, `?return=${encodeURIComponent(target as string)}`)
     expect(res.headers.get('location')).toBe('/')
+  })
+
+  it('finishes a sign-in begun before another client filled the attempt ceiling', async () => {
+    let peer = '203.0.113.7'
+    const { app } = appFor({ createAccounts: true }, idp.fetch, undefined, {
+      maxPending: 5,
+      peer: () => peer,
+    })
+    const started = await app.request(`${BASE}/auth/sign-in/corp`)
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    peer = '198.51.100.9'
+    for (let i = 0; i < 12; i++) await app.request(`${BASE}/auth/sign-in/corp`)
+    idp.next({ sub: 'ada-1' })
+    const callback = idp.authorize(started.headers.get('location') as string)
+    const res = await app.request(callback, { headers: { cookie: `__Host-wb_signin=${binding}` } })
+    expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
   })
 
   // Beginning a sign-in needs no credential and stores a row, so what one
