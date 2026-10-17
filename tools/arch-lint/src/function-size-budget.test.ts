@@ -392,14 +392,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // three are what a replica IS to a reader. +3: the replica's tag library,
   // handed to both editors. +2: the picture seams a copy and paste carry.
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 77,
-  // Presentation only — the logic is `useTransferHandshake`. Six stages, each
-  // a short branch, and the offer and the report already live in their own
-  // components; the page is the switch between them.
+  // Presentation only — the logic is `useTransferHandshake`. The question,
+  // the offer, the status lines and the report live in their own components;
+  // the page is the switch between them.
   'apps/web/src/pages/ReceiveTransferPage.tsx#ReceiveTransferPage': 68,
-  // The offer's JSX: the sender's CLAIM, the sentence saying images do not
-  // travel, the target choice and the accept control. Each is a line a person
-  // needs before pressing, so none can move after the press.
-  'apps/web/src/pages/ReceiveTransferPage.tsx#OfferPanel': 59,
   // The Copies-on-this-device card mounts in BOTH branches, and the
   // disconnected one is where it matters most — with no daemon every copy is
   // browser-kept, so a card hidden there would hide the whole list.

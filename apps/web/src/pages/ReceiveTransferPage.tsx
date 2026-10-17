@@ -29,6 +29,14 @@ import { type WorkspaceIdentity, workspaceLabel } from '../lib/workspace-handle.
  * Nothing is accepted without an explicit press, on every render. The
  * numbers an offer carries are the SENDER's claims and are shown as such;
  * what actually merged is read back from this keeper afterwards.
+ *
+ * ANY web origin may open this page and offer a transfer, and that is
+ * deliberate: a self-hosted app has an address nobody can list in advance.
+ * So the first thing an offer meets is a question naming that origin, and
+ * no Accept control exists until the person says they started it — a page
+ * that opened this window on its own gets a decline and nothing else. The
+ * target workspace is never preselected for the same reason: where a
+ * stranger's record would land is the person's choice, not the list order.
  */
 
 export interface ReceiveTransferPageProps {
@@ -41,24 +49,23 @@ export function ReceiveTransferPage({
   fetchFn = globalThis.fetch.bind(globalThis),
   opener = globalThis.opener as TransferOpener,
 }: ReceiveTransferPageProps): React.JSX.Element {
-  const { session, stage, targets, targetsUnavailable, targetId, setTargetId, accept } =
-    useTransferHandshake({
-      hash: globalThis.location?.hash ?? '',
-      fetchFn,
-      opener,
-    })
+  const {
+    session,
+    stage,
+    targets,
+    targetsUnavailable,
+    targetId,
+    setTargetId,
+    confirm,
+    decline,
+    accept,
+  } = useTransferHandshake({
+    hash: globalThis.location?.hash ?? '',
+    fetchFn,
+    opener,
+  })
 
-  if (stage.kind === 'not-a-transfer') {
-    return (
-      <main className="mx-auto max-w-lg p-6" data-testid="receive-transfer">
-        <h1 className="text-lg font-semibold">Nothing to receive</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This page accepts a workspace sent from another app. Open it from there rather than
-          directly.
-        </p>
-      </main>
-    )
-  }
+  if (stage.kind === 'not-a-transfer') return <NothingToReceive />
 
   return (
     <main className="mx-auto max-w-lg p-6" data-testid="receive-transfer">
@@ -70,10 +77,14 @@ export function ReceiveTransferPage({
         Sent from <span data-testid="receive-transfer-sender">{session?.senderOrigin}</span>
       </p>
 
-      {stage.kind === 'waiting' && (
-        <p className="mt-4 text-sm" data-testid="receive-transfer-status">
-          Waiting for the workspace to arrive…
-        </p>
+      <StatusLine stage={stage} />
+
+      {stage.kind === 'confirming' && (
+        <ConfirmSender
+          senderOrigin={session?.senderOrigin ?? ''}
+          onConfirm={confirm}
+          onDecline={decline}
+        />
       )}
 
       {stage.kind === 'offered' && (
@@ -84,26 +95,62 @@ export function ReceiveTransferPage({
           onTargetChange={setTargetId}
           canAccept={targetId !== ''}
           onAccept={() => void accept()}
+          onDecline={decline}
         />
       )}
 
-      {stage.kind === 'offered' && targetsUnavailable && <SignInNotice />}
-
-      {stage.kind === 'accepting' && (
-        <p className="mt-4 text-sm" data-testid="receive-transfer-status">
-          Merging the workspace…
-        </p>
+      {(stage.kind === 'confirming' || stage.kind === 'offered') && targetsUnavailable && (
+        <SignInNotice />
       )}
 
       {stage.kind === 'done' && <DoneReport stage={stage} />}
+    </main>
+  )
+}
 
-      {stage.kind === 'refused' && (
+function NothingToReceive(): React.JSX.Element {
+  return (
+    <main className="mx-auto max-w-lg p-6" data-testid="receive-transfer">
+      <h1 className="text-lg font-semibold">Nothing to receive</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        This page accepts a workspace sent from another app. Open it from there rather than
+        directly.
+      </p>
+    </main>
+  )
+}
+
+/** The one-sentence stages: what the page is doing, or why it stopped. */
+function StatusLine({ stage }: { stage: TransferStage }): React.JSX.Element | null {
+  switch (stage.kind) {
+    case 'waiting':
+      return (
+        <p className="mt-4 text-sm" data-testid="receive-transfer-status">
+          Waiting for the workspace to arrive…
+        </p>
+      )
+    case 'accepting':
+      return (
+        <p className="mt-4 text-sm" data-testid="receive-transfer-status">
+          Merging the workspace…
+        </p>
+      )
+    case 'declined':
+      return (
+        <p className="mt-4 text-sm" data-testid="receive-transfer-declined">
+          Declined. Nothing was merged, and the other app was told only that you declined. You can
+          close this window.
+        </p>
+      )
+    case 'refused':
+      return (
         <p className="mt-4 text-sm" data-testid="receive-transfer-refused">
           {stage.reason}
         </p>
-      )}
-    </main>
-  )
+      )
+    default:
+      return null
+  }
 }
 
 // Signing in HERE would navigate this window away and lose the handshake in
@@ -116,6 +163,58 @@ function SignInNotice(): React.JSX.Element {
   )
 }
 
+function ConfirmSender({
+  senderOrigin,
+  onConfirm,
+  onDecline,
+}: {
+  senderOrigin: string
+  onConfirm: () => void
+  onDecline: () => void
+}): React.JSX.Element {
+  return (
+    <section className="mt-4 rounded-md border p-4" data-testid="receive-transfer-confirm">
+      <h2 className="text-base font-semibold">Did you start this transfer?</h2>
+      <p className="mt-2 text-sm">A workspace is being offered by</p>
+      {/* A text node, never a link, for the reason the line above says. */}
+      <p
+        className="mt-1 break-all font-mono text-base font-semibold"
+        data-testid="receive-transfer-confirm-sender"
+      >
+        {senderOrigin}
+      </p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Continue only if you sent it from that address yourself. Any site can open this page, so if
+        you do not recognise it, decline and nothing is merged.
+      </p>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          data-testid="receive-transfer-confirm-yes"
+          className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
+          onClick={onConfirm}
+        >
+          I started it
+        </button>
+        <DeclineButton onDecline={onDecline} />
+      </div>
+    </section>
+  )
+}
+
+function DeclineButton({ onDecline }: { onDecline: () => void }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      data-testid="receive-transfer-decline"
+      className="rounded-md border px-3 py-1 text-sm font-medium"
+      onClick={onDecline}
+    >
+      Decline
+    </button>
+  )
+}
+
 function OfferPanel({
   documentCount,
   targets,
@@ -123,6 +222,7 @@ function OfferPanel({
   onTargetChange,
   canAccept,
   onAccept,
+  onDecline,
 }: {
   documentCount: number
   targets: WorkspaceIdentity[]
@@ -130,6 +230,7 @@ function OfferPanel({
   onTargetChange: (id: string) => void
   canAccept: boolean
   onAccept: () => void
+  onDecline: () => void
 }): React.JSX.Element {
   return (
     <>
@@ -144,22 +245,8 @@ function OfferPanel({
         Documents and their history are carried. Images are not — they stay in the sending browser,
         and any document that shows one will be missing its picture here.
       </p>
-      {targets.length > 1 && (
-        <label className="mt-4 block text-sm">
-          Into workspace
-          <select
-            className="mt-1 block w-full rounded-md border px-2 py-1"
-            data-testid="receive-transfer-target"
-            value={targetId}
-            onChange={(event) => onTargetChange(event.target.value)}
-          >
-            {targets.map((target) => (
-              <option key={target.workspaceId} value={target.workspaceId}>
-                {workspaceLabel(target)}
-              </option>
-            ))}
-          </select>
-        </label>
+      {targets.length > 0 && (
+        <TargetPicker targets={targets} targetId={targetId} onTargetChange={onTargetChange} />
       )}
       <div className="mt-4 flex gap-2">
         <button
@@ -171,8 +258,42 @@ function OfferPanel({
         >
           Accept
         </button>
+        <DeclineButton onDecline={onDecline} />
       </div>
     </>
+  )
+}
+
+// Always shown, and starting on a disabled empty choice: where the record
+// lands is named by the person, never taken from the list order.
+function TargetPicker({
+  targets,
+  targetId,
+  onTargetChange,
+}: {
+  targets: WorkspaceIdentity[]
+  targetId: string
+  onTargetChange: (id: string) => void
+}): React.JSX.Element {
+  return (
+    <label className="mt-4 block text-sm">
+      Into workspace
+      <select
+        className="mt-1 block w-full rounded-md border px-2 py-1"
+        data-testid="receive-transfer-target"
+        value={targetId}
+        onChange={(event) => onTargetChange(event.target.value)}
+      >
+        <option value="" disabled>
+          Choose a workspace
+        </option>
+        {targets.map((target) => (
+          <option key={target.workspaceId} value={target.workspaceId}>
+            {workspaceLabel(target)}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

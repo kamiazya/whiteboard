@@ -1,6 +1,7 @@
 /**
  * The receiving page end to end, in a real browser: a stub opener announces
- * nothing and posts an offer as a real `MessageEvent`, the person accepts, and
+ * nothing and posts an offer as a real `MessageEvent`, the person confirms
+ * they started it, names the target workspace and accepts, and
  * the merge is verified by reading the DESTINATION's record back — never by
  * trusting that the POST happened.
  *
@@ -115,6 +116,12 @@ const offer = (over: Record<string, unknown> = {}) => ({
 
 const returnTo = window.location.pathname + window.location.search
 
+/** The person says they started it, then names the workspace — nothing is preselected. */
+async function confirmAndChoose(workspaceId = 'ws-here'): Promise<void> {
+  await userEvent.click(await screen.findByTestId('receive-transfer-confirm-yes'))
+  await userEvent.selectOptions(screen.getByTestId('receive-transfer-target'), workspaceId)
+}
+
 beforeEach(() => {
   history.replaceState(
     null,
@@ -144,7 +151,8 @@ describe('ReceiveTransferPage', () => {
     const opener = { postMessage: vi.fn() }
     render(<ReceiveTransferPage fetchFn={keeperStub(target, promotes)} opener={opener} />)
     arrive(SENDER, offer())
-    expect((await screen.findByTestId('receive-transfer-offer')).textContent).toMatch(
+    await confirmAndChoose()
+    expect(screen.getByTestId('receive-transfer-offer').textContent).toMatch(
       /says it is sending 2 documents/,
     )
     await userEvent.click(screen.getByTestId('receive-transfer-accept'))
@@ -192,7 +200,7 @@ describe('ReceiveTransferPage', () => {
       />,
     )
     arrive(SENDER, offer())
-    await screen.findByTestId('receive-transfer-offer')
+    await confirmAndChoose()
     await userEvent.click(screen.getByTestId('receive-transfer-accept'))
 
     expect((await screen.findByTestId('receive-transfer-refused')).textContent).toBe(
@@ -209,6 +217,62 @@ describe('ReceiveTransferPage', () => {
       ok: false,
       reason: 'You may not merge into this workspace.',
     })
+  })
+
+  it('asks whether you started it, naming the sender, before any Accept exists', async () => {
+    const opener = { postMessage: vi.fn() }
+    render(<ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [])} opener={opener} />)
+    arrive(SENDER, offer())
+
+    const question = await screen.findByTestId('receive-transfer-confirm')
+    expect(question.textContent).toMatch(/Did you start this transfer\?/)
+    expect(screen.getByTestId('receive-transfer-confirm-sender').textContent).toBe(SENDER)
+    expect(screen.queryByTestId('receive-transfer-accept')).toBeNull()
+    expect(screen.queryByTestId('receive-transfer-target')).toBeNull()
+    // Nothing beyond the ready handshake has gone back to the opener.
+    expect(opener.postMessage.mock.calls.map(([message]) => message.type)).toEqual([
+      'transfer-ready',
+    ])
+  })
+
+  it('preselects no target, even with one workspace, and Accept waits for a choice', async () => {
+    render(<ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [])} opener={null} />)
+    arrive(SENDER, offer())
+    await userEvent.click(await screen.findByTestId('receive-transfer-confirm-yes'))
+
+    const picker = await screen.findByTestId<HTMLSelectElement>('receive-transfer-target')
+    expect(picker.value).toBe('')
+    expect(screen.getByTestId<HTMLButtonElement>('receive-transfer-accept').disabled).toBe(true)
+    await userEvent.selectOptions(picker, 'ws-here')
+    expect(screen.getByTestId<HTMLButtonElement>('receive-transfer-accept').disabled).toBe(false)
+  })
+
+  it('declining tells the opener only that, and merges nothing', async () => {
+    const target = new LoroDoc()
+    const promotes: unknown[] = []
+    const opener = { postMessage: vi.fn() }
+    render(<ReceiveTransferPage fetchFn={keeperStub(target, promotes)} opener={opener} />)
+    arrive(SENDER, offer())
+    await userEvent.click(await screen.findByTestId('receive-transfer-decline'))
+
+    expect((await screen.findByTestId('receive-transfer-declined')).textContent).toMatch(
+      /Nothing was merged/,
+    )
+    expect(screen.queryByTestId('receive-transfer-accept')).toBeNull()
+    expect(opener.postMessage.mock.calls).toHaveLength(2)
+    const reply = opener.postMessage.mock.calls.at(-1)
+    if (reply === undefined) throw new Error('expected a reply to the opener')
+    expect(reply[1]).toBe(SENDER)
+    expect(Object.keys(reply[0] as object).sort()).toEqual([
+      'declined',
+      'nonce',
+      'ok',
+      'reason',
+      'type',
+    ])
+    expect(reply[0]).toMatchObject({ type: 'transfer-result', ok: false, declined: true })
+    expect(promotes).toEqual([])
+    expect(readWorkspaceDocuments(target)).toEqual([])
   })
 
   it('shows nothing for an offer from another origin, however well-formed', async () => {
@@ -245,6 +309,7 @@ describe('ReceiveTransferPage', () => {
     expect((await screen.findByTestId('receive-transfer-sign-in')).textContent).toMatch(
       /Sign in to this keeper/,
     )
+    await userEvent.click(screen.getByTestId('receive-transfer-confirm-yes'))
     expect(screen.getByTestId<HTMLButtonElement>('receive-transfer-accept').disabled).toBe(true)
     expect(promotes).toEqual([])
   })
@@ -258,8 +323,13 @@ describe('ReceiveTransferPage', () => {
       <ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [], { workspaces })} opener={null} />,
     )
     arrive(SENDER, offer())
+    await userEvent.click(await screen.findByTestId('receive-transfer-confirm-yes'))
     const picker = await screen.findByTestId<HTMLSelectElement>('receive-transfer-target')
-    expect(Array.from(picker.options, (option) => option.textContent)).toEqual(['dev', 'ops'])
+    expect(Array.from(picker.options, (option) => option.textContent)).toEqual([
+      'Choose a workspace',
+      'dev',
+      'ops',
+    ])
   })
 
   it('says there is nothing to receive when opened without a transfer fragment', () => {
