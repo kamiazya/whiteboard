@@ -309,3 +309,90 @@ describe("testing.md's bundle-size row names every budget the gate enforces", ()
     expect(row).toContain('`__tla`')
   })
 })
+
+/** Every markdown file under docs/, recursively. */
+function docsMarkdown(dir = join(REPO_ROOT, 'docs')): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return docsMarkdown(path)
+    return entry.name.endsWith('.md') ? [path] : []
+  })
+}
+
+/** Each `cosign verify` command in `text`, with its `\`-continued lines joined. */
+function cosignVerifyCommands(text: string): string[] {
+  return [...text.matchAll(/cosign verify(?:[^\n]*\\\n)*[^\n]*/g)].map((m) =>
+    m[0].replace(/\\\n/g, ' '),
+  )
+}
+
+/** The value of `--flag "value"`, `--flag 'value'`, `--flag=value` or `--flag value`. */
+function flagValue(command: string, flag: string): string | undefined {
+  const m = new RegExp(`${flag}(?:=|\\s+)(?:"([^"]*)"|'([^']*)'|(\\S+))`).exec(command)
+  return m ? (m[1] ?? m[2] ?? m[3]) : undefined
+}
+
+// Keyless signatures carry the signing workflow's URL as the certificate
+// identity. An unanchored regexp accepts any identity CONTAINING the repo
+// path — a branch named after it in someone else's fork signs a passing
+// image — so the identity is exact, or a regexp pinned at both ends to this
+// repository's release workflow.
+function identityFindings(command: string): string[] {
+  const findings: string[] = []
+  const exact = flagValue(command, '--certificate-identity')
+  const regexp = flagValue(command, '--certificate-identity-regexp')
+  if (exact !== undefined) {
+    if (!exact.startsWith('https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@'))
+      findings.push(`exact identity names another workflow: ${exact}`)
+  } else if (regexp !== undefined) {
+    if (
+      !regexp.startsWith(
+        '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@',
+      ) ||
+      !regexp.endsWith('$')
+    )
+      findings.push(`identity regexp is not anchored to release.yml: ${regexp}`)
+  } else {
+    findings.push('no certificate identity')
+  }
+  if (flagValue(command, '--certificate-github-workflow-repository') !== 'kamiazya/whiteboard')
+    findings.push('no --certificate-github-workflow-repository kamiazya/whiteboard')
+  if (
+    flagValue(command, '--certificate-oidc-issuer') !==
+    'https://token.actions.githubusercontent.com'
+  )
+    findings.push('no GitHub Actions OIDC issuer')
+  return findings
+}
+
+describe('every documented `cosign verify` pins the release workflow identity', () => {
+  const commands = docsMarkdown().flatMap((file) =>
+    cosignVerifyCommands(readFileSync(file, 'utf-8')).map((command) => ({
+      file: file.slice(REPO_ROOT.length + 1),
+      command,
+    })),
+  )
+
+  it('finds the documented verification', () => {
+    expect(commands.map((c) => c.file)).toContain('docs/contributing/releasing.md')
+  })
+
+  it('rejects an unanchored identity regexp and accepts an anchored one', () => {
+    const base =
+      ' --certificate-github-workflow-repository kamiazya/whiteboard --certificate-oidc-issuer "https://token.actions.githubusercontent.com"'
+    expect(
+      identityFindings(
+        `cosign verify x --certificate-identity-regexp "github.com/kamiazya/whiteboard"${base}`,
+      ),
+    ).not.toEqual([])
+    expect(
+      identityFindings(
+        `cosign verify x --certificate-identity-regexp "^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/heads/main$"${base}`,
+      ),
+    ).toEqual([])
+  })
+
+  it.each(commands)('$file: $command', ({ command }) => {
+    expect(identityFindings(command)).toEqual([])
+  })
+})
