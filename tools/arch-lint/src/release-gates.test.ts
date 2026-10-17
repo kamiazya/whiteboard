@@ -120,7 +120,7 @@ describe('release gate: package.json bin + scripts contract', () => {
 // certificate — names GITHUB_SHA and the ref the dispatch ran from. Dispatched
 // from main, a tag main never held would ship under main's identity, so every
 // job that checks out `force_publish_tag` refuses a HEAD that is not
-// GITHUB_SHA, as the very next step: anything later already runs the tag's code
+// GITHUB_SHA, or a GITHUB_REF that is not that exact tag, as the very next step: anything later already runs the tag's code
 // (its `./.github/actions/*` included).
 interface ReleaseStep {
   name?: string
@@ -128,6 +128,7 @@ interface ReleaseStep {
   if?: string
   run?: string
   with?: { ref?: string }
+  env?: Record<string, string>
 }
 const RELEASE_JOBS = (
   parseYaml(readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')) as {
@@ -141,13 +142,19 @@ const FORCED_CHECKOUT_JOBS = Object.entries(RELEASE_JOBS)
   )
   .map(([name, job]) => ({ name, steps: job.steps }))
 
+const FORCED_TAG = 'mcp-server-v1.2.3'
+
 describe('release gate: a forced publish attests the commit it publishes', () => {
   const tmpRoots: string[] = []
   afterAll(() => {
     for (const dir of tmpRoots) rmSync(dir, { recursive: true, force: true })
   })
 
-  function runGuard(script: string, sha: (head: string) => string) {
+  function runGuard(
+    script: string,
+    sha: (head: string) => string,
+    ref = `refs/tags/${FORCED_TAG}`,
+  ) {
     const cwd = mkdtempSync(join(tmpdir(), 'release-provenance-'))
     tmpRoots.push(cwd)
     // A git hook exports GIT_DIR and friends; inherited, they point every
@@ -170,7 +177,7 @@ describe('release gate: a forced publish attests the commit it publishes', () =>
     const head = git('rev-parse', 'HEAD')
     const res = spawnSync('bash', ['-e', '-c', script], {
       cwd,
-      env: { ...env, GITHUB_SHA: sha(head) },
+      env: { ...env, GITHUB_SHA: sha(head), GITHUB_REF: ref, FORCE_PUBLISH_TAG: FORCED_TAG },
       encoding: 'utf-8',
     })
     return { status: res.status, stderr: `${res.stdout}${res.stderr}` }
@@ -191,6 +198,17 @@ describe('release gate: a forced publish attests the commit it publishes', () =>
       expect(script).toMatch(/git rev-parse HEAD/)
       expect(script).toMatch(/GITHUB_SHA/)
       expect(guard?.if).toContain('inputs.force_publish_tag')
+      expect(guard?.env?.FORCE_PUBLISH_TAG).toContain('inputs.force_publish_tag')
+      expect(script).toMatch(/GITHUB_REF/)
+    })
+
+    // The certificate and provenance name the dispatched REF as well as the
+    // commit: a dispatch from main at the tag's own commit passes the HEAD
+    // check yet signs as release.yml@refs/heads/main.
+    it('refuses a dispatch at the tagged commit that ran from another ref', () => {
+      const res = runGuard(script, (head) => head, 'refs/heads/main')
+      expect(res.status).not.toBe(0)
+      expect(res.stderr).toContain('--ref')
     })
 
     it('refuses when the checked-out tag is not the dispatched commit, and says how to dispatch', () => {
