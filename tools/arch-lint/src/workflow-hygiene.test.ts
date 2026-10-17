@@ -213,3 +213,95 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
     expect(unexpected).toEqual([])
   })
 })
+
+interface SecretJob {
+  env?: Record<string, unknown>
+  steps?: { name?: string; run?: string; env?: Record<string, unknown> }[]
+}
+
+const CLOUDFLARE_SECRET_RE = /secrets\.CLOUDFLARE_/
+// Each of these resolves and runs a package with no lockfile behind it, and
+// with its lifecycle scripts on — in a job that can deploy the site.
+const UNLOCKED_FETCH_PATTERNS: RegExp[] = [
+  /\bnpx\s/,
+  /\bnpm\s+exec\b/,
+  /\bnpm\s+(i|install)\b/,
+  /\bpnpm\s+dlx\b/,
+]
+
+/**
+ * Every way a job that holds the Cloudflare deploy token weakens it: a
+ * job-level env entry hands the token to every step (installs included),
+ * and an unlocked fetch runs code nobody reviewed next to it.
+ */
+function cloudflareJobFindings(yamlText: string): string[] {
+  const jobs = Object.entries(
+    (parseYaml(yamlText) as { jobs?: Record<string, SecretJob> } | null)?.jobs ?? {},
+  )
+  return jobs.flatMap(([jobId, job]) => {
+    if (!CLOUDFLARE_SECRET_RE.test(JSON.stringify(job ?? {}))) return []
+    const envHits = Object.entries(job.env ?? {})
+      .filter(([, value]) => CLOUDFLARE_SECRET_RE.test(String(value)))
+      .map(([key]) => `${jobId}: job-level env ${key} carries a Cloudflare secret`)
+    const runHits = (job.steps ?? []).flatMap((step) =>
+      UNLOCKED_FETCH_PATTERNS.filter((rx) => rx.test(step.run ?? '')).map(
+        (rx) => `${jobId}: step "${step.name ?? ''}" runs ${rx.source}`,
+      ),
+    )
+    return [...envHits, ...runHits]
+  })
+}
+
+describe('workflow hygiene: a job holding Cloudflare secrets', () => {
+  it('scanner fixture: flags job-level secret env and an npx run', () => {
+    const fixture = [
+      'jobs:',
+      '  deploy:',
+      '    env:',
+      '      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
+      '    steps:',
+      '      - name: Deploy',
+      '        run: npx --yes wrangler@4 pages deploy dist',
+      '      - name: Tool',
+      '        run: pnpm dlx some-tool',
+      '',
+    ].join('\n')
+    expect(cloudflareJobFindings(fixture)).toHaveLength(3)
+  })
+
+  it('scanner fixture: step-scoped secrets and a lockfile install pass', () => {
+    const fixture = [
+      'jobs:',
+      '  deploy:',
+      '    steps:',
+      '      - name: Install',
+      '        run: pnpm install --frozen-lockfile',
+      '      - name: Deploy',
+      '        uses: cloudflare/wrangler-action@x',
+      '        with:',
+      '          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
+      '',
+    ].join('\n')
+    expect(cloudflareJobFindings(fixture)).toEqual([])
+  })
+
+  const workflowFiles = readdirSync(WORKFLOWS_DIR).filter(
+    (f) => f.endsWith('.yml') || f.endsWith('.yaml'),
+  )
+  const holders = workflowFiles.filter((f) =>
+    CLOUDFLARE_SECRET_RE.test(readFileSync(resolve(WORKFLOWS_DIR, f), 'utf-8')),
+  )
+
+  it('finds the workflows that deploy to Cloudflare', () => {
+    expect(holders).toEqual(
+      expect.arrayContaining(['deploy-preview.yml', 'preview-pr-deploy.yml', 'release.yml']),
+    )
+  })
+
+  it.each(
+    holders,
+  )('%s scopes the secret to its deploy step and fetches nothing unlocked', (file) => {
+    const text = readFileSync(resolve(WORKFLOWS_DIR, file), 'utf-8')
+    expect(cloudflareJobFindings(text)).toEqual([])
+  })
+})

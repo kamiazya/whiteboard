@@ -6,6 +6,10 @@
 # code that produced them never touched a secret. Where it publishes (the branch
 # label) and which PR it comments on come from the workflow_run event, never from
 # anything the build uploaded.
+#
+# wrangler comes from the DEFAULT branch's lockfile (the same pinned
+# wrangler-action deploy-preview.yml and release.yml use), installed before any
+# secret is in reach; the Cloudflare secrets are bound to the deploy step alone.
 name: Preview PR Deploy
 
 on:
@@ -35,14 +39,18 @@ jobs:
       # the Environments UI reflects reality; preview-cleanup.yml releases the
       # record when the PR closes. (environment.url is resolved at job end, so
       # it may reference the deploy step's output.)
-      url: ${{ steps.deploy.outputs.url }}
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      url: ${{ steps.deploy.outputs.pages-deployment-alias-url || steps.deploy.outputs.deployment-url }}
     steps:
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      # The default branch, never the PR: this checkout supplies the lockfile
+      # wrangler is installed from and the wrangler.toml it deploys under. It
+      # runs first because checkout cleans the workspace.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '24'
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm
+      - name: Install wrangler from the lockfile (no secrets in reach)
+        run: pnpm install --frozen-lockfile --filter @kamiazya/whiteboard-web
       - name: Download the built site from the triggering run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -88,31 +96,48 @@ jobs:
           fi
           echo "pr=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$(preview_label "$HEAD_BRANCH" "$PR_NUMBER")" >> "$GITHUB_OUTPUT"
-      - name: Deploy the built artifact (no PR code executes here)
-        id: deploy
-        if: steps.meta.outputs.skip != 'true' && env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+      - name: Refuse anything but static files
+        id: guard
+        if: steps.meta.outputs.skip != 'true'
+        # Pages runs an artifact's `_worker.js` (a file or a directory) as
+        # server code on the preview hostname, and `_routes.json` decides
+        # which requests reach it; a PR build may publish neither.
         env:
           BRANCH: ${{ steps.meta.outputs.branch }}
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           set -euo pipefail
-          # wrangler reads CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID from env.
-          # BRANCH is pre-sanitized to [a-z0-9-]; --project pins the target project.
-          # A reserved alias here would be a production deploy of PR code.
+          # BRANCH is pre-sanitized to [a-z0-9-]; a reserved alias here would
+          # be a production deploy of PR code.
           case "$BRANCH" in
             ''|main|latest|stable) echo "refusing to deploy to reserved branch '$BRANCH'" >&2; exit 1 ;;
           esac
-          # Exact-pinned: this step holds deploy secrets, so the tool version must
-          # not float at run time — bump deliberately.
-          out=$(npx --yes wrangler@4.105.0 pages deploy artifacts/preview-pr-dist \
-            --project-name=kamiazya-whiteboard --branch="$BRANCH" 2>&1) || { printf '%s\n' "$out"; exit 1; }
-          printf '%s\n' "$out"
-          url=$(printf '%s' "$out" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+          dist=artifacts/preview-pr-dist
+          [ -d "$dist" ] || { echo "no built site at $dist" >&2; exit 1; }
+          for name in _worker.js _routes.json; do
+            if [ -e "$dist/$name" ] || [ -L "$dist/$name" ]; then
+              echo "refusing to deploy: the artifact carries $name, which Pages would run as server code" >&2
+              exit 1
+            fi
+          done
+          echo "ready=$HAS_CLOUDFLARE" >> "$GITHUB_OUTPUT"
+      - name: Deploy the built artifact (no PR code executes here)
+        id: deploy
+        if: steps.meta.outputs.skip != 'true' && steps.guard.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          # pnpm required: the npm fallback cannot parse the catalog: protocol;
+          # wrangler is an apps/web devDependency, installed above.
+          packageManager: pnpm
+          command: pages deploy ../../artifacts/preview-pr-dist --project-name=kamiazya-whiteboard --branch=${{ steps.meta.outputs.branch }}
       - name: Comment preview URL on the PR
-        if: steps.deploy.outputs.url != ''
+        if: steps.deploy.outputs.pages-deployment-alias-url != '' || steps.deploy.outputs.deployment-url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.deploy.outputs.url }}
+          URL: ${{ steps.deploy.outputs.pages-deployment-alias-url || steps.deploy.outputs.deployment-url }}
           PR: ${{ steps.meta.outputs.pr }}
           REPO: ${{ github.repository }}
         run: |
