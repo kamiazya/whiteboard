@@ -91,7 +91,7 @@ describe('app — server-mode sign-in (ADR-0046)', () => {
         nonce: 'n',
         codeVerifier: 'v',
         providerId: 'corp',
-        invitationToken: null,
+        invitationTokenHash: null,
         returnTo: '/',
       }),
       take: async () => null,

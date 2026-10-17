@@ -198,7 +198,9 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
   const done = await completeSignIn(deps.signIn, {
     provider,
     claims,
-    ...(attempt.invitationToken === null ? {} : { invitationToken: attempt.invitationToken }),
+    ...(attempt.invitationTokenHash === null
+      ? {}
+      : { invitationTokenHash: attempt.invitationTokenHash }),
     now: now(),
   })
   if (!done.ok) return refusedTo(c, done.reason)

@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sha256Hex } from '../../shared/sha256.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInAttemptStore, type SignInAttemptStore } from './sign-in-attempt-store.js'
 
@@ -56,16 +57,21 @@ describe('sign-in attempts', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('carries the invitation a newcomer arrived with', async () => {
+  // The invitation store keeps only a token's hash, so an attempt holding
+  // the token itself would be the one place a live link could be read back.
+  it('carries the invitation a newcomer arrived with as its hash alone', async () => {
+    const token = 'inv-token-that-must-not-be-stored'
     const begun = await attempts.begin({
       providerId: 'corp',
       returnTo: '/',
-      invitationToken: 'inv-token',
+      invitationToken: token,
       now: T0,
       ttlMs: TTL,
     })
+    const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+    expect(JSON.stringify(rows)).not.toContain(token)
     const taken = await attempts.take(begun.state, begun.browserBinding, T0 + 1)
-    expect(taken?.invitationToken).toBe('inv-token')
+    expect(taken?.invitationTokenHash).toBe(sha256Hex(token))
   })
 
   // Beginning needs no credential, so a flood must not grow the table without

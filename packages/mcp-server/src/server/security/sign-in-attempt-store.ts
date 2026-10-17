@@ -20,7 +20,8 @@ interface Attempt {
   readonly providerId: string
   readonly nonce: string
   readonly codeVerifier: string
-  readonly invitationToken: string | null
+  /** The hash of the invitation token the attempt began with: what the invitation store keys by. */
+  readonly invitationTokenHash: string | null
   readonly returnTo: string
 }
 
@@ -80,7 +81,7 @@ export function createSignInAttemptStore(
         // RFC 7636 section 4.1: 43-128 characters of the unreserved set;
         // 32 random bytes in base64url are 43.
         codeVerifier: random(),
-        invitationToken: invitationToken ?? null,
+        invitationTokenHash: invitationToken === undefined ? null : sha256Hex(invitationToken),
         providerId,
         returnTo,
       }
@@ -92,7 +93,7 @@ export function createSignInAttemptStore(
           providerId,
           nonce: minted.nonce,
           codeVerifier: minted.codeVerifier,
-          invitationToken: minted.invitationToken,
+          invitationTokenHash: minted.invitationTokenHash,
           returnTo,
           expiresAt: now + ttlMs,
         })
@@ -108,7 +109,7 @@ export function createSignInAttemptStore(
         .where('state', '=', state)
         .where('browserBindingHash', '=', sha256Hex(browserBinding))
         .where('expiresAt', '>', now)
-        .returning(['providerId', 'nonce', 'codeVerifier', 'invitationToken', 'returnTo'])
+        .returning(['providerId', 'nonce', 'codeVerifier', 'invitationTokenHash', 'returnTo'])
         .execute()
       return row ?? null
     },

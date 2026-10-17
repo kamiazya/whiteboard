@@ -10,6 +10,7 @@ import {
   type WorkspaceDocumentApiAction,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sha256Hex } from '../shared/sha256.js'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import {
@@ -498,6 +499,6 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
     const state = new URL(res.headers.get('location') ?? '').searchParams.get('state') ?? ''
     const binding = /__Host-wb_signin=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1] ?? ''
     const attempt = await signIn.attempts.take(state, binding, Date.now())
-    expect(attempt).toMatchObject({ returnTo: '/w/x', invitationToken: invitation })
+    expect(attempt).toMatchObject({ returnTo: '/w/x', invitationTokenHash: sha256Hex(invitation) })
   })
 })

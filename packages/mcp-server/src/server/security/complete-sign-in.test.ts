@@ -8,6 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sha256Hex } from '../../shared/sha256.js'
 import { inTenantTransaction, tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { oidcProviders } from './_test-helpers.js'
@@ -154,7 +155,7 @@ describe('completeSignIn — a person already here', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done).toEqual({ ok: false, reason: 'deactivated' })
@@ -207,7 +208,7 @@ describe('completeSignIn — somebody new', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done.ok).toBe(true)
@@ -228,14 +229,14 @@ describe('completeSignIn — somebody new', () => {
     await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0,
     })
     const eve = { sub: 'eve-1', email: 'eve@corp.example', email_verified: true }
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: eve,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done).toEqual({ ok: false, reason: 'invitation_unusable' })
@@ -251,7 +252,7 @@ describe('completeSignIn — somebody new', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + HOUR,
     })
     expect(done).toEqual({ ok: false, reason: 'invitation_unusable' })
@@ -268,7 +269,7 @@ describe('completeSignIn — somebody new', () => {
     const done = await completeSignIn(deps, {
       provider: strict,
       claims: outsider,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done).toEqual({ ok: false, reason: 'email_domain_not_allowed' })
@@ -289,7 +290,7 @@ describe('completeSignIn — somebody new', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done.ok).toBe(true)
@@ -325,7 +326,7 @@ describe('completeSignIn — a user that cannot be created', () => {
       completeSignIn(failing, {
         provider: provider(),
         claims: ada,
-        invitationToken: token,
+        invitationTokenHash: sha256Hex(token),
         now: T0 + 1,
       }),
     ).rejects.toThrow('disk full')
@@ -345,7 +346,7 @@ describe('completeSignIn — an invitation into a workspace', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done.ok).toBe(true)
@@ -360,7 +361,7 @@ describe('completeSignIn — an invitation into a workspace', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect(done.ok).toBe(true)
@@ -383,7 +384,7 @@ describe('completeSignIn — an invitation into a workspace', () => {
     await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + 1,
     })
     expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
@@ -397,7 +398,7 @@ describe('completeSignIn — an invitation into a workspace', () => {
     const done = await completeSignIn(deps, {
       provider: provider(),
       claims: ada,
-      invitationToken: token,
+      invitationTokenHash: sha256Hex(token),
       now: T0 + HOUR,
     })
     expect(done.ok).toBe(true)
@@ -452,7 +453,12 @@ describe('completeSignIn — two people racing for one link', () => {
     const eve = { sub: 'eve-1', email: 'eve@corp.example', email_verified: true }
     const results = await Promise.all(
       [ada, eve].map((claims) =>
-        completeSignIn(deps, { provider: provider(), claims, invitationToken: token, now: T0 + 1 }),
+        completeSignIn(deps, {
+          provider: provider(),
+          claims,
+          invitationTokenHash: sha256Hex(token),
+          now: T0 + 1,
+        }),
       ),
     )
     expect(results.filter((r) => r.ok)).toHaveLength(1)

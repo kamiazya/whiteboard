@@ -52,4 +52,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0039-sign-in-authenticated-at',
   '0040-drop-invitation-email',
   '0041-drop-version-branch-name',
+  '0042-sign-in-attempt-invitation-hash',
 ] as const satisfies readonly string[]
