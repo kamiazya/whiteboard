@@ -465,6 +465,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   The daemon counts the documents before it merges anything, and refuses a
   larger record whole (`promote_too_many_documents`). So one request cannot
   make the daemon write an unbounded number of saved versions.
+- **A workspace holds a bounded number of documents.** The 2000-document
+  ceiling holds for the workspace as a whole, however the documents arrive: a
+  sync update or a move that would leave the workspace holding more is
+  refused whole (`too_many_documents`), so repeating small updates cannot
+  grow a record without limit either. The documents one update edits are
+  checkpointed one at a time, not all at once.
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set

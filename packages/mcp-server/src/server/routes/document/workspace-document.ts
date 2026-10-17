@@ -181,6 +181,33 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
   }
 }
 
+/**
+ * Signals every document an update edited, as the per-document route signals
+ * the one it wrote; the checkpoint lands once each goes quiet. One document at
+ * a time, after the response: an update may edit as many documents as a
+ * workspace holds, and each signal loads that document's projection, so
+ * starting them together would hold every projection at once. A failure is
+ * logged and never fails the update or the documents after it.
+ */
+async function signalEdited(
+  options: WorkspaceDocumentRouterOptions,
+  deps: ServerDeps,
+  workspaceId: string,
+  edited: readonly { readonly path: string }[],
+): Promise<void> {
+  for (const { path } of edited) {
+    try {
+      const doc = await deps.liveDocuments.get(workspaceId, path)
+      options.triggerAutoVersion(workspaceId, path, doc)
+    } catch (err: unknown) {
+      getLogger('document').error(
+        { workspaceId, path, err: err as Error },
+        'auto-version trigger failed',
+      )
+    }
+  }
+}
+
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
 
@@ -212,20 +239,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         return c.json(errorBody('invalid_body', 'Malformed workspace-document update'), 400)
       }
 
-      // Signal every document the update edited, as the per-document route
-      // signals the one it wrote. The checkpoint lands once each goes quiet;
-      // failures never fail the update itself.
-      for (const { path } of result.edited) {
-        void (async () => {
-          const doc = await deps.liveDocuments.get(workspaceId, path)
-          options.triggerAutoVersion(workspaceId, path, doc)
-        })().catch((err: unknown) => {
-          getLogger('document').error(
-            { workspaceId, path, err: err as Error },
-            'auto-version trigger failed',
-          )
-        })
-      }
+      void signalEdited(options, deps, workspaceId, result.edited)
 
       const response: UpdateDocumentResponse = { ok: true }
       return c.json(response)
