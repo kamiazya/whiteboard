@@ -35,6 +35,13 @@ gives it one.
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+An inline Markdown image (`![alt](url)`) in a body draws its picture when the
+surface resolves the URL to a workspace attachment, or when the URL is
+`http:`, `https:` or `data:`. Any other URL — a bare or relative file path,
+`file:` — draws as its alt text. The daemon's PNG export goes one step
+further and draws only `data:` images: it never reads a file the URL names on
+the daemon's host, and never fetches a remote one.
+
 ## How large a markdown document may be
 
 One markdown write — the `markdown` field of a `wb_workspace_edit`

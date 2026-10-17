@@ -31,7 +31,7 @@ import type {
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
-import { referenceFor, withReferenceSeams } from '../../references/seams.js'
+import { type ReferenceSeams, referenceFor, withReferenceSeams } from '../../references/seams.js'
 import { type SceneWalkNode, sceneChildrenOf } from '../../scene-children.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
@@ -69,6 +69,16 @@ import { uaxSegments } from './uax-segments.js'
  * anybody wrote, and a reader who has the image does not need telling.
  */
 const IMAGE_PLACEHOLDER = '\u2002'
+
+/**
+ * Where an inline image's picture loads from: what the reference seam
+ * resolves it to, else the written URL when its scheme is one every painter
+ * reads as a URL. A bare or relative path is not: resvg reads it from the
+ * host it runs on, so the author would pick a file on the exporting machine.
+ */
+const imageSrc = (url: string, resolve: ReferenceSeams['resolveReference'] | undefined) =>
+  referenceFor(url, resolve)?.image?.href ?? (/^(?:https?|data):/i.test(url) ? url : undefined)
+
 /**
  * An EM space, which a font defines as one em — so the run's box is a body-
  * sized square WIDE, and as tall as the line. A `<symbol>` letterboxes
@@ -558,9 +568,8 @@ function layoutPhrasing(
    * is prose.
    *
    * Where the picture actually loads from is the CALLER's, the same way a
-   * file node's is — a written path may be a workspace attachment. An
-   * unresolved one keeps what the markdown said, so an absolute URL still
-   * works.
+   * file node's is (`imageSrc`); one with nowhere to load from reads as its
+   * alt and paints nothing.
    */
   const emitImage = (
     child: { alt?: string | null; url: string },
@@ -568,8 +577,8 @@ function layoutPhrasing(
   ) => {
     const alt =
       child.alt === undefined || child.alt === null || child.alt === '' ? undefined : child.alt
-    const src =
-      referenceFor(child.url, options.references?.resolveReference)?.image?.href ?? child.url
+    const src = imageSrc(child.url, options.references?.resolveReference)
+    if (src === undefined) return alt === undefined ? undefined : emit(alt, {}, currentStyle)
     emit(
       alt ?? IMAGE_PLACEHOLDER,
       { paints: { kind: 'image', src } },

@@ -44,6 +44,7 @@ import { errnoCode } from '../../shared/errno.js'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
+import { withoutExternalImages } from './external-images.js'
 import { installedFontFiles } from './installed-fonts.js'
 import { createExportTextMeasurer, loadExportFonts } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
@@ -316,7 +317,7 @@ async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
           ? ({ mode: 'zoom', value: scale } as const)
           : ({ mode: 'original' } as const)
       const installed = await installedFontFiles(fontsDir)
-      const resvg = new Resvg(svg, {
+      const resvg = new Resvg(withoutExternalImages(svg), {
         background,
         font: { ...fontOption, fontFiles: [...(fontOption.fontFiles ?? []), ...installed] },
         fitTo,
