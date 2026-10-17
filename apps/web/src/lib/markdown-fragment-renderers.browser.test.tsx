@@ -25,6 +25,15 @@ describe('renderDiagramFragment (real mermaid)', () => {
     expect(fragment?.width).toBeGreaterThan(30)
   })
 
+  // katex is overridden across a major (pnpm-workspace.yaml) past the range
+  // mermaid declares, so this pins that mermaid's `$$…$$` label path still
+  // loads it and gets MathML back.
+  it('renders a $$math$$ label through katex as MathML', async () => {
+    const fragment = await renderDiagramFragment('mermaid', 'graph TD; A["$$x^2$$"]-->B')
+    expect(fragment?.svg).toContain('<math')
+    expect(fragment?.svg).toContain('<msup>')
+  })
+
   it('is total against diagram source the engine rejects', async () => {
     const logged = expectLoggedFailures()
     await expect(
