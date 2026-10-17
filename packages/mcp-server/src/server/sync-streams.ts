@@ -7,6 +7,7 @@
 // audience vocabulary (`sync-audience.ts`), the workspace tail and the
 // notifier read and write through these functions without importing a route.
 
+import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import {
   documentSyncKey,
   workspaceDocKey,
@@ -143,6 +144,47 @@ function deliver(
 }
 
 const streams = new Map<string, SyncStream>()
+
+/**
+ * How many streams server mode holds open for one user, and in all. The web
+ * app keeps ONE stream per browser profile, shared across its tabs through a
+ * SharedWorker, and one per tab only where SharedWorker is missing (Chrome on
+ * Android) — so a person on a few devices with a few such tabs stays far
+ * under the per-user cap, while a caller opening streams in a loop is stopped
+ * long before the keeper's memory is. The local daemon has one person, and
+ * applies neither.
+ */
+export const SYNC_STREAM_CAPS = { perUser: 16, total: 1024 } as const
+export type SyncStreamCaps = { perUser: number; total: number }
+
+/** The largest update frame: a Loro update is capped at the content body
+ *  limit, and travels base64-encoded. */
+const LARGEST_UPDATE_FRAME_CHARS = Math.ceil(MAX_FILE_UPLOAD_BYTES / 3) * 4
+
+/**
+ * How much a stream may have written and not yet delivered, in characters of
+ * frame data (ASCII — JSON around base64 — so one byte each). A reader that
+ * stops reading would otherwise hold a copy of every broadcast. Past it the
+ * stream is ended; the client reconnects, resubscribes and reads what it
+ * missed from the keeper, so a slow reader loses nothing. Two of the largest
+ * update frames fit under it, with room for the envelope.
+ */
+export const MAX_QUEUED_STREAM_CHARS = 2 * LARGEST_UPDATE_FRAME_CHARS + 1024 * 1024
+
+/**
+ * Which cap a new stream for `userId` would pass, if any. Checked before the
+ * stream registers, so opens racing each other may overshoot by however many
+ * are in flight at once — a bound on a flood, not an exact count.
+ */
+export function syncStreamCapReached(
+  userId: string,
+  caps: SyncStreamCaps,
+): 'per_user' | 'total' | null {
+  if (streams.size >= caps.total) return 'total'
+  let held = 0
+  for (const stream of streams.values()) if (stream.userId === userId) held++
+  return held >= caps.perUser ? 'per_user' : null
+}
 
 /** Holds a stream open under the id its first frame carried. */
 export function registerSyncStream(streamId: string, stream: SyncStream): void {

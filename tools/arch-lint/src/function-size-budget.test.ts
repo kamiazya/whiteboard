@@ -559,9 +559,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // router with its own mount block.
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 99,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 67,
-  // The update fan-out subscribes at construction from the deps the root hands
-  // down, where a per-process memoized fallback used to resolve its own.
-  'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
   // The setter's write-side validation and the boolean answer to the lazy-row
   // hazard (ADR-0042 decision 1 addendum) both belong beside effectiveTier
   // rather than in a second file over the same table; rotateKey (rotation

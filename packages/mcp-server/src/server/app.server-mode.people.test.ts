@@ -24,7 +24,11 @@ import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-sess
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
-import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-streams.js'
+import {
+  resetSyncStreamsForTests,
+  SYNC_STREAM_CAPS,
+  sseBroadcastWorkspaceUpdate,
+} from './sync-streams.js'
 
 let tempDir: string
 
@@ -245,6 +249,17 @@ describe('server mode — a stream answers only to the user who opened it', () =
 
     expect(subscribed.status).toBe(403)
     expect(ready.status).toBe(403)
+  })
+
+  it('refuses a user who already holds the most streams server mode allows', async () => {
+    const bob = await signedIn('bob')
+    const held = []
+    for (let i = 0; i < SYNC_STREAM_CAPS.perUser; i++) held.push(await opened(bob))
+    expect(held).toHaveLength(SYNC_STREAM_CAPS.perUser)
+
+    const res = await app.request(`${PUBLIC_URL}/api/sync/stream`, { headers: bob })
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ error: 'too_many_streams' })
   })
 
   it('refuses to open a stream for a bearer that is no user of this tenant', async () => {
