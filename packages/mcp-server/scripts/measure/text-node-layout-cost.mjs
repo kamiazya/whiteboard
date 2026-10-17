@@ -3,7 +3,11 @@
  * `wb_canvas_edit` does to size or check a text node before it writes.
  *
  * Run:
- *   node --import tsx/esm scripts/measure/text-node-layout-cost.mjs [lengths...]
+ *   [WIDTH=200] node --import tsx/esm scripts/measure/text-node-layout-cost.mjs [lengths...]
+ *
+ * `WIDTH` is the box's width in pixels, 200 by default. A wider box holds
+ * longer lines, so it is what prices one line of the whole text: a width no
+ * shorter than the text's full advance lays a paragraph out as ONE line.
  *
  * Through the daemon's own measurer (the vendored opentype.js faces) AND the
  * constant-ratio one, because the edit path takes the taller of the two
@@ -31,6 +35,7 @@ import { opentypeApi } from '../../src/shared/opentype.ts'
 const LENGTHS = process.argv.slice(2).map(Number)
 const lengths = LENGTHS.length > 0 ? LENGTHS : [1024, 2048, 4096, 8192]
 const appearance = createSpatialTheme({ mode: 'light' })
+const width = Number(process.env.WIDTH ?? 200)
 
 const sentence = 'Lorem ipsum dolor sit amet. '
 function prose(length, breakEvery) {
@@ -61,7 +66,7 @@ function layOut(text) {
     calls++
     return m(t, d)
   }
-  const node = textNode({ id: 'n', text, x: 0, y: 0, width: 200, height: 100 })
+  const node = textNode({ id: 'n', text, x: 0, y: 0, width, height: 100 })
   longestFontCall = 0
   const before = process.cpuUsage()
   for (const m of [measure, constantRatioMeasureText]) {
