@@ -3,7 +3,7 @@
 // daemon answers (ADR-0050). The record's token goes as the Bearer credential
 // when it has one, exactly as the native host attaches it.
 
-import { request as httpRequest } from 'node:http'
+import { type ClientRequest, request as httpRequest, type IncomingMessage } from 'node:http'
 import type { DaemonRecord } from './daemon-record-schema.js'
 
 export interface DaemonRequest {
@@ -57,11 +57,51 @@ function bodyOf(text: string): unknown {
   }
 }
 
+/**
+ * Hands `res`'s whole body to `done`, or aborts once it passes `maxBytes`
+ * rather than holding the rest.
+ */
+function collectBody(
+  res: IncomingMessage,
+  maxBytes: number | undefined,
+  abort: (err: Error) => void,
+  done: (text: string) => void,
+): void {
+  const chunks: Buffer[] = []
+  let received = 0
+  res.on('data', (chunk: Buffer) => {
+    received += chunk.length
+    if (maxBytes !== undefined && received > maxBytes) {
+      abort(new Error(`answer exceeds ${maxBytes} bytes`))
+      return
+    }
+    chunks.push(chunk)
+  })
+  res.on('end', () => done(Buffer.concat(chunks).toString('utf8')))
+}
+
+/** Arms the request's inactivity timeout and total deadline; answers what disarms the deadline. */
+function boundExchange(outgoing: ClientRequest, req: DaemonRequest): () => void {
+  const { timeoutMs, deadlineMs } = req
+  if (timeoutMs !== undefined) {
+    outgoing.setTimeout(timeoutMs, () =>
+      outgoing.destroy(new Error(`no answer within ${timeoutMs}ms`)),
+    )
+  }
+  if (deadlineMs === undefined) return () => {}
+  const deadline = setTimeout(
+    () => outgoing.destroy(new Error(`no complete answer within ${deadlineMs}ms`)),
+    deadlineMs,
+  )
+  return () => clearTimeout(deadline)
+}
+
 export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
   return new Promise((resolve, reject) => {
     let connected = false
+    let disarm = () => {}
     const fail = (err: Error) => {
-      clearTimeout(deadline)
+      disarm()
       reject(connected ? new DaemonNoAnswerError(err.message, { cause: err }) : err)
     }
     const payload = req.body === undefined ? undefined : JSON.stringify(req.body)
@@ -73,31 +113,19 @@ export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
         headers: headersFor(req, payload),
       },
       (res) => {
-        const chunks: Buffer[] = []
-        let received = 0
-        res.on('data', (chunk: Buffer) => {
-          received += chunk.length
-          if (req.maxBodyBytes !== undefined && received > req.maxBodyBytes) {
-            outgoing.destroy(new Error(`answer exceeds ${req.maxBodyBytes} bytes`))
-            return
-          }
-          chunks.push(chunk)
-        })
         res.on('error', fail)
-        res.on('end', () => {
-          clearTimeout(deadline)
-          const body = bodyOf(Buffer.concat(chunks).toString('utf8'))
-          resolve({ status: res.statusCode ?? 0, body })
-        })
+        collectBody(
+          res,
+          req.maxBodyBytes,
+          (err) => outgoing.destroy(err),
+          (text) => {
+            disarm()
+            resolve({ status: res.statusCode ?? 0, body: bodyOf(text) })
+          },
+        )
       },
     )
-    const deadline =
-      req.deadlineMs === undefined
-        ? undefined
-        : setTimeout(
-            () => outgoing.destroy(new Error(`no complete answer within ${req.deadlineMs}ms`)),
-            req.deadlineMs,
-          )
+    disarm = boundExchange(outgoing, req)
     outgoing.on('socket', (socket) => {
       // A kept-alive socket is handed over already connected.
       if (!socket.connecting) connected = true
@@ -107,10 +135,6 @@ export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
         })
     })
     outgoing.on('error', fail)
-    if (req.timeoutMs !== undefined) {
-      const ms = req.timeoutMs
-      outgoing.setTimeout(ms, () => outgoing.destroy(new Error(`no answer within ${ms}ms`)))
-    }
     if (payload !== undefined) outgoing.write(payload)
     outgoing.end()
   })
