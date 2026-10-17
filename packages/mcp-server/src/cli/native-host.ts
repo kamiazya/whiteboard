@@ -126,6 +126,19 @@ function chooseManifestDirs(
     : nativeHostManifestDirs(homedir(), process.platform, dataDir)
 }
 
+/**
+ * Whether the install was told where to write. A development install anywhere
+ * else would replace the registration each browser's everyday profile relies
+ * on, and the development build admits loopback pages any user of the machine
+ * can serve.
+ */
+function namesManifestDir(values: { manifestDir?: string; firefoxManifestDir?: string }): boolean {
+  return values.manifestDir !== undefined || values.firefoxManifestDir !== undefined
+}
+
+const DEVELOPMENT_NEEDS_DIR =
+  'whiteboard native-host install --development registers only into a directory you name: pass --manifest-dir=<path> or --firefox-manifest-dir=<path> (a throwaway profile, never an everyday one).\n'
+
 async function install(rest: readonly string[]): Promise<number> {
   const scan = scanFlags(rest, INSTALL_FLAGS)
   if (scan.kind === 'usage-error') {
@@ -139,17 +152,8 @@ async function install(rest: readonly string[]): Promise<number> {
     return 64
   }
   const development = scan.seen.has('--development')
-  // A development install everywhere would replace the registration each
-  // browser's everyday profile relies on, and the development build admits
-  // loopback pages any user of the machine can serve.
-  if (
-    development &&
-    scan.values.manifestDir === undefined &&
-    scan.values.firefoxManifestDir === undefined
-  ) {
-    process.stderr.write(
-      'whiteboard native-host install --development registers only into a directory you name: pass --manifest-dir=<path> or --firefox-manifest-dir=<path> (a throwaway profile, never an everyday one).\n',
-    )
+  if (development && !namesManifestDir(scan.values)) {
+    process.stderr.write(DEVELOPMENT_NEEDS_DIR)
     return 64
   }
   const dataDir = resolve(scan.values.dataDir ?? resolveDefaultDataDir(process.env))
