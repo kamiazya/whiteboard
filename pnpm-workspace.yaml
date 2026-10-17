@@ -250,14 +250,16 @@ packageExtensions:
 # under pnpm 10 (verified: same "Ignored build scripts" warning appears on a
 # clean pnpm 10 install), so only esbuild is allowed here — this preserves
 # existing behavior rather than newly enabling native builds pnpm was already
-# skipping.
+# skipping. onnxruntime-node's postinstall downloads only its CUDA execution
+# provider from NuGet; the CPU backend the embedder runs on ships in the
+# package, so the download buys nothing here and is a network fetch at install.
 allowBuilds:
   canvas: false
   esbuild: true
   lefthook: false
   libxmljs2: false
   msw: false
-  onnxruntime-node: true
+  onnxruntime-node: false
   sharp: false
   workerd: false
 
