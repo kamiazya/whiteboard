@@ -90,7 +90,7 @@ function mountRemoval(
     if (removed.kind === 'refused') return refuse(c, removed.reason)
     // First, before anything that can fail: a stream they already hold would
     // otherwise keep delivering the workspace (ADR-0042).
-    endSyncStreamsOf(userId)
+    endSyncStreamsOf(userId, workspaceId)
     return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
   })
 }

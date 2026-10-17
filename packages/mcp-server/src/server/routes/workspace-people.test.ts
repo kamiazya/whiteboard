@@ -108,7 +108,7 @@ describe('workspace people', () => {
     expect(vi.mocked(endSyncStreamsOf)).not.toHaveBeenCalled()
 
     expect((await call('ada', 'DELETE', `/people/${ids.bob}`)).status).toBe(200)
-    expect(vi.mocked(endSyncStreamsOf)).toHaveBeenCalledExactlyOnceWith(ids.bob)
+    expect(vi.mocked(endSyncStreamsOf)).toHaveBeenCalledExactlyOnceWith(ids.bob, 'ws-1')
   })
 
   it('lists the people and their roles to any member', async () => {

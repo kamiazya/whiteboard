@@ -11,6 +11,7 @@ import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-co
 import {
   documentSyncKey,
   workspaceDocKey,
+  workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
 } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import type {
@@ -310,19 +311,32 @@ export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: 
   sendText(workspaceId, path, raw, (entry) => entry.ready)
 }
 
+// Whether a stream follows `workspaceId`, by any key. Keys are canonical, so
+// a per-document key's handle IS the workspace id.
+function follows(stream: SyncStream, workspaceId: string): boolean {
+  for (const { key } of stream.docs.values()) {
+    if (workspaceHandleOfSyncKey(key) === workspaceId) return true
+  }
+  return false
+}
+
 /**
- * Ends every stream a user holds (ADR-0049 decision 4, ADR-0042): losing access
- * — deactivated, or removed from a workspace — takes effect on the stream they
- * already have open, not only on the requests they make next. Membership is
- * checked when a stream subscribes, so a closed stream is how the client
- * learns to ask again, and asking again is refused where it no longer may.
+ * Ends the streams a user holds (ADR-0049 decision 4, ADR-0042): losing access
+ * takes effect on the stream they already have open, not only on the requests
+ * they make next. Removed from one workspace, only the streams following it
+ * end — one that also follows another is ended whole, and its resubscribe is
+ * decided afresh; deactivated (no `workspaceId`), every stream does.
+ * Membership is checked when a stream subscribes, so a closed stream is how
+ * the client learns to ask again, and asking again is refused where it no
+ * longer may.
  */
-export function endSyncStreamsOf(userId: string): void {
+export function endSyncStreamsOf(userId: string, workspaceId?: string): void {
   for (const [streamId, stream] of streams) {
     if (stream.userId !== userId) continue
+    if (workspaceId !== undefined && !follows(stream, workspaceId)) continue
     streams.delete(streamId)
     stream.end()
-    log.info({ streamId }, 'sync stream ended: its user lost access')
+    log.info({ streamId, workspaceId }, 'sync stream ended: its user lost access')
   }
 }
 
