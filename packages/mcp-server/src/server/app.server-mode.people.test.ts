@@ -173,6 +173,39 @@ describe('server mode — a stream open before someone loses access ends with it
   })
 })
 
+// Revocation ends the streams of the user who OPENED them, so a stream may only
+// carry the subscriptions of that same user: one opened under any other
+// credential would survive its subscriber losing access.
+describe('server mode — a stream answers only to the user who opened it', () => {
+  it('refuses to subscribe a stream someone else opened', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const { workspaceId } = (await (await create(bob, 'Plans')).json()) as { workspaceId: string }
+    const { streamId } = await opened(ada)
+
+    const subscribed = await syncPost(bob, 'subscribe', {
+      streamId,
+      subscribe: [`workspace:${workspaceId}`],
+    })
+    const ready = await syncPost(bob, 'message', {
+      streamId,
+      doc: `${workspaceId}/plan`,
+      message: { type: 'client_ready' },
+    })
+
+    expect(subscribed.status).toBe(403)
+    expect(ready.status).toBe(403)
+  })
+
+  it('refuses to open a stream for a bearer that is no user of this tenant', async () => {
+    const res = await app.request(`${PUBLIC_URL}/api/sync/stream`, {
+      headers: { authorization: 'Bearer stranger' },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'requires_person_session' })
+  })
+})
+
 // The unknown-workspace guard answers 404 workspace_not_found, which would tell
 // a stranger which workspaces exist if it ran first: the membership gate has to
 // answer both the same.

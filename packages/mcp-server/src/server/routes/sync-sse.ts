@@ -168,7 +168,30 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
 
 const SYNC_BODY: ReadJsonBodyOptions = { voice: 'code', refuseShape: invalidRequestBody }
 
-async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
+/**
+ * Losing access ends the streams of the user who OPENED them, so a stream
+ * answers to that user alone: subscribed by anyone else — a second account, a
+ * bearer naming nobody — it would outlive its subscriber's removal and keep
+ * delivering a workspace they may no longer read.
+ */
+async function foreignStreamRefusal(
+  c: Context,
+  options: SyncSseRouterOptions,
+  streamId: string,
+  stream: SyncStream,
+): Promise<Response | null> {
+  if (options.userOf === undefined) return null
+  const caller = await options.userOf(c)
+  if (caller !== null && caller === stream.userId) return null
+  log.warning({ streamId }, 'sync request refused: the stream is not the caller’s')
+  return c.json(
+    { error: 'not_stream_owner', message: 'this stream was opened by someone else' },
+    403,
+  )
+}
+
+async function handleSubscribe(c: Context, options: SyncSseRouterOptions) {
+  const { admit } = options
   const parsed = await readJsonBody(c, syncSubscribeRequestSchema, SYNC_BODY)
   if ('refusal' in parsed) return parsed.refusal
 
@@ -190,6 +213,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   // reconnect, a stale streamId). Answering 200 would leave the caller
   // believing it is subscribed and waiting forever for updates.
   if (!stream) return unknownStream(c, parsed.data.streamId)
+  const foreign = await foreignStreamRefusal(c, options, parsed.data.streamId, stream)
+  if (foreign) return foreign
 
   if (
     exceedsStreamCap(
@@ -219,7 +244,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
 
 // The client->server half of the sync protocol: an SSE client has no
 // upstream channel of its own, so its messages arrive here.
-async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
+async function handleMessage(c: Context, options: SyncSseRouterOptions) {
+  const { admit } = options
   const parsed = await readJsonBody(c, syncClientMessageRequestSchema, SYNC_BODY)
   if ('refusal' in parsed) return parsed.refusal
 
@@ -229,6 +255,8 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
 
   const stream = syncStreamById(parsed.data.streamId)
   if (!stream) return unknownStream(c, parsed.data.streamId)
+  const foreign = await foreignStreamRefusal(c, options, parsed.data.streamId, stream)
+  if (foreign) return foreign
 
   // `client_ready` is the one message a client sends: a viewport request is
   // fired once and never awaited, so there is no acknowledgement message.
@@ -259,6 +287,12 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     // it is what proves the stream is yours.
     const streamId = globalThis.crypto.randomUUID()
     const userId = (await options.userOf?.(c)) ?? null
+    // Where the keeper knows people, a stream nobody owns is one no
+    // revocation could ever end.
+    if (options.userOf !== undefined && userId === null) {
+      log.warning({}, 'sync stream refused: the caller is no user of this keeper')
+      return c.json(membershipRefusal('requires_person_session'), 403)
+    }
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
@@ -289,8 +323,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     })
   })
 
-  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options.admit))
-  app.post('/api/sync/message', (c) => handleMessage(c, options.admit))
+  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))
+  app.post('/api/sync/message', (c) => handleMessage(c, options))
 
   return app
 }
