@@ -9,12 +9,14 @@ import {
   daemonPingResponseSchema,
   type RuntimeStatusResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { Hono } from 'hono'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type CredentialResolverConfig,
   createCredentialResolver,
 } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
+import { callerGrant, rememberGrant } from '../security/membership-gate.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR); the storage report and the
@@ -270,5 +272,51 @@ describe('runtime routes — a macaroon reaches the read half, like every other 
     })
 
     expect(res.status).toBe(401)
+  })
+})
+
+// Server mode builds the resolver with no daemon token, which answers every
+// caller `anonymous` with every scope. So the router judges the grant the
+// server-mode `/api/*` middleware authenticated, and a request that middleware
+// never saw — one it was not mounted in front of — is refused, not admitted.
+describe('runtime routes on server mode', () => {
+  function serverModeApp() {
+    const app = new Hono()
+    app.use('*', async (c, next) => {
+      if (c.req.header('x-test-session') === 'member') {
+        rememberGrant(c, { kind: 'signed-in', scopes: ['runtime:read'] })
+      }
+      await next()
+    })
+    app.route(
+      '/',
+      createRuntimeRouter({
+        credentialResolver: createCredentialResolver({ daemonToken: undefined }),
+        serverModeGrant: callerGrant,
+        instanceId: 'test-instance-id',
+        identity: testIdentity,
+        storageReport: mockStorageReport,
+        readLastAutoCompactedAt: mockReadLatestCompactedAt,
+        touch: vi.fn(),
+        getStatus: () => STATUS,
+      }),
+    )
+    return app
+  }
+
+  it('refuses a request no server-mode middleware authenticated', async () => {
+    const res = await serverModeApp().request('/api/runtime/status')
+    expect(res.status).toBe(401)
+  })
+
+  it('admits the grant the server-mode middleware authenticated', async () => {
+    const res = await serverModeApp().request('/api/runtime/status', {
+      headers: { 'x-test-session': 'member' },
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('still answers ping to anyone', async () => {
+    expect((await serverModeApp().request('/api/runtime/ping')).status).toBe(200)
   })
 })

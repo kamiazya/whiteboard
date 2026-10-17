@@ -3,10 +3,10 @@ import {
   daemonPingResponseSchema,
   type RuntimeStatusResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
-import type { CredentialResolver } from '../security/credential-resolver.js'
+import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 
@@ -23,6 +23,15 @@ export interface RuntimeRouterOptions {
    * declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
+  /**
+   * Set on server mode only: the grant the server-mode `/api/*` middleware
+   * authenticated for this request. Server mode's resolver holds no daemon
+   * token, so it answers every caller `anonymous` with every scope; judged by
+   * it, this layer would admit anyone the moment that middleware was not in
+   * front of it. With this set the resolver is not asked, and a request the
+   * middleware did not authenticate is refused.
+   */
+  serverModeGrant?: (c: Context) => ResolvedGrant | undefined
   /**
    * The storage usage report for the data directory this router serves.
    * Handed in because producing it walks the disk, which is a mechanic and
@@ -67,9 +76,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
     if (scope?.kind === 'public') return next()
 
-    const grant = await options.credentialResolver.resolve({
-      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-    })
+    const grant =
+      options.serverModeGrant !== undefined
+        ? (options.serverModeGrant(c) ?? null)
+        : await options.credentialResolver.resolve({
+            secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+          })
     if (grant === null) return c.json({ error: 'unauthorized' }, 401)
     if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return next()
 

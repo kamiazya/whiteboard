@@ -37,6 +37,7 @@ import { createDaemonIdentity } from './security/daemon-identity.js'
 import { createLocalTokenMcpHttpAuthStrategy } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware } from './security/mcp-http.js'
 import {
+  callerGrant,
   callerUserId,
   creatorAsFirstMember,
   type FirstMember,
@@ -399,6 +400,7 @@ export function createApp(options: AppOptions) {
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
+      ...(options.authMode === 'server-mode' ? { serverModeGrant: callerGrant } : {}),
       storageReport: () => computeStorageReport(scope.dataDir),
       readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
     }),
