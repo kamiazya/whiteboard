@@ -86,6 +86,16 @@ function safeReturnPath(requested: string | undefined, publicBaseUrl: string): s
   return `${resolved.pathname}${resolved.search}${resolved.hash}`
 }
 
+// openid-client keeps a refused response body on its error — as the cause,
+// or as a property — and a token endpoint's body can carry snake_case
+// `id_token`/`access_token`/`refresh_token` the redaction list cannot name at
+// every depth. The log gets what KIND of failure it was, never the error.
+function failureOf(err: unknown): { readonly name: string; readonly code?: string } {
+  if (!(err instanceof Error)) return { name: typeof err }
+  const { code } = err as { code?: unknown }
+  return typeof code === 'string' ? { name: err.name, code } : { name: err.name }
+}
+
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
 
 interface Routing {
@@ -131,7 +141,10 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
       fresh,
     })
     .catch((err: unknown) => {
-      log.warning({ providerId: provider.id, err }, 'the provider could not be reached')
+      log.warning(
+        { providerId: provider.id, failure: failureOf(err) },
+        'the provider could not be reached',
+      )
       return null
     })
   if (to === null) return refusedTo(c, 'provider_unreachable')
@@ -160,7 +173,10 @@ async function verifiedClaims(
       ...checks,
     })
   } catch (err) {
-    log.warning({ providerId: provider.id, err }, 'the provider answer failed a check')
+    log.warning(
+      { providerId: provider.id, failure: failureOf(err) },
+      'the provider answer failed a check',
+    )
     return null
   }
 }

@@ -20,6 +20,7 @@ import {
   type FakeOidcProvider,
   fakeOidcProvider,
 } from '../../shared/test-utils/fake-oidc-provider.js'
+import { captureLogsForTests } from '../log.js'
 import { oidcProviders, resolvedForTest } from '../security/_test-helpers.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
@@ -340,6 +341,48 @@ describe('sign-in through an OIDC provider', () => {
       headers: { cookie: `${SESSION_COOKIE}=${session}` },
     })
     expect(await res.json()).toMatchObject({ user: { administrator: true } })
+  })
+
+  // A provider's failed answer can carry tokens, and openid-client keeps the
+  // body it refused as the error's cause; what reaches the log must not.
+  describe('what a provider failure logs', () => {
+    const SECRET = 'leaked-provider-token'
+    let logs: ReturnType<typeof captureLogsForTests>
+    beforeEach(() => {
+      logs = captureLogsForTests('warning')
+    })
+    afterEach(() => logs.restore())
+    const logged = () => JSON.stringify(logs.records.filter((r) => r.scope === 'sign-in'))
+
+    it('keeps the tokens of a refused token response out of the log', async () => {
+      const refusing: CustomFetch = async (url, init) => {
+        if (!String(url).endsWith('/token')) return idp.fetch(url, init)
+        return new Response(
+          JSON.stringify({
+            error: 'invalid_grant',
+            id_token: SECRET,
+            access_token: SECRET,
+            refresh_token: SECRET,
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      const { app } = appFor({ createAccounts: true }, refusing)
+      idp.next({ sub: 'ada-1' })
+      const res = await signInThrough(app)
+      expect(res.headers.get('location')).toBe('/sign-in?error=provider_refused')
+      expect(logged()).toContain('the provider answer failed a check')
+      expect(logged()).not.toContain(SECRET)
+    })
+
+    it('keeps what an unreachable provider failed with out of the log', async () => {
+      const failing: CustomFetch = () =>
+        Promise.reject(Object.assign(new TypeError('fetch failed'), { body: { id_token: SECRET } }))
+      const { app } = appFor({ createAccounts: true }, failing)
+      await app.request(`${BASE}/auth/sign-in/corp`)
+      expect(logged()).toContain('the provider could not be reached')
+      expect(logged()).not.toContain(SECRET)
+    })
   })
 
   it('returns to the sign-in screen when the provider cannot be reached', async () => {
