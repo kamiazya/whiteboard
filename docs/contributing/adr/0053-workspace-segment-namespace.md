@@ -1,10 +1,10 @@
 # ADR-0053: A workspace segment is unique within its owner's namespace, not across the keeper
 
-**Status:** Proposed, 2026-10-17. The owner decided the direction that day —
-"namespace segments per owner", design first, nothing implemented. This
-record sets out the options against the code as it stands and recommends
-one. The decision itself, and the open questions at the end, are the
-owner's to settle.
+**Status:** Accepted, 2026-10-17. The owner chose the direction that day
+("namespace segments per owner", design first), then answered the four open
+questions this record raised. The answers are the Decision section below.
+Nothing is built yet; the implementation is separate work, sliced at the
+end of this record.
 
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
@@ -149,6 +149,11 @@ All three options keep the canonical-id address (`/w/<ULID>`) as the form
 that survives a rename, and all three replace `workspaces_segment_unique`.
 They differ in what a segment is unique WITHIN.
 
+These options are recorded as they were proposed. Where one says "this is
+open question N", or makes a claim that one of the answers changed (such
+as Option A leaving the single-person keepers on `/w/<segment>`), the
+Decision section supersedes it.
+
 ### Option A — per-owner namespace
 
 A server-mode workspace belongs to one **namespace**: the tenant user who
@@ -289,58 +294,225 @@ A server-mode segment always carries an opaque suffix the keeper mints:
 | residual leak | a co-owner renaming inside the holder's namespace (Q3); the owner handle itself if chosen (Q1) | none | none |
 | new identity to manage | a namespace holder, and a person's deletion moves it | a segment per membership | none |
 
-## Recommendation
+## Decision
 
-**Option A, with the owner component minted rather than chosen, segment
-changes limited to the namespace holder, and the single-person keepers left
-on `/w/<segment>`.**
+**Option A: a segment is unique within its owner's namespace, on every
+keeper, under one URL grammar.** The proposed record recommended Option A,
+and the owner chose it. The four answers below settle the points Option A
+left open.
 
-- It is the shape the owner asked for, and the only one that keeps a
-  readable URL that means the same thing to every member. B gives that up
-  by construction. C keeps it only by making the readable part less
-  readable.
-- Its bare-segment MCP handle is today's handle for anyone working in
-  their own workspaces. The qualified form can wait for its own
-  tool-surface increment, because the canonical id already reaches
-  everything else.
-- It closes the tenant gap as part of the same index change.
-- The two places a leak could remain, the owner handle and a co-owner's
-  rename, are closed by the two choices above, and both are cheap to
-  reverse later if the owner decides a readable user handle is worth its
-  oracle.
+### 1. The owner component is split by use: an opaque form for links that leave the workspace, a readable handle inside the app
 
-Implementation is deliberately not planned here. Once the questions below
-are answered, the slices follow `architecture-map.md`'s direction: the
-schema and index in `model`/`ports`, then the daemon's registry and its
-three oracle paths, each with a test that reproduces today's 409 / `-2` /
-`not_a_member` difference first, then the web app's grammar.
+There are two address forms, and which one is used depends on who the
+address may reach.
 
-## Open questions for the owner
+- **Inside the authenticated app**, URLs read
+  `/w/<handle>/<segment>/d/<path>`. The `<handle>` is a per-tenant user
+  handle that its user chooses, unique per `(tenantId, handle)`. It is
+  never ULID-shaped (the refinement `workspaceSegmentSchema` applies today
+  moves to the handle), so the first component tells the two forms apart.
+  A user who has not chosen one gets a handle derived from their display
+  name through `deriveWorkspaceSegment` and `firstFreeSegment`. The
+  workspace segment keeps its own grammar and becomes unique per
+  `(tenantId, namespace, segment)`.
+- **A link that may reach someone outside the workspace** uses the opaque
+  form, without exception. That covers an invitation, a "copy link" meant
+  for someone who is not yet a member, and any future share surface. The
+  opaque form names the **workspace**, not the owner's namespace. A link
+  points at one thing, and a namespace-level link would hand the
+  recipient an address that covers workspaces they were never sent.
+  - The opaque form is `/w/<workspaceId>`, the canonical ULID that already
+    resolves in that position (ADR-0019). It is minted, stays the same
+    across a rename of the handle or the segment, and carries nothing
+    anyone chose.
+  - No separate link key is minted. Access is decided by membership, not
+    by holding the link, so a second key would be a fourth identity layer
+    that grants nothing the id does not.
+  - The cost of using the id: a ULID encodes its creation time to the
+    millisecond, so anyone holding the link learns when the workspace was
+    created. That is accepted. If it stops being acceptable, the upgrade
+    is a separately minted random key that resolves to the workspace id.
+  - An invitation link keeps carrying its invitation token
+    (`invitePageUrl`), which is a capability to be admitted, not an
+    address. Once the invitation is accepted, it lands on the opaque
+    workspace form like any other link.
+- **The opaque form becomes the in-app URL after sign-in.**
+  1. An unauthenticated request for any `/w/…` path is answered the same
+     way whatever the path names: it is sent to sign-in, and nothing about
+     the path is resolved before a session exists.
+  2. After sign-in, the app resolves `/w/<workspaceId>` through the
+     membership gate.
+  3. A member is moved, by replacing the history entry, to
+     `/w/<handle>/<segment>/…` built from the CURRENT handle and segment.
+  4. A non-member gets the same `not_a_member` refusal the gate gives
+     today. This is the same rule as `workspaceHandle`'s "emit the segment
+     when there is one", applied after access is known rather than before.
+- **A copied in-app URL opened by a non-member** gets the same answer as
+  every address they cannot reach. The gate answers `not_a_member` for all
+  of these alike:
+  - `/w/alice/secret`, where the workspace exists but they are not a
+    member;
+  - `/w/alice/nothing`, where Alice has no such workspace;
+  - `/w/nobody/x`, where no user holds that handle.
 
-1. **The owner component in a URL**: a minted opaque key (no oracle,
-   unreadable) or a chosen user handle (readable, and reveals whether a
-   handle is taken within a tenant)?
-2. **Two grammars**: may server mode use `/w/<owner>/<segment>` while the
-   single-person keepers keep `/w/<segment>`, or should every keeper carry
-   an owner component (a fixed one where there is one person) to keep a
-   single grammar?
-3. **Who may change a segment**: only the namespace holder, or every
-   ADR-0049 owner, accepting that a co-owner can probe the holder's
-   namespace?
-4. **When the namespace holder is deleted** (ADR-0051): which remaining
-   owner inherits the namespace, given that every URL carrying the old one
-   dies?
+  This keeps the property `workspaceAccess` has now: resolution may know
+  the answer, but the response does not depend on it.
+
+**The consequence, accepted.** Whether a handle exists is visible to the
+tenant's AUTHENTICATED users. Choosing a handle that is taken is refused,
+and a user's handle is visible in every in-app URL they share with a
+member. The owner accepted this, since anyone who can ask is signed in to
+the tenant. It must not be visible to an UNAUTHENTICATED caller: no path an
+unauthenticated request can reach may answer differently for a handle that
+exists. Step 1 above is how, and the implementation pins it with a test.
+What stays hidden even from signed-in users is the thing the oracle was
+about: which WORKSPACES exist in another person's namespace.
+
+### 2. One grammar on every keeper; single-person keepers carry the fixed component `me`
+
+The browser, the local daemon and the edge keeper also address a workspace
+as `/w/<handle>/<segment>/d/<path>`. Their one namespace is spelled with
+the fixed handle **`me`**.
+
+- `me` is valid under the handle grammar and is not ULID-shaped.
+- It reads correctly where there is exactly one person.
+- Server mode reserves it, so no tenant user can choose `me` and
+  `/w/me/…` never names somebody else's namespace there. A server-mode
+  `/w/me/…` matches no user, so it gets the uniform `not_a_member`.
+  `me` is deliberately NOT an alias for the caller's own handle: a link
+  that meant something different to each person who opened it would be the
+  shared-link hazard Option B was rejected for.
+- The opaque form `/w/<workspaceId>` resolves on every keeper as it does
+  today.
+- `local` was not used for this, because the vocabulary rule retires it
+  for anything about where a workspace is kept.
+
+**Existing `/w/<segment>` links: break them, do not redirect.** This is
+the recommendation, to be confirmed in the web-grammar slice.
+
+- After the change, a one-component `/w/<x>` resolves ONLY as a canonical
+  id. A non-ULID one-component path gets the same unknown-address answer as
+  any address that names nothing.
+- A redirect would be safe on a single-person keeper, which has one
+  namespace to redirect into. On server mode it cannot be safe: choosing
+  the namespace would mean resolving a bare segment keeper-wide, which is
+  the oracle this record closes.
+- A redirect on one keeper and not the other would bring back the
+  per-keeper grammar answer 2 rules out.
+- At 0.0.x, the vocabulary rule's no-compatibility policy makes the break
+  the cheaper honest answer.
+- What breaks: bookmarks, copied URLs, and any route string the web app
+  stored that carries `/w/<segment>`. Id-form links survive on every
+  keeper.
+
+### 3. Every ADR-0049 owner may change a segment
+
+Any owner of a workspace may rename its segment, not only the namespace
+holder. A rename checks collisions within the workspace's namespace.
+
+**The consequence, accepted.** A co-owner of one of Alice's workspaces can
+probe Alice's namespace: a rename to a segment Alice already uses answers
+`409`. What a co-owner learns is limited to which segments are taken in
+that one namespace. They learn nothing about those workspaces' contents,
+display names or members, and nothing about any other namespace.
+
+Creating a workspace always mints it in the creator's own namespace, and
+so does MCP `createWorkspace: true`. A workspace changes namespace only
+through answer 4.
+
+### 4. When the namespace holder is deleted, the oldest surviving owner inherits
+
+When ADR-0051 deletes a person whose namespace holds workspaces, each of
+those workspaces moves to its **oldest surviving owner**. That is the
+current owner with the earliest membership `createdAt`, with ties broken by
+user id. The membership row's `createdAt` is used because no
+role-change time is stored. ADR-0051 already refuses to delete a
+workspace's sole owner, so a surviving owner always exists.
+
+- **URLs carrying the old handle stop working.** Id-form links survive.
+  This is ADR-0019's accepted "a renamed segment's old URL is dead", now
+  triggered by deleting a person.
+- **A segment that collides in the inheritor's namespace** is suffixed
+  with `firstFreeSegment` there. The inheritor sees all of their own
+  namespace, so the suffix tells nobody anything new.
+- **A deleted person's handle becomes free to choose again.** An old URL
+  can then point into the new holder's namespace. It still reaches only
+  workspaces the opener is a member of, so this can cause confusion but
+  leaks nothing. No tombstone is kept, for the reason ADR-0019 keeps none
+  for segments.
+
+### MCP handles
+
+A tool's `workspaceId` accepts three forms:
+
+- the canonical id;
+- the qualified `<handle>/<segment>`;
+- a bare segment, as shorthand for the caller's own namespace (`me` on a
+  single-person keeper, the caller's handle on server mode).
+
+An MCP handle is an argument, not a link handed to somebody, so a
+caller-relative shorthand is safe here in a way it would not be in a URL.
+A qualified handle in another namespace is never minted, and gets the
+uniform `not_a_member` whether or not the workspace exists. Admitting `/`
+in `workspaceIdSchema`, and describing all three forms, changes a published
+tool surface. Its exact shape is settled by that slice's `mcp-tool-surface`
+procedure, not here.
+
+### Implementation slices (not started)
+
+The slices are listed in `architecture-map.md`'s dependency order. Each
+starts from a failing test at its nearest layer.
+
+1. **`model` / `ports`.**
+   - Add a user-handle schema (the segment charset, never ULID-shaped, `me`
+     reserved).
+   - Make `resolveWorkspaceHandle` resolve the three address forms.
+   - Make `WorkspaceSegmentTakenError` name the namespace it is unique in.
+   - A property test covers parse and resolve of every form.
+2. **The daemon registry and the three oracle paths.**
+   - A migration replaces `workspaces_segment_unique` with
+     `(tenantId, namespace, segment)`.
+   - It adds the namespace column, backfilled from each workspace's
+     earliest `owner` membership. A workspace with no owner row is refused
+     for an operator to assign, never guessed.
+   - It adds the per-tenant user handle.
+   - Red tests first, each reproducing today's difference, before the
+     fix:
+     - a rename to another person's segment answers `409`;
+     - a create beside another person's segment answers `-2`;
+     - MCP `createWorkspace` on another person's segment answers
+       `not_a_member`.
+   - The same slice adds the unauthenticated-uniformity test from answer
+     1, and the cross-tenant case from "A latent second instance".
+3. **The web app's grammar.**
+   - `workspacePath`, `documentPath`, `parseWorkspaceRoute` and
+     `workspaceHandle` move to `/w/<handle>/<segment>`.
+   - The post-sign-in replacement of the opaque form.
+   - A copy-link surface that emits only the opaque form.
+   - The single-person keepers' `me`.
+   - Browser-mode coverage of the route flow.
+4. **The MCP tool surface**, through the `mcp-tool-surface` procedure.
+   - The qualified handle and the three forms' descriptions.
+   - ADR-0031's scoreboards re-pinned.
+   - `pnpm smoke:e2e` extended to call a qualified handle.
+   - The operator command line's `--workspace` changes in the same slice.
 
 ## Consequences
 
-- If accepted, ADR-0019's "unique per keeper" becomes "unique per keeper
-  for a single-person keeper, and per namespace on server mode", and
-  `workspaceSegmentSchema`'s comment and `docs/explanation/domain-model.md`
-  change with the implementation.
-- Server-mode segment URLs break once. The id form keeps working. At 0.0.x
-  that is the vocabulary rule's accepted cost.
-- Nothing changes for the browser keeper, the local daemon or the edge
-  keeper under any of the three options.
+- **ADR-0019 is amended.** "Unique per keeper" becomes "unique per
+  namespace". When implemented, `workspaceSegmentSchema`'s comment and
+  `docs/explanation/domain-model.md` change in the same increment.
+- **Every keeper's `/w/<segment>` links break once, and id links survive.**
+  At 0.0.x that is the vocabulary rule's accepted cost.
+- **A person gains a fourth identity-bearing name, their handle.** Its
+  existence is visible to signed-in users of the tenant (answer 1). It is
+  invisible to an unauthenticated caller, and that has to be held by a
+  test, not by care.
+- **Within one namespace a co-owner can probe it** (answer 3). Across
+  namespaces, nobody can. Across tenants, the replaced index closes the
+  latent instance.
+- **Deleting a person can now break URLs** (answer 4) as well as
+  removing access.
 
 ## Alternatives considered
 
