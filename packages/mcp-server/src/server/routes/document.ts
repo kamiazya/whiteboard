@@ -95,6 +95,15 @@ function armAutoVersionTrigger(
   return trigger
 }
 
+// What a person-saved row is stamped with: the device, and the caller where
+// the keeper knows it. The version-save and promote routes take the same pair.
+function whoSaved(options: DocumentRouterOptions) {
+  return {
+    ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
+    ...(options.callerName === undefined ? {} : { callerName: options.callerName }),
+  }
+}
+
 function workspacesRouterOptions(options: DocumentRouterOptions) {
   return {
     serverDeps: options.serverDeps,
@@ -141,8 +150,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     createWorkspaceDocumentRouter({
       triggerAutoVersion,
       serverDeps: options.serverDeps,
-      ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
-      ...(options.callerName === undefined ? {} : { callerName: options.callerName }),
+      ...whoSaved(options),
     }),
   )
   app.route(
@@ -150,8 +158,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     createVersionsRouter({
       versionStore,
       scope: options.scope,
-      ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
-      ...(options.callerName === undefined ? {} : { callerName: options.callerName }),
+      ...whoSaved(options),
     }),
   )
   app.route('/', createMaintenanceRouter({ versionStore, scope: options.scope }))

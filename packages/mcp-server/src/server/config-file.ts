@@ -26,9 +26,9 @@
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
 
-import { realpathSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { cosmiconfigSync, defaultLoadersSync, type LoadersSync } from 'cosmiconfig'
 import { z } from 'zod'
 import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
@@ -168,18 +168,17 @@ function refuseWorkingDirectoryKeys(config: WhiteboardConfigFile, filepath: stri
   )
 }
 
-function realPathOr(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return resolve(path)
-  }
-}
-
 // A working directory that IS the home directory finds the home config through
 // the cwd search places; that file is the user's own and keeps its trust.
+// Compared by file identity, so a symlinked home still matches.
 function isHomeConfig(filepath: string, homeDir: string): boolean {
-  return realPathOr(filepath) === realPathOr(join(homeDir, HOME_CONFIG_FILE_RELATIVE_PATH))
+  try {
+    const found = statSync(filepath)
+    const home = statSync(join(homeDir, HOME_CONFIG_FILE_RELATIVE_PATH))
+    return found.dev === home.dev && found.ino === home.ino
+  } catch {
+    return false
+  }
 }
 
 // Loads a whiteboard config file from `cwd` itself (no ancestor walk-up).
