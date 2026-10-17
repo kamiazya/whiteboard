@@ -8,12 +8,17 @@
  * which is exactly those surfaces' behaviour today.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import {
+  describeThrown,
+  generateDocumentId,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
+import { serverModeToolErrorText } from './server-mode-redaction.js'
 import { type MembershipDenial, membershipRefusal, workspaceAccess } from './workspace-access.js'
 
 export interface McpCaller {
@@ -22,6 +27,27 @@ export interface McpCaller {
 }
 
 const callers = new AsyncLocalStorage<McpCaller>()
+
+/**
+ * The text a failed tool call answers with. Server mode's caller is a member,
+ * not the operator, so a fault's text (a storage path, SQL, engine detail)
+ * goes to the log rather than to them; the local daemon and stdio answer
+ * their owner with all of it.
+ */
+export function toolErrorText(tool: string, err: unknown): string {
+  return callers.getStore() === undefined ? describeThrown(err) : serverModeToolErrorText(tool, err)
+}
+
+/**
+ * The gate's own refusals. Named, so server mode's error text passes them to
+ * the caller verbatim as the refusals they are.
+ */
+class McpCallRefusalError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'McpCallRefusalError'
+  }
+}
 
 export function runAsMcpCaller<T>(caller: McpCaller, fn: () => Promise<T>): Promise<T> {
   return callers.run(caller, fn)
@@ -53,7 +79,7 @@ type GateIndex = Pick<DocumentIndex, 'resolveWorkspace' | 'createWorkspace'>
 
 function refused(denial: MembershipDenial): Error {
   const { error, message } = membershipRefusal(denial)
-  return new Error(`${error}: ${message}`)
+  return new McpCallRefusalError(`${error}: ${message}`)
 }
 
 /**
@@ -66,7 +92,9 @@ function refused(denial: MembershipDenial): Error {
 function scopeRefusal(caller: McpCaller, toolName: string): Error | null {
   const required = MCP_TOOL_SCOPES[toolName]
   if (required !== undefined && hasRequiredScopes(caller.grant.scopes, required)) return null
-  return new Error(`insufficient_scope: this credential's scopes do not reach ${toolName}`)
+  return new McpCallRefusalError(
+    `insufficient_scope: this credential's scopes do not reach ${toolName}`,
+  )
 }
 
 /**
@@ -100,7 +128,9 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
           return tool.execute(input)
         }
         return Promise.reject(
-          new Error(`workspace_required: ${tool.name} must name the workspace it acts on`),
+          new McpCallRefusalError(
+            `workspace_required: ${tool.name} must name the workspace it acts on`,
+          ),
         )
       },
     }

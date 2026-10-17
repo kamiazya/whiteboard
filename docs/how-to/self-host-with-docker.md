@@ -909,3 +909,7 @@ deployment state.
 - Raw JWT values, Authorization/Bearer headers, JWKS URI credentials, full
   filesystem paths, and stack traces are never written to stdout, stderr, or
   the Docker logs surface.
+- What a member sees of a server fault carries no storage detail. A stored
+  file or record the server cannot read answers `corrupt_stored_data` with a
+  fixed message, and an MCP tool call that fails for any reason other than a
+  refusal answers `internal_error`. The detail goes to the server log.

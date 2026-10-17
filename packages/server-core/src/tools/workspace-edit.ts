@@ -40,12 +40,14 @@ class WorkspaceEditError extends Error {
     readonly opIndex: number,
     readonly op: string,
     readonly applied: number,
-    detail: string,
+    cause: unknown,
   ) {
     super(
-      `ops[${opIndex}] (${op}) could not be applied: ${detail.replace(/\.$/, '')}. ` +
+      `ops[${opIndex}] (${op}) could not be applied: ${describeThrown(cause).replace(/\.$/, '')}. ` +
         `${applied} op(s) before it were applied and stand; ops after it were not run. ` +
         'Resume from this index rather than resending the batch.',
+      // Kept so a surface that must not quote a fault can see what it quotes.
+      { cause },
     )
     this.name = 'WorkspaceEditError'
   }
@@ -432,7 +434,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
           if (outcome.workspaceId !== undefined) workspaceId = outcome.workspaceId
           results.push(outcome.result)
         } catch (err) {
-          throw new WorkspaceEditError(index, op.op, results.length, describeThrown(err))
+          throw new WorkspaceEditError(index, op.op, results.length, err)
         }
       }
 

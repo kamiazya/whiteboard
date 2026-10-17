@@ -5,7 +5,7 @@
  * "creating" it again.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
@@ -54,10 +54,12 @@ beforeAll(async () => {
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let app: ReturnType<typeof createApp>
+let layout: ReturnType<typeof testDataLayout>
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-mcp-membership-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
+  layout = testDataLayout()
   const members = createMemberProfileStore(handle.db)
   const providers = oidcProviders(
     signInConfigSchema.parse({
@@ -83,7 +85,7 @@ beforeEach(async () => {
       }),
     }),
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
-    dataLayout: testDataLayout(),
+    dataLayout: layout,
     people: {
       members,
       sessions: createSignInSessionStore(handle.db),
@@ -119,9 +121,9 @@ afterEach(async () => {
 const FULL_SCOPE =
   'mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write'
 
-/** An MCP client for `sub`, holding a typed access token from `claude-code`. */
-async function agentOf(sub: string, scope = FULL_SCOPE) {
-  const token = await new SignJWT({ azp: 'claude-code', scope, name: sub })
+/** A typed access token from `claude-code` for `sub`. */
+function tokenFor(sub: string, scope: string) {
+  return new SignJWT({ azp: 'claude-code', scope, name: sub })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
     .setIssuer(ISSUER)
     .setAudience(PUBLIC_URL)
@@ -129,6 +131,11 @@ async function agentOf(sub: string, scope = FULL_SCOPE) {
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(privateKey)
+}
+
+/** An MCP client for `sub`, holding a typed access token from `claude-code`. */
+async function agentOf(sub: string, scope = FULL_SCOPE) {
+  const token = await tokenFor(sub, scope)
   const client = new Client({ name: `agent-${sub}`, version: '1.0.0' })
   const transport = new StreamableHTTPClientTransport(new URL(`${PUBLIC_URL}/mcp`), {
     fetch: async (input, init) => {
@@ -213,6 +220,37 @@ describe('server mode /mcp — a tool needs the scope its /api twin needs', () =
     } finally {
       await owner.close()
       await reader.close()
+    }
+  })
+})
+
+// A member can make a read fail as corrupt (an empty stored file, a read
+// racing a purge); the answer must not hand them where this server keeps its
+// data. The operator reads the detail in the log.
+describe('server mode — a corrupt stored file is refused without its storage path', () => {
+  it('answers corrupt_stored_data with no path and no data directory in the body', async () => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { workspaceId } = created.structuredContent as { workspaceId: string }
+      const dir = layout.workspaceFilesDir(workspaceId)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'empty1.png'), new Uint8Array(0))
+
+      const res = await app.request(
+        `${PUBLIC_URL}/api/w/${workspaceId}/document/notes/file/empty1`,
+        {
+          headers: { Authorization: `Bearer ${await tokenFor('ada', 'files:read')}` },
+        },
+      )
+      const text = await res.text()
+      expect(res.status, text).toBe(500)
+      expect(JSON.parse(text)).toMatchObject({ error: 'corrupt_stored_data' })
+      expect(text).not.toContain(tempDir)
+      expect(text).not.toContain('/')
+    } finally {
+      await ada.close()
     }
   })
 })
