@@ -55,13 +55,44 @@ export function resolveDataDir(
 
   // In the Codex sandbox, the home directory may not be writable.
   // Fall back to tmp only when there is no explicit env override.
-  return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
+  return tempFallbackDataDir(options.tmpDir)
+}
+
+/**
+ * The data dir used when the home directory cannot be written. Every local
+ * user shares the temp dir, so a fixed name there is one another user can
+ * create first and then read or rewrite every document in; the uid in the
+ * name gives each user their own, and `secureDataDir` refuses one somebody
+ * else prepared anyway. Without a uid (Windows) the temp dir is per-user.
+ */
+export function tempFallbackDataDir(
+  tmpDir: string = tmpdir(),
+  uid: number | undefined = process.getuid?.(),
+): string {
+  return resolve(tmpDir, uid === undefined ? '.whiteboard' : `.whiteboard-${uid}`)
+}
+
+/**
+ * Makes the data dir owner-only and refuses one this user cannot trust —
+ * another user's, or one other users can write — before anything is written
+ * into it. Every self-hosting root boots through this, so the stdio entry is
+ * held to what the daemon's startup lock already demands.
+ */
+export function secureDataDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: POSIX_DATA_DIR_MODE })
+  assertDataDirOwnedByUser(dir)
+  if (platform() === 'win32') return
+  try {
+    chmodSync(dir, POSIX_DATA_DIR_MODE)
+  } catch {
+    /* Tightening permissions is best-effort, as in canWriteDir. */
+  }
 }
 
 /**
  * Refuses a data dir another user owns. Whoever owns it controls `daemon.json`
  * and so the socket and token a client trusts — a real risk when the dir is
- * `$TMPDIR/.whiteboard`, which any user can create first. Mode bits say
+ * a directory in the shared temp dir, which any user can create first. Mode bits say
  * nothing here: an owner-only dir is exactly what that user would make.
  * A dir that does not exist yet is fine; where there is no uid (Windows)
  * there is nothing to compare.

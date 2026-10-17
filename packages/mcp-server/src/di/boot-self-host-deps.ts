@@ -5,11 +5,12 @@ import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { type StoreScope, storeScope } from '../server/store/store-scope.js'
 import type { DataLayout } from '../server/tenant/data-layout-seam.js'
+import { secureDataDir } from '../shared/data-dir-secure.js'
 import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
 
 /**
- * Makes a data dir ready to be read: migrated, and holding the workspace the
- * current-workspace marker names. Both steps are memoized per data dir, so a
+ * Makes a data dir ready to be read: owned by this user and closed to others,
+ * migrated, and holding the workspace the current-workspace marker names. Both steps are memoized per data dir, so a
  * second caller on a prepared dir pays nothing.
  *
  * The order is the contract. `getDb` opens the file and nothing more, so a
@@ -20,6 +21,7 @@ import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
  * naming both here is what stops that being load-bearing.
  */
 async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
+  secureDataDir(dataDir)
   await prepareDataDir(dataDir)
   await ensureWorkspaceId(dataDir)
 }
