@@ -379,6 +379,24 @@ describe('sign-in through an OIDC provider', () => {
     expect(unproduced).toEqual([])
   })
 
+  // A browser signing in anew, as itself or as somebody else, leaves nothing
+  // behind that the cookie it is about to overwrite could still open.
+  it('ends the session the browser held before signing in again', async () => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const before = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    idp.next({ sub: 'bob-1' })
+    const started = await app.request(`${BASE}/auth/sign-in/corp`)
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    const res = await app.request(idp.authorize(started.headers.get('location') as string), {
+      headers: { cookie: `__Host-wb_signin=${binding}; ${SESSION_COOKIE}=${before}` },
+    })
+    const after = cookieFrom(res, SESSION_COOKIE) as string
+    expect(after).toBeTruthy()
+    expect(await signIn.sessions.resolve(before, Date.now())).toBeNull()
+    expect(await signIn.sessions.resolve(after, Date.now())).toMatchObject({ subject: 'bob-1' })
+  })
+
   it('ends the session on sign-out', async () => {
     const { app, signIn } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })

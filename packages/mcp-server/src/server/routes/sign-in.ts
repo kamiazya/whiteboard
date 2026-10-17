@@ -202,6 +202,10 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
     now: now(),
   })
   if (!done.ok) return refusedTo(c, done.reason)
+  // The cookie set below overwrites the one this browser held, and a session
+  // nobody can name any more is one only a thief of the old cookie can use.
+  const previous = getCookie(c, SESSION_COOKIE)
+  if (previous !== undefined) await deps.signIn.sessions.end(previous)
   setCookie(c, SESSION_COOKIE, done.sessionToken, {
     ...cookieOptions,
     maxAge: Math.floor(deps.signIn.sessionTtlMs / 1000),
