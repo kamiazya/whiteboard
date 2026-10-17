@@ -53,6 +53,7 @@ describe('a store scope', () => {
         id: 'p-two',
         displayName: 'Two',
         accountId: 'a-two',
+        handle: 'two',
         createdAt: 1,
         updatedAt: 1,
       })
@@ -72,6 +73,7 @@ describe('a store scope', () => {
         id: 'p-a',
         displayName: 'A',
         accountId: 'a-a',
+        handle: 'a',
         createdAt: 1,
         updatedAt: 1,
       })

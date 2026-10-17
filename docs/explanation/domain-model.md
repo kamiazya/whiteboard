@@ -23,6 +23,18 @@ modes, how documents are identified, and how a workspace keeps them. Read
   shows you. Renaming changes what you chose and never the identity — which
   is why a link built on the identifier keeps working across a rename, and
   one built on the short name does not.
+
+  The short name only has to be unique among the workspaces of one
+  **namespace**
+  ([ADR-0053](../contributing/adr/0053-workspace-segment-namespace.md)). A
+  keeper with one person — the browser, a daemon on your own machine — has a
+  single namespace, `me`. On a shared server every person has their own,
+  named by a handle derived from their display name the first time they sign
+  in, and a workspace belongs to the namespace of whoever created it. Two
+  people can each have a `design` workspace there, and creating or renaming
+  one never tells you whether somebody else uses that name. A short name you
+  type means one of your own workspaces; one shared with you from somebody
+  else's namespace is addressed by its identifier.
 - **Display name** — the human title of a document. Optional; a document
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.

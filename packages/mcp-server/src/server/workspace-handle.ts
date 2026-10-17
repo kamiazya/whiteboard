@@ -1,22 +1,55 @@
+import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { workspaceRegistry } from './store/document-store.js'
 import { validateWorkspaceId, validationErrorBody } from './validators.js'
 
 /**
+ * The namespace of a caller who has none of their own: a server-mode grant
+ * that names no user of this tenant. No row's namespace can equal it (the
+ * empty string is no handle), so a bare segment from such a caller matches
+ * nothing, while a canonical id still resolves.
+ */
+export const NO_NAMESPACE = ''
+
+/**
+ * Whose namespace a bare segment means for this request (ADR-0053): the
+ * signed-in user's handle on server mode, which its auth middleware records
+ * before any handle is resolved. A request nothing recorded one for is a
+ * single-person keeper's — the local daemon, stdio — whose one namespace is
+ * `me`.
+ */
+const callerNamespaces = new WeakMap<Request, string>()
+
+export function rememberCallerNamespace(c: Context, namespace: string): void {
+  callerNamespaces.set(c.req.raw, namespace)
+}
+
+export function callerNamespaceOf(c: Context): string {
+  return callerNamespaces.get(c.req.raw) ?? SINGLE_PERSON_NAMESPACE
+}
+
+/**
  * ADR-0019: an address carries a HANDLE, which is either a workspace's
- * per-keeper `segment` or its canonical id. This is the daemon's one place
- * that turns one into the other, so no route, tool or socket can answer
- * differently — `resolveWorkspaceHandle` in ports fixes the precedence, and
- * this fixes which registry it reads.
+ * `segment` or its canonical id. This is the daemon's one place that turns
+ * one into the other, so no route, tool or socket can answer differently —
+ * `resolveWorkspaceHandle` in ports fixes the precedence, and this fixes
+ * which registry it reads.
+ *
+ * A segment is unique per namespace (ADR-0053), so a bare one is looked up in
+ * `callerNamespace` alone: resolving it across the registry would answer
+ * with whoever else holds that segment.
  *
  * TOTAL by design: a handle matching nothing passes through unchanged, so
  * every existing refusal keeps the status, body and wording it already had,
  * and names what the caller actually typed rather than something derived.
  */
-export async function resolveWorkspaceHandleToId(handle: string): Promise<string> {
+export async function resolveWorkspaceHandleToId(
+  handle: string,
+  callerNamespace: string = SINGLE_PERSON_NAMESPACE,
+): Promise<string> {
   const entries = await workspaceRegistry().listWorkspaces()
-  return resolveWorkspaceHandle(entries, handle)?.workspaceId ?? handle
+  return resolveWorkspaceHandle(entries, handle, callerNamespace)?.workspaceId ?? handle
 }
 
 /**
@@ -39,7 +72,7 @@ export async function workspaceIdFromHandle(c: Context, handle: string): Promise
   }
   const hit = perRequest.get(handle)
   if (hit !== undefined) return hit
-  const workspaceId = await resolveWorkspaceHandleToId(handle)
+  const workspaceId = await resolveWorkspaceHandleToId(handle, callerNamespaceOf(c))
   perRequest.set(handle, workspaceId)
   return workspaceId
 }

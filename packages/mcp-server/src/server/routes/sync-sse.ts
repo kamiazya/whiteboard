@@ -43,7 +43,7 @@ import {
   unregisterSyncStream,
 } from '../sync-streams.js'
 import { cachedViewportRequest } from '../viewport-requests.js'
-import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
+import { callerNamespaceOf, resolveWorkspaceHandleToId } from '../workspace-handle.js'
 import { type ReadJsonBodyOptions, readJsonBody } from './read-json-body.js'
 
 const log = getLogger('sync-sse')
@@ -70,7 +70,7 @@ function unknownStream(c: Context, streamId: string): Response {
  */
 async function canonicalDocKey(
   key: string,
-  resolve: (handle: string) => Promise<string> = resolveWorkspaceHandleToId,
+  resolve: (handle: string) => Promise<string>,
 ): Promise<string> {
   const handle = workspaceHandleOfSyncKey(key)
   if (handle === null) return key
@@ -84,14 +84,17 @@ async function canonicalDocKey(
 /**
  * Each key as the client wrote it, beside its canonical form. A handle is
  * resolved once however many keys name it, since each resolution reads the
- * workspace registry.
+ * workspace registry — and in the caller's namespace, as every address is.
  */
-async function canonicalKeys(keys: readonly string[]): Promise<Array<{ key: string; as: string }>> {
+async function canonicalKeys(
+  c: Context,
+  keys: readonly string[],
+): Promise<Array<{ key: string; as: string }>> {
   const resolutions = new Map<string, Promise<string>>()
   const resolve = (handle: string) => {
     let resolution = resolutions.get(handle)
     if (resolution === undefined) {
-      resolution = resolveWorkspaceHandleToId(handle)
+      resolution = resolveWorkspaceHandleToId(handle, callerNamespaceOf(c))
       resolutions.set(handle, resolution)
     }
     return resolution
@@ -215,7 +218,7 @@ async function handleSubscribe(c: Context, options: SyncSseRouterOptions) {
 
   // Resolved before the gate, so membership is decided for the workspace
   // a key actually reaches, whichever handle named it.
-  const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
+  const subscribe = await canonicalKeys(c, parsed.data.subscribe ?? [])
   // Dropped by the spelling it was subscribed under, so no resolution.
   const unsubscribe = parsed.data.unsubscribe ?? []
 
@@ -262,7 +265,12 @@ async function handleMessage(c: Context, options: SyncSseRouterOptions) {
   const parsed = await readJsonBody(c, syncClientMessageRequestSchema, SYNC_BODY)
   if ('refusal' in parsed) return parsed.refusal
 
-  const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
+  const doc = {
+    key: await canonicalDocKey(parsed.data.doc, (handle) =>
+      resolveWorkspaceHandleToId(handle, callerNamespaceOf(c)),
+    ),
+    as: parsed.data.doc,
+  }
   const refusal = await firstMembershipRefusal(c, admit, [doc.key])
   if (refusal) return c.json(refusal, 403)
 

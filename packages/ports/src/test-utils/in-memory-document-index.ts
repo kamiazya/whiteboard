@@ -98,7 +98,7 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
    * gap the conformance suite exists to close.
    */
   async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
-    const { workspaceId, segment, displayName } = createWorkspaceInputSchema.parse(input)
+    const { workspaceId, namespace, segment, displayName } = createWorkspaceInputSchema.parse(input)
     // Creating one that exists leaves it ALONE — it is not an error, and it is
     // not an overwrite either. The bare `{ workspaceId }` call is what an
     // "ensure it exists" caller makes, and treating it as a full row would
@@ -106,6 +106,7 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     if (this.#workspaces.has(workspaceId)) return
     this.#workspaces.set(workspaceId, {
       workspaceId,
+      ...(namespace === undefined ? {} : { namespace }),
       ...(segment === undefined ? {} : { segment }),
       ...(displayName === undefined ? {} : { displayName }),
     })
@@ -122,10 +123,13 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     if (
       segment !== undefined &&
       [...this.#workspaces.values()].some(
-        (entry) => entry.segment === segment && entry.workspaceId !== workspaceId,
+        (entry) =>
+          entry.segment === segment &&
+          entry.namespace === current.namespace &&
+          entry.workspaceId !== workspaceId,
       )
     ) {
-      throw new WorkspaceSegmentTakenError(segment)
+      throw new WorkspaceSegmentTakenError(segment, current.namespace)
     }
     const renamed: WorkspaceEntry = {
       ...current,
@@ -136,8 +140,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     return renamed
   }
 
-  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
-    return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
+  async resolveWorkspace(handle: string, callerNamespace?: string): Promise<WorkspaceEntry | null> {
+    return resolveWorkspaceHandle(await this.listWorkspaces(), handle, callerNamespace)
   }
 
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {

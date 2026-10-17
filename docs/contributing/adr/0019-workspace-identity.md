@@ -52,7 +52,7 @@ keepers:
 | layer | field | rules |
 |---|---|---|
 | canonical | `workspaceId` | machine-minted bare ULID. The only key references, versions/branches, storage rows, and sync ever use. Never shown as chrome, never typed by a human. |
-| user-facing | `segment` | unique per keeper, renameable, URL-safe. Owned by the keeper's registry (daemon `workspaces` table row / browser IndexedDB registry row), **not** CRDT-synced state. |
+| user-facing | `segment` | unique per keeper (per namespace since [ADR-0053](0053-workspace-segment-namespace.md)), renameable, URL-safe. Owned by the keeper's registry (daemon `workspaces` table row / browser IndexedDB registry row), **not** CRDT-synced state. |
 | naming | `displayName` | free text, no uniqueness, no identity duties. Also registry-owned. |
 
 Decisions taken with the words they were taken in (user decisions,

@@ -7,7 +7,11 @@
  */
 import type { Context } from 'hono'
 import { getLogger } from '../log.js'
-import { workspaceIdFromHandle } from '../workspace-handle.js'
+import {
+  NO_NAMESPACE,
+  rememberCallerNamespace,
+  workspaceIdFromHandle,
+} from '../workspace-handle.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
@@ -85,6 +89,34 @@ export interface FirstMember {
   /** This tenant's user behind the request, or null when there is none to make a member. */
   profileFor(c: Context): Promise<string | null>
   add(workspaceId: string, profileId: string): Promise<void>
+}
+
+/**
+ * Whose namespace a bare segment means for this grant (ADR-0053): its user's
+ * handle, or a namespace nobody holds when the grant names no user of this
+ * tenant — an operator-issued grant, or a bearer with no user here. Those
+ * still reach a workspace by its canonical id.
+ */
+export async function namespaceOfGrant(
+  grant: ResolvedGrant,
+  members: MemberProfileStore,
+): Promise<string> {
+  if (grant.person === undefined) return NO_NAMESPACE
+  return (await members.profileForBinding(grant.person))?.handle ?? NO_NAMESPACE
+}
+
+/**
+ * Server mode's record of who a request is, for everything after its auth
+ * middleware: the grant, and whose namespace a bare segment means. Recorded
+ * before the gate, since resolving the address it checks reads the latter.
+ */
+export async function rememberCaller(
+  c: Context,
+  grant: ResolvedGrant,
+  members: MemberProfileStore,
+): Promise<void> {
+  rememberGrant(c, grant)
+  rememberCallerNamespace(c, await namespaceOfGrant(grant, members))
 }
 
 /** The grant the middleware resolved for this request, if it reached one. */

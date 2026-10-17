@@ -24,7 +24,11 @@ import type { MiddlewareHandler } from 'hono'
 import type { z } from 'zod'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validateDocumentPath, validationErrorBody } from '../../validators.js'
-import { refuseMalformedHandle, workspaceIdFromHandle } from '../../workspace-handle.js'
+import {
+  callerNamespaceOf,
+  refuseMalformedHandle,
+  workspaceIdFromHandle,
+} from '../../workspace-handle.js'
 
 export function defaultHumanDisplayName(): string {
   try {
@@ -184,7 +188,7 @@ export function refuseUnknownWorkspace(deps: Pick<ServerDeps, 'documentIndex'>):
     if (refuseMalformedHandle(c, handle) !== null) return next()
     // The index `/api/v1` asks, and for the same reason: it takes either layer
     // of the address (ADR-0019) and is the registry the operations read.
-    if ((await deps.documentIndex.resolveWorkspace(handle)) === null) {
+    if ((await deps.documentIndex.resolveWorkspace(handle, callerNamespaceOf(c))) === null) {
       return c.json(workspaceNotFoundRefusal(handle), 404)
     }
     await next()

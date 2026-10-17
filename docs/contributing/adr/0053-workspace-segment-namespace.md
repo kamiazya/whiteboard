@@ -3,8 +3,9 @@
 **Status:** Accepted, 2026-10-17. The owner chose the direction that day
 ("namespace segments per owner", design first), then answered the four open
 questions this record raised. The answers are the Decision section below.
-Nothing is built yet; the implementation is separate work, sliced at the
-end of this record.
+The implementation is sliced at the end of this record; slices 1 and 2
+(model/ports, and the daemon registry with its three oracle paths) are
+built, slices 3 and 4 are not.
 
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
@@ -458,7 +459,7 @@ in `workspaceIdSchema`, and describing all three forms, changes a published
 tool surface. Its exact shape is settled by that slice's `mcp-tool-surface`
 procedure, not here.
 
-### Implementation slices (not started)
+### Implementation slices (1 and 2 built)
 
 The slices are listed in `architecture-map.md`'s dependency order. Each
 starts from a failing test at its nearest layer.
@@ -484,6 +485,16 @@ starts from a failing test at its nearest layer.
        `not_a_member`.
    - The same slice adds the unauthenticated-uniformity test from answer
      1, and the cross-tenant case from "A latent second instance".
+   - As built (migration `0046-workspace-namespace`): a workspace with NO
+     membership at all is placed in `me` rather than refused. Every local
+     daemon workspace is such a row, so refusing would stop every local
+     daemon from migrating; on server mode a workspace nobody is a member of
+     admits nobody, and `me` — which no server-mode user can hold — leaves it
+     reachable by its id alone until an operator grants it a member. A
+     workspace with members but no owner is refused, as above. Until slice 3
+     the server-mode listing omits the segment of a workspace held in
+     another namespace, since the web app would otherwise address it by a
+     bare segment that means the caller's own namespace.
 3. **The web app's grammar.**
    - `workspacePath`, `documentPath`, `parseWorkspaceRoute` and
      `workspaceHandle` move to `/w/<handle>/<segment>`.

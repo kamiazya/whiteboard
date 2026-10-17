@@ -64,6 +64,20 @@ describe('grantMember', () => {
     expect(await members.isWorkspaceMember('ws-01HX', ada.id)).toBe('member')
   })
 
+  // ADR-0053: one segment may sit in several namespaces, and the operator
+  // has none of their own to mean by a bare one.
+  it('finds a segment held in a namespace only when the address names it', async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-ada', { namespace: 'ada', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    const bare = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+    const qualified = await grantMember(handle.db, { workspaceId: 'bob/plans', user: ada.id })
+
+    expect(bare.kind).toBe('unknown-workspace')
+    expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('ws-bob')
+  })
+
   it('finds a user by their exact display name', async () => {
     const ada = await userNamed('Ada', 'ada-1')
     await userNamed('Bob', 'bob-1')

@@ -1,9 +1,13 @@
+import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import type { TenantDatabase } from './tenant-database.js'
 
 /**
- * Did this write violate the `workspaces_segment_unique` index (migration
- * 0018) rather than fail for some other reason?
+ * Did this write violate the segment's unique index — keyed on
+ * (tenantId, namespace, segment) since migration 0046, on `segment` alone
+ * before it — rather than fail for some other reason? SQLite names every
+ * column of the index it refused, so `workspaces.segment` is in the message
+ * under either.
  *
  * Both spellings are accepted because the driver's error SHAPE moved under
  * us: libsql 0.3.19 reported `code: 'SQLITE_CONSTRAINT_UNIQUE'`, while
@@ -42,9 +46,10 @@ export interface WorkspaceIdentity {
 export async function upsertWorkspaceRow(
   db: TenantDatabase,
   workspaceId: string,
-  identity: WorkspaceIdentity = {},
+  identity: WorkspaceIdentity & { namespace?: string } = {},
 ): Promise<void> {
   const now = Date.now()
+  const namespace = identity.namespace ?? SINGLE_PERSON_NAMESPACE
   try {
     await db
       .insertInto('workspaces')
@@ -52,6 +57,7 @@ export async function upsertWorkspaceRow(
         id: workspaceId,
         displayName: identity.displayName ?? null,
         segment: identity.segment ?? null,
+        namespace,
         createdAt: now,
         updatedAt: now,
       })
@@ -59,12 +65,15 @@ export async function upsertWorkspaceRow(
       .execute()
   } catch (err) {
     // `onConflict` above names only the `id` unique constraint; a violation
-    // of the SEPARATE `workspaces_segment_unique` index (migration 0018)
-    // still raises normally and is translated here into the named port
-    // error, so a caller sees a segment collision distinctly from any other
-    // write failure.
+    // of the SEPARATE segment index still raises normally and is translated
+    // here into the named port error, so a caller sees a segment collision
+    // distinctly from any other write failure.
     if (identity.segment !== undefined && isSegmentUniqueViolation(err)) {
-      throw new WorkspaceSegmentTakenError(identity.segment)
+      throw new WorkspaceSegmentTakenError(
+        identity.segment,
+        // A single-person keeper has one namespace; naming it says nothing.
+        namespace === SINGLE_PERSON_NAMESPACE ? undefined : namespace,
+      )
     }
     throw err
   }
@@ -82,7 +91,9 @@ export async function upsertWorkspaceRow(
  *
  * The unique index is what makes the collision check indivisible: SQLite
  * refuses the UPDATE itself, so there is no window between a check and the
- * write it authorises. The workspace's OWN segment is not a conflict —
+ * write it authorises. It is keyed on the row's own namespace, so a rename
+ * collides only with segments that namespace already holds (ADR-0053) — the
+ * namespace is never an input here. The workspace's OWN segment is not a conflict —
  * the row it collides with is itself, and `where id = ?` means the update
  * is the row.
  */

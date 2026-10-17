@@ -2,7 +2,8 @@
  * ADR-0046 decision 10 through server mode's `/mcp`, with the real JWT
  * validator and a real MCP client: a workspace an agent creates is its
  * person's, and another person's agent reaches it neither by reading nor by
- * "creating" it again.
+ * "creating" it again — a create naming its segment mints that agent's own
+ * (ADR-0053).
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -183,10 +184,60 @@ describe('server mode /mcp — a workspace belongs to the people in it', () => {
       expect(read.isError).toBe(true)
       expect(textOf(read)).toMatch(/not_a_member/)
 
-      // createWorkspace on an existing workspace is an ordinary write.
-      const again = await eve.call('wb_workspace_edit', createPlans)
+      // By its id, which names it in any namespace, a create is an ordinary
+      // write to somebody else's workspace.
+      const id = created.structuredContent?.workspaceId
+      expect(id).toMatch(/^[0-9A-Z]{26}$/)
+      const again = await eve.call('wb_workspace_edit', { ...createPlans, workspaceId: id })
       expect(again.isError).toBe(true)
       expect(textOf(again)).toMatch(/not_a_member/)
+    } finally {
+      await ada.close()
+      await eve.close()
+    }
+  })
+})
+
+// ADR-0053: a bare segment means the caller's own namespace, so whether some
+// other person holds it is never the answer to a create.
+describe("server mode /mcp — a segment is the caller's own", () => {
+  it("mints the agent's own workspace under a segment another person holds", async () => {
+    const ada = await agentOf('ada')
+    const eve = await agentOf('eve')
+    try {
+      expect((await ada.call('wb_workspace_edit', createPlans)).isError).toBeFalsy()
+
+      const eves = await eve.call('wb_workspace_edit', {
+        ...createPlans,
+        ops: [{ op: 'document.create', path: 'mine', kind: 'markdown', markdown: 'eve' }],
+      })
+      expect(eves.isError, textOf(eves)).toBeFalsy()
+
+      const paths = async (agent: typeof ada) => {
+        const listed = await agent.call('wb_document_list', { workspaceId: 'plans' })
+        expect(listed.isError, textOf(listed)).toBeFalsy()
+        const documents = (listed.structuredContent?.documents ?? []) as { path: string }[]
+        return documents.map((d) => d.path)
+      }
+      expect(await paths(ada)).toEqual(['notes'])
+      expect(await paths(eve)).toEqual(['mine'])
+    } finally {
+      await ada.close()
+      await eve.close()
+    }
+  })
+
+  it('refuses a read of a segment only another person holds as it refuses one nobody holds', async () => {
+    const ada = await agentOf('ada')
+    const eve = await agentOf('eve')
+    try {
+      expect((await ada.call('wb_workspace_edit', createPlans)).isError).toBeFalsy()
+
+      const held = await eve.call('wb_document_list', { workspaceId: 'plans' })
+      const absent = await eve.call('wb_document_list', { workspaceId: 'nothing' })
+
+      expect(held.isError).toBe(true)
+      expect(textOf(held)).toBe(textOf(absent).replace('nothing', 'plans'))
     } finally {
       await ada.close()
       await eve.close()

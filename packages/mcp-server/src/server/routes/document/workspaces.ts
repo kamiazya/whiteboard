@@ -10,7 +10,11 @@ import {
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
-import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  generateDocumentId,
+  SINGLE_PERSON_NAMESPACE,
+} from '@kamiazya/whiteboard-model'
 import {
   type DocumentIndex,
   DocumentPathContestedError,
@@ -18,6 +22,7 @@ import {
   isDatabaseBusy,
   isWorkspaceNotFoundError,
   NoRoomForCopyError,
+  type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
@@ -34,6 +39,7 @@ import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate
 import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath } from '../../validators.js'
 import {
+  callerNamespaceOf,
   parseWorkspaceHandle,
   refuseMalformedHandle,
   workspaceIdFromHandle,
@@ -133,11 +139,19 @@ function logFollowOutcome(workspaceId: string, moved: WbDocumentMoveResult): voi
 async function summarizeWorkspace(
   deps: ServerDeps,
   options: WorkspacesRouterOptions,
-  row: { workspaceId: string; segment?: string; displayName?: string },
+  row: WorkspaceEntry,
+  callerNamespace: string,
 ) {
+  // A bare segment means the caller's own namespace (ADR-0053), and the web
+  // app addresses a listed workspace by its segment when it carries one — so
+  // a segment from somebody else's namespace would address nothing for this
+  // caller. Such a row is listed by its id alone until addresses carry the
+  // namespace.
+  const addressable =
+    row.segment !== undefined && (row.namespace ?? SINGLE_PERSON_NAMESPACE) === callerNamespace
   return {
     workspaceId: row.workspaceId,
-    ...(row.segment === undefined ? {} : { segment: row.segment }),
+    ...(addressable ? { segment: row.segment } : {}),
     ...(row.displayName === undefined ? {} : { displayName: row.displayName }),
     documentCount: await countDocuments(deps.documentIndex, row.workspaceId),
     ...(options.replicaTier === undefined
@@ -159,15 +173,24 @@ async function creatorOf(
 async function createWorkspaceRow(
   deps: ServerDeps,
   displayName: string,
+  namespace: string,
 ): Promise<WorkspaceSummary> {
   const workspaceId = generateDocumentId()
   const base = deriveWorkspaceSegment(displayName)
-  // Advisory: the registry's unique index decides, and the caller translates
-  // its refusal when two creates both found the same candidate free.
-  const taken = new Set((await deps.documentIndex.listWorkspaces()).map((w) => w.segment))
+  // Only the creator's own namespace is asked (ADR-0053): it is the one the
+  // new segment must be unique in, and the creator already sees all of it, so
+  // a suffix tells them nothing about anybody else's. Advisory: the
+  // registry's unique index decides, and the caller translates its refusal
+  // when two creates both found the same candidate free.
+  const taken = new Set(
+    (await deps.documentIndex.listWorkspaces())
+      .filter((w) => (w.namespace ?? SINGLE_PERSON_NAMESPACE) === namespace)
+      .map((w) => w.segment),
+  )
   const segment = base === undefined ? undefined : await firstFreeSegment(base, (s) => taken.has(s))
   await deps.documentIndex.createWorkspace({
     workspaceId,
+    ...(namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace }),
     ...(segment === undefined ? {} : { segment }),
     displayName,
   })
@@ -203,6 +226,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // control a person opens by clicking. Revisit if this list ever feeds
       // something that polls.
       const counted = []
+      const callerNamespace = callerNamespaceOf(c)
       for (const row of workspaces) {
         // ponytail: N x (profileForBinding + isWorkspaceMember) per list — two
         // lookups a row, the first answering the same person every time; a
@@ -216,7 +240,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
           continue
         }
         // Awaited IN the loop, never gathered: see the note above.
-        counted.push(await summarizeWorkspace(deps, options, row))
+        counted.push(await summarizeWorkspace(deps, options, row, callerNamespace))
       }
       const response: ListWorkspacesResponse = { workspaces: counted }
       return c.json(response)
@@ -246,7 +270,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
 
     try {
       const deps = options.serverDeps
-      const summary = await createWorkspaceRow(deps, displayName)
+      const summary = await createWorkspaceRow(deps, displayName, callerNamespaceOf(c))
       if (creator !== null) await options.firstMember?.add(summary.workspaceId, creator)
       return c.json(summary, 201)
     } catch (err) {

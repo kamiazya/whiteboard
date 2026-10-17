@@ -28,12 +28,15 @@ export async function grantMember(
   db: TenantDatabase,
   { workspaceId: workspaceHandle, user }: { workspaceId: string; user: string },
 ): Promise<GrantMemberOutcome> {
-  // A handle, as every other surface reads one (ADR-0019): the segment an
-  // operator sees in a URL, or the canonical id.
-  const rows = await db.selectFrom('workspaces').select(['id', 'segment']).execute()
+  // A handle, as every other surface reads one (ADR-0019): the canonical id,
+  // or a segment qualified by the namespace holding it (ADR-0053). The
+  // operator has no namespace of their own, so a bare segment reaches only
+  // the holder-less `me` one — never whichever of several namespaces holds it.
+  const rows = await db.selectFrom('workspaces').select(['id', 'namespace', 'segment']).execute()
   const workspace = resolveWorkspaceHandle(
     rows.map((row) => ({
       workspaceId: row.id,
+      namespace: row.namespace,
       ...(row.segment === null ? {} : { segment: row.segment }),
     })),
     workspaceHandle,

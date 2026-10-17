@@ -41,7 +41,8 @@
  */
 
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { deriveUserHandle, generateDocumentId, userHandleSchema } from '@kamiazya/whiteboard-model'
+import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 import { z } from 'zod'
 import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
 
@@ -50,6 +51,7 @@ const memberProfileRowSchema = z
     id: z.string().min(1),
     displayName: z.string().min(1),
     accountId: z.string().min(1),
+    handle: userHandleSchema,
     createdAt: z.number(),
     updatedAt: z.number(),
     deactivatedAt: z.number().nullable(),
@@ -190,14 +192,37 @@ async function loadProfileWhere(
   return toProfile(row, await passkeysOf(db, row.accountId))
 }
 
+/**
+ * A handle no user of this tenant holds, derived from the display name
+ * (ADR-0053 decision 1). Its existence is visible to the tenant's signed-in
+ * users, which the ADR accepts; nothing unauthenticated reaches this. Past the
+ * suffix series' bound the handle carries a fresh id instead, since a person
+ * without one has no address at all.
+ */
+async function freeHandleFor(db: TenantScoped, displayName: string): Promise<string> {
+  const held = async (handle: string) =>
+    (await db
+      .selectFrom('memberProfiles')
+      .select('id')
+      .where('handle', '=', handle)
+      .executeTakeFirst()) !== undefined
+  return (
+    (await firstFreeSegment(deriveUserHandle(displayName), held)) ??
+    `user-${generateDocumentId().toLowerCase()}`
+  )
+}
+
 // Creates this tenant's user for an account (ADR-0045 decision 3: at most one
-// per account per tenant, which the unique index also holds).
+// per account per tenant, which the unique index also holds). The handle is
+// read and written inside the caller's transaction, and the (tenantId,
+// handle) index refuses whatever a concurrent mint slipped between them.
 async function insertUser(db: TenantScoped, accountId: string, displayName: string) {
   const now = Date.now()
   const row = {
     id: generateDocumentId(),
     displayName,
     accountId,
+    handle: await freeHandleFor(db, displayName),
     createdAt: now,
     updatedAt: now,
     deactivatedAt: null,

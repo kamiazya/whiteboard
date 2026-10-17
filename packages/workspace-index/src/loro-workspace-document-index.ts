@@ -167,8 +167,8 @@ export class LoroWorkspaceDocumentIndex
    * order. Nothing tree-shaped participates: a workspace's ADDRESS is a
    * property of who keeps it, the same reason `listWorkspaces` delegates.
    */
-  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
-    return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
+  async resolveWorkspace(handle: string, callerNamespace?: string): Promise<WorkspaceEntry | null> {
+    return resolveWorkspaceHandle(await this.listWorkspaces(), handle, callerNamespace)
   }
 
   /**

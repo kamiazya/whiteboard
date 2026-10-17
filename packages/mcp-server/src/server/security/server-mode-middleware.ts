@@ -12,7 +12,7 @@ import type { ResolvedGrant } from './credential-resolver.js'
 import type { InvitationStore } from './invitation-store.js'
 import { runAsMcpCaller } from './mcp-caller.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
-import { membershipRefusalFor, rememberGrant } from './membership-gate.js'
+import { membershipRefusalFor, rememberCaller } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
@@ -212,7 +212,7 @@ export function createServerModeApiAuthMiddleware(
     }
     const resolved = await serverModeGrant(c, authStrategy, routeScope.scopes, people)
     if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
-    rememberGrant(c, resolved.grant)
+    await rememberCaller(c, resolved.grant, people.members)
     const refused = await membershipRefusalFor(c, resolved.grant, people.members)
     return refused ?? next()
   }
