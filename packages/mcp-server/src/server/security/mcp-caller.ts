@@ -9,7 +9,9 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
+import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
 import { type MembershipDenial, membershipRefusal, workspaceAccess } from './workspace-access.js'
 
@@ -52,8 +54,21 @@ function refused(denial: MembershipDenial): Error {
 }
 
 /**
- * Wraps a record of tools so a call runs only for a member of the workspace it
- * names, and a call naming none is refused unless the tool is in
+ * `mcp:call` opens the endpoint; what the call may DO is the scope its `/api`
+ * twin needs. Without this a token scoped for reading could delete through
+ * `/mcp` what it could only read through `/api`. A tool with no entry is
+ * refused, so an unmapped tool fails closed. The scopes are not quoted, as no
+ * other auth refusal quotes them.
+ */
+function scopeRefusal(caller: McpCaller, toolName: string): Error | null {
+  const required = MCP_TOOL_SCOPES[toolName]
+  if (required !== undefined && hasRequiredScopes(caller.grant.scopes, required)) return null
+  return new Error(`insufficient_scope: this credential's scopes do not reach ${toolName}`)
+}
+
+/**
+ * Wraps a record of tools so a call runs only for a caller whose scopes reach
+ * the tool and who is a member of the workspace it names, and a call naming none is refused unless the tool is in
  * `WORKSPACE_OPTIONAL_TOOLS` — the same record-level seam as server-core's handle
  * resolution, and for its reason: a per-tool step is one the next tool would
  * not have. The tool objects are spread, so their schemas keep identity.
@@ -74,6 +89,8 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       execute: (input: never) => {
         const caller = callers.getStore()
         if (caller === undefined) return tool.execute(input)
+        const insufficient = scopeRefusal(caller, tool.name)
+        if (insufficient !== null) return Promise.reject(insufficient)
         const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
         if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
         if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {

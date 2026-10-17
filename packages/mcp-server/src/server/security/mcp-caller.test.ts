@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { gatedByMembership, runAsMcpCaller } from './mcp-caller.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
@@ -17,7 +18,7 @@ import { createMemberProfileStore, type MemberProfileStore } from './member-prof
 const ada = { authenticator: 'oidc:test', subject: 'ada' }
 const bearerOf = (person: typeof ada): ResolvedGrant => ({
   kind: 'external-bearer',
-  scopes: ['mcp:call'],
+  scopes: ALL_AUTH_SCOPES,
   person,
 })
 
@@ -37,7 +38,7 @@ function tools() {
   return gatedByMembership(
     {
       edit: {
-        name: 'wb_edit',
+        name: 'wb_workspace_edit',
         async execute(input: { workspaceId?: string; createWorkspace?: boolean; fail?: boolean }) {
           executed.push(input)
           if (input.createWorkspace && input.workspaceId && !workspaces.has(input.workspaceId)) {
@@ -152,7 +153,7 @@ describe('gatedByMembership', () => {
     const gated = gatedByMembership(
       {
         edit: {
-          name: 'wb_edit',
+          name: 'wb_workspace_edit',
           async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
             throw new Error('refused before minting')
           },
@@ -178,7 +179,7 @@ describe('gatedByMembership', () => {
     const gated = gatedByMembership(
       {
         edit: {
-          name: 'wb_edit',
+          name: 'wb_workspace_edit',
           async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
             workspaces.set('fresh', { workspaceId: 'ws-fresh', segment: 'fresh' })
             await members.addMember('ws-fresh', bob.id)
@@ -227,6 +228,26 @@ describe('gatedByMembership', () => {
     )
     await expect(asAda(() => gated.facetList.execute({ workspaceId: 'plans' }))).rejects.toThrow(
       /not_a_member/,
+    )
+  })
+
+  it('refuses a tool its scopes do not reach before asking about membership', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await members.addMember('ws-plans', profile.id)
+    const reader: ResolvedGrant = { ...bearerOf(ada), scopes: ['mcp:call', 'canvas:read'] }
+    await expect(
+      runAsMcpCaller({ grant: reader, members }, () => tools().execute({ workspaceId: 'plans' })),
+    ).rejects.toThrow(/insufficient_scope/)
+    expect(executed).toEqual([])
+  })
+
+  it('refuses a tool that has no scope entry, whatever the grant holds', async () => {
+    const gated = gatedByMembership(
+      { unmapped: { name: 'wb_unmapped', execute: async (input: unknown) => input } },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+    )
+    await expect(asAda(() => gated.unmapped.execute({ workspaceId: 'plans' }))).rejects.toThrow(
+      /insufficient_scope/,
     )
   })
 })

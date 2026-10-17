@@ -114,9 +114,14 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+// Everything a tool on /mcp can need, so the membership cases below are about
+// membership alone.
+const FULL_SCOPE =
+  'mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write'
+
 /** An MCP client for `sub`, holding a typed access token from `claude-code`. */
-async function agentOf(sub: string) {
-  const token = await new SignJWT({ azp: 'claude-code', scope: 'mcp:call', name: sub })
+async function agentOf(sub: string, scope = FULL_SCOPE) {
+  const token = await new SignJWT({ azp: 'claude-code', scope, name: sub })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
     .setIssuer(ISSUER)
     .setAudience(PUBLIC_URL)
@@ -141,6 +146,7 @@ async function agentOf(sub: string) {
       client.callTool({ name, arguments: args }) as Promise<{
         isError?: boolean
         content: Array<{ text?: string }>
+        structuredContent?: Record<string, unknown>
       }>,
     close: () => transport.close(),
   }
@@ -175,6 +181,38 @@ describe('server mode /mcp — a workspace belongs to the people in it', () => {
     } finally {
       await ada.close()
       await eve.close()
+    }
+  })
+})
+
+describe('server mode /mcp — a tool needs the scope its /api twin needs', () => {
+  it('refuses a delete to a read-scoped token and still answers its reads', async () => {
+    const owner = await agentOf('ada')
+    const reader = await agentOf('ada', 'canvas:read mcp:call')
+    try {
+      const created = await owner.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { results } = created.structuredContent as { results: Array<{ documentId: string }> }
+      const documentId = results[0]?.documentId
+
+      const deleted = await reader.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        ops: [{ op: 'document.delete', documentId }],
+      })
+      expect(deleted.isError).toBe(true)
+      expect(textOf(deleted)).toMatch(/insufficient_scope/)
+
+      const read = await reader.call('wb_document_get', {
+        workspaceId: 'plans',
+        documentIds: [documentId],
+      })
+      expect(read.isError, textOf(read)).toBeFalsy()
+      expect(read.structuredContent?.documents).toEqual([
+        expect.objectContaining({ documentId, content: expect.stringContaining('hello') }),
+      ])
+    } finally {
+      await owner.close()
+      await reader.close()
     }
   })
 })

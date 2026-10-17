@@ -282,6 +282,31 @@ owner remains, it adds an ordinary member.
 > and narrow it with `requiredClaims`. Then grant each existing workspace its
 > first member with `grant-member`.
 
+### Scopes a bearer token needs on `/mcp`
+
+Membership decides which workspaces a caller reaches. The token's `scope`
+claim decides what it may do there. `/mcp` itself needs `mcp:call`. Each
+tool also needs the scope its HTTP API counterpart needs, so a token can do
+the same things through either surface:
+
+| Scope | Tools |
+| --- | --- |
+| `canvas:read` | `wb_document_get`, `wb_document_search`, `wb_canvas_snapshot`, `wb_scene_render`, `wb_facet_list`, `canvas_view` |
+| `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
+| `workspace:read` | `wb_document_list` |
+| `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
+| `versions:read` | `wb_version_list` |
+| `versions:write` | `wb_version_save`, `wb_version_restore` |
+
+A call without the scope fails with `insufficient_scope` and changes nothing.
+A token scoped `mcp:call canvas:read` can read documents but cannot edit or
+delete them. To give an agent everything, ask your identity provider for
+`mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write`.
+Before this, `mcp:call` alone allowed every tool. A token that carries only
+`mcp:call` now has no tool it can call.
+
+The local daemon is unchanged: its token can do everything.
+
 ### Administrators
 
 A server's **administrators** manage its people. They can list every user,
