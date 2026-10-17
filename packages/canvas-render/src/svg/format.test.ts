@@ -92,6 +92,21 @@ describe('sanitizeHref', () => {
     expect(sanitizeHref('docs/\x01a')).toBe('docs/a')
   })
 
+  it('rejects a scheme-less network-path href, which leaves the page origin', () => {
+    // Under an http(s) base the URL parser reads `\\` as `/`, so each of
+    // these resolves to another host while looking scheme-less.
+    expect(sanitizeHref('//evil.example/x')).toBe('#')
+    expect(sanitizeHref('\\\\evil.example/x')).toBe('#')
+    expect(sanitizeHref('/\\evil.example/x')).toBe('#')
+    expect(sanitizeHref('\t//evil.example/x')).toBe('#')
+    expect(sanitizeHref('/\n/evil.example/x')).toBe('#')
+  })
+
+  it('keeps a root-relative path', () => {
+    expect(sanitizeHref('/')).toBe('/')
+    expect(sanitizeHref('/docs/guide')).toBe('/docs/guide')
+  })
+
   it('leaves a relative path that merely CONTAINS a colon alone', () => {
     // The scheme pattern is anchored. Unanchored it finds `a:` in the middle
     // of an ordinary path and rewrites a working link to `#` — failing safe,
