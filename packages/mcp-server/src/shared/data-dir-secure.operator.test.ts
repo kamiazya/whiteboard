@@ -1,9 +1,10 @@
 /**
  * Server mode's data dir is named by the operator, and a platform may hand
  * the process one it does not own: a Kubernetes volume is root-owned and
- * shared through `fsGroup`. So `secureDataDir(dir, 'operator')` refuses only a
- * dir every user can write, and leaves the mode the operator chose — the
- * owner-only tightening is for the single-user roots.
+ * shared through `fsGroup`, and a bind mount is often opened to every uid. So
+ * `secureDataDir(dir, 'operator')` judges nothing and leaves the mode the
+ * operator chose — the owner-only check and tightening are for the
+ * single-user roots.
  */
 import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -27,10 +28,15 @@ describe.skipIf(!CHMOD_IS_OBSERVABLE)('secureDataDir for an operator-named dir',
     expect(statSync(dir).mode & 0o7777).toBe(0o2775)
   })
 
-  it('refuses a dir every user can write', () => {
+  it('accepts a bind mount the operator opened to every uid', () => {
     chmodSync(dir, 0o777)
+    expect(() => secureDataDir(dir, 'operator')).not.toThrow()
     expect(statSync(dir).mode & 0o777).toBe(0o777)
-    expect(() => secureDataDir(dir, 'operator')).toThrow(/writable by every user/)
+  })
+
+  it('still refuses that dir for a single-user root', () => {
+    chmodSync(dir, 0o777)
+    expect(() => secureDataDir(dir)).toThrow(/writable by other users/)
   })
 
   it('tightens the same dir to owner-only for a single-user root', () => {

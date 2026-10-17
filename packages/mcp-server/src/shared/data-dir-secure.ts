@@ -77,21 +77,11 @@ export function tempFallbackDataDir(
  * daemon), whose dir must be this user's own. `operator` is server mode,
  * where the operator names the dir and a platform may hand the process one
  * it does not own — a Kubernetes volume is root-owned and shared through
- * `fsGroup` — so only a dir anyone can write is refused, and its mode is
- * left as the operator set it.
+ * `fsGroup`, and a bind mount is often opened to every uid so the
+ * container's own user can write it — so the dir is created if missing and
+ * otherwise left exactly as the operator set it.
  */
 export type DataDirTrust = 'owner' | 'operator'
-
-function refuseWorldWritableDataDir(dir: string): void {
-  if (platform() === 'win32') return
-  const mode = Number(statSync(dir).mode)
-  if ((mode & 0o002) !== 0) {
-    throw new Error(
-      `the data directory ${dir} is writable by every user (mode ${(mode & 0o777).toString(8)}). ` +
-        'Remove write access for others (for example `chmod o-w`).',
-    )
-  }
-}
 
 /**
  * Makes the data dir owner-only and refuses one this user cannot trust —
@@ -102,7 +92,6 @@ function refuseWorldWritableDataDir(dir: string): void {
 export function secureDataDir(dir: string, trust: DataDirTrust = 'owner'): void {
   if (trust === 'operator') {
     mkdirSync(dir, { recursive: true })
-    refuseWorldWritableDataDir(dir)
     return
   }
   mkdirSync(dir, { recursive: true, mode: POSIX_DATA_DIR_MODE })

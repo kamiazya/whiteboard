@@ -427,8 +427,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user and make it
   owner-only. Server mode leaves its ownership and mode as the operator set
-  them — a platform volume may be owned by another user and shared through a
-  group — and refuses only one that every user can write.
+  them: a platform volume may be owned by another user and shared through a
+  group, and a bind mount is often opened to every uid so the container's
+  user can write it. Keeping that directory closed to other users of the
+  host is the operator's to arrange.
 
 ## Current limitations
 
