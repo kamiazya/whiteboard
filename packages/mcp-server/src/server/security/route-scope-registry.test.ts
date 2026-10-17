@@ -285,6 +285,7 @@ const WRITE_VERBS = ['POST', 'PUT', 'PATCH', 'DELETE']
 // that splits on write/read owes both halves.
 const SCOPE_DECISIONS = [
   ['runtime/ping', 'GET', '/api/runtime/ping', { kind: 'public' }],
+  ['runtime/proof', 'GET', '/api/runtime/proof', { kind: 'public' }],
   [
     'document file/action overlap',
     'GET',
@@ -453,6 +454,7 @@ describe('what each rule decides', () => {
 // rule fails on that rule's own entry.
 const CLAIMED_BY = {
   'runtime/ping': ['GET', '/api/runtime/ping'],
+  'runtime/proof': ['GET', '/api/runtime/proof'],
   'document file/action overlap': ['POST', '/api/w/ws1/document/a/file/update'],
   'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
   'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
@@ -520,6 +522,7 @@ const GATED = [
 
 const ORIGIN_TRUSTED = [
   'runtime/ping',
+  'runtime/proof',
   'sync transport',
   'workspace replica-key',
   'workspace replica-key rotate',

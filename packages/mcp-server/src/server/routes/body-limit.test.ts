@@ -9,15 +9,15 @@ import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { stripComments } from '../../shared/test-utils/strip-comments.js'
-import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from './body-limit.js'
 
 function appLimitedTo(maxSize: number, noun: string) {
   const app = new Hono()
-  app.post('/x', limitBody(maxSize, noun), (c) => c.text('stored'))
+  app.post('/x', limitContentBody(maxSize, noun), (c) => c.text('stored'))
   return app
 }
 
-describe('limitBody', () => {
+describe('limitContentBody', () => {
   it('answers 413 payload_too_large naming the noun and the limit', async () => {
     const res = await appLimitedTo(4, 'Upload').request('/x', { method: 'POST', body: 'too big' })
     expect(res.status).toBe(413)
@@ -39,7 +39,7 @@ describe('limitBody', () => {
   })
 })
 
-describe('limitBody and the request a later handler recognises', () => {
+describe('limitContentBody and the request a later handler recognises', () => {
   // Server mode memoises the grant that authenticated a request against the
   // Request object itself (`membership-gate.ts`), so a ceiling that hands the
   // handler a rebuilt Request makes the caller anonymous to the handler.
@@ -53,7 +53,7 @@ describe('limitBody and the request a later handler recognises', () => {
       before = c.req.raw
       await next()
     })
-    app.post('/x', limitBody(100, 'Upload'), async (c) =>
+    app.post('/x', limitContentBody(100, 'Upload'), async (c) =>
       c.json({ same: c.req.raw === before, text: await c.req.text() }),
     )
     const headers: Record<string, string> =

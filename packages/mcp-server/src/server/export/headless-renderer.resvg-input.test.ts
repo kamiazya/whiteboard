@@ -35,9 +35,11 @@ afterEach(() => {
 
 describe('the image hrefs resvg is given', () => {
   it('keeps a data: image', async () => {
-    await renderSpatialCanvasToPng(canvasNaming('data:image/png;base64,AA'), FONTS_DIR)
+    const onePixel =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    await renderSpatialCanvasToPng(canvasNaming(onePixel), FONTS_DIR)
     expect(constructed.svgs).toHaveLength(1)
-    expect(constructed.svgs[0]).toContain('href="data:image/png;base64,AA"')
+    expect(constructed.svgs[0]).toContain(`href="${onePixel}"`)
   })
 
   it('drops every href that is not a data: URI before resvg sees it', async () => {

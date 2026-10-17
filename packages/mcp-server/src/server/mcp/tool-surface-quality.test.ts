@@ -781,8 +781,8 @@ describe('what the tool table costs to read', () => {
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
         // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65). +48 both: a name's 200 `maxLength` on both creates and the move.
-        visibleBytes: 3433, // +51: three input paths state the 1024-character bound; +16 `actor`'s 256 `maxLength`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
-        wireBytes: 4994, // +68: the same, and the output's path; +16 the actor bound
+        visibleBytes: 3448, // +51: three input paths state the 1024-character bound; +16 `actor`'s 256 `maxLength`; +15 `ops` states the 200-op ceiling every batch tool shares; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        wireBytes: 5009, // +68: the same, and the output's path; +16 the actor bound; +15 the op ceiling, as visible; +68 the address forms, as visible
         descriptionWords: 47,
         parameters: 22,
         undescribed: 13,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 42580, // +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's)
+      visibleBytes: 42595, // +15 the op ceiling on wb_workspace_edit; +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's)
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, then +767, each the same bytes as visible.
-      wireBytes: 133926, // +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
+      wireBytes: 133941, // +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

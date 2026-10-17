@@ -200,8 +200,9 @@ export function createServerModeApiAuthMiddleware(
     if (routeScope === null) {
       return c.json({ error: 'auth.route-undeclared' }, 500)
     }
-    // The `public` decision is a deliberate, documented carve-out (currently
-    // only GET /api/runtime/ping — a liveness probe) — never an omission.
+    // The `public` decision is a deliberate, documented carve-out (the
+    // liveness probe and the daemon's token proof under /api/runtime/, which
+    // answers 404 here: server mode holds no daemon token) — never an omission.
     if (routeScope.kind === 'public') return next()
     // `daemon-token-only` routes exist only in local-daemon mode, which has
     // no AsyncAuthStrategy — server-mode has no daemon token to compare

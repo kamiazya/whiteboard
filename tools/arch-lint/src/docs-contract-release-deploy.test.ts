@@ -332,28 +332,66 @@ function flagValue(command: string, flag: string): string | undefined {
   return m ? (m[1] ?? m[2] ?? m[3]) : undefined
 }
 
+const EXACT_PREFIX = 'https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@'
+const REGEXP_PREFIX = '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@'
+
 // Keyless signatures carry the signing workflow's URL as the certificate
 // identity. An unanchored regexp accepts any identity CONTAINING the repo
 // path — a branch named after it in someone else's fork signs a passing
 // image — so the identity is exact, or a regexp pinned at both ends to this
 // repository's release workflow.
+//
+// Each command also names ONE ref and the trigger that ref signs under: a
+// release-please release is a `push` to main, a forced re-publish a
+// `workflow_dispatch` from the tag. A check accepting either ref under any
+// trigger also accepts a tag-shaped ref signing from its own copy of
+// release.yml on a tag push, which no release ever does.
+//
+// A tag identity names ONE tag — the `<tag>` placeholder or a concrete
+// `mcp-server-v<semver>` — and a regexp's ref must be that literal, its dots
+// escaped: `refs/tags/.*` accepts every tag anyone can push.
+const EXACT_TAG_REF = /^refs\/tags\/(?:<tag>|mcp-server-v\d+\.\d+\.\d+)$/
+const REGEXP_META = /[.*+?^${}()|[\]\\]/
+
+/** The ref a regexp's body matches literally, or `undefined` when it matches more than one string. */
+function literalRef(body: string): string | undefined {
+  if (REGEXP_META.test(body.replace(/\\[./-]/g, ''))) return undefined
+  return body.replace(/\\([./-])/g, '$1')
+}
+
 function identityFindings(command: string): string[] {
   const findings: string[] = []
   const exact = flagValue(command, '--certificate-identity')
   const regexp = flagValue(command, '--certificate-identity-regexp')
+  let ref: string | undefined
   if (exact !== undefined) {
-    if (!exact.startsWith('https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@'))
+    if (!exact.startsWith(EXACT_PREFIX))
       findings.push(`exact identity names another workflow: ${exact}`)
+    else ref = exact.slice(EXACT_PREFIX.length)
   } else if (regexp !== undefined) {
-    if (
-      !regexp.startsWith(
-        '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@',
-      ) ||
-      !regexp.endsWith('$')
-    )
+    if (!regexp.startsWith(REGEXP_PREFIX) || !regexp.endsWith('$'))
       findings.push(`identity regexp is not anchored to release.yml: ${regexp}`)
+    else {
+      const body = regexp.slice(REGEXP_PREFIX.length, -1)
+      ref = literalRef(body)
+      if (ref === undefined) findings.push(`identity regexp matches more than one ref: ${body}`)
+    }
   } else {
     findings.push('no certificate identity')
+  }
+  const trigger = flagValue(command, '--certificate-github-workflow-trigger')
+  if (ref !== undefined) {
+    if (ref.includes('|')) findings.push(`identity accepts more than one ref: ${ref}`)
+    else if (ref === 'refs/heads/main') {
+      if (trigger !== 'push')
+        findings.push('a main identity without --certificate-github-workflow-trigger push')
+    } else if (ref.startsWith('refs/tags/')) {
+      if (!EXACT_TAG_REF.test(ref)) findings.push(`tag identity names no single tag: ${ref}`)
+      if (trigger !== 'workflow_dispatch')
+        findings.push(
+          'a tag identity without --certificate-github-workflow-trigger workflow_dispatch',
+        )
+    } else findings.push(`identity names a ref no release signs from: ${ref}`)
   }
   if (flagValue(command, '--certificate-github-workflow-repository') !== 'kamiazya/whiteboard')
     findings.push('no --certificate-github-workflow-repository kamiazya/whiteboard')
@@ -387,9 +425,78 @@ describe('every documented `cosign verify` pins the release workflow identity', 
     ).not.toEqual([])
     expect(
       identityFindings(
-        `cosign verify x --certificate-identity-regexp "^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/heads/main$"${base}`,
+        `cosign verify x --certificate-identity-regexp "^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/heads/main$"${base} --certificate-github-workflow-trigger push`,
       ),
     ).toEqual([])
+  })
+
+  it('pairs each ref with the trigger a release signs it under, one ref per command', () => {
+    const base =
+      ' --certificate-github-workflow-repository kamiazya/whiteboard --certificate-oidc-issuer "https://token.actions.githubusercontent.com"'
+    const identity = (ref: string) =>
+      `cosign verify x --certificate-identity "https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@${ref}"${base}`
+    expect(identityFindings(identity('refs/tags/<tag>'))).not.toEqual([])
+    expect(
+      identityFindings(`${identity('refs/tags/<tag>')} --certificate-github-workflow-trigger push`),
+    ).not.toEqual([])
+    expect(
+      identityFindings(
+        `${identity('refs/tags/<tag>')} --certificate-github-workflow-trigger workflow_dispatch`,
+      ),
+    ).toEqual([])
+    expect(
+      identityFindings(
+        `${identity('refs/heads/main')} --certificate-github-workflow-trigger workflow_dispatch`,
+      ),
+    ).not.toEqual([])
+    expect(
+      identityFindings(
+        `cosign verify x --certificate-identity-regexp '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/(heads/main|tags/x)$'${base} --certificate-github-workflow-trigger push`,
+      ),
+    ).not.toEqual([])
+  })
+
+  // A pattern after `refs/tags/` accepts a signature from ANY tag, including
+  // one a writer pushed at a commit carrying their own release.yml.
+  it.each([
+    'refs/tags/.*',
+    'refs/tags/mcp-server-v.*',
+    'refs/tags/mcp-server-v[0-9]+',
+    'refs/tags/mcp-server-v1.2.3',
+  ])('rejects a tag identity regexp naming %s rather than one tag', (ref) => {
+    const command = `cosign verify x --certificate-identity-regexp '${REGEXP_PREFIX}${ref}$' --certificate-github-workflow-repository kamiazya/whiteboard --certificate-oidc-issuer "https://token.actions.githubusercontent.com" --certificate-github-workflow-trigger workflow_dispatch`
+    expect(identityFindings(command)).not.toEqual([])
+  })
+
+  it('accepts a tag identity regexp naming one tag exactly', () => {
+    const command = `cosign verify x --certificate-identity-regexp '${REGEXP_PREFIX}refs/tags/mcp-server-v1\\.2\\.3$' --certificate-github-workflow-repository kamiazya/whiteboard --certificate-oidc-issuer "https://token.actions.githubusercontent.com" --certificate-github-workflow-trigger workflow_dispatch`
+    expect(identityFindings(command)).toEqual([])
+  })
+
+  it('documents both release identities', () => {
+    const refs = commands.map(({ command }) =>
+      (flagValue(command, '--certificate-identity') ?? '').slice(EXACT_PREFIX.length),
+    )
+    expect(refs).toEqual(expect.arrayContaining(['refs/heads/main', 'refs/tags/<tag>']))
+  })
+
+  // A tag identity is only as trustworthy as whoever can create the tag: a
+  // writer who pushes `mcp-server-v9.9.9` at a commit carrying their own
+  // release.yml and dispatches from it signs under exactly that identity.
+  it('states that the tag identity rests on a maintainer-only tag ruleset', () => {
+    const releasing = readFileSync(join(REPO_ROOT, 'docs/contributing/releasing.md'), 'utf-8')
+    expect(releasing).toMatch(/ruleset [^.]*`mcp-server-v\*` tags to maintainers/)
+  })
+
+  // Each place that asks for the ruleset is a place an operator may stop
+  // reading, so each one carries the consequence of its absence too.
+  it('says beside every ruleset requirement that only main is trusted without it', () => {
+    const releasing = readFileSync(join(REPO_ROOT, 'docs/contributing/releasing.md'), 'utf-8')
+    const asks = releasing.split(/\n\s*\n/).filter((p) => /ruleset[\s\S]*`mcp-server-v\*`/.test(p))
+    expect(asks.length).toBeGreaterThan(1)
+    for (const paragraph of asks) {
+      expect(paragraph, paragraph).toMatch(/trust only the\s+`refs\/heads\/main`\s+identity/)
+    }
   })
 
   it.each(commands)('$file: $command', ({ command }) => {

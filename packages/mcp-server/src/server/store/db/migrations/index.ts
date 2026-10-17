@@ -43,6 +43,7 @@ import { migration as dropVersionBranchName } from './0041-drop-version-branch-n
 import { migration as signInAttemptInvitationHash } from './0042-sign-in-attempt-invitation-hash.js'
 import { migration as dropWorkspaceMembersOnly } from './0043-drop-workspace-members-only.js'
 import { migration as signInAttemptSource } from './0044-sign-in-attempt-source.js'
+import { migration as signInAttemptSourcePrefixes } from './0045-sign-in-attempt-source-prefixes.js'
 import { migration as workspaceNamespace } from './0046-workspace-namespace.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
@@ -98,5 +99,6 @@ export const migrations: Record<string, Migration> = {
   '0042-sign-in-attempt-invitation-hash': signInAttemptInvitationHash,
   '0043-drop-workspace-members-only': dropWorkspaceMembersOnly,
   '0044-sign-in-attempt-source': signInAttemptSource,
+  '0045-sign-in-attempt-source-prefixes': signInAttemptSourcePrefixes,
   '0046-workspace-namespace': workspaceNamespace,
 }

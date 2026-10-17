@@ -56,6 +56,9 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
   'server/sync-streams.ts',
   'server/sync-audience.ts',
   'server/viewport-requests.ts',
+  // How many content-sized request bodies are being read at once: live state
+  // the root arms and the body ceiling every content route uses draws on.
+  'server/content-slots.ts',
   'server/daemon-actor.ts',
   'server/current-workspace.ts',
   // Startup clean-up of data-dir artifacts a retired feature left behind.
@@ -137,6 +140,11 @@ export const ADAPTER_ENTITLED_MECHANICS: readonly {
     modules: ['sync-streams', 'sync-audience', 'viewport-requests'],
     reason:
       'the in-memory registry of what is open and listening, shared by the route that opens a stream and the writers that feed it: live state, not stored state',
+  },
+  {
+    modules: ['content-slots'],
+    reason:
+      'the in-memory count of content-sized bodies in flight, which the body ceiling takes a slot from before reading: live state, not stored state',
   },
 ]
 

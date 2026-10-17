@@ -42,10 +42,10 @@ interface SignInAttemptStoreOptions {
 // begins grows the table for as long as it lasts. When full, an attempt goes
 // rather than the new one being refused — refusing would let a flood of this
 // size every ten minutes lock everybody out of signing in — and the one that
-// goes is the oldest of the SOURCE holding the most, so a flood from one
-// client sheds its own attempts and leaves everybody else's standing. The
-// returnTo and invitation the route stores are both bounded, so a full table
-// is a few tens of megabytes at most.
+// goes is the oldest of the SOURCE holding the most (judged by allocation,
+// coarsest first), so a flood from one client sheds its own attempts and
+// leaves everybody else's standing. The returnTo and invitation the route
+// stores are both bounded, so a full table is a few tens of megabytes at most.
 const DEFAULT_MAX_PENDING = 10_000
 
 const random = () => randomBytes(32).toString('base64url')
@@ -62,25 +62,69 @@ function ipv6Groups(address: string): readonly string[] | null {
   return [...left, ...fill, ...right].map((g) => g.padStart(4, '0'))
 }
 
-// What counts as one client. An IPv6 subscriber is routinely handed a whole
-// /64, so that prefix is the source; an IPv4-mapped address is its IPv4 one.
-// Behind a reverse proxy every client shares the proxy's address and this
-// degrades to one source, which is exactly the shedding a single ceiling did.
-function sourceKey(address: string | undefined): string {
-  if (address === undefined || isIP(address) !== 6) return address ?? ''
-  const groups = ipv6Groups(address)
-  if (groups === null) return address
+interface SourceKeys {
+  readonly sourcePrefix48: string
+  readonly sourcePrefix56: string
+  readonly source: string
+}
+
+// What counts as one client, and the allocations it sits in. An IPv6
+// subscriber is routinely handed a whole /64, and an end site a /56 or a /48
+// (RFC 6177), so a single site holds up to 65,536 /64s; those three prefixes
+// are its levels. An IPv4 address is scarce enough that each one is already a
+// cost to an attacker, and a /24 is routinely shared by unrelated people (a
+// carrier pool, a campus), so grouping by it would shed honest neighbours
+// with a flood: an IPv4 source is its own address at every level. An
+// IPv4-mapped address is its IPv4 one. Behind a reverse proxy every client
+// shares the proxy's address and this degrades to one source, which is
+// exactly the shedding a single ceiling did.
+function sourceKeys(address: string | undefined): SourceKeys {
+  const groups = address !== undefined && isIP(address) === 6 ? ipv6Groups(address) : null
+  if (groups === null) return sameAtEveryLevel(address ?? '')
   if (groups.slice(0, 5).every((g) => g === '0000') && groups[5] === 'ffff') {
     const [hi = 0, lo = 0] = [groups[6], groups[7]].map((g) => Number.parseInt(g ?? '0', 16))
-    return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+    return sameAtEveryLevel([hi >> 8, hi & 255, lo >> 8, lo & 255].join('.'))
   }
-  return `${groups.slice(0, 4).join(':')}::/64`
+  const site = groups.slice(0, 3).join(':')
+  return {
+    sourcePrefix48: sha256Hex(`${site}::/48`),
+    sourcePrefix56: sha256Hex(`${site}:${(groups[3] ?? '').slice(0, 2)}00::/56`),
+    source: sha256Hex(`${groups.slice(0, 4).join(':')}::/64`),
+  }
+}
+
+function sameAtEveryLevel(key: string): SourceKeys {
+  const digest = sha256Hex(key)
+  return { sourcePrefix48: digest, sourcePrefix56: digest, source: digest }
+}
+
+// Coarsest first: the heaviest /48 is chosen, then the heaviest /56 inside
+// it, then the heaviest /64 inside that, so spreading a flood across finer
+// prefixes never moves the eviction off the allocation that holds them.
+const SOURCE_LEVELS = ['sourcePrefix48', 'sourcePrefix56', 'source'] as const
+
+// The attempt a full table sheds: the oldest of the heaviest source, found
+// level by level (the oldest such group on a tie).
+async function evictionCandidate(db: TenantDatabase): Promise<{ state: string } | undefined> {
+  let scope = db.selectFrom('signInAttempts')
+  for (const level of SOURCE_LEVELS) {
+    const heaviest = await scope
+      .select(level)
+      .groupBy(level)
+      .orderBy((eb) => eb.fn.countAll(), 'desc')
+      .orderBy((eb) => eb.fn.min('expiresAt'), 'asc')
+      .limit(1)
+      .executeTakeFirst()
+    if (heaviest === undefined) return undefined
+    scope = scope.where(level, '=', heaviest[level])
+  }
+  return scope.select('state').orderBy('expiresAt', 'asc').limit(1).executeTakeFirst()
 }
 
 // Leaves room for one more attempt. An attempt nobody finished is otherwise
 // never removed; beginning one sheds them, at the rate of sign-ins and with
 // no worker to declare — the expired first, then, past the ceiling, the
-// oldest of whichever source holds the most (the oldest such source on a tie).
+// evictionCandidate.
 async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<void> {
   await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
   const { pending } = await db
@@ -88,22 +132,7 @@ async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<
     .select((eb) => eb.fn.countAll<number>().as('pending'))
     .executeTakeFirstOrThrow()
   for (let excess = Number(pending) - keep; excess > 0; excess--) {
-    const heaviest = await db
-      .selectFrom('signInAttempts')
-      .select('source')
-      .groupBy('source')
-      .orderBy((eb) => eb.fn.countAll(), 'desc')
-      .orderBy((eb) => eb.fn.min('expiresAt'), 'asc')
-      .limit(1)
-      .executeTakeFirst()
-    if (heaviest === undefined) return
-    const oldest = await db
-      .selectFrom('signInAttempts')
-      .select('state')
-      .where('source', '=', heaviest.source)
-      .orderBy('expiresAt', 'asc')
-      .limit(1)
-      .executeTakeFirst()
+    const oldest = await evictionCandidate(db)
     if (oldest === undefined) return
     await db.deleteFrom('signInAttempts').where('state', '=', oldest.state).execute()
   }
@@ -139,7 +168,7 @@ export function createSignInAttemptStore(
           invitationTokenHash: minted.invitationTokenHash,
           returnTo,
           expiresAt: now + ttlMs,
-          source: sha256Hex(sourceKey(source)),
+          ...sourceKeys(source),
         })
         .execute()
       return minted

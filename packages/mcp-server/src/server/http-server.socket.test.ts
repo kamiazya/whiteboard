@@ -4,6 +4,13 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestDaemon } from '../daemon/daemon-request.js'
+import {
+  endpointProofResponseSchema,
+  endpointProofUrl,
+  isEndpointProof,
+  newEndpointProofNonce,
+} from '../shared/endpoint-proof.js'
 import type { RunningServer } from './http-server.js'
 
 // Its own data dir: `config.js` is mocked onto it, so nothing here touches the real one.
@@ -80,5 +87,22 @@ describe('startHttpServer on a local socket (ADR-0050)', () => {
         authorization: 'Bearer socket-token',
       }),
     ).toBe(200)
+  })
+
+  // A Windows reader asks this before it will send the token to the pipe a
+  // record names, so the composed daemon must answer it under its own token.
+  it('proves it holds the daemon token without being sent it', async () => {
+    const socketPath = join(tempDir, 'run', 'daemon.sock')
+    running = await startHttpServer({ token: 'socket-token', socketPath })
+
+    const nonce = newEndpointProofNonce()
+    const answer = await requestDaemon({
+      record: { socketPath },
+      method: 'GET',
+      path: endpointProofUrl(nonce),
+    })
+    expect(answer).toMatchObject({ status: 200 })
+    const { proof } = endpointProofResponseSchema.parse(answer.body)
+    await expect(isEndpointProof('socket-token', nonce, proof)).resolves.toBe(true)
   })
 })

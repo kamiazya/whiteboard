@@ -4,6 +4,8 @@ import {
   documentNameSchema,
   documentPathSchema,
   markdownInputSchema,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   okfActorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -170,6 +172,7 @@ export const workspaceEditInputSchema = z
     ops: z
       .array(workspaceOpSchema)
       .min(1)
+      .max(OPS_PER_CALL_MAX, `more ops than ${OPS_PER_CALL_LIMIT_PHRASE}`)
       .describe('Applied in order. A failing op stops the run; the ops before it stand.'),
   })
   .strict()
