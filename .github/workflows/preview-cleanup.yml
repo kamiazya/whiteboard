@@ -30,14 +30,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          # Untrusted branch name: read via env and sanitized to [a-z0-9-] with
-          # the same rules the deploy path uses, so the alias hostnames match.
+          # Untrusted branch name: read via env and mapped by the same
+          # preview_label() preview-pr-deploy.yml deploys with (reserved aliases
+          # and empty labels become pr-<n>), so the alias hostnames match.
           HEAD_REF: ${{ github.head_ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          label=$(printf '%s' "$HEAD_REF" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
-          [ -z "$label" ] && label="pr-$PR_NUMBER"
+          preview_label() {
+            local label
+            label=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+            case "$label" in
+              ''|main|latest|stable) label="pr-$2" ;;
+            esac
+            printf '%s' "$label"
+          }
+          label=$(preview_label "$HEAD_REF" "$PR_NUMBER")
           alias_prefix="https://$label.kamiazya-whiteboard.pages.dev"
           echo "releasing preview deployments with environment_url under: $alias_prefix"
 
