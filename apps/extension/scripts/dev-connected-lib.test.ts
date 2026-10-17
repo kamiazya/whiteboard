@@ -5,6 +5,7 @@ import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { WHITEBOARD_DEV_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cdpPortRefusal,
@@ -21,6 +22,8 @@ const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'dev-connected.mjs'
 const NATIVE_HOST_MANIFEST = 'io.github.kamiazya.whiteboard.json'
 
 describe('connectedHostInstall', () => {
+  // The launcher loads the development build, so the host it registers allows
+  // that build's id and never the production one's.
   it("registers the host for the checkout's .dev-data inside the throwaway profile", () => {
     const plan = connectedHostInstall({
       env: {},
@@ -34,6 +37,7 @@ describe('connectedHostInstall', () => {
       'native-host',
       'install',
       '--json',
+      '--development',
       `--data-dir=${resolve('/repo/.dev-data')}`,
       `--manifest-dir=${resolve('/scratch/profile/NativeMessagingHosts')}`,
     ])
@@ -268,6 +272,7 @@ describe('installHost, through the real CLI', () => {
       readFileSync(join(profileDir, 'NativeMessagingHosts', NATIVE_HOST_MANIFEST), 'utf8'),
     )
     expect(manifest.path).toBe(join(dataDir, 'native-host', 'whiteboard-native-host'))
+    expect(manifest.allowed_origins).toEqual([`chrome-extension://${WHITEBOARD_DEV_EXTENSION_ID}/`])
     expect(readFileSync(manifest.path, 'utf8')).toContain(`WHITEBOARD_DATA_DIR='${dataDir}'`)
     for (const dir of ['.config/chromium', '.config/google-chrome', '.mozilla']) {
       expect(readdirSync(join(home, dir))).toEqual([])

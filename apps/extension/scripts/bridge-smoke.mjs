@@ -37,7 +37,9 @@ import {
   whiteboard,
 } from './smoke-kit.mjs'
 
-const EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
+// The development build's id: the page under test is a loopback one, which only
+// that build admits (daemon-client's WHITEBOARD_DEV_EXTENSION_ID).
+const EXTENSION_ID = 'jmhladeopagobbneclpfligeahaheiml'
 // The notice a daemon-kept page shows while an edit has not reached the
 // daemon. Its own element, so this names exactly it and not the live region.
 const UNSAVED_NOTICE = /^Changes not saved yet\.$/
@@ -84,6 +86,7 @@ async function openPage(extensionDir, pageUrl) {
     'native-host',
     'install',
     '--json',
+    ...(extensionDir.endsWith('development') ? ['--development'] : []),
     `--data-dir=${dataDir}`,
     `--manifest-dir=${join(profile, 'NativeMessagingHosts')}`,
   ])

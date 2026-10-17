@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
+  WHITEBOARD_DEV_EXTENSION_ID,
+  WHITEBOARD_DEV_GECKO_ID,
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
@@ -107,6 +109,29 @@ describe('installNativeHost', () => {
     // application", so each engine gets only its own.
     expect(read(firefoxDir)).toEqual({ ...common, allowed_extensions: [WHITEBOARD_GECKO_ID] })
     expect(statSync(result.launcher).mode & 0o777).toBe(0o700)
+  })
+
+  // The development build admits loopback pages any user of the machine can
+  // serve, so its install allows that build's ids and never the production ones:
+  // a host registered for everyday use then never starts for it.
+  it('allows only the development build when installed for it', async () => {
+    const chromeDir = join(scratch, 'chrome', 'NativeMessagingHosts')
+    const firefoxDir = join(scratch, 'firefox', 'native-messaging-hosts')
+    await installNativeHost({
+      dataDir: join(scratch, 'data'),
+      manifestDirs: [
+        { browser: 'explicit', engine: 'chromium', dir: chromeDir },
+        { browser: 'explicit', engine: 'firefox', dir: firefoxDir },
+      ],
+      launcher: launcherFor('/opt/whiteboard/cli.js'),
+      extensionBuild: 'development',
+    })
+    const read = (dir: string) =>
+      JSON.parse(readFileSync(join(dir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
+    expect(read(chromeDir).allowed_origins).toEqual([
+      `chrome-extension://${WHITEBOARD_DEV_EXTENSION_ID}/`,
+    ])
+    expect(read(firefoxDir).allowed_extensions).toEqual([WHITEBOARD_DEV_GECKO_ID])
   })
 
   // The browser runs the launcher as this user, and the file's own mode does

@@ -6,6 +6,8 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import {
+  WHITEBOARD_DEV_EXTENSION_ID,
+  WHITEBOARD_DEV_GECKO_ID,
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
@@ -44,6 +46,15 @@ describe('manifestFor', () => {
   // from it would load an extension the host refuses to start for.
   it('carries the key the host manifest names', () => {
     expect(extensionIdOf(manifestFor('production').key)).toBe(WHITEBOARD_EXTENSION_ID)
+  })
+
+  // The development build admits loopback pages, which any user of the machine
+  // can serve. Under the production id, a host installed for everyday use would
+  // start for it, so it carries an id of its own that only a development
+  // install of the host allows.
+  it('gives the development build an id of its own', () => {
+    expect(extensionIdOf(manifestFor('development').key)).toBe(WHITEBOARD_DEV_EXTENSION_ID)
+    expect(WHITEBOARD_DEV_EXTENSION_ID).not.toBe(WHITEBOARD_EXTENSION_ID)
   })
 
   it('lets only the hosted app reach it, and asks for nothing but native messaging', () => {
@@ -86,6 +97,13 @@ describe('firefoxManifestFor', () => {
     expect(firefoxManifestFor('production').browser_specific_settings.gecko.id).toBe(
       WHITEBOARD_GECKO_ID,
     )
+  })
+
+  it('gives the development build an id of its own', () => {
+    expect(firefoxManifestFor('development').browser_specific_settings.gecko.id).toBe(
+      WHITEBOARD_DEV_GECKO_ID,
+    )
+    expect(WHITEBOARD_DEV_GECKO_ID).not.toBe(WHITEBOARD_GECKO_ID)
   })
 
   // The content script's hosts are granted at install only from the ESR that

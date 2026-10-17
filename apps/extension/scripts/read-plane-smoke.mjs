@@ -255,6 +255,7 @@ async function openBrowser() {
     'native-host',
     'install',
     '--json',
+    '--development',
     `--data-dir=${dataDir}`,
     `--manifest-dir=${join(profile, 'NativeMessagingHosts')}`,
   ])

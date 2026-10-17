@@ -3,7 +3,10 @@
  * writes it next to the service worker.
  * https://developer.chrome.com/docs/extensions/reference/manifest
  */
-import { WHITEBOARD_GECKO_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  WHITEBOARD_DEV_GECKO_ID,
+  WHITEBOARD_GECKO_ID,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { version } from '../package.json' with { type: 'json' }
 
@@ -14,6 +17,14 @@ import { version } from '../package.json' with { type: 'json' }
  */
 const EXTENSION_KEY =
   'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnUvZtXWvNjLEOfD+ohEovcqQUeLSMkkASGgA/vrhRDMMLuLrc38I1X371rgYutJ/RfjncF/NKxx4YVavgVl5R2s7LJutdfukxUIlLF8628Nv3S3oQOOh1GgRlDRragxtdTx8PLM5Tb+JH7mW928IxSwnVY3nEE/JXMlPxrb1KI9t8xj2b+zpt1dnPoLPbrU2hSMrOqgVrfjfA7u+AeusPt1Yrng+x+P7pxEogCbcepzf24/njM5BRyT5vmT+LwvckSNDwONV5eN1Of78arQCbj+OTaf5ZoM3jVsvVY6ZbMoQp1gkMxmK/34OcIo1sjokh/noQbcDchwLGlDrJS+6HQIDAQAB'
+
+/**
+ * The development build's own key, kept the same way. It must not derive the
+ * production id: that build admits loopback pages, and a host installed for
+ * everyday use allows the production id alone.
+ */
+const DEVELOPMENT_EXTENSION_KEY =
+  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArc4RaaS8jwRhUFSepxIKc3B607yTOy3z/xK2DjENsYkCZp9kFlpqNKJMhz0/0Y1/k9W7vxyeUB9DeEGF0es2UFIX5thZ2Kvw2KEsl07qIOoYaXcQ5garUvzCy3TV7PzQH0xdyaWs2/nckziLvhXdV0Hxn4irkKE1DOClrG3DtiwM77ER50wJ+9NZqZ0M9hep7YWtqBezFQCPxQa2/7vg8SyBDOar9pT0/wtIoeSqgQ5iipOefOZMcMu7aTXAjmSuioioGz/z9ncnW1VEz9DqxuwzyFLTmg3olCLeDaN9gxZEU8tDCPwNyWZG8mLZjORz+u6nVmmdhmt/XUoM3CV+wwIDAQAB'
 
 const HOSTED_APP = `${HOSTED_APP_ORIGIN}/*`
 
@@ -31,7 +42,7 @@ export function manifestFor(mode: BuildMode) {
     name: 'Whiteboard',
     description: 'Connects the whiteboard app to the whiteboard daemon on this computer.',
     version,
-    key: EXTENSION_KEY,
+    key: mode === 'development' ? DEVELOPMENT_EXTENSION_KEY : EXTENSION_KEY,
     permissions: ['nativeMessaging'],
     background: { service_worker: 'background.js', type: 'module' },
     externally_connectable: { matches: admittedPages(mode) },
@@ -56,7 +67,12 @@ export function firefoxManifestFor(mode: BuildMode) {
       { matches: admittedPages(mode), js: ['content.js'], run_at: 'document_start' },
     ],
     // 128 is the ESR that grants a content script's hosts at install.
-    browser_specific_settings: { gecko: { id: WHITEBOARD_GECKO_ID, strict_min_version: '128.0' } },
+    browser_specific_settings: {
+      gecko: {
+        id: mode === 'development' ? WHITEBOARD_DEV_GECKO_ID : WHITEBOARD_GECKO_ID,
+        strict_min_version: '128.0',
+      },
+    },
   }
 }
 

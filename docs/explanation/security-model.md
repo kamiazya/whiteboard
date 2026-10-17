@@ -42,6 +42,13 @@ The local daemon has one person: the machine's owner
   start it for anything else. `whiteboard native-host install` writes that
   manifest at user level (and, on Windows, a per-user registry key naming
   it).
+- **The development build of the extension has an id of its own.** It
+  admits `localhost` and `127.0.0.1` pages, which any user of the machine
+  can serve, so a host installed for everyday use does not start for it.
+  Only `whiteboard native-host install --development` allows that id, and
+  it refuses to run without a directory you name (`--manifest-dir`,
+  `--firefox-manifest-dir`), so it cannot replace your browsers' own
+  registration.
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the
   local process that launches the server.
 
@@ -391,6 +398,20 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   access tokens.
 
 ## Current limitations
+
+- **On Windows the daemon's named pipe is not owner-only.** Node creates the
+  pipe through libuv, which calls `CreateNamedPipeW` with no security
+  attributes, so the pipe gets Windows' default security descriptor: full
+  control for LocalSystem, administrators and the creator owner, and read
+  access for the Everyone group and the anonymous account
+  ([named pipe security](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights)).
+  Node offers no option that narrows it — `readableAll`/`writableAll` only
+  widen it, and the daemon sets neither. Read access does not include write
+  access, so another account cannot send the daemon a request over the
+  pipe, and every request but `/api/runtime/ping` also needs the bearer
+  token. The random pipe name defeats creating the pipe first; it does not
+  hide the pipe, since pipe names can be listed. The Unix socket's
+  owner-only directory has no equivalent here.
 
 - Server mode is shipped and used today for team/remote deployments (see
   above); it is not itself production-hardened beyond what is documented on

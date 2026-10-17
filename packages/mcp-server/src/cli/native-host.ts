@@ -44,7 +44,7 @@ export function keepHostAliveOnUnhandledRejection(): () => void {
 }
 
 const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
-  booleans: ['--json'],
+  booleans: ['--json', '--development'],
   values: {
     '--data-dir': 'dataDir',
     '--manifest-dir': 'manifestDir',
@@ -53,7 +53,7 @@ const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'>
 }
 
 const INSTALL_USAGE =
-  'whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]'
+  'whiteboard native-host install --json [--development] [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]'
 
 export async function dispatchNativeHost(
   subcommand: string | undefined,
@@ -126,6 +126,19 @@ function chooseManifestDirs(
     : nativeHostManifestDirs(homedir(), process.platform, dataDir)
 }
 
+/**
+ * Whether the install was told where to write. A development install anywhere
+ * else would replace the registration each browser's everyday profile relies
+ * on, and the development build admits loopback pages any user of the machine
+ * can serve.
+ */
+function namesManifestDir(values: { manifestDir?: string; firefoxManifestDir?: string }): boolean {
+  return values.manifestDir !== undefined || values.firefoxManifestDir !== undefined
+}
+
+const DEVELOPMENT_NEEDS_DIR =
+  'whiteboard native-host install --development registers only into a directory you name: pass --manifest-dir=<path> or --firefox-manifest-dir=<path> (a throwaway profile, never an everyday one).\n'
+
 async function install(rest: readonly string[]): Promise<number> {
   const scan = scanFlags(rest, INSTALL_FLAGS)
   if (scan.kind === 'usage-error') {
@@ -136,6 +149,11 @@ async function install(rest: readonly string[]): Promise<number> {
     process.stderr.write(
       'Only --json is supported. Re-run with: whiteboard native-host install --json\n',
     )
+    return 64
+  }
+  const development = scan.seen.has('--development')
+  if (development && !namesManifestDir(scan.values)) {
+    process.stderr.write(DEVELOPMENT_NEEDS_DIR)
     return 64
   }
   const dataDir = resolve(scan.values.dataDir ?? resolveDefaultDataDir(process.env))
@@ -151,6 +169,7 @@ async function install(rest: readonly string[]): Promise<number> {
       execArgv: portableExecArgv(process.execArgv),
       entry,
     },
+    extensionBuild: development ? 'development' : 'production',
   })
   const ok = result.manifests.length > 0
   const reason = ok
