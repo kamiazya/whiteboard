@@ -18,7 +18,7 @@ import {
   extensionToPageSchema,
   type PageToHost,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { extensionIdForPage } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { BRIDGE_ORIGIN } from './bridge-address.js'
 import type { BridgePort } from './extension-bridge-port.js'
@@ -54,7 +54,7 @@ export function extensionHello(
     const timer = setTimeout(() => resolve(null), timeoutMs)
     try {
       const hello: ExtensionHello = { type: 'hello' }
-      runtime.sendMessage(WHITEBOARD_EXTENSION_ID, hello, (reply) => {
+      runtime.sendMessage(extensionIdForPage(globalThis.location.origin), hello, (reply) => {
         clearTimeout(timer)
         const parsed = extensionHelloReplySchema.safeParse(reply)
         resolve(parsed.success ? parsed.data : null)
@@ -332,6 +332,8 @@ function settle(
  * `BRIDGE_DAEMON_BASE_URL` shares this port.
  */
 export const extensionBridgeFetch = createBridgeFetch(
-  () => extensionRuntime()?.connect(WHITEBOARD_EXTENSION_ID) ?? connectThroughWindow(),
+  () =>
+    extensionRuntime()?.connect(extensionIdForPage(globalThis.location.origin)) ??
+    connectThroughWindow(),
   extensionSkew,
 )

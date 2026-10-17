@@ -156,14 +156,20 @@ through the development build of the extension, which also admits
   to one native messaging host process. `pnpm --filter @kamiazya/whiteboard-extension build`
   writes `dist/production` (admits the hosted app only) and `dist/development`
   (also `localhost` and `127.0.0.1`, for a dev server). Load either with
-  **Load unpacked** on `chrome://extensions`; the manifest carries a key, so the
-  id is always `ckgipndlpblkhiplhnbbdnpnibflplje`.
+  **Load unpacked** on `chrome://extensions`; each manifest carries a key, so the
+  production id is always `ckgipndlpblkhiplhnbbdnpnibflplje` and the
+  development id `jmhladeopagobbneclpfligeahaheiml`. The two differ on purpose:
+  a host installed for everyday use allows the production id alone, so a
+  development build loaded into your own profile cannot hand the daemon to
+  whatever serves a loopback port. The web app addresses the production id
+  from the hosted app and the development id from any other page.
 - The build also writes `dist/firefox-production` and `dist/firefox-development`.
   Firefox lets no page message an extension, so that build relays through a
   content script on the admitted pages instead, and its id is
-  `whiteboard@kamiazya.github.io`. Load it with **Load Temporary Add-on** on
+  `whiteboard@kamiazya.github.io` (`whiteboard-dev@kamiazya.github.io` for the
+  development build). Load it with **Load Temporary Add-on** on
   `about:debugging` (pick its `manifest.json`); it lasts until Firefox restarts.
-- `whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]`
+- `whiteboard native-host install --json [--development] [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]`
   registers the host with each browser this user has run (Chrome, Chromium,
   Edge, Brave and Firefox, Ubuntu's snap Firefox included) on Linux and macOS,
   and on Windows with Chrome, Chromium, Edge and Firefox through a per-user
@@ -176,7 +182,10 @@ through the development build of the extension, which also admits
   and remembers the answer — a refusal too; the user guide says how to clear
   it. One host name
   means one data dir per browser: installing for `.dev-data` replaces the
-  registration for `~/.whiteboard`.
+  registration for `~/.whiteboard`. `--development` writes a manifest that
+  allows the development build instead of the production one, and only into
+  a directory named with `--manifest-dir`/`--firefox-manifest-dir` — a
+  throwaway profile's, as `pnpm dev:connected` and the smokes use.
 - The host relays only `/api/` requests, to the owner-only socket the daemon
   records in `daemon.json`, and attaches the daemon's token itself — the page
   never holds one.
@@ -229,7 +238,9 @@ dev MCP proxy shows up in the workspace.
   dev server already on 5173 may be another checkout's, so it is reused only
   when named with `--url=<url>`.
 - Linux and macOS only: on Windows, Chromium finds a native host through a
-  per-user registry key, which a throwaway profile cannot scope.
+  per-user registry key, which a throwaway profile cannot scope, and a
+  development install writes no registry key, so the development build has no
+  host to reach there.
 - Not `WHITEBOARD_CHROME_PATH`: that is the test launcher's choice, usually
   branded Chrome or the headless shell, and neither loads an unpacked
   extension. `WHITEBOARD_DEV_CONNECTED_CHROME=<path>` names another Chromium.

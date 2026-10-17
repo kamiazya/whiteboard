@@ -14,7 +14,9 @@ import { whiteboard } from './smoke-kit.mjs'
  * daemon `ensure-http-dev-daemon.mjs` started. The manifest dir is always
  * named: without `--manifest-dir` the CLI registers with every browser the
  * user has run, replacing the registration their real profile relies on (one
- * host name means one data dir per browser).
+ * host name means one data dir per browser). It is a `--development` install,
+ * allowing the development build this launcher loads and not the production
+ * one.
  *
  * @param {{ env: Record<string, string | undefined>, repoRoot: string, profileDir: string }} input
  */
@@ -28,6 +30,7 @@ export function connectedHostInstall({ env, repoRoot, profileDir }) {
       'native-host',
       'install',
       '--json',
+      '--development',
       `--data-dir=${dataDir}`,
       `--manifest-dir=${manifestDir}`,
     ],

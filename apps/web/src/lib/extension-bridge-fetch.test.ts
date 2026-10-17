@@ -5,11 +5,14 @@
  * and only the function they are handed changes.
  */
 import { bridgeSkew, pageToHostSchema } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  WHITEBOARD_DEV_EXTENSION_ID,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL, isBridgeDaemon } from './bridge-address.js'
-import { createBridgeFetch } from './extension-bridge-fetch.js'
+import { createBridgeFetch, extensionHello } from './extension-bridge-fetch.js'
 import type { BridgePort } from './extension-bridge-port.js'
 
 /** The extension's end of the port, answering as the native host would. */
@@ -441,3 +444,29 @@ describe('isBridgeDaemon', () => {
 async function sentFrom(ext: FakeExtension): Promise<void> {
   await vi.waitFor(() => expect(ext.ports.at(-1)?.sent.length ?? 0).toBeGreaterThan(0))
 }
+
+// The production build admits the hosted app alone, so a page served from
+// anywhere else addresses the development build, which carries its own id.
+describe('extensionHello', () => {
+  it('asks the development build from a loopback page', async () => {
+    expect(['localhost', '127.0.0.1']).toContain(globalThis.location.hostname)
+    const asked: string[] = []
+    vi.stubGlobal('chrome', {
+      runtime: {
+        connect: () => {
+          throw new Error('not opened by a hello')
+        },
+        sendMessage: (id: string, _message: unknown, reply: (response: unknown) => void) => {
+          asked.push(id)
+          reply(undefined)
+        },
+      },
+    })
+    try {
+      await extensionHello(50)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(asked).toEqual([WHITEBOARD_DEV_EXTENSION_ID])
+  })
+})

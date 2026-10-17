@@ -1,8 +1,9 @@
 /**
- * The two names the browser checks when the whiteboard extension starts its
+ * The names the browser checks when the whiteboard extension starts its
  * native host (ADR-0050). Apart from the bridge's schemas so the extension,
  * which relays without reading, carries no validator it never runs.
  */
+import { HOSTED_APP_ORIGIN } from './hosted-app.js'
 
 /** The native messaging host's name, as the browser looks it up. */
 export const NATIVE_HOST_NAME = 'io.github.kamiazya.whiteboard'
@@ -12,6 +13,23 @@ export const WHITEBOARD_EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
 
 /** The Firefox build's id, which Firefox takes from the manifest as written. */
 export const WHITEBOARD_GECKO_ID = 'whiteboard@kamiazya.github.io'
+
+/**
+ * The development build's ids. That build admits loopback pages, which any
+ * user of the machine can serve, so it must not share an id a host installed
+ * for everyday use allows: only a development install of the host names these.
+ */
+export const WHITEBOARD_DEV_EXTENSION_ID = 'jmhladeopagobbneclpfligeahaheiml'
+export const WHITEBOARD_DEV_GECKO_ID = 'whiteboard-dev@kamiazya.github.io'
+
+/**
+ * The Chromium extension a page addresses. Only the hosted app is admitted by
+ * the production build, so every other page can be reaching the development
+ * build alone.
+ */
+export function extensionIdForPage(origin: string): string {
+  return origin === HOSTED_APP_ORIGIN ? WHITEBOARD_EXTENSION_ID : WHITEBOARD_DEV_EXTENSION_ID
+}
 
 /**
  * The version of the frames the page, the extension and the native host

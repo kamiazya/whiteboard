@@ -44,7 +44,7 @@ export function keepHostAliveOnUnhandledRejection(): () => void {
 }
 
 const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
-  booleans: ['--json'],
+  booleans: ['--json', '--development'],
   values: {
     '--data-dir': 'dataDir',
     '--manifest-dir': 'manifestDir',
@@ -53,7 +53,7 @@ const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'>
 }
 
 const INSTALL_USAGE =
-  'whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]'
+  'whiteboard native-host install --json [--development] [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]'
 
 export async function dispatchNativeHost(
   subcommand: string | undefined,
@@ -138,6 +138,20 @@ async function install(rest: readonly string[]): Promise<number> {
     )
     return 64
   }
+  const development = scan.seen.has('--development')
+  // A development install everywhere would replace the registration each
+  // browser's everyday profile relies on, and the development build admits
+  // loopback pages any user of the machine can serve.
+  if (
+    development &&
+    scan.values.manifestDir === undefined &&
+    scan.values.firefoxManifestDir === undefined
+  ) {
+    process.stderr.write(
+      'whiteboard native-host install --development registers only into a directory you name: pass --manifest-dir=<path> or --firefox-manifest-dir=<path> (a throwaway profile, never an everyday one).\n',
+    )
+    return 64
+  }
   const dataDir = resolve(scan.values.dataDir ?? resolveDefaultDataDir(process.env))
   const manifestDirs = chooseManifestDirs(dataDir, scan.values)
   const entry = realpathSync(process.argv[1] ?? '')
@@ -151,6 +165,7 @@ async function install(rest: readonly string[]): Promise<number> {
       execArgv: portableExecArgv(process.execArgv),
       entry,
     },
+    extensionBuild: development ? 'development' : 'production',
   })
   const ok = result.manifests.length > 0
   const reason = ok

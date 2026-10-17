@@ -214,6 +214,7 @@ try {
     'native-host',
     'install',
     '--json',
+    '--development',
     `--data-dir=${dataDir}`,
     `--firefox-manifest-dir=${join(home, '.mozilla/native-messaging-hosts')}`,
   ])
