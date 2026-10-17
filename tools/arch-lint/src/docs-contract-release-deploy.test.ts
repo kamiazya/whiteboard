@@ -332,28 +332,48 @@ function flagValue(command: string, flag: string): string | undefined {
   return m ? (m[1] ?? m[2] ?? m[3]) : undefined
 }
 
+const EXACT_PREFIX = 'https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@'
+const REGEXP_PREFIX = '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@'
+
 // Keyless signatures carry the signing workflow's URL as the certificate
 // identity. An unanchored regexp accepts any identity CONTAINING the repo
 // path — a branch named after it in someone else's fork signs a passing
 // image — so the identity is exact, or a regexp pinned at both ends to this
 // repository's release workflow.
+//
+// Each command also names ONE ref and the trigger that ref signs under: a
+// release-please release is a `push` to main, a forced re-publish a
+// `workflow_dispatch` from the tag. A check accepting either ref under any
+// trigger also accepts a tag-shaped ref signing from its own copy of
+// release.yml on a tag push, which no release ever does.
 function identityFindings(command: string): string[] {
   const findings: string[] = []
   const exact = flagValue(command, '--certificate-identity')
   const regexp = flagValue(command, '--certificate-identity-regexp')
+  let ref: string | undefined
   if (exact !== undefined) {
-    if (!exact.startsWith('https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@'))
+    if (!exact.startsWith(EXACT_PREFIX))
       findings.push(`exact identity names another workflow: ${exact}`)
+    else ref = exact.slice(EXACT_PREFIX.length)
   } else if (regexp !== undefined) {
-    if (
-      !regexp.startsWith(
-        '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@',
-      ) ||
-      !regexp.endsWith('$')
-    )
+    if (!regexp.startsWith(REGEXP_PREFIX) || !regexp.endsWith('$'))
       findings.push(`identity regexp is not anchored to release.yml: ${regexp}`)
+    else ref = regexp.slice(REGEXP_PREFIX.length, -1)
   } else {
     findings.push('no certificate identity')
+  }
+  const trigger = flagValue(command, '--certificate-github-workflow-trigger')
+  if (ref !== undefined) {
+    if (ref.includes('|')) findings.push(`identity accepts more than one ref: ${ref}`)
+    else if (ref === 'refs/heads/main') {
+      if (trigger !== 'push')
+        findings.push('a main identity without --certificate-github-workflow-trigger push')
+    } else if (ref.startsWith('refs/tags/')) {
+      if (trigger !== 'workflow_dispatch')
+        findings.push(
+          'a tag identity without --certificate-github-workflow-trigger workflow_dispatch',
+        )
+    } else findings.push(`identity names a ref no release signs from: ${ref}`)
   }
   if (flagValue(command, '--certificate-github-workflow-repository') !== 'kamiazya/whiteboard')
     findings.push('no --certificate-github-workflow-repository kamiazya/whiteboard')
@@ -387,9 +407,50 @@ describe('every documented `cosign verify` pins the release workflow identity', 
     ).not.toEqual([])
     expect(
       identityFindings(
-        `cosign verify x --certificate-identity-regexp "^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/heads/main$"${base}`,
+        `cosign verify x --certificate-identity-regexp "^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/heads/main$"${base} --certificate-github-workflow-trigger push`,
       ),
     ).toEqual([])
+  })
+
+  it('pairs each ref with the trigger a release signs it under, one ref per command', () => {
+    const base =
+      ' --certificate-github-workflow-repository kamiazya/whiteboard --certificate-oidc-issuer "https://token.actions.githubusercontent.com"'
+    const identity = (ref: string) =>
+      `cosign verify x --certificate-identity "https://github.com/kamiazya/whiteboard/.github/workflows/release.yml@${ref}"${base}`
+    expect(identityFindings(identity('refs/tags/<tag>'))).not.toEqual([])
+    expect(
+      identityFindings(`${identity('refs/tags/<tag>')} --certificate-github-workflow-trigger push`),
+    ).not.toEqual([])
+    expect(
+      identityFindings(
+        `${identity('refs/tags/<tag>')} --certificate-github-workflow-trigger workflow_dispatch`,
+      ),
+    ).toEqual([])
+    expect(
+      identityFindings(
+        `${identity('refs/heads/main')} --certificate-github-workflow-trigger workflow_dispatch`,
+      ),
+    ).not.toEqual([])
+    expect(
+      identityFindings(
+        `cosign verify x --certificate-identity-regexp '^https://github\\.com/kamiazya/whiteboard/\\.github/workflows/release\\.yml@refs/(heads/main|tags/x)$'${base} --certificate-github-workflow-trigger push`,
+      ),
+    ).not.toEqual([])
+  })
+
+  it('documents both release identities', () => {
+    const refs = commands.map(({ command }) =>
+      (flagValue(command, '--certificate-identity') ?? '').slice(EXACT_PREFIX.length),
+    )
+    expect(refs).toEqual(expect.arrayContaining(['refs/heads/main', 'refs/tags/<tag>']))
+  })
+
+  // A tag identity is only as trustworthy as whoever can create the tag: a
+  // writer who pushes `mcp-server-v9.9.9` at a commit carrying their own
+  // release.yml and dispatches from it signs under exactly that identity.
+  it('states that the tag identity rests on a maintainer-only tag ruleset', () => {
+    const releasing = readFileSync(join(REPO_ROOT, 'docs/contributing/releasing.md'), 'utf-8')
+    expect(releasing).toMatch(/ruleset [^.]*`mcp-server-v\*` tags to maintainers/)
   })
 
   it.each(commands)('$file: $command', ({ command }) => {

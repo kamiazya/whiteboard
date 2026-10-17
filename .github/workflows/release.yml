@@ -239,6 +239,20 @@ jobs:
         with:
           ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
 
+      - name: Refuse a forced publish whose signature would name another commit
+        # The image's provenance and the cosign certificate name GITHUB_SHA and
+        # the dispatched ref, while this job builds the tag checked out above.
+        # Dispatched from main, a tag main never held would be signed as
+        # release.yml@refs/heads/main. They agree only when the dispatch ran
+        # from the tag itself.
+        if: inputs.force_publish_tag != ''
+        run: |
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out tag is $head but this run attests $GITHUB_SHA. Dispatch the forced publish from the tag itself: gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>"
+            exit 1
+          fi
+
       - uses: ./.github/actions/setup-pnpm
         with:
           node-version: 24

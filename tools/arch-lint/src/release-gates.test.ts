@@ -115,35 +115,39 @@ describe('release gate: package.json bin + scripts contract', () => {
   })
 })
 
-describe('release gate: a forced npm publish attests the commit it publishes', () => {
-  // `npm publish --provenance` attests GITHUB_SHA — the commit the dispatch
-  // ran from — while a forced publish checks out and packs the TAG. Dispatched
-  // from main, the provenance would name a commit the tarball was not built
-  // from, so the job must refuse before it publishes.
-  interface Step {
-    name?: string
-    uses?: string
-    if?: string
-    run?: string
+// A forced publish checks out and builds the TAG, while every attestation the
+// run makes — npm `--provenance`, the image's provenance, the cosign
+// certificate — names GITHUB_SHA and the ref the dispatch ran from. Dispatched
+// from main, a tag main never held would ship under main's identity, so every
+// job that checks out `force_publish_tag` refuses a HEAD that is not
+// GITHUB_SHA, as the very next step: anything later already runs the tag's code
+// (its `./.github/actions/*` included).
+interface ReleaseStep {
+  name?: string
+  uses?: string
+  if?: string
+  run?: string
+  with?: { ref?: string }
+}
+const RELEASE_JOBS = (
+  parseYaml(readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')) as {
+    jobs: Record<string, { steps: ReleaseStep[] }>
   }
-  const release = parseYaml(
-    readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8'),
-  ) as {
-    jobs: Record<string, { steps: Step[] }>
-  }
-  const steps = release.jobs['publish-mcp']?.steps ?? []
-  const guardIndex = steps.findIndex(
-    (s) => /git rev-parse HEAD/.test(s.run ?? '') && /GITHUB_SHA/.test(s.run ?? ''),
+).jobs
+const isCheckout = (s: ReleaseStep) => (s.uses ?? '').startsWith('actions/checkout@')
+const FORCED_CHECKOUT_JOBS = Object.entries(RELEASE_JOBS)
+  .filter(([, job]) =>
+    job.steps.some((s) => isCheckout(s) && (s.with?.ref ?? '').includes('force_publish_tag')),
   )
-  const checkoutIndex = steps.findIndex((s) => (s.uses ?? '').startsWith('actions/checkout@'))
-  const publishIndex = steps.findIndex((s) => /npm publish[^\n]*--provenance/.test(s.run ?? ''))
+  .map(([name, job]) => ({ name, steps: job.steps }))
 
+describe('release gate: a forced publish attests the commit it publishes', () => {
   const tmpRoots: string[] = []
   afterAll(() => {
     for (const dir of tmpRoots) rmSync(dir, { recursive: true, force: true })
   })
 
-  function runGuard(sha: (head: string) => string): { status: number | null; stderr: string } {
+  function runGuard(script: string, sha: (head: string) => string) {
     const cwd = mkdtempSync(join(tmpdir(), 'release-provenance-'))
     tmpRoots.push(cwd)
     // A git hook exports GIT_DIR and friends; inherited, they point every
@@ -164,7 +168,7 @@ describe('release gate: a forced npm publish attests the commit it publishes', (
       'tag',
     )
     const head = git('rev-parse', 'HEAD')
-    const res = spawnSync('bash', ['-e', '-c', steps[guardIndex]?.run ?? 'exit 99'], {
+    const res = spawnSync('bash', ['-e', '-c', script], {
       cwd,
       env: { ...env, GITHUB_SHA: sha(head) },
       encoding: 'utf-8',
@@ -172,22 +176,32 @@ describe('release gate: a forced npm publish attests the commit it publishes', (
     return { status: res.status, stderr: `${res.stdout}${res.stderr}` }
   }
 
-  it('checks HEAD against GITHUB_SHA after checkout and before npm publish --provenance', () => {
-    expect(checkoutIndex).toBeGreaterThanOrEqual(0)
-    expect(publishIndex).toBeGreaterThan(checkoutIndex)
-    expect(guardIndex).toBeGreaterThan(checkoutIndex)
-    expect(guardIndex).toBeLessThan(publishIndex)
-    expect(steps[guardIndex]?.if).toContain('inputs.force_publish_tag')
+  it('finds both publishing jobs among those that check out the forced tag', () => {
+    expect(FORCED_CHECKOUT_JOBS.map((j) => j.name)).toEqual(
+      expect.arrayContaining(['publish-mcp', 'docker-publish-sign']),
+    )
   })
 
-  it('refuses when the checked-out tag is not the dispatched commit, and says how to dispatch', () => {
-    const res = runGuard(() => 'f'.repeat(40))
-    expect(res.status).not.toBe(0)
-    expect(res.stderr).toContain('--ref')
-  })
+  describe.each(FORCED_CHECKOUT_JOBS)('$name', ({ steps }) => {
+    const checkoutIndex = steps.findIndex(isCheckout)
+    const guard = steps[checkoutIndex + 1]
+    const script = guard?.run ?? 'exit 99'
 
-  it('passes when the dispatch ran from the tag it publishes', () => {
-    const res = runGuard((head) => head)
-    expect(res.status, res.stderr).toBe(0)
+    it('checks HEAD against GITHUB_SHA as the step right after checkout', () => {
+      expect(script).toMatch(/git rev-parse HEAD/)
+      expect(script).toMatch(/GITHUB_SHA/)
+      expect(guard?.if).toContain('inputs.force_publish_tag')
+    })
+
+    it('refuses when the checked-out tag is not the dispatched commit, and says how to dispatch', () => {
+      const res = runGuard(script, () => 'f'.repeat(40))
+      expect(res.status).not.toBe(0)
+      expect(res.stderr).toContain('--ref')
+    })
+
+    it('passes when the dispatch ran from the tag it publishes', () => {
+      const res = runGuard(script, (head) => head)
+      expect(res.status, res.stderr).toBe(0)
+    })
   })
 })
