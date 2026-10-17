@@ -111,7 +111,7 @@ export const LEDGER: Ledger = {
     providerId: text,
     nonce: text,
     codeVerifier: text,
-    invitationToken: textOrNull,
+    invitationTokenHash: textOrNull,
     returnTo: text,
     expiresAt: integer,
   },

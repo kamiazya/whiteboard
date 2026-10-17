@@ -15,6 +15,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantScoped } from '../store/db/tenant-database.js'
+import { INVITATION_TOKEN_BYTES } from './invitation-token.js'
 
 const invitationSchema = z
   .object({
@@ -30,6 +31,8 @@ type Invitation = z.infer<typeof invitationSchema>
 
 type LinkRefusal = 'unknown' | 'expired' | 'redeemed'
 
+type OpenedLink = { ok: true; invitation: Invitation } | { ok: false; reason: LinkRefusal }
+
 interface IssueInput {
   readonly invitedBy: string
   /** ADR-0049 decision 3: the workspace accepting it joins; absent, the tenant alone. */
@@ -41,10 +44,9 @@ interface IssueInput {
 export interface InvitationStore {
   /** The token is returned here and nowhere else; the store keeps its hash. */
   createLink(input: IssueInput): Promise<{ token: string; invitation: Invitation }>
-  openLink(
-    token: string,
-    now: number,
-  ): Promise<{ ok: true; invitation: Invitation } | { ok: false; reason: LinkRefusal }>
+  openLink(token: string, now: number): Promise<OpenedLink>
+  /** `openLink` for a caller that kept only the token's hash. */
+  openLinkByHash(tokenHash: string, now: number): Promise<OpenedLink>
   /** True for exactly one caller per invitation, and only before it expires. */
   redeem(invitationId: string, redeemedBy: string, now: number): Promise<boolean>
 }
@@ -69,11 +71,11 @@ async function insert(db: TenantScoped, input: IssueInput, tokenHash: string): P
   return invitation
 }
 
-async function openLink(db: TenantScoped, token: string, now: number) {
+async function openLink(db: TenantScoped, tokenHash: string, now: number): Promise<OpenedLink> {
   const row = await db
     .selectFrom('invitations')
     .selectAll()
-    .where('tokenHash', '=', sha256Hex(token))
+    .where('tokenHash', '=', tokenHash)
     .executeTakeFirst()
   if (row === undefined) return { ok: false as const, reason: 'unknown' as const }
   if (row.redeemedAt !== null) return { ok: false as const, reason: 'redeemed' as const }
@@ -96,10 +98,11 @@ async function redeem(db: TenantScoped, invitationId: string, redeemedBy: string
 export function createInvitationStore(db: TenantScoped): InvitationStore {
   return {
     async createLink(input) {
-      const token = randomBytes(32).toString('base64url')
+      const token = randomBytes(INVITATION_TOKEN_BYTES).toString('base64url')
       return { token, invitation: await insert(db, input, sha256Hex(token)) }
     },
-    openLink: (token, now) => openLink(db, token, now),
+    openLink: (token, now) => openLink(db, sha256Hex(token), now),
+    openLinkByHash: (tokenHash, now) => openLink(db, tokenHash, now),
     redeem: (invitationId, redeemedBy, now) => redeem(db, invitationId, redeemedBy, now),
   }
 }

@@ -23,11 +23,14 @@ import type {
   SignInRefusal,
   SignInSessionResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
+import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { errnoCode } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
 import type { AdministratorCheck } from '../security/administrator-check.js'
 import { type CompleteSignInDeps, completeSignIn } from '../security/complete-sign-in.js'
+import { isInvitationTokenShaped } from '../security/invitation-token.js'
 import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-party.js'
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
 import type { SignInAttemptStore } from '../security/sign-in-attempt-store.js'
@@ -43,6 +46,9 @@ const log = getLogger('sign-in')
 
 const ATTEMPT_COOKIE = '__Host-wb_signin'
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
+// A return path is a page of the web app; beginning a sign-in needs no
+// credential, so a longer one is dropped rather than stored for whoever asks.
+const MAX_RETURN_PATH = 2048
 
 /** A provider a person signs in with here: through a browser redirect to an
  *  OIDC provider, or through the reverse proxy in front of the keeper. */
@@ -62,12 +68,33 @@ export interface SignInRoutesDeps {
   readonly peerAddress?: (c: Context) => string | undefined
 }
 
-// Only a path on this origin. `//host` and `/\host` are read as another host
-// by browsers, and anything absolute is somebody else's page.
-function safeReturnPath(requested: string | undefined): string {
+// Only a path on this origin, decided the way the browser will read it: the
+// URL parser strips tab and newline and turns `\` into `/`, so `/\t/host`
+// and `/\host` are another host once parsed. Resolving against our own
+// origin and keeping the result only when the origin survives covers every
+// such spelling; a control character is refused outright, since nothing
+// legitimate carries one.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
+
+function safeReturnPath(requested: string | undefined, publicBaseUrl: string): string {
   if (requested === undefined || !requested.startsWith('/')) return '/'
-  if (requested.startsWith('//') || requested.includes('\\')) return '/'
-  return requested
+  if (requested.length > MAX_RETURN_PATH) return '/'
+  if (CONTROL_CHARACTER.test(requested)) return '/'
+  const ours = new URL(publicBaseUrl)
+  const resolved = URL.parse(requested, ours)
+  if (resolved === null || resolved.origin !== ours.origin) return '/'
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`
+}
+
+// openid-client keeps a refused response body on its error — as the cause,
+// or as a property — and a token endpoint's body can carry snake_case
+// `id_token`/`access_token`/`refresh_token` the redaction list cannot name at
+// every depth. The log gets what KIND of failure it was, never the error.
+function failureOf(err: unknown): { readonly name: string; readonly code?: string } {
+  if (!(err instanceof Error)) return { name: typeof err }
+  const code = errnoCode(err)
+  return code === undefined ? { name: err.name } : { name: err.name, code }
 }
 
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
@@ -82,9 +109,12 @@ interface Routing {
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
   const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
+  if (invitation !== undefined && !isInvitationTokenShaped(invitation)) {
+    return refusedTo(c, 'invitation_unusable')
+  }
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
-    returnTo: safeReturnPath(returnTo),
+    returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),
     ...(invitation === undefined ? {} : { invitationToken: invitation }),
     now: now(),
     ttlMs: ATTEMPT_TTL_MS,
@@ -112,7 +142,10 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
       fresh,
     })
     .catch((err: unknown) => {
-      log.warning({ providerId: provider.id, err }, 'the provider could not be reached')
+      log.warning(
+        { providerId: provider.id, failure: failureOf(err) },
+        'the provider could not be reached',
+      )
       return null
     })
   if (to === null) return refusedTo(c, 'provider_unreachable')
@@ -141,7 +174,10 @@ async function verifiedClaims(
       ...checks,
     })
   } catch (err) {
-    log.warning({ providerId: provider.id, err }, 'the provider answer failed a check')
+    log.warning(
+      { providerId: provider.id, failure: failureOf(err) },
+      'the provider answer failed a check',
+    )
     return null
   }
 }
@@ -179,10 +215,16 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
   const done = await completeSignIn(deps.signIn, {
     provider,
     claims,
-    ...(attempt.invitationToken === null ? {} : { invitationToken: attempt.invitationToken }),
+    ...(attempt.invitationTokenHash === null
+      ? {}
+      : { invitationTokenHash: attempt.invitationTokenHash }),
     now: now(),
   })
   if (!done.ok) return refusedTo(c, done.reason)
+  // The cookie set below overwrites the one this browser held, and a session
+  // nobody can name any more is one only a thief of the old cookie can use.
+  const previous = getCookie(c, SESSION_COOKIE)
+  if (previous !== undefined) await deps.signIn.sessions.end(previous)
   setCookie(c, SESSION_COOKIE, done.sessionToken, {
     ...cookieOptions,
     maxAge: Math.floor(deps.signIn.sessionTtlMs / 1000),
@@ -231,7 +273,14 @@ async function session(c: Context, deps: SignInRoutesDeps, now: () => number) {
   return c.json(body)
 }
 
+// The browser attaches the session cookie to a POST any page makes to this
+// host — a sibling subdomain's included, which SameSite=Lax does not stop —
+// so, as for every session write, only this host's own pages may sign out.
+// Browsers send `Origin` on every POST, same-origin ones too.
 async function signOut(c: Context, deps: SignInRoutesDeps) {
+  if (c.req.header('origin') !== new URL(deps.publicBaseUrl).origin) {
+    return c.json(errorBody('forbidden', 'Sign out from this server’s own pages.'), 403)
+  }
   const session = getCookie(c, SESSION_COOKIE)
   if (session !== undefined) await deps.signIn.sessions.end(session)
   deleteCookie(c, SESSION_COOKIE, cookieOptions)

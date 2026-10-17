@@ -10,6 +10,7 @@ import {
   type WorkspaceDocumentApiAction,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sha256Hex } from '../shared/sha256.js'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import {
@@ -491,12 +492,13 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
   // are checked by driving the one into the other: the attempt the keeper
   // stores is what its callback later admits and redirects with.
   it('a sign-in link keeps both its invitation and where to return to', async () => {
-    const url = daemonUrls.authSignInUrl('corp', { returnTo: '/w/x', invitation: 'inv-123' })
+    const invitation = 'i'.repeat(43)
+    const url = daemonUrls.authSignInUrl('corp', { returnTo: '/w/x', invitation })
     const res = await app.request(`${PUBLIC_URL}${url}`)
     expect(res.status, res.headers.get('location') ?? '').toBe(302)
     const state = new URL(res.headers.get('location') ?? '').searchParams.get('state') ?? ''
     const binding = /__Host-wb_signin=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1] ?? ''
     const attempt = await signIn.attempts.take(state, binding, Date.now())
-    expect(attempt).toMatchObject({ returnTo: '/w/x', invitationToken: 'inv-123' })
+    expect(attempt).toMatchObject({ returnTo: '/w/x', invitationTokenHash: sha256Hex(invitation) })
   })
 })

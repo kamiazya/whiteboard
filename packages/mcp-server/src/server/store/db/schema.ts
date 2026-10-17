@@ -214,7 +214,8 @@ interface SignInAttemptsTable {
   providerId: string
   nonce: string
   codeVerifier: string
-  invitationToken: string | null
+  /** SHA-256 of the invitation link's token; the token itself is never kept. */
+  invitationTokenHash: string | null
   returnTo: string
   expiresAt: Timestamp
 }
