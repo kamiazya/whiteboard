@@ -60,7 +60,7 @@ async function mountPage(store: BrowserStoreDouble) {
   const router = createMemoryRouter(
     [
       {
-        path: '/w/:workspace/d/*',
+        path: '/w/*',
         element: (
           <BrowserDocumentPage
             store={store.index}
@@ -72,7 +72,7 @@ async function mountPage(store: BrowserStoreDouble) {
         ),
       },
     ],
-    { initialEntries: ['/w/default/d/here'] },
+    { initialEntries: ['/w/me/default/d/here'] },
   )
   await act(async () => {
     rtlRender(<RouterProvider router={router} />)
@@ -100,7 +100,7 @@ describe('BrowserDocumentPage file references', () => {
     // having the URL→document effect repair it lands back on this same
     // pathname, so a pathname assertion cannot tell the two apart — and the
     // difference is a junk history entry the user has to press Back through.
-    expect(router.state.location.pathname).toBe('/w/default/d/here')
+    expect(router.state.location.pathname).toBe('/w/me/default/d/here')
     expect(router.state.location.key).toBe(before)
   })
 })

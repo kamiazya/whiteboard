@@ -9,24 +9,36 @@
  * is the failure mode a per-site rule has: not disagreement, but one site
  * quietly knowing about fewer layers than there are.
  *
- * `workspaceHandle` is the inverse of ports' `resolveWorkspaceHandle`: that
- * one turns an incoming address into a workspace, this one turns a workspace
- * into the address to emit. They are kept apart because the label half has no
- * business in a contracts package, and splitting the pair to place one of
- * them "correctly" would cost more than it buys — move the handle half beside
- * its inverse when a second package needs it.
+ * `workspaceHandle` is the inverse of `resolveWorkspaceAddress`: that one
+ * turns an incoming address into a workspace, this one turns a workspace into
+ * the address to emit. The label half has no business in a contracts
+ * package, so the pair lives here rather than beside ports'
+ * `resolveWorkspaceHandle`.
  */
+import {
+  formatWorkspaceAddress,
+  parseWorkspaceAddress,
+  SINGLE_PERSON_NAMESPACE,
+} from '@kamiazya/whiteboard-model'
+import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
+import { workspacePath } from './app-routes.js'
 
 /** Just enough of a workspace record to address and name it. */
 export interface WorkspaceIdentity {
   readonly workspaceId: string
+  /** The namespace holding `segment`; absent is a single-person keeper's `me`. */
+  readonly namespace?: string | undefined
   readonly segment?: string | undefined
   readonly displayName?: string | undefined
 }
 
 /**
- * What an address carries: the segment when the workspace has one, the
- * canonical id when it does not.
+ * What an in-app address carries (ADR-0053): `<namespace>/<segment>` when the
+ * workspace has a segment, the canonical id when it does not.
+ *
+ * Never the segment alone: a segment is unique only inside its namespace, so
+ * on a keeper with many people a bare one would name a different workspace
+ * for each person who opened it.
  *
  * The id is not a lesser answer here — ADR-0019 keeps it resolvable in the
  * same position precisely so it can be the durable form, and 0019's migration
@@ -34,7 +46,45 @@ export interface WorkspaceIdentity {
  * one. A workspace addressed by its id is a workspace nobody has named yet.
  */
 export function workspaceHandle(workspace: WorkspaceIdentity): string {
-  return workspace.segment ?? workspace.workspaceId
+  if (workspace.segment === undefined) return workspace.workspaceId
+  return formatWorkspaceAddress({
+    form: 'qualified',
+    namespace: workspace.namespace ?? SINGLE_PERSON_NAMESPACE,
+    segment: workspace.segment,
+  })
+}
+
+/**
+ * The workspace an address names among `entries`, or null.
+ *
+ * Ports' `resolveWorkspaceHandle` reads a one-component address as a segment
+ * in the caller's namespace first — right for an MCP argument, wrong for a
+ * URL: a one-component URL is the id form ONLY (ADR-0053 decision 2), so an
+ * old `/w/<segment>` link names nothing rather than being quietly redirected.
+ * A legacy non-ULID id still matches itself exactly.
+ */
+export function resolveWorkspaceAddress<W extends WorkspaceIdentity>(
+  entries: readonly W[],
+  address: string,
+): W | null {
+  const parsed = parseWorkspaceAddress(address)
+  if (parsed === null) return null
+  if (parsed.form === 'bare') return entries.find((w) => w.workspaceId === address) ?? null
+  const resolved = resolveWorkspaceHandle(entries, address)
+  return resolved === null
+    ? null
+    : (entries.find((w) => w.workspaceId === resolved.workspaceId) ?? null)
+}
+
+/**
+ * The link to hand to somebody else: the opaque `/w/<workspaceId>`, never
+ * the in-app address (ADR-0053 decision 1). A link may reach a person who is
+ * not a member, and the readable form would tell them the holder's handle
+ * and what the workspace is called. The app moves a member who opens it onto
+ * the readable form once access is known.
+ */
+export function workspaceLink(origin: string, workspace: WorkspaceIdentity): string {
+  return `${origin}${workspacePath(workspace.workspaceId)}`
 }
 
 /**

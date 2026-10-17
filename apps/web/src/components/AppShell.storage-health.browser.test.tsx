@@ -13,7 +13,7 @@ function renderShell() {
   render(
     <RouterProvider
       router={createMemoryRouter([{ path: '*', element: <AppShell daemon={false} /> }], {
-        initialEntries: ['/w/default/d/c1'],
+        initialEntries: ['/w/me/default/d/c1'],
       })}
     />,
   )

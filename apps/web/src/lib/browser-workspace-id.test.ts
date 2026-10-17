@@ -115,12 +115,23 @@ describe('browser workspace id accessor', () => {
     const first = await resolveBrowserWorkspaceId(DB_NAME)
     await index.createWorkspace({ workspaceId: LATER_ULID, segment: 'second' })
 
-    const moved = await switchBrowserWorkspace('second', DB_NAME)
+    const moved = await switchBrowserWorkspace('me/second', DB_NAME)
 
     expect(moved?.workspaceId).toBe(LATER_ULID)
     expect(getBrowserWorkspaceId()).toBe(LATER_ULID)
     expect(getBrowserWorkspaceId()).not.toBe(first)
     expect(getBrowserWorkspaceIdentity().segment).toBe('second')
+  })
+
+  // ADR-0053 decision 2: an old one-component segment address is the id form,
+  // so it names nothing rather than being redirected into `me`.
+  it('does not switch to a bare segment', async () => {
+    const index = new IdbDocumentIndex(DB_NAME)
+    const first = await resolveBrowserWorkspaceId(DB_NAME)
+    await index.createWorkspace({ workspaceId: LATER_ULID, segment: 'second' })
+
+    expect(await switchBrowserWorkspace('second', DB_NAME)).toBeNull()
+    expect(getBrowserWorkspaceId()).toBe(first)
   })
 
   it('a registry read whose transaction aborts fails rather than hanging', async () => {
@@ -199,9 +210,9 @@ describe('browser workspace id accessor', () => {
     await registerTestWorkspace({ workspaceId: LATER_ULID, segment: 'kept' })
 
     expect(await resolveBrowserWorkspaceId(DB_NAME)).toBe(LATER_ULID)
-    expect(await switchBrowserWorkspace('broken', DB_NAME)).toBeNull()
+    expect(await switchBrowserWorkspace('me/broken', DB_NAME)).toBeNull()
     expect(await switchBrowserWorkspace('00 not an id', DB_NAME)).toBeNull()
-    expect(await switchBrowserWorkspace('kept', DB_NAME)).toEqual({
+    expect(await switchBrowserWorkspace('me/kept', DB_NAME)).toEqual({
       workspaceId: LATER_ULID,
       segment: 'kept',
     })
@@ -301,7 +312,7 @@ describe('browser workspace id accessor', () => {
     })
 
     resetBrowserWorkspaceIdForTests()
-    expect(await resolveBrowserWorkspaceId(DB_NAME, 'second')).toBe(LATER_ULID)
+    expect(await resolveBrowserWorkspaceId(DB_NAME, 'me/second')).toBe(LATER_ULID)
     expect(getBrowserWorkspaceIdentity()).toEqual({ workspaceId: LATER_ULID, segment: 'second' })
   })
 
@@ -314,11 +325,12 @@ describe('browser workspace id accessor', () => {
     expect(await resolveBrowserWorkspaceId(DB_NAME, 'no-such-workspace')).toBe(only)
   })
 
-  it('the handle is the segment when there is one, the id when there is not', () => {
+  it('the handle is the qualified segment when there is one, the id when there is not', () => {
     // What an ADDRESS carries. Both arms are live: a v15+ registry row has a
-    // segment, and a row written before that carrier does not.
+    // segment, and a row written before that carrier does not. The browser
+    // holds one namespace, `me` (ADR-0053).
     setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'design-team')
-    expect(browserWorkspaceHandleOrNull()).toBe('design-team')
+    expect(browserWorkspaceHandleOrNull()).toBe('me/design-team')
 
     setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV')
     expect(browserWorkspaceHandleOrNull()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')

@@ -13,6 +13,7 @@ import {
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 import { type MembershipRefusalState, membershipRefusal } from '../lib/membership-refusal.js'
+import { resolveWorkspaceAddress } from '../lib/workspace-handle.js'
 
 // `app-logger` takes (message, data) — the opposite order to the server's pino seam.
 const log = getAppLogger('daemon-document-page')
@@ -20,7 +21,9 @@ const log = getAppLogger('daemon-document-page')
 export interface UseDaemonDocumentControllerOptions {
   daemonBaseUrl: string
   // Absent workspaceId/path is resolved to a default (first workspace / first
-  // canvas) on mount — see the resolve effect below.
+  // canvas) on mount — see the resolve effect below. An ADDRESS, in either
+  // form the URL carries (`<namespace>/<segment>` or the canonical id); the
+  // controller's own `workspaceId` is always the id it resolves to.
   workspaceId?: string
   path?: string
   daemonFetch: typeof fetch
@@ -76,6 +79,26 @@ export interface DaemonDocumentController {
 }
 
 const DAEMON_REQUEST_FAILED = 'The daemon request failed.'
+const NO_WORKSPACE_AT_ADDRESS = 'No workspace you can open is at this address.'
+
+/**
+ * The workspace id an address names among the listed workspaces.
+ *
+ * A one-component address is the id form, and an unlisted one is still asked
+ * for: the keeper's answer for it — a membership refusal on server mode,
+ * which lists only what the caller may see — is the one the person needs. A
+ * qualified address names a segment, which no request can carry, so an
+ * unlisted one is answered here, the same whatever it names.
+ */
+function addressedWorkspaceId(
+  list: readonly WorkspaceSummary[],
+  address: string | undefined,
+): string | null {
+  if (address === undefined) return list[0]?.workspaceId ?? null
+  return (
+    resolveWorkspaceAddress(list, address)?.workspaceId ?? (address.includes('/') ? null : address)
+  )
+}
 
 /**
  * How a failed resolve is reported.
@@ -158,9 +181,13 @@ export function useDaemonDocumentController(
       if (!current()) return
       setWorkspaces(list)
 
-      const wid = options.workspaceId ?? list[0]?.workspaceId ?? null
+      const wid = addressedWorkspaceId(list, options.workspaceId)
       if (wid === null) {
-        setLoadError('No workspace is available on this daemon.')
+        setLoadError(
+          options.workspaceId === undefined
+            ? 'No workspace is available on this daemon.'
+            : NO_WORKSPACE_AT_ADDRESS,
+        )
         return
       }
       knownWid = wid

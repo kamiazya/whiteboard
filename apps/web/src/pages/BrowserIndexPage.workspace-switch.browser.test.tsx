@@ -73,8 +73,8 @@ it('lists the workspace switched to, told apart by count', async () => {
   await waitFor(() => expect(titles()).toHaveLength(1))
   // Asserted, not assumed: a switch that did not happen leaves the list
   // unchanged, which is indistinguishable from the bug under test.
-  expect(await switchBrowserWorkspace('second')).not.toBeNull()
+  expect(await switchBrowserWorkspace('me/second')).not.toBeNull()
   await waitFor(() => expect(titles()).toHaveLength(2))
-  expect(await switchBrowserWorkspace('default')).not.toBeNull()
+  expect(await switchBrowserWorkspace('me/default')).not.toBeNull()
   await waitFor(() => expect(titles()).toHaveLength(1))
 })

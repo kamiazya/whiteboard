@@ -51,7 +51,7 @@ const browserFixture: DocumentPageFixture = {
     router = createMemoryRouter(
       [
         {
-          path: '/w/:workspace/d/*',
+          path: '/w/*',
           element: (
             <BrowserDocumentPage
               store={seeded.index}
@@ -63,7 +63,7 @@ const browserFixture: DocumentPageFixture = {
           ),
         },
       ],
-      { initialEntries: [`/w/default/d/${open.path}`] },
+      { initialEntries: [`/w/me/default/d/${open.path}`] },
     )
     const mounted = router
     await act(async () => {
@@ -75,7 +75,7 @@ const browserFixture: DocumentPageFixture = {
   labelOf: (doc) => doc.name,
   async expectOpened(path) {
     await waitFor(() => {
-      expect(router?.state.location.pathname).toBe(`/w/default/d/${path}`)
+      expect(router?.state.location.pathname).toBe(`/w/me/default/d/${path}`)
     })
   },
   failNextDelete() {

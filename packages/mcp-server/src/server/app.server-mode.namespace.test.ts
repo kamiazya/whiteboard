@@ -184,26 +184,38 @@ describe("server mode — a segment in someone else's namespace is invisible", (
     expect(byId.status).toBe(200)
   })
 
-  // The web app still addresses a listed workspace by its segment when it has
-  // one, and a bare segment means the caller's own namespace: a segment
-  // listed for somebody else's would address nothing for this caller.
-  it('lists a workspace from another namespace without its segment', async () => {
+  // A listed segment means nothing without the namespace holding it, so each
+  // row carries both and the web app addresses it as `<namespace>/<segment>`.
+  it('lists each workspace with the namespace that holds its segment', async () => {
     const ada = await signedIn('ada')
     const bob = await signedIn('bob')
     const shared = await create(ada, 'Design')
-    await create(bob, 'Notes')
+    const own = await create(bob, 'Notes')
     await members.addMember(shared.workspaceId, await userIdOf('bob'))
 
     const res = await app.request(`${PUBLIC_URL}/api/workspaces`, { headers: bob })
     const { workspaces } = (await res.json()) as {
-      workspaces: { workspaceId: string; segment?: string }[]
+      workspaces: { workspaceId: string; namespace?: string; segment?: string }[]
     }
 
     expect(workspaces).toHaveLength(2)
-    expect(workspaces.find((w) => w.workspaceId === shared.workspaceId)).not.toHaveProperty(
-      'segment',
-    )
-    expect(workspaces.find((w) => w.workspaceId !== shared.workspaceId)?.segment).toBe('notes')
+    expect(workspaces.find((w) => w.workspaceId === shared.workspaceId)).toMatchObject({
+      namespace: 'ada',
+      segment: 'design',
+    })
+    expect(workspaces.find((w) => w.workspaceId === own.workspaceId)).toMatchObject({
+      namespace: 'bob',
+      segment: 'notes',
+    })
+  })
+
+  it('answers a create and a rename with the namespace the workspace is held in', async () => {
+    const ada = await signedIn('ada')
+    const created = (await create(ada, 'Design')) as { workspaceId: string; namespace?: string }
+    const renamed = await rename(ada, created.workspaceId, { segment: 'plans' })
+
+    expect(created.namespace).toBe('ada')
+    expect(await renamed.json()).toMatchObject({ namespace: 'ada', segment: 'plans' })
   })
 })
 

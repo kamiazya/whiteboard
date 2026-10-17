@@ -178,7 +178,7 @@ describe('a replica entry written in two steps', () => {
   })
 
   it('records the segment and display name a pull captured', () => {
-    expect(findReplicaForHandle(pulled, 'team')?.displayName).toBe('Team')
+    expect(findReplicaForHandle(pulled, 'me/team')?.displayName).toBe('Team')
   })
 
   it('keeps them when a later push states only what it synced', () => {
@@ -188,7 +188,7 @@ describe('a replica entry written in two steps', () => {
       syncedFrontier: 'f2',
     })
 
-    expect(findReplicaForHandle(pushed, 'team')).toMatchObject({
+    expect(findReplicaForHandle(pushed, 'me/team')).toMatchObject({
       workspaceId: 'ws-1',
       displayName: 'Team',
       syncedAt: '2026-01-02T00:00:00Z',
@@ -213,10 +213,12 @@ describe('a replica entry written in two steps', () => {
     expect(forgetReplicaEntry(defaultUserSettings(), 'nope')).toEqual(defaultUserSettings())
   })
 
-  it('finds an entry by its canonical id or by its segment, and nothing else', () => {
+  it('finds an entry by its canonical id or by its qualified segment, and nothing else', () => {
     expect(findReplicaForHandle(pulled, 'ws-1')?.workspaceId).toBe('ws-1')
-    expect(findReplicaForHandle(pulled, 'team')?.workspaceId).toBe('ws-1')
-    expect(findReplicaForHandle(pulled, 'nobody')).toBeNull()
+    expect(findReplicaForHandle(pulled, 'me/team')?.workspaceId).toBe('ws-1')
+    // A one-component address is the id form only (ADR-0053 decision 2).
+    expect(findReplicaForHandle(pulled, 'team')).toBeNull()
+    expect(findReplicaForHandle(pulled, 'me/nobody')).toBeNull()
     expect(findReplicaForHandle(defaultUserSettings(), 'ws-1')).toBeNull()
   })
 })

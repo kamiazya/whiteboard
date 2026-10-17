@@ -27,6 +27,69 @@ function refusal(code: 'requires_person_session' | 'not_a_member') {
 }
 
 describe('useDaemonDocumentController', () => {
+  // ADR-0053: the URL carries `<namespace>/<segment>`, which no route takes,
+  // so the controller names the id the listing resolves it to.
+  it('resolves a qualified address to the id it names before any request', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [
+        { workspaceId: 'w-me', segment: 'plans' },
+        { workspaceId: 'w-ada', namespace: 'ada', segment: 'plans' },
+      ],
+    })
+    mockListDocuments.mockResolvedValue({ documents: [] })
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({
+        daemonBaseUrl: DAEMON_BASE_URL,
+        daemonFetch: fetchFn,
+        workspaceId: 'ada/plans',
+      }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.workspaceId).toBe('w-ada')
+    expect(mockListDocuments).toHaveBeenCalledExactlyOnceWith(fetchFn, DAEMON_BASE_URL, 'w-ada')
+  })
+
+  it('asks for nothing at a qualified address the listing does not hold', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w-me', segment: 'plans' }],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({
+        daemonBaseUrl: DAEMON_BASE_URL,
+        daemonFetch: fetchFn,
+        workspaceId: 'bob/plans',
+      }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.loadError).toMatch(/no workspace you can open is at this address/i)
+    expect(mockListDocuments).not.toHaveBeenCalled()
+  })
+
+  // The keeper's own answer for an unlisted id — a membership refusal on
+  // server mode — is the one a person needs, so the id is still asked for.
+  it('still asks for an unlisted id-form address', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [] })
+    mockListDocuments.mockRejectedValue(refusal('not_a_member'))
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({
+        daemonBaseUrl: DAEMON_BASE_URL,
+        daemonFetch: fetchFn,
+        workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.refusal).toEqual({
+      code: 'not_a_member',
+      workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
+  })
+
   it('picks the first workspace when no workspaceId is given', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],

@@ -21,7 +21,7 @@ describe('useShellWorkspaceRows', () => {
           source: { list: () => Promise.reject(new Error('registry unreadable')) },
           onSwitch: () => {},
         },
-        '/w/design',
+        '/w/me/design',
       ),
     )
     await vi.waitFor(() =>
@@ -31,7 +31,7 @@ describe('useShellWorkspaceRows', () => {
       ),
     )
     expect(result.current.rows).toEqual([])
-    expect(result.current.activeName).toBe('design')
+    expect(result.current.activeName).toBe('me/design')
     await vi.waitFor(() => expect(result.current.listFailed).toBe(true))
   })
 
@@ -45,7 +45,7 @@ describe('useShellWorkspaceRows', () => {
     const list = () =>
       failing ? Promise.reject(new Error('keeper busy')) : Promise.resolve([design])
     const workspaces = { source: { list }, onSwitch: () => {} }
-    const { result } = renderHook(() => useShellWorkspaceRows(workspaces, '/w/design'))
+    const { result } = renderHook(() => useShellWorkspaceRows(workspaces, '/w/me/design'))
     await vi.waitFor(() => expect(result.current.listFailed).toBe(true))
 
     failing = false

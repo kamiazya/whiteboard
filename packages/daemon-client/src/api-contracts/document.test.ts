@@ -361,6 +361,26 @@ describe('workspaceSummarySchema', () => {
     ).toEqual({ workspaceId: 'ws-abc' })
   })
 
+  it('carries the namespace a segment is unique within', () => {
+    const qualified: WorkspaceSummary = {
+      workspaceId: 'ws-abc',
+      namespace: 'ada',
+      segment: 'design',
+    }
+    expect(workspaceSummarySchema.parse(qualified)).toEqual(qualified)
+  })
+
+  // Delegates to model's handle grammar: a ULID-shaped handle would make
+  // `/w/<handle>/<segment>` read as the id form.
+  it('reads a ULID-shaped namespace as absent, keeping the workspace', () => {
+    expect(
+      workspaceSummarySchema.parse({
+        workspaceId: 'ws-abc',
+        namespace: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }),
+    ).toEqual({ workspaceId: 'ws-abc' })
+  })
+
   it('accepts a tier when the daemon threads a resolver', () => {
     expect(
       workspaceSummarySchema.safeParse({ workspaceId: 'ws-abc', tier: 'bounded' }).success,

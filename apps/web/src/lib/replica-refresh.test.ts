@@ -160,7 +160,7 @@ describe('scheduleReplicaRefresh', () => {
     await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(2))
   })
 
-  it('a page addressing the workspace by segment still caches under the canonical id', async () => {
+  it('a page addressing the workspace by qualified segment still caches under the canonical id', async () => {
     // ADR-0019's two-name trap, hit in a real browser: the page carries the
     // handle ('dev'), the switcher rows carry the canonical id, and a
     // registry keyed by whichever the page had matches nothing. The refresh
@@ -168,7 +168,7 @@ describe('scheduleReplicaRefresh', () => {
     const cache = vi
       .fn()
       .mockResolvedValue({ kind: 'ok', syncedAt: '2026-09-01T12:00:00.000Z', documentCount: 1 })
-    scheduleReplicaRefresh(deps({ cache, workspaceId: 'dev' }))
+    scheduleReplicaRefresh(deps({ cache, workspaceId: 'me/dev' }))
     await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
     expect(cache.mock.calls[0]?.[0]?.workspaceId).toBe(WS)
     await vi.waitFor(() => {
@@ -392,7 +392,7 @@ describe('scheduleReplicaPush', () => {
     return {
       fetch: listStub([{ workspaceId: WS, segment: 'dev' }]),
       daemonBaseUrl: BASE,
-      workspaceId: 'dev',
+      workspaceId: 'me/dev',
       schedule: (run: () => void) => run(),
       readStoredFrontier: vi.fn().mockResolvedValue(FRONTIER_LOCAL),
       push: vi.fn().mockResolvedValue({
@@ -514,6 +514,6 @@ describe('scheduleReplicaPush', () => {
     await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
     const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
     expect(message).toMatch(/push failed/)
-    expect(fields).toEqual({ daemonBaseUrl: BASE, workspaceId: 'dev', name: 'RangeError' })
+    expect(fields).toEqual({ daemonBaseUrl: BASE, workspaceId: 'me/dev', name: 'RangeError' })
   })
 })

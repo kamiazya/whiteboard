@@ -94,7 +94,7 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/w/:workspace/d/*',
+          path: '/w/*',
           element: (
             <BrowserDocumentPage
               store={store.index}
@@ -106,7 +106,7 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
           ),
         },
       ],
-      { initialEntries: ['/w/default/d/main'] },
+      { initialEntries: ['/w/me/default/d/main'] },
     )
     await act(async () => {
       render(<RouterProvider router={router} />)

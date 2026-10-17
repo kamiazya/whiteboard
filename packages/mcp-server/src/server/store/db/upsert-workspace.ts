@@ -101,7 +101,7 @@ export async function renameWorkspaceRow(
   db: TenantDatabase,
   workspaceId: string,
   identity: WorkspaceIdentity,
-): Promise<{ segment: string | null; displayName: string | null } | null> {
+): Promise<{ namespace: string; segment: string | null; displayName: string | null } | null> {
   try {
     const updated = await db
       .updateTable('workspaces')
@@ -111,7 +111,7 @@ export async function renameWorkspaceRow(
         updatedAt: Date.now(),
       })
       .where('id', '=', workspaceId)
-      .returning(['segment', 'displayName'])
+      .returning(['namespace', 'segment', 'displayName'])
       .executeTakeFirst()
     return updated ?? null
   } catch (err) {

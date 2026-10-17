@@ -247,7 +247,7 @@ it('opens the workspace the address names, not the one the daemon lists first', 
   const router = createMemoryRouter(
     [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
     {
-      initialEntries: ['/w/default'],
+      initialEntries: ['/w/me/default'],
     },
   )
   await act(async () => {
@@ -257,7 +257,7 @@ it('opens the workspace the address names, not the one the daemon lists first', 
   // The addressed workspace's own document — the page cannot show this while
   // it is looking at the other workspace, whose list is empty.
   await screen.findByText('Font check')
-  expect(router.state.location.pathname).toBe('/w/default')
+  expect(router.state.location.pathname).toBe('/w/me/default')
   // And it never went looking in the first-listed one, which is what the
   // sticky selection did: it resolved that workspace, asked for its
   // documents, and only then met the address.
@@ -285,7 +285,7 @@ it('costs the same to address a workspace by its canonical id as by its segment'
   await screen.findByText('Font check')
   // It normalises to the segment, which is the handle the workspace prefers.
   await waitFor(() => {
-    expect(router.state.location.pathname).toBe('/w/default')
+    expect(router.state.location.pathname).toBe('/w/me/default')
   })
   expect(documentsAsked).not.toContain(NO_SEGMENT_ID)
   await settleRequests()
@@ -331,7 +331,7 @@ it('settles an address that named no workspace once, instead of trading it', asy
   // The `default` workspace, because nothing in the address asked for
   // another one: it is the one the daemon bootstraps, so the first-listed
   // fallback yields to it.
-  expect(router.state.location.pathname).toBe('/w/default')
+  expect(router.state.location.pathname).toBe('/w/me/default')
   await settleRequests()
   expectWithinBudget(counts, COLD_LOAD_BUDGET.settled)
 })
@@ -344,7 +344,7 @@ it('keeps a DOCUMENT address whole while the workspace settles', async () => {
   const router = createMemoryRouter(
     [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
     {
-      initialEntries: ['/w/default/d/font-check'],
+      initialEntries: ['/w/me/default/d/font-check'],
     },
   )
   await act(async () => {
@@ -354,5 +354,5 @@ it('keeps a DOCUMENT address whole while the workspace settles', async () => {
   await waitFor(() => {
     expect(screen.getByTestId('daemon-document-page')).not.toBeNull()
   })
-  expect(router.state.location.pathname).toBe('/w/default/d/font-check')
+  expect(router.state.location.pathname).toBe('/w/me/default/d/font-check')
 })

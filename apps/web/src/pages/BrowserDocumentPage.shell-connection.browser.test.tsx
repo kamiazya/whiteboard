@@ -21,7 +21,7 @@ claimIsolatedWhiteboardDb('browserdocumentpage-shell-connection')
 function renderApp() {
   return rtlRender(
     <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/w/default/d/c1']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
         <div className="flex h-dvh flex-col">
           <AppShell daemon={false} />
           <div className="min-h-0 flex-1">

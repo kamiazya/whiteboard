@@ -24,6 +24,7 @@ import { errorName, type TransferFailure } from './keeper-transfer-failure.js'
 import type { PushReplicaEditsResult } from './replica-push.js'
 import { findReplicaForHandle, pulledReplicaFields, withReplicaEntry } from './replicas.js'
 import { createUserSettingsStore } from './user-settings-store.js'
+import { resolveWorkspaceAddress } from './workspace-handle.js'
 
 const log = getAppLogger('replica-refresh')
 
@@ -147,10 +148,8 @@ async function pullReplica(deps: ReplicaRefreshDeps, key: string): Promise<void>
     // whichever the page had matches nothing. Measured in a real browser
     // before this resolve existed.
     const { workspaces } = await listWorkspaces(deps.fetch, deps.daemonBaseUrl)
-    const summary = workspaces.find(
-      (ws) => ws.workspaceId === deps.workspaceId || ws.segment === deps.workspaceId,
-    )
-    if (summary === undefined) return
+    const summary = resolveWorkspaceAddress(workspaces, deps.workspaceId)
+    if (summary === null) return
     const canonical = summary.workspaceId
     const cache = deps.cache ?? (await import('./replica-cache.js')).cacheDaemonWorkspace
     const { BrowserWorkspaceDocs } = await import('./browser-workspace-docs.js')

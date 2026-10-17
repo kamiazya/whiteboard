@@ -8,6 +8,7 @@
 
 import {
   messageOf,
+  SINGLE_PERSON_NAMESPACE,
   WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
   WORKSPACE_SEGMENT_MAX_LENGTH,
 } from '@kamiazya/whiteboard-model'
@@ -17,6 +18,7 @@ import {
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import { useId, useRef, useState } from 'react'
+import { workspacePath } from '../../lib/app-routes.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { workspaceHandle } from '../../lib/workspace-handle.js'
 import type { WorkspaceRow, WorkspaceSwitcherSource } from '../../lib/workspace-switcher-source.js'
@@ -163,6 +165,15 @@ function NameField({ active, canWrite, write }: FieldProps) {
 }
 
 /**
+ * The URL in front of the segment box, built by the router's own builder: the
+ * segment sits after the namespace holding it (ADR-0053), and a literal `/w/`
+ * would go on reading right after the grammar moved.
+ */
+function segmentUrlHead(active: WorkspaceRow): string {
+  return workspacePath(`${active.namespace ?? SINGLE_PERSON_NAMESPACE}/`)
+}
+
+/**
  * The URL's draft is not the name's device. It is the PENDING edit: this field
  * does not commit per keystroke, so the draft is what has not been written yet
  * rather than a rendering workaround. It commits on blur too: leaving a field
@@ -187,7 +198,7 @@ function UrlField({ active, canWrite, write }: FieldProps) {
     <>
       <div className="flex items-center rounded-md border bg-background px-1.5 py-0.5 font-mono text-xs">
         <span aria-hidden="true" className="text-muted-foreground">
-          /w/
+          {segmentUrlHead(active)}
         </span>
         <label className="sr-only" htmlFor={id}>
           Workspace URL

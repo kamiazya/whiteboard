@@ -28,7 +28,7 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
-import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
+import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -96,7 +96,7 @@ it('Back after a write this page did not make lists it', async () => {
 
   // Leave for the editor and come back inside the chunk-load window, so the
   // page is never unmounted and only `revision` can tell it to re-read.
-  await router.navigate(documentPath(BROWSER_DEFAULT_SEGMENT, path))
+  await router.navigate(documentPath(BROWSER_DEFAULT_ADDRESS, path))
   await waitFor(() => expect(router.state.location.pathname).toMatch(/\/d\//), {
     timeout: 15_000,
   })

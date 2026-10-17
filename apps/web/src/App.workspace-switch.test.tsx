@@ -59,33 +59,33 @@ describe('browser workspace switch', () => {
     })
     const router = createMemoryRouter(
       [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
-      { initialEntries: ['/w/default'] },
+      { initialEntries: ['/w/me/default'] },
     )
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
 
     await act(async () => {
-      await router.navigate('/w/second')
+      await router.navigate('/w/me/second')
     })
 
     await waitFor(() => expect(getBrowserWorkspaceId()).toBe(SECOND_ULID))
     // The address KEPT. The rewrite guard has to read this as a switch, not
     // as an address naming a workspace this browser does not hold.
-    expect(router.state.location.pathname).toBe('/w/second')
+    expect(router.state.location.pathname).toBe('/w/me/second')
   })
 
   it('a rename that moves the address takes the address and the runtime with it', async () => {
     // The rename goes through the same library function the shell's switcher
     // calls, then the address moves the way its `onSwitch` moves it. What
-    // this pins is the half after that: `/w/renamed` has to RESOLVE, against
+    // this pins is the half after that: `/w/me/renamed` has to RESOLVE, against
     // a registry row whose segment was `default` when this page loaded.
     // Renaming only the display name instead leaves the address unresolvable
-    // and the rewrite guard sends the page back to `/w/default` — which is
+    // and the rewrite guard sends the page back to `/w/me/default` — which is
     // what the assertion below would report.
     const { renameBrowserWorkspace } = await import('./lib/browser-workspaces.js')
     const router = createMemoryRouter(
       [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
-      { initialEntries: ['/w/default'] },
+      { initialEntries: ['/w/me/default'] },
     )
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
@@ -96,13 +96,13 @@ describe('browser workspace switch', () => {
     })
     expect(renamed.segment).toBe('renamed')
     await act(async () => {
-      await router.navigate('/w/renamed')
+      await router.navigate('/w/me/renamed')
     })
 
     await waitFor(() => expect(getBrowserWorkspaceId()).toBe(settled))
     // Kept, not rewritten: a rewrite here would mean the new address failed
     // to resolve, which is the same failure as a rename nobody stored.
-    expect(router.state.location.pathname).toBe('/w/renamed')
+    expect(router.state.location.pathname).toBe('/w/me/renamed')
   })
 
   it('rewrites an address the registry cannot resolve, and stays where it was', async () => {
@@ -115,7 +115,7 @@ describe('browser workspace switch', () => {
     //
     // What that costs is this assertion, and it says nothing about a switch:
     // the rewrite goes to the active workspace's handle, so a leaked
-    // `renamed` makes the address below `/w/renamed` and reads as a rewrite
+    // `renamed` makes the address below `/w/me/renamed` and reads as a rewrite
     // that went somewhere nobody asked for. Measured — standing in for one
     // such late write reproduces it exactly, and it is what failed on CI
     // while passing five runs out of five locally.
@@ -132,7 +132,7 @@ describe('browser workspace switch', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/default'))
     expect(getBrowserWorkspaceId()).toBe(settled)
   })
 })

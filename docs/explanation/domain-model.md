@@ -14,8 +14,8 @@ modes, how documents are identified, and how a workspace keeps them. Read
 - **Workspace** — a named collection of documents. Both keepers hold as many
   as you make: the app names the current one in the header, and the same
   control switches between them and creates new ones. Which workspace you are
-  in is part of the address (`/w/<workspace>`), so a link, a bookmark and the
-  back button all carry it.
+  in is part of the address (`/w/<namespace>/<workspace>`), so a link, a
+  bookmark and the back button all carry it.
 
   A workspace has three names, and only two are yours to choose. The one in
   the URL is short and URL-safe; the one in the header is free text with no
@@ -37,6 +37,19 @@ modes, how documents are identified, and how a workspace keeps them. Read
   else's namespace is addressed by its identifier, or — in an agent's tool
   call — by `<handle>/<short name>`. A tool call never creates a workspace
   in somebody else's namespace.
+
+
+  So the address the app shows is `/w/<namespace>/<short name>` on every
+  keeper — `/w/me/design` in the browser and on your own daemon,
+  `/w/ada/design` for Ada's workspace on a shared server. The other form is
+  `/w/<identifier>`, which names the workspace and nothing else: it survives
+  every rename, and it is what **Copy link** hands you on a shared server,
+  because a link may reach somebody who is not a member and the readable form
+  would tell them whose workspace it is and what it is called. A member who
+  opens it is moved onto the readable address; anybody else gets the same
+  refusal as for an address that names nothing. A one-part `/w/<short name>`
+  from before namespaces no longer opens anything — only the identifier fits
+  in that position now.
 - **Display name** — the human title of a document. Optional; a document
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.
@@ -88,7 +101,7 @@ which predates the rename and calls this a *slug* throughout).
 Documents kept in the browser are addressed the same way — literally the same
 way, since both keepers use one URL grammar. A path is stored, not derived: it
 is assigned at creation (`untitled`, `untitled-2`, …) exactly as in daemon
-mode, it is the `<path>` in `/w/<workspace>/d/<path>`, and it is unique within
+mode, it is the `<path>` in `/w/<namespace>/<workspace>/d/<path>`, and it is unique within
 its workspace — the store refuses a second document at a path another one holds,
 because a duplicate would make that address ambiguous rather than merely
 untidy.

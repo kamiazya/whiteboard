@@ -27,7 +27,7 @@ it('opens the workspace whose segment is `default` even when it is not listed fi
     workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b', segment: 'default' }],
     documentsByWorkspace: {
       'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
-      default: [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
     },
   })
 
