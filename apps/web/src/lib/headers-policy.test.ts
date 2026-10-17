@@ -42,6 +42,12 @@ describe('Content-Security-Policy directives', () => {
     expect(extractCsp(headersContent)).toContain("frame-ancestors 'none'")
   })
 
+  it("contains form-action 'none'", () => {
+    // The app submits no form natively (every <form> preventDefaults), so a
+    // form that markup injected into the page could build has nowhere to post.
+    expect(extractCsp(headersContent)).toContain("form-action 'none'")
+  })
+
   it("script-src allows WebAssembly compilation via 'wasm-unsafe-eval'", () => {
     // loro-crdt ships as a WebAssembly module. Under script-src 'self' the browser
     // rejects WebAssembly.Module() (CompileError) and the app renders a blank page.

@@ -318,6 +318,26 @@ properties, not implementation detail.
 - **The bytes must parse as a font before anything is written.** A file that
   `opentype.js` cannot parse never reaches the data directory.
 
+## Math and diagrams drawn from document text (web app)
+
+The web app typesets `$$` math blocks and draws `` ```mermaid `` fences in the
+note preview, the canvas editor and the SVG/PNG exports, and the SVG it gets
+back is placed into the page as markup. Document text decides what goes into
+that SVG, so it is held to what SVG text can do:
+
+- Mermaid runs at its `strict` security level with HTML labels off, and a
+  diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
+  loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
+  one shows as its source.
+- Whatever either engine returns is checked before it is used: a fragment
+  carrying an HTML island (`<foreignObject>`), a form, a script, an event
+  handler, an `action` or `formaction` attribute, or any `href`, `src` or
+  `url(…)` that points outside the fragment is refused, and the block keeps
+  its source.
+- The hosted app's policy carries `form-action 'none'`: nothing in the app
+  submits a form natively, so a form that did reach the page would have
+  nowhere to post.
+
 ## Browser-dependent operations
 
 No current MCP tool requires a connected browser client — canvas editing

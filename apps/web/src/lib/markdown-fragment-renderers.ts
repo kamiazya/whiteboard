@@ -14,8 +14,9 @@
  * string is emitted VERBATIM by canvas-render's backend, so it must be safe
  * against untrusted document text. MathJax typesets TeX into its own glyph
  * paths (source text never passes through unescaped), and mermaid runs at
- * `securityLevel: 'strict'`, which sanitizes labels and disables script-
- * bearing constructs.
+ * `securityLevel: 'strict'` with HTML labels locked off, so a label is SVG
+ * text rather than markup. `fragmentIsEmbeddable` re-checks the output of
+ * both engines.
  */
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
 import { getAppLogger } from './app-logger.js'
@@ -95,6 +96,15 @@ function fragmentHrefsAreLocal(svg: string): boolean {
 }
 
 const SCRIPT_ELEMENT = /<script\b/i
+/**
+ * Live HTML inside an SVG: a `<foreignObject>` carries arbitrary XHTML (a
+ * form, a button) that works in the app-origin preview and in an exported
+ * SVG opened on its own.
+ */
+const HTML_ISLAND_ELEMENT = /<(?:foreignObject|form)\b/i
+/** Any `url(` whose target is not a fragment-local `#id` (CSS or attribute). */
+const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
+const FORM_ATTRIBUTE = /^(?:form)?action$/i
 const WHITESPACE = /\s/
 const TAG_NAME_END = /[\s/>]/
 const ATTR_NAME_END = /[\s=>/]/
@@ -122,12 +132,29 @@ function skipAttributeValue(svg: string, from: number): number {
   return close < 0 ? svg.length : close + 1
 }
 
+/** The attribute value spanning `[from, end)`, without its quotes. */
+function attributeValue(svg: string, from: number, end: number): string {
+  const quote = svg.charAt(from)
+  const quoted = quote === '"' || quote === "'"
+  return svg.slice(quoted ? from + 1 : from, quoted ? end - 1 : end).trim()
+}
+
+/**
+ * An attribute that runs script (`on<event>`), submits a form
+ * (`action`/`formaction`), or loads from outside the fragment (`src` not
+ * naming a local `#id`).
+ */
+function isRefusedAttribute(name: string, value: string): boolean {
+  if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name)) return true
+  return /^src$/i.test(name) && !value.startsWith('#')
+}
+
 /**
  * Walks the attributes of the tag starting at `from`: `HANDLER_FOUND` when
- * one is an `on<event>=`, otherwise the index where the tag ends, so the
- * caller resumes there and the whole walk stays linear.
+ * one is refused, otherwise the index where the tag ends, so the caller
+ * resumes there and the whole walk stays linear.
  */
-function scanTagForEventHandler(svg: string, from: number): number {
+function scanTagForRefusedAttribute(svg: string, from: number): number {
   let i = from
   while (i < svg.length && svg.charAt(i) !== '>') {
     const nameStart = i
@@ -141,23 +168,25 @@ function scanTagForEventHandler(svg: string, from: number): number {
       i = afterName
       continue
     }
-    if (/^on/i.test(svg.slice(nameStart, i))) return HANDLER_FOUND
-    i = skipAttributeValue(svg, skipWhitespace(svg, afterName + 1))
+    const name = svg.slice(nameStart, i)
+    const valueStart = skipWhitespace(svg, afterName + 1)
+    i = skipAttributeValue(svg, valueStart)
+    if (isRefusedAttribute(name, attributeValue(svg, valueStart, i))) return HANDLER_FOUND
   }
   return i
 }
 
 /**
- * Whether any tag carries an `on<event>=` attribute. A linear walk rather
+ * Whether any tag carries a refused attribute. A linear walk rather
  * than one regex: a pattern that follows quoted values (so a `>` inside an
  * earlier value does not end the tag) backtracks catastrophically, and one
  * that does not is bypassed by that `>`. Only tags are read, so label TEXT
  * that happens to say `onclick=` does not refuse a diagram.
  */
-function hasEventHandlerAttribute(svg: string): boolean {
+function hasRefusedAttribute(svg: string): boolean {
   for (let open = svg.indexOf('<'); open >= 0; open = svg.indexOf('<', open + 1)) {
     if (!/[a-zA-Z]/.test(svg.charAt(open + 1))) continue
-    const end = scanTagForEventHandler(svg, scanUntil(svg, open + 1, TAG_NAME_END))
+    const end = scanTagForRefusedAttribute(svg, scanUntil(svg, open + 1, TAG_NAME_END))
     if (end === HANDLER_FOUND) return true
     open = end
   }
@@ -166,11 +195,19 @@ function hasEventHandlerAttribute(svg: string): boolean {
 
 /**
  * Whether an engine's SVG may be embedded verbatim: every reference is
- * local, and nothing in it runs script. `<foreignObject>` is deliberately
- * not refused — mermaid draws most diagram kinds' labels through it.
+ * local, nothing in it runs script or submits a form, and it holds no HTML.
+ * Refusing `<foreignObject>` costs nothing at the engines' configuration —
+ * neither emits one — so a fragment that carries one was steered there by
+ * document text.
  */
 export function fragmentIsEmbeddable(svg: string): boolean {
-  return fragmentHrefsAreLocal(svg) && !SCRIPT_ELEMENT.test(svg) && !hasEventHandlerAttribute(svg)
+  return (
+    fragmentHrefsAreLocal(svg) &&
+    !SCRIPT_ELEMENT.test(svg) &&
+    !HTML_ISLAND_ELEMENT.test(svg) &&
+    !NON_LOCAL_URL.test(svg) &&
+    !hasRefusedAttribute(svg)
+  )
 }
 
 /** Parses `width="12.5ex"`-style MathJax root attributes into px. */
@@ -230,12 +267,20 @@ async function loadMermaid(): Promise<MermaidApi | undefined> {
         'maxEdges',
         'dompurifyConfig',
         'themeCSS',
+        'htmlLabels',
       ],
       theme: 'neutral',
-      // Pure-SVG labels: foreignObject/HTML labels would not survive the
-      // trip through canvas-render's SVG document (and would break any
-      // future rasterized export of the same scene).
-      flowchart: { htmlLabels: false },
+      // Pure-SVG labels, locked against a directive by `secure` above: an
+      // HTML label is live markup (a form, a button) in the preview and in an
+      // exported SVG, and would not survive rasterising either. The
+      // top-level key is the one every diagram kind reads; `flowchart.htmlLabels`
+      // is deprecated and loses to it. A `$$…$$` label is therefore drawn as
+      // its source, since katex's MathML needs an HTML label.
+      htmlLabels: false,
+      // A journey draws task text through a <foreignObject> by default; tspan
+      // placement keeps it SVG. A directive can still ask for 'fo', and
+      // fragmentIsEmbeddable then refuses the diagram.
+      journey: { textPlacement: 'tspan' },
     })
     return mermaid
   } catch (err) {
