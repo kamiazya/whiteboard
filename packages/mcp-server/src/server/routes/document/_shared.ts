@@ -34,7 +34,7 @@ import {
   workspaceIdFromHandle,
 } from '../../workspace-handle.js'
 
-export function defaultHumanDisplayName(): string {
+function defaultHumanDisplayName(): string {
   try {
     const name = userInfo().username.trim()
     if (name.length > 0) return name
