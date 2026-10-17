@@ -26,6 +26,7 @@ import type {
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { errnoCode } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
 import type { AdministratorCheck } from '../security/administrator-check.js'
 import { type CompleteSignInDeps, completeSignIn } from '../security/complete-sign-in.js'
@@ -92,8 +93,8 @@ function safeReturnPath(requested: string | undefined, publicBaseUrl: string): s
 // every depth. The log gets what KIND of failure it was, never the error.
 function failureOf(err: unknown): { readonly name: string; readonly code?: string } {
   if (!(err instanceof Error)) return { name: typeof err }
-  const { code } = err as { code?: unknown }
-  return typeof code === 'string' ? { name: err.name, code } : { name: err.name }
+  const code = errnoCode(err)
+  return code === undefined ? { name: err.name } : { name: err.name, code }
 }
 
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
