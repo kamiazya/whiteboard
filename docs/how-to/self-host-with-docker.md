@@ -214,6 +214,11 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
+A version a member saves, and the checkpoint left when a workspace is moved
+in from a browser, show that member's profile name in the History panel. The
+server takes the name from whoever signed in, not from the request, so a
+member cannot save a version under someone else's name.
+
 To bring in someone who is not a user yet, an owner creates an invitation
 with `POST /api/workspaces/<workspace>/invitations`. The response carries a
 link to this keeper's `/invite` page, valid for seven days and usable once.

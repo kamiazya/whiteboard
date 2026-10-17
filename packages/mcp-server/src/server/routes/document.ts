@@ -2,6 +2,7 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type {
+  CallerName,
   FirstMember,
   WorkspaceAdmit,
   WorkspaceOwnership,
@@ -62,6 +63,8 @@ export interface DocumentRouterOptions {
   onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
   /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
   daemonActor?: string
+  /** Threaded to the version-save and promote routes — see `VersionsRouterOptions.callerName`. */
+  callerName?: CallerName
   /** Resolves the read plane's effective tier for GET /api/workspaces to
    *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
@@ -139,6 +142,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
       triggerAutoVersion,
       serverDeps: options.serverDeps,
       ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
+      ...(options.callerName === undefined ? {} : { callerName: options.callerName }),
     }),
   )
   app.route(
@@ -147,6 +151,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
       versionStore,
       scope: options.scope,
       ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
+      ...(options.callerName === undefined ? {} : { callerName: options.callerName }),
     }),
   )
   app.route('/', createMaintenanceRouter({ versionStore, scope: options.scope }))
