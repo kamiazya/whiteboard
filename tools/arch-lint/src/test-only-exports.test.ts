@@ -238,6 +238,10 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/model/src/workspace-address.ts#deriveUserHandle':
+    'consumed by ADR-0053 slice 2: the daemon registry mints a user handle from it when a person has not chosen one; declared in model beside the handle schema so both keepers derive one rule',
+  'packages/model/src/workspace-address.ts#formatWorkspaceAddress':
+    "consumed by ADR-0053 slice 3: the web app's workspace paths build the qualified form through it; declared beside parseWorkspaceAddress so the round-trip property holds the pair together",
   'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_LAYOUT_BUDGET':
     'the per-render bound on nested layouts; production reads it in its own module, and the embed-budget test asserts every fan-out shape stays under the named bound rather than a copied number',
   'packages/server-core/src/operations/promote-workspace.ts#PROMOTE_MAX_DOCUMENTS':

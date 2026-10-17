@@ -5,6 +5,7 @@ import {
   createDocumentInputSchema,
   createWorkspaceInputSchema,
   documentEntrySchema,
+  WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from './document-index.js'
 import { fc, fcTest } from './test-utils/fast-check.js'
@@ -184,6 +185,20 @@ describe('workspaceEntrySchema', () => {
   it('rejects an unknown key', () => {
     expect(workspaceEntrySchema.safeParse({ workspaceId: 'ws', displayname: 'typo' }).success).toBe(
       false,
+    )
+  })
+})
+
+describe('WorkspaceSegmentTakenError', () => {
+  it('names the namespace the segment is unique in, when it is given one', () => {
+    const error = new WorkspaceSegmentTakenError('design', 'alice')
+    expect(error.namespace).toBe('alice')
+    expect(error.message).toBe('Workspace segment "design" is already taken in namespace "alice"')
+  })
+
+  it('keeps the bare message for a keeper with one namespace', () => {
+    expect(new WorkspaceSegmentTakenError('design').message).toBe(
+      'Workspace segment "design" is already taken',
     )
   })
 })
