@@ -8,7 +8,10 @@
 import {
   addWorkspacePersonRequestSchema,
   changeWorkspaceRoleRequestSchema,
+  MAX_PENDING_WORKSPACE_INVITATIONS,
+  pendingInvitationsResponseSchema,
   removeWorkspacePersonResponseSchema,
+  revokeInvitationResponseSchema,
   type WorkspacePeopleRefusal,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
@@ -38,6 +41,11 @@ const REFUSALS = {
   unknown_user: [404, 'no user by that id here'],
   not_a_member: [404, 'no such member in this workspace'],
   last_owner: [409, 'a workspace keeps at least one owner; make someone else an owner first'],
+  unknown_invitation: [404, 'no pending invitation by that id in this workspace'],
+  too_many_invitations: [
+    409,
+    `this workspace already has ${MAX_PENDING_WORKSPACE_INVITATIONS} pending invitations; revoke one first`,
+  ],
 } as const satisfies Record<WorkspacePeopleRefusal['error'], readonly [number, string]>
 
 function refuse(c: Context, error: WorkspacePeopleRefusal['error']) {
@@ -95,8 +103,37 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
     const workspaceId = await ownedBy(c, keeper)
     const invitedBy = await keeper.actingUserId(c)
     if (workspaceId === null || invitedBy === null) return refuse(c, 'not_an_owner')
+    // ponytail: counted before the insert, so mints racing each other may
+    // overshoot by however many are in flight — a bound on a flood, not an
+    // exact count; a conditional insert if it ever needs to be exact.
+    const pending = await store.listPending(workspaceId, Date.now())
+    if (pending.length >= MAX_PENDING_WORKSPACE_INVITATIONS) {
+      return refuse(c, 'too_many_invitations')
+    }
     const body = await issueInvitationLink(store, origin, { invitedBy, workspaceId })
     return c.json(body, 201)
+  })
+
+  app.get('/api/workspaces/:workspace/invitations', async (c) => {
+    const workspaceId = await ownedBy(c, keeper)
+    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const pending = await store.listPending(workspaceId, Date.now())
+    const invitations = pending.map((invitation) => ({
+      id: invitation.id,
+      invitedBy: invitation.invitedBy,
+      createdAt: new Date(invitation.createdAt).toISOString(),
+      expiresAt: new Date(invitation.expiresAt).toISOString(),
+    }))
+    return c.json(pendingInvitationsResponseSchema.parse({ invitations }), 200)
+  })
+
+  app.delete('/api/workspaces/:workspace/invitations/:invitationId', async (c) => {
+    const workspaceId = await ownedBy(c, keeper)
+    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const revoked = await store.revoke(workspaceId, c.req.param('invitationId'))
+    if (!revoked) return refuse(c, 'unknown_invitation')
+    log.notice({ workspaceId, invitationId: c.req.param('invitationId') }, 'invitation revoked')
+    return c.json(revokeInvitationResponseSchema.parse({ revoked: true }), 200)
   })
 }
 

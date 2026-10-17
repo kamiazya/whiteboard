@@ -59,6 +59,10 @@ export interface InvitationStore {
   openLinkByHash(tokenHash: string, now: number): Promise<OpenedLink>
   /** True for exactly one caller per invitation, and only before it expires. */
   redeem(invitationId: string, redeemedBy: string, now: number): Promise<boolean>
+  /** The links into `workspaceId` neither redeemed nor expired, oldest first. */
+  listPending(workspaceId: string, now: number): Promise<Invitation[]>
+  /** Takes back an unredeemed link into `workspaceId`; false when there is none by that id. */
+  revoke(workspaceId: string, invitationId: string): Promise<boolean>
 }
 
 async function insert(db: TenantScoped, input: IssueInput, tokenHash: string): Promise<Invitation> {
@@ -183,6 +187,32 @@ async function redeem(
   return updated.length > 0
 }
 
+async function listPending(db: TenantScoped, workspaceId: string, now: number) {
+  const rows = await db
+    .selectFrom('invitations')
+    .select(['id', 'invitedBy', 'workspaceId', 'createdAt', 'expiresAt'])
+    .where('workspaceId', '=', workspaceId)
+    .where('redeemedAt', 'is', null)
+    .where('expiresAt', '>', now)
+    .orderBy('createdAt', 'asc')
+    .orderBy('id', 'asc')
+    .execute()
+  return rows.map((row) => invitationSchema.parse(row))
+}
+
+// A revoked link is deleted, so it then opens as one never issued. A
+// redeemed one is kept: it records who let that person in.
+async function revoke(db: TenantScoped, workspaceId: string, invitationId: string) {
+  const deleted = await db
+    .deleteFrom('invitations')
+    .where('id', '=', invitationId)
+    .where('workspaceId', '=', workspaceId)
+    .where('redeemedAt', 'is', null)
+    .returning('id')
+    .execute()
+  return deleted.length > 0
+}
+
 interface InvitationStoreOptions {
   /** The administrators the sign-in configuration names (ADR-0049 decision 2). */
   readonly configuredAdministrators?: readonly AuthenticatorBinding[]
@@ -202,5 +232,7 @@ export function createInvitationStore(
     openLinkByHash: (tokenHash, now) => openLink(db, tokenHash, now),
     redeem: (invitationId, redeemedBy, now) =>
       redeem(db, configured, invitationId, redeemedBy, now),
+    listPending: (workspaceId, now) => listPending(db, workspaceId, now),
+    revoke: (workspaceId, invitationId) => revoke(db, workspaceId, invitationId),
   }
 }

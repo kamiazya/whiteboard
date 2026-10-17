@@ -99,6 +99,19 @@ describe('invitation links', () => {
     expect(await store.redeem(invitation.id, 'p-bob', T0 + HOUR)).toBe(false)
   })
 
+  // A redeemed link records who let that person in, so it is no longer
+  // pending and revoking it takes nothing back.
+  it('neither lists nor revokes a link already redeemed', async () => {
+    const link = { invitedBy: ada, workspaceId: 'ws-1', now: T0, ttlMs: HOUR }
+    const spent = await store.createLink(link)
+    const open = await store.createLink(link)
+    expect(await store.redeem(spent.invitation.id, 'p-bob', T0 + 1)).toBe(true)
+    expect((await store.listPending('ws-1', T0 + 2)).map((i) => i.id)).toEqual([open.invitation.id])
+    expect(await store.revoke('ws-1', spent.invitation.id)).toBe(false)
+    expect(await store.openLink(spent.token, T0 + 2)).toEqual({ ok: false, reason: 'redeemed' })
+    expect(await store.listPending('ws-1', T0 + HOUR)).toEqual([])
+  })
+
   it('refuses a token it never issued', async () => {
     expect(await store.openLink('not-a-token', T0)).toEqual({ ok: false, reason: 'unknown' })
   })
