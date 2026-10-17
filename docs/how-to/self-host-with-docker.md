@@ -906,9 +906,13 @@ deployment state.
   variables must be supplied at run time via `--env-file` or `-e`.
 - The local-daemon token (`WHITEBOARD_DAEMON_TOKEN`) is not used in server
   mode and must not appear in the container environment.
-- Raw JWT values, Authorization/Bearer headers, JWKS URI credentials, full
-  filesystem paths, and stack traces are never written to stdout, stderr, or
-  the Docker logs surface.
+- Raw JWT values, Authorization/Bearer headers and JWKS URI credentials are
+  never written to stdout, stderr, or the Docker logs surface.
+- Filesystem paths are kept out of what a member receives: an export answers
+  its file's path within the workspace's exports directory, and a fault
+  answers a fixed message (below). The server log is the operator's, and it
+  does carry that detail — a failure is logged with its error, which can
+  name a path under the data directory and include a stack trace.
 - What a member sees of a server fault carries no storage detail. A stored
   file or record the server cannot read answers `corrupt_stored_data` with a
   fixed message, and an MCP tool call that fails for any reason other than a
