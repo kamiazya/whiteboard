@@ -146,8 +146,11 @@ describe('release gate: a forced npm publish attests the commit it publishes', (
   function runGuard(sha: (head: string) => string): { status: number | null; stderr: string } {
     const cwd = mkdtempSync(join(tmpdir(), 'release-provenance-'))
     tmpRoots.push(cwd)
+    // A git hook exports GIT_DIR and friends; inherited, they point every
+    // command here at the repository being pushed instead of the scratch one.
+    const env = { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: cwd, GIT_CONFIG_NOSYSTEM: '1' }
     const git = (...args: string[]) =>
-      spawnSync('git', args, { cwd, encoding: 'utf-8' }).stdout.trim()
+      spawnSync('git', args, { cwd, env, encoding: 'utf-8' }).stdout.trim()
     git('init', '-q')
     git(
       '-c',
@@ -163,7 +166,7 @@ describe('release gate: a forced npm publish attests the commit it publishes', (
     const head = git('rev-parse', 'HEAD')
     const res = spawnSync('bash', ['-e', '-c', steps[guardIndex]?.run ?? 'exit 99'], {
       cwd,
-      env: { PATH: process.env.PATH ?? '/usr/bin:/bin', GITHUB_SHA: sha(head) },
+      env: { ...env, GITHUB_SHA: sha(head) },
       encoding: 'utf-8',
     })
     return { status: res.status, stderr: `${res.stdout}${res.stderr}` }
