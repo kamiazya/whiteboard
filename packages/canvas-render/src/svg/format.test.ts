@@ -76,6 +76,22 @@ describe('sanitizeHref', () => {
     expect(sanitizeHref('j\ta\tv\ta\tscript:alert(1)')).toBe('#')
   })
 
+  it('judges the scheme of the bytes the serializer emits, not of the input', () => {
+    // The serializer strips characters XML 1.0 cannot carry (C0/C1 controls,
+    // U+FFFE/U+FFFF, lone surrogates). Checked before that strip, each of these
+    // looks scheme-less and passes as relative — then reaches the document as
+    // a live `javascript:` URL.
+    expect(sanitizeHref('java\u0085script:alert(1)')).toBe('#')
+    expect(sanitizeHref('java\uFFFEscript:alert(1)')).toBe('#')
+    expect(sanitizeHref('j\x01avascript:alert(1)')).toBe('#')
+    expect(sanitizeHref('java\uD800script:alert(1)')).toBe('#')
+  })
+
+  it('returns the href as it will be emitted, with XML-invalid characters removed', () => {
+    expect(sanitizeHref('https://exa\u0085mple.com')).toBe('https://example.com')
+    expect(sanitizeHref('docs/\x01a')).toBe('docs/a')
+  })
+
   it('leaves a relative path that merely CONTAINS a colon alone', () => {
     // The scheme pattern is anchored. Unanchored it finds `a:` in the middle
     // of an ordinary path and rewrites a working link to `#` — failing safe,

@@ -6,6 +6,8 @@
  * locale- and engine-dependent and would break that guarantee).
  */
 
+import { stripXmlInvalidChars } from '../xml-escape.js'
+
 /** Fixed decimal precision for all emitted coordinates. */
 const COORD_PRECISION = 3
 
@@ -78,14 +80,20 @@ declare const safeHrefBrand: unique symbol
 export type SafeHref = string & { readonly [safeHrefBrand]: true }
 
 /**
- * Returns `href` unchanged when it has no scheme (relative/hash link) or an
+ * Returns `href` when it has no scheme (relative/hash link) or an
  * allow-listed scheme, otherwise `#` — never throws, degrades to a safe
  * same-page anchor rather than rejecting the whole render.
+ *
+ * The check runs on the href with XML-invalid characters already removed,
+ * and that stripped form is what is returned: the serializer removes them
+ * anyway, so judging the raw input lets `java\u0085script:` pass as relative
+ * and reach the document as `javascript:`.
  */
 export function sanitizeHref(href: string): SafeHref {
-  const match = URL_SCHEME_PATTERN.exec(normalizeHrefForSchemeCheck(href))
-  if (!match) return href as SafeHref
-  return (SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#') as SafeHref
+  const emitted = stripXmlInvalidChars(href)
+  const match = URL_SCHEME_PATTERN.exec(normalizeHrefForSchemeCheck(emitted))
+  if (!match) return emitted as SafeHref
+  return (SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? emitted : '#') as SafeHref
 }
 
 /**
