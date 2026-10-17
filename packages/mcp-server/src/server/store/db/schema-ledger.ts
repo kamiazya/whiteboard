@@ -115,6 +115,8 @@ export const LEDGER: Ledger = {
     returnTo: text,
     expiresAt: integer,
     source: text,
+    sourcePrefix48: text,
+    sourcePrefix56: text,
   },
   workspaceMemberships: { workspaceId: text, profileId: text, createdAt: integer, role: text },
   tenantAdministrators: { profileId: text, appointedBy: textOrNull, appointedAt: integer },
