@@ -11,8 +11,10 @@ import {
   INVITE_PAGE_PATH,
   inviteTokenOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
+import { MAX_PENDING_WORKSPACE_INVITATIONS } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sha256Hex } from '../../shared/sha256.js'
 import { serverModePeople } from '../_test-server-mode-harness.js'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import type { InvitationStore } from '../security/invitation-store.js'
@@ -106,7 +108,7 @@ describe('workspace people', () => {
     expect(vi.mocked(endSyncStreamsOf)).not.toHaveBeenCalled()
 
     expect((await call('ada', 'DELETE', `/people/${ids.bob}`)).status).toBe(200)
-    expect(vi.mocked(endSyncStreamsOf)).toHaveBeenCalledExactlyOnceWith(ids.bob)
+    expect(vi.mocked(endSyncStreamsOf)).toHaveBeenCalledExactlyOnceWith(ids.bob, 'ws-1')
   })
 
   it('lists the people and their roles to any member', async () => {
@@ -191,6 +193,94 @@ describe('workspace people', () => {
     expect(await invitations.openLink(token, Date.now())).toMatchObject({
       ok: true,
       invitation: { workspaceId: 'ws-1', invitedBy: ids.ada },
+    })
+  })
+
+  // An owner sees who has a link outstanding and can take one back; the
+  // token is shown once, at minting, and never again.
+  describe('pending invitations', () => {
+    it('lists the links still pending to an owner, without the token or its hash', async () => {
+      const made = await call('ada', 'POST', '/invitations', {})
+      const token = inviteTokenOf(new URL(String(made.body.url)).hash) ?? ''
+      const listed = await call('ada', 'GET', '/invitations')
+      expect(listed.status).toBe(200)
+      const pending = listed.body.invitations as Record<string, unknown>[]
+      expect(pending).toHaveLength(1)
+      expect(pending[0]).toEqual({
+        id: expect.any(String),
+        invitedBy: ids.ada,
+        createdAt: expect.any(String),
+        expiresAt: made.body.expiresAt,
+      })
+      expect(JSON.stringify(listed.body)).not.toContain(token)
+      expect(JSON.stringify(listed.body)).not.toContain(sha256Hex(token))
+    })
+
+    it('shows the pending links to an owner alone', async () => {
+      expect((await call('bob', 'GET', '/invitations')).body).toMatchObject({
+        error: 'not_an_owner',
+      })
+    })
+
+    it('lets an owner revoke a pending link, which then opens nothing', async () => {
+      const made = await call('ada', 'POST', '/invitations', {})
+      const token = inviteTokenOf(new URL(String(made.body.url)).hash) ?? ''
+      const [pending] = (await call('ada', 'GET', '/invitations')).body.invitations as {
+        id: string
+      }[]
+      const id = pending?.id ?? ''
+      expect((await call('bob', 'DELETE', `/invitations/${id}`)).body).toMatchObject({
+        error: 'not_an_owner',
+      })
+      expect(await call('ada', 'DELETE', `/invitations/${id}`)).toEqual({
+        status: 200,
+        body: { revoked: true },
+      })
+      expect(await invitations.openLink(token, Date.now())).toEqual({
+        ok: false,
+        reason: 'unknown',
+      })
+      expect((await call('ada', 'GET', '/invitations')).body.invitations).toEqual([])
+      expect(await call('ada', 'DELETE', `/invitations/${id}`)).toMatchObject({
+        status: 404,
+        body: { error: 'unknown_invitation' },
+      })
+    })
+
+    // An owner of one workspace cannot see or revoke another's links by id.
+    it('neither lists nor revokes a link into another workspace', async () => {
+      await members.addMember('ws-2', ids.eve as string)
+      const elsewhere = await invitations.createLink({
+        invitedBy: ids.eve as string,
+        workspaceId: 'ws-2',
+        now: Date.now(),
+        ttlMs: 60_000,
+      })
+      expect((await call('ada', 'GET', '/invitations')).body.invitations).toEqual([])
+      expect((await call('ada', 'DELETE', `/invitations/${elsewhere.invitation.id}`)).status).toBe(
+        404,
+      )
+      expect((await invitations.openLink(elsewhere.token, Date.now())).ok).toBe(true)
+    })
+
+    it('refuses a link past the pending cap, until one is revoked', async () => {
+      for (let i = 0; i < MAX_PENDING_WORKSPACE_INVITATIONS; i++) {
+        await invitations.createLink({
+          invitedBy: ids.ada as string,
+          workspaceId: 'ws-1',
+          now: Date.now(),
+          ttlMs: 60_000,
+        })
+      }
+      expect(await call('ada', 'POST', '/invitations', {})).toMatchObject({
+        status: 409,
+        body: { error: 'too_many_invitations' },
+      })
+      const [first] = (await call('ada', 'GET', '/invitations')).body.invitations as {
+        id: string
+      }[]
+      await call('ada', 'DELETE', `/invitations/${first?.id ?? ''}`)
+      expect((await call('ada', 'POST', '/invitations', {})).status).toBe(201)
     })
   })
 

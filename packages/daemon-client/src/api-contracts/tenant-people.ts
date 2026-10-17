@@ -46,6 +46,8 @@ export const tenantPeopleRefusalSchema = z.object({
     'not_an_administrator',
     'unknown_user',
     'cannot_deactivate_self',
+    // A tenant keeps at least one active administrator, as a workspace keeps an owner.
+    'last_administrator',
     'cannot_dismiss_self',
     'not_deactivated',
     'sole_owner',

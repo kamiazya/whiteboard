@@ -34,7 +34,9 @@ import {
   addWorkspacePersonRequestSchema,
   changeWorkspaceRoleRequestSchema,
   invitationLinkResponseSchema,
+  pendingInvitationsResponseSchema,
   removeWorkspacePersonResponseSchema,
+  revokeInvitationResponseSchema,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
@@ -122,6 +124,14 @@ const RULES: Record<string, Rule> = {
     answers: 'json',
     response: invitationLinkResponseSchema,
   },
+  'GET /api/workspaces/:workspace/invitations': {
+    answers: 'json',
+    response: pendingInvitationsResponseSchema,
+  },
+  'DELETE /api/workspaces/:workspace/invitations/:invitationId': {
+    answers: 'json',
+    response: revokeInvitationResponseSchema,
+  },
   'GET /api/people': { answers: 'json', response: tenantPeopleResponseSchema },
   'POST /api/people/:userId/deactivation': {
     answers: 'json',
@@ -163,6 +173,8 @@ const HAPPY_USER: Record<string, PersonName> = {
 interface Seed {
   readonly app: ReturnType<typeof createApp>
   readonly workspaceId: string
+  /** A link into that workspace still pending, so revoking one has one to revoke. */
+  readonly invitationId: string
   readonly userIds: Record<PersonName, string>
   /** A session cookie per person, as a browser sends it. */
   readonly cookies: Record<PersonName | 'oidc', string>
@@ -295,10 +307,18 @@ async function seededApp(idp: Idp): Promise<Seed> {
   const stores = serverModePeople(handle.db, dir)
   const app = composedApp(handle, stores, idp)
   const seeded = await seededPeople(stores)
+  const workspaceId = await seededWorkspace(app, stores, seeded)
+  const { invitation } = await stores.people.invitations.createLink({
+    invitedBy: seeded.userIds.admin,
+    workspaceId,
+    now: Date.now(),
+    ttlMs: HOUR,
+  })
   return {
     app,
     ...seeded,
-    workspaceId: await seededWorkspace(app, stores, seeded),
+    workspaceId,
+    invitationId: invitation.id,
     callbacks: await seededCallbacks(app, idp),
     dispose: async () => {
       resetSyncStreamsForTests()
@@ -370,6 +390,9 @@ function fillPattern(seed: Seed, key: string, pattern: string, happy: boolean) {
       return happy ? fc.constant(user) : aimedAt(user, Object.values(seed.userIds))
     }
     if (segment === ':providerId') return happy ? fc.constant('corp') : aimedAt('corp', [])
+    if (segment === ':invitationId') {
+      return happy ? fc.constant(seed.invitationId) : aimedAt(seed.invitationId, [])
+    }
     return fc.constant(segment)
   }
   return fc

@@ -222,6 +222,24 @@ a member of that workspace. The token is in the link's fragment, so the
 browser never sends it to a server and it does not appear in a `Referer`.
 The link is the secret, and it is shown only in that response.
 
+A link speaks for the owner who created it, so it works only while they could
+still create it. If they are removed from the workspace, made a member, or
+deactivated, every link they created and nobody has accepted stops working.
+Whoever arrives through one is refused, the same as with an expired link.
+
+Owners can review and take back the links still waiting to be accepted:
+
+- `GET /api/workspaces/<workspace>/invitations` lists them, each with its
+  `id`, who created it (`invitedBy`), `createdAt` and `expiresAt`. The link
+  itself is never shown again.
+- `DELETE /api/workspaces/<workspace>/invitations/<id>` revokes one. It then
+  works for nobody. An id from another workspace answers
+  `404 unknown_invitation`.
+
+A workspace can have at most 50 links waiting at once. Creating one more is
+refused with `409 too_many_invitations` until one is accepted, expires or is
+revoked.
+
 Only an owner can change anything. A workspace always keeps at least one
 owner, so demoting or removing the last owner is refused with `last_owner`.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool
@@ -351,14 +369,21 @@ available through `/api/people`:
 - `GET /api/people` lists every user, marked `deactivated` and
   `administrator`.
 - `POST` and `DELETE /api/people/<userId>/deactivation` deactivate and
-  reactivate a user. An administrator cannot deactivate themselves.
+  reactivate a user. An administrator cannot deactivate themselves. The
+  server keeps at least one active administrator, so deactivating the last
+  one is refused with `409 last_administrator`. That holds even when two
+  administrators deactivate each other at the same moment. The operator's
+  `whiteboard server deactivate-user` is not held to this, since
+  `grant-admin` can appoint another.
 - `DELETE /api/people/<userId>` deletes a user who is already deactivated.
   See [Deleting a user](#deleting-a-user).
 - `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
   an administrator. Only appointments can be dismissed here; someone named in
   the configuration stays an administrator until the list changes.
 - `POST /api/invitations` creates an invitation link to the server alone.
-  Accepting it makes a user and nothing more.
+  Accepting it makes a user and nothing more. It works only while whoever
+  created it is still an active administrator. A dismissed or deactivated
+  administrator's links stop working.
 
 Everyone else gets `403 not_an_administrator`.
 

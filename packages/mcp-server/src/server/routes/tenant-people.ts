@@ -52,6 +52,10 @@ const REFUSALS = {
   not_an_administrator: [403, 'only an administrator of this server can do that'],
   unknown_user: [404, 'no user by that id here'],
   cannot_deactivate_self: [409, 'an administrator cannot deactivate themselves'],
+  last_administrator: [
+    409,
+    'this server keeps at least one active administrator; appoint another first',
+  ],
   cannot_dismiss_self: [409, 'an administrator cannot dismiss themselves; another one can'],
   not_deactivated: [409, 'deactivate a person before deleting them'],
   sole_owner: [409, 'they are the only owner of these workspaces; appoint another owner first'],
