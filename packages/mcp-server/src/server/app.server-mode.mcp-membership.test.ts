@@ -171,6 +171,25 @@ const createPlans = {
 }
 
 describe('server mode /mcp — a workspace belongs to the people in it', () => {
+  // A handle that cannot be minted as a segment is refused by the gate, not
+  // handed to the tool ungated: an absent id and a malformed segment answer
+  // like any workspace the caller is not in.
+  it.each([
+    '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+    '-',
+  ])('refuses createWorkspace on a handle it cannot mint (%s)', async (workspaceId) => {
+    const ada = await agentOf('ada')
+    try {
+      const res = await ada.call('wb_workspace_edit', { ...createPlans, workspaceId })
+      expect(res.isError).toBe(true)
+      expect(textOf(res)).toMatch(/not_a_member/)
+      const listed = await ada.call('wb_document_list', { workspaceId })
+      expect(textOf(listed)).toMatch(/not_a_member/)
+    } finally {
+      await ada.close()
+    }
+  })
+
   it("makes the creating agent's person its first member, and keeps another's out", async () => {
     const ada = await agentOf('ada')
     const eve = await agentOf('eve')

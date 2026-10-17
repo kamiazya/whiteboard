@@ -189,3 +189,79 @@ describe('server mode — content-sized bodies in flight', () => {
     for (const each of held) expect((await each.response).status).toBe(200)
   })
 })
+
+const PING = new TextEncoder().encode(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }))
+
+/**
+ * A JSON-RPC POST to `/mcp` from `subject`'s bearer, its body withheld until
+ * `release` — or failed by `drop`, which is what a client that went away
+ * looks like to the reader. `read` says whether anything asked for its bytes.
+ */
+function heldMcpCall(subject: string) {
+  let settle: (outcome: 'send' | 'drop') => void = () => {}
+  const settled = new Promise<'send' | 'drop'>((resolve) => {
+    settle = resolve
+  })
+  let read = false
+  const body = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        read = true
+        if ((await settled) === 'drop') {
+          controller.error(new Error('the client went away'))
+          return
+        }
+        controller.enqueue(PING)
+        controller.close()
+      },
+    },
+    { highWaterMark: 0 },
+  )
+  const response = Promise.resolve(
+    app.request(`${PUBLIC_URL}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${subject}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit),
+  )
+  return {
+    response,
+    release: () => settle('send'),
+    drop: () => settle('drop'),
+    wasRead: () => read,
+  }
+}
+
+describe('server mode — /mcp bodies in flight', () => {
+  it('refuses a user past the per-user cap before reading the body, and frees a dropped slot', async () => {
+    await members.ensureProfile({
+      binding: { authenticator: ISSUER, subject: 'ada' },
+      displayName: 'ada',
+    })
+    const held = Array.from({ length: CONTENT_REQUEST_CAPS.perUser }, () => heldMcpCall('ada'))
+    await vi.waitFor(() => expect(held.every((each) => each.wasRead())).toBe(true))
+
+    const refused = await refusedUnread(heldMcpCall('ada'))
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('retry-after')).toMatch(/^[1-9]\d*$/)
+    expect(await refused.json()).toMatchObject({
+      jsonrpc: '2.0',
+      error: { code: -32000 },
+      id: null,
+    })
+
+    const [dropped, ...rest] = held
+    dropped?.drop()
+    await dropped?.response.catch(() => undefined)
+    const after = heldMcpCall('ada')
+    await vi.waitFor(() => expect(after.wasRead()).toBe(true))
+
+    for (const each of [...rest, after]) each.release()
+    for (const each of [...rest, after]) expect((await each.response).status).toBe(200)
+  })
+})

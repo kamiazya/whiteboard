@@ -34,6 +34,7 @@ import {
   duplicateDocumentInputSchema,
   moveDocumentInputSchema,
   NoRoomForCopyError,
+  refuseNewDocuments,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -153,6 +154,7 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     if (documents.has(path)) {
       throw new DocumentPathTakenError(workspaceId, path)
     }
+    refuseNewDocuments(documents.size)
     const entry: DocumentEntry = {
       documentId: generateDocumentId(),
       path,
@@ -271,6 +273,7 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     if (source === undefined) throw new DocumentNotFoundError(workspaceId, path)
     const copyPath = deriveCopyPath(source.path, occupiedPaths(documents.keys()))
     if (copyPath === null) throw new NoRoomForCopyError(source.path)
+    refuseNewDocuments(documents.size)
     const copy: DocumentEntry = {
       documentId: generateDocumentId(),
       path: copyPath,

@@ -12,10 +12,12 @@ import {
   hasDocumentTrash,
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
+  TooManyDocumentsError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
   type ApiErrorBody,
+  errorBody,
   issueText,
   type ServerDeps,
   WorkspaceNotFoundForCallerError,
@@ -71,7 +73,7 @@ function handleDocumentNotFound(
  */
 export type ErrorAnswer = (
   err: unknown,
-) => { status: 400 | 404 | 409 | 500; body: ApiErrorBody } | null
+) => { status: 400 | 404 | 409 | 413 | 500; body: ApiErrorBody } | null
 
 /**
  * The first translation that owns `err`, or null for the caller to rethrow.
@@ -85,7 +87,7 @@ export type ErrorAnswer = (
 export function firstOwned(
   err: unknown,
   answers: readonly ErrorAnswer[],
-): { status: 400 | 404 | 409 | 500; body: ApiErrorBody } | null {
+): { status: 400 | 404 | 409 | 413 | 500; body: ApiErrorBody } | null {
   for (const answer of answers) {
     const owned = answer(err)
     if (owned !== null) return owned
@@ -102,6 +104,15 @@ export const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
   handleDocumentNotFound,
   handleCorruptStoredData,
 ]
+
+/**
+ * A new document past the workspace's document ceiling, in the code the sync
+ * routes answer it with, so a client reads one refusal however it minted.
+ */
+export const tooManyDocuments: ErrorAnswer = (err) =>
+  err instanceof TooManyDocumentsError
+    ? { status: 413, body: errorBody(err.code, err.message) }
+    : null
 
 /** A conflicting workspace segment: another workspace already holds it. */
 export const segmentTaken: ErrorAnswer = (err) =>

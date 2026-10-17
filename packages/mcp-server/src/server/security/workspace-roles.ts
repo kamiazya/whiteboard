@@ -9,7 +9,12 @@
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { ExpressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
-import type { TenantScoped } from '../store/db/tenant-database.js'
+import {
+  inTenantTransaction,
+  type TenantScoped,
+  type TenantTransaction,
+} from '../store/db/tenant-database.js'
+import { moveIntoNamespace, oldestOwnerNamespace } from './workspace-namespace-home.js'
 
 export interface WorkspaceMember {
   readonly profile: { readonly id: string; readonly displayName: string }
@@ -80,6 +85,22 @@ async function membersOf(db: TenantScoped, workspaceId: string): Promise<Workspa
   }))
 }
 
+// A workspace held in the namespace of somebody who just stopped owning it
+// moves to its oldest remaining owner (ADR-0053 decision 4's rule). Left
+// where it was, its former holder could still learn its segment through
+// their own namespace's collisions — a create's suffix, a rename's 409.
+async function rehomeFrom(trx: TenantTransaction, workspaceId: string, profileId: string) {
+  const held = await trx
+    .selectFrom('workspaces')
+    .innerJoin('memberProfiles', 'memberProfiles.handle', 'workspaces.namespace')
+    .select(['workspaces.id', 'workspaces.segment'])
+    .where('workspaces.id', '=', workspaceId)
+    .where('memberProfiles.id', '=', profileId)
+    .executeTakeFirst()
+  if (held === undefined) return
+  await moveIntoNamespace(trx, held, await oldestOwnerNamespace(trx, workspaceId, profileId))
+}
+
 export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
   return {
     list: (workspaceId) => membersOf(db, workspaceId),
@@ -93,26 +114,32 @@ export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
       return row !== undefined
     },
 
-    async setRole(workspaceId, profileId, role) {
-      let update = db
-        .updateTable('workspaceMemberships')
-        .set({ role })
-        .where('workspaceId', '=', workspaceId)
-        .where('profileId', '=', profileId)
-      if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
-      const changed = await update.returning('profileId').execute()
-      return changed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
-    },
+    setRole: (workspaceId, profileId, role) =>
+      inTenantTransaction(db, async (trx) => {
+        let update = trx
+          .updateTable('workspaceMemberships')
+          .set({ role })
+          .where('workspaceId', '=', workspaceId)
+          .where('profileId', '=', profileId)
+        if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
+        const changed = await update.returning('profileId').execute()
+        if (changed.length === 0) return refusal(trx, workspaceId, profileId)
+        if (role === 'member') await rehomeFrom(trx, workspaceId, profileId)
+        return 'ok'
+      }),
 
-    async remove(workspaceId, profileId) {
-      const removed = await db
-        .deleteFrom('workspaceMemberships')
-        .where('workspaceId', '=', workspaceId)
-        .where('profileId', '=', profileId)
-        .where(keepsAnOwner(workspaceId, profileId))
-        .returning('profileId')
-        .execute()
-      return removed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
-    },
+    remove: (workspaceId, profileId) =>
+      inTenantTransaction(db, async (trx) => {
+        const removed = await trx
+          .deleteFrom('workspaceMemberships')
+          .where('workspaceId', '=', workspaceId)
+          .where('profileId', '=', profileId)
+          .where(keepsAnOwner(workspaceId, profileId))
+          .returning('profileId')
+          .execute()
+        if (removed.length === 0) return refusal(trx, workspaceId, profileId)
+        await rehomeFrom(trx, workspaceId, profileId)
+        return 'ok'
+      }),
   }
 }

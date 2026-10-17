@@ -1,4 +1,7 @@
-import { decodeSegment } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import {
+  decodeSegment,
+  isDotSegment,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { formatWorkspaceAddress, parseWorkspaceAddress } from '@kamiazya/whiteboard-model'
 
 // Canonical URL shapes for apps/web. Kept as pure string-building/parsing
@@ -55,11 +58,20 @@ export type WorkspaceRoute =
   | { kind: 'index'; workspace?: string }
   | { kind: 'document'; workspace: string; path: string }
 
-/** The decoded document path a URL tail spells, or null when any segment is empty or undecodable. */
+/**
+ * The decoded document path a URL tail spells, or null when any segment is
+ * empty, undecodable, or a dot segment — `%2e%2e` decodes to `..`, which no
+ * document path admits and which the API URL built from it would resolve
+ * away.
+ */
 function documentTail(tail: string): string | null {
-  const segments = tail.split('/').map(decodeSegment)
-  if (segments.some((segment) => segment === null || segment === '')) return null
-  return segments.join('/')
+  const decoded = tail.split('/').map(decodeSegment)
+  if (decoded.some((segment) => segment === null)) return null
+  // Judged after the join: `%2F` decodes to a separator, so `a%2F..` is the
+  // path `a/..` even though no single URL segment spelled `..`.
+  const path = decoded.join('/')
+  if (path.split('/').some((segment) => segment === '' || isDotSegment(segment))) return null
+  return path
 }
 
 /** The address a qualified pair of URL components spells, or null when the address grammar refuses it. */

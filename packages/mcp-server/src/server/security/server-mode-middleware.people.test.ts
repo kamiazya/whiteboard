@@ -51,18 +51,24 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let sessions: SignInSessionStore
 let app: Hono
+let streamsOpened: number
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-server-mode-people-'))
   handle = await createIsolatedDb({ dataDir: root })
   members = createMemberProfileStore(handle.db)
   sessions = createSignInSessionStore(handle.db)
+  streamsOpened = 0
   app = new Hono()
   app.use(
     '/api/*',
     createServerModeApiAuthMiddleware(strategy, { members, sessions, origin: ORIGIN }),
   )
   app.get('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
+  app.get('/api/sync/stream', (c) => {
+    streamsOpened += 1
+    return c.json({ reached: true })
+  })
   app.post('/api/fonts/:id/install', (c) => c.json({ reached: true }))
   app.post('/api/v1/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
 })
@@ -224,5 +230,45 @@ describe('server mode — /mcp asks its bearer for mcp:call', () => {
   it('refuses a token that lacks mcp:call, whatever else it holds', async () => {
     expect((await mcp('Bearer canvas:read')).status).toBe(403)
     expect((await mcp('Bearer ')).status).toBe(403)
+  })
+})
+
+// A read carries the session too, and one a sibling subdomain's page makes
+// can still hold what the session is entitled to — a sync stream, of which a
+// user may hold only so many. So where the browser says whose page asked
+// (`Sec-Fetch-Site`), only this host's own pages, or a navigation the user
+// typed, carry it; a client that sends no such header keeps reading as before.
+describe('server mode — a session reads only from its own pages', () => {
+  async function streamAs(site: string | undefined) {
+    await member('ada')
+    const token = await sessions.create(
+      { authenticator: ISSUER, subject: 'ada' },
+      Date.now(),
+      60_000,
+    )
+    return app.request('/api/sync/stream', {
+      headers: {
+        cookie: `${SESSION_COOKIE}=${token}`,
+        ...(site === undefined ? {} : { 'sec-fetch-site': site }),
+      },
+    })
+  }
+
+  it.for([
+    ['this host', 'same-origin'],
+    ['a navigation the user typed', 'none'],
+    ['a client that says nothing', undefined],
+  ] as const)('opens a stream for %s', async ([, site]) => {
+    expect(await answer(streamAs(site))).toEqual(REACHED)
+    expect(streamsOpened).toBe(1)
+  })
+
+  it.for([
+    ['a sibling subdomain', 'same-site'],
+    ['another site', 'cross-site'],
+    ['a value no browser sends', 'bogus'],
+  ] as const)('opens no stream for a page on %s', async ([, site]) => {
+    expect((await streamAs(site)).status).toBe(401)
+    expect(streamsOpened).toBe(0)
   })
 })

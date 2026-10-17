@@ -143,6 +143,30 @@ describe('parseWorkspaceRoute', () => {
     expect(parseWorkspaceRoute('/w/me/w1/d/ok/ma%in')).toBeNull()
   })
 
+  // A document path that decodes to a dot segment would be handed to the API
+  // URL builders, where the URL parser resolves it to another `/api` route.
+  it.each([
+    '/w/me/w1/d/..',
+    '/w/me/w1/d/a/./b',
+    '/w/me/w1/d/a/%2e%2E',
+    '/w/me/w1/d/%2e',
+    '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV/d/a/%2E%2e/b',
+    // An encoded separator decodes to one: `a%2F..` is the path `a/..`.
+    '/w/me/w1/d/a%2F..',
+    '/w/me/w1/d/a%2F%2E',
+    '/w/me/w1/d/a%2F%2Fb',
+  ])('treats a dot segment in the tail as not-a-route: %s', (pathname) => {
+    expect(parseWorkspaceRoute(pathname)).toBeNull()
+  })
+
+  it('keeps a tail segment that merely contains dots', () => {
+    expect(parseWorkspaceRoute('/w/me/w1/d/a.b/...')).toEqual({
+      kind: 'document',
+      workspace: 'me/w1',
+      path: 'a.b/...',
+    })
+  })
+
   it('is not confused by the workspace-index route it now nests under', () => {
     // `/w/me/w1` and `/w/me/w1/d/...` share a prefix; the document branch
     // must not swallow the workspace route, nor the reverse.

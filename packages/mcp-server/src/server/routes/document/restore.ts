@@ -13,7 +13,12 @@ import {
 import { Hono } from 'hono'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
 import { readJsonBody } from '../read-json-body.js'
-import { handleCorruptStoredData, invalidBodyRefusal, refusedBy } from './_shared.js'
+import {
+  handleCorruptStoredData,
+  invalidBodyRefusal,
+  refusedBy,
+  tooManyDocuments,
+} from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
@@ -148,7 +153,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         const answer = restoreAnswer(result, { targetPath })
         return c.json(answer.body, answer.status)
       } catch (err) {
-        const issue = handleCorruptStoredData(err)
+        const issue = handleCorruptStoredData(err) ?? tooManyDocuments(err)
         if (issue) return c.json(issue.body, issue.status)
         throw err
       }

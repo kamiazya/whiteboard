@@ -330,15 +330,20 @@ that SVG, so it is held to what SVG text can do:
   diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
   loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
   one shows as its source.
-- MathJax runs without its `html` extension, so `\href`, `\class`, `\cssId`
-  and `\style` are not commands: math cannot carry a link, or put an id, a
-  class or an inline style of its choosing into the page. Written in a math
-  block, they show as unknown commands.
+- MathJax runs without its `html`, `bbox` and `unicode` extensions, and
+  without `require`, which could load one back. So `\href`, `\class`,
+  `\cssId`, `\style`, `\bbox` and `\unicode` are not commands: math cannot
+  carry a link, or put an id, a class, an inline style or a font of its
+  choosing into the page. Written in a math block, they show as unknown
+  commands.
 - Whatever either engine returns is checked before it is used: a fragment
-  carrying an HTML island (`<foreignObject>`), a form, a script, an event
-  handler, an `action` or `formaction` attribute, or any `href`, `src` or
-  `url(…)` that points outside the fragment is refused, and the block keeps
-  its source.
+  carrying an HTML island (`<foreignObject>`), a form, a script, an
+  animation element (`<animate>`, `<set>` and the rest, which could rewrite a
+  link after the check has read it), an event handler, an `action` or
+  `formaction` attribute, or any `href`, `src` or `url(…)` that points outside
+  the fragment, quoted or not, is refused, and the block keeps its source.
+  This matters beyond the app: an exported SVG opened on its own has no
+  content security policy behind it.
 - The hosted app's policy carries `form-action 'none'`: nothing in the app
   submits a form natively, so a form that did reach the page would have
   nowhere to post.
@@ -404,6 +409,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   sign-in session authenticates a write (any method but `GET`, `HEAD` or
   `OPTIONS`) only when the request's `Origin` is the server's own origin —
   otherwise the session is ignored and the request needs a bearer token.
+  Reads are held to the browser's `Sec-Fetch-Site` header where it is sent:
+  the session counts only for `same-origin` (this server's own pages) or
+  `none` (a navigation the user started), so a page on a sibling subdomain
+  cannot spend a signed-in person's live-sync streams. A client that sends
+  no `Sec-Fetch-Site` reads with the session as before.
   Allowlist entries may be exact origins
   or a `https://*.example.com` leftmost-label wildcard subdomain pattern for
   deployment-preview shapes (e.g. Cloudflare Pages branch previews); bare `*`
@@ -441,9 +451,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
-  update, a promote, an upload or a document created from its content is read
-  whole before it is applied, so the bodies in flight are capped per user and
-  per instance, and the next one is refused before it is read. The limits are
+  update, a promote, an upload, a document created from its content or a
+  JSON-RPC request to `/mcp` is read whole before it is applied, so the
+  bodies in flight are capped per user and per instance, and the next one is
+  refused before it is read. Callers whose grant names no user on the
+  instance share one user's allowance. The limits are
   [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,
@@ -484,7 +496,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is
-  refused whole (`too_many_documents`), so repeating small updates cannot
+  refused whole (`too_many_documents`), and so is each single new document —
+  a create through `/api/v1` or `wb_workspace_edit`, a document's update to a
+  new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
   checkpointed one at a time, not all at once.
 - **The data directory answers to the operator.** The stdio entry and the

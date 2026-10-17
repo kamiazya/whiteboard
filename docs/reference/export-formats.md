@@ -95,7 +95,11 @@ not:
   refuse, with `413 {"error":"too_many_documents"}`, an update or record that
   would leave the workspace holding more than 2000 documents; a workspace that
   already holds more still takes edits that add no document, and deleting is
-  how it shrinks.
+  how it shrinks. Every other way a document is added holds the same ceiling
+  and answers it the same way: a document's `update` to a path no document
+  holds yet, `POST /api/v1/workspaces/{id}/documents`, a duplicate, a restore
+  from the trash, and a version restored to a new path. `wb_workspace_edit`'s
+  `document.create` refuses at that op, with the same message.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 

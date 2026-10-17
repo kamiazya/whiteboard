@@ -4,11 +4,22 @@ import { armContentSlots, createContentSlots } from './content-slots.js'
 import { limitContentBody } from './routes/body-limit.js'
 
 describe('createContentSlots', () => {
-  it('counts a caller with no user against the total only', () => {
-    const slots = createContentSlots({ perUser: 1, total: 2 })
+  // Grants that name no user here are told apart by nothing, so they share
+  // one user's allowance rather than each reaching for the whole instance.
+  it('counts every caller with no user as one user', () => {
+    const slots = createContentSlots({ perUser: 2, total: 4 })
     expect(typeof slots.take(null)).toBe('function')
     expect(typeof slots.take(null)).toBe('function')
-    expect(slots.take(null)).toBe('total')
+    expect(slots.take(null)).toBe('per_user')
+    expect(typeof slots.take('ada')).toBe('function')
+  })
+
+  it('frees a slot a caller with no user held', () => {
+    const slots = createContentSlots({ perUser: 1, total: 4 })
+    const held = slots.take(null)
+    if (typeof held !== 'function') throw new Error('the first slot was refused')
+    held()
+    expect(typeof slots.take(null)).toBe('function')
   })
 
   it('frees a slot once however many times it is released', () => {

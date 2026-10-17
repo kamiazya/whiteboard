@@ -22,8 +22,9 @@ import {
   hasDocumentTrash,
   isDatabaseBusy,
   isWorkspaceNotFoundError,
+  TooManyDocumentsError,
 } from '@kamiazya/whiteboard-ports'
-import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { type ApiErrorBody, errorBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
@@ -37,9 +38,9 @@ type Handler = (c: Context) => Promise<Response>
 const NO_TRASH: ApiErrorBody = { title: 'This composition has no trash.' }
 
 // The addressing every trash route shares: the workspace handle parsed and
-// refused outside the try below, the unknown workspace answered 404, a busy
-// database left to the app's 503 with Retry-After, anything else logged and
-// answered 500.
+// refused outside the try below, the unknown workspace answered 404, a
+// restore into a workspace at its document ceiling 413, a busy database left
+// to the app's 503 with Retry-After, anything else logged and answered 500.
 async function answering(
   deps: ServerDeps,
   c: Context,
@@ -61,6 +62,11 @@ async function answering(
   } catch (err) {
     if (isWorkspaceNotFoundError(err)) {
       return c.json(workspaceNotFoundRefusal(workspaceId), 404)
+    }
+    // Answered here rather than through `_shared`'s `tooManyDocuments`, which
+    // would pull `node:os` into a route that otherwise has none.
+    if (err instanceof TooManyDocumentsError) {
+      return c.json(errorBody(err.code, err.message), 413)
     }
     if (isDatabaseBusy(err)) throw err
     getLogger('document').error({ err: err as Error }, failure.logged)
