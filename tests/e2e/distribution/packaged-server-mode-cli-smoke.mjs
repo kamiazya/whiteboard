@@ -414,7 +414,7 @@ try {
     await refusedAs('before a member is granted', 'not_a_member')
     operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, '--user=cli-smoke-user'])
     const listRes = await listDocuments()
-    if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
+    if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status} ${await listRes.text()}`)
     const list = await listRes.json()
     if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 5: seeded canvas not found on restored server', {
