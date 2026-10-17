@@ -137,6 +137,21 @@ async function loadMermaid(): Promise<MermaidApi | undefined> {
       // 'strict' sanitizes labels and blocks script-bearing constructs —
       // load-bearing for the PreviewPane verbatim-injection rationale.
       securityLevel: 'strict',
+      // Keys a diagram's own `%%{init}%%` directive may not override. Setting
+      // `secure` replaces mermaid's list, so its defaults are repeated here;
+      // `themeCSS` would otherwise let document text inject CSS into a
+      // fragment embedded verbatim, and `dompurifyConfig` loosen the label
+      // sanitiser that 'strict' relies on.
+      secure: [
+        'secure',
+        'securityLevel',
+        'startOnLoad',
+        'maxTextSize',
+        'suppressErrorRendering',
+        'maxEdges',
+        'dompurifyConfig',
+        'themeCSS',
+      ],
       theme: 'neutral',
       // Pure-SVG labels: foreignObject/HTML labels would not survive the
       // trip through canvas-render's SVG document (and would break any
