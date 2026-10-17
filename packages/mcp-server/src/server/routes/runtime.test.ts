@@ -11,6 +11,9 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { daemonLiveness } from '../../daemon/daemon-liveness.js'
+import type { DaemonRequest } from '../../daemon/daemon-request.js'
+import { endpointProofResponseSchema, isEndpointProof } from '../../shared/endpoint-proof.js'
 import {
   type CredentialResolverConfig,
   createCredentialResolver,
@@ -77,9 +80,13 @@ const STATUS: RuntimeStatusResponse = {
 // typecheck (TypeScript assumes the spread may supply it and drops excess
 // property checks). Measured — the router ran without a resolver and every
 // case answered 500.
-function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = {}) {
+function createApp(
+  credentials: Omit<CredentialResolverConfig, 'daemonToken'> = {},
+  endpointProofKey: string | null = 'secret',
+) {
   const touch = vi.fn()
   const app = createRuntimeRouter({
+    endpointProofKey: endpointProofKey ?? undefined,
     credentialResolver: createCredentialResolver({ daemonToken: 'secret', ...credentials }),
     instanceId: 'test-instance-id',
     identity: testIdentity,
@@ -115,6 +122,54 @@ describe('runtime routes', () => {
         did: ed25519PublicKeyToDidKey(testIdentity.publicKey),
       },
     })
+  })
+
+  // A caller about to send the token proves the server holds it first, so the
+  // proof is asked for without one and must never carry the token itself.
+  it('proves it holds the token to a caller that presents none', async () => {
+    const { app } = createApp()
+    const nonce = 'n'.repeat(43)
+    const res = await app.request(`/api/runtime/proof?nonce=${nonce}`)
+    expect(res.status).toBe(200)
+    const body = endpointProofResponseSchema.parse(await res.json())
+    await expect(isEndpointProof('secret', nonce, body.proof)).resolves.toBe(true)
+    await expect(isEndpointProof('other', nonce, body.proof)).resolves.toBe(false)
+    expect(body.proof).not.toContain('secret')
+  })
+
+  // The client half and this route meet only over the wire, so hold them to
+  // each other: a Windows record is `running` exactly when this route answers.
+  it('satisfies the daemon-liveness proof a Windows reader asks of a pipe', async () => {
+    const { app } = createApp()
+    const request = async (req: DaemonRequest) => {
+      const res = await app.request(req.path)
+      return { status: res.status, body: await res.json() }
+    }
+    const record = {
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      socketPath: '\\\\.\\pipe\\whiteboard-test',
+    }
+    const windowsShape = { isAlive: () => true, startMs: () => null, request }
+    const proven = await daemonLiveness({ ...record, token: 'secret' }, windowsShape)
+    expect(proven).toEqual({ state: 'running' })
+    const wrongToken = await daemonLiveness({ ...record, token: 'other' }, windowsShape)
+    expect(wrongToken).toEqual({ state: 'unconfirmed' })
+  })
+
+  it('refuses a proof for a nonce that is not 32 base64url bytes', async () => {
+    const { app } = createApp()
+    for (const nonce of ['', 'short', `${'n'.repeat(43)}=`]) {
+      const res = await app.request(`/api/runtime/proof?nonce=${encodeURIComponent(nonce)}`)
+      expect(res.status).toBe(400)
+    }
+  })
+
+  it('answers no proof where it holds no daemon token', async () => {
+    const { app } = createApp({}, null)
+    const res = await app.request(`/api/runtime/proof?nonce=${'n'.repeat(43)}`)
+    expect(res.status).toBe(404)
+    await expect(res.json()).resolves.toMatchObject({ error: 'not_found' })
   })
 
   it('rejects status without a bearer token', async () => {
@@ -292,6 +347,7 @@ describe('runtime routes on server mode', () => {
       '/',
       createRuntimeRouter({
         credentialResolver: createCredentialResolver({ daemonToken: undefined }),
+        endpointProofKey: undefined,
         serverModeGrant: callerGrant,
         instanceId: 'test-instance-id',
         identity: testIdentity,
