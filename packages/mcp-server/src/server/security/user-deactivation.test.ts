@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
+import { createTenantAdministratorStore } from './tenant-administrator-store.js'
 import { createUserDeactivation, type UserDeactivation } from './user-deactivation.js'
 
 let root: string
@@ -85,5 +86,51 @@ describe('createUserDeactivation', () => {
 
   it('is not deactivated for a binding with no user', async () => {
     expect(await members.isDeactivated(ada)).toBe(false)
+  })
+})
+
+// A tenant keeps at least one active administrator, as a workspace keeps an
+// owner: the guard rides in the deactivating UPDATE, so two administrators
+// deactivating each other at once cannot both succeed.
+describe('deactivating while keeping an administrator', () => {
+  const cy = { authenticator: 'oidc:https://id.example', subject: 'cy' }
+  async function appointed(binding: typeof ada, name: string) {
+    const user = await members.ensureProfile({ binding, displayName: name })
+    await createTenantAdministratorStore(handle.db).appoint(user.id, null)
+    return user.id
+  }
+
+  it('deactivates one of two administrators, and refuses the last one left', async () => {
+    const adaId = await appointed(ada, 'Ada')
+    const bobId = await appointed(bob, 'Bob')
+    expect(await deactivation.deactivateKeepingAnAdministrator(bobId, 1_000)).toBe('deactivated')
+    expect(await deactivation.deactivateKeepingAnAdministrator(adaId, 1_000)).toBe(
+      'last-administrator',
+    )
+    expect(await members.isDeactivated(ada)).toBe(false)
+    expect(await deactivation.deactivateKeepingAnAdministrator(bobId, 2_000)).toBe('unchanged')
+  })
+
+  it('lets exactly one of two administrators deactivating each other at once succeed', async () => {
+    const adaId = await appointed(ada, 'Ada')
+    const bobId = await appointed(bob, 'Bob')
+    const outcomes = await Promise.all([
+      deactivation.deactivateKeepingAnAdministrator(adaId, 1_000),
+      deactivation.deactivateKeepingAnAdministrator(bobId, 1_000),
+    ])
+    expect([...outcomes].sort()).toEqual(['deactivated', 'last-administrator'])
+  })
+
+  it('deactivates someone who administers nothing, administrators or not', async () => {
+    const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    expect(await deactivation.deactivateKeepingAnAdministrator(user.id, 1_000)).toBe('deactivated')
+  })
+
+  it('counts an administrator the configuration names, and holds one to the rule too', async () => {
+    const guarded = createUserDeactivation(handle.db, { configuredAdministrators: [cy] })
+    const adaId = await appointed(ada, 'Ada')
+    const cyId = (await members.ensureProfile({ binding: cy, displayName: 'Cy' })).id
+    expect(await guarded.deactivateKeepingAnAdministrator(adaId, 1_000)).toBe('deactivated')
+    expect(await guarded.deactivateKeepingAnAdministrator(cyId, 1_000)).toBe('last-administrator')
   })
 })

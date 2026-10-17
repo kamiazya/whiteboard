@@ -50,7 +50,7 @@ export function createServerModePeople(
         configured,
       }),
       appointments,
-      deactivation: createUserDeactivation(db),
+      deactivation: createUserDeactivation(db, { configuredAdministrators: configured }),
       deletion: createUserDeletion(db, accountRetirementFor(options.dataDir)),
     },
     origin: new URL(options.publicBaseUrl).origin,

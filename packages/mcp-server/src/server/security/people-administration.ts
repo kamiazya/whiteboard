@@ -124,7 +124,8 @@ export interface PeopleAdministration {
     by: By,
     now: number,
   ): Promise<
-    Done<{ readonly changed: boolean }> | Refused<'unknown_user' | 'cannot_deactivate_self'>
+    | Done<{ readonly changed: boolean }>
+    | Refused<'unknown_user' | 'cannot_deactivate_self' | 'last_administrator'>
   >
   /** `changed` is false when they were not deactivated. */
   reactivate(userId: string): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user'>>
@@ -145,7 +146,14 @@ export function createPeopleAdministration(deps: {
     async deactivate(userId, by, now) {
       if (!(await isUser(userId))) return unknown
       if (userId === by) return { kind: 'refused', reason: 'cannot_deactivate_self' }
-      return { kind: 'done', changed: await deps.deactivation.deactivate(userId, now) }
+      // The operator can appoint another from the command line; an
+      // administrator's request must not leave the tenant with none.
+      if (by === null) {
+        return { kind: 'done', changed: await deps.deactivation.deactivate(userId, now) }
+      }
+      const outcome = await deps.deactivation.deactivateKeepingAnAdministrator(userId, now)
+      if (outcome === 'last-administrator') return { kind: 'refused', reason: 'last_administrator' }
+      return { kind: 'done', changed: outcome === 'deactivated' }
     },
 
     async reactivate(userId) {

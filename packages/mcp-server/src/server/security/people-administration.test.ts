@@ -155,6 +155,20 @@ describe('deactivating a person', () => {
     })
   })
 
+  // Two administrators deactivating each other at once: the one whose
+  // request lands second finds no other administrator left, so is refused.
+  it('refuses an administrator deactivating the last active administrator', async () => {
+    await appointments.appoint(ids.bob as string, ids.ada as string)
+    expect(await people.deactivate(ids.ada as string, ids.bob as string, NOW)).toEqual({
+      kind: 'done',
+      changed: true,
+    })
+    expect(await people.deactivate(ids.bob as string, ids.ada as string, NOW)).toEqual({
+      kind: 'refused',
+      reason: 'last_administrator',
+    })
+  })
+
   // The operator is nobody's user, so there is no self to protect.
   it('lets the operator deactivate anyone', async () => {
     expect(await people.deactivate(ids.ada as string, null, NOW)).toEqual({
