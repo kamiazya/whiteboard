@@ -186,7 +186,9 @@ sent down a stream, the instance holding it re-checks that its user is still a
 member of the workspace and not deactivated, and ends the stream if not — so a
 removal or deactivation made on another instance, or with
 `whiteboard server deactivate-user`, takes effect on streams that are already
-open.
+open. On the instance that handles the change it is immediate: removing someone
+from a workspace ends their streams that follow that workspace, and
+deactivating them ends every stream they hold.
 
 ## Codex sandbox constraints
 
