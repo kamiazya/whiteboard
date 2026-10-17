@@ -119,7 +119,20 @@ order in the current directory:
 
 If nothing is found in the current directory, `~/.whiteboard/config.yaml`
 is consulted as a per-machine fallback — so a `dataDir` in it redirects every
-command run from a directory with no file of its own. Only declarative JSON/YAML/rc formats
+command run from a directory with no file of its own.
+
+**A config file in the current directory may not set `dataDir` or `token`.**
+The current directory is wherever you, or an MCP client, started the command —
+for `whiteboard mcp` that is usually whatever repository is open, which may be
+one you cloned and never read. A file there choosing where your data lives or
+which token guards the daemon would let that repository's author take it over.
+So a current-directory file that sets either key stops the command with exit
+code 1 and a message naming the file and the key; it may still set `logLevel`
+and `openBrowser`. Put `dataDir` and `token` in `~/.whiteboard/config.yaml`,
+the only file that may set them (there is no flag that names a config file).
+When the current directory IS your home directory, that file is found there
+and keeps its trust. Only one file is ever read: a current-directory file,
+even one setting only `logLevel`, means the home file is not consulted. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately
 NOT searched, so a config file can never execute code at daemon startup.
 

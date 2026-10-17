@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -130,21 +130,32 @@ vi.mock('./server-status.js', () => ({
 const { main } = await import('./dispatcher.js')
 
 let dir: string
+let home: string
 let originalCwd: string
 const ENV_KEYS = [
   'WHITEBOARD_TOKEN',
   'WHITEBOARD_DAEMON_TOKEN',
   'WHITEBOARD_LOG_LEVEL',
   'WHITEBOARD_DATA_DIR',
+  'HOME',
 ] as const
 let savedEnv: Record<string, string | undefined>
 
+// dataDir and token are honoured only from the home-directory config, so the
+// tests that exercise them write it there, under a HOME of the test's own.
+function writeHomeConfig(body: Record<string, unknown>): void {
+  mkdirSync(join(home, '.whiteboard'), { recursive: true })
+  writeFileSync(join(home, '.whiteboard', 'config.yaml'), JSON.stringify(body))
+}
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'whiteboard-dispatcher-config-'))
+  home = mkdtempSync(join(tmpdir(), 'whiteboard-dispatcher-home-'))
   originalCwd = process.cwd()
   process.chdir(dir)
   savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
   for (const key of ENV_KEYS) delete process.env[key]
+  process.env.HOME = home
   runDaemonRun.mockClear()
   seen.clear()
 })
@@ -152,6 +163,7 @@ beforeEach(() => {
 afterEach(() => {
   process.chdir(originalCwd)
   rmSync(dir, { recursive: true, force: true })
+  rmSync(home, { recursive: true, force: true })
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key]
     else process.env[key] = savedEnv[key]
@@ -160,13 +172,7 @@ afterEach(() => {
 
 describe('whiteboard daemon run — config file wiring', () => {
   it('threads config-file dataDir and token into the run', async () => {
-    writeFileSync(
-      join(dir, '.whiteboardrc.json'),
-      JSON.stringify({
-        dataDir: join(dir, 'data'),
-        token: 'file-token-value',
-      }),
-    )
+    writeHomeConfig({ dataDir: join(dir, 'data'), token: 'file-token-value' })
 
     const capture = captureLogsForTests()
     try {
@@ -182,15 +188,12 @@ describe('whiteboard daemon run — config file wiring', () => {
 
     const loadRecord = capture.records.find((r) => r.msg.includes('loaded whiteboard config file'))
     expect(loadRecord).toBeDefined()
-    expect(loadRecord?.data?.filepath).toMatch(/\.whiteboardrc\.json$/)
+    expect(loadRecord?.data?.filepath).toBe(join(home, '.whiteboard', 'config.yaml'))
     expect(JSON.stringify(capture.records)).not.toContain('file-token-value')
   })
 
   it('--data-dir on the CLI beats the config file dataDir', async () => {
-    writeFileSync(
-      join(dir, '.whiteboardrc.json'),
-      JSON.stringify({ dataDir: join(dir, 'from-file') }),
-    )
+    writeHomeConfig({ dataDir: join(dir, 'from-file') })
     await main(['daemon', 'run', '--json', `--data-dir=${join(dir, 'from-cli')}`])
     expect(process.env.WHITEBOARD_DATA_DIR).toBe(join(dir, 'from-cli'))
   })
@@ -228,8 +231,7 @@ describe('whiteboard daemon run — config file wiring', () => {
 // what every one of these commands locates the daemon by.
 describe('config-file dataDir reaches every command that locates the local daemon', () => {
   const FROM_FILE = () => join(dir, 'from-file')
-  const writeConfig = () =>
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ dataDir: FROM_FILE() }))
+  const writeConfig = () => writeHomeConfig({ dataDir: FROM_FILE() })
 
   const COMMANDS: readonly { key: string; argv: () => string[] }[] = [
     { key: 'daemon status', argv: () => ['daemon', 'status', '--json'] },
@@ -293,10 +295,49 @@ describe('config-file dataDir reaches every command that locates the local daemo
   })
 
   it('fails a read-only command on an invalid config file instead of looking in the wrong place', async () => {
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ dataDir: 7 }))
+    writeHomeConfig({ dataDir: 7 })
     const { result, stderr } = await captureStdio(() => main(['daemon', 'status', '--json']))
     expect(result).toBe(1)
     expect(seen.has('daemon status')).toBe(false)
-    expect(stderr).toContain('.whiteboardrc.json')
+    expect(stderr).toContain('config.yaml')
+  })
+})
+
+// The working directory is wherever an MCP client started us — often a cloned
+// repo — so a file there may not choose the data directory or the token.
+describe('a working-directory config may not set dataDir or token', () => {
+  it.each([
+    ['daemon run', ['daemon', 'run', '--json']],
+    ['mcp', ['mcp']],
+    ['daemon status', ['daemon', 'status', '--json']],
+  ])('%s refuses a cwd dataDir and leaves WHITEBOARD_DATA_DIR unset', async (key, argv) => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ dataDir: './evil' }))
+    const { result, stderr } = await captureStdio(() => main(argv))
+    expect(result).toBe(1)
+    expect(stderr).toContain(join(dir, '.whiteboardrc'))
+    expect(stderr).toContain('"dataDir"')
+    expect(process.env.WHITEBOARD_DATA_DIR).toBeUndefined()
+    expect(runDaemonRun).not.toHaveBeenCalled()
+    expect(seen.has(key)).toBe(false)
+  })
+
+  it('refuses a cwd token without layering it into either token seam', async () => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ token: 'planted-token' }))
+    const { result, stderr } = await captureStdio(() => main(['daemon', 'run', '--json']))
+    expect(result).toBe(1)
+    expect(stderr).toContain('"token"')
+    expect(stderr).not.toContain('planted-token')
+    expect(process.env.WHITEBOARD_TOKEN).toBeUndefined()
+    expect(process.env.WHITEBOARD_DAEMON_TOKEN).toBeUndefined()
+  })
+
+  it('applies a cwd config that sets only logLevel, which shadows the home config whole', async () => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'error' }))
+    writeHomeConfig({ dataDir: join(dir, 'from-home') })
+    await captureStdio(() => main(['daemon', 'status', '--json']))
+    // One config file applies, never a merge of two: the cwd file wins the
+    // search, so the home file is not read.
+    expect(seen.get('daemon status')).not.toContain(join(dir, 'from-home'))
+    expect(process.env.WHITEBOARD_LOG_LEVEL).toBe('error')
   })
 })

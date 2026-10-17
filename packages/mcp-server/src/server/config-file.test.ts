@@ -134,13 +134,17 @@ describe('loadConfigFile', () => {
     for (const key of declared) {
       expect(samples, `add a sample value for the new config key "${key}"`).toHaveProperty(key)
     }
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify(samples))
+    // The home config, since a working-directory one may not set every key.
+    const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), JSON.stringify(samples))
     const capture = captureLogsForTests()
     try {
-      expect(loadConfigFile(dir)?.config).toEqual(samples)
+      expect(loadConfigFile(dir, { homeDir })?.config).toEqual(samples)
       expect(capture.records.filter((r) => r.msg.includes('unknown whiteboard config'))).toEqual([])
     } finally {
       capture.restore()
+      rmSync(homeDir, { recursive: true, force: true })
     }
   })
 
@@ -204,6 +208,64 @@ describe('loadConfigFile', () => {
     } finally {
       rmSync(homeDir, { recursive: true, force: true })
     }
+  })
+})
+
+// The working directory is wherever an MCP client started us, often a cloned
+// repo nobody here vetted. A file there may tune how we run, but not WHERE our
+// data lives or WHICH token guards the daemon: those two are honoured only from
+// the home-directory config.
+describe('loadConfigFile refuses dataDir and token from the working directory', () => {
+  let homeDir: string
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+  })
+  afterEach(() => {
+    rmSync(homeDir, { recursive: true, force: true })
+  })
+
+  it.each([
+    ['dataDir', { dataDir: './evil' }],
+    ['token', { token: 'planted-token' }],
+  ] as const)('refuses %s in a cwd .whiteboardrc, naming the file and the key', (key, body) => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'info', ...body }))
+    let thrown: unknown
+    try {
+      loadConfigFile(dir, { homeDir })
+    } catch (err) {
+      thrown = err
+    }
+    expect(String(thrown)).toContain(join(dir, '.whiteboardrc'))
+    expect(String(thrown)).toContain(`"${key}"`)
+    expect(String(thrown)).not.toContain('planted-token')
+  })
+
+  it('refuses dataDir from package.json#whiteboard in cwd', () => {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ whiteboard: { dataDir: '/x' } }))
+    expect(() => loadConfigFile(dir, { homeDir })).toThrow(/"dataDir"/)
+  })
+
+  it('still honours logLevel and openBrowser from cwd', () => {
+    writeFileSync(
+      join(dir, '.whiteboardrc'),
+      JSON.stringify({ logLevel: 'debug', openBrowser: false }),
+    )
+    expect(loadConfigFile(dir, { homeDir })?.config).toEqual({
+      logLevel: 'debug',
+      openBrowser: false,
+    })
+  })
+
+  it('honours dataDir and token from the home-directory config', () => {
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'dataDir: /data\ntoken: t\n')
+    expect(loadConfigFile(dir, { homeDir })?.config).toEqual({ dataDir: '/data', token: 't' })
+  })
+
+  it('honours the home-directory config when cwd is the home directory itself', () => {
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'dataDir: /data\n')
+    expect(loadConfigFile(homeDir, { homeDir })?.config).toEqual({ dataDir: '/data' })
   })
 })
 

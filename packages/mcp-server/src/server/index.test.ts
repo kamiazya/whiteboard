@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -243,6 +243,17 @@ describe('server/index main() WHITEBOARD_REPLICA_TIER wiring', () => {
 describe('server/index main() config-file wiring', () => {
   let dir: string
   let originalCwd: string
+  let home: string | undefined
+  const originalHome = process.env.HOME
+
+  // token and dataDir are honoured only from the home-directory config, so
+  // the tests that exercise them write it under a HOME of their own.
+  function writeHomeConfig(body: Record<string, unknown>): void {
+    home = mkdtempSync(join(tmpdir(), 'whiteboard-index-home-'))
+    process.env.HOME = home
+    mkdirSync(join(home, '.whiteboard'))
+    writeFileSync(join(home, '.whiteboard', 'config.yaml'), JSON.stringify(body))
+  }
 
   afterEach(() => {
     vi.clearAllMocks()
@@ -258,13 +269,17 @@ describe('server/index main() config-file wiring', () => {
     delete process.env.WHITEBOARD_DATA_DIR
     if (originalCwd) process.chdir(originalCwd)
     if (dir) rmSync(dir, { recursive: true, force: true })
+    if (home) rmSync(home, { recursive: true, force: true })
+    home = undefined
+    if (originalHome === undefined) delete process.env.HOME
+    else process.env.HOME = originalHome
   })
 
   it('loads a config-file token into WHITEBOARD_TOKEN (env still wins if set)', async () => {
     dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
     originalCwd = process.cwd()
     process.chdir(dir)
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ token: 'file-token' }))
+    writeHomeConfig({ token: 'file-token' })
     delete process.env.WHITEBOARD_TOKEN
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
@@ -308,10 +323,7 @@ describe('server/index main() config-file wiring', () => {
     dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
     originalCwd = process.cwd()
     process.chdir(dir)
-    writeFileSync(
-      join(dir, '.whiteboardrc.json'),
-      JSON.stringify({ token: 'file-token', dataDir: join(dir, 'data') }),
-    )
+    writeHomeConfig({ token: 'file-token', dataDir: join(dir, 'data') })
     delete process.env.WHITEBOARD_TOKEN
     delete process.env.WHITEBOARD_DATA_DIR
 
