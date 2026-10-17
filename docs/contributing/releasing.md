@@ -48,9 +48,10 @@ v0.1.0                   # wrong prefix
 mcp-server-v0.1          # missing patch segment
 ```
 
-The SemVer validation step runs _before_ checkout in each publish job inside
-`release.yml`. Invalid tags are rejected before any code is checked out or
-credentials are requested.
+The SemVer validation step runs _before_ checkout in `build-mcp` and `build-docker`,
+the jobs that check the tag out, and first in `docker-publish-sign`, which pushes under
+it. Invalid tags are rejected before any code is checked out or credentials are
+requested.
 
 ---
 
@@ -72,20 +73,22 @@ credentials are requested.
    |---|---|---|
    | `release-please` | every push to `main` | opens or updates the Release PR; creates the tags and GitHub Releases when it is merged |
    | `advance-stable` | the root (plugin) component was released | fast-forwards the `stable` branch to the release tag |
-   | `publish-mcp` | `mcp-server` was released, or a forced re-publish with `publish_npm` | npm publish |
-   | `docker-publish-sign` | `mcp-server` was released, or a forced re-publish with `publish_docker` | image push and cosign signature |
+   | `build-mcp` | `mcp-server` was released, or a forced re-publish with `publish_npm` | runs the publish gate and packs the npm tarball, with read-only permissions |
+   | `build-docker` | `mcp-server` was released, or a forced re-publish with `publish_docker` | runs the publish gate and container smokes and builds the image into an OCI archive, with read-only permissions |
+   | `publish-mcp` | `build-mcp` succeeded | npm publish of the tarball `build-mcp` packed |
+   | `docker-publish-sign` | `build-docker` succeeded | image push and cosign signature of the archive `build-docker` built |
    | `deploy-web` | any component was released | Cloudflare Pages production deploy of `apps/web`; skips its deploy step while the Cloudflare secrets are absent |
 
-   The jobs after `release-please` are independent of one another: one failing does not stop
-   the others, so a failed `advance-stable` leaves the npm package, the image and the web
-   deploy published.
+   Apart from each publish job waiting on its build job, the jobs after `release-please` are
+   independent of one another: one failing does not stop the others, so a failed
+   `advance-stable` leaves the npm package, the image and the web deploy published.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
    OIDC failure). Must match `mcp-server-v<semver>`; rejected before checkout otherwise.
    The `publish_npm` and `publish_docker` inputs (both default on) choose which halves run.
 
 ### Publish gate scope: publishability, not correctness
 
-`publish-mcp` runs the **publish** tier of `tests/e2e/distribution/release-gate-matrix.json`
+`build-mcp` runs the **publish** tier of `tests/e2e/distribution/release-gate-matrix.json`
 via `pnpm publish-gate` (`tools/checks/src/publish-gate.mjs`, a matrix-driven runner that
 mirrors `pages-release.mjs`). That tier is scoped to **publishability**: does the tarball
 build correctly, contain the required files, carry an SBOM, and actually start when
@@ -99,7 +102,7 @@ It deliberately does **not** re-run the full browser/jsdom test matrix
 already proven by **verify CI (`ci.yml`) at the identical tag SHA**: a release tag always
 points at a commit that was pushed to `main`, and `ci.yml`'s `verify` job (gated on
 `test-unit`, `test-jsdom`, `test-browser`) already ran against that exact commit before a
-human merged the release PR. Re-running the same suite a second time inside `publish-mcp`
+human merged the release PR. Re-running the same suite a second time inside `build-mcp`
 produced no new correctness signal — it only re-exposed an already-green commit to
 environment flakes (three consecutive releases failed publish this way, each on a
 different flake inside the re-run, while npm sat stuck at an older version). See
@@ -108,41 +111,74 @@ different flake inside the re-run, while npm sat stuck at an older version). See
 boundary from drifting.
 
 A blocking cross-workflow dependency on verify's *reported* conclusion (rather than on
-branch-protection having already required it) was considered and rejected: `publish-mcp`
+branch-protection having already required it) was considered and rejected: `build-mcp`
 only depends on `release-please`, not on `verify`, so querying verify's conclusion at
 publish time races a same-push `ci.yml` run that may still be in progress, and would
 require granting `actions: read` that the workflow does not otherwise need. If a stronger,
 machine-checked guarantee is wanted later, add it as a non-blocking advisory annotation
 first.
 
-### `publish-mcp` job (npm OIDC provenance)
+### Build and publish are separate jobs
 
-Steps (in order):
+Each half is a **build** job and a **publish** job. The build job checks out the tag,
+installs dependencies and runs every gate with `contents: read` and nothing else; its
+checkout sets `persist-credentials: false`, so the job token is not left in `.git/config`
+either. The publish job holds the credential — `id-token: write`, and `packages: write`
+for the image — and checks out nothing and runs no repository or dependency code. It
+downloads the artifact its build job uploaded, checks it against the sha256 that job
+reported, and publishes it.
+
+The split exists because any lifecycle script, test or smoke in the tree could otherwise
+mint the OIDC token npm and Sigstore accept, or read the GHCR push token.
+`ci-policy.test.ts` in `tools/arch-lint/src/` fails on a job that holds either permission
+and checks out the repository, runs a repository action, or runs `pnpm`, `npx`, `node` or
+a script-running `npm` verb, and on a release checkout that keeps the token where the job
+does not push with it (only `advance-stable` does).
+
+### `build-mcp` and `publish-mcp` jobs (npm OIDC provenance)
+
+`build-mcp` steps (in order):
 
 1. Validate `mcp-server-v<semver>` tag shape via `TAG` env var (not inline expression —
    prevents shell injection).
-2. Checkout the release tag.
-3. Install dependencies (Node 24 pinned; npm 11.x meets Trusted Publishing requirement).
-4. `pnpm audit --prod --audit-level=high`: a high or critical advisory in a production
+2. Checkout the release tag, with `persist-credentials: false`.
+3. On a forced re-publish, refuse when the checked-out tag is not `GITHUB_SHA` or the run
+   was not dispatched from the tag (see **Force-publish via release.yml**).
+4. Install dependencies (Node 24 pinned).
+5. `pnpm audit --prod --audit-level=high`: a high or critical advisory in a production
    dependency stops the publish.
-5. `pnpm publish-gate`: runs the publish tier (typecheck, mcp-node floor, build,
+6. `pnpm publish-gate`: runs the publish tier (typecheck, mcp-node floor, build,
    artifact checks, SBOM generation, tarball/packaged smokes) — see "Publish gate
    scope" above.
-6. `verify-pack-contents`: the packed tarball carries the README and LICENSE and no test
+7. `verify-pack-contents`: the packed tarball carries the README and LICENSE and no test
    artifacts or internal `_artifacts`.
-7. Upload SBOM as GitHub Actions artifact `npm-sbom-<run_id>` (retained 90 days,
+8. Upload SBOM as GitHub Actions artifact `npm-sbom-<run_id>` (retained 90 days,
    `if-no-files-found: error`).
-8. `npm publish --access public --provenance` (OIDC Trusted Publishing, no NPM_TOKEN).
+9. `pnpm pack`, which resolves the `catalog:` protocol to concrete ranges, then upload the
+   tarball as `npm-tarball-<run_id>` (retained 7 days) and report its sha256 as a job
+   output.
+
+Permissions: `contents: read`. No environment.
+
+`publish-mcp` steps (in order):
+
+1. `actions/setup-node` with Node 24 and the npm registry (npm 11.x meets the Trusted
+   Publishing requirement).
+2. Download `npm-tarball-<run_id>` and check it with `sha256sum -c` against
+   `build-mcp`'s output.
+3. `npm publish <tarball> --access public --provenance --ignore-scripts` (OIDC Trusted
+   Publishing, no NPM_TOKEN). The provenance names the same workflow, commit and ref as
+   before the split: the job runs in `release.yml`, in the same run.
 
 Permissions: `contents: read`, `id-token: write` (job-scoped, not workflow-root).
 Environment: `production-npm`.
 
-### `docker-publish-sign` job (keyless signing)
+### `build-docker` and `docker-publish-sign` jobs (keyless signing)
 
-Steps (in order):
+`build-docker` steps (in order):
 
 1. Validate `mcp-server-v<semver>` tag shape via `TAG` env var (same guard as npm job).
-2. Checkout the release tag.
+2. Checkout the release tag, with `persist-credentials: false`.
 3. On a forced re-publish, refuse when the checked-out tag is not `GITHUB_SHA`, the commit
    the dispatch ran from, which the image's provenance and the cosign certificate name.
 4. Install dependencies.
@@ -154,9 +190,25 @@ Steps (in order):
    different load-dependent tests, and a re-run checks out the same tag, so a flake there
    blocks the image for that whole release. `check:release-candidate:docker` stays the
    local, full pre-release pass.
-6. `docker/build-push-action` with `sbom: true` and `provenance: true` (OCI attestations).
-7. `cosign sign --yes` using `DIGEST` and `IMAGE_REPO` env vars (not inline shell
-   expansion); keyless signing via Sigstore OIDC, no private key material.
+6. `docker/build-push-action` with `sbom: true` and `provenance: true` (OCI attestations),
+   exporting an OCI archive instead of pushing; the attestations travel inside the archive.
+7. Upload the archive as `docker-image-<run_id>` (retained 7 days) and report its sha256
+   as a job output.
+
+Permissions: `contents: read`. No environment.
+
+`docker-publish-sign` steps (in order):
+
+1. Validate the tag shape again: the tag names the pushed reference.
+2. Download `docker-image-<run_id>` and check it with `sha256sum -c` against
+   `build-docker`'s output.
+3. Log in to GHCR, then `skopeo copy --all --preserve-digests` the archive to
+   `ghcr.io/kamiazya/whiteboard:<tag>` and `:latest`. `--all` pushes the whole image
+   index, attestation manifests included, and `--preserve-digests` refuses to rewrite
+   anything, so the digest pushed is the one `build-docker` built. A `docker load` would
+   drop the attestations.
+4. `cosign sign --yes` of that digest, using `DIGEST` and `IMAGE_REPO` env vars (not
+   inline shell expansion); keyless signing via Sigstore OIDC, no private key material.
 
 Permissions: `contents: read`, `id-token: write`, `packages: write` (job-scoped).
 Environment: `production-docker`.
@@ -257,7 +309,7 @@ lockfile-pinned at v4.x):
   which is how `check:release-candidate` calls it; there is no root script of
   that name)
 
-- **When it runs in CI**: `pnpm publish-gate` (used in the `publish-mcp` job) runs
+- **When it runs in CI**: `pnpm publish-gate` (used in the `build-mcp` job) runs
   `generate-npm-sbom.mjs` as one of the publish-tier gates, before `npm publish`. This
   ensures the SBOM content regression tests in `sbom-policy.test.ts` always execute on
   the release path.
@@ -277,9 +329,10 @@ lockfile-pinned at v4.x):
 ## Docker SBOM and Provenance
 
 Docker SBOM and provenance attestations are produced by `docker/build-push-action`
-with `sbom: true` and `provenance: true`. These flags cause Buildkit to generate
-and push OCI attestation manifests alongside the image layers. No custom signing
-keys or bespoke signing formats are used.
+with `sbom: true` and `provenance: true` in `build-docker`. These flags cause Buildkit
+to generate OCI attestation manifests into the image index of the OCI archive that job
+builds, and `docker-publish-sign` pushes them alongside the image layers. No custom
+signing keys or bespoke signing formats are used.
 
 The Docker image is keyless-signed by cosign via Sigstore OIDC. The signing
 identity is tied to the GitHub Actions OIDC token of the `production-docker`
@@ -293,9 +346,10 @@ from rather than a pattern that accepts both:
 - a release-please release signs as `release.yml` on `refs/heads/main`,
   triggered by `push`;
 - a forced re-publish signs as `release.yml` on `refs/tags/<tag>`, triggered
-  by `workflow_dispatch`. `docker-publish-sign` refuses a forced run whose
+  by `workflow_dispatch`. `build-docker` refuses a forced run whose
   checked-out tag is not the commit the run was dispatched from, or that was
-  dispatched from any ref but `refs/tags/<tag>` itself, so a forced
+  dispatched from any ref but `refs/tags/<tag>` itself, and `docker-publish-sign`
+  signs only after it succeeds, so a forced
   re-publish is always dispatched with `--ref <tag>` (see
   **Force-publish via release.yml** below) and never signs a tag under
   `main`'s identity.
@@ -387,9 +441,9 @@ must approve.
 Dispatch a forced publish **from the tag itself**:
 `gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance,
 the image's provenance and the cosign certificate all name the commit and ref the run
-was dispatched from, so both `publish-mcp` and `docker-publish-sign` fail right after
+was dispatched from, so both `build-mcp` and `build-docker` fail right after
 checkout when the checked-out tag is a different commit, or when the run was dispatched
-from any ref but `refs/tags/<tag>` — a dispatch from `main` would otherwise publish the
+from any ref but `refs/tags/<tag>`, and neither publish job starts — a dispatch from `main` would otherwise publish the
 tag's tarball and image under `main`'s identity, even at the tag's own commit.
 
 ---

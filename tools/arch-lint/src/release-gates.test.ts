@@ -183,9 +183,9 @@ describe('release gate: a forced publish attests the commit it publishes', () =>
     return { status: res.status, stderr: `${res.stdout}${res.stderr}` }
   }
 
-  it('finds both publishing jobs among those that check out the forced tag', () => {
+  it('finds both build jobs among those that check out the forced tag', () => {
     expect(FORCED_CHECKOUT_JOBS.map((j) => j.name)).toEqual(
-      expect.arrayContaining(['publish-mcp', 'docker-publish-sign']),
+      expect.arrayContaining(['build-mcp', 'build-docker']),
     )
   })
 

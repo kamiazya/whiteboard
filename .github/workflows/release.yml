@@ -10,7 +10,9 @@
 #   1. Push Conventional Commits such as feat:, fix:, or chore: to main
 #   2. release-please opens one grouped PR titled "chore: release main" (linked-versions)
 #   3. A maintainer reviews and merges it
-#   4. After merge, `publish-mcp` runs when the target package reports release_created=true
+#   4. After merge, `build-mcp` and `build-docker` gate and build the artifacts
+#      when the target package reports release_created=true, and `publish-mcp`
+#      and `docker-publish-sign` publish what they built
 #
 # “Please release” means “merge the Release PR created by release-please.”
 
@@ -40,7 +42,7 @@ on:
 
 # No workflow-level `permissions` block on purpose: a write granted here is
 # ambient to every job that does not override it, and the only job that needs
-# one is release-please. The other four already declare their own, so moving
+# one is release-please. Every other job declares its own, so moving
 # the grant down changes what they get by exactly nothing and removes a
 # standing write from whichever job is added next. A job-level block REPLACES
 # the workflow-level one rather than adding to it, which is what makes this
@@ -87,6 +89,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Keeps the token in .git/config on purpose: the push below uses it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -102,14 +105,22 @@ jobs:
           # No force flag: a non-fast-forward means history was rewritten — fail loudly.
           git push origin "refs/tags/${TAG}^{commit}:refs/heads/stable"
 
-  publish-mcp:
+  # Each publish half is two jobs. The BUILD job checks out the tag, installs
+  # dependencies and runs the gates with `contents: read` and nothing else, so
+  # no lifecycle script, test or smoke it runs can mint the OIDC token or read
+  # a registry push token. The PUBLISH job holds those credentials, checks out
+  # nothing and runs no repository or dependency code: it downloads the
+  # artifact the build job produced, checks it against the sha256 that job
+  # reported, and publishes it. ci-policy.test.ts holds both halves of that.
+  build-mcp:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_npm) }}
     runs-on: ubuntu-24.04
-    environment: production-npm
     permissions:
       contents: read
-      id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+      tarball_sha256: ${{ steps.pack.outputs.sha256 }}
     env:
       # The smoke's first tools/call opens the packaged store cold (native
       # modules, WASM, first-run migrations), which exceeds the default RPC
@@ -134,6 +145,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+          persist-credentials: false
 
       - name: Refuse a forced publish whose provenance would name another commit
         # `npm publish --provenance` attests GITHUB_SHA, the commit the
@@ -158,12 +170,10 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm
         with:
-          # Pinned inline (not via .node-version) because publish-mcp checks out an old tag whose
-          # source tree may predate .node-version. Node 24 ships with npm 11.x which already meets
-          # Trusted Publishing's >= 11.5.1 requirement and avoids the `npm i -g npm@latest` bug.
+          # Pinned inline (not via .node-version) because build-mcp checks out an old tag whose
+          # source tree may predate .node-version.
           # local-node-version.test.ts fails when this drifts from .node-version.
           node-version: 24
-          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies (workspace root)
         working-directory: .
@@ -206,28 +216,36 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publish to npm
-        # Assumes OIDC Trusted Publisher is configured (no NPM_TOKEN required).
-        # `pnpm pack` first so the `catalog:` protocol in package.json is replaced
-        # with concrete version ranges inside the tarball — npm itself cannot
-        # resolve `catalog:` and would otherwise publish a broken manifest. npm
-        # then publishes that pre-resolved tarball, preserving npm's OIDC Trusted
-        # Publisher + provenance flow (pnpm publish does not perform the npm OIDC
-        # token exchange, so we keep npm as the publisher).
+      - name: Pack the tarball
+        # `pnpm pack` replaces the `catalog:` protocol in package.json with
+        # concrete version ranges inside the tarball — npm itself cannot
+        # resolve `catalog:` and would otherwise publish a broken manifest.
+        id: pack
         run: |
           set -eu
           TARBALL=$(pnpm pack | tail -1)
-          npm publish "$TARBALL" --access public --provenance
+          name=$(basename "$TARBALL")
+          mkdir -p "$RUNNER_TEMP/npm-tarball"
+          mv "$TARBALL" "$RUNNER_TEMP/npm-tarball/$name"
+          echo "tarball=$name" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$RUNNER_TEMP/npm-tarball/$name" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-  docker-publish-sign:
+      - name: Upload the tarball for publish-mcp
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-tarball-${{ github.run_id }}
+          path: ${{ runner.temp }}/npm-tarball/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  build-docker:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_docker) }}
     runs-on: ubuntu-24.04
-    environment: production-docker
     permissions:
       contents: read
-      id-token: write   # cosign keyless signing (OIDC)
-      packages: write   # GHCR push
+    outputs:
+      image_sha256: ${{ steps.archive.outputs.sha256 }}
     env:
       # The smoke's first tools/call opens the packaged store cold (native
       # modules, WASM, first-run migrations), which exceeds the default RPC
@@ -246,6 +264,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+          persist-credentials: false
 
       - name: Refuse a forced publish whose signature would name another commit
         # The image's provenance and the cosign certificate name GITHUB_SHA and
@@ -278,7 +297,7 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
 
-      # Publishability only, like publish-mcp: the full `pnpm test` matrix ran
+      # Publishability only, like build-mcp: the full `pnpm test` matrix ran
       # on this SHA in verify CI, and re-running it here on one runner made
       # every load-dependent test a way to block the image. No WHITEBOARD_DEV:
       # publish-gate runs `build` before any smoke, so dist/ exists by the
@@ -292,13 +311,6 @@ jobs:
       - name: Docker backup and restore smoke
         run: pnpm smoke:docker-backup-restore
 
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       # Dockerfile.server's ARG NODE_VERSION has no default, so a build that
       # omits it resolves `FROM node:${NODE_VERSION}-slim` to `node:-slim`
       # and fails. Read from .node-version, with the same inline fallback and
@@ -307,20 +319,154 @@ jobs:
       # Dockerfile at such a tag does not declare is a warning, not a failure.
       - name: Resolve NODE_VERSION build arg
         id: node-version
-        run: echo "value=$(cat .node-version 2>/dev/null || echo 24)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "value=$(cat .node-version 2>/dev/null || echo 24)" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/docker-image"
 
-      - name: Build and push Docker image
-        id: push
+      # The docker-container driver, because the default `docker` driver
+      # cannot export an OCI archive with attestations in it.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Built into an OCI archive rather than pushed: the SBOM and provenance
+      # attestations travel inside the archive's index, so the publish job
+      # pushes them with the image without building anything. A `docker load`
+      # would drop them.
+      - name: Build the Docker image into an OCI archive
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: Dockerfile.server
           build-args: |
             NODE_VERSION=${{ steps.node-version.outputs.value }}
-          push: true
-          tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+          tags: ghcr.io/${{ github.repository }}:${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+          outputs: type=oci,dest=${{ runner.temp }}/docker-image/image.tar
           sbom: true
           provenance: true
+
+      - name: Hash the image archive
+        id: archive
+        run: echo "sha256=$(sha256sum "$RUNNER_TEMP/docker-image/image.tar" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the image archive for docker-publish-sign
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-image-${{ github.run_id }}
+          path: ${{ runner.temp }}/docker-image/image.tar
+          if-no-files-found: error
+          retention-days: 7
+          # The layers inside are already compressed.
+          compression-level: 0
+
+  publish-mcp:
+    needs: [release-please, build-mcp]
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_npm) }}
+    runs-on: ubuntu-24.04
+    environment: production-npm
+    permissions:
+      contents: read
+      id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
+    steps:
+      # Node 24 ships with npm 11.x, which already meets Trusted Publishing's
+      # >= 11.5.1 requirement and avoids the `npm i -g npm@latest` bug.
+      # local-node-version.test.ts fails when this drifts from .node-version.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download the tarball build-mcp packed
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-tarball-${{ github.run_id }}
+          path: ${{ runner.temp }}/npm-tarball
+
+      - name: Verify the tarball against build-mcp's digest
+        env:
+          TARBALL_NAME: ${{ needs.build-mcp.outputs.tarball }}
+          TARBALL_SHA256: ${{ needs.build-mcp.outputs.tarball_sha256 }}
+        run: |
+          set -eu
+          if [[ ! "$TARBALL_NAME" =~ ^[A-Za-z0-9._-]+\.tgz$ ]]; then
+            echo "::error::build-mcp reported no usable tarball name: '$TARBALL_NAME'"
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/npm-tarball"
+          echo "$TARBALL_SHA256  $TARBALL_NAME" | sha256sum -c -
+
+      - name: Publish to npm
+        # Assumes OIDC Trusted Publisher is configured (no NPM_TOKEN required).
+        # npm, not pnpm, publishes: pnpm publish does not perform the npm OIDC
+        # token exchange. `--ignore-scripts` because nothing from the package
+        # may run in a job that holds the publish credential.
+        env:
+          TARBALL_NAME: ${{ needs.build-mcp.outputs.tarball }}
+        run: |
+          set -eu
+          TARBALL="$RUNNER_TEMP/npm-tarball/$TARBALL_NAME"
+          npm publish "$TARBALL" --access public --provenance --ignore-scripts
+
+  docker-publish-sign:
+    needs: [release-please, build-docker]
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_docker) }}
+    runs-on: ubuntu-24.04
+    environment: production-docker
+    permissions:
+      contents: read
+      id-token: write   # cosign keyless signing (OIDC)
+      packages: write   # GHCR push
+    steps:
+      - name: Validate tag shape
+        env:
+          TAG: ${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^mcp-server-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$TAG' does not match mcp-server-v<semver>"
+            exit 1
+          fi
+
+      - name: Download the image archive build-docker built
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-image-${{ github.run_id }}
+          path: ${{ runner.temp }}/docker-image
+
+      - name: Verify the archive against build-docker's digest
+        env:
+          IMAGE_SHA256: ${{ needs.build-docker.outputs.image_sha256 }}
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP/docker-image"
+          echo "$IMAGE_SHA256  image.tar" | sha256sum -c -
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # skopeo ships on the runner image and reads the login above from
+      # ~/.docker/config.json. `--all --preserve-digests` pushes the image
+      # index whole, attestation manifests included, and refuses to rewrite
+      # any of it, so the digest signed below is the one build-docker built.
+      - name: Push the Docker image
+        id: push
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository }}
+          TAG: ${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+        run: |
+          set -euo pipefail
+          archive="oci-archive:$RUNNER_TEMP/docker-image/image.tar"
+          skopeo copy --all --preserve-digests --digestfile "$RUNNER_TEMP/digest-tag" "$archive" "docker://$IMAGE_REPO:$TAG"
+          skopeo copy --all --preserve-digests --digestfile "$RUNNER_TEMP/digest-latest" "$archive" "docker://$IMAGE_REPO:latest"
+          digest=$(cat "$RUNNER_TEMP/digest-tag")
+          if [ "$digest" != "$(cat "$RUNNER_TEMP/digest-latest")" ]; then
+            echo "::error::$TAG and latest were pushed as different digests"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -350,6 +496,8 @@ jobs:
     # never the install and build that run dependency code before it.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 

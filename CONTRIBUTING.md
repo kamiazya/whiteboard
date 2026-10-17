@@ -116,14 +116,14 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 1. Push to `main` using Conventional Commits.
 2. The `release` GitHub Actions workflow opens or updates a `chore: release main` PR that bumps `package.json` and updates the changelog.
 3. A maintainer reviews and merges that PR.
-4. The workflow runs again from the merge with `release_created=true`. `publish-mcp` performs:
+4. The workflow runs again from the merge with `release_created=true`. `build-mcp` performs, with read-only permissions:
    - `pnpm install --frozen-lockfile`
    - `pnpm audit --prod`
    - `pnpm publish-gate` — the publishability tier (typecheck, build, artifact checks, SBOM, tarball/packaged smokes). It deliberately does not re-run `pnpm test`: verify CI already ran the full matrix on this exact commit.
-   - `verify-pack-contents`, then `pnpm pack` → `npm publish`
+   - `verify-pack-contents`, then `pnpm pack`, uploading the tarball and its sha256
    - GitHub Release + tag creation
 
-   The `docker-publish-sign` job runs the same gate, then the container smokes, before it pushes and signs the image. Two more jobs run from the same release: `advance-stable` fast-forwards the `stable` branch (what the Claude Code marketplace and Codex `@stable` plugin consumers resolve) to the release tag and fails, rather than forces, when `stable` has diverged; `deploy-web` deploys `apps/web` to Cloudflare Pages production under the `production-web` environment. The jobs are independent of each other. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step, the required environments and the `advance-stable` recovery.
+   `publish-mcp` then checks the tarball against that sha256 and runs `npm publish` on it; it holds the OIDC credential and runs no repository or dependency code. The `build-docker` job runs the same gate, then the container smokes, and builds the image into an OCI archive; `docker-publish-sign` pushes and signs that archive the same way. Two more jobs run from the same release: `advance-stable` fast-forwards the `stable` branch (what the Claude Code marketplace and Codex `@stable` plugin consumers resolve) to the release tag and fails, rather than forces, when `stable` has diverged; `deploy-web` deploys `apps/web` to Cloudflare Pages production under the `production-web` environment. Apart from each publish job waiting on its build job, the jobs are independent of each other. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step, the required environments and the `advance-stable` recovery.
 
 ### Local checks before merging a release PR
 

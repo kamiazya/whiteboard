@@ -12,6 +12,7 @@
 // flag exactly those two and none of the singles.
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { clusterFailures, testIdFromTitle } from './flake-watch-lib.mjs'
 
@@ -615,6 +616,7 @@ test('flakeCacheDir falls back to the checkout tmp when git cannot say where the
 import {
   formatUnhealedReport,
   inspectPublishJobs,
+  PUBLISH_JOBS,
   unhealedPublishJobs,
   unhealedWorkflowRuns,
 } from './flake-watch-lib.mjs'
@@ -690,6 +692,22 @@ test('unhealedPublishJobs reports a publish job whose newest real run failed, ev
       conclusion: 'failure',
     },
   ])
+})
+
+// A build job's failure strands the artifact too: its publish job is then skipped, which is no
+// evidence either way, so every job an mcp-server release runs is watched.
+test('PUBLISH_JOBS names every release.yml job that runs on an mcp-server release', () => {
+  const workflow = readFileSync(
+    new URL('../../.github/workflows/release.yml', import.meta.url),
+    'utf-8',
+  )
+  const body = workflow.slice(workflow.indexOf('\njobs:\n'))
+  const blocks = body.split(/^ {2}(?=[a-z][\w-]*:\s*$)/m).slice(1)
+  const releaseJobs = blocks
+    .filter((block) => /^ {4}if:.*mcp_release_created/m.test(block))
+    .map((block) => block.slice(0, block.indexOf(':')))
+  assert.ok(releaseJobs.length >= 2, `found ${releaseJobs.length} release jobs`)
+  assert.deepEqual([...releaseJobs].sort(), [...PUBLISH_JOBS].sort())
 })
 
 test('unhealedPublishJobs is empty once a later run of that job succeeded', () => {

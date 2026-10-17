@@ -1,7 +1,7 @@
 // Property catalog: SBOM artifact policy invariants.
 // Drift guard:
-//   - release.yml publish-mcp job has SBOM generation + upload steps.
-//   - release.yml docker-publish-sign job has sbom:true and provenance:true (OCI attestations).
+//   - release.yml build-mcp job has SBOM generation + upload steps.
+//   - release.yml build-docker job has sbom:true and provenance:true (OCI attestations).
 //   - generate-npm-sbom.mjs does not leak SBOM contents or credentials to stdout.
 //   - Runbook (docs/contributing/releasing.md) covers required keywords.
 // PBT: validateSbomSummary() catches malformed safe-stdout summary shapes.
@@ -64,13 +64,12 @@ export function validateSbomSummary(summary: unknown): ValidationResult {
   return { ok: true }
 }
 
-// ── npm SBOM drift: release.yml publish-mcp job ──────────────────────────────
+// ── npm SBOM drift: release.yml build-mcp job ────────────────────────────────
 
-describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
+describe('npm SBOM step drift (release.yml build-mcp job)', () => {
   const RELEASE_WORKFLOW = '.github/workflows/release.yml'
 
-  const npmSection = () =>
-    jobSection(readFile(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
+  const npmSection = () => jobSection(readFile(RELEASE_WORKFLOW), 'build-mcp', 'build-docker')
 
   it('npm job invokes the publish-gate runner (which runs generate:sbom:npm as a publish-tier gate)', () => {
     expect(npmSection()).toContain('pnpm publish-gate')
@@ -100,21 +99,17 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
     expect(sbomIdx, 'generate:sbom:npm must precede pnpm test').toBeLessThan(testIdx)
   })
 
-  it('npm job publish-gate step appears before npm publish', () => {
+  it('npm job publish-gate step appears before the pack that publish-mcp publishes', () => {
     const section = npmSection()
     const publishGateIdx = section.indexOf('pnpm publish-gate')
-    // Use `run: npm publish` to avoid matching the job `name:` field.
-    const publishIdx = section.indexOf('npm publish "$TARBALL"')
+    const packIdx = section.indexOf('pnpm pack')
     expect(publishGateIdx, 'pnpm publish-gate must be present in npm job').toBeGreaterThanOrEqual(0)
-    expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
-    expect(publishGateIdx, 'pnpm publish-gate must precede npm publish').toBeLessThan(publishIdx)
+    expect(packIdx, 'pnpm pack must be present').toBeGreaterThanOrEqual(0)
+    expect(publishGateIdx, 'pnpm publish-gate must precede pnpm pack').toBeLessThan(packIdx)
   })
 
-  it('npm job upload-artifact appears before npm publish', () => {
-    const section = npmSection()
-    const uploadIdx = section.indexOf('upload-artifact')
-    const publishIdx = section.indexOf('npm publish "$TARBALL"')
-    expect(uploadIdx, 'SBOM upload must precede npm publish').toBeLessThan(publishIdx)
+  it('npm job uploads the SBOM', () => {
+    expect(npmSection()).toContain('_artifacts/npm-sbom.cdx.json')
   })
 
   it('npm job upload step has if-no-files-found: error', () => {
@@ -132,21 +127,27 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
 
 // ── Docker SBOM/provenance drift ─────────────────────────────────────────────
 
-describe('Docker SBOM and provenance drift (release.yml docker-publish-sign job)', () => {
+describe('Docker SBOM and provenance drift (release.yml build-docker and docker-publish-sign jobs)', () => {
   const RELEASE_WORKFLOW = '.github/workflows/release.yml'
 
+  const buildSection = () => jobSection(readFile(RELEASE_WORKFLOW), 'build-docker', 'publish-mcp')
   const dockerSection = () => jobSection(readFile(RELEASE_WORKFLOW), 'docker-publish-sign')
 
-  it('Docker job uses docker/build-push-action', () => {
-    expect(dockerSection()).toContain('docker/build-push-action')
+  it('Docker build job uses docker/build-push-action', () => {
+    expect(buildSection()).toContain('docker/build-push-action')
   })
 
-  it('Docker job has sbom: true (OCI SBOM attestation)', () => {
-    expect(dockerSection()).toContain('sbom: true')
+  it('Docker build job has sbom: true (OCI SBOM attestation)', () => {
+    expect(buildSection()).toContain('sbom: true')
   })
 
-  it('Docker job has provenance: true (OCI provenance attestation)', () => {
-    expect(dockerSection()).toContain('provenance: true')
+  it('Docker build job has provenance: true (OCI provenance attestation)', () => {
+    expect(buildSection()).toContain('provenance: true')
+  })
+
+  it('Docker publish job pushes the attestations with the image index', () => {
+    // A `docker load` of the archive would drop the attestation manifests.
+    expect(dockerSection()).toContain('--all --preserve-digests')
   })
 
   it('Docker job uses cosign sign (keyless signing)', () => {
@@ -280,7 +281,7 @@ describe('ci.yml dry-run SBOM regression safety', () => {
 
   it('ci.yml verify job, which runs the npm dry-run, does not contain generate:sbom:npm', () => {
     // SBOM generation in dry-run is premature; dry-run does not produce a publishable artifact.
-    // SBOM generation only runs as a publish-tier gate via `pnpm publish-gate` (release.yml publish-mcp job).
+    // SBOM generation only runs as a publish-tier gate via `pnpm publish-gate` (release.yml build-mcp job).
     const section = jobSection(readFile(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).not.toContain('generate:sbom:npm')
   })
@@ -507,17 +508,17 @@ describe('validateSbomSummary PBT', () => {
 })
 
 describe('release.yml publish job step ordering hazards', () => {
-  it('publish-mcp pre-checkout steps must not inherit the packages/mcp-server default cwd', () => {
-    // publish-mcp sets defaults.run.working-directory: packages/mcp-server, but that
+  it('build-mcp pre-checkout steps must not inherit the packages/mcp-server default cwd', () => {
+    // build-mcp sets defaults.run.working-directory: packages/mcp-server, but that
     // directory only exists after actions/checkout runs. Any run step placed before
     // checkout (e.g. Validate tag shape) must override with working-directory: .
     // or bash fails to start ("No such file or directory") — broke the v0.0.8 release.
     const releaseYml = readFile('.github/workflows/release.yml')
-    const publishMcp = jobSection(releaseYml, 'publish-mcp', 'docker-publish-sign')
-    expect(publishMcp, 'publish-mcp job must exist in release.yml').not.toBe('')
-    const checkoutIdx = publishMcp.indexOf('actions/checkout@')
-    expect(checkoutIdx, 'publish-mcp must have a checkout step').toBeGreaterThan(-1)
-    const preCheckout = publishMcp.slice(0, checkoutIdx)
+    const buildMcp = jobSection(releaseYml, 'build-mcp', 'build-docker')
+    expect(buildMcp, 'build-mcp job must exist in release.yml').not.toBe('')
+    const checkoutIdx = buildMcp.indexOf('actions/checkout@')
+    expect(checkoutIdx, 'build-mcp must have a checkout step').toBeGreaterThan(-1)
+    const preCheckout = buildMcp.slice(0, checkoutIdx)
     // Every `run:` step before checkout needs an explicit working-directory
     // override. Assert PER STEP — matching against the whole pre-checkout block
     // would let one compliant step mask another step's missing override.
@@ -533,13 +534,13 @@ describe('release.yml publish job step ordering hazards', () => {
     }
   })
 
-  it('publish jobs extend the daemon startup timeout for CI cold starts', () => {
+  it('build jobs extend the daemon startup timeout for CI cold starts', () => {
     // Packaged daemon cold-start (native modules, WASM, first-run migrations)
     // exceeds the 10s default on CI runners and killed the tarball smoke.
     const releaseYml = readFile('.github/workflows/release.yml')
     for (const [jobId, nextJobId] of [
-      ['publish-mcp', 'docker-publish-sign'],
-      ['docker-publish-sign', 'deploy-web'],
+      ['build-mcp', 'build-docker'],
+      ['build-docker', 'publish-mcp'],
     ] as const) {
       const section = jobSection(releaseYml, jobId, nextJobId)
       expect(section, `${jobId} job must exist`).not.toBe('')

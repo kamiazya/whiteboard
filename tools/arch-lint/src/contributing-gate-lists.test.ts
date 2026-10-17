@@ -140,7 +140,7 @@ describe('the release documentation describes the workflow that ships', () => {
     expect(section).toContain('pnpm publish-gate')
     expect(
       section,
-      'publish-mcp runs the publish tier, so no step bullet is `pnpm test`',
+      'build-mcp runs the publish tier, so no step bullet is `pnpm test`',
     ).not.toMatch(/^\s+- `pnpm (test|typecheck|smoke:e2e)`/m)
   })
 
@@ -165,23 +165,23 @@ describe('the release documentation describes the workflow that ships', () => {
     expect(dangling).toEqual([])
   })
 
-  it('the SBOM document lists the root scripts each publish job runs, and no aggregate they skip', () => {
+  it('the SBOM document lists the root scripts each build job runs, and no aggregate they skip', () => {
     const workflow = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf-8')
     const doc = readFileSync(join(ROOT, RELEASE_DOCS[1] ?? ''), 'utf-8')
     const start = doc.indexOf('## What the production publish workflow v0 implements')
     const section = doc.slice(start, doc.indexOf('\n## ', start + 1))
     expect(start).toBeGreaterThan(-1)
     const jobs = [
-      jobSection(workflow, 'publish-mcp', 'docker-publish-sign'),
-      jobSection(workflow, 'docker-publish-sign'),
+      jobSection(workflow, 'build-mcp', 'build-docker'),
+      jobSection(workflow, 'build-docker', 'publish-mcp'),
     ]
     const run = jobs.flatMap(bareScriptNames)
     const gates = run.filter(
       (name) => name in rootScripts && /^(publish-gate|smoke:docker)/.test(name),
     )
     expect(gates.length).toBeGreaterThanOrEqual(3)
-    for (const name of gates) expect(section, `${name} runs in a publish job`).toContain(name)
-    expect(section, 'neither publish job runs the release-candidate aggregate').not.toContain(
+    for (const name of gates) expect(section, `${name} runs in a build job`).toContain(name)
+    expect(section, 'neither build job runs the release-candidate aggregate').not.toContain(
       'check:release-candidate',
     )
   })
