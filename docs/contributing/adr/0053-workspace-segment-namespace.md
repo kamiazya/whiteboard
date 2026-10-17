@@ -3,8 +3,9 @@
 **Status:** Accepted, 2026-10-17. The owner chose the direction that day
 ("namespace segments per owner", design first), then answered the four open
 questions this record raised. The answers are the Decision section below.
-Nothing is built yet; the implementation is separate work, sliced at the
-end of this record.
+The implementation is sliced at the end of this record; all four slices
+(model/ports, the daemon registry with its three oracle paths, the web
+app's grammar, and the MCP tool surface) are built.
 
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
@@ -387,8 +388,8 @@ the fixed handle **`me`**.
 - `local` was not used for this, because the vocabulary rule retires it
   for anything about where a workspace is kept.
 
-**Existing `/w/<segment>` links: break them, do not redirect.** This is
-the recommendation, to be confirmed in the web-grammar slice.
+**Existing `/w/<segment>` links: break them, do not redirect.** Confirmed
+in the web-grammar slice, as built.
 
 - After the change, a one-component `/w/<x>` resolves ONLY as a canonical
   id. A non-ULID one-component path gets the same unknown-address answer as
@@ -458,7 +459,7 @@ in `workspaceIdSchema`, and describing all three forms, changes a published
 tool surface. Its exact shape is settled by that slice's `mcp-tool-surface`
 procedure, not here.
 
-### Implementation slices (not started)
+### Implementation slices (all four built)
 
 The slices are listed in `architecture-map.md`'s dependency order. Each
 starts from a failing test at its nearest layer.
@@ -484,6 +485,18 @@ starts from a failing test at its nearest layer.
        `not_a_member`.
    - The same slice adds the unauthenticated-uniformity test from answer
      1, and the cross-tenant case from "A latent second instance".
+   - As built (migration `0046-workspace-namespace`): a workspace with NO
+     membership at all is placed in `me` rather than refused. Every local
+     daemon workspace is such a row, so refusing would stop every local
+     daemon from migrating; on server mode a workspace nobody is a member of
+     admits nobody, and `me` — which no server-mode user can hold — leaves it
+     reachable by its id alone until an operator grants it a member. That
+     grant takes it into its first owner's namespace, suffixing a segment
+     the owner already holds there (`homeWithItsOwner`). A
+     workspace with members but no owner is refused, as above. Until slice 3
+     the server-mode listing omitted the segment of a workspace held in
+     another namespace, since the web app would otherwise have addressed it
+     by a bare segment that means the caller's own namespace.
 3. **The web app's grammar.**
    - `workspacePath`, `documentPath`, `parseWorkspaceRoute` and
      `workspaceHandle` move to `/w/<handle>/<segment>`.
@@ -491,11 +504,45 @@ starts from a failing test at its nearest layer.
    - A copy-link surface that emits only the opaque form.
    - The single-person keepers' `me`.
    - Browser-mode coverage of the route flow.
+   - As built: a route's workspace is an address string, `<namespace>/<segment>`
+     or a canonical id, and the first URL component decides which — a
+     ULID-shaped one is the id form and nothing else, any other is a
+     namespace, so a segment spelled `d` stays addressable. A one-component
+     address still parses, as the id form, and the web app resolves it by
+     id ALONE (`resolveWorkspaceAddress`, beside `workspaceHandle`), never
+     as ports' caller-relative bare segment — that shorthand is for MCP
+     arguments. No API route takes the qualified form (`workspaceIdSchema`
+     admits no `/` until slice 4), so every request the web app sends names
+     the workspace's id, and the address is derived from the listing, whose
+     summaries now carry `namespace`; the slice-2 stop-gap that hid a foreign
+     segment is gone. The copy-link surface is server mode's **Copy link**
+     in the workspace header. The opaque-to-readable move is a REPLACE made
+     once the listing names the workspace. Not built here: an
+     unauthenticated deep link is still sent to sign-in without the path it
+     asked for, so it lands on the workspace list rather than back on the
+     link, and an accepted invitation likewise lands on the list.
 4. **The MCP tool surface**, through the `mcp-tool-surface` procedure.
    - The qualified handle and the three forms' descriptions.
    - ADR-0031's scoreboards re-pinned.
    - `pnpm smoke:e2e` extended to call a qualified handle.
    - The operator command line's `--workspace` changes in the same slice.
+   - As built: every tool's `workspaceId` is one described schema, the
+     pattern `^[\w-]+(\/[\w-]+)?$` with "Workspace id,
+     `<handle>/<segment>`, or a segment of your own." (+767 model-visible
+     bytes across the table, 10 fewer undescribed parameters).
+     `server-core` no longer assumes `me`: `ServerDeps.callerNamespace`
+     answers whose namespace a bare segment means, and the tool wrapper,
+     `/api/v1`'s resolution and the `createWorkspace` mint all ask it. The
+     daemon answers from the same records its gates resolved with — the
+     `/api` middleware's for an `/api/v1` request, the `/mcp` caller's for
+     a tool call — so `/api/v1` can no longer serve a different workspace
+     from the one the membership gate admitted. An operator-issued grant
+     names no user and so has no namespace: it reaches a workspace by id or
+     qualified handle only, and server-core mints nothing for it. A
+     qualified handle in another namespace is never minted; on server mode
+     it is refused `not_a_member` whether or not the workspace exists. The
+     operator commands' `--workspace` takes `<id|handle/segment|segment>`,
+     where a bare segment reaches only the `me` namespace.
 
 ## Consequences
 

@@ -9,11 +9,15 @@ type Bool = ColumnType<number, number, number>
 interface WorkspacesTable {
   id: string
   displayName: string | null
-  // ADR-0019's user-facing handle: unique per keeper (enforced by the
-  // `workspaces_segment_unique` index added in migration 0018), nullable
-  // because a workspace minted before that migration has none until Wave-2
-  // backfill/minting.
+  // ADR-0019's user-facing handle: unique per namespace (ADR-0053; the
+  // `workspaces_namespace_segment_unique` index on tenantId, namespace and
+  // segment, migration 0046), nullable because a workspace minted before
+  // migration 0018 may have none.
   segment: string | null
+  // The handle of the namespace holding this workspace (ADR-0053): its
+  // creator's on server mode, `me` on a single-person keeper. Defaults to
+  // `me`, so an insert may omit it.
+  namespace: Generated<string>
   createdAt: Timestamp
   updatedAt: Timestamp
   // The read plane's per-workspace tier override (ADR-0042 decisions 1/3/5).
@@ -129,6 +133,9 @@ interface MemberProfilesTable {
   id: string
   displayName: string
   accountId: string
+  // The handle naming this user's namespace in addresses (ADR-0053), unique
+  // per tenant. Derived from the display name when the user is minted.
+  handle: string
   createdAt: Timestamp
   updatedAt: Timestamp
   /**

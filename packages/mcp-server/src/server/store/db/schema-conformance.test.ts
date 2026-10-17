@@ -107,7 +107,14 @@ describe('DatabaseSchema against the migrated database', () => {
       .execute()
     await handle.db
       .insertInto('memberProfiles')
-      .values({ id: 'p-omitted', displayName: 'Ada', accountId: 'a-1', createdAt: 1, updatedAt: 1 })
+      .values({
+        id: 'p-omitted',
+        displayName: 'Ada',
+        accountId: 'a-1',
+        handle: 'ada',
+        createdAt: 1,
+        updatedAt: 1,
+      })
       .execute()
 
     const snapshot = await handle.db

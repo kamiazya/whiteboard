@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
 import { createInvitationStore, type InvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
@@ -158,5 +159,69 @@ describe('createUserDeletion', () => {
     const namesakes = await sessions.create(namesake, 0, HOUR)
     await deletion().delete(user.id)
     expect(await sessions.resolve(namesakes, 1)).toEqual(namesake)
+  })
+})
+
+// ADR-0053 decision 4: the workspaces a deleted person's namespace holds move
+// to each one's oldest surviving owner, and a segment that collides there is
+// suffixed in the inheritor's namespace.
+describe('createUserDeletion — the namespace a deleted person held', () => {
+  const carol = { authenticator: 'oidc:https://id.example', subject: 'carol' }
+
+  async function workspaceRow(id: string, namespace: string, segment: string) {
+    await upsertWorkspaceRow(handle.db, id, { namespace, segment })
+  }
+
+  async function placed(id: string) {
+    return handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow()
+  }
+
+  it('moves each workspace to its oldest surviving owner, ties by user id', async () => {
+    const user = await deactivated(ada, 'Ada')
+    const bobUser = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
+    const carolUser = await members.ensureProfile({ binding: carol, displayName: 'Carol' })
+    await workspaceRow('ws-1', user.handle, 'design')
+    const roles = createWorkspaceRoles(handle.db)
+    for (const id of [user.id, carolUser.id, bobUser.id]) await members.addMember('ws-1', id)
+    for (const id of [carolUser.id, bobUser.id]) await roles.setRole('ws-1', id, 'owner')
+    await handle.db
+      .updateTable('workspaceMemberships')
+      .set({ createdAt: 50 })
+      .where('workspaceId', '=', 'ws-1')
+      .where('profileId', '!=', user.id)
+      .execute()
+
+    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+
+    const [first] = [bobUser, carolUser].sort((a, b) => (a.id < b.id ? -1 : 1))
+    expect(await placed('ws-1')).toEqual({ namespace: first?.handle, segment: 'design' })
+  })
+
+  it("suffixes a segment the inheritor's namespace already holds", async () => {
+    const user = await deactivated(ada, 'Ada')
+    const bobUser = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
+    await workspaceRow('ws-ada', user.handle, 'design')
+    await workspaceRow('ws-bob', bobUser.handle, 'design')
+    await members.addMember('ws-ada', user.id)
+    await members.addMember('ws-ada', bobUser.id)
+    await createWorkspaceRoles(handle.db).setRole('ws-ada', bobUser.id, 'owner')
+
+    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+
+    expect(await placed('ws-ada')).toEqual({ namespace: bobUser.handle, segment: 'design-2' })
+    expect(await placed('ws-bob')).toEqual({ namespace: bobUser.handle, segment: 'design' })
+  })
+
+  it('moves a workspace with no owner left to the namespace nobody holds', async () => {
+    const user = await deactivated(ada, 'Ada')
+    await workspaceRow('ws-empty', user.handle, 'design')
+
+    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+
+    expect(await placed('ws-empty')).toEqual({ namespace: 'me', segment: 'design' })
   })
 })

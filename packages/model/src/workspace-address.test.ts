@@ -9,6 +9,7 @@ import {
   SINGLE_PERSON_NAMESPACE,
   userHandleSchema,
   type WorkspaceAddress,
+  workspaceAddressInputSchema,
   workspaceAddressSchema,
 } from './workspace-address.js'
 
@@ -148,5 +149,23 @@ describe('parseWorkspaceAddress', () => {
     if (address === null) return
     expect(workspaceAddressSchema.safeParse(address).success).toBe(true)
     expect(formatWorkspaceAddress(address)).toBe(input)
+  })
+})
+
+describe('workspaceAddressInputSchema', () => {
+  // The schema a tool publishes is a regex and the parser is not, so this is
+  // what keeps a tool from refusing at its boundary an address it resolves.
+  fcTest.prop(
+    [fc.oneof(addressArb.map(formatWorkspaceAddress), noisyArb)],
+    withDefaults({ numRuns: 500 }),
+  )('admits every address the parser reads a form from', (input) => {
+    if (parseWorkspaceAddress(input) === null) return
+    expect(workspaceAddressInputSchema.safeParse(input).success).toBe(true)
+  })
+
+  it('refuses more than one separator and characters no form holds', () => {
+    for (const input of ['', 'a/b/c', '/design', 'alice/', 'a.b', 'a b']) {
+      expect(workspaceAddressInputSchema.safeParse(input).success, input).toBe(false)
+    }
   })
 })

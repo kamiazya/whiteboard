@@ -70,7 +70,7 @@ This project is split into three main runtime layers:
 
 ### Browser collaboration path
 
-1. A browser opens `/w/<workspace>/d/<path>`.
+1. A browser opens `/w/<namespace>/<workspace>/d/<path>` (or the id form `/w/<workspace id>/d/<path>`).
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
 4. SSE events broadcast document changes and version events.

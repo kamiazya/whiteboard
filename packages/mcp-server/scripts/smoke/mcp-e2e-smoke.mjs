@@ -28,6 +28,7 @@ import { assertListedRowIsNotPinned } from './lib/listed-pin.mjs'
 import { assertProposalAuthor, SMOKE_AUTHOR } from './lib/proposal-author.mjs'
 import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
 import { resolveSmokeEntry } from './lib/smoke-entry.mjs'
+import { assertWorkspaceAddressForms } from './lib/workspace-address-forms.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -304,6 +305,8 @@ async function aDocumentCarriesItsBodyFromTheCreateCall(ctx) {
   // `WORKSPACE_ID`. That the rest of this smoke passes unchanged IS the
   // proof that segment-first resolution works through the published
   // artifact: the id underneath changed, and the address did not.
+
+  await assertWorkspaceAddressForms(callTool, WORKSPACE_ID, created.workspaceId)
 
   // A document's name is the workspace's, not its content's (ADR-0009), so
   // it round-trips through create -> list without any document read.

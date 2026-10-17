@@ -33,7 +33,7 @@ function applyingRename(base: WorkspaceRow = DESIGN_ROW) {
 function renderFields({
   active = DESIGN_ROW,
   rename,
-  current = 'design',
+  current = 'me/design',
   onSwitch = vi.fn(),
   onRenamed = vi.fn(),
   notice,
@@ -85,8 +85,22 @@ describe('WorkspaceIdentityFields — navigating after a rename', () => {
     const { url } = renderFields({ rename: applyingRename(), onSwitch, onRenamed })
     fireEvent.change(url, { target: { value: 'marketing' } })
     fireEvent.keyDown(url, { key: 'Enter' })
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('marketing'))
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('me/marketing'))
     expect(onRenamed).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ADR-0053: the segment sits after the namespace holding it, so the URL the
+// box edits reads with that namespace in front.
+describe('WorkspaceIdentityFields — the URL it edits', () => {
+  it('draws the namespace holding the segment in front of the box', () => {
+    renderFields({ active: { ...DESIGN_ROW, namespace: 'ada' }, current: 'ada/design' })
+    expect(screen.getByText('/w/ada/')).toBeTruthy()
+  })
+
+  it("draws a single-person keeper's namespace as `me`", () => {
+    renderFields()
+    expect(screen.getByText('/w/me/')).toBeTruthy()
   })
 })
 

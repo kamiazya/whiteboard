@@ -112,6 +112,13 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
 export const createWorkspaceInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
+    /**
+     * The namespace the new workspace is held in, and so the one its segment
+     * must be unique within (ADR-0053): the creator's handle on a keeper with
+     * many people. Absent is the single-person namespace, `me`. Fixed at
+     * creation — `renameWorkspaceInputSchema` cannot move it.
+     */
+    namespace: namespaceHandleSchema.optional(),
     segment: workspaceSegmentSchema.optional(),
     displayName: workspaceDisplayNameSchema.optional(),
   })
@@ -520,8 +527,13 @@ export interface DocumentIndex {
    * Required, not optional. An optional method is one a surface can forget to
    * call, and forgetting means falling back to a literal id match — which is
    * indistinguishable from working until the day a segment exists.
+   *
+   * `callerNamespace` is whose namespace a BARE segment is looked up in
+   * (`resolveWorkspaceHandle`'s third argument). A keeper with one person
+   * omits it; one with many passes the caller's handle on every call, since
+   * the default reaches only the single-person namespace.
    */
-  resolveWorkspace(handle: string): Promise<WorkspaceEntry | null>
+  resolveWorkspace(handle: string, callerNamespace?: string): Promise<WorkspaceEntry | null>
   /**
    * Renames the layers their owner chooses — `segment`, `displayName`, or
    * both — and answers the workspace as it now stands, so a caller that has

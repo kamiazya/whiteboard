@@ -242,7 +242,7 @@ describe('parseDaemonReplicaKeyArgs', () => {
     })
     expect(parseDaemonReplicaKeyArgs(['--json'])).toEqual({
       kind: 'usage-error',
-      message: '--workspace=<id|segment> is required',
+      message: '--workspace=<id|handle/segment|segment> is required',
     })
   })
 

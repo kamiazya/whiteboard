@@ -1,12 +1,13 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 export const versionListInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe('Workspace that holds the document.'),
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema.describe('Document ID (ULID) to list saved versions for.'),
   })
   .strict()

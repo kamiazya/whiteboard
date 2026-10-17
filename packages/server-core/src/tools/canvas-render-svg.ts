@@ -13,7 +13,7 @@ import {
   readMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -26,6 +26,7 @@ import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { taggedDrawingLibrary } from './tag-library.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /**
  * `DocRef`'s document arm carries `workspaceId` (the record a consumer
@@ -36,7 +37,7 @@ import { taggedDrawingLibrary } from './tag-library.js'
  */
 export const canvasRenderSvgInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     embedReferences: z
       .boolean()

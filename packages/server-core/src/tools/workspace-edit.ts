@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { resolveWorkspaceFor } from './caller-namespace.js'
 import {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
@@ -18,6 +19,7 @@ import {
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /** A `document.move` that names neither where to move nor what to rename to. */
 class DocumentMoveNeedsTargetError extends Error {
@@ -145,7 +147,7 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
 
 export const workspaceEditInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     createWorkspace: z
       .boolean()
       .optional()
@@ -400,7 +402,7 @@ function applyOp(ctx: WorkspaceEditContext, op: WorkspaceEditOp): Promise<OpOutc
  */
 async function refuseUnknownWorkspace(deps: ServerDeps, input: WorkspaceEditInput): Promise<void> {
   if (input.createWorkspace === true) return
-  if ((await deps.documentIndex.resolveWorkspace(input.workspaceId)) !== null) return
+  if ((await resolveWorkspaceFor(deps, input.workspaceId)) !== null) return
   throw new WorkspaceNotFoundForCallerError(
     input.workspaceId,
     input.ops.some((op) => op.op === 'document.create') ? 'create' : 'read',

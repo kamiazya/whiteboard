@@ -9,6 +9,11 @@
  * an invitation already redeemed — keeps the id. Nothing resolves those ids
  * to a person, so there is no name left behind to scrub.
  *
+ * The workspaces their namespace holds move to another owner in the same
+ * transaction (ADR-0053 decision 4): their handle is free to choose again
+ * once they are gone, and no workspace may be left in a namespace a stranger
+ * could then hold.
+ *
  * Their account is keeper-wide (ADR-0045) and may still be another tenant's
  * user, so retiring it is handed to `retireAccount`, which can see every
  * tenant; this store sees one.
@@ -18,6 +23,7 @@ import {
   type TenantScoped,
   type TenantTransaction,
 } from '../store/db/tenant-database.js'
+import { moveIntoNamespace, oldestOwnerNamespace } from './workspace-namespace-home.js'
 
 type UserDeletionOutcome =
   | { readonly kind: 'deleted' }
@@ -68,6 +74,26 @@ async function endSessions(trx: TenantTransaction, accountId: string) {
   }
 }
 
+// Moves every workspace the person's namespace holds to its inheritor, their
+// oldest surviving owner (ADR-0053 decision 4). A workspace with no owner left
+// goes to `me`, which no server-mode user can hold, so it stays reachable by
+// its id until an operator grants it a member.
+async function rehomeTheirNamespace(trx: TenantTransaction, profileId: string, handle: string) {
+  const held = await trx
+    .selectFrom('workspaces')
+    .select(['id', 'segment'])
+    .where('namespace', '=', handle)
+    .orderBy('id')
+    .execute()
+  for (const workspace of held) {
+    await moveIntoNamespace(
+      trx,
+      workspace,
+      await oldestOwnerNamespace(trx, workspace.id, profileId),
+    )
+  }
+}
+
 async function removeTheirRows(trx: TenantTransaction, profileId: string, accountId: string) {
   await trx.deleteFrom('workspaceMemberships').where('profileId', '=', profileId).execute()
   await trx.deleteFrom('tenantAdministrators').where('profileId', '=', profileId).execute()
@@ -89,13 +115,14 @@ export function createUserDeletion(
       const outcome = await inTenantTransaction(db, async (trx) => {
         const user = await trx
           .selectFrom('memberProfiles')
-          .select(['accountId', 'deactivatedAt'])
+          .select(['accountId', 'deactivatedAt', 'handle'])
           .where('id', '=', profileId)
           .executeTakeFirst()
         if (user === undefined) return { kind: 'unknown-user' } as const
         if (user.deactivatedAt === null) return { kind: 'not-deactivated' } as const
         const workspaceIds = await soleOwnerOf(trx, profileId)
         if (workspaceIds.length > 0) return { kind: 'sole-owner', workspaceIds } as const
+        await rehomeTheirNamespace(trx, profileId, user.handle)
         await removeTheirRows(trx, profileId, user.accountId)
         return { kind: 'deleted', accountId: user.accountId } as const
       })

@@ -64,6 +64,53 @@ describe('grantMember', () => {
     expect(await members.isWorkspaceMember('ws-01HX', ada.id)).toBe('member')
   })
 
+  // ADR-0053: one segment may sit in several namespaces, and the operator
+  // has none of their own to mean by a bare one.
+  it('finds a segment held in a namespace only when the address names it', async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-ada', { namespace: 'ada', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    const bare = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+    const qualified = await grantMember(handle.db, { workspaceId: 'bob/plans', user: ada.id })
+
+    expect(bare.kind).toBe('unknown-workspace')
+    expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('ws-bob')
+  })
+
+  // A workspace a single-person keeper made, restored onto server mode, sits
+  // in `me`, which no server-mode user holds: its first owner's own bare
+  // segment has to reach it once the operator grants them.
+  it("moves a workspace no namespace holds into its first owner's", async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-restored', { namespace: 'me', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, 'ws-ada-own', { namespace: 'ada', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    const outcome = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+
+    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-restored')
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', 'ws-restored')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({ namespace: ada.handle, segment: 'plans-2' })
+  })
+
+  it('moves only a workspace held in `me`, never one another namespace holds', async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    await grantMember(handle.db, { workspaceId: 'ws-bob', user: ada.id })
+
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', 'ws-bob')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({ namespace: 'bob', segment: 'plans' })
+  })
+
   it('finds a user by their exact display name', async () => {
     const ada = await userNamed('Ada', 'ada-1')
     await userNamed('Bob', 'bob-1')
@@ -162,6 +209,6 @@ describe('whiteboard server grant-member', () => {
   it('exits 64 without --workspace', async () => {
     const res = await run(['--json', '--user=Ada'])
     expect(res.code).toBe(64)
-    expect(res.stderr).toContain('--workspace=<id|segment> is required')
+    expect(res.stderr).toContain('--workspace=<id|handle/segment|segment> is required')
   })
 })

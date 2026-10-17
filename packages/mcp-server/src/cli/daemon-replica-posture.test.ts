@@ -245,6 +245,18 @@ describe('a workspace addressed by its segment', () => {
     expect(daemon.asked.map((req) => req.path)).toEqual([`/api/workspaces/${ULID}/replica-tier`])
   })
 
+  it('reads the qualified form in the one namespace a daemon keeps (ADR-0053)', async () => {
+    const daemon = daemonAnswering(200, { keyId: KEY_ID }, held)
+    const { result } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'me/default',
+      parseRecord: running,
+      isPidAlive: () => true,
+      request: daemon.request,
+    })
+    expect(result).toMatchObject({ ok: true, workspaceId: ULID })
+  })
+
   it('leaves a handle the daemon does not list to the daemon to refuse', async () => {
     const daemon = daemonAnswering(
       404,

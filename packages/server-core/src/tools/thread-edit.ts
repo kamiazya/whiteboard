@@ -21,7 +21,6 @@ import {
   placeTextAnchor,
   type SpatialAnchor,
   type TextAnchor,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -33,6 +32,7 @@ import {
   resolveSummaryWord,
 } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /**
@@ -92,7 +92,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
 
 const threadEditInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     ops: z
       .array(threadOpSchema)

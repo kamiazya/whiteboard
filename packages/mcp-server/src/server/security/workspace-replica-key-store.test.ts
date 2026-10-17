@@ -203,6 +203,7 @@ describe('setTier', () => {
       id: 'ws-1',
       displayName: 'Ada',
       segment: 'ada',
+      namespace: 'me',
       createdAt: 111,
       updatedAt: 222,
       replicaTier: 'bounded',

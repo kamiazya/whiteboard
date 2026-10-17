@@ -244,7 +244,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     mockConnectResult = refusal === undefined ? { status: 'none' } : { status: 'none', refusal }
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/w/team']}>
+        <MemoryRouter initialEntries={['/w/me/team']}>
           <App providerState={BROWSER_STATE} />
         </MemoryRouter>,
       )
@@ -272,7 +272,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/w/team']}>
+        <MemoryRouter initialEntries={['/w/me/team']}>
           <App providerState={BROWSER_STATE} />
         </MemoryRouter>,
       )
@@ -323,7 +323,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/w/team']}>
+        <MemoryRouter initialEntries={['/w/me/team']}>
           <App providerState={BROWSER_STATE} />
         </MemoryRouter>,
       )
@@ -468,7 +468,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     // browser-keeper rewrite effect (use-workspace-address-sync.ts) now runs
     // and lands on the browser's own workspace, the same way an address
     // naming a workspace this browser never kept always does.
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/default'))
     await screen.findByTestId('browser-index-page')
   })
 })
@@ -538,7 +538,7 @@ describe('App keeper wiring', () => {
   // a provider kind and mounts the page that belongs to it.
   it('mounts BrowserDocumentPage for the browser keeper', async () => {
     render(
-      <MemoryRouter initialEntries={['/w/default/d/c1']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -548,7 +548,7 @@ describe('App keeper wiring', () => {
   it('derives initialPath from a /w/:workspace/d/:path cold-load URL, folders and all', async () => {
     receivedInitialPath = undefined
     render(
-      <MemoryRouter initialEntries={['/w/default/d/design/login%20flow']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/design/login%20flow']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -734,10 +734,10 @@ describe('App daemon provider state', () => {
       const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
         workspace: string,
       ) => void
-      onWorkspaceResolved('design-team')
+      onWorkspaceResolved('me/design-team')
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/design-team'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/design-team'))
     // REPLACED, not pushed: naming what was already on screen is not a step a
     // person took, and a back button that returns to `/` would resolve again
     // and push again — a trap of the app's own making.
@@ -749,7 +749,7 @@ describe('App daemon provider state', () => {
     // navigation the person made, and back has to undo it.
     const router = createMemoryRouter(
       [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
-      { initialEntries: ['/w/design-team'] },
+      { initialEntries: ['/w/me/design-team'] },
     )
     render(<RouterProvider router={router} />)
     await screen.findByTestId('daemon-index-page')
@@ -758,14 +758,14 @@ describe('App daemon provider state', () => {
       const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
         workspace: string,
       ) => void
-      onWorkspaceResolved('sandbox')
+      onWorkspaceResolved('me/sandbox')
     })
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/sandbox'))
 
     await act(async () => {
       await router.navigate(-1)
     })
-    expect(router.state.location.pathname).toBe('/w/design-team')
+    expect(router.state.location.pathname).toBe('/w/me/design-team')
   })
 
   it('names the browser workspace in the address, replacing the "/" that named none', async () => {
@@ -786,7 +786,7 @@ describe('App daemon provider state', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/default'))
     // REPLACE for the same reason the daemon does it: the app is finishing a
     // sentence the person started, not taking a step on their behalf.
     expect(router.state.historyAction).toBe('REPLACE')
@@ -813,7 +813,7 @@ describe('App daemon provider state', () => {
     )
     const router = createMemoryRouter(
       [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
-      { initialEntries: ['/w/design'] },
+      { initialEntries: ['/w/me/design'] },
     )
     render(<RouterProvider router={router} />)
     await screen.findByTestId('daemon-index-page')
@@ -821,8 +821,8 @@ describe('App daemon provider state', () => {
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('menuitem', { name: /sandbox/i }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
-    expect(receivedDaemonIndexPageProps?.workspace).toBe('sandbox')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/sandbox'))
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('me/sandbox')
   })
 
   it('mounts the document once the workspace identity settles after first paint', async () => {
@@ -838,7 +838,7 @@ describe('App daemon provider state', () => {
     resetBrowserWorkspaceIdForTests()
     try {
       render(
-        <MemoryRouter initialEntries={['/w/default/d/c1']}>
+        <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
           <App providerState={BROWSER_STATE} />
         </MemoryRouter>,
       )
@@ -865,7 +865,7 @@ describe('App daemon provider state', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/default'))
     expect(getBrowserWorkspaceId()).toBe(settled)
   })
 
@@ -875,7 +875,7 @@ describe('App daemon provider state', () => {
     // branch actually hands it a source — a control nothing mounts passes
     // every test it has.
     render(
-      <MemoryRouter initialEntries={['/w/default']}>
+      <MemoryRouter initialEntries={['/w/me/default']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -903,7 +903,7 @@ describe('App daemon provider state', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/me/default'))
   })
 
   it('opens a browser document addressed by the canonical id, not only the segment', async () => {
@@ -1117,11 +1117,11 @@ describe('App shell (single instance above the routed pages)', () => {
 
     fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
-    // `/w/default`, not `/`: the address names its workspace by the time the
+    // `/w/me/default`, not `/`: the address names its workspace by the time the
     // gear is clicked, and the entry point records where the person actually
     // was. Coming back to `/` would resolve a workspace again rather than
     // returning to the one they left.
-    expect((router.state.location.state as { from?: string }).from).toBe('/w/default')
+    expect((router.state.location.state as { from?: string }).from).toBe('/w/me/default')
     // The settings branch keeps exactly one shell too — the page brings none
     // of its own.
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
@@ -1300,7 +1300,7 @@ describe('App error boundary', () => {
     throwInBrowserDocumentPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
-      <MemoryRouter initialEntries={['/w/default/d/c1']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -1364,7 +1364,7 @@ describe('App not-found route', () => {
 
   it('keeps known routes on their normal pages', () => {
     render(
-      <MemoryRouter initialEntries={['/w/default/d/c9']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/c9']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )

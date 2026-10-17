@@ -25,6 +25,7 @@ import { SEARCH_QUERY_KEYS, searchInputFromQuery, searchWireName } from './searc
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
+import { resolveWorkspaceFor } from './tools/caller-namespace.js'
 import { inTheCallersWords, unknownWorkspaceRefusal } from './tools/caller-refusals.js'
 import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
@@ -78,7 +79,7 @@ import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
 import { createViewportSetTool } from './tools/viewport-set.js'
 import { createWorkspaceEditTool } from './tools/workspace-edit.js'
-import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
+import { withResolvedWorkspaceHandles } from './workspace-handle.js'
 
 /**
  * The URL names the workspace and the document a write is about; the body
@@ -185,12 +186,9 @@ function resolvesWorkspace(
 ): MiddlewareHandler<{ Variables: { workspaceId: string } }, '/api/v1/workspaces/:workspaceId/*'> {
   return async (c, next) => {
     const handle = c.req.param('workspaceId')
-    const workspaceId = await resolveWorkspaceId(deps.documentIndex, handle)
-    const unresolved =
-      workspaceId === handle &&
-      !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`) &&
-      (await deps.documentIndex.resolveWorkspace(handle)) === null
-    if (unresolved) {
+    const resolved = await resolveWorkspaceFor(deps, handle, c.req.raw)
+    const workspaceId = resolved?.workspaceId ?? handle
+    if (resolved === null && !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`)) {
       const refusal = await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)
       return c.json(errorBody('workspace_not_found', refusal.message), 404)
     }
@@ -470,7 +468,7 @@ export function createServer(deps: ServerDeps) {
   }
   return {
     app,
-    tools: withResolvedWorkspaceHandles(tools, deps.documentIndex, deps.knownWorkspaceHandles),
+    tools: withResolvedWorkspaceHandles(tools, deps),
   }
 }
 

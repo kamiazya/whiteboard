@@ -41,7 +41,9 @@ afterEach(() => {
 interface Keeper {
   providers?: { id: string; displayName: string }[] | 'none'
   signedIn?: string
-  workspaces?: { workspaceId: string; displayName?: string; segment?: string }[] | 'failing'
+  workspaces?:
+    | { workspaceId: string; displayName?: string; namespace?: string; segment?: string }[]
+    | 'failing'
   signOut?: 'failing'
 }
 
@@ -212,8 +214,8 @@ describe('server mode opens a workspace', () => {
 
 describe('server mode inside a workspace', () => {
   const twoWorkspaces = [
-    { workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' },
-    { workspaceId: 'ws-2', displayName: 'Roadmap', segment: 'roadmap' },
+    { workspaceId: 'ws-1', displayName: 'Plans', namespace: 'ada', segment: 'plans' },
+    { workspaceId: 'ws-2', displayName: 'Roadmap', namespace: 'ada', segment: 'roadmap' },
   ]
 
   // Links behind a disclosure rather than a select: a closed select changes
@@ -224,22 +226,34 @@ describe('server mode inside a workspace', () => {
     const toggle = await screen.findByText('Plans', { selector: 'summary' })
     fireEvent.click(toggle)
     const other = await screen.findByRole('link', { name: 'Roadmap' })
-    expect(other.getAttribute('href')).toBe('/w/ws-2')
+    expect(other.getAttribute('href')).toBe('/w/ada/roadmap')
     fireEvent.click(other)
-    await waitFor(() => expect(opened.at(-1)?.props).toMatchObject({ workspace: 'ws-2' }))
+    await waitFor(() => expect(opened.at(-1)?.props).toMatchObject({ workspace: 'ada/roadmap' }))
   })
 
-  // The index rewrites /w/<id> to /w/<segment> once it resolves.
-  it('names the current workspace when the address uses its segment', async () => {
-    renderAt('/w/roadmap', { signedIn: 'Ada', workspaces: twoWorkspaces })
+  // The index rewrites /w/<id> to /w/<handle>/<segment> once it resolves.
+  it('names the current workspace when the address carries its segment', async () => {
+    renderAt('/w/ada/roadmap', { signedIn: 'Ada', workspaces: twoWorkspaces })
     expect(await screen.findByText('Roadmap', { selector: 'summary' })).toBeTruthy()
+  })
+
+  // ADR-0053 decision 2: a one-component address is the id form only.
+  it('names no workspace for an old one-component segment address', async () => {
+    renderAt('/w/roadmap', { signedIn: 'Ada', workspaces: twoWorkspaces })
+    expect(await screen.findByText('Workspaces', { selector: 'summary' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy link' })).toBeNull()
   })
 
   it('reads the list again when opened, so a newer workspace is there', async () => {
     const workspaces = [...twoWorkspaces]
     renderAt('/w/ws-1', { signedIn: 'Ada', workspaces })
     await screen.findByText('Plans', { selector: 'summary' })
-    workspaces.push({ workspaceId: 'ws-3', displayName: 'Launch', segment: 'launch' })
+    workspaces.push({
+      workspaceId: 'ws-3',
+      displayName: 'Launch',
+      namespace: 'ada',
+      segment: 'launch',
+    })
     fireEvent.click(screen.getByText('Plans', { selector: 'summary' }))
     expect(await screen.findByRole('link', { name: 'Launch' })).toBeTruthy()
   })

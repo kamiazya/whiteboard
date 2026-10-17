@@ -9,6 +9,7 @@
  */
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { z } from 'zod'
 import { createServer } from './create-server.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
@@ -71,5 +72,95 @@ describe('workspace handles at the server boundary', () => {
     const { app } = makeServer(plain)
     const res = await app.request('/api/v1/workspaces/default/documents')
     expect(res.status).toBe(200)
+  })
+})
+
+// ADR-0053: a workspace address is its canonical id, `<handle>/<segment>`, or
+// a bare segment in the CALLER's namespace — which is the composition root's
+// to say, since only it knows who is calling.
+describe('workspace addresses in the caller’s namespace', () => {
+  const ALICES = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
+  const MEMBERLESS = '01ARZ3NDEKTSV4RRFFQ69G5FAX'
+  let index: InMemoryDocumentIndex
+
+  function serverFor(namespace: string) {
+    return createServer(
+      makeTestDeps({
+        documentStore: new InMemoryDocumentStore(),
+        documentIndex: index,
+        documentTeardown: inMemoryDocumentTeardown(),
+        callerNamespace: async () => namespace,
+      }),
+    )
+  }
+
+  const pathsIn = async (server: ReturnType<typeof serverFor>, workspaceId: string) =>
+    (await server.tools.documentList.execute({ workspaceId })).documents.map((d) => d.path)
+
+  beforeEach(async () => {
+    index = new InMemoryDocumentIndex()
+    // The same segment in two namespaces: which one answers is the question.
+    await index.createWorkspace({ workspaceId: ALICES, namespace: 'alice', segment: 'design' })
+    await index.createWorkspace({ workspaceId: MEMBERLESS, segment: 'design' })
+    await index.createDocument({ workspaceId: ALICES, path: 'alices', kind: 'markdown' })
+    await index.createDocument({ workspaceId: MEMBERLESS, path: 'memberless', kind: 'markdown' })
+  })
+
+  it('resolves a bare segment in the namespace the deps name, for a tool', async () => {
+    expect(await pathsIn(serverFor('alice'), 'design')).toEqual(['alices'])
+    expect(await pathsIn(serverFor('me'), 'design')).toEqual(['memberless'])
+  })
+
+  it('resolves a bare segment in the namespace the deps name, over /api/v1', async () => {
+    const res = await serverFor('alice').app.request('/api/v1/workspaces/design/documents')
+    expect(res.status).toBe(200)
+    expect(JSON.stringify(await res.json())).toContain('alices')
+  })
+
+  it('reaches a qualified handle in any namespace, whoever is calling', async () => {
+    expect(await pathsIn(serverFor('alice'), 'me/design')).toEqual(['memberless'])
+    expect(await pathsIn(serverFor('me'), 'alice/design')).toEqual(['alices'])
+  })
+
+  it('admits all three forms in every tool’s workspaceId', () => {
+    const { tools } = serverFor('alice')
+    const scoped = Object.values(tools).filter(
+      (tool) =>
+        tool.name !== 'wb_facet_list' &&
+        'workspaceId' in (tool.inputSchema as { shape: object }).shape,
+    )
+    // Every workspace-scoped tool but the facet catalogue, whose workspace is optional.
+    expect(scoped.length).toBeGreaterThan(14)
+    for (const tool of scoped) {
+      const field = (tool.inputSchema as unknown as { shape: Record<string, z.ZodType> }).shape
+        .workspaceId as z.ZodType
+      for (const address of [ALICES, 'alice/design', 'design']) {
+        expect(field.safeParse(address).success, `${tool.name} ${address}`).toBe(true)
+      }
+      expect(field.safeParse('a/b/c').success, tool.name).toBe(false)
+      expect(field.description, tool.name).toMatch(/<handle>\/<segment>/)
+    }
+  })
+
+  const createNotes = (workspaceId: string) => ({
+    workspaceId,
+    createWorkspace: true,
+    ops: [{ op: 'document.create' as const, path: 'notes', kind: 'markdown' as const }],
+  })
+
+  it('mints a qualified handle in the caller’s own namespace under its segment', async () => {
+    const { tools } = serverFor('alice')
+    const created = await tools.workspaceEdit.execute(createNotes('alice/fresh'))
+    const entry = (await index.listWorkspaces()).find((w) => w.workspaceId === created.workspaceId)
+    expect(entry).toMatchObject({ namespace: 'alice', segment: 'fresh' })
+  })
+
+  it('never mints a qualified handle in another namespace', async () => {
+    const { tools } = serverFor('alice')
+    const before = await index.listWorkspaces()
+    await expect(tools.workspaceEdit.execute(createNotes('bob/fresh'))).rejects.toThrow(
+      /Workspace not found: "bob\/fresh"/,
+    )
+    expect(await index.listWorkspaces()).toEqual(before)
   })
 })

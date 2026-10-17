@@ -42,6 +42,7 @@ export const LEDGER: Ledger = {
     id: text,
     displayName: textOrNull,
     segment: textOrNull,
+    namespace: text,
     createdAt: integer,
     updatedAt: integer,
     replicaTier: textOrNull,
@@ -81,6 +82,7 @@ export const LEDGER: Ledger = {
     id: text,
     displayName: text,
     accountId: text,
+    handle: text,
     createdAt: integer,
     updatedAt: integer,
     deactivatedAt: integerOrNull,
@@ -134,6 +136,8 @@ export const NULLABLE_IN_DATABASE: {
   memberProfiles: {
     accountId:
       'migration 0032 added it nullable (SQLite ADD COLUMN takes no NOT NULL without a default); every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',
+    handle:
+      'migration 0046 added it nullable for the same reason and filled every row; every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',
   },
   workspaceMemberships: {
     role: 'migration 0036 added it nullable for the same reason; every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',

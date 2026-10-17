@@ -5,15 +5,19 @@ import {
   documentPathSchema,
   markdownInputSchema,
   okfActorInputSchema,
+  workspaceAddressInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /**
  * Fields every new document has, whatever its kind.
  */
 const documentCreateCommonShape = {
-  workspaceId: workspaceIdSchema,
+  // An address, as the batch that delegates here received it: the create is
+  // where a qualified handle in the caller's own namespace is minted.
+  workspaceId: workspaceAddressInputSchema,
   path: documentPathSchema.describe(
     'Where the document goes, as a slash-separated path from the workspace root. Hierarchy is the path: `plan/sub` sits under `plan`, and no separate parent id is involved.',
   ),
@@ -127,7 +131,7 @@ export const wbDocumentResolveOutputSchema = documentDetailSchema
 
 export const wbDocumentListInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
   })
   .strict()
 

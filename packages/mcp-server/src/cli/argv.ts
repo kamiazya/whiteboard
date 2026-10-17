@@ -87,11 +87,11 @@ export function parseDaemonReplicaKeyArgs(args: readonly string[]): DaemonReplic
     return {
       kind: 'usage-error',
       message:
-        'Only --json is supported. Re-run with: whiteboard daemon rotate-replica-key --json --workspace=<id|segment>',
+        'Only --json is supported. Re-run with: whiteboard daemon rotate-replica-key --json --workspace=<id|handle/segment|segment>',
     }
   }
   if (scan.values.workspaceId === undefined) {
-    return { kind: 'usage-error', message: '--workspace=<id|segment> is required' }
+    return { kind: 'usage-error', message: '--workspace=<id|handle/segment|segment> is required' }
   }
   return {
     kind: 'ok',
@@ -126,11 +126,11 @@ export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonRepli
   if (!scan.seen.has('--json')) {
     return {
       kind: 'usage-error',
-      message: `Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id|segment> --tier=<${REPLICA_TIER_CHOICES}>`,
+      message: `Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id|handle/segment|segment> --tier=<${REPLICA_TIER_CHOICES}>`,
     }
   }
   if (scan.values.workspaceId === undefined) {
-    return { kind: 'usage-error', message: '--workspace=<id|segment> is required' }
+    return { kind: 'usage-error', message: '--workspace=<id|handle/segment|segment> is required' }
   }
   const tier = scan.values.tier
   if (tier === undefined) {

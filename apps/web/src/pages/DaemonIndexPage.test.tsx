@@ -465,13 +465,10 @@ describe('DaemonIndexPage', () => {
         { workspaceId: WS_ULID, segment: 'studio' },
         { workspaceId: 'ws-other' },
       ] as Array<{ workspaceId: string; segment?: string }>,
-      // Keyed by HANDLE, which for a workspace holding a segment is that
-      // segment — the page addresses the daemon by what it settled on, not by
-      // the canonical id. Both spellings are present because the rename below
-      // moves which one it asks for.
+      // Keyed by the canonical id: no route takes the in-app address
+      // (ADR-0053), so the page names the id whatever the URL carries.
       documentsByWorkspace: {
-        studio: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
-        marketing: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
         'ws-other': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     }
@@ -480,7 +477,7 @@ describe('DaemonIndexPage', () => {
     const { rerender } = render(
       <DaemonIndexPage
         daemonBaseUrl={DAEMON_BASE_URL}
-        workspace="studio"
+        workspace="me/studio"
         onWorkspaceResolved={onWorkspaceResolved}
         onOpenDocument={vi.fn()}
       />,
@@ -493,14 +490,14 @@ describe('DaemonIndexPage', () => {
       <MemoryRouter initialEntries={['/']}>
         <DaemonIndexPage
           daemonBaseUrl={DAEMON_BASE_URL}
-          workspace="marketing"
+          workspace="me/marketing"
           onWorkspaceResolved={onWorkspaceResolved}
           onOpenDocument={vi.fn()}
         />
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('marketing'))
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('me/marketing'))
     expect(await screen.findByText('alpha')).toBeTruthy()
     expect(screen.queryByText('beta')).toBeNull()
   })
@@ -738,17 +735,14 @@ describe('DaemonIndexPage', () => {
   })
 
   it('opens a document under the workspace segment, not its canonical id', async () => {
-    // ADR-0019: the visible URL carries the human-readable segment. This page
-    // is where a daemon URL is born — `onOpenDocument` is what App.tsx turns
-    // into `/w/:handle/d/:path` — so a raw ULID handed over here is a
-    // raw ULID in the address bar.
+    // ADR-0019: the visible URL carries the human-readable segment, qualified
+    // by its namespace (ADR-0053). This page is where a daemon URL is born —
+    // `onOpenDocument` is what App.tsx turns into `/w/:ns/:segment/d/:path` —
+    // so a raw ULID handed over here is a raw ULID in the address bar.
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'design-team' }],
       documentsByWorkspace: {
-        // Keyed under BOTH so this test is about the handle `onOpenDocument`
-        // receives, and not about which one the fetch used.
         [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
-        'design-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
     const onOpenDocument = vi.fn()
@@ -757,7 +751,53 @@ describe('DaemonIndexPage', () => {
     await selectCard('alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
-    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('design-team', 'alpha')
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('me/design-team', 'alpha')
+  })
+
+  it('reports a workspace in another namespace under that namespace', async () => {
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: WS_ULID, namespace: 'ada', segment: 'design-team' }],
+      documentsByWorkspace: {
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onWorkspaceResolved = vi.fn()
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace={WS_ULID}
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    expect(onWorkspaceResolved).toHaveBeenLastCalledWith('ada/design-team')
+  })
+
+  // ADR-0053 decision 2: a one-component address is the id form only, so an
+  // old segment link is answered as an address that names nothing.
+  it('does not resolve a bare segment address', async () => {
+    const fetchMock = installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: WS_ULID, segment: 'design-team' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        [WS_ULID]: [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="design-team"
+        onOpenDocument={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('design-team'))).toBe(false)
   })
 
   it('a canonical-id address still finds the workspace it names', async () => {
@@ -770,8 +810,8 @@ describe('DaemonIndexPage', () => {
         { workspaceId: WS_ULID, segment: 'design-team' },
       ],
       documentsByWorkspace: {
-        'alpha-space': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
-        'design-team': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        [WS_ULID]: [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -1711,10 +1751,9 @@ describe('the workspace names the page', () => {
   it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team', displayName: 'Marketing' }],
-      // Keyed by the SEGMENT, because that is what the page addresses with:
-      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      // Keyed by the canonical id, which is what every request names.
       documentsByWorkspace: {
-        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -1736,10 +1775,9 @@ describe('the workspace names the page', () => {
     // precedence — the page must not re-derive it and skip a layer.
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team' }],
-      // Keyed by the SEGMENT, because that is what the page addresses with:
-      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      // Keyed by the canonical id, which is what every request names.
       documentsByWorkspace: {
-        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 

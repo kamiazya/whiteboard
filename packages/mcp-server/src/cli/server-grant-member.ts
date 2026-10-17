@@ -1,6 +1,7 @@
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createWorkspacePeopleAdministration } from '../server/security/people-administration.js'
+import { homeWithItsOwner } from '../server/security/workspace-namespace-home.js'
 import { createWorkspaceRoles } from '../server/security/workspace-roles.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
@@ -28,12 +29,15 @@ export async function grantMember(
   db: TenantDatabase,
   { workspaceId: workspaceHandle, user }: { workspaceId: string; user: string },
 ): Promise<GrantMemberOutcome> {
-  // A handle, as every other surface reads one (ADR-0019): the segment an
-  // operator sees in a URL, or the canonical id.
-  const rows = await db.selectFrom('workspaces').select(['id', 'segment']).execute()
+  // A handle, as every other surface reads one (ADR-0019): the canonical id,
+  // or a segment qualified by the namespace holding it (ADR-0053). The
+  // operator has no namespace of their own, so a bare segment reaches only
+  // the holder-less `me` one — never whichever of several namespaces holds it.
+  const rows = await db.selectFrom('workspaces').select(['id', 'namespace', 'segment']).execute()
   const workspace = resolveWorkspaceHandle(
     rows.map((row) => ({
       workspaceId: row.id,
+      namespace: row.namespace,
       ...(row.segment === null ? {} : { segment: row.segment }),
     })),
     workspaceHandle,
@@ -50,11 +54,12 @@ export async function grantMember(
     roles: createWorkspaceRoles(db),
   }).grant(workspaceId, found.user.id)
   if (granted.kind === 'refused') return operatorRefusal(granted)
+  await homeWithItsOwner(db, workspaceId)
   return { kind: 'ok', workspaceId, user: found.user }
 }
 
 const USAGE =
-  'Re-run with: whiteboard server grant-member --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]'
+  'Re-run with: whiteboard server grant-member --json --workspace=<id|handle/segment|segment> --user=<id|name> [--data-dir=<path>]'
 
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
@@ -78,7 +83,7 @@ export async function runServerGrantMember(
   const { workspaceId, user, dataDir } = scan.values
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
   if (workspaceId === undefined)
-    return usageError(io, `--workspace=<id|segment> is required. ${USAGE}`)
+    return usageError(io, `--workspace=<id|handle/segment|segment> is required. ${USAGE}`)
   if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
 
   const outcome = await grantMember(await openKeeperDb(dataDir, env), { workspaceId, user })

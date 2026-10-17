@@ -11,6 +11,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import {
   describeThrown,
   generateDocumentId,
+  parseWorkspaceAddress,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
@@ -18,6 +19,7 @@ import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
+import { namespaceOfGrant } from './membership-gate.js'
 import { serverModeToolErrorText } from './server-mode-redaction.js'
 import { type MembershipDenial, membershipRefusal, workspaceAccess } from './workspace-access.js'
 
@@ -47,6 +49,16 @@ class McpCallRefusalError extends Error {
     super(message)
     this.name = 'McpCallRefusalError'
   }
+}
+
+/**
+ * Whose namespace a bare segment means for the tool call being served
+ * (ADR-0053) — the same answer the gate below resolves with — or undefined
+ * outside a server-mode call, where the keeper's one namespace applies.
+ */
+export async function mcpCallerNamespace(): Promise<string | undefined> {
+  const caller = callers.getStore()
+  return caller === undefined ? undefined : namespaceOfGrant(caller.grant, caller.members)
 }
 
 export function runAsMcpCaller<T>(caller: McpCaller, fn: () => Promise<T>): Promise<T> {
@@ -145,16 +157,22 @@ async function gatedCall(
   tool: WorkspaceScopedTool,
   input: never,
 ): Promise<unknown> {
-  let existing = await index.resolveWorkspace(handle)
+  // A bare segment is looked up in the caller's own namespace (ADR-0053), so
+  // a segment somebody else holds is no different here from one nobody does:
+  // a read is refused alike, and a create mints the caller's own.
+  const namespace = await namespaceOfGrant(caller.grant, caller.members)
+  let existing = await index.resolveWorkspace(handle, namespace)
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
     const minted = await mintAsFirstMember(caller, index, handle)
     if (minted === 'unmintable') return tool.execute(input)
-    if (minted !== 'taken') {
-      return tool.execute({ ...(input as object), workspaceId: minted } as never)
+    if (typeof minted === 'object') {
+      return tool.execute({ ...(input as object), workspaceId: minted.workspaceId } as never)
     }
-    // Someone else minted the segment after the check above: it is theirs,
-    // and joining it takes a membership like any other workspace.
-    existing = await index.resolveWorkspace(handle)
+    // `taken`: a concurrent call of the caller's own minted the segment after
+    // the check above; it is in their namespace, so the gate below admits
+    // them. `foreign`: another namespace's segment, which the gate below
+    // refuses whether or not it exists.
+    existing = await index.resolveWorkspace(handle, namespace)
   }
   const access = await workspaceAccess(
     caller.grant,
@@ -169,35 +187,39 @@ async function gatedCall(
 }
 
 /**
- * The gate mints the workspace ITSELF, before the tool runs, and makes the
- * caller its member before anything is written. Left to the tool, the mint
- * converges on whichever creator's write lands first, so a second person
- * creating the same segment at the same instant would have their documents
- * filed in the first one's workspace, where the first one reads them. Here
- * the segment's unique index decides: whoever loses gets `taken` and is
- * refused like any non-member, with nothing written. The id is fresh and
- * known only to this call until the membership lands.
+ * The gate mints the workspace ITSELF, in the caller's own namespace, before
+ * the tool runs, and makes the caller its member before anything is written.
+ * Left to the tool, the mint would converge on whichever write lands first.
+ * Here the segment's unique index decides — and since it is unique per
+ * namespace, only another call by the same person can win it: whoever loses
+ * gets `taken`, with nothing written. The id is fresh and known only to this
+ * call until the membership lands.
  *
  * A batch refused after the mint leaves the caller a member of an empty
- * workspace, so their retry reaches it. A handle that cannot be a segment
- * is `unmintable`: the tool refuses it with its own reason, minting nothing.
+ * workspace, so their retry reaches it. A handle qualified by another
+ * namespace is `foreign` and never minted (ADR-0053). One that cannot be a
+ * segment is `unmintable`: the tool refuses it with its own reason, minting
+ * nothing.
  */
 async function mintAsFirstMember(
   caller: McpCaller,
   index: GateIndex,
   handle: string,
-): Promise<string | 'taken' | 'unmintable'> {
+): Promise<{ readonly workspaceId: string } | 'taken' | 'foreign' | 'unmintable'> {
   const person = caller.grant.person
   const profile = person === undefined ? null : await caller.members.profileForBinding(person)
   if (profile === null) throw refused('requires_person_session')
-  if (!workspaceSegmentSchema.safeParse(handle).success) return 'unmintable'
+  const address = parseWorkspaceAddress(handle)
+  if (address?.form === 'qualified' && address.namespace !== profile.handle) return 'foreign'
+  const segment = address?.form === 'qualified' ? address.segment : handle
+  if (!workspaceSegmentSchema.safeParse(segment).success) return 'unmintable'
   const workspaceId = generateDocumentId()
   try {
-    await index.createWorkspace({ workspaceId, segment: handle })
+    await index.createWorkspace({ workspaceId, namespace: profile.handle, segment })
   } catch (err) {
     if (isWorkspaceSegmentTakenError(err)) return 'taken'
     throw err
   }
   await caller.members.addMember(workspaceId, profile.id)
-  return workspaceId
+  return { workspaceId }
 }

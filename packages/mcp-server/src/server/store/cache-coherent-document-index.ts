@@ -69,6 +69,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     const parsed = createWorkspaceInputSchema.parse(input)
     return withWorkspaceWriteLock(parsed.workspaceId, async () => {
       await upsertWorkspaceRow(await this.scope.db(), parsed.workspaceId, {
+        ...(parsed.namespace === undefined ? {} : { namespace: parsed.namespace }),
         ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
         ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
       })

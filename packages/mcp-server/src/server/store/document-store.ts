@@ -16,7 +16,7 @@ import {
   writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
@@ -116,10 +116,13 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
       const db = await scope.db()
       const rows = await db
         .selectFrom('workspaces')
-        .select(['id', 'segment', 'displayName'])
+        .select(['id', 'namespace', 'segment', 'displayName'])
         .execute()
       return rows.map((row) => ({
         workspaceId: row.id,
+        // `me` is what an absent namespace already means, so a single-person
+        // keeper's rows read exactly as they did before namespaces.
+        ...(row.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: row.namespace }),
         ...(row.segment === null ? {} : { segment: row.segment }),
         ...(row.displayName === null ? {} : { displayName: row.displayName }),
       }))
@@ -145,6 +148,7 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
       if (updated === null) throw new WorkspaceNotFoundError(input.workspaceId)
       return {
         workspaceId: input.workspaceId,
+        ...(updated.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: updated.namespace }),
         ...(updated.segment === null ? {} : { segment: updated.segment }),
         ...(updated.displayName === null ? {} : { displayName: updated.displayName }),
       }

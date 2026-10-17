@@ -10,7 +10,11 @@ import {
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
-import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  generateDocumentId,
+  SINGLE_PERSON_NAMESPACE,
+} from '@kamiazya/whiteboard-model'
 import {
   type DocumentIndex,
   DocumentPathContestedError,
@@ -18,6 +22,7 @@ import {
   isDatabaseBusy,
   isWorkspaceNotFoundError,
   NoRoomForCopyError,
+  type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
@@ -34,6 +39,7 @@ import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate
 import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath } from '../../validators.js'
 import {
+  callerNamespaceOf,
   parseWorkspaceHandle,
   refuseMalformedHandle,
   workspaceIdFromHandle,
@@ -133,10 +139,11 @@ function logFollowOutcome(workspaceId: string, moved: WbDocumentMoveResult): voi
 async function summarizeWorkspace(
   deps: ServerDeps,
   options: WorkspacesRouterOptions,
-  row: { workspaceId: string; segment?: string; displayName?: string },
+  row: WorkspaceEntry,
 ) {
   return {
     workspaceId: row.workspaceId,
+    ...(row.namespace === undefined ? {} : { namespace: row.namespace }),
     ...(row.segment === undefined ? {} : { segment: row.segment }),
     ...(row.displayName === undefined ? {} : { displayName: row.displayName }),
     documentCount: await countDocuments(deps.documentIndex, row.workspaceId),
@@ -159,19 +166,33 @@ async function creatorOf(
 async function createWorkspaceRow(
   deps: ServerDeps,
   displayName: string,
+  namespace: string,
 ): Promise<WorkspaceSummary> {
   const workspaceId = generateDocumentId()
   const base = deriveWorkspaceSegment(displayName)
-  // Advisory: the registry's unique index decides, and the caller translates
-  // its refusal when two creates both found the same candidate free.
-  const taken = new Set((await deps.documentIndex.listWorkspaces()).map((w) => w.segment))
+  // Only the creator's own namespace is asked (ADR-0053): it is the one the
+  // new segment must be unique in, and the creator already sees all of it, so
+  // a suffix tells them nothing about anybody else's. Advisory: the
+  // registry's unique index decides, and the caller translates its refusal
+  // when two creates both found the same candidate free.
+  const taken = new Set(
+    (await deps.documentIndex.listWorkspaces())
+      .filter((w) => (w.namespace ?? SINGLE_PERSON_NAMESPACE) === namespace)
+      .map((w) => w.segment),
+  )
   const segment = base === undefined ? undefined : await firstFreeSegment(base, (s) => taken.has(s))
   await deps.documentIndex.createWorkspace({
     workspaceId,
+    ...(namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace }),
     ...(segment === undefined ? {} : { segment }),
     displayName,
   })
-  return { workspaceId, ...(segment === undefined ? {} : { segment }), displayName }
+  return {
+    workspaceId,
+    ...(namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace }),
+    ...(segment === undefined ? {} : { segment }),
+    displayName,
+  }
 }
 
 export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
@@ -246,7 +267,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
 
     try {
       const deps = options.serverDeps
-      const summary = await createWorkspaceRow(deps, displayName)
+      const summary = await createWorkspaceRow(deps, displayName, callerNamespaceOf(c))
       if (creator !== null) await options.firstMember?.add(summary.workspaceId, creator)
       return c.json(summary, 201)
     } catch (err) {
@@ -282,6 +303,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
       const response: WorkspaceSummary = {
         workspaceId: renamed.workspaceId,
+        ...(renamed.namespace === undefined ? {} : { namespace: renamed.namespace }),
         ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
         ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),
       }

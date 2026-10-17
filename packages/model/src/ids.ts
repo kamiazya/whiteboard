@@ -151,10 +151,11 @@ export const WORKSPACE_DISPLAY_NAME_MAX_LENGTH = 200
 export const WORKSPACE_SEGMENT_MAX_LENGTH = 200
 
 /**
- * A workspace's user-facing handle (ADR-0019): unique per keeper, renameable,
- * URL-safe. Uniqueness is the keeper's registry to enforce (the daemon
- * `workspaces` table row / a browser IndexedDB registry row) — this schema
- * pins shape only.
+ * A workspace's user-facing handle (ADR-0019): unique per NAMESPACE
+ * (ADR-0053, amending ADR-0019's "per keeper"), renameable, URL-safe.
+ * Uniqueness is the keeper's registry to enforce (the daemon `workspaces`
+ * table's (tenant, namespace, segment) index / a browser IndexedDB registry
+ * row, whose keeper has one namespace) — this schema pins shape only.
  *
  * The charset reuses `DOCUMENT_PATH_SEGMENT_PATTERN` deliberately, for
  * consistency with document path segments (`documentPathSchema` above).

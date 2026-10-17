@@ -1,6 +1,13 @@
 import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId, messageOf, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import {
+  generateDocumentId,
+  messageOf,
+  namespaceHandleSchema,
+  parseWorkspaceAddress,
+  SINGLE_PERSON_NAMESPACE,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
 import {
   hasDocumentPins,
   isWorkspaceSegmentTakenError,
@@ -11,6 +18,7 @@ import type { z } from 'zod'
 import { saveDocumentSnapshot } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
+import { callerNamespaceOf } from './caller-namespace.js'
 import {
   DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,
@@ -64,6 +72,23 @@ async function rethrowWorkspaceNotFound<T>(
 }
 
 /**
+ * The segment a create files `handle` under, always in the CALLER's namespace
+ * (ADR-0053): a bare segment, or one qualified by that same namespace. A
+ * handle qualified by any other namespace is never minted — to this caller it
+ * names a workspace that is not there, and is refused as one. So is every
+ * handle from a caller with no namespace of its own to mint in.
+ */
+function segmentToMint(handle: string, namespace: string): string {
+  if (!namespaceHandleSchema.safeParse(namespace).success) {
+    throw new WorkspaceNotFoundForCallerError(handle)
+  }
+  const address = parseWorkspaceAddress(handle)
+  if (address?.form !== 'qualified') return handle
+  if (address.namespace !== namespace) throw new WorkspaceNotFoundForCallerError(handle)
+  return address.segment
+}
+
+/**
  * ADR-0019's mint: a new workspace is keyed by a canonical ULID the server
  * chooses, and the handle the caller sent is filed as its `segment`.
  *
@@ -79,15 +104,21 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
   // already resolved to a canonical id would be refused for being
   // ULID-shaped. So an existing workspace short-circuits, and only a handle
   // that names nothing reaches the mint.
-  const existing = await deps.documentIndex.resolveWorkspace(handle)
+  const namespace = await callerNamespaceOf(deps)
+  const existing = await deps.documentIndex.resolveWorkspace(handle, namespace)
   if (existing !== null) return existing.workspaceId
 
-  if (!workspaceSegmentSchema.safeParse(handle).success) {
+  const segment = segmentToMint(handle, namespace)
+  if (!workspaceSegmentSchema.safeParse(segment).success) {
     throw new WorkspaceSegmentUnusableError(handle)
   }
   const workspaceId = generateDocumentId()
   try {
-    await deps.documentIndex.createWorkspace({ workspaceId, segment: handle })
+    await deps.documentIndex.createWorkspace({
+      workspaceId,
+      segment,
+      ...(namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace }),
+    })
   } catch (err) {
     if (!isWorkspaceSegmentTakenError(err)) throw err
     // Another create bootstrapped this handle between the resolve above and
@@ -101,7 +132,7 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
     // The loser leaves nothing behind: a keeper claims the registry identity
     // BEFORE the tree record precisely so a refused segment cannot strand a
     // half-created workspace.
-    const winner = await deps.documentIndex.resolveWorkspace(handle)
+    const winner = await deps.documentIndex.resolveWorkspace(handle, namespace)
     // Nothing answers to a segment the write just reported as taken: the row
     // is gone again, or this keeper does not resolve what it stores. Either
     // way it is not a race this can settle, so the original error stands.

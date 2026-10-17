@@ -1,26 +1,33 @@
 import { decodeSegment } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import { formatWorkspaceAddress, parseWorkspaceAddress } from '@kamiazya/whiteboard-model'
 
 // Canonical URL shapes for apps/web. Kept as pure string-building/parsing
 // functions (no React Router import) so the shape is unit-testable without a
 // router context.
 //
-// ONE grammar, for both keepers. The browser kept a `/local/*` family of its
-// own until ADR-0019 gave a browser workspace a segment to be named by;
-// before that it had no address to put there, and the shape said so. Two
-// grammars encode the KEEPER into the address, which is what three-layer
-// identity exists to stop — and the keeper is not the URL's to say: ADR-0004
-// settles it once at page load, so one path means "this workspace, of
-// whichever keeper this session runs".
+// ONE grammar, for every keeper (ADR-0053 decision 2). Two grammars encode the
+// KEEPER into the address, which is what three-layer identity exists to stop —
+// and the keeper is not the URL's to say: ADR-0004 settles it once at page
+// load, so one path means "this workspace, of whichever keeper this session
+// runs". A single-person keeper spells its one namespace `me`.
 //
-// The parameter is a HANDLE, not an id. ADR-0019 resolves an address
-// segment-first with the canonical id as the durable fallback, so this layer
-// deliberately does not know which of the two it is carrying.
+// The `workspace` a route carries is an ADDRESS string in one of two forms:
+// `<namespace>/<segment>`, what the app shows, or a bare canonical id, the
+// opaque form a link that leaves the workspace carries. The first URL
+// component tells them apart — a handle is never ULID-shaped. A one-component
+// address that is not a ULID still parses, as the id form: an old
+// `/w/<segment>` link then names nothing rather than being redirected, since
+// choosing a namespace for it on a keeper with many people would mean
+// resolving a bare segment across all of them.
 export function indexPath(): string {
   return '/'
 }
 
+// Each component is encoded, the separator between them is not: it is the
+// address's own, and encoding it would make a qualified address one opaque
+// component that reads as the id form.
 export function workspacePath(workspace: string): string {
-  return `/w/${encodeURIComponent(workspace)}`
+  return `/w/${workspace.split('/').map(encodeURIComponent).join('/')}`
 }
 
 // Everything in a document's URL that its path does not decide.
@@ -48,32 +55,66 @@ export type WorkspaceRoute =
   | { kind: 'index'; workspace?: string }
   | { kind: 'document'; workspace: string; path: string }
 
+/** The decoded document path a URL tail spells, or null when any segment is empty or undecodable. */
+function documentTail(tail: string): string | null {
+  const segments = tail.split('/').map(decodeSegment)
+  if (segments.some((segment) => segment === null || segment === '')) return null
+  return segments.join('/')
+}
+
+/** The address a qualified pair of URL components spells, or null when the address grammar refuses it. */
+function qualifiedAddress(namespace: string, segment: string): string | null {
+  const ns = decodeSegment(namespace)
+  const seg = decodeSegment(segment)
+  if (ns === null || seg === null) return null
+  const address = parseWorkspaceAddress(`${ns}/${seg}`)
+  return address?.form === 'qualified' ? formatWorkspaceAddress(address) : null
+}
+
+/** The route after `/w/` when it is a qualified address: `<ns>/<seg>` or `<ns>/<seg>/d/<path>`. */
+function qualifiedRoute(rest: string): WorkspaceRoute | null {
+  const documentMatch = /^([^/]+)\/([^/]+)\/d\/(.+?)\/?$/.exec(rest)
+  if (documentMatch) {
+    const workspace = qualifiedAddress(documentMatch[1] as string, documentMatch[2] as string)
+    const path = documentTail(documentMatch[3] as string)
+    return workspace === null || path === null ? null : { kind: 'document', workspace, path }
+  }
+  const indexMatch = /^([^/]+)\/([^/]+)\/?$/.exec(rest)
+  if (indexMatch) {
+    const workspace = qualifiedAddress(indexMatch[1] as string, indexMatch[2] as string)
+    return workspace === null ? null : { kind: 'index', workspace }
+  }
+  return null
+}
+
+/** The route after `/w/` when it is a one-component (id-form) address: `<id>` or `<id>/d/<path>`. */
+function idRoute(rest: string): WorkspaceRoute | null {
+  const documentMatch = /^([^/]+)\/d\/(.+?)\/?$/.exec(rest)
+  if (documentMatch) {
+    const workspace = decodeSegment(documentMatch[1] as string)
+    const path = documentTail(documentMatch[2] as string)
+    return workspace === null || path === null ? null : { kind: 'document', workspace, path }
+  }
+  const indexMatch = /^([^/]+)\/?$/.exec(rest)
+  if (indexMatch) {
+    const workspace = decodeSegment(indexMatch[1] as string)
+    return workspace === null ? null : { kind: 'index', workspace }
+  }
+  return null
+}
+
 // Deliberately regex-based rather than react-router's matchPath: App.tsx
 // needs this result inside a useState lazy initializer (before any Route
 // tree exists to match against), and keeping it framework-agnostic lets it
 // be unit-tested without a Router context.
 export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
-  // The document branch is checked first: `/w/:ws` and `/w/:ws/d/...`
-  // share a prefix, and the workspace pattern below is anchored so it cannot
-  // swallow a document URL either way.
-  const documentMatch = pathname.match(/^\/w\/([^/]+)\/d\/(.+?)\/?$/)
-  if (documentMatch) {
-    const workspace = decodeSegment(documentMatch[1])
-    const segments = (documentMatch[2] as string).split('/').map(decodeSegment)
-    if (workspace === null || segments.some((segment) => segment === null || segment === '')) {
-      return null
-    }
-    return { kind: 'document', workspace, path: segments.join('/') }
-  }
-  const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
-  if (workspaceMatch) {
-    const workspace = decodeSegment(workspaceMatch[1])
-    return workspace === null ? null : { kind: 'index', workspace }
-  }
-  if (pathname === '/' || pathname === '') {
-    return { kind: 'index' }
-  }
-  return null
+  if (pathname === '/' || pathname === '') return { kind: 'index' }
+  if (!pathname.startsWith('/w/')) return null
+  const rest = pathname.slice('/w/'.length)
+  // The qualified form first, so a segment spelled `d` stays addressable. It
+  // cannot swallow an id-form address: the namespace grammar refuses a
+  // ULID-shaped handle, so `/w/<id>/d/…` falls through to the id form.
+  return qualifiedRoute(rest) ?? idRoute(rest)
 }
 
 // Inverse of parseWorkspaceRoute — the single place that turns a route back

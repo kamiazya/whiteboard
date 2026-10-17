@@ -12,27 +12,13 @@
  * of those resolving independently is how one request ends up holding a lock
  * under one spelling while writing under another.
  */
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import type { ServerDeps } from './server-deps.js'
+import { resolveWorkspaceFor } from './tools/caller-namespace.js'
 import {
   inTheCallersWords,
-  type KnownWorkspaceHandles,
   ownsWorkspaceRefusal,
   unknownWorkspaceRefusal,
 } from './tools/caller-refusals.js'
-
-/**
- * The canonical id for `handle`, or `handle` unchanged when nothing answers
- * to it.
- *
- * Total by design: an unresolvable handle is NOT an error here. Passing it
- * through means the lookup that follows fails exactly as it did before
- * resolution existed — the same 404, the same `isError` text, from the same
- * place. Answering with an error of its own would put a second vocabulary in
- * front of every not-found, and every surface would have to learn it.
- */
-export async function resolveWorkspaceId(index: DocumentIndex, handle: string): Promise<string> {
-  return (await index.resolveWorkspace(handle))?.workspaceId ?? handle
-}
 
 /** The shape every tool in `createServer`'s record shares. */
 interface WorkspaceScopedTool {
@@ -54,8 +40,7 @@ interface WorkspaceScopedTool {
  */
 export function withResolvedWorkspaceHandles<T extends Record<string, WorkspaceScopedTool>>(
   tools: T,
-  index: DocumentIndex,
-  knownWorkspaceHandles?: KnownWorkspaceHandles,
+  deps: Pick<ServerDeps, 'documentIndex' | 'callerNamespace' | 'knownWorkspaceHandles'>,
 ): T {
   const wrapped: Record<string, WorkspaceScopedTool> = {}
   for (const [key, tool] of Object.entries(tools)) {
@@ -65,16 +50,16 @@ export function withResolvedWorkspaceHandles<T extends Record<string, WorkspaceS
         const scoped = input as { workspaceId?: unknown; documentId?: unknown }
         if (typeof scoped?.workspaceId !== 'string') return tool.execute(input)
         const handle = scoped.workspaceId
-        const resolved = await index.resolveWorkspace(handle)
+        const resolved = await resolveWorkspaceFor(deps, handle)
         if (resolved === null && !ownsWorkspaceRefusal(tool)) {
-          throw await unknownWorkspaceRefusal(handle, knownWorkspaceHandles)
+          throw await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)
         }
         const workspaceId = resolved?.workspaceId ?? handle
         try {
           return await tool.execute({ ...scoped, workspaceId } as never)
         } catch (err) {
           throw await inTheCallersWords(err, {
-            index,
+            index: deps.documentIndex,
             handle,
             workspaceId,
             documentId: scoped.documentId,

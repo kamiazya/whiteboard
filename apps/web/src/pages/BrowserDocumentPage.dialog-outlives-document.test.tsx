@@ -33,8 +33,8 @@ import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -163,7 +163,7 @@ describe('a destructive dialog does not outlive its document', () => {
 
     // The switch. Browser Back does this with the dialog still open.
     await act(async () => {
-      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_ADDRESS, 'arrived-after'))
     })
     // Polled OUTSIDE React's act scope, and read from the document text
     // rather than by role. Both are measured rather than stylistic:
@@ -244,7 +244,7 @@ describe('a destructive dialog does not outlive its document', () => {
     await store.attempted
 
     await act(async () => {
-      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_ADDRESS, 'arrived-after'))
     })
     for (let i = 0; i < 100 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
       await new Promise((r) => setTimeout(r, 50))
@@ -301,7 +301,7 @@ describe('a destructive dialog does not outlive its document', () => {
     ).not.toBeNull()
 
     await act(async () => {
-      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_ADDRESS, 'arrived-after'))
     })
     // Longer than the other two cases here, and measured rather than guessed:
     // with the surface open this page also holds a CodeMirror instance, and

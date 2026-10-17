@@ -25,7 +25,6 @@ import {
   placeTextAnchor,
   proposalSchema,
   resolveTextAnchor,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -34,6 +33,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
 import { proposalAuthorSchema } from './proposal-author.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /** One proposed passage as a caller sends it: the model's own input form of `body.replace`. */
@@ -42,7 +42,7 @@ type BodyEditOp = z.infer<typeof bodyEditOpSchema>
 
 export const bodyEditInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     /**
      * `propose` by default, the same rule decision 7 gives `wb_canvas_edit`:

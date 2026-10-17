@@ -25,16 +25,23 @@ describe('app-routes', () => {
     expect(documentPath('w1', 'main')).toBe('/w/w1/d/main')
   })
 
-  it('percent-encodes the workspace, and the path per segment', () => {
+  it('percent-encodes each address component, and the path per segment', () => {
     expect(documentPath('w 1', 'my/path')).toBe('/w/w%201/d/my/path')
-    expect(workspacePath('w/1')).toBe('/w/w%2F1')
+    expect(workspacePath('me/w 1')).toBe('/w/me/w%201')
   })
 
-  it('builds one shape for both keepers, whatever the handle names', () => {
+  // ADR-0053: the namespace and the segment are two URL components, so the
+  // separator between them is the address's own and stays unencoded.
+  it('builds a qualified address as two components', () => {
+    expect(workspacePath('me/design')).toBe('/w/me/design')
+    expect(documentPath('ada/design', 'notes/plan')).toBe('/w/ada/design/d/notes/plan')
+  })
+
+  it('builds one shape for every keeper, whatever the address names', () => {
     // The browser used to have builders of its own producing `/local/*`. It
-    // has none now, and that is the point: a `default`-segmented browser
-    // workspace and a daemon's are the same kind of address.
-    expect(documentPath('default', 'abc-123')).toBe('/w/default/d/abc-123')
+    // has none now, and that is the point: a browser workspace and a daemon's
+    // are the same kind of address.
+    expect(documentPath('me/default', 'abc-123')).toBe('/w/me/default/d/abc-123')
     expect(documentPath('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'main')).toBe(
       '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV/d/main',
     )
@@ -47,15 +54,62 @@ describe('parseWorkspaceRoute', () => {
   })
 
   it('parses a workspace-scoped index route', () => {
-    expect(parseWorkspaceRoute('/w/w1')).toEqual({ kind: 'index', workspace: 'w1' })
+    expect(parseWorkspaceRoute('/w/me/w1')).toEqual({ kind: 'index', workspace: 'me/w1' })
   })
 
   it('parses a canvas route', () => {
-    expect(parseWorkspaceRoute('/w/w1/d/main')).toEqual({
+    expect(parseWorkspaceRoute('/w/me/w1/d/main')).toEqual({
       kind: 'document',
-      workspace: 'w1',
+      workspace: 'me/w1',
       path: 'main',
     })
+  })
+
+  it('parses the opaque id form, with and without a document', () => {
+    const id = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    expect(parseWorkspaceRoute(`/w/${id}`)).toEqual({ kind: 'index', workspace: id })
+    expect(parseWorkspaceRoute(`/w/${id}/d/notes/plan`)).toEqual({
+      kind: 'document',
+      workspace: id,
+      path: 'notes/plan',
+    })
+  })
+
+  // A ULID-shaped first component is the id form, so a following `d` opens a
+  // document there rather than naming a segment called `d`.
+  it('reads the component after an id as the document marker', () => {
+    const id = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    expect(parseWorkspaceRoute(`/w/${id}/d`)).toBeNull()
+    expect(parseWorkspaceRoute(`/w/${id}/plans`)).toBeNull()
+  })
+
+  // Any other first component is a namespace, so a workspace whose segment
+  // is `d` is still addressable, and its documents sit after a second `d`.
+  it('reads a segment spelled `d` as a segment in a qualified address', () => {
+    expect(parseWorkspaceRoute('/w/me/d')).toEqual({ kind: 'index', workspace: 'me/d' })
+    expect(parseWorkspaceRoute('/w/me/d/d/x')).toEqual({
+      kind: 'document',
+      workspace: 'me/d',
+      path: 'x',
+    })
+  })
+
+  // Decision 2: old one-component segment links are not redirected. They
+  // still parse — as an id-form address that names nothing — so they get the
+  // same answer as any address naming nothing, not a different page.
+  it('reads a one-component address as the id form, never as a segment', () => {
+    expect(parseWorkspaceRoute('/w/design')).toEqual({ kind: 'index', workspace: 'design' })
+    expect(parseWorkspaceRoute('/w/design/d/main')).toEqual({
+      kind: 'document',
+      workspace: 'design',
+      path: 'main',
+    })
+  })
+
+  it('refuses a qualified address the address grammar does not admit', () => {
+    // A ULID-shaped segment and a non-path-safe one.
+    expect(parseWorkspaceRoute('/w/me/01ARZ3NDEKTSV4RRFFQ69G5FAV')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/a%20b')).toBeNull()
   })
 
   it('accepts a multi-segment document path as the tail', () => {
@@ -63,37 +117,37 @@ describe('parseWorkspaceRoute', () => {
     // URL segment per path segment, so the hierarchy the workspace shows is
     // the hierarchy the address bar shows. The data path below has been able
     // to load these since the documents family took paths.
-    expect(parseWorkspaceRoute('/w/w1/d/notes/2026/plan')).toEqual({
+    expect(parseWorkspaceRoute('/w/me/w1/d/notes/2026/plan')).toEqual({
       kind: 'document',
-      workspace: 'w1',
+      workspace: 'me/w1',
       path: 'notes/2026/plan',
     })
   })
 
   it('round-trips a nested path through workspaceRoutePath', () => {
     expect(
-      workspaceRoutePath({ kind: 'document', workspace: 'w1', path: 'notes/2026/plan' }),
-    ).toEqual('/w/w1/d/notes/2026/plan')
+      workspaceRoutePath({ kind: 'document', workspace: 'me/w1', path: 'notes/2026/plan' }),
+    ).toEqual('/w/me/w1/d/notes/2026/plan')
   })
 
   it('decodes each tail segment separately, keeping the separators', () => {
-    expect(parseWorkspaceRoute('/w/w1/d/a%20b/c%20d')).toEqual({
+    expect(parseWorkspaceRoute('/w/me/w1/d/a%20b/c%20d')).toEqual({
       kind: 'document',
-      workspace: 'w1',
+      workspace: 'me/w1',
       path: 'a b/c d',
     })
-    expect(documentPath('w1', 'a b/c d')).toBe('/w/w1/d/a%20b/c%20d')
+    expect(documentPath('me/w1', 'a b/c d')).toBe('/w/me/w1/d/a%20b/c%20d')
   })
 
   it('treats a malformed segment anywhere in the tail as not-a-route', () => {
-    expect(parseWorkspaceRoute('/w/w1/d/ok/ma%in')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/w1/d/ok/ma%in')).toBeNull()
   })
 
   it('is not confused by the workspace-index route it now nests under', () => {
-    // `/w/w1` and `/w/w1/d/...` share a prefix; the canvas branch must
-    // not swallow the bare workspace route, nor the reverse.
-    expect(parseWorkspaceRoute('/w/w1')).toEqual({ kind: 'index', workspace: 'w1' })
-    expect(parseWorkspaceRoute('/w/w1/canvas')).toBeNull()
+    // `/w/me/w1` and `/w/me/w1/d/...` share a prefix; the document branch
+    // must not swallow the workspace route, nor the reverse.
+    expect(parseWorkspaceRoute('/w/me/w1')).toEqual({ kind: 'index', workspace: 'me/w1' })
+    expect(parseWorkspaceRoute('/w/me/w1/canvas')).toBeNull()
   })
 
   it('returns null for an unrelated path, the retired families included', () => {
@@ -105,9 +159,16 @@ describe('parseWorkspaceRoute', () => {
   })
 
   it('round-trips through workspaceRoutePath', () => {
-    const route = parseWorkspaceRoute('/w/w1/d/main')
-    expect(route).not.toBeNull()
-    expect(workspaceRoutePath(route!)).toBe('/w/w1/d/main')
+    for (const path of [
+      '/w/me/w1/d/main',
+      '/w/ada/w1',
+      '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV/d/main',
+      '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    ]) {
+      const route = parseWorkspaceRoute(path)
+      expect(route).not.toBeNull()
+      expect(workspaceRoutePath(route!)).toBe(path)
+    }
   })
 })
 
@@ -117,12 +178,12 @@ describe('workspaceRoutePath', () => {
   })
 
   it('builds a workspace-scoped index path', () => {
-    expect(workspaceRoutePath({ kind: 'index', workspace: 'w1' })).toBe('/w/w1')
+    expect(workspaceRoutePath({ kind: 'index', workspace: 'me/w1' })).toBe('/w/me/w1')
   })
 
   it('builds a canvas path', () => {
-    expect(workspaceRoutePath({ kind: 'document', workspace: 'w1', path: 'main' })).toBe(
-      '/w/w1/d/main',
+    expect(workspaceRoutePath({ kind: 'document', workspace: 'me/w1', path: 'main' })).toBe(
+      '/w/me/w1/d/main',
     )
   })
 })
@@ -133,17 +194,17 @@ describe("a browser-kept workspace's address", () => {
   // that a browser document's path survives the round trip with its hierarchy
   // visible — which is exactly as true now that there is one family.
   it('parses a document kept in this browser', () => {
-    expect(parseWorkspaceRoute('/w/default/d/abc-123')).toEqual({
+    expect(parseWorkspaceRoute('/w/me/default/d/abc-123')).toEqual({
       kind: 'document',
-      workspace: 'default',
+      workspace: 'me/default',
       path: 'abc-123',
     })
   })
 
   it('parses a multi-segment path', () => {
-    expect(parseWorkspaceRoute('/w/default/d/design/login')).toEqual({
+    expect(parseWorkspaceRoute('/w/me/default/d/design/login')).toEqual({
       kind: 'document',
-      workspace: 'default',
+      workspace: 'me/default',
       path: 'design/login',
     })
   })
@@ -152,19 +213,22 @@ describe("a browser-kept workspace's address", () => {
   // and decoding it on the way back in agree with each other and produce a
   // URL that hides the hierarchy. Assert the STRING.
   it('leaves separators unencoded and encodes only the segments', () => {
-    expect(documentPath('default', 'design/login')).toBe('/w/default/d/design/login')
-    expect(documentPath('default', 'a b/c')).toBe('/w/default/d/a%20b/c')
+    expect(documentPath('me/default', 'design/login')).toBe('/w/me/default/d/design/login')
+    expect(documentPath('me/default', 'a b/c')).toBe('/w/me/default/d/a%20b/c')
   })
 
   // An empty segment would name nothing, and joined segments are what stop
   // `..` being expressible.
   it('refuses an empty segment', () => {
-    expect(parseWorkspaceRoute('/w/default/d//login')).toBeNull()
-    expect(parseWorkspaceRoute('/w/default/d/design//login')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/default/d//login')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/default/d/design//login')).toBeNull()
   })
 
-  it('reads a bare workspace address as that workspace index', () => {
-    expect(parseWorkspaceRoute('/w/default')).toEqual({ kind: 'index', workspace: 'default' })
+  it('reads a workspace address as that workspace index', () => {
+    expect(parseWorkspaceRoute('/w/me/default')).toEqual({
+      kind: 'index',
+      workspace: 'me/default',
+    })
   })
 })
 
@@ -174,9 +238,10 @@ describe("a browser-kept workspace's address", () => {
 describe('malformed percent-encoding', () => {
   it('treats an undecodable segment as not-a-route instead of throwing', () => {
     expect(parseWorkspaceRoute('/w/w%1/d/main')).toBeNull()
-    expect(parseWorkspaceRoute('/w/w1/d/ma%in')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/w1/d/ma%in')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/w%1')).toBeNull()
     expect(parseWorkspaceRoute('/w/%E0%A4%A')).toBeNull()
-    expect(parseWorkspaceRoute('/w/default/d/%zz')).toBeNull()
+    expect(parseWorkspaceRoute('/w/me/default/d/%zz')).toBeNull()
   })
 })
 
@@ -184,9 +249,10 @@ describe('isKnownAppPath', () => {
   it('accepts every route in the closed set', () => {
     for (const p of [
       '/',
-      '/w/ws1',
-      '/w/ws1/d/main',
-      '/w/default/d/design/login',
+      '/w/me/ws1',
+      '/w/me/ws1/d/main',
+      '/w/me/default/d/design/login',
+      '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV/d/main',
       '/settings',
       '/settings/general',
       '/settings/data',
@@ -201,7 +267,7 @@ describe('isKnownAppPath', () => {
     for (const p of [
       '/nope',
       '/document/ws1/main',
-      '/w/ws1/canvas',
+      '/w/me/ws1/canvas',
       // The retired browser family. It answered `true` here for as long as it
       // was a route; a stale bookmark to one must now read as not-found
       // rather than fall through to a silently different view.
@@ -210,7 +276,7 @@ describe('isKnownAppPath', () => {
       // The daemon's consent page. A local daemon is reached through the
       // extension (ADR-0050), so there is no pairing to consent to.
       '/pair',
-      '/w/default/d//b',
+      '/w/me/default/d//b',
       '/w/',
       '/settings/nope',
     ]) {
@@ -256,12 +322,12 @@ describe('documentPathPrefix', () => {
   // true if it is the SAME string the router builds — a hand-written `/w/…/d/`
   // in a component would keep reading right long after the grammar moved.
   it('is the literal head of the URL a document is addressed at', () => {
-    expect(documentPath('design-team', 'design/login')).toBe(
-      `${documentPathPrefix('design-team')}design/login`,
+    expect(documentPath('me/design-team', 'design/login')).toBe(
+      `${documentPathPrefix('me/design-team')}design/login`,
     )
   })
 
-  it('encodes the handle the same way the full URL does', () => {
-    expect(documentPathPrefix('w 1')).toBe('/w/w%201/d/')
+  it('encodes the address the same way the full URL does', () => {
+    expect(documentPathPrefix('me/w 1')).toBe('/w/me/w%201/d/')
   })
 })

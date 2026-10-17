@@ -81,6 +81,33 @@ describe('ensureProfile', () => {
   })
 })
 
+// ADR-0053 decision 1: a user's handle names their namespace, so it is
+// unique in the tenant, derived from the display name, and never `me`.
+describe('ensureProfile — the handle a new user is given', () => {
+  const mint = (credentialId: string, displayName: string) =>
+    store.ensureProfile({ binding: passkeyBinding('https://a.example', credentialId), displayName })
+
+  it('derives it from the display name, suffixed past one another user holds', async () => {
+    expect((await mint('c-1', 'Ada Lovelace')).handle).toBe('ada-lovelace')
+    expect((await mint('c-2', 'Ada Lovelace')).handle).toBe('ada-lovelace-2')
+  })
+
+  it('never gives the reserved `me`, and holds a handle unique per tenant only', async () => {
+    expect((await mint('c-1', 'Me')).handle).toBe('user')
+    const other = createMemberProfileStore(tenantDatabase(handle.rawDb, 'tenant-two'))
+    const elsewhere = await other.ensureProfile({
+      binding: passkeyBinding('https://a.example', 'c-2'),
+      displayName: 'Me',
+    })
+    expect(elsewhere.handle).toBe('user')
+  })
+
+  it('keeps the handle a returning person already holds', async () => {
+    const first = await mint('c-1', 'Ada')
+    expect((await mint('c-1', 'Someone else')).handle).toBe(first.handle)
+  })
+})
+
 describe('addMember', () => {
   it('is idempotent: a second call leaves one membership', async () => {
     const profile = await store.ensureProfile({

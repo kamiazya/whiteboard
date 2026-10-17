@@ -191,6 +191,21 @@ export function resolveServerImage({ repoRoot, defaultTag, docker, fail, label }
  * @param {string} label
  * @returns {(message: string, context?: Record<string, unknown>) => never}
  */
+/**
+ * Keeps the last `max` characters a child wrote to `stream`, so a failure can
+ * name what the process said rather than only that it misbehaved.
+ *
+ * @param {import('node:stream').Readable} stream
+ * @returns {() => string}
+ */
+export function captureTail(stream, max = 4000) {
+  let text = ''
+  stream.on('data', (chunk) => {
+    text = (text + chunk.toString()).slice(-max)
+  })
+  return () => text
+}
+
 export function createFail(label) {
   return (message, context = {}) => {
     console.error(`[${label}] FAIL: ${message}`)

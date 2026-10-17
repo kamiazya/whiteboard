@@ -31,12 +31,12 @@ import {
   proposalSchema,
   RESOURCE_KINDS,
   sharedNodeFieldsSchema,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { AgentActivityTouched } from '../agent-activity-touched.js'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
 import { proposalAuthorSchema } from './proposal-author.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 // Geometry and identity are DERIVED from the stored node's own fields rather
 // than restated beside them, so a change to what an `x` may hold reaches this
@@ -559,7 +559,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
 
 export const canvasEditInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     ops: z
       .array(canvasOpSchema)

@@ -4,7 +4,6 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { daemonMemoryScope } from '../components/workspace-files/use-device-memory.js'
@@ -23,7 +22,11 @@ import { documentLabel } from '../lib/document-label.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
-import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import {
+  resolveWorkspaceAddress,
+  workspaceHandle,
+  workspaceLabel,
+} from '../lib/workspace-handle.js'
 import { type DocumentRow, deleteEach } from './daemon-index-actions.js'
 // What the list shows: a failed load with the recovery that is actually
 // available, the transient loading state, onboarding, or the panel. Split out
@@ -33,6 +36,7 @@ import { DaemonIndexBody } from './daemon-index-body.js'
 import type { DaemonIndexPageProps } from './daemon-index-page-props.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
 import { useFollowWorkspaceWrites } from './use-follow-workspace-writes.js'
+import { useWorkspaceAddressOf } from './use-workspace-address-of.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the one the ADDRESS names. Choosing which is the shell switcher's,
@@ -64,9 +68,9 @@ function createFailureMessage(err: unknown, kind: DocumentKind): string {
 }
 
 /**
- * What the address resolves to, given the handles whose documents answered
- * 404. An address that MOVED to a refused handle is a person choosing it, so
- * its refusal is lifted (mutating `refused`) and it resolves as usual.
+ * What the address resolves to, given the workspaces whose documents answered
+ * 404. An address that MOVED to a refused workspace is a person choosing it,
+ * so its refusal is lifted (mutating `refused`) and it resolves as usual.
  */
 function resolveAddress(
   workspaces: readonly WorkspaceSummary[],
@@ -74,17 +78,31 @@ function resolveAddress(
   refused: Set<string>,
   moved: boolean,
 ): { wanted: WorkspaceSummary | null; refused: boolean; usable: WorkspaceSummary[] } {
-  const resolved = resolveWorkspaceHandle(workspaces, address)
-  if (moved && resolved !== null) refused.delete(workspaceHandle(resolved))
-  const isRefused = resolved !== null && refused.has(workspaceHandle(resolved))
+  const resolved = resolveWorkspaceAddress(workspaces, address)
+  if (moved && resolved !== null) refused.delete(resolved.workspaceId)
+  const isRefused = resolved !== null && refused.has(resolved.workspaceId)
   return {
     wanted: isRefused ? null : resolved,
     refused: isRefused,
-    usable: workspaces.filter((w) => !refused.has(workspaceHandle(w))),
+    usable: workspaces.filter((w) => !refused.has(w.workspaceId)),
   }
 }
 
 const pathOf = (row: DocumentRow): string => row.path
+
+/**
+ * The selected workspace's row, and the ADDRESS the page shows it under. The
+ * selection is the canonical id, because no route takes the in-app
+ * `<namespace>/<segment>` (ADR-0053); the address is the URL's alone.
+ */
+function selectionOf(
+  workspaces: readonly WorkspaceSummary[],
+  selected: string | null,
+): { active: WorkspaceSummary | null; address: string | null } {
+  const active =
+    selected === null ? null : (workspaces.find((w) => w.workspaceId === selected) ?? null)
+  return { active, address: active === null ? selected : workspaceHandle(active) }
+}
 
 // Unordered on purpose: the panel orders what it shows from the same source,
 // and these rows serve lookups (a name, a path, a kind) only.
@@ -113,6 +131,7 @@ export function DaemonIndexPage({
   // after a daemon answers with nothing. Only the second of those is a state
   // to render; the first is still loading.
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
+  // The canonical id, which every request names; `selectionOf` derives the address.
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   // One source per (fetch, base, workspace): the panel re-reads whenever the
   // source identity changes, so this memo is also what scopes it to the
@@ -172,6 +191,8 @@ export function DaemonIndexPage({
   const selectedWorkspaceRef = useRef(selectedWorkspace)
   selectedWorkspaceRef.current = selectedWorkspace
 
+  const addressOf = useWorkspaceAddressOf(workspaces)
+
   // Read through a ref so `loadWorkspaces` stays stable across renders — the
   // mount effect below stays load-once, and the retry controls can share the
   // same function. The effect that FOLLOWS this prop is separate, below,
@@ -203,18 +224,14 @@ export function DaemonIndexPage({
       setWorkspaces(res.workspaces)
       setWorkspacesLoaded(true)
       const targeted = addressedWorkspaceRef.current
-      // Through `resolveWorkspaceHandle`, not an `includes`: the URL may carry
-      // EITHER layer — the segment a person reads, or the canonical id that
-      // survives a rename — and an id-form address matched against segments
-      // alone would miss and silently open a different workspace.
-      const wanted = targeted ? resolveWorkspaceHandle(res.workspaces, targeted) : null
+      // Through `resolveWorkspaceAddress`, not an `includes`: the URL may carry
+      // EITHER form — the qualified address a person reads, or the canonical
+      // id that survives a rename — and matching segments alone would miss
+      // the id form and silently open a different workspace.
+      const wanted = targeted ? resolveWorkspaceAddress(res.workspaces, targeted) : null
       const first = workspaceOpenedByDefault(res.workspaces)
       setSelectedWorkspace(
-        (current) =>
-          current ??
-          (wanted ? workspaceHandle(wanted) : undefined) ??
-          (first ? workspaceHandle(first) : undefined) ??
-          null,
+        (current) => current ?? wanted?.workspaceId ?? first?.workspaceId ?? null,
       )
     } catch {
       if (superseded()) return
@@ -241,9 +258,9 @@ export function DaemonIndexPage({
   //   verbatim, this effect overrode that fallback, which is what its test
   //   caught.
   //
-  // `resolveWorkspaceHandle` because the address may carry either of
-  // ADR-0019's layers, and matching segments alone would miss the canonical
-  // id form and silently open a different workspace.
+  // `resolveWorkspaceAddress` because the address may carry either form, and
+  // matching segments alone would miss the canonical id form and silently
+  // open a different workspace.
   // Keyed on the SETTLED value, not on the act of choosing: the initial
   // resolve and a switch reach the address bar the same way, because to a
   // reader they are the same fact — this is the workspace you are looking at.
@@ -307,8 +324,8 @@ export function DaemonIndexPage({
     const fallback = usable[0]
     const target = wanted ?? fallback
     if (target === undefined) return
-    const handle = workspaceHandle(target)
-    setSelectedWorkspace((current) => (current === handle ? current : handle))
+    const targetId = target.workspaceId
+    setSelectedWorkspace((current) => (current === targetId ? current : targetId))
     if (wanted !== null) return
     // A STALE address — a bookmark of a workspace that is gone, opened while
     // the app is already running. The page falls back to first-listed, which
@@ -322,16 +339,19 @@ export function DaemonIndexPage({
     // effect never re-runs — its deps did not move, and a ref is not a dep.
     // Marking it reported in the same breath is what keeps this to ONE call
     // when the fallback IS a different workspace and that effect does fire.
-    reportedWorkspaceRef.current = handle
-    onWorkspaceResolved?.(handle)
+    const address = workspaceHandle(target)
+    reportedWorkspaceRef.current = address
+    onWorkspaceResolved?.(address)
   }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved, loadWorkspaces])
 
+  // Keyed on the list too: a rename moves the address but not the selection.
   useEffect(() => {
     if (selectedWorkspace === null) return
-    if (reportedWorkspaceRef.current === selectedWorkspace) return
-    reportedWorkspaceRef.current = selectedWorkspace
-    onWorkspaceResolved?.(selectedWorkspace)
-  }, [selectedWorkspace, onWorkspaceResolved])
+    const address = addressOf(selectedWorkspace)
+    if (reportedWorkspaceRef.current === address) return
+    reportedWorkspaceRef.current = address
+    onWorkspaceResolved?.(address)
+  }, [selectedWorkspace, workspaces, onWorkspaceResolved, addressOf])
 
   // Re-reads the workspace list and moves off the one that vanished.
   //
@@ -346,11 +366,11 @@ export function DaemonIndexPage({
         const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
         if (isStale()) return
         setWorkspaces(res.workspaces)
-        // Every refused handle, not only this one: with two that 404, moving
+        // Every refused one, not only this one: with two that 404, moving
         // from one to the other and back is the same loop one level down.
         const next = res.workspaces
-          .map(workspaceHandle)
-          .find((h) => h !== staleWorkspaceId && !refusedRef.current.has(h))
+          .map((w) => w.workspaceId)
+          .find((id) => id !== staleWorkspaceId && !refusedRef.current.has(id))
         if (next === undefined) {
           // Nothing to move to — this was the only workspace, or the list and
           // the documents disagree about it. Re-selecting the same one would
@@ -508,7 +528,7 @@ export function DaemonIndexPage({
           path,
           kind,
         )
-        onOpenDocument(workspaceAtStart, created.path)
+        onOpenDocument(addressOf(workspaceAtStart), created.path)
       } catch (err) {
         setCreateError(createFailureMessage(err, kind))
         // The path is derived from `rows`, so a failure caused by a name this list has not seen
@@ -520,7 +540,7 @@ export function DaemonIndexPage({
         setCreating(false)
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenDocument, loadWorkspace],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenDocument, addressOf, loadWorkspace],
   )
 
   // One request: the daemon places the copy beside its source and names it,
@@ -553,9 +573,7 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace, loadWorkspace, duplicatingPath],
   )
 
-  // What the page calls itself. `selectedWorkspace` holds a HANDLE, not an id,
-  // so the row is found through `resolveWorkspaceHandle` — the same reason the
-  // loader above gives, one layer up. `workspaceLabel` owns the precedence
+  // What the page calls itself. `workspaceLabel` owns the precedence
   // across ADR-0019's three layers; re-deriving it here is how a site ends up
   // knowing about fewer layers than there are.
   //
@@ -565,11 +583,13 @@ export function DaemonIndexPage({
   // also mounts at `/`, where there is no handle to fall back to). The
   // heading is never absent — a document browser with no h1 is a worse
   // outcome than a generic one.
-  const activeWorkspace =
-    selectedWorkspace === null ? null : resolveWorkspaceHandle(workspaces, selectedWorkspace)
+  const { active: activeWorkspace, address: selectedAddress } = selectionOf(
+    workspaces,
+    selectedWorkspace,
+  )
   const pageHeading =
     (activeWorkspace ? workspaceLabel(activeWorkspace) : null) ??
-    selectedWorkspace ??
+    selectedAddress ??
     workspace ??
     'Documents'
 
@@ -594,7 +614,8 @@ export function DaemonIndexPage({
           rows={rows}
           trashCount={trashCount}
           creating={creating}
-          selectedWorkspace={selectedWorkspace}
+          // The ADDRESS: the panel builds document URLs from it.
+          selectedWorkspace={selectedAddress}
           memoryScope={
             activeWorkspace ? daemonMemoryScope(daemonBaseUrl, activeWorkspace) : undefined
           }

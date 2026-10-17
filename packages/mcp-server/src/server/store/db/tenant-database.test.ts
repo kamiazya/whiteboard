@@ -150,6 +150,7 @@ const profileRow = (id: string, displayName: string) => ({
   id,
   displayName,
   accountId: `account-${id}`,
+  handle: id,
   createdAt: 1,
   updatedAt: 1,
 })

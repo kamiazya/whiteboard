@@ -52,6 +52,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import {
   assertNoLeak,
+  captureTail,
   createAccessTokenMinter,
   createCliRunner,
   createFail,
@@ -381,8 +382,9 @@ try {
       },
     )
 
+    const tail = captureTail(serverMode.stderr)
     const ready = await waitForProcessReadyJson(serverMode)
-    if (!ready) fail('scenario 5: restored server did not emit ready JSON')
+    if (!ready) fail('scenario 5: restored server did not emit ready JSON', { stderr: tail() })
     if (!(await waitForHttpReady(`http://127.0.0.1:${SERVER_PORT}/api/runtime/ping`))) {
       fail('scenario 5: restored server HTTP not ready')
     }
@@ -391,10 +393,8 @@ try {
     // Verify the seeded canvas is accessible via the protected API — once the
     // bearer's person is a member of the restored workspace.
     const jwt = makeJwt(privateKey, 'workspace:read canvas:read')
-    const listDocuments = () =>
-      fetch(`http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      })
+    const documentsUrl = `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`
+    const listDocuments = () => fetch(documentsUrl, { headers: { Authorization: `Bearer ${jwt}` } })
     const refusedAs = async (step, expected) => {
       const res = await listDocuments()
       if (res.status !== 403) fail(`scenario 5: expected 403 ${step}, got ${res.status}`)
@@ -414,7 +414,7 @@ try {
     await refusedAs('before a member is granted', 'not_a_member')
     operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, '--user=cli-smoke-user'])
     const listRes = await listDocuments()
-    if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
+    if (!listRes.ok) fail(`scenario 5: list answered ${listRes.status}`, { stderr: tail() })
     const list = await listRes.json()
     if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 5: seeded canvas not found on restored server', {
@@ -423,9 +423,7 @@ try {
     }
 
     // Auth contract: unauthenticated → 401, wrong scope → 403.
-    const anonymousRes = await fetch(
-      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
-    )
+    const anonymousRes = await fetch(documentsUrl)
     if (anonymousRes.status !== 401)
       fail(`scenario 5: expected 401 for no-auth, got ${anonymousRes.status}`)
     assertNoLeak('scenario 5 no-auth body', await anonymousRes.text(), SMOKE_LITERALS)

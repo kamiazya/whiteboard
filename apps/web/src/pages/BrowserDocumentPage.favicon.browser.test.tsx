@@ -48,7 +48,7 @@ describe('the browser page tab icon', () => {
   it('draws the offline icon and sets the badge once the store refuses a write', async () => {
     const logged = expectLoggedFailures()
     rtlRender(
-      <MemoryRouter initialEntries={['/w/default/d/c1']}>
+      <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
         <AppShell daemon={false} />
         <KeeperNotices />
         <BrowserDocumentPage store={new FoldingBrowserIndex()} />

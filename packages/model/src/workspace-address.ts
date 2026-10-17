@@ -86,17 +86,35 @@ export const workspaceAddressSchema = z.discriminatedUnion('form', [
 ])
 export type WorkspaceAddress = z.infer<typeof workspaceAddressSchema>
 
+/**
+ * An address as a caller TYPES it, before `parseWorkspaceAddress` decides its
+ * form: one handle, or a namespace handle and a segment joined by one `/`. A
+ * pattern rather than a refinement, so a published JSON Schema states the
+ * grammar too; which workspace it names stays the registry's answer. `\w` is
+ * `WORKSPACE_ID_PATTERN`'s `[a-zA-Z0-9_]` exactly (no `u` flag), spelled
+ * short because every tool's schema publishes it.
+ */
+const WORKSPACE_ADDRESS_PATTERN = /^[\w-]+(\/[\w-]+)?$/
+
+export const workspaceAddressInputSchema = z
+  .string()
+  .regex(
+    WORKSPACE_ADDRESS_PATTERN,
+    'a workspace address is an id, <handle>/<segment>, or a segment ([a-zA-Z0-9_-], at most one "/")',
+  )
+
 /** The address an input string spells, or null when it spells none of the three forms. */
 export function parseWorkspaceAddress(input: string): WorkspaceAddress | null {
-  const parts = input.split('/')
-  const candidate =
-    parts.length === 2
-      ? { form: 'qualified', namespace: parts[0], segment: parts[1] }
-      : workspaceCanonicalIdSchema.safeParse(input).success
-        ? { form: 'id', workspaceId: input }
-        : { form: 'bare', handle: input }
-  const parsed = workspaceAddressSchema.safeParse(candidate)
+  const parsed = workspaceAddressSchema.safeParse(addressCandidate(input))
   return parsed.success ? parsed.data : null
+}
+
+/** Which form `input` would be read as; `workspaceAddressSchema` decides whether it is one. */
+function addressCandidate(input: string): Record<string, string> {
+  const parts = input.split('/')
+  if (parts.length === 2) return { form: 'qualified', namespace: parts[0], segment: parts[1] }
+  if (workspaceCanonicalIdSchema.safeParse(input).success) return { form: 'id', workspaceId: input }
+  return { form: 'bare', handle: input }
 }
 
 /** The string `parseWorkspaceAddress` reads back as `address`. */
