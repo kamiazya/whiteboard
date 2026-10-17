@@ -340,6 +340,37 @@ function streamEntry(
   }
 }
 
+/** Registers an opened stream, sends its id, and holds it open until it ends. */
+async function holdStream(
+  stream: SSEStreamingApi,
+  streamId: string,
+  userId: string | null,
+  options: SyncSseRouterOptions,
+): Promise<void> {
+  registerSyncStream(streamId, streamEntry(stream, streamId, userId, options))
+  // Listening before the first await: an abort that lands while the ready
+  // frame is written fires no listener added after it, which would leave
+  // the stream registered and this callback waiting forever.
+  const closed = new Promise<void>((resolve) => {
+    stream.onAbort(() => {
+      unregisterSyncStream(streamId)
+      log.info({ streamId }, 'sync stream closed')
+      resolve()
+    })
+  })
+  const ready: SyncReadyEvent = { streamId }
+  await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
+  if (stream.aborted) {
+    unregisterSyncStream(streamId)
+    return
+  }
+  log.info({ streamId }, 'sync stream opened')
+
+  // Hold the stream open. streamSSE resolves the callback -> closes the
+  // response, so the connection lives exactly as long as this promise.
+  await closed
+}
+
 export function createSyncSseRouter(options: SyncSseRouterOptions) {
   const app = new Hono()
   // Every workspace-record update the operations commit (ADR-0018) fans out
@@ -362,30 +393,7 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
-    return streamSSE(c, async (stream) => {
-      registerSyncStream(streamId, streamEntry(stream, streamId, userId, options))
-      // Listening before the first await: an abort that lands while the ready
-      // frame is written fires no listener added after it, which would leave
-      // the stream registered and this callback waiting forever.
-      const closed = new Promise<void>((resolve) => {
-        stream.onAbort(() => {
-          unregisterSyncStream(streamId)
-          log.info({ streamId }, 'sync stream closed')
-          resolve()
-        })
-      })
-      const ready: SyncReadyEvent = { streamId }
-      await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
-      if (stream.aborted) {
-        unregisterSyncStream(streamId)
-        return
-      }
-      log.info({ streamId }, 'sync stream opened')
-
-      // Hold the stream open. streamSSE resolves the callback -> closes the
-      // response, so the connection lives exactly as long as this promise.
-      await closed
-    })
+    return streamSSE(c, (stream) => holdStream(stream, streamId, userId, options))
   })
 
   app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))

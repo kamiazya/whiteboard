@@ -98,37 +98,48 @@ function keepsAnAdministrator(configured: readonly AuthenticatorBinding[]) {
     eb.or([eb.not(isAdministrator(eb, configured)), anotherActiveAdministrator(eb, configured)])
 }
 
+// Deactivates the row and ends its sessions; `keepFor` set, only while it
+// leaves another active administrator (those configured included).
+function deactivateRow(
+  db: TenantScoped,
+  keepFor: readonly AuthenticatorBinding[] | null,
+  profileId: string,
+  now: number,
+): Promise<boolean> {
+  return inTenantTransaction(db, async (trx) => {
+    let update = trx
+      .updateTable('memberProfiles')
+      .set({ deactivatedAt: now })
+      .where('id', '=', profileId)
+      .where('deactivatedAt', 'is', null)
+    if (keepFor !== null) update = update.where(keepsAnAdministrator(keepFor))
+    const user = await update.returning('accountId').executeTakeFirst()
+    if (user === undefined) return false
+    // A session names a binding, not a user, so each of the account's
+    // bindings is ended here.
+    const bindings = await trx
+      .selectFrom('accountBindings')
+      .select(['authenticator', 'subject'])
+      .where('accountId', '=', user.accountId)
+      .execute()
+    for (const { authenticator, subject } of bindings) {
+      await trx
+        .deleteFrom('signInSessions')
+        .where('authenticator', '=', authenticator)
+        .where('subject', '=', subject)
+        .execute()
+    }
+    return true
+  })
+}
+
 export function createUserDeactivation(
   db: TenantScoped,
   options: UserDeactivationOptions = {},
 ): UserDeactivation {
   const configured = options.configuredAdministrators ?? []
   const deactivateWhere = (profileId: string, now: number, keepAnAdministrator: boolean) =>
-    inTenantTransaction(db, async (trx) => {
-      let update = trx
-        .updateTable('memberProfiles')
-        .set({ deactivatedAt: now })
-        .where('id', '=', profileId)
-        .where('deactivatedAt', 'is', null)
-      if (keepAnAdministrator) update = update.where(keepsAnAdministrator(configured))
-      const user = await update.returning('accountId').executeTakeFirst()
-      if (user === undefined) return false
-      // A session names a binding, not a user, so each of the account's
-      // bindings is ended here.
-      const bindings = await trx
-        .selectFrom('accountBindings')
-        .select(['authenticator', 'subject'])
-        .where('accountId', '=', user.accountId)
-        .execute()
-      for (const { authenticator, subject } of bindings) {
-        await trx
-          .deleteFrom('signInSessions')
-          .where('authenticator', '=', authenticator)
-          .where('subject', '=', subject)
-          .execute()
-      }
-      return true
-    })
+    deactivateRow(db, keepAnAdministrator ? configured : null, profileId, now)
   return {
     deactivate: (profileId, now) => deactivateWhere(profileId, now, false),
 

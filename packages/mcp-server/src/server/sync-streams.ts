@@ -198,7 +198,7 @@ export function syncStreamCapReached(
  * user's budget still fits one stream at its ceiling, so a single slow reader
  * is ended by its own ceiling first.
  */
-export const SYNC_QUEUE_BUDGET = {
+const SYNC_QUEUE_BUDGET = {
   perUser: 2 * MAX_QUEUED_STREAM_CHARS,
   total: 8 * MAX_QUEUED_STREAM_CHARS,
 } as const
