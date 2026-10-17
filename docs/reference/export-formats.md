@@ -214,9 +214,9 @@ over-long node.
 
 ## How many ops one call may carry
 
-One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit` and
-`wb_thread_edit` — carries at most **200** ops. A larger batch is refused
-before any op is applied, with "more ops than the 200-op limit for one call"
+One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit`,
+`wb_thread_edit` and `wb_workspace_edit` — carries at most **200** ops. A
+larger batch is refused before any op is applied, with "more ops than the 200-op limit for one call"
 (`wb_body_edit` says "passages"); split it across calls, and pass the same
 `proposalId` to `wb_body_edit` to keep the passages in one proposal. A text
 op whose offsets do not select its quote is found by searching the whole body,
