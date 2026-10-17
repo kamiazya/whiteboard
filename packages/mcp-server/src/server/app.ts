@@ -277,7 +277,7 @@ function appWiring(options: AppOptions) {
 
   const { credentialResolver, mcpAuth } = credentialWiring(options, token)
 
-  return { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus }
+  return { instanceId, identity, token, credentialResolver, mcpAuth, serverModeGetStatus }
 }
 
 /**
@@ -290,7 +290,7 @@ function runtimeRouter(
   scope: StoreScope,
   wiring: Pick<
     ReturnType<typeof appWiring>,
-    'instanceId' | 'identity' | 'credentialResolver' | 'serverModeGetStatus'
+    'instanceId' | 'identity' | 'token' | 'credentialResolver' | 'serverModeGetStatus'
   >,
 ) {
   const serverMode = options.authMode === 'server-mode'
@@ -300,6 +300,7 @@ function runtimeRouter(
     touch: options.touch,
     getStatus: serverMode ? wiring.serverModeGetStatus! : options.getStatus,
     credentialResolver: wiring.credentialResolver,
+    endpointProofKey: wiring.token,
     ...(serverMode ? { serverModeGrant: callerGrant } : {}),
     storageReport: () => computeStorageReport(scope.dataDir),
     readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
@@ -328,7 +329,7 @@ export function createApp(options: AppOptions) {
 
   // The config is judged before any other option is read, so a caller with
   // an invalid server-mode config is refused for that and nothing else.
-  const { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus } =
+  const { instanceId, identity, token, credentialResolver, mcpAuth, serverModeGetStatus } =
     appWiring(options)
   const membership = membershipWiring(options)
 
@@ -421,6 +422,7 @@ export function createApp(options: AppOptions) {
     runtimeRouter(options, scope, {
       instanceId,
       identity,
+      token,
       credentialResolver,
       serverModeGetStatus,
     }),

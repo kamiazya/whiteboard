@@ -35,8 +35,9 @@ The local daemon has one person: the machine's owner
   mints one today
   ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)
   withdrew the minting route).
-  `/api/runtime/ping` is public; there is no HTTP route that stops the
-  daemon.
+  `/api/runtime/ping` and `/api/runtime/proof` (the token proof described
+  under Current limitations, which reveals nothing of the token) are public;
+  there is no HTTP route that stops the daemon.
 - **The browser starts the native host only for the whiteboard extension.**
   The host's manifest names the extension's id, and the browser refuses to
   start it for anything else. `whiteboard native-host install` writes that
@@ -484,10 +485,25 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   Node offers no option that narrows it — `readableAll`/`writableAll` only
   widen it, and the daemon sets neither. Read access does not include write
   access, so another account cannot send the daemon a request over the
-  pipe, and every request but `/api/runtime/ping` also needs the bearer
-  token. The random pipe name defeats creating the pipe first; it does not
-  hide the pipe, since pipe names can be listed. The Unix socket's
-  owner-only directory has no equivalent here.
+  pipe, and every request but `/api/runtime/ping` and `/api/runtime/proof`
+  also needs the bearer token. The random pipe name defeats creating the
+  pipe first; it does not hide the pipe, since pipe names can be listed. The
+  Unix socket's owner-only directory has no equivalent here.
+
+  A daemon that dies without removing `daemon.json` (a crash, a kill, a
+  power loss) releases its pipe name, and another account can then create a
+  pipe under it. Windows also cannot say when a process started, so a live
+  pid in the record proves nothing about who now serves the pipe. Before a
+  client sends the token to a pipe, it therefore asks the pipe to prove that
+  it holds the token: it sends a random nonce to `/api/runtime/proof`
+  without any credential, and the daemon answers with an HMAC-SHA256 of the
+  nonce, keyed by the token. Only an answer that verifies against the
+  record's token counts. A pipe that answers anything else is refused, and
+  the client reports that a process holds the pipe without confirming it is
+  the recorded daemon. A pipe nobody serves is treated as a stale record.
+  The token itself never travels until the proof succeeds. On Linux and
+  macOS nothing changes: the socket's owner-only directory already keeps
+  every other account out.
 
 - Server mode is shipped and used today for team/remote deployments (see
   above); it is not itself production-hardened beyond what is documented on

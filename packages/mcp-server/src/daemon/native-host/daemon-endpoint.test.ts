@@ -2,8 +2,9 @@ import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { endpointProof } from '../../shared/endpoint-proof.js'
 import { getDaemonRecordPath } from '../daemon-registry.js'
-import { DaemonNoAnswerError } from '../daemon-request.js'
+import { DaemonNoAnswerError, type DaemonRequest } from '../daemon-request.js'
 import { resolveDaemonEndpoint } from './daemon-endpoint.js'
 
 describe('resolveDaemonEndpoint', () => {
@@ -84,5 +85,61 @@ describe('resolveDaemonEndpoint', () => {
     const socketPath = await writeRecord(dataDir, new Date().toISOString())
     const seams = { isAlive: () => true, startMs: () => Date.now() - 60_000 }
     await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toEqual({ socketPath, token: 't' })
+  })
+
+  // Windows: no /proc, so a live pid says nothing about who wrote the record,
+  // and a pipe name a crashed daemon released can be re-created by any user.
+  describe('on a named pipe whose start time cannot be read', () => {
+    const PIPE = '\\\\.\\pipe\\whiteboard-0123456789abcdef0123456789abcdef'
+    const windowsShape = { isAlive: () => true, startMs: () => null }
+
+    async function writePipeRecord(dir: string): Promise<void> {
+      const record = {
+        pid: process.pid,
+        version: '0.0.0',
+        startedAt: new Date().toISOString(),
+        socketPath: PIPE,
+        token: 't',
+      }
+      await writeFile(getDaemonRecordPath(dir), JSON.stringify(record))
+    }
+
+    it('refuses a pipe server that cannot prove it holds the token', async () => {
+      dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+      await writePipeRecord(dataDir)
+      const asked: DaemonRequest[] = []
+      const request = async (req: DaemonRequest) => {
+        asked.push(req)
+        return { status: 200, body: { proof: 'forged' } }
+      }
+      await expect(resolveDaemonEndpoint(dataDir, { ...windowsShape, request })).rejects.toThrow(
+        getDaemonRecordPath(dataDir),
+      )
+      expect(asked.length).toBeGreaterThan(0)
+      expect(asked.every((req) => req.record.token === undefined)).toBe(true)
+    })
+
+    it('relays to a pipe server that proves it holds the token', async () => {
+      dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+      await writePipeRecord(dataDir)
+      const request = async (req: DaemonRequest) => {
+        const nonce = new URL(req.path, 'http://daemon').searchParams.get('nonce') ?? ''
+        expect(req.record.token).toBeUndefined()
+        return { status: 200, body: { proof: await endpointProof('t', nonce) } }
+      }
+      await expect(resolveDaemonEndpoint(dataDir, { ...windowsShape, request })).resolves.toEqual({
+        socketPath: PIPE,
+        token: 't',
+      })
+    })
+
+    it('answers null when nothing serves the recorded pipe', async () => {
+      dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+      await writePipeRecord(dataDir)
+      const request = async () => {
+        throw Object.assign(new Error('connect ENOENT'), { code: 'ENOENT' })
+      }
+      await expect(resolveDaemonEndpoint(dataDir, { ...windowsShape, request })).resolves.toBeNull()
+    })
   })
 })
