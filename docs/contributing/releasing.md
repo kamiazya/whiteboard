@@ -18,7 +18,9 @@ The two publish environments should require at least one reviewer before the job
 Without the environment protection, the `release.yml` publish guard is incomplete.
 A forced re-publish runs the tag's own copy of `release.yml`, so a tag ruleset restricting
 `mcp-server-v*` tags to maintainers (creation, update and deletion) is required too; see
-**Docker SBOM and Provenance** for what it protects.
+**Docker SBOM and Provenance** for what it protects. Until that ruleset exists, do not
+trust a signature or provenance naming the `refs/tags/<tag>` identity: trust only the
+`refs/heads/main` identity.
 `production-web` carries the Cloudflare secrets, so protect it the same way.
 `release-please` and `advance-stable` bind no environment: neither holds a registry or
 deploy credential. The PR-preview deploys use a separate `preview-web` environment, which
@@ -292,7 +294,8 @@ from rather than a pattern that accepts both:
   triggered by `push`;
 - a forced re-publish signs as `release.yml` on `refs/tags/<tag>`, triggered
   by `workflow_dispatch`. `docker-publish-sign` refuses a forced run whose
-  checked-out tag is not the commit the run was dispatched from, so a forced
+  checked-out tag is not the commit the run was dispatched from, or that was
+  dispatched from any ref but `refs/tags/<tag>` itself, so a forced
   re-publish is always dispatched with `--ref <tag>` (see
   **Force-publish via release.yml** below) and never signs a tag under
   `main`'s identity.
@@ -385,8 +388,9 @@ Dispatch a forced publish **from the tag itself**:
 `gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance,
 the image's provenance and the cosign certificate all name the commit and ref the run
 was dispatched from, so both `publish-mcp` and `docker-publish-sign` fail right after
-checkout when the checked-out tag is a different commit — a dispatch from `main` would
-otherwise publish the tag's tarball and image under `main`'s identity.
+checkout when the checked-out tag is a different commit, or when the run was dispatched
+from any ref but `refs/tags/<tag>` — a dispatch from `main` would otherwise publish the
+tag's tarball and image under `main`'s identity, even at the tag's own commit.
 
 ---
 

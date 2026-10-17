@@ -453,6 +453,17 @@ describe('every documented `cosign verify` pins the release workflow identity', 
     expect(releasing).toMatch(/ruleset [^.]*`mcp-server-v\*` tags to maintainers/)
   })
 
+  // Each place that asks for the ruleset is a place an operator may stop
+  // reading, so each one carries the consequence of its absence too.
+  it('says beside every ruleset requirement that only main is trusted without it', () => {
+    const releasing = readFileSync(join(REPO_ROOT, 'docs/contributing/releasing.md'), 'utf-8')
+    const asks = releasing.split(/\n\s*\n/).filter((p) => /ruleset[\s\S]*`mcp-server-v\*`/.test(p))
+    expect(asks.length).toBeGreaterThan(1)
+    for (const paragraph of asks) {
+      expect(paragraph, paragraph).toMatch(/trust only the\s+`refs\/heads\/main`\s+identity/)
+    }
+  })
+
   it.each(commands)('$file: $command', ({ command }) => {
     expect(identityFindings(command)).toEqual([])
   })
