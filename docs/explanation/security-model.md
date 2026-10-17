@@ -484,7 +484,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is
-  refused whole (`too_many_documents`), so repeating small updates cannot
+  refused whole (`too_many_documents`), and so is each single new document —
+  a create through `/api/v1` or `wb_workspace_edit`, a document's update to a
+  new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
   checkpointed one at a time, not all at once.
 - **The data directory answers to the operator.** The stdio entry and the

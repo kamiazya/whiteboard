@@ -79,6 +79,7 @@ import {
   KeyedSerializer,
   moveDocumentInputSchema,
   NoRoomForCopyError,
+  refuseNewDocuments,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -86,7 +87,7 @@ import {
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
-import { isRestorableTrash } from './restore-judgement.js'
+import { restorableTrashDocuments } from './restore-judgement.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
 /**
@@ -226,9 +227,14 @@ export class LoroWorkspaceDocumentIndex
       // the writer wrote. Judged on scratch copies, so nothing is placed first.
       const segments = entry.path.split('/')
       const parentPath = segments.length > 1 ? segments.slice(0, -1).join('/') : undefined
-      if (!isRestorableTrash(stored.bytes, { documentId: input.documentId, parentPath })) {
-        return null
-      }
+      const restoring = restorableTrashDocuments(stored.bytes, {
+        documentId: input.documentId,
+        parentPath,
+      })
+      if (restoring === null) return null
+      // A refusal rather than null: the row is fine and restorable once the
+      // workspace has room, which the caller has to be told to make.
+      refuseNewDocuments(readWorkspaceDocuments(doc).length, restoring)
       const restored = importWorkspaceSubtree(doc, stored.bytes, parentPath)
       if (restored === null) return null
       forgetTrashEntry(doc, input.documentId)
@@ -328,6 +334,9 @@ export class LoroWorkspaceDocumentIndex
     const input = createDocumentInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.#open(input.workspaceId)
+      // Before the tree is touched: the record `#open` answers may be the
+      // live one, so a refused create must leave nothing in it.
+      refuseNewDocuments(readWorkspaceDocuments(doc).length)
       const created = createWorkspaceDocumentAtPath(doc, {
         path: input.path,
         documentId: generateDocumentId(),
@@ -367,6 +376,7 @@ export class LoroWorkspaceDocumentIndex
       if (atPath.length > 1) throw new DocumentPathContestedError(input.workspaceId, input.path)
       const source = atPath[0]
       if (source === undefined) throw new DocumentNotFoundError(input.workspaceId, input.path)
+      refuseNewDocuments(documents.length)
       const path = deriveCopyPath(
         source.path,
         readWorkspaceNodes(doc).map((node) => node.path),

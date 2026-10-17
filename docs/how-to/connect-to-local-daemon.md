@@ -289,7 +289,8 @@ desktop. The daemon refuses a larger workspace whole, with the error
 `promote_too_many_documents`, and keeps none of it. The same 2000 is the most
 a daemon workspace holds, so a move into a workspace that already holds
 documents is refused, with `too_many_documents`, when the two together would
-hold more.
+hold more — and at 2000 the daemon refuses any new document, however it is
+added, with the same error.
 
 Once the daemon confirms it holds every document, image, trashed document
 and saved version that moved, the old browser copy is removed — its Trash

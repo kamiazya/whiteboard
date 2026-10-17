@@ -113,7 +113,7 @@ const EXEMPT: Readonly<Record<string, string>> = {
   ContainerNameTooLongError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and bounds every id it is handed before a write',
   SyncWriteRefusalError:
-    'the abstract base of the sync write refusals below; raised only as one of them, by the sync operations, never on /api/v1',
+    'the abstract base of the sync write refusals below and of TooManyDocumentsError; raised only as one of them, never bare',
   TextBreachRefusalError:
     'the abstract base of the seven text refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
@@ -122,8 +122,6 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 bounds a name through documentNameSchema before any write',
   OffGrammarPathError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
-  TooManyDocumentsError:
-    'raised by applyWorkspaceDocumentUpdate on a CRDT update (the sync update and promote); /api/v1 takes no CRDT bytes and creates one document per request',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

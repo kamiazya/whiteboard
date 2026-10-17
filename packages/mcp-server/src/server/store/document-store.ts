@@ -22,6 +22,7 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  refuseNewDocuments,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
@@ -202,6 +203,10 @@ function placeDocumentInTree({
 }): void {
   const kindForTree = requestedKind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
   if (existingEntry === null) {
+    // A path the tree does not hold is a NEW document — the per-document
+    // update's lazy create among them — so it answers to the workspace's
+    // document ceiling like every other mint.
+    refuseNewDocuments(readWorkspaceDocuments(workspaceDoc).length)
     createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
   } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
     updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })

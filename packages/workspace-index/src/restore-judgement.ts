@@ -22,26 +22,31 @@ import {
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 
-/** Whether the bytes may be placed for `documentId` under `parentPath`. */
-export function isRestorableTrash(
+/**
+ * How many documents the bytes would place for `documentId` under
+ * `parentPath` — the document and any it held — or `null` when they may not
+ * be placed at all.
+ */
+export function restorableTrashDocuments(
   bytes: Uint8Array,
   input: { readonly documentId: string; readonly parentPath: string | undefined },
-): boolean {
+): number | null {
   // An empty record replays no runs, so this judges what the bytes HOLD — a
   // body or node text past its bound — at the cost of loading a snapshot.
   const { breach } = importWithinTextLimits(new LoroDoc(), bytes)
-  if (breach !== null) return false
+  if (breach !== null) return null
   // Placed under the row's parent path as the live record would place it, so
   // the paths read back are the ones the restore would create.
   const placed = new LoroDoc()
   const restored = importWorkspaceSubtree(placed, bytes, input.parentPath)
   // Bytes holding some other document — another row's, say — are refused, so
   // a row can only bring back the document it is for.
-  if (restored?.documentId !== input.documentId) return false
-  if (unreadableWorkspaceNodes(placed).length > 0) return false
-  for (const entry of readWorkspaceDocuments(placed)) {
-    if (!documentPathSchema.safeParse(entry.path).success) return false
-    if ((entry.name?.length ?? 0) > DOCUMENT_NAME_MAX_LENGTH) return false
+  if (restored?.documentId !== input.documentId) return null
+  if (unreadableWorkspaceNodes(placed).length > 0) return null
+  const documents = readWorkspaceDocuments(placed)
+  for (const entry of documents) {
+    if (!documentPathSchema.safeParse(entry.path).success) return null
+    if ((entry.name?.length ?? 0) > DOCUMENT_NAME_MAX_LENGTH) return null
   }
-  return true
+  return documents.length
 }

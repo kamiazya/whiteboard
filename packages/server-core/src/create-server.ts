@@ -7,6 +7,7 @@ import {
   isWorkspaceSegmentTakenError,
   SnapshotReassemblyError,
   StoredDocumentUnreadableError,
+  TooManyDocumentsError,
 } from '@kamiazya/whiteboard-ports'
 import type { Context, ErrorHandler, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
@@ -475,7 +476,7 @@ export function createServer(deps: ServerDeps) {
 interface Refusal {
   readonly matches: (err: unknown) => boolean
   readonly code: (err: unknown) => string
-  readonly status: 400 | 404 | 409 | 500
+  readonly status: 400 | 404 | 409 | 413 | 500
 }
 
 const refusalOf = (
@@ -522,6 +523,9 @@ const REFUSALS: readonly Refusal[] = [
     status: 404,
   },
   refusalOf(DocumentPathTakenError, 'document_path_taken', 409),
+  // A create into a workspace at its document ceiling, in the code the sync
+  // routes answer the same refusal with.
+  refusalOf(TooManyDocumentsError, (err: TooManyDocumentsError) => err.code, 413),
   // The caller asked to create a workspace under a handle that cannot be a
   // segment (ADR-0019): the NAME is the problem, and only the caller can pick
   // another one.

@@ -56,6 +56,7 @@ import {
   refusedBy,
   segmentTaken,
   titleRefusal,
+  tooManyDocuments,
   workspaceNotFound,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -500,6 +501,7 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
         const owned = firstOwned(err, [
           notFoundAs(`No document "${path}" to duplicate`),
           cannotPlaceCopy,
+          tooManyDocuments,
         ])
         if (owned) return c.json(owned.body, owned.status)
         throw err
