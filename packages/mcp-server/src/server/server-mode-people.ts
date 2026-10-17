@@ -35,7 +35,8 @@ export function createServerModePeople(
   db: TenantDatabase,
   options: ServerModePeopleOptions,
 ): { people: ServerModePeople; signIn: CompleteSignInDeps } {
-  const signIn = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
+  const configured = options.configuredAdministrators ?? []
+  const signIn = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS, configured)
   const appointments = createTenantAdministratorStore(db)
   const people: ServerModePeople = {
     members: signIn.members,
@@ -46,7 +47,7 @@ export function createServerModePeople(
       check: createAdministratorCheck({
         admins: appointments,
         members: signIn.members,
-        configured: options.configuredAdministrators ?? [],
+        configured,
       }),
       appointments,
       deactivation: createUserDeactivation(db),

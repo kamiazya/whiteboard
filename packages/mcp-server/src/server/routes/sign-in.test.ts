@@ -251,8 +251,13 @@ describe('sign-in through an OIDC provider', () => {
 
   it('lets an invited person in through the link they arrived with', async () => {
     const { app, signIn } = appFor({})
+    const bob = await signIn.members.ensureProfile({
+      binding: { authenticator: 'oidc:https://other.example', subject: 'bob' },
+      displayName: 'Bob',
+    })
+    await createTenantAdministratorStore(handle.db).appoint(bob.id, null)
     const { token } = await signIn.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob.id,
       now: Date.now(),
       ttlMs: HOUR,
     })

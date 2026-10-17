@@ -20,7 +20,9 @@ import {
 import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore } from './member-profile-store.js'
 import { type OidcProvider, providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
+import { createTenantAdministratorStore } from './tenant-administrator-store.js'
 import { createUserDeactivation } from './user-deactivation.js'
+import { createWorkspaceRoles } from './workspace-roles.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -49,20 +51,34 @@ const ada = { sub: 'ada-1', email: 'ada@corp.example', email_verified: true, nam
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let deps: CompleteSignInDeps
+/** Who mints every link here: an administrator of the tenant and the owner of `ws-1`. */
+let bob: string
 
 function depsFor(tenantId?: string): CompleteSignInDeps {
   const db = tenantId === undefined ? handle.db : tenantDatabase(handle.rawDb, tenantId)
   return createCompleteSignInDeps(db, HOUR)
 }
 
+// Every account but the inviter's: what a sign-in under test created.
 async function accountCount(): Promise<number> {
-  return (await handle.rawDb.selectFrom('accounts').selectAll().execute()).length
+  return (await handle.rawDb.selectFrom('accounts').selectAll().execute()).length - 1
+}
+
+async function seedInviter(): Promise<string> {
+  const inviter = await deps.members.ensureProfile({
+    binding: { authenticator: providerAuthenticator(provider()), subject: 'bob-1' },
+    displayName: 'Bob',
+  })
+  await deps.members.addMember('ws-1', inviter.id)
+  await createTenantAdministratorStore(handle.db).appoint(inviter.id, null)
+  return inviter.id
 }
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-complete-sign-in-'))
   handle = await createIsolatedDb({ dataDir: root })
   deps = depsFor()
+  bob = await seedInviter()
 })
 afterEach(async () => {
   await handle.dispose()
@@ -148,7 +164,7 @@ describe('completeSignIn — a person already here', () => {
     const user = await deps.members.ensureProfile({ binding, displayName: 'Ada' })
     await createUserDeactivation(handle.db).deactivate(user.id, T0)
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -201,7 +217,7 @@ describe('completeSignIn — somebody new', () => {
 
   it('creates the user through a valid link and spends the link', async () => {
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -222,7 +238,7 @@ describe('completeSignIn — somebody new', () => {
 
   it('refuses a spent link, and creates no account', async () => {
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -245,7 +261,7 @@ describe('completeSignIn — somebody new', () => {
 
   it('refuses an expired link', async () => {
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -261,7 +277,7 @@ describe('completeSignIn — somebody new', () => {
   it('does not spend a link on a person the rules refuse', async () => {
     const strict = provider({ allowedEmailDomains: ['corp.example'] })
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -283,7 +299,7 @@ describe('completeSignIn — somebody new', () => {
       now: T0,
     })
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -303,7 +319,7 @@ describe('completeSignIn — a user that cannot be created', () => {
   // in between must not leave the link spent and nobody created.
   it('leaves the link unspent when creating the user fails', async () => {
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -339,7 +355,7 @@ describe('completeSignIn — a user that cannot be created', () => {
 describe('completeSignIn — an invitation into a workspace', () => {
   const binding = () => ({ authenticator: providerAuthenticator(provider()), subject: 'ada-1' })
   const workspaceLink = () =>
-    deps.invitations.createLink({ invitedBy: 'p-bob', workspaceId: 'ws-1', now: T0, ttlMs: HOUR })
+    deps.invitations.createLink({ invitedBy: bob, workspaceId: 'ws-1', now: T0, ttlMs: HOUR })
 
   it('makes a newcomer a user and a member of that workspace', async () => {
     const { token } = await workspaceLink()
@@ -377,7 +393,7 @@ describe('completeSignIn — an invitation into a workspace', () => {
   it('leaves an invitation that names no workspace unspent for an existing user', async () => {
     await deps.members.ensureProfile({ binding: binding(), displayName: 'Ada' })
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -446,7 +462,7 @@ describe('completeSignIn — two people racing for one link', () => {
   // succeeds, and the loser is refused before any user exists for them.
   it('lets exactly one of them in, and creates exactly one account', async () => {
     const { token } = await deps.invitations.createLink({
-      invitedBy: 'p-bob',
+      invitedBy: bob,
       now: T0,
       ttlMs: HOUR,
     })
@@ -487,5 +503,98 @@ describe('completeSignIn — what a provider must hand over', () => {
     })
     expect(done).toEqual({ ok: false, reason: 'no_subject' })
     expect(await accountCount()).toBe(0)
+  })
+})
+
+// An invitation speaks with its inviter's authority, so it is spent only while
+// they still hold it: an owner of the workspace it invites into, or an
+// administrator for one into the tenant alone — and in either case active.
+describe('completeSignIn — an inviter who has since lost their authority', () => {
+  const newcomer = { sub: 'eve-1', email: 'eve@corp.example', email_verified: true }
+  const workspaceLink = () =>
+    deps.invitations.createLink({ invitedBy: bob, workspaceId: 'ws-1', now: T0, ttlMs: HOUR })
+  const redeemWith = (token: string, claims: typeof newcomer = newcomer) =>
+    completeSignIn(deps, {
+      provider: provider(),
+      claims,
+      invitationTokenHash: sha256Hex(token),
+      now: T0 + 1,
+    })
+  const roles = () => createWorkspaceRoles(handle.db)
+  async function secondOwner(): Promise<string> {
+    const ada = await deps.members.ensureProfile({
+      binding: { authenticator: providerAuthenticator(provider()), subject: 'ada-1' },
+      displayName: 'Ada',
+    })
+    await deps.members.addMember('ws-1', ada.id)
+    await roles().setRole('ws-1', ada.id, 'owner')
+    return ada.id
+  }
+
+  it('refuses a removed owner who redeems their own link back into the workspace', async () => {
+    await secondOwner()
+    const { token } = await workspaceLink()
+    expect(await roles().remove('ws-1', bob)).toBe('ok')
+    const done = await redeemWith(token, {
+      sub: 'bob-1',
+      email: 'bob@corp.example',
+      email_verified: true,
+    })
+    expect(done).toEqual({ ok: false, reason: 'invitation_unusable' })
+    expect((await roles().list('ws-1')).map((m) => m.profile.id)).not.toContain(bob)
+  })
+
+  it('refuses a newcomer on a link from an owner since demoted to member', async () => {
+    await secondOwner()
+    const { token } = await workspaceLink()
+    expect(await roles().setRole('ws-1', bob, 'member')).toBe('ok')
+    expect(await redeemWith(token)).toEqual({ ok: false, reason: 'invitation_unusable' })
+    expect(await accountCount()).toBe(1)
+  })
+
+  it('refuses a newcomer on a workspace link from an inviter since deactivated', async () => {
+    const { token } = await workspaceLink()
+    await createUserDeactivation(handle.db).deactivate(bob, T0)
+    expect(await redeemWith(token)).toEqual({ ok: false, reason: 'invitation_unusable' })
+    expect(await accountCount()).toBe(0)
+  })
+
+  it('refuses a newcomer on a tenant link from an administrator since dismissed', async () => {
+    const { token } = await deps.invitations.createLink({ invitedBy: bob, now: T0, ttlMs: HOUR })
+    await createTenantAdministratorStore(handle.db).dismiss(bob)
+    expect(await redeemWith(token)).toEqual({ ok: false, reason: 'invitation_unusable' })
+    expect(await accountCount()).toBe(0)
+  })
+
+  it('refuses a newcomer on a tenant link from an administrator since deactivated', async () => {
+    const { token } = await deps.invitations.createLink({ invitedBy: bob, now: T0, ttlMs: HOUR })
+    await createUserDeactivation(handle.db).deactivate(bob, T0)
+    expect(await redeemWith(token)).toEqual({ ok: false, reason: 'invitation_unusable' })
+  })
+
+  // The configuration's administrators are no rows, so the guard matches
+  // them by binding; one the configuration stops naming loses the link too.
+  it('admits a newcomer on a tenant link from an administrator the configuration names', async () => {
+    const carolBinding = { authenticator: providerAuthenticator(provider()), subject: 'carol-1' }
+    const carol = await deps.members.ensureProfile({ binding: carolBinding, displayName: 'Carol' })
+    const { token } = await deps.invitations.createLink({
+      invitedBy: carol.id,
+      now: T0,
+      ttlMs: HOUR,
+    })
+    expect(await redeemWith(token)).toEqual({ ok: false, reason: 'invitation_unusable' })
+    deps = createCompleteSignInDeps(handle.db, HOUR, [
+      { authenticator: 'oidc:https://elsewhere.example', subject: 'carol-1' },
+      carolBinding,
+    ])
+    expect((await redeemWith(token)).ok).toBe(true)
+  })
+
+  it('still admits a newcomer on a link whose inviter keeps their authority', async () => {
+    const { token } = await workspaceLink()
+    const done = await redeemWith(token)
+    expect(done.ok).toBe(true)
+    if (!done.ok) return
+    expect(await deps.members.membershipRole('ws-1', done.profile.id)).toBe('member')
   })
 })

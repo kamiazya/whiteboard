@@ -10,6 +10,8 @@ import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createInvitationStore, type InvitationStore } from './invitation-store.js'
 import { isInvitationTokenShaped } from './invitation-token.js'
+import { createMemberProfileStore } from './member-profile-store.js'
+import { createTenantAdministratorStore } from './tenant-administrator-store.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -17,11 +19,21 @@ const T0 = 1_800_000_000_000
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let store: InvitationStore
+/** An administrator, and the owner of `ws-1`: someone whose links stay good. */
+let ada: string
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-invitations-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createInvitationStore(handle.db)
+  const members = createMemberProfileStore(handle.db)
+  const user = await members.ensureProfile({
+    binding: { authenticator: 'oidc:https://idp.test', subject: 'ada' },
+    displayName: 'Ada',
+  })
+  await members.addMember('ws-1', user.id)
+  await createTenantAdministratorStore(handle.db).appoint(user.id, null)
+  ada = user.id
 })
 afterEach(async () => {
   await handle.dispose()
@@ -33,7 +45,7 @@ describe('invitation links', () => {
   // token outside the shape would be a link nobody can use.
   it('mints only tokens of the shape the sign-in route accepts', async () => {
     for (let i = 0; i < 20; i++) {
-      const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+      const { token } = await store.createLink({ invitedBy: ada, now: T0, ttlMs: HOUR })
       expect(isInvitationTokenShaped(token), token).toBe(true)
     }
     expect(isInvitationTokenShaped(`${'A'.repeat(43)}x`)).toBe(false)
@@ -43,12 +55,12 @@ describe('invitation links', () => {
   // none invites to the tenant alone.
   it('carries the workspace it invites into, or none', async () => {
     const into = await store.createLink({
-      invitedBy: 'p-ada',
+      invitedBy: ada,
       workspaceId: 'ws-1',
       now: T0,
       ttlMs: HOUR,
     })
-    const bare = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+    const bare = await store.createLink({ invitedBy: ada, now: T0, ttlMs: HOUR })
     expect(into.invitation.workspaceId).toBe('ws-1')
     expect(await store.openLink(into.token, T0 + 1)).toMatchObject({
       ok: true,
@@ -61,14 +73,14 @@ describe('invitation links', () => {
   })
 
   it('hands the token back once and stores only its hash', async () => {
-    const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+    const { token } = await store.createLink({ invitedBy: ada, now: T0, ttlMs: HOUR })
     const rows = await handle.rawDb.selectFrom('invitations').selectAll().execute()
     expect(rows).toHaveLength(1)
     expect(JSON.stringify(rows)).not.toContain(token)
   })
 
   it('opens an unexpired link, and redeems it exactly once', async () => {
-    const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+    const { token } = await store.createLink({ invitedBy: ada, now: T0, ttlMs: HOUR })
     const opened = await store.openLink(token, T0 + 1)
     expect(opened.ok).toBe(true)
     if (!opened.ok) return
@@ -79,7 +91,7 @@ describe('invitation links', () => {
 
   it('refuses an expired link, whether opening or redeeming it', async () => {
     const { token, invitation } = await store.createLink({
-      invitedBy: 'p-ada',
+      invitedBy: ada,
       now: T0,
       ttlMs: HOUR,
     })
@@ -92,7 +104,7 @@ describe('invitation links', () => {
   })
 
   it('is invisible to another tenant — a link from one tenant opens nothing in another', async () => {
-    const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+    const { token } = await store.createLink({ invitedBy: ada, now: T0, ttlMs: HOUR })
     const other = createInvitationStore(tenantDatabase(handle.rawDb, 'tenant-two'))
     expect(await other.openLink(token, T0 + 1)).toEqual({ ok: false, reason: 'unknown' })
   })

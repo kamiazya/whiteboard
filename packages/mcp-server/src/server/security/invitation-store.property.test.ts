@@ -17,6 +17,8 @@ import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createInvitationStore } from './invitation-store.js'
+import { createMemberProfileStore } from './member-profile-store.js'
+import { createTenantAdministratorStore } from './tenant-administrator-store.js'
 
 const TTL = 1000
 
@@ -87,7 +89,14 @@ describe('invitation links — against a model', () => {
   fcTest.prop([fc.array(opArb, { minLength: 1, maxLength: 30 })], withDefaults({ numRuns: 60 }))(
     'opening and redeeming always answer what the model says a link is',
     async (ops) => {
-      const store = createInvitationStore(tenantDatabase(handle.rawDb, `model-${run++}`))
+      const tenant = tenantDatabase(handle.rawDb, `model-${run++}`)
+      const store = createInvitationStore(tenant)
+      // The inviter keeps their authority throughout; losing it is example-tested.
+      const inviter = await createMemberProfileStore(tenant).ensureProfile({
+        binding: { authenticator: 'oidc:https://idp.test', subject: 'inviter' },
+        displayName: 'Inviter',
+      })
+      await createTenantAdministratorStore(tenant).appoint(inviter.id, null)
       const issued: Modelled[] = []
       let now = 1_800_000_000_000
       for (const op of ops) {
@@ -96,7 +105,11 @@ describe('invitation links — against a model', () => {
           continue
         }
         if (op.kind === 'issue') {
-          const { token, invitation } = await store.createLink({ invitedBy: 'p', now, ttlMs: TTL })
+          const { token, invitation } = await store.createLink({
+            invitedBy: inviter.id,
+            now,
+            ttlMs: TTL,
+          })
           issued.push({
             id: invitation.id,
             token,
