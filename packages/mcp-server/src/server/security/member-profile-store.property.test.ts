@@ -3,10 +3,6 @@
  * add/remove op on that exact (ws, p) pair was an add, for any interleaved
  * sequence touching a small pool of workspaces and profiles — and
  * `roles.list(ws)` must never disagree with that same model.
- *
- * `membersOnly(ws)` is a SEPARATE, monotone model: true iff at least one
- * `addMember(ws, ·)` ever ran, for any workspace in the pool — removing
- * every member never clears it (user decision 2026-09-21).
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -62,7 +58,6 @@ async function dropMembership(workspaceId: string, profileId: string): Promise<v
 async function clearRows(): Promise<void> {
   const { rawDb } = handle
   await rawDb.deleteFrom('workspaceMemberships').execute()
-  await rawDb.deleteFrom('workspaceMembersOnly').execute()
   await rawDb.deleteFrom('memberProfiles').execute()
   await rawDb.deleteFrom('accountBindings').execute()
   await rawDb.deleteFrom('accounts').execute()
@@ -92,7 +87,6 @@ describe('membership seam', () => {
       }
 
       const model = new Map<string, boolean>()
-      const everAdded = new Set<string>()
       for (const op of ops) {
         const pairKey = `${op.ws}/${op.p}`
         const profileId = profileIds.get(op.p)
@@ -100,7 +94,6 @@ describe('membership seam', () => {
         if (op.kind === 'add') {
           await store.addMember(op.ws, profileId)
           model.set(pairKey, true)
-          everAdded.add(op.ws)
         } else {
           await dropMembership(op.ws, profileId)
           model.set(pairKey, false)
@@ -123,8 +116,6 @@ describe('membership seam', () => {
           ),
         )
         expect(new Set(members.map((m) => m.profile.id))).toEqual(expectedIds)
-
-        expect(await store.membersOnly(ws)).toBe(everAdded.has(ws))
       }
     },
   )

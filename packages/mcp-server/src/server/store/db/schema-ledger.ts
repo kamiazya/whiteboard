@@ -118,7 +118,6 @@ export const LEDGER: Ledger = {
   workspaceMemberships: { workspaceId: text, profileId: text, createdAt: integer, role: text },
   tenantAdministrators: { profileId: text, appointedBy: textOrNull, appointedAt: integer },
   workspaceReplicaKeys: { workspaceId: text, key: blob, salt: blob, createdAt: integer },
-  workspaceMembersOnly: { workspaceId: text, since: integer },
   tenants: { id: text, createdAt: integer },
 }
 

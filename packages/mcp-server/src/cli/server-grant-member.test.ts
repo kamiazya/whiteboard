@@ -53,7 +53,6 @@ describe('grantMember', () => {
       user: { id: ada.id, displayName: 'Ada' },
     })
     expect(await members.isWorkspaceMember(WS, ada.id)).toBe('member')
-    expect(await members.membersOnly(WS)).toBe(true)
   })
 
   // What an operator sees is the address in the URL, which is the segment.
@@ -80,7 +79,8 @@ describe('grantMember', () => {
     expect(outcome.kind === 'ambiguous-user' && outcome.users.map((u) => u.id).sort()).toEqual(
       [one.id, two.id].sort(),
     )
-    expect(await members.membersOnly(WS)).toBe(false)
+    expect(await members.isWorkspaceMember(WS, one.id)).toBe('not-a-member')
+    expect(await members.isWorkspaceMember(WS, two.id)).toBe('not-a-member')
   })
 
   it('refuses a user nobody has signed in as, listing who has', async () => {

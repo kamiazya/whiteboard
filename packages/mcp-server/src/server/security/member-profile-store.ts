@@ -20,14 +20,10 @@
  * operator whose workspace has lost every owner recovers it with
  * `whiteboard server grant-member`, which goes through `addMember`.
  *
- * `workspaceMembersOnly` is the one row a removal NEVER touches (user
- * decision 2026-09-21): once a workspace has had a member, `membersOnly`
- * stays true even after the last one is removed, so a workspace never falls
- * back to origin trust by emptying. Nothing clears it. Every workspace is
- * members-only regardless (ADR-0046 d10), so no gate consults the marker:
- * `/mcp` admits a workspace's creator when it mints the workspace
- * (`mcp-caller.ts`). See the 0030 migration for why it is its own table
- * rather than a column on `workspaces`.
+ * Every workspace is members-only (ADR-0046 d10), so emptying one never
+ * falls back to origin trust: `/mcp` admits a workspace's creator when it
+ * mints the workspace (`mcp-caller.ts`), and a workspace nobody is a member
+ * of admits nobody.
  *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
  * caller never consults `isWorkspaceMember` for an `anonymous` or
@@ -112,19 +108,14 @@ export interface MemberProfileStore {
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
   /** This user's role in the workspace, or null when they are not a member. */
   membershipRole(workspaceId: string, profileId: string): Promise<WorkspaceRole | null>
-  /** True once this workspace has ever had a member — never reverts on removal. */
-  membersOnly(workspaceId: string): Promise<boolean>
   /** True while this user exists, is not deactivated, and is a member of the
    *  workspace — what an open stream is re-checked against, in one read. */
   holdsAccess(workspaceId: string, profileId: string): Promise<boolean>
 }
 
-// Inserts the membership row and, on a workspace's FIRST membership ever,
-// its `workspaceMembersOnly` marker — in one transaction so the two can
-// never disagree about whether a workspace has had a member.
-// A workspace's first member is its owner (ADR-0049 decision 1). "First" is
-// read from the memberships themselves, not the members-only marker, which
-// stays set after every member has gone.
+// A workspace's first member is its owner (ADR-0049 decision 1). The read
+// and the insert share a transaction so two concurrent first members cannot
+// both become owner.
 async function insertMembership(db: TenantScoped, workspaceId: string, profileId: string) {
   const now = Date.now()
   await inTenantTransaction(db, async (trx) => {
@@ -139,11 +130,6 @@ async function insertMembership(db: TenantScoped, workspaceId: string, profileId
       .insertInto('workspaceMemberships')
       .values({ workspaceId, profileId, createdAt: now, role })
       .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
-      .execute()
-    await trx
-      .insertInto('workspaceMembersOnly')
-      .values({ workspaceId, since: now })
-      .onConflict((oc) => oc.column('workspaceId').doNothing())
       .execute()
   })
 }
@@ -312,15 +298,6 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
         .where('workspaceMemberships.workspaceId', '=', workspaceId)
         .where('workspaceMemberships.profileId', '=', profileId)
         .where('memberProfiles.deactivatedAt', 'is', null)
-        .executeTakeFirst()
-      return row !== undefined
-    },
-
-    async membersOnly(workspaceId) {
-      const row = await db
-        .selectFrom('workspaceMembersOnly')
-        .select('workspaceId')
-        .where('workspaceId', '=', workspaceId)
         .executeTakeFirst()
       return row !== undefined
     },

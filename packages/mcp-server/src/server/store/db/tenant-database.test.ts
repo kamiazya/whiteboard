@@ -268,9 +268,9 @@ describe('what a tenant-bound handle scopes beyond a plain statement', () => {
 
   it('hands back rows without the tenant column, the shape the schema type declares', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
-    await a.insertInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute()
-    expect(await a.selectFrom('workspaceMembersOnly').selectAll().execute()).toEqual([
-      { workspaceId: 'w', since: 1 },
+    await a.insertInto('tenantAdministrators').values({ profileId: 'w', appointedAt: 1 }).execute()
+    expect(await a.selectFrom('tenantAdministrators').selectAll().execute()).toEqual([
+      { profileId: 'w', appointedBy: null, appointedAt: 1 },
     ])
   })
 
@@ -287,8 +287,8 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(
       a
-        .insertInto('workspaceMembersOnly')
-        .values({ workspaceId: 'w', since: 1, tenantId: 'other' } as any)
+        .insertInto('tenantAdministrators')
+        .values({ profileId: 'w', appointedAt: 1, tenantId: 'other' } as any)
         .execute(),
     ).rejects.toThrow(/tenantId/)
   })
@@ -297,7 +297,7 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(
       a
-        .updateTable('workspaceMembersOnly')
+        .updateTable('tenantAdministrators')
         .set({ tenantId: 'other' } as any)
         .execute(),
     ).rejects.toThrow(/tenantId/)
@@ -307,33 +307,33 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
   // not only when it is the sole column.
   it('an update that moves a row to another tenant among other columns', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
-    await a.insertInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute()
+    await a.insertInto('tenantAdministrators').values({ profileId: 'w', appointedAt: 1 }).execute()
     for (const set of [
-      { since: 2, tenantId: 'other' },
-      { tenantId: 'other', since: 2 },
+      { appointedAt: 2, tenantId: 'other' },
+      { tenantId: 'other', appointedAt: 2 },
     ]) {
       await expect(
         a
-          .updateTable('workspaceMembersOnly')
+          .updateTable('tenantAdministrators')
           .set(set as any)
           .execute(),
       ).rejects.toThrow(/tenantId/)
     }
-    const row = await a.selectFrom('workspaceMembersOnly').selectAll().executeTakeFirstOrThrow()
-    expect(row.since).toBe(1)
+    const row = await a.selectFrom('tenantAdministrators').selectAll().executeTakeFirstOrThrow()
+    expect(row.appointedAt).toBe(1)
   })
 
   it('leaves an update of ordinary columns alone', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
-    await a.insertInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute()
-    await a.updateTable('workspaceMembersOnly').set({ since: 2 }).execute()
-    const row = await a.selectFrom('workspaceMembersOnly').selectAll().executeTakeFirstOrThrow()
-    expect(row.since).toBe(2)
+    await a.insertInto('tenantAdministrators').values({ profileId: 'w', appointedAt: 1 }).execute()
+    await a.updateTable('tenantAdministrators').set({ appointedAt: 2 }).execute()
+    const row = await a.selectFrom('tenantAdministrators').selectAll().executeTakeFirstOrThrow()
+    expect(row.appointedAt).toBe(2)
   })
 
   it('a whole raw statement, which it has no tree to scope', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
-    await expect(sql`select * from workspaceMembersOnly`.execute(a)).rejects.toThrow(
+    await expect(sql`select * from tenantAdministrators`.execute(a)).rejects.toThrow(
       /raw statement/,
     )
   })
@@ -341,13 +341,13 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
   it('an INSERT OR REPLACE, which would delete another tenant row on a key collision', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(
-      a.replaceInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute(),
+      a.replaceInto('tenantAdministrators').values({ profileId: 'w', appointedAt: 1 }).execute(),
     ).rejects.toThrow(/OR REPLACE/)
     await expect(
       a
-        .insertInto('workspaceMembersOnly')
+        .insertInto('tenantAdministrators')
         .orReplace()
-        .values({ workspaceId: 'w', since: 1 })
+        .values({ profileId: 'w', appointedAt: 1 })
         .execute(),
     ).rejects.toThrow(/OR REPLACE/)
   })
@@ -356,8 +356,8 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(
       a
-        .insertInto('workspaceMembersOnly')
-        .columns(['workspaceId', 'since'])
+        .insertInto('tenantAdministrators')
+        .columns(['profileId', 'appointedAt'])
         .expression((eb) =>
           eb.selectFrom('workspaceMemberships').select(['workspaceId', 'createdAt']),
         )

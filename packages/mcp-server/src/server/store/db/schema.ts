@@ -220,15 +220,6 @@ interface SignInAttemptsTable {
   expiresAt: Timestamp
 }
 
-// Whether a workspace has ever had a member — set once by `addMember`'s
-// first insert, never cleared when the last member is removed
-// (`WorkspaceRoles.remove`; user decision 2026-09-21: removing the sole
-// member does not revert a workspace to origin trust). Outside `workspaces` on purpose; see the 0030 migration.
-interface WorkspaceMembersOnlyTable {
-  workspaceId: string
-  since: Timestamp
-}
-
 // Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,
 // deliberately NOT declared here: the tenant-bound handle stamps it on insert,
 // filters on it and strips it from results, so a store cannot name it at all.
@@ -258,7 +249,6 @@ export interface DatabaseSchema {
   workspaceMemberships: WorkspaceMembershipsTable
   tenantAdministrators: TenantAdministratorsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
-  workspaceMembersOnly: WorkspaceMembersOnlyTable
   tenants: TenantsTable
 }
 

@@ -20,6 +20,8 @@ vi.mock('../../../config.js', () => ({
 }))
 
 const PRE_0030 = '0029-workspace-replica-keys'
+// 0043 drops the table, so this migration's own effect is read where it ran.
+const AT_0030 = '0030-workspace-members-only'
 
 type Db = Kysely<Record<string, Record<string, unknown>>>
 
@@ -47,7 +49,7 @@ afterEach(async () => {
   await rm(dataDir, { recursive: true, force: true })
 })
 
-it('is absent before 0030, and backfills one row per distinct workspaceMemberships.workspaceId at head', async () => {
+it('is absent before 0030, and backfills one row per distinct workspaceMemberships.workspaceId', async () => {
   const handle = await openDb()
   await handle.migrateTo(PRE_0030)
   const before = await tableNames(handle.db)
@@ -69,7 +71,7 @@ it('is absent before 0030, and backfills one row per distinct workspaceMembershi
     ])
     .execute()
 
-  await handle.migrateToHead()
+  await handle.migrateTo(AT_0030)
 
   const after = await tableNames(handle.db)
   expect(after).toContain('workspaceMembersOnly')
@@ -77,16 +79,15 @@ it('is absent before 0030, and backfills one row per distinct workspaceMembershi
 
   const rows = await handle.db
     .selectFrom('workspaceMembersOnly')
-    // 0030's own columns: later migrations add more (0031's tenant).
     .select(['workspaceId', 'since'])
     .orderBy('workspaceId', 'asc')
     .execute()
   expect(rows).toEqual([{ workspaceId: 'ws-a', since: 10 }])
 })
 
-it('leaves a workspace with no membership row unmarked at head', async () => {
+it('leaves a workspace with no membership row unmarked', async () => {
   const handle = await openDb()
-  await handle.migrateToHead()
+  await handle.migrateTo(AT_0030)
 
   const rows = await handle.db.selectFrom('workspaceMembersOnly').selectAll().execute()
   expect(rows).toEqual([])
