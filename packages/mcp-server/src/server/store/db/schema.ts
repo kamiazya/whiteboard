@@ -220,6 +220,10 @@ interface SignInAttemptsTable {
   expiresAt: Timestamp
   /** SHA-256 of the client's network source, never the address itself. */
   source: string
+  /** SHA-256 of the IPv6 /48 the source sits in (an IPv4 source's own address). */
+  sourcePrefix48: string
+  /** SHA-256 of the IPv6 /56 the source sits in (an IPv4 source's own address). */
+  sourcePrefix56: string
 }
 
 // Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,

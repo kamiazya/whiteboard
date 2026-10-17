@@ -15,6 +15,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
+  WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -430,6 +431,25 @@ describe('a workspace-document sync update that moves a path', () => {
 
     expect(refusal).toBeInstanceOf(OffGrammarPathError)
     expect((refusal as Error).message).toContain(`${DOCUMENT_PATH_MAX_LENGTH} characters`)
+  })
+
+  // Listed by id, the node tree-ordered last would hide every earlier one
+  // carrying the same id.
+  it('creating a document outside the grammar under an id another holds is refused', async () => {
+    const store = new StoredDoc(workspaceSeed('body'))
+    const update = updateFrom(store.get(), (doc) => {
+      const node = doc.getTree(WORKSPACE_TREE_KEY).createNode(undefined, 0)
+      node.data.set('documentId', DOC_ID)
+      node.data.set('segment', 'Ä')
+      node.data.set('kind', 'markdown')
+      node.data.set('createdAt', 1_000)
+      node.data.set('updatedAt', 1_000)
+    })
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).rejects.toMatchObject({ paths: ['Ä'] })
+    expect(storedPathsOf(store)).toEqual([PATH])
   })
 
   it('creating a document outside the grammar is refused', async () => {

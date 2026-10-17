@@ -3,7 +3,14 @@ import {
   daemonPingResponseSchema,
   type RuntimeStatusResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
+import {
+  ENDPOINT_PROOF_PATH,
+  endpointProof,
+  endpointProofNonceSchema,
+  endpointProofResponseSchema,
+} from '../../shared/endpoint-proof.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
@@ -23,6 +30,14 @@ export interface RuntimeRouterOptions {
    * declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
+  /**
+   * The daemon token, as the key `/api/runtime/proof` answers with
+   * (`../../shared/endpoint-proof.ts`), or undefined where this process holds none
+   * (server mode) and so has nothing to prove. Required, though it may be
+   * undefined: a composition that forgot it would leave every Windows client
+   * refusing a daemon that is really there.
+   */
+  endpointProofKey: string | undefined
   /**
    * Set on server mode only: the grant the server-mode `/api/*` middleware
    * authenticated for this request. Server mode's resolver holds no daemon
@@ -57,6 +72,25 @@ async function requestGrant(
   })
 }
 
+/**
+ * `/api/runtime/proof`. Public: it is asked BEFORE a caller will send any
+ * credential, and its answer is an HMAC under a label of its own, which
+ * reveals nothing of the token and is worth nothing outside this exchange.
+ */
+function mountEndpointProof(app: Hono, key: string | undefined): void {
+  app.get(ENDPOINT_PROOF_PATH, async (c) => {
+    if (key === undefined) {
+      return c.json(errorBody('not_found', 'This server holds no daemon token to prove.'), 404)
+    }
+    const nonce = endpointProofNonceSchema.safeParse(c.req.query('nonce'))
+    if (!nonce.success) {
+      return c.json(errorBody('invalid_request', 'nonce must be 32 bytes, base64url.'), 400)
+    }
+    const proof = await endpointProof(key, nonce.data)
+    return c.json(endpointProofResponseSchema.parse({ proof }))
+  })
+}
+
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
   const app = new Hono()
 
@@ -73,6 +107,8 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
       }),
     )
   })
+
+  mountEndpointProof(app, options.endpointProofKey)
 
   app.use('/api/runtime/*', async (c, next) => {
     // The route-scope registry is the single authority on which runtime

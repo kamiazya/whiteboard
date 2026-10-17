@@ -28,8 +28,12 @@ import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { PROMOTE_MAX_DOCUMENTS, promoteWorkspace } from './promote-workspace.js'
-import { OffGrammarPathError, syncWriteAnswer } from './sync-write-refusals.js'
+import { promoteWorkspace } from './promote-workspace.js'
+import {
+  OffGrammarPathError,
+  syncWriteAnswer,
+  WORKSPACE_MAX_DOCUMENTS,
+} from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -463,7 +467,7 @@ describe('promoteWorkspace', () => {
 
   it('refuses a record holding more documents than a promote carries, before merging any of it', async () => {
     const fake = fakes()
-    const documents = PROMOTE_MAX_DOCUMENTS + 1
+    const documents = WORKSPACE_MAX_DOCUMENTS + 1
     const result = await promoteWorkspace(
       {
         liveDocuments: fake.live,
@@ -473,12 +477,18 @@ describe('promoteWorkspace', () => {
       },
       { workspaceId: WS, snapshot: recordOf(documents), operator },
     )
-    expect(result).toEqual({ kind: 'too-many-documents', documents, limit: PROMOTE_MAX_DOCUMENTS })
+    expect(result).toEqual({
+      kind: 'too-many-documents',
+      documents,
+      limit: WORKSPACE_MAX_DOCUMENTS,
+    })
     expect(fake.saves()).toBe(0)
     expect(fake.versions.saves).toHaveLength(0)
   })
 
-  it('promotes a record holding exactly as many documents as a promote carries', async () => {
+  // The target already holds one document of its own, so this record brings
+  // the merged workspace exactly to the ceiling.
+  it('promotes a record that brings the workspace exactly to the document ceiling', async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
       {
@@ -487,9 +497,25 @@ describe('promoteWorkspace', () => {
         versions: fake.versions,
         blobStore: fake.blobs,
       },
-      { workspaceId: WS, snapshot: recordOf(PROMOTE_MAX_DOCUMENTS), operator },
+      { workspaceId: WS, snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS - 1), operator },
     )
     expect(result.kind).toBe('promoted')
-    expect(fake.versions.saves).toHaveLength(PROMOTE_MAX_DOCUMENTS)
+    expect(fake.versions.saves).toHaveLength(WORKSPACE_MAX_DOCUMENTS - 1)
+  })
+
+  it('refuses a record within the ceiling whose merge would take the workspace past it', async () => {
+    const fake = fakes()
+    const refusal = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS), operator },
+    ).catch((err: unknown) => err)
+    expect(syncWriteAnswer(refusal)).toEqual({ code: 'too_many_documents', status: 413 })
+    expect(fake.saves()).toBe(0)
+    expect(fake.versions.saves).toHaveLength(0)
   })
 })

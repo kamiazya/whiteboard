@@ -10,6 +10,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
+import { armContentSlots, CONTENT_REQUEST_CAPS, createContentSlots } from './content-slots.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -204,6 +205,24 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
   }
 }
 
+/**
+ * Server mode's bound on content-sized bodies in flight, per user and per
+ * instance (`content-slots.ts`): one count for the whole app, so every
+ * route reading such a body draws on it. The local daemon has one person and
+ * arms none.
+ */
+function mountContentSlots(app: Hono, options: AppOptions): void {
+  if (options.authMode !== 'server-mode') return
+  const { members } = options.people
+  const arm = armContentSlots({
+    slots: createContentSlots(CONTENT_REQUEST_CAPS),
+    userOf: (c) => callerUserId(c, members),
+    refused: (userId, cap) =>
+      requestLog.warning({ userId, cap }, 'content request refused: too many in flight'),
+  })
+  app.use('*', arm)
+}
+
 /** The routers only server mode mounts: a workspace's people as its owners manage them (ADR-0049). */
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode') return
@@ -277,7 +296,7 @@ function appWiring(options: AppOptions) {
 
   const { credentialResolver, mcpAuth } = credentialWiring(options, token)
 
-  return { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus }
+  return { instanceId, identity, token, credentialResolver, mcpAuth, serverModeGetStatus }
 }
 
 /**
@@ -290,7 +309,7 @@ function runtimeRouter(
   scope: StoreScope,
   wiring: Pick<
     ReturnType<typeof appWiring>,
-    'instanceId' | 'identity' | 'credentialResolver' | 'serverModeGetStatus'
+    'instanceId' | 'identity' | 'token' | 'credentialResolver' | 'serverModeGetStatus'
   >,
 ) {
   const serverMode = options.authMode === 'server-mode'
@@ -300,6 +319,7 @@ function runtimeRouter(
     touch: options.touch,
     getStatus: serverMode ? wiring.serverModeGetStatus! : options.getStatus,
     credentialResolver: wiring.credentialResolver,
+    endpointProofKey: wiring.token,
     ...(serverMode ? { serverModeGrant: callerGrant } : {}),
     storageReport: () => computeStorageReport(scope.dataDir),
     readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
@@ -328,8 +348,8 @@ export function createApp(options: AppOptions) {
 
   // The config is judged before any other option is read, so a caller with
   // an invalid server-mode config is refused for that and nothing else.
-  const { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus } =
-    appWiring(options)
+  const wiring = appWiring(options)
+  const { identity, credentialResolver, mcpAuth } = wiring
   const membership = membershipWiring(options)
 
   // Tracing middleware first so the request span wraps every other
@@ -348,6 +368,7 @@ export function createApp(options: AppOptions) {
   })
 
   mountApiAuth(app, options, credentialResolver)
+  mountContentSlots(app, options)
 
   mountMcpMiddleware(app, options, mcpAuth)
 
@@ -416,15 +437,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())
-  app.route(
-    '/',
-    runtimeRouter(options, scope, {
-      instanceId,
-      identity,
-      credentialResolver,
-      serverModeGetStatus,
-    }),
-  )
+  app.route('/', runtimeRouter(options, scope, wiring))
   if (options.authMode === 'server-mode') {
     mountServerModeUi(app, options.signIn)
     // Same shape as the local-daemon return below, so callers see one type

@@ -66,7 +66,10 @@ export function judgeLockHolder(
       return { kind: 'gone', holderPid: pid, reason: 'holder exited' }
     case 'foreign':
       return { kind: 'gone', holderPid: pid, reason: 'holder pid reused by a later process' }
+    // A lock is only waited on, never handed a secret, so a live pid this
+    // platform cannot judge is still its holder.
     case 'writer':
+    case 'unknown':
       return { kind: 'held', holderPid: pid }
   }
 }

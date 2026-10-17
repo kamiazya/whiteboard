@@ -1,6 +1,7 @@
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context, MiddlewareHandler } from 'hono'
+import { takeContentSlot } from '../content-slots.js'
 
 /**
  * The 413 a body past its ceiling is answered with: the daemon's own refusal,
@@ -61,7 +62,7 @@ function declaresMoreThan(c: Context, maxSize: number): boolean {
  * The `/mcp` ceiling in `app.ts` is deliberately not this: that endpoint
  * speaks JSON-RPC, and its refusal is an error object with a JSON-RPC code.
  */
-export function limitBody(maxSize: number, noun: string): MiddlewareHandler {
+function limitBody(maxSize: number, noun: string): MiddlewareHandler {
   return async (c, next) => {
     if (declaresMoreThan(c, maxSize)) return payloadTooLarge(c, maxSize, noun)
     // A declared length inside the ceiling is the transport's to enforce; only a
@@ -73,6 +74,27 @@ export function limitBody(maxSize: number, noun: string): MiddlewareHandler {
       return payloadTooLarge(c, maxSize, noun)
     }
     return next()
+  }
+}
+
+/**
+ * A content-sized body ceiling, as middleware: `limitBody` behind a content
+ * slot (`content-slots.ts`) taken before any of the body is read and held
+ * until the handler answers. Every route whose ceiling is
+ * `CONTENT_BODY_LIMIT_BYTES` or promotion's takes it through here, so how
+ * many such bodies are resident at once is bounded where the composition
+ * arms the slots.
+ */
+export function limitContentBody(maxSize: number, noun: string): MiddlewareHandler {
+  const limit = limitBody(maxSize, noun)
+  return async (c, next) => {
+    const slot = await takeContentSlot(c)
+    if (slot instanceof Response) return slot
+    try {
+      return await limit(c, next)
+    } finally {
+      slot()
+    }
   }
 }
 
@@ -137,7 +159,7 @@ const V1_DOCUMENT_CREATE = /^\/api\/v1\/workspaces\/[^/]+\/documents$/
  */
 export function limitV1WriteBody(): MiddlewareHandler {
   const fields = limitBody(JSON_BODY_LIMIT_BYTES, 'Request body')
-  const content = limitBody(CONTENT_BODY_LIMIT_BYTES, 'Request body')
+  const content = limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Request body')
   return (c, next) =>
     c.req.method === 'POST' && V1_DOCUMENT_CREATE.test(c.req.path)
       ? content(c, next)

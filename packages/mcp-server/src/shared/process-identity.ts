@@ -4,9 +4,11 @@
 // removing it, and after a crash or a reboot its pid can belong to any other
 // process of the same user. Signal 0 cannot tell those apart; the process's
 // start time can, because a writer started before it wrote. Where the start
-// time is unknowable (no /proc: macOS, Windows) the live pid is trusted, so a
-// live writer is never called foreign — the safe direction for every caller,
-// each of which refuses something while the writer runs.
+// time is unknowable (no /proc: macOS, Windows) the answer is `unknown`, never
+// `foreign`, so a live writer is never called foreign — the safe direction for
+// a caller that refuses something while the writer runs. It is not `writer`
+// either: a caller about to hand that process a secret has to learn the pid
+// proved nothing, and ask the process itself.
 //
 // `scripts/dev/dev-daemon-socket-lib.mjs` keeps a bare-node copy of this
 // judgement; its test holds the two to the same answers.
@@ -56,16 +58,18 @@ export function readProcessStartMs(
 /**
  * What the pid a record written at `writtenAtMs` names is now: gone, a process
  * that started after the record (it took over the pid of a writer that died),
- * or — as far as this platform can tell — the writer. An unknown time on
- * either side (NaN, no /proc) reads as the writer.
+ * the writer, or — where this platform cannot read the process's start time —
+ * `unknown`, a live pid that may be either. A record with no time of its own
+ * (NaN) reads as the writer: the start time it would be compared with exists.
  */
 export function recordedProcess(
   pid: number,
   writtenAtMs: number,
   { isAlive = isPidAlive, startMs = readProcessStartMs }: ProcessIdentitySeams = {},
-): 'writer' | 'foreign' | 'dead' {
+): 'writer' | 'unknown' | 'foreign' | 'dead' {
   if (!isAlive(pid)) return 'dead'
   const started = startMs(pid)
-  if (Number.isNaN(writtenAtMs) || started === null) return 'writer'
+  if (started === null) return 'unknown'
+  if (Number.isNaN(writtenAtMs)) return 'writer'
   return started <= writtenAtMs + START_SLACK_MS ? 'writer' : 'foreign'
 }

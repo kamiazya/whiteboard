@@ -158,6 +158,41 @@ describe('sign-in attempts', () => {
       expect(await capped.take(victim.state, victim.browserBinding, T0 + 50)).not.toBeNull()
     })
 
+    // One end-site /48 holds 65,536 /64s, so a flood spread one attempt per
+    // /64 is still one allocation, and its attempts are the ones that go.
+    it('sheds a flood spread across the /64s of one /48 before anyone else', async () => {
+      const capped = createSignInAttemptStore(handle.db, { maxPending: 10 })
+      await flood(capped, (i) => `2001:db8:7:${i.toString(16)}::1`)
+      const victim = await capped.begin({
+        providerId: 'corp',
+        returnTo: '/',
+        source: '203.0.113.7',
+        now: T0 + 41,
+        ttlMs: TTL,
+      })
+      for (let i = 41; i <= 80; i++) {
+        await capped.begin({
+          providerId: 'corp',
+          returnTo: '/',
+          source: `2001:db8:7:${i.toString(16)}::1`,
+          now: T0 + 41 + i,
+          ttlMs: TTL,
+        })
+      }
+      const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+      expect(rows.length).toBeLessThanOrEqual(10)
+      expect(await capped.take(victim.state, victim.browserBinding, T0 + 200)).not.toBeNull()
+    })
+
+    // Inside the heaviest /48 the heaviest /56 goes first, so a neighbour
+    // sharing the site with a flooding /56 keeps its attempt.
+    it('sheds the heaviest /56 inside the heaviest /48', async () => {
+      const capped = createSignInAttemptStore(handle.db, { maxPending: 10 })
+      const neighbour = await victimBegins(capped, '2001:db8:7:100::1')
+      await flood(capped, (i) => `2001:db8:7:${i.toString(16)}::1`)
+      expect(await capped.take(neighbour.state, neighbour.browserBinding, T0 + 50)).not.toBeNull()
+    })
+
     it('counts an IPv4-mapped IPv6 address as its IPv4 address', async () => {
       for (const source of ['198.51.100.9', '::ffff:198.51.100.9', '::ffff:c633:6409']) {
         await victimBegins(attempts, source)

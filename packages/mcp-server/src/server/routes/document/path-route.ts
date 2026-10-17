@@ -12,6 +12,19 @@ import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
 
+/**
+ * `middleware`, run only for a request `owns` — every action shares one
+ * wildcard, so a middleware registered beside it would otherwise run for
+ * every sibling's request too, and an update's body ceiling and content slot
+ * would be taken by an export.
+ */
+function scopedTo(
+  owns: (c: Context) => boolean,
+  middleware: readonly MiddlewareHandler[],
+): MiddlewareHandler[] {
+  return middleware.map((each) => (c, next) => (owns(c) ? each(c, next) : next()))
+}
+
 type DocumentHandler = (
   c: Context,
   workspaceId: string,
@@ -66,17 +79,23 @@ export function onDocumentAction(
   handler: DocumentHandler,
   ...middleware: MiddlewareHandler[]
 ): void {
-  const dispatch = async (c: Context, next: Next) => {
+  const pathOf = (c: Context) => {
     const parsed = parseDocumentApiPath(c.req.path)
     const path = parsed === null ? null : documentPathForAction(parsed.tail, action)
-    if (parsed === null || path === null) return next()
+    return parsed === null || path === null ? null : { parsed, path }
+  }
+  const dispatch = async (c: Context, next: Next) => {
+    const matched = pathOf(c)
+    if (matched === null) return next()
+    const { parsed, path } = matched
     // Validated on the handle AS WRITTEN, so a malformed one keeps its 400;
     // resolved afterwards, so the handler only ever sees a canonical id.
     const invalid = validated(c, parsed.workspaceId, path)
     if (invalid) return invalid
     return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), path)
   }
-  app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
+  const scoped = scopedTo((c) => pathOf(c) !== null, middleware)
+  app[method](DOCUMENT_WILDCARD, ...(scoped as []), dispatch)
 }
 
 /** Same, for the `<document path>/file/<fileId>` tail. */
@@ -86,15 +105,21 @@ export function onDocumentFile(
   handler: DocumentFileHandler,
   ...middleware: MiddlewareHandler[]
 ): void {
-  const dispatch = async (c: Context, next: Next) => {
+  const fileOf = (c: Context) => {
     const parsed = parseDocumentApiPath(c.req.path)
     const file = parsed === null ? null : documentPathForFile(parsed.tail)
-    if (parsed === null || file === null) return next()
+    return parsed === null || file === null ? null : { parsed, file }
+  }
+  const dispatch = async (c: Context, next: Next) => {
+    const matched = fileOf(c)
+    if (matched === null) return next()
+    const { parsed, file } = matched
     const invalid = validated(c, parsed.workspaceId, file.path)
     if (invalid) return invalid
     return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), file.path, file.fileId)
   }
-  app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
+  const scoped = scopedTo((c) => fileOf(c) !== null, middleware)
+  app[method](DOCUMENT_WILDCARD, ...(scoped as []), dispatch)
 }
 
 export const DOCUMENTS_WILDCARD = '/api/workspaces/:workspaceId/documents/*'
@@ -166,5 +191,6 @@ export function onDocumentsRoute(
     if (invalid) return invalid
     return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
   }
-  app[method](DOCUMENTS_WILDCARD, ...(middleware as []), dispatch)
+  const owns = (c: Context) => matchDocumentsTail(c.req.path, suffixPattern) !== null
+  app[method](DOCUMENTS_WILDCARD, ...(scopedTo(owns, middleware) as []), dispatch)
 }

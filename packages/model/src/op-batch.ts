@@ -1,6 +1,6 @@
 /**
  * The most ops one call of an op-batch tool may carry — `wb_canvas_edit`,
- * `wb_body_edit` and `wb_thread_edit` alike.
+ * `wb_body_edit`, `wb_thread_edit` and `wb_workspace_edit` alike.
  *
  * A ceiling on one REQUEST, not on a document: a batch past it is almost
  * always a model looping, and a refused oversized batch is cheaper to recover

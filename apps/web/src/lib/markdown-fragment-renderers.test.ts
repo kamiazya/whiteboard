@@ -42,7 +42,7 @@ describe('renderMathFragment (real MathJax)', () => {
   })
 
   it('never emits a fragment carrying a non-local href (TeX \\href is rejected)', async () => {
-    // AllPackages minus `href` plus the output-side guard: whichever layer
+    // AllPackages minus `html` plus the output-side guard: whichever layer
     // catches it, no attacker-controlled URL may survive into SVG this app
     // injects verbatim.
     const fragment = await renderMathFragment('\\href{javascript:alert(1)}{x}')
@@ -52,6 +52,18 @@ describe('renderMathFragment (real MathJax)', () => {
         expect(match[1]?.startsWith('#')).toBe(true)
       }
     }
+  })
+
+  // The fragment lands in the app's own DOM, so an id from document text
+  // could clobber a global and a class could borrow the app's CSS; neither
+  // trips the href check, so the macros must not exist at all.
+  it('gives document text no way to set an id, class or style', async () => {
+    const id = await renderMathFragment('\\cssId{wbinjectedid}{y}')
+    expect(id?.svg ?? '').not.toContain('wbinjectedid')
+    const cls = await renderMathFragment('\\class{wbinjectedclass}{y}')
+    expect(cls?.svg ?? '').not.toContain('wbinjectedclass')
+    const style = await renderMathFragment('\\style{outline:9px solid}{y}')
+    expect(style?.svg ?? '').not.toContain('outline')
   })
 })
 

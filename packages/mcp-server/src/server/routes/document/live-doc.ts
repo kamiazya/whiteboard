@@ -8,7 +8,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
-import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
 import { onDocumentAction } from './path-route.js'
 
 export interface LiveDocRouterOptions {
@@ -108,7 +108,7 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       const response: UpdateDocumentResponse = { ok: true }
       return c.json(response)
     },
-    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
+    limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
   )
 
   return app

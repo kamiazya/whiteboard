@@ -35,8 +35,9 @@ The local daemon has one person: the machine's owner
   mints one today
   ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)
   withdrew the minting route).
-  `/api/runtime/ping` is public; there is no HTTP route that stops the
-  daemon.
+  `/api/runtime/ping` and `/api/runtime/proof` (the token proof described
+  under Current limitations, which reveals nothing of the token) are public;
+  there is no HTTP route that stops the daemon.
 - **The browser starts the native host only for the whiteboard extension.**
   The host's manifest names the extension's id, and the browser refuses to
   start it for anything else. `whiteboard native-host install` writes that
@@ -329,6 +330,10 @@ that SVG, so it is held to what SVG text can do:
   diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
   loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
   one shows as its source.
+- MathJax runs without its `html` extension, so `\href`, `\class`, `\cssId`
+  and `\style` are not commands: math cannot carry a link, or put an id, a
+  class or an inline style of its choosing into the page. Written in a math
+  block, they show as unknown commands.
 - Whatever either engine returns is checked before it is used: a fragment
   carrying an HTML island (`<foreignObject>`), a form, a script, an event
   handler, an `action` or `formaction` attribute, or any `href`, `src` or
@@ -435,6 +440,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   deactivation before sending each update and ends the stream when either
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
+- **Server mode reads a bounded number of large bodies at once.** A sync
+  update, a promote, an upload or a document created from its content is read
+  whole before it is applied, so the bodies in flight are capped per user and
+  per instance, and the next one is refused before it is read. The limits are
+  [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,
   so both are the writer's choice: a restore that would place a document at a
@@ -448,10 +458,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   fixed message and goes to the operator's log with its detail; an export
   names its file within the workspace's exports directory, not the absolute
   path.
-- **A PNG export is bounded, and reads no host file.** A render past the pixel
-  budget is refused before it is drawn, and an inline Markdown image draws in
-  a PNG only from a `data:` URL — the exporter never reads a file the URL
-  names on the server, nor fetches a remote one. Both are in
+- **A PNG export is bounded in pixels, and reads no host file.** Two things
+  are bounded before anything is drawn: the size of the picture the export
+  produces, and the pixels the inline images it carries declare between them,
+  read from each image's own header. An export past either budget is
+  refused. An image whose type the exporter does not draw, or whose header it
+  cannot read, is left out rather than trusted to be small. An inline
+  Markdown image draws in a PNG only from a `data:` URL — the exporter never
+  reads a file the URL names on the server, nor fetches a remote one. What is
+  NOT bounded is time: the drawing itself runs in the serving process with
+  no deadline. All of it is in
   [Export formats](../reference/export-formats.md).
 - **A render lays out a bounded number of embedded documents.** Embeds nest
   three levels deep, and one render lays out at most 128 embedded documents
@@ -465,6 +481,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   The daemon counts the documents before it merges anything, and refuses a
   larger record whole (`promote_too_many_documents`). So one request cannot
   make the daemon write an unbounded number of saved versions.
+- **A workspace holds a bounded number of documents.** The 2000-document
+  ceiling holds for the workspace as a whole, however the documents arrive: a
+  sync update or a move that would leave the workspace holding more is
+  refused whole (`too_many_documents`), so repeating small updates cannot
+  grow a record without limit either. The documents one update edits are
+  checkpointed one at a time, not all at once.
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set
@@ -484,10 +506,25 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   Node offers no option that narrows it — `readableAll`/`writableAll` only
   widen it, and the daemon sets neither. Read access does not include write
   access, so another account cannot send the daemon a request over the
-  pipe, and every request but `/api/runtime/ping` also needs the bearer
-  token. The random pipe name defeats creating the pipe first; it does not
-  hide the pipe, since pipe names can be listed. The Unix socket's
-  owner-only directory has no equivalent here.
+  pipe, and every request but `/api/runtime/ping` and `/api/runtime/proof`
+  also needs the bearer token. The random pipe name defeats creating the
+  pipe first; it does not hide the pipe, since pipe names can be listed. The
+  Unix socket's owner-only directory has no equivalent here.
+
+  A daemon that dies without removing `daemon.json` (a crash, a kill, a
+  power loss) releases its pipe name, and another account can then create a
+  pipe under it. Windows also cannot say when a process started, so a live
+  pid in the record proves nothing about who now serves the pipe. Before a
+  client sends the token to a pipe, it therefore asks the pipe to prove that
+  it holds the token: it sends a random nonce to `/api/runtime/proof`
+  without any credential, and the daemon answers with an HMAC-SHA256 of the
+  nonce, keyed by the token. Only an answer that verifies against the
+  record's token counts. A pipe that answers anything else is refused, and
+  the client reports that a process holds the pipe without confirming it is
+  the recorded daemon. A pipe nobody serves is treated as a stale record.
+  The token itself never travels until the proof succeeds. On Linux and
+  macOS nothing changes: the socket's owner-only directory already keeps
+  every other account out.
 
 - Server mode is shipped and used today for team/remote deployments (see
   above); it is not itself production-hardened beyond what is documented on

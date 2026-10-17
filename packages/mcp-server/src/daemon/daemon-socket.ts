@@ -33,7 +33,7 @@ function defaultContext(): SocketPathContext {
 const PIPE_PREFIX = '\\\\.\\pipe\\'
 
 /** Whether `path` names a Windows named pipe rather than a socket file. */
-function isNamedPipe(path: string): boolean {
+export function isNamedPipe(path: string): boolean {
   return path.startsWith(PIPE_PREFIX)
 }
 

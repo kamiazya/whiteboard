@@ -11,8 +11,10 @@ import {
   DocumentNameTooLongError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
+  TooManyDocumentsError,
   textBreachRefusal,
   UnreadableDocumentMetaError,
+  WORKSPACE_MAX_DOCUMENTS,
 } from './sync-write-refusals.js'
 
 const log = getLogger('sync-write-limit')
@@ -23,31 +25,53 @@ function refuse(target: CachedTarget, error: SyncWriteRefusalError): never {
   throw error
 }
 
-/** What a workspace record's tree says about its documents, as the placement checks compare it. */
+/**
+ * What a workspace record's tree says about its documents, as the placement
+ * checks compare it. One entry per document NODE, never keyed by id: a
+ * client can write a node carrying an id another node already has, and a
+ * map by id would let the node tree-ordered last hide the rest — from the
+ * ceiling's count and from the path and name checks alike.
+ */
 interface Placement {
-  /** Each listed document's path, by id. */
-  readonly paths: ReadonlyMap<string, string>
-  /** Each listed document's name length, by id; 0 for no name. */
-  readonly names: ReadonlyMap<string, number>
+  readonly documents: ReadonlyArray<{
+    readonly documentId: string
+    readonly path: string
+    /** 0 for no name. */
+    readonly nameLength: number
+  }>
   /** The tree ids every listing skips, with their subtrees. */
   readonly unreadable: ReadonlySet<string>
 }
 
 function placementOf(doc: LoroDoc): Placement {
-  const entries = readWorkspaceDocuments(doc)
   return {
-    paths: new Map(entries.map((entry) => [entry.documentId, entry.path])),
-    names: new Map(entries.map((entry) => [entry.documentId, entry.name?.length ?? 0])),
+    documents: readWorkspaceDocuments(doc).map((entry) => ({
+      documentId: entry.documentId,
+      path: entry.path,
+      nameLength: entry.name?.length ?? 0,
+    })),
     unreadable: new Set(unreadableWorkspaceNodes(doc)),
   }
 }
 
+const placedAt = (documentId: string, path: string) => `${documentId}\n${path}`
+
+/** The longest name each id carried, so a long name is judged against its own past. */
+function longestNames(placement: Placement): ReadonlyMap<string, number> {
+  const longest = new Map<string, number>()
+  for (const { documentId, nameLength } of placement.documents) {
+    longest.set(documentId, Math.max(nameLength, longest.get(documentId) ?? 0))
+  }
+  return longest
+}
+
 /**
- * The refusal an update's placement writes earn: a node it left unreadable, a
- * document it MOVED onto a path the grammar refuses, or a name it grew past
- * the bound. What was already so before the update is not its doing — and
- * moving a document off a bad path, or shortening a long name, is how it gets
- * repaired — so each is judged against the state before.
+ * The refusal an update's placement writes earn: a record it grew past
+ * `WORKSPACE_MAX_DOCUMENTS`, a node it left unreadable, a document it MOVED
+ * onto a path the grammar refuses, or a name it grew past the bound. What
+ * was already so before the update is not its doing — and deleting
+ * documents, moving one off a bad path, or shortening a long name is how it
+ * gets repaired — so each is judged against the state before.
  *
  * One walk of the tree in the usual case, where nothing is suspect. Only when
  * something is does the state go back to `before` for a second walk, which
@@ -60,26 +84,29 @@ function placementRefusal(
   target: CachedTarget,
 ): SyncWriteRefusalError | null {
   const after = placementOf(doc)
-  const offGrammar = [...after.paths].filter(
-    ([, path]) => !documentPathSchema.safeParse(path).success,
+  const offGrammar = after.documents.filter(
+    ({ path }) => !documentPathSchema.safeParse(path).success,
   )
-  const longNames = [...after.names].filter(([, length]) => length > DOCUMENT_NAME_MAX_LENGTH)
-  if (offGrammar.length === 0 && longNames.length === 0 && after.unreadable.size === 0) return null
+  const longNames = after.documents.filter(
+    ({ nameLength }) => nameLength > DOCUMENT_NAME_MAX_LENGTH,
+  )
+  const crowded = after.documents.length > WORKSPACE_MAX_DOCUMENTS
+  if (!crowded && offGrammar.length === 0 && longNames.length === 0 && after.unreadable.size === 0)
+    return null
   doc.checkout(before)
   const earlier = placementOf(doc)
   runEvictingOnEngineTrap(target, 'importing an update into', () => doc.attach())
+  if (crowded && after.documents.length > earlier.documents.length) {
+    return new TooManyDocumentsError(after.documents.length)
+  }
   const unreadable = [...after.unreadable].filter((node) => !earlier.unreadable.has(node))
   if (unreadable.length > 0) return new UnreadableDocumentMetaError(unreadable)
-  const moved = offGrammar.filter(([documentId, path]) => earlier.paths.get(documentId) !== path)
-  if (moved.length > 0) return new OffGrammarPathError(moved.map(([, path]) => path))
-  const grown = longNames.filter(
-    ([documentId, length]) => length > (earlier.names.get(documentId) ?? 0),
-  )
-  if (grown.length > 0) {
-    return new DocumentNameTooLongError(
-      grown.map(([documentId]) => after.paths.get(documentId) ?? documentId),
-    )
-  }
+  const earlierPlaces = new Set(earlier.documents.map((d) => placedAt(d.documentId, d.path)))
+  const moved = offGrammar.filter((d) => !earlierPlaces.has(placedAt(d.documentId, d.path)))
+  if (moved.length > 0) return new OffGrammarPathError(moved.map(({ path }) => path))
+  const earlierNames = longestNames(earlier)
+  const grown = longNames.filter((d) => d.nameLength > (earlierNames.get(d.documentId) ?? 0))
+  if (grown.length > 0) return new DocumentNameTooLongError(grown.map(({ path }) => path))
   return null
 }
 

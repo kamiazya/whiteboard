@@ -8,8 +8,9 @@
 // added later silently inherits a guess instead of a decision. This module
 // replaces the catch-all with an explicit `null` ("nobody has declared this
 // route yet") so the caller can fail closed, and a `public` decision so the
-// one deliberately unauthenticated route (`GET /api/runtime/ping`, a
-// liveness probe) reads as a decision instead of an accidental gap.
+// deliberately unauthenticated routes (`GET /api/runtime/ping`, a liveness
+// probe, and `GET /api/runtime/proof`, a daemon's proof that it holds its
+// token) read as a decision instead of an accidental gap.
 //
 // `route-scope-registry.test.ts` walks every route actually mounted on the
 // server-mode Hono app (`app.routes`) and asserts each one resolves to a
@@ -137,11 +138,15 @@ const byAccess =
 const publicRoute = (): RouteScopeDecision => ({ kind: 'public' })
 
 const API_ROUTE_RULES: readonly RouteScopeRule[] = [
-  // The one public route: a liveness probe that identifies the responder
+  // A public route: a liveness probe that identifies the responder
   // (instanceId, advertised public key) and carries no secret or document
   // data, so it must answer a caller that holds no credential yet. Every
   // other /api/runtime/* path requires a scope below.
   { name: 'runtime/ping', claims: exactly('/api/runtime/ping'), decide: publicRoute },
+  // A daemon's proof that it holds its token, asked by a client that will not
+  // send the token until it has one (shared/endpoint-proof.ts) — so it must
+  // answer a caller holding no credential, and it carries no secret.
+  { name: 'runtime/proof', claims: exactly('/api/runtime/proof'), decide: publicRoute },
 
   // A file whose id is spelled like a document action (`…/a/file/update`) is
   // also that action on the document `a/file`, and which of the two answers
