@@ -58,3 +58,18 @@ export async function registerDocumentInWorkspace(
 ): Promise<void> {
   store.documentIndex.seed({ workspaceId, documentId, path, kind: 'spatial' })
 }
+
+/**
+ * Places `documentId` in `workspaceId` unless a test already did, with no
+ * kind — so a read tool's ownership guard admits the pair while the document's
+ * own recorded kind, or a kind the test seeded itself, stays what decides how
+ * it is read.
+ */
+export async function placeUnlessPlaced(
+  store: FakeDocumentStore,
+  workspaceId: WorkspaceId,
+  documentId: DocumentId,
+): Promise<void> {
+  if ((await store.documentIndex.resolveDocumentById({ workspaceId, documentId })) !== null) return
+  store.documentIndex.seed({ workspaceId, documentId, path: `placed-${documentId.toLowerCase()}` })
+}

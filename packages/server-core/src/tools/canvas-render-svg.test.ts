@@ -15,6 +15,7 @@ import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
+  placeUnlessPlaced,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
@@ -25,7 +26,9 @@ import { TAG_LIBRARY_PATH } from './tag-library.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+/** Places the document under test, since every read tool refuses one its workspace does not hold. */
+async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
+  await placeUnlessPlaced(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   return makeTestDeps({
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
@@ -41,7 +44,7 @@ describe('wb_scene_render tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -77,7 +80,7 @@ describe('wb_scene_render tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -96,7 +99,7 @@ describe('wb_scene_render tool', () => {
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(new FakeDocumentStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(new FakeDocumentStore()))
 
     await expect(
       tool.execute({
@@ -114,7 +117,7 @@ describe('wb_scene_render tool', () => {
       writeDocumentKind(doc, 'markdown')
       writeMarkdownBody(doc, '# Real prose')
     })
-    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -142,7 +145,7 @@ describe('wb_scene_render tool', () => {
       path: 'legacy-md',
       kind: 'markdown',
     })
-    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -166,7 +169,7 @@ describe('wb_scene_render measurer injection', () => {
     })
     const measured: string[] = []
     const tool = createCanvasRenderSvgTool({
-      ...makeDeps(store),
+      ...(await makeDeps(store)),
       textMeasurer: async () => ({
         measure: (text, font) => {
           measured.push(text)
@@ -213,7 +216,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
   }
 
   test('defaults to clean: an agent reading the SVG never pays for a theme unasked', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(await neonStore()))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -224,7 +227,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
   })
 
   test("style: 'document' draws the theme the document names", async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(await neonStore()))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -235,7 +238,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
   })
 
   test('a theme id draws that theme without the document naming it', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(await neonStore()))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -250,7 +253,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
   // asking for a theme could not tell it had not got one. The write path
   // refuses the same id with the registered ones; the read path now does too.
   test('refuses a theme id no plugin registered, naming what is', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(await neonStore()))
     const refused = tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -262,7 +265,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
   })
 
   test('refuses it before reading the document, so a typo costs no render', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(new FakeDocumentStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(new FakeDocumentStore()))
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
@@ -296,9 +299,12 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
     return store
   }
 
-  function depsMeasuring(store: FakeDocumentStore, ...families: string[]): ServerDeps {
+  async function depsMeasuring(
+    store: FakeDocumentStore,
+    ...families: string[]
+  ): Promise<ServerDeps> {
     return {
-      ...makeDeps(store),
+      ...(await makeDeps(store)),
       textMeasurer: async () => ({
         measure: constantRatioMeasureText,
         measurableFamilies: new Set([SPATIAL_THEME_FONT_FAMILY, ...families]),
@@ -307,7 +313,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
   }
 
   test('an installed family the theme names is declared', async () => {
-    const tool = createCanvasRenderSvgTool(depsMeasuring(await sketchStore(), 'Yomogi'))
+    const tool = createCanvasRenderSvgTool(await depsMeasuring(await sketchStore(), 'Yomogi'))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -318,7 +324,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
   })
 
   test('a family the measurer cannot answer for degrades to the bundled one', async () => {
-    const tool = createCanvasRenderSvgTool(depsMeasuring(await sketchStore()))
+    const tool = createCanvasRenderSvgTool(await depsMeasuring(await sketchStore()))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -330,7 +336,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
   })
 
   test('with no measurer supplied, only the bundled family is ever declared', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(await sketchStore()))
+    const tool = createCanvasRenderSvgTool(await makeDeps(await sketchStore()))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -371,7 +377,7 @@ describe('wb_scene_render draws the legend (ADR-0040 decision 6)', () => {
         edges: [],
       })
     })
-    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -426,8 +432,8 @@ describe('wb_scene_render and a workspace tag library (ADR-0040 decision 5)', ()
     }
     return store
   }
-  const render = (store: FakeDocumentStore) =>
-    createCanvasRenderSvgTool(makeDeps(store)).execute({
+  const render = async (store: FakeDocumentStore) =>
+    createCanvasRenderSvgTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
@@ -513,8 +519,8 @@ describe('wb_scene_render colours a board it draws inside another document', () 
     })
     return store
   }
-  const render = (store: FakeDocumentStore, embedReferences: boolean) =>
-    createCanvasRenderSvgTool(makeDeps(store)).execute({
+  const render = async (store: FakeDocumentStore, embedReferences: boolean) =>
+    createCanvasRenderSvgTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences,

@@ -19,7 +19,7 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
 import { TAG_LIBRARY_PATH } from './tag-library.js'
@@ -28,7 +28,9 @@ const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+/** Places the document under test, since every read tool refuses one its workspace does not hold. */
+async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
+  await placeUnlessPlaced(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   return makeTestDeps({
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
@@ -84,7 +86,7 @@ describe('canvas_view tool', () => {
   test('returns the scene the widget lays out, plus the id it refreshes with', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -118,7 +120,7 @@ describe('canvas_view tool', () => {
       messages: [{ id: 'm', body: 'both of these' }],
     }
     await seedDoc(store, DOCUMENT_ID, (doc) => writeCommentThread(doc, thread))
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -239,7 +241,7 @@ describe('canvas_view tool', () => {
   test('carries the referenced markdown document as its name and raw body', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -252,7 +254,7 @@ describe('canvas_view tool', () => {
   test('names a referenced document that has no display name by its path', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store, { path: 'notes/unnamed' })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -275,7 +277,7 @@ describe('canvas_view tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -311,7 +313,7 @@ describe('canvas_view tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -344,7 +346,7 @@ describe('canvas_view tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -401,7 +403,7 @@ describe('canvas_view tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -414,7 +416,7 @@ describe('canvas_view tool', () => {
       writeDocumentKind(doc, 'markdown')
       writeMarkdownBody(doc, '# Real prose')
     })
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
 
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
@@ -429,7 +431,7 @@ describe('canvas_view style (ADR-0030 decision 6)', () => {
   test('echoes the style the caller asked for, so the widget draws that look', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
-    const tool = createCanvasViewTool(makeDeps(store))
+    const tool = createCanvasViewTool(await makeDeps(store))
     const themed = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -517,8 +519,8 @@ describe('canvas_view and the workspace tag library', () => {
     }
     return store
   }
-  const view = (store: FakeDocumentStore) =>
-    createCanvasViewTool(makeDeps(store)).execute({
+  const view = async (store: FakeDocumentStore) =>
+    createCanvasViewTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
     })

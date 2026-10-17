@@ -11,7 +11,7 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import {
   canvasSnapshotSchema,
@@ -25,7 +25,9 @@ import {
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+/** Places the document under test, since every read tool refuses one its workspace does not hold. */
+async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
+  await placeUnlessPlaced(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   return makeTestDeps({
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
@@ -60,7 +62,7 @@ describe('wb_canvas_snapshot tool', () => {
         ],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -132,7 +134,7 @@ describe('wb_canvas_snapshot tool', () => {
       })
     })
 
-    const result = await createCanvasSnapshotTool(makeDeps(store)).execute({
+    const result = await createCanvasSnapshotTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
     })
@@ -182,7 +184,7 @@ describe('wb_canvas_snapshot tool', () => {
       setNodeLock(doc, 'n1', true)
       setEdgeLock(doc, 'e2', true)
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -207,7 +209,7 @@ describe('wb_canvas_snapshot tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -229,7 +231,7 @@ describe('wb_canvas_snapshot tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes, edges: [] })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -258,7 +260,7 @@ describe('wb_canvas_snapshot tool', () => {
         edges,
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -274,7 +276,7 @@ describe('wb_canvas_snapshot tool', () => {
       writeDocumentKind(doc, 'markdown')
       writeMarkdownBody(doc, '# Real prose\n\nThis document is not empty.')
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
@@ -285,7 +287,7 @@ describe('wb_canvas_snapshot tool', () => {
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
-    const tool = createCanvasSnapshotTool(makeDeps(new FakeDocumentStore()))
+    const tool = createCanvasSnapshotTool(await makeDeps(new FakeDocumentStore()))
 
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
@@ -308,7 +310,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
         edges: [],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -326,7 +328,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
         edges: [],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -367,7 +369,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
         edges: [],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -389,7 +391,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
       path: 'legacy-md',
       kind: 'markdown',
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
@@ -406,7 +408,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
         edges: [],
       })
     })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -433,7 +435,7 @@ describe('wb_canvas_snapshot — overflows', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes, edges: [] })
     })
-    return createCanvasSnapshotTool(makeDeps(store)).execute({
+    return createCanvasSnapshotTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       ...(layout ? { layout: true } : {}),
@@ -621,7 +623,7 @@ describe('wb_canvas_snapshot comments', () => {
       writeCommentThread(doc, openThread('whole', { kind: 'document' }))
     })
 
-    const result = await createCanvasSnapshotTool(makeDeps(store)).execute({
+    const result = await createCanvasSnapshotTool(await makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
     })
@@ -631,8 +633,8 @@ describe('wb_canvas_snapshot comments', () => {
     expect(result.comments.map((comment) => comment.id)).toEqual(['pin'])
   })
 
-  test('tells a reader the document-level threads are not in the list, and where to find them', () => {
-    const { description } = createCanvasSnapshotTool(makeDeps(new FakeDocumentStore()))
+  test('tells a reader the document-level threads are not in the list, and where to find them', async () => {
+    const { description } = createCanvasSnapshotTool(await makeDeps(new FakeDocumentStore()))
 
     expect(description).toMatch(/whole-document/i)
     expect(description).toContain('wb_document_get')

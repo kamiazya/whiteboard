@@ -3,14 +3,14 @@ import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
 /**
- * Guards a mutation tool against a caller-supplied `workspaceId` that does
- * not actually own `documentId` (stale cached id, copy-paste across two open
- * documents, client bug). Without this check a mismatched pair would still
- * pass every canvas-doc-level validation — `loadDocument`/
- * `loadOrCreateDocument` address the doc purely by `documentId`, with no
- * cross-check against placement. Call this before any mutation so the caller
- * gets an explicit, typed rejection instead of silently writing into the
- * wrong workspace's canvas.
+ * Guards a tool against a caller-supplied `workspaceId` that does not
+ * actually own `documentId` (stale cached id, copy-paste across two open
+ * documents, client bug, or a caller probing another workspace). Without this
+ * check a mismatched pair would still pass every canvas-doc-level validation —
+ * `loadDocument`/`loadOrCreateDocument` address the doc purely by
+ * `documentId`, and a store may fall through to one keyed by that id alone.
+ * Call this before any read or mutation so the caller gets an explicit, typed
+ * rejection instead of reading or writing the wrong workspace's document.
  */
 export async function assertDocumentInWorkspace(
   documentIndex: DocumentIndex,

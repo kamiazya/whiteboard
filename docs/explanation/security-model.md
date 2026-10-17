@@ -415,6 +415,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   deactivation before sending each update and ends the stream when either
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
+- **A restore from the trash is held to the bounds of any other write.** A
+  trash entry syncs with the workspace and a move carries the bytes it names,
+  so both are the writer's choice: a restore that would place a document at a
+  path outside the path grammar, give it a name past the length limit, or
+  bring back a body or node text past its limit is refused and changes
+  nothing, in the browser and on the daemon alike.
+- **An MCP tool reads only a document its named workspace holds.** A
+  `documentId` paired with a `workspaceId` that does not place it is refused
+  as not found, by the read tools as by the write tools.
 - **What a member is answered carries no storage detail.** A fault answers a
   fixed message and goes to the operator's log with its detail; an export
   names its file within the workspace's exports directory, not the absolute

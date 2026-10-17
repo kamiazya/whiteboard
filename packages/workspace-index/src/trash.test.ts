@@ -12,10 +12,14 @@
 import {
   readSpatialCanvas,
   readTrashEntries,
+  readWorkspaceNodes,
   recordTrashEntry,
+  setWorkspaceDocumentName,
+  type TrashEntry,
+  writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { DOCUMENT_NAME_MAX_LENGTH, MARKDOWN_MAX_CHARS, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { type BlobStore, blobRefKey } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -261,6 +265,89 @@ describe('restoring a document', () => {
     expect(
       (await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId).sort(),
     ).toEqual([named, other].sort())
+  })
+})
+
+describe('restoring a document judges it as a sync write would', () => {
+  // A trash row and the bytes it names both arrive from outside — a sync
+  // update can rewrite a row, a promotion carries bytes — so what a restore
+  // places is held to the bounds any other write of the record is.
+  let blobs: ReturnType<typeof inMemoryBlobStore>
+  let docs: ReturnType<typeof inMemoryWorkspaceDocs>
+  let index: LoroWorkspaceDocumentIndex
+
+  beforeEach(async () => {
+    blobs = inMemoryBlobStore()
+    docs = inMemoryWorkspaceDocs()
+    index = new LoroWorkspaceDocumentIndex(docs, blobs, {
+      listWorkspaces: async () => [],
+      renameWorkspace: notRenamed,
+    })
+    await index.createWorkspace({ workspaceId: WS })
+  })
+
+  async function trashed(
+    path: string,
+    shape: (doc: LoroDoc, documentId: string) => void = () => {},
+  ): Promise<{ documentId: string; row: TrashEntry }> {
+    const { documentId } = await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+    shape(docs.peek(WS), documentId)
+    await index.deleteDocument({ workspaceId: WS, path })
+    const row = (await index.listTrash({ workspaceId: WS })).find(
+      (entry) => entry.documentId === documentId,
+    )
+    if (row === undefined) throw new Error('expected a trash row')
+    return { documentId, row }
+  }
+
+  async function expectRefusedAndUntouched(documentId: string): Promise<void> {
+    expect(await index.restoreDocument({ workspaceId: WS, documentId })).toBeNull()
+    expect(await index.listDocuments({ workspaceId: WS })).toEqual([])
+    expect(readWorkspaceNodes(docs.peek(WS))).toEqual([])
+    expect((await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId)).toEqual([
+      documentId,
+    ])
+  }
+
+  it.each([
+    ['an empty segment', 'a//b'],
+    ['a parent step', '../x'],
+    ['a control character', 'a\u0007b/notes'],
+  ])('refuses a row whose path holds %s', async (_shape, path) => {
+    const { documentId, row } = await trashed('notes')
+    recordTrashEntry(docs.peek(WS), { ...row, path })
+
+    await expectRefusedAndUntouched(documentId)
+  })
+
+  it('refuses bytes holding a body past the length bound', async () => {
+    const { documentId } = await trashed('notes', (doc, id) =>
+      writeMarkdownBody(index.documentContainers(doc, id), 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
+    )
+
+    await expectRefusedAndUntouched(documentId)
+  })
+
+  it('refuses bytes holding a name past the length bound', async () => {
+    const { documentId } = await trashed('notes', (doc, id) =>
+      setWorkspaceDocumentName(doc, {
+        documentId: id,
+        name: 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1),
+      }),
+    )
+
+    await expectRefusedAndUntouched(documentId)
+  })
+
+  it('restores a document at the bounds', async () => {
+    const { documentId } = await trashed('design/notes', (doc, id) => {
+      writeMarkdownBody(index.documentContainers(doc, id), 'x'.repeat(MARKDOWN_MAX_CHARS))
+      setWorkspaceDocumentName(doc, { documentId: id, name: 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH) })
+    })
+
+    const restored = await index.restoreDocument({ workspaceId: WS, documentId })
+
+    expect(restored?.path).toBe('design/notes')
   })
 })
 
