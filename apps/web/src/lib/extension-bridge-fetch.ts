@@ -19,6 +19,7 @@ import {
   type PageToHost,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { extensionIdForPage } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { HOSTED_APP_ORIGIN } from '@kamiazya/whiteboard-daemon-client/hosted-app'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { BRIDGE_ORIGIN } from './bridge-address.js'
 import type { BridgePort } from './extension-bridge-port.js'
@@ -54,11 +55,15 @@ export function extensionHello(
     const timer = setTimeout(() => resolve(null), timeoutMs)
     try {
       const hello: ExtensionHello = { type: 'hello' }
-      runtime.sendMessage(extensionIdForPage(globalThis.location.origin), hello, (reply) => {
-        clearTimeout(timer)
-        const parsed = extensionHelloReplySchema.safeParse(reply)
-        resolve(parsed.success ? parsed.data : null)
-      })
+      runtime.sendMessage(
+        extensionIdForPage(globalThis.location.origin, HOSTED_APP_ORIGIN),
+        hello,
+        (reply) => {
+          clearTimeout(timer)
+          const parsed = extensionHelloReplySchema.safeParse(reply)
+          resolve(parsed.success ? parsed.data : null)
+        },
+      )
     } catch {
       clearTimeout(timer)
       resolve(null)
@@ -333,7 +338,8 @@ function settle(
  */
 export const extensionBridgeFetch = createBridgeFetch(
   () =>
-    extensionRuntime()?.connect(extensionIdForPage(globalThis.location.origin)) ??
-    connectThroughWindow(),
+    extensionRuntime()?.connect(
+      extensionIdForPage(globalThis.location.origin, HOSTED_APP_ORIGIN),
+    ) ?? connectThroughWindow(),
   extensionSkew,
 )

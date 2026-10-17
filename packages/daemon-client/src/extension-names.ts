@@ -3,8 +3,6 @@
  * native host (ADR-0050). Apart from the bridge's schemas so the extension,
  * which relays without reading, carries no validator it never runs.
  */
-import { HOSTED_APP_ORIGIN } from './hosted-app.js'
-
 /** The native messaging host's name, as the browser looks it up. */
 export const NATIVE_HOST_NAME = 'io.github.kamiazya.whiteboard'
 
@@ -25,10 +23,12 @@ export const WHITEBOARD_DEV_GECKO_ID = 'whiteboard-dev@kamiazya.github.io'
 /**
  * The Chromium extension a page addresses. Only the hosted app is admitted by
  * the production build, so every other page can be reaching the development
- * build alone.
+ * build alone. The hosted origin is passed in rather than imported: the
+ * extension's build config loads this module through Node, which cannot
+ * follow a `.js` specifier to a `.ts` sibling, so it stays import-free.
  */
-export function extensionIdForPage(origin: string): string {
-  return origin === HOSTED_APP_ORIGIN ? WHITEBOARD_EXTENSION_ID : WHITEBOARD_DEV_EXTENSION_ID
+export function extensionIdForPage(origin: string, hostedAppOrigin: string): string {
+  return origin === hostedAppOrigin ? WHITEBOARD_EXTENSION_ID : WHITEBOARD_DEV_EXTENSION_ID
 }
 
 /**

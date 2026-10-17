@@ -19,7 +19,7 @@ describe('BRIDGE_PROTOCOL_VERSION', () => {
 
 describe('extensionIdForPage', () => {
   it('addresses the production build from the hosted app', () => {
-    expect(extensionIdForPage(HOSTED_APP_ORIGIN)).toBe(WHITEBOARD_EXTENSION_ID)
+    expect(extensionIdForPage(HOSTED_APP_ORIGIN, HOSTED_APP_ORIGIN)).toBe(WHITEBOARD_EXTENSION_ID)
   })
 
   // The production build admits no other page, so a loopback dev server or a
@@ -30,6 +30,6 @@ describe('extensionIdForPage', () => {
     'https://pr-12.kamiazya-whiteboard.pages.dev',
     `${HOSTED_APP_ORIGIN}.evil.example`,
   ])('addresses the development build from %s', (origin) => {
-    expect(extensionIdForPage(origin)).toBe(WHITEBOARD_DEV_EXTENSION_ID)
+    expect(extensionIdForPage(origin, HOSTED_APP_ORIGIN)).toBe(WHITEBOARD_DEV_EXTENSION_ID)
   })
 })

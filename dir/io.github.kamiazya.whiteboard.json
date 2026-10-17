@@ -1,0 +1,7 @@
+{
+  "name": "io.github.kamiazya.whiteboard",
+  "description": "Relays the whiteboard extension to the local whiteboard daemon",
+  "path": "/tmp/wb-docs-commands-nRcLtA/data/native-host/whiteboard-native-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://jmhladeopagobbneclpfligeahaheiml/"]
+}

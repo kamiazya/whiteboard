@@ -45,10 +45,11 @@ The local daemon has one person: the machine's owner
 - **The development build of the extension has an id of its own.** It
   admits `localhost` and `127.0.0.1` pages, which any user of the machine
   can serve, so a host installed for everyday use does not start for it.
-  Only `whiteboard native-host install --development` allows that id, and
-  it refuses to run without a directory you name (`--manifest-dir`,
-  `--firefox-manifest-dir`), so it cannot replace your browsers' own
-  registration.
+  Only a development install allows that id, and it refuses to run without
+  a directory you name, so it cannot replace your browsers' own
+  registration:
+  `whiteboard native-host install --json --development --manifest-dir=<dir>`
+  (or `--firefox-manifest-dir=<dir>`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the
   local process that launches the server.
 

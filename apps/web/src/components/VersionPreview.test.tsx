@@ -128,9 +128,18 @@ describe('a link drawn in a version', () => {
 
   it.each([
     ['root-relative', '/guide'],
-    ['protocol-relative', '//example.com/x'],
     ['document-relative', 'guide.md'],
   ])('a %s URL keeps the browser default', async (_shape, href) => {
     expect(await click({ kind: 'markdown', body: BODY }, href)).toBe(false)
+  })
+
+  it('draws a protocol-relative URL as an inert link, never as another host', async () => {
+    const { container } = render(<VersionPreview past={{ kind: 'markdown', body: BODY }} />)
+    // The guide link renders first-class, so the scene is drawn when it exists.
+    await vi.waitFor(() => {
+      if (container.querySelector('a[href="/guide"]') === null) throw new Error('not drawn yet')
+    })
+    expect(container.querySelector('a[href="//example.com/x"]')).toBeNull()
+    expect(container.querySelector('a[href="#"]')).not.toBeNull()
   })
 })
