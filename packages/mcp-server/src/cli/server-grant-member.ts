@@ -1,6 +1,7 @@
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createWorkspacePeopleAdministration } from '../server/security/people-administration.js'
+import { homeWithItsOwner } from '../server/security/workspace-namespace-home.js'
 import { createWorkspaceRoles } from '../server/security/workspace-roles.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
@@ -53,6 +54,7 @@ export async function grantMember(
     roles: createWorkspaceRoles(db),
   }).grant(workspaceId, found.user.id)
   if (granted.kind === 'refused') return operatorRefusal(granted)
+  await homeWithItsOwner(db, workspaceId)
   return { kind: 'ok', workspaceId, user: found.user }
 }
 

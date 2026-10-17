@@ -78,6 +78,39 @@ describe('grantMember', () => {
     expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('ws-bob')
   })
 
+  // A workspace a single-person keeper made, restored onto server mode, sits
+  // in `me`, which no server-mode user holds: its first owner's own bare
+  // segment has to reach it once the operator grants them.
+  it("moves a workspace no namespace holds into its first owner's", async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-restored', { namespace: 'me', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, 'ws-ada-own', { namespace: 'ada', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    const outcome = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+
+    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-restored')
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', 'ws-restored')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({ namespace: ada.handle, segment: 'plans-2' })
+  })
+
+  it('moves only a workspace held in `me`, never one another namespace holds', async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+
+    await grantMember(handle.db, { workspaceId: 'ws-bob', user: ada.id })
+
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', 'ws-bob')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({ namespace: 'bob', segment: 'plans' })
+  })
+
   it('finds a user by their exact display name', async () => {
     const ada = await userNamed('Ada', 'ada-1')
     await userNamed('Bob', 'bob-1')

@@ -300,6 +300,12 @@ The person must have become a user first (by signing in, by a bearer as
 above, or by `add-user`). A name that matches nobody, or more than one user, is refused and the
 candidates are printed.
 
+A workspace moved in from a local daemon has no owner's address yet, so the
+address `--workspace` takes is its id, or its segment as the daemon showed it.
+Granting its first owner moves it to that person's address,
+`/w/<their handle>/<segment>`. If they already have a workspace with that
+segment, the moved one gets a numbered suffix (`plans-2`).
+
 The same command recovers a workspace whose owners are all deactivated.
 When the workspace has no active owner, the person it names becomes an
 owner, and someone who is already a member is promoted. While an active

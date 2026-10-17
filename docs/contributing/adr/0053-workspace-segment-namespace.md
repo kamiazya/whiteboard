@@ -490,7 +490,9 @@ starts from a failing test at its nearest layer.
      daemon workspace is such a row, so refusing would stop every local
      daemon from migrating; on server mode a workspace nobody is a member of
      admits nobody, and `me` — which no server-mode user can hold — leaves it
-     reachable by its id alone until an operator grants it a member. A
+     reachable by its id alone until an operator grants it a member. That
+     grant takes it into its first owner's namespace, suffixing a segment
+     the owner already holds there (`homeWithItsOwner`). A
      workspace with members but no owner is refused, as above. Until slice 3
      the server-mode listing omitted the segment of a workspace held in
      another namespace, since the web app would otherwise have addressed it

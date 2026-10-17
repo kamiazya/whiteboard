@@ -381,8 +381,14 @@ try {
       },
     )
 
+    let serverStderr = ''
+    serverMode.stderr.on('data', (chunk) => {
+      serverStderr = (serverStderr + chunk.toString()).slice(-4000)
+    })
     const ready = await waitForProcessReadyJson(serverMode)
-    if (!ready) fail('scenario 5: restored server did not emit ready JSON')
+    if (!ready) {
+      fail('scenario 5: restored server did not emit ready JSON', { stderr: serverStderr })
+    }
     if (!(await waitForHttpReady(`http://127.0.0.1:${SERVER_PORT}/api/runtime/ping`))) {
       fail('scenario 5: restored server HTTP not ready')
     }
@@ -414,7 +420,11 @@ try {
     await refusedAs('before a member is granted', 'not_a_member')
     operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, '--user=cli-smoke-user'])
     const listRes = await listDocuments()
-    if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status} ${await listRes.text()}`)
+    if (!listRes.ok) {
+      fail(`scenario 5: canvas list failed with ${listRes.status} ${await listRes.text()}`, {
+        stderr: serverStderr,
+      })
+    }
     const list = await listRes.json()
     if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 5: seeded canvas not found on restored server', {
