@@ -1,6 +1,6 @@
 import type { Stats } from 'node:fs'
 import { cp, lstat, mkdir, readdir, readlink, stat } from 'node:fs/promises'
-import { dirname, join, parse, resolve, sep } from 'node:path'
+import { dirname, join, parse, relative, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { NATIVE_HOST_DIRNAME } from '../daemon/native-host/install.js'
 import { isMissingFileError } from '../shared/errno.js'
@@ -526,6 +526,9 @@ async function materialiseMirroredBlobs(
         'Restore refused rather than producing a data directory with holes in it.',
     )
   }
+  // A parent mirror sits outside the backup, so the symlink check above never
+  // walked it; each source is judged here, whichever mirror holds it.
+  for (const item of wanted) await assertPlainMirrorFile(mirrorRoot, item.from)
 
   for (const item of wanted) {
     await mkdir(dirname(item.to), { recursive: true })
@@ -540,8 +543,10 @@ async function materialiseMirroredBlobs(
  * only constructor of `BackupBlobReferences` from untrusted bytes): a tenant id
  * is one path segment and a file path is relative with no `.`, `..`, empty
  * segment or backslash, so every destination below is inside the tenant's blob
- * directory by construction. The target is empty and the restored tree has
- * been checked symlink-free, so no existing link can redirect one either.
+ * directory by construction. The target is empty, the backup has been checked
+ * symlink-free, and each source in the mirror — which for a `parent` mirror
+ * lies outside the backup — is checked by `assertPlainMirrorFile`, so no link
+ * can redirect a source or a destination.
  */
 function plannedRestores(
   mirrorRoot: string,
@@ -559,6 +564,29 @@ function plannedRestores(
     to: join(into, ...relativePath.split('/')),
   }))
   return [...planned, ...named]
+}
+
+/**
+ * Refuses `path` unless every component below `mirrorRoot` is a real
+ * directory and the last a regular file. `cp` with `dereference: false`
+ * recreates a symlinked file as a link in the target, and follows a symlinked
+ * directory on the way to it, so either would let the mirror's neighbour
+ * decide what a restored data directory holds.
+ */
+async function assertPlainMirrorFile(mirrorRoot: string, path: string): Promise<void> {
+  const segments = relative(mirrorRoot, path).split(sep)
+  let current = mirrorRoot
+  for (const [index, segment] of segments.entries()) {
+    current = join(current, segment)
+    const s = await lstat(current)
+    const last = index === segments.length - 1
+    if (s.isSymbolicLink()) {
+      throw new BackupError('Backup mirror contains a symlink, which is not allowed.')
+    }
+    if (last ? !s.isFile() : !s.isDirectory()) {
+      throw new BackupError('Backup mirror contains a non-regular entry, which is not allowed.')
+    }
+  }
 }
 
 async function pathExists(path: string): Promise<boolean> {

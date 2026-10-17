@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sha256Hex } from '../shared/sha256.js'
-import { restoreDataDir } from './backup-restore.js'
+import { BackupError, restoreDataDir } from './backup-restore.js'
 
 /**
  * A backup is an artifact somebody else may have produced or moved, and its
@@ -90,5 +90,71 @@ describe('restoring a backup whose manifest names hostile paths', () => {
     await expect(restoreDataDir(backup, target, { allowedRoots: [root] })).rejects.toThrow()
     expect(await outsideTarget()).toEqual(before)
     expect(await filesUnder(target).catch(() => [])).toEqual([])
+  })
+})
+
+/**
+ * A `mirror: 'parent'` backup reads its blobs from the directory ABOVE the
+ * backup, which the backup's own symlink check never walks. Whatever it reads
+ * from there has to be a plain file reached through plain directories, or a
+ * restore copies a link — or a file the link's owner chose — into the target.
+ */
+describe("restoring a backup whose blobs live in the parent's mirror", () => {
+  const parentBlobs = () => join(root, 'data', 'blobs')
+  const shard = () => join(parentBlobs(), digest.slice(0, 2), digest.slice(2))
+
+  async function writeParentManifest(): Promise<void> {
+    await writeFile(
+      join(backup, 'blobs.json'),
+      JSON.stringify({
+        schemaVersion: 3,
+        mirror: 'parent',
+        tenants: { 'self-host': { blobs: [digest], files: {} } },
+      }),
+    )
+  }
+
+  /** Every symlink under `dir`, so a recreated link shows wherever it landed. */
+  async function symlinksUnder(dir: string): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true, recursive: true }).catch(() => [])
+    return entries.filter((entry) => entry.isSymbolicLink()).map((entry) => entry.name)
+  }
+
+  it('restores a blob the parent mirror holds as a plain file', async () => {
+    await mkdir(join(parentBlobs(), digest.slice(0, 2)), { recursive: true })
+    await writeFile(shard(), payload)
+    await writeParentManifest()
+
+    await restoreDataDir(backup, target, { allowedRoots: [root] })
+
+    const restored = join(target, 'tenants', 'self-host', 'blobs', digest.slice(0, 2))
+    expect(await readFile(join(restored, digest.slice(2)), 'utf8')).toBe('attacker-controlled')
+  })
+
+  it('refuses a shard entry that is a symlink, and restores no link', async () => {
+    const outside = join(root, 'outside', 'secret')
+    await mkdir(join(root, 'outside'), { recursive: true })
+    await writeFile(outside, payload)
+    await mkdir(join(parentBlobs(), digest.slice(0, 2)), { recursive: true })
+    await symlink(outside, shard())
+    await writeParentManifest()
+
+    await expect(restoreDataDir(backup, target, { allowedRoots: [root] })).rejects.toThrow(
+      BackupError,
+    )
+    expect(await symlinksUnder(target)).toEqual([])
+  })
+
+  it('refuses a mirror whose blobs directory is itself a symlink', async () => {
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(join(elsewhere, digest.slice(0, 2)), { recursive: true })
+    await writeFile(join(elsewhere, digest.slice(0, 2), digest.slice(2)), payload)
+    await symlink(elsewhere, parentBlobs())
+    await writeParentManifest()
+
+    await expect(restoreDataDir(backup, target, { allowedRoots: [root] })).rejects.toThrow(
+      BackupError,
+    )
+    expect(await filesUnder(join(target, 'tenants')).catch(() => [])).toEqual([])
   })
 })
