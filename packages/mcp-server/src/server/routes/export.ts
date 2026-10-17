@@ -4,18 +4,17 @@ import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-co
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { z } from 'zod'
-import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
-  answeredExportPath,
   documentMissingBody,
   type ExportPathAnswer,
   readExportBody,
   resolveRequestedOutputPath,
-  writeExportFile,
+  writeExportAnswer,
 } from './export-request.js'
 
 /**
@@ -105,26 +104,14 @@ export function createExportRouter(options: ExportRouterOptions) {
 
     const rendered = await renderedExport(workspaceId, path, body, options.scope)
     if ('error' in rendered) return c.json(rendered.error, rendered.status)
-    const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
-
-    const filePath = await writeExportFile(pngBuffer, {
-      outputPath,
-      layout,
-      workspaceId,
-      path,
-      extension: 'png',
-    })
-    const response: ExportResponse = {
-      filePath: answeredExportPath(
-        filePath,
-        options.exportPaths ?? 'absolute',
-        layout,
-        workspaceId,
+    return c.json(
+      await writeExportAnswer(
+        rendered.png,
+        { outputPath, layout, workspaceId, path, extension: 'png' },
+        rendered,
+        options.exportPaths,
       ),
-      undrawable: [...undrawable],
-      unresolvedFamilies: [...unresolvedFamilies],
-    }
-    return c.json(response)
+    )
   })
 
   return app

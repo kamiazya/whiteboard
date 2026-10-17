@@ -251,7 +251,7 @@ async function restoreToTarget(
  * caller cannot be told which document now holds it. Named, so a server-mode
  * caller reads this rather than a bare internal error.
  */
-export class RestoredDocumentIdMissingError extends Error {
+class RestoredDocumentIdMissingError extends Error {
   constructor(public readonly targetPath: string) {
     super(`restored document has no id: ${targetPath}`)
     this.name = 'RestoredDocumentIdMissingError'

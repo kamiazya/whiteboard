@@ -46,6 +46,17 @@ export interface RuntimeRouterOptions {
   readLastAutoCompactedAt: () => Promise<number | null>
 }
 
+/** Which grant this request holds, or `null` for none: see `serverModeGrant`. */
+async function requestGrant(
+  options: RuntimeRouterOptions,
+  c: Context,
+): Promise<ResolvedGrant | null> {
+  if (options.serverModeGrant !== undefined) return options.serverModeGrant(c) ?? null
+  return options.credentialResolver.resolve({
+    secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+  })
+}
+
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
   const app = new Hono()
 
@@ -76,12 +87,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
     if (scope?.kind === 'public') return next()
 
-    const grant =
-      options.serverModeGrant !== undefined
-        ? (options.serverModeGrant(c) ?? null)
-        : await options.credentialResolver.resolve({
-            secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-          })
+    const grant = await requestGrant(options, c)
     if (grant === null) return c.json({ error: 'unauthorized' }, 401)
     if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return next()
 

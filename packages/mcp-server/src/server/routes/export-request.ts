@@ -11,6 +11,7 @@ import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
+import type { ExportResponse } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
@@ -139,13 +140,25 @@ export async function writeExportFile(
  */
 export type ExportPathAnswer = 'absolute' | 'exports-relative'
 
-export function answeredExportPath(
-  filePath: string,
-  answer: ExportPathAnswer,
-  layout: ExportsLayout,
-  workspaceId: string,
-): string {
-  return answer === 'absolute' ? filePath : relative(layout.exportsDir(workspaceId), filePath)
+/**
+ * Writes a rendered export and answers it: where it landed, named as
+ * `answer` says, and what the render could not draw.
+ */
+export async function writeExportAnswer(
+  data: string | Uint8Array,
+  target: Parameters<typeof writeExportFile>[1],
+  report: { undrawable: readonly string[]; unresolvedFamilies: readonly string[] },
+  answer: ExportPathAnswer = 'absolute',
+): Promise<ExportResponse> {
+  const filePath = await writeExportFile(data, target)
+  return {
+    filePath:
+      answer === 'absolute'
+        ? filePath
+        : relative(target.layout.exportsDir(target.workspaceId), filePath),
+    undrawable: [...report.undrawable],
+    unresolvedFamilies: [...report.unresolvedFamilies],
+  }
 }
 
 /**

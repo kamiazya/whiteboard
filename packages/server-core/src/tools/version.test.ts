@@ -3,7 +3,6 @@ import { documentIdSchema, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { RestoredDocumentIdMissingError } from '../operations/restore-version.js'
 import type {
   CanvasClientNotifier,
   RestoreProgressEvent,
@@ -450,6 +449,6 @@ describe('wb_version_restore', () => {
         versionId: saved.id,
         targetPath: 'notes/plan-copy',
       }),
-    ).rejects.toBeInstanceOf(RestoredDocumentIdMissingError)
+    ).rejects.toMatchObject({ name: 'RestoredDocumentIdMissingError' })
   })
 })
