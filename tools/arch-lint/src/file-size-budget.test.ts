@@ -210,8 +210,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // vocabulary they share with the typesetter (`mdast-layout-options.ts`) are
   // sibling modules; the vocabulary went first, so neither imports the
   // typesetter back. The next shrink is the inline writer out of
-  // `layoutPhrasing`, benched before and after.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1341,
+  // `layoutPhrasing`, benched before and after. Raised by 9 for the nested-
+  // layout budget, which has to be spent where an embed is resolved.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1350,
   // The side-choice SEARCH: the cost model's application to a whole canvas,
   // the trial machinery of `createConfigScore`, the repair pass and the
   // regions. The side vocabulary (`edge-sides.ts`), the anchor pass

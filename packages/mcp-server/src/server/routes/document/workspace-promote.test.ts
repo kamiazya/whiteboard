@@ -17,6 +17,7 @@ import {
   readMarkdownBody,
   recordTrashEntry,
   resolveWorkspaceDocumentById,
+  WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -155,6 +156,37 @@ it('answers bytes that are not a record in the code family, under a code of thei
     error: 'malformed_snapshot',
     message: 'Malformed workspace record snapshot',
   })
+})
+
+// The cap as the route's caller reads it (ADR-0044's desktop browser-keeper
+// limit), stated here rather than imported so the test judges the operation.
+const PROMOTE_DOCUMENT_CAP = 2000
+
+it('refuses a record past the document cap with 413 under its own code, and keeps none of it', async () => {
+  const { promote, documents } = harness()
+  // Raw tree nodes in one commit: the path-checked create walks the whole
+  // tree per call, which makes a fixture this size take minutes.
+  const record = new LoroDoc()
+  const tree = record.getTree(WORKSPACE_TREE_KEY)
+  const ulid = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+  for (let i = 0; i <= PROMOTE_DOCUMENT_CAP; i++) {
+    const node = tree.createNode()
+    const suffix = `${ulid[Math.floor(i / 1024) % 32]}${ulid[Math.floor(i / 32) % 32]}${ulid[i % 32]}`
+    node.data.set('documentId', `01BRWC${suffix.padStart(20, '0')}`)
+    node.data.set('segment', `d${i}`)
+    node.data.set('kind', 'markdown')
+    node.data.set('createdAt', 1_000)
+    node.data.set('updatedAt', 1_000)
+  }
+  record.commit()
+
+  const res = await promote({ snapshot: b64u(new Uint8Array(record.export({ mode: 'snapshot' }))) })
+  expect(res.status).toBe(413)
+  const body = (await res.json()) as { error: string; message: string }
+  expect(body.error).toBe('promote_too_many_documents')
+  expect(body.message).toContain(String(PROMOTE_DOCUMENT_CAP))
+  expect(await documents()).toHaveLength(0)
+  expect(await new FileVersionStore().list('session1', 'd0')).toHaveLength(0)
 })
 
 it('answers 404 for a workspace the daemon never registered', async () => {

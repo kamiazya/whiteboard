@@ -3,6 +3,7 @@ import type { Scene } from '@kamiazya/whiteboard-scene'
 import { withReferenceSeams } from '../references/seams.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 import {
@@ -60,6 +61,9 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
 export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOptions): Scene {
   const options = withReferenceSeams(input)
   const { canvasAppearance, style, fontAvailable, tagLibrary, ...rest } = options
+  // Opened here rather than in the typesetter so the canvases this note
+  // embeds spend from the same account as the note's own embeds.
+  const nestedLayoutBudget = options.nestedLayoutBudget ?? createNestedLayoutBudget()
   return typesetMdastBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
       fitSceneIntoBox(
@@ -67,11 +71,13 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           measure: options.measure,
           appearance: canvasAppearance ?? createSpatialTheme({ mode: 'light' }),
           embedPath: box.embedPath,
+          nestedLayoutBudget,
           ...pickKeys(options, FORWARDED_TO_EMBEDDED_CANVAS),
         }),
         box,
       ),
     ...rest,
+    nestedLayoutBudget,
   })
 }
 

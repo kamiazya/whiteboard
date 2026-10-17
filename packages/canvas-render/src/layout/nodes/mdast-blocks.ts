@@ -37,6 +37,7 @@ import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
 import { escapeXmlText } from '../../xml-escape.js'
+import { createNestedLayoutBudget, spendNestedLayout } from './embed-budget.js'
 import { createInlineJunction, headCharacter } from './inline-junction.js'
 import { layoutCodeBlock } from './mdast-code-block.js'
 import {
@@ -1005,8 +1006,9 @@ function layoutListItem(
  * inline under an `embedResolved` node whose children stay in ABSOLUTE
  * coordinates (no SVG transform, so the listItem/tableCell transform-
  * boundary set is untouched). Total by construction: a cycle on the
- * current path, the depth cap, and a missing/throwing resolver each
- * degrade to an `embedPlaceholder` with the matching reason, so no resolver
+ * current path, the depth cap, the render's nested-layout budget, and a
+ * missing/throwing resolver each degrade to an `embedPlaceholder` with the
+ * matching reason, so no resolver
  * can loop or abort layout.
  */
 function layoutEmbedBlock(
@@ -1032,6 +1034,9 @@ function layoutEmbedBlock(
   if (embedPath.includes(documentId)) return placeholder('cycle')
   if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
   if (resolved === undefined) return placeholder('unresolvable')
+  // Spent here for both targets: a canvas target's miniature is laid out by
+  // `layoutEmbeddedCanvas`, which must not spend again for the same embed.
+  if (!spendNestedLayout(options.nestedLayoutBudget)) return placeholder('budget')
   const nextPath = [...embedPath, documentId]
   // A fragment narrows the document to the part it names. One the document
   // does not hold is unresolvable in the same way a missing document is:
@@ -1146,7 +1151,11 @@ export function typesetMdastBlocks(root: MdastRoot, options: MdastLayoutOptions)
  * shape `layoutSpatialCanvas` uses for `parseBody`.
  */
 function resolveTheme(options: MdastLayoutOptions): ResolvedMdastOptions {
-  return { ...withReferenceSeams(options), theme: options.theme ?? MARKDOWN_THEME_NODE }
+  return {
+    ...withReferenceSeams(options),
+    theme: options.theme ?? MARKDOWN_THEME_NODE,
+    nestedLayoutBudget: options.nestedLayoutBudget ?? createNestedLayoutBudget(),
+  }
 }
 
 export interface FittedBlocks {
