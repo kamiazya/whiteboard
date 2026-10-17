@@ -11,9 +11,9 @@ import {
   TAGS_PER_ELEMENT_MAX,
   tagListWriteSchema,
   tagWriteSchema,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /**
  * A ceiling on one request. Facet payloads are small, so this is not about
@@ -82,7 +82,7 @@ const tagsChangeSchema = z
  */
 export const facetSetInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe('The workspace the documents belong to.'),
+    workspaceId: workspaceAddressArgSchema,
     documentIds: z
       .array(documentIdSchema)
       .min(1)

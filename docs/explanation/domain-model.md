@@ -34,7 +34,9 @@ modes, how documents are identified, and how a workspace keeps them. Read
   people can each have a `design` workspace there, and creating or renaming
   one never tells you whether somebody else uses that name. A short name you
   type means one of your own workspaces; one shared with you from somebody
-  else's namespace is addressed by its identifier.
+  else's namespace is addressed by its identifier, or — in an agent's tool
+  call — by `<handle>/<short name>`. A tool call never creates a workspace
+  in somebody else's namespace.
 - **Display name** — the human title of a document. Optional; a document
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.

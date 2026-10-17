@@ -176,6 +176,6 @@ describe('whiteboard server grant-member', () => {
   it('exits 64 without --workspace', async () => {
     const res = await run(['--json', '--user=Ada'])
     expect(res.code).toBe(64)
-    expect(res.stderr).toContain('--workspace=<id|segment> is required')
+    expect(res.stderr).toContain('--workspace=<id|handle/segment|segment> is required')
   })
 })

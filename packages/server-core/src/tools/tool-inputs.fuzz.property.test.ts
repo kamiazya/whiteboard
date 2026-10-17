@@ -31,6 +31,7 @@ import {
   documentPathSchema,
   extensionFacetsSchema,
   nodeIdSchema,
+  workspaceAddressInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import {
@@ -103,8 +104,8 @@ type Passage = (typeof PASSAGES)[number]
 const passages = fc.constantFrom(...PASSAGES)
 const OKF_NOTE = '---\ntype: note\ntags: [a]\n---\n# Title\n\nA body.\n'
 const override = (path: string, schema: z.ZodTypeAny): fc.Arbitrary<unknown> | undefined => {
-  if (sameSchema(schema, workspaceIdSchema)) {
-    return fc.constantFrom(WORKSPACE_ID, WORKSPACE_ID, WORKSPACE_ID, 'nowhere')
+  if (sameSchema(schema, workspaceIdSchema) || sameSchema(schema, workspaceAddressInputSchema)) {
+    return fc.constantFrom(WORKSPACE_ID, WORKSPACE_ID, WORKSPACE_ID, 'nowhere', 'me/nowhere')
   }
   if (sameSchema(schema, documentIdSchema)) {
     return fc.constantFrom(SPATIAL_ID, SPATIAL_ID, MARKDOWN_ID, MARKDOWN_ID, MISSING_ID)

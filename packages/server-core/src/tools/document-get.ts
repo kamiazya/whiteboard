@@ -6,7 +6,6 @@ import {
   documentIdSchema,
   documentKindSchema,
   proposalSchema,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadOrCreateDocument } from '../document-io.js'
@@ -14,6 +13,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { DocumentSerializeError } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /**
  * 20 is a ceiling on one request, and it is a JUDGEMENT rather than a
@@ -26,7 +26,7 @@ const MAX_DOCUMENTS = 20
 
 const documentGetInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentIds: z.array(documentIdSchema).min(1).max(MAX_DOCUMENTS),
     options: z
       .object({

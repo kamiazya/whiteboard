@@ -26,7 +26,12 @@ export function rememberCallerNamespace(c: Context, namespace: string): void {
 }
 
 export function callerNamespaceOf(c: Context): string {
-  return callerNamespaces.get(c.req.raw) ?? SINGLE_PERSON_NAMESPACE
+  return callerNamespaceOfRequest(c.req.raw)
+}
+
+/** `callerNamespaceOf` for a holder of the bare request, as server-core's `/api/v1` is. */
+export function callerNamespaceOfRequest(request: Request): string {
+  return callerNamespaces.get(request) ?? SINGLE_PERSON_NAMESPACE
 }
 
 /**

@@ -383,3 +383,99 @@ describe('server mode — an export answers no server path', () => {
     }
   })
 })
+
+// ADR-0053's three address forms on a keeper many people share: a qualified
+// handle reaches another namespace's workspace for its members alone, and is
+// never minted for anyone but the namespace's own holder.
+describe('server mode /mcp — a qualified handle names one namespace', () => {
+  const pathsOf = (listed: { structuredContent?: Record<string, unknown> }) =>
+    ((listed.structuredContent?.documents ?? []) as { path: string }[]).map((d) => d.path)
+
+  it('reaches a workspace by <handle>/<segment> for its member, and refuses anyone else alike', async () => {
+    const ada = await agentOf('ada')
+    const eve = await agentOf('eve')
+    try {
+      expect((await ada.call('wb_workspace_edit', createPlans)).isError).toBeFalsy()
+
+      const own = await ada.call('wb_document_list', { workspaceId: 'ada/plans' })
+      expect(own.isError, textOf(own)).toBeFalsy()
+      expect(pathsOf(own)).toEqual(['notes'])
+
+      const held = await eve.call('wb_document_list', { workspaceId: 'ada/plans' })
+      const absent = await eve.call('wb_document_list', { workspaceId: 'ada/nothing' })
+      const nobody = await eve.call('wb_document_list', { workspaceId: 'nobody/plans' })
+      expect(held.isError).toBe(true)
+      expect(textOf(held)).toMatch(/not_a_member/)
+      expect(textOf(absent)).toBe(textOf(held).replace('plans', 'nothing'))
+      expect(textOf(nobody)).toBe(textOf(held).replace('ada', 'nobody'))
+    } finally {
+      await ada.close()
+      await eve.close()
+    }
+  })
+
+  it("never mints a qualified handle in another person's namespace", async () => {
+    const eve = await agentOf('eve')
+    try {
+      const before = await options.serverDeps.documentIndex.listWorkspaces()
+      const minted = await eve.call('wb_workspace_edit', {
+        ...createPlans,
+        workspaceId: 'ada/plans',
+      })
+      expect(minted.isError).toBe(true)
+      expect(textOf(minted)).toMatch(/not_a_member/)
+      expect(await options.serverDeps.documentIndex.listWorkspaces()).toEqual(before)
+    } finally {
+      await eve.close()
+    }
+  })
+
+  it("mints a qualified handle in the caller's own namespace with them as its member", async () => {
+    const eve = await agentOf('eve')
+    try {
+      const minted = await eve.call('wb_workspace_edit', {
+        ...createPlans,
+        workspaceId: 'eve/plans',
+      })
+      expect(minted.isError, textOf(minted)).toBeFalsy()
+      const listed = await eve.call('wb_document_list', { workspaceId: 'plans' })
+      expect(listed.isError, textOf(listed)).toBeFalsy()
+      expect(pathsOf(listed)).toEqual(['notes'])
+    } finally {
+      await eve.close()
+    }
+  })
+})
+
+// The gate resolves a bare segment in the caller's namespace before it judges
+// membership; `/api/v1` resolving it again in any other namespace would serve
+// a workspace the gate never admitted the request to.
+describe("server mode /api/v1 — a bare segment is the caller's own", () => {
+  // The gate reads the daemon's own registry, so the deps must be booted over it.
+  beforeEach(async () => {
+    const boot = await bootSelfHostDeps(tempDir)
+    options = { ...options, serverDeps: boot.serverDeps, dataLayout: boot.dataLayout }
+    app = createApp(options)
+  })
+
+  it("serves the caller's workspace, not a memberless one holding the same segment", async () => {
+    const ada = await agentOf('ada')
+    try {
+      expect((await ada.call('wb_workspace_edit', createPlans)).isError).toBeFalsy()
+    } finally {
+      await ada.close()
+    }
+    const { documentIndex } = options.serverDeps
+    const memberless = '01ARZ3NDEKTSV4RRFFQ69G5FAX'
+    await documentIndex.createWorkspace({ workspaceId: memberless, segment: 'plans' })
+    await documentIndex.createDocument({ workspaceId: memberless, path: 'stray', kind: 'markdown' })
+
+    const res = await app.request(`${PUBLIC_URL}/api/v1/workspaces/plans/documents`, {
+      headers: { Authorization: `Bearer ${await tokenFor('ada', 'workspace:read')}` },
+    })
+    const text = await res.text()
+    expect(res.status, text).toBe(200)
+    expect(text).toContain('notes')
+    expect(text).not.toContain('stray')
+  })
+})

@@ -3,9 +3,9 @@
 **Status:** Accepted, 2026-10-17. The owner chose the direction that day
 ("namespace segments per owner", design first), then answered the four open
 questions this record raised. The answers are the Decision section below.
-The implementation is sliced at the end of this record; slices 1 and 2
-(model/ports, and the daemon registry with its three oracle paths) are
-built, slices 3 and 4 are not.
+The implementation is sliced at the end of this record; slices 1, 2 and 4
+(model/ports, the daemon registry with its three oracle paths, and the MCP
+tool surface) are built, slice 3 is not.
 
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
@@ -459,7 +459,7 @@ in `workspaceIdSchema`, and describing all three forms, changes a published
 tool surface. Its exact shape is settled by that slice's `mcp-tool-surface`
 procedure, not here.
 
-### Implementation slices (1 and 2 built)
+### Implementation slices (1, 2 and 4 built)
 
 The slices are listed in `architecture-map.md`'s dependency order. Each
 starts from a failing test at its nearest layer.
@@ -507,6 +507,23 @@ starts from a failing test at its nearest layer.
    - ADR-0031's scoreboards re-pinned.
    - `pnpm smoke:e2e` extended to call a qualified handle.
    - The operator command line's `--workspace` changes in the same slice.
+   - As built: every tool's `workspaceId` is one described schema, the
+     pattern `^[\w-]+(\/[\w-]+)?$` with "Workspace id,
+     `<handle>/<segment>`, or a segment of your own." (+767 model-visible
+     bytes across the table, 10 fewer undescribed parameters).
+     `server-core` no longer assumes `me`: `ServerDeps.callerNamespace`
+     answers whose namespace a bare segment means, and the tool wrapper,
+     `/api/v1`'s resolution and the `createWorkspace` mint all ask it. The
+     daemon answers from the same records its gates resolved with — the
+     `/api` middleware's for an `/api/v1` request, the `/mcp` caller's for
+     a tool call — so `/api/v1` can no longer serve a different workspace
+     from the one the membership gate admitted. An operator-issued grant
+     names no user and so has no namespace: it reaches a workspace by id or
+     qualified handle only, and server-core mints nothing for it. A
+     qualified handle in another namespace is never minted; on server mode
+     it is refused `not_a_member` whether or not the workspace exists. The
+     operator commands' `--workspace` takes `<id|handle/segment|segment>`,
+     where a bare segment reaches only the `me` namespace.
 
 ## Consequences
 

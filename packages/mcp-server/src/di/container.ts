@@ -3,6 +3,7 @@ import {
   fontDownloadUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { createFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import {
   type BlobStore,
@@ -14,11 +15,13 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
+import { mcpCallerNamespace } from '../server/security/mcp-caller.js'
 import { createDocumentTeardown } from '../server/store/document-store.js'
 import { createDocumentWritten } from '../server/store/document-written.js'
 import { liveDocuments, workspaceDocuments } from '../server/store/live-documents.js'
 import { globalStoreScope, type StoreScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
+import { callerNamespaceOfRequest } from '../server/workspace-handle.js'
 import { agentVersionHistory } from './agent-version-history.js'
 import { STORE_SCOPE } from './store-scope-token.js'
 
@@ -131,5 +134,13 @@ export function resolveServerDeps(
     // of any adapter importing a mechanic.
     liveDocuments: liveDocuments(scope),
     workspaceDocuments: workspaceDocuments(scope),
+    // Whose namespace a bare segment means (ADR-0053), answered exactly as
+    // the server-mode gates resolved it: the `/api` middleware's record for
+    // an `/api/v1` request, the `/mcp` caller for a tool call. Neither exists
+    // on the local daemon or stdio, whose one namespace is `me`.
+    callerNamespace: async (request) =>
+      request === undefined
+        ? ((await mcpCallerNamespace()) ?? SINGLE_PERSON_NAMESPACE)
+        : callerNamespaceOfRequest(request),
   }
 }

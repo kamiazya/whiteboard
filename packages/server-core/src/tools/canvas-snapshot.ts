@@ -23,7 +23,6 @@ import {
   nodeUrl,
   type SpatialCanvas,
   type SpatialNode,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
@@ -33,6 +32,7 @@ import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /**
  * Per-node text budget, in characters. A text node can hold a whole markdown
@@ -182,7 +182,7 @@ export type CanvasSnapshot = z.infer<typeof canvasSnapshotSchema>
 
 const canvasSnapshotInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     /**
      * Also analyse the laid-out scene: what overlaps, what contains what,

@@ -1,9 +1,10 @@
-import { documentIdSchema, versionLabelSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, versionLabelSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /**
@@ -15,7 +16,7 @@ const MAX_DOCUMENTS = 50
 
 export const versionSaveInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe('Workspace that holds the documents.'),
+    workspaceId: workspaceAddressArgSchema,
     documentIds: z
       .array(documentIdSchema)
       .min(1)

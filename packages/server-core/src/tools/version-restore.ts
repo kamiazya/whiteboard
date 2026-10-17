@@ -1,14 +1,15 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, documentPathSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
 import type { ServerDeps } from '../server-deps.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError } from './errors.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 export const versionRestoreInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe('Workspace ID the document belongs to.'),
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema.describe(
       'Document ID (ULID) whose history holds the version. Restored onto itself unless targetPath is given.',
     ),

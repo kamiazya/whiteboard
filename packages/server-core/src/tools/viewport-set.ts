@@ -1,17 +1,18 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { viewportRequestParamsSchema } from '../viewport-request.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError, NodeNotFoundError } from './errors.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 // The routing keys first, then the shared params by their one declaration —
 // written as a shape spread rather than `.extend`, so the keys a model reads
 // keep the order they have always had.
 const viewportSetInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     ...viewportRequestParamsSchema.shape,
   })

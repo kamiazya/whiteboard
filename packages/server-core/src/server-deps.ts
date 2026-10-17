@@ -138,6 +138,19 @@ export interface ServerDeps {
    */
   knownWorkspaceHandles?: () => Promise<readonly string[]>
   /**
+   * Whose namespace a BARE segment means for the call being served
+   * (ADR-0053): a single-person keeper's `me`, or the signed-in user's handle
+   * on a keeper many people share. `request` is the `/api/v1` request when
+   * there is one; a tool call has none, and the composition root knows its
+   * caller another way.
+   *
+   * Asked rather than assumed because resolution here runs AFTER a keeper's
+   * own gate resolved the same address: answering in another namespace than
+   * the gate did would hand a request a workspace nobody authorised it for.
+   * Absent is `me`, the right answer for every single-person composition.
+   */
+  callerNamespace?: (request?: Request) => Promise<string>
+  /**
    * The facet registry validating registered-facet writes (ADR-0013
    * decision 6): the bundled plugin set, composed once per root. The set is
    * fixed at build time because rendering, export and the web editor read the

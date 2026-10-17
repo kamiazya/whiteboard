@@ -25,10 +25,11 @@ import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { taggedDrawingLibrary } from './tag-library.js'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 export const canvasViewInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,
     /**
      * Which look the widget draws (ADR-0030 decision 6). Echoed, never

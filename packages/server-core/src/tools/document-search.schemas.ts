@@ -12,13 +12,13 @@ import {
   searchQueryInputSchema,
   TAG_COUNT_LIMIT_PHRASE,
   TAGS_PER_ELEMENT_MAX,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 export const documentSearchInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe('The workspace to search.'),
+    workspaceId: workspaceAddressArgSchema,
     query: searchQueryInputSchema
       .optional()
       .describe(

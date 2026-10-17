@@ -57,7 +57,7 @@ export async function grantMember(
 }
 
 const USAGE =
-  'Re-run with: whiteboard server grant-member --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]'
+  'Re-run with: whiteboard server grant-member --json --workspace=<id|handle/segment|segment> --user=<id|name> [--data-dir=<path>]'
 
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
@@ -81,7 +81,7 @@ export async function runServerGrantMember(
   const { workspaceId, user, dataDir } = scan.values
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
   if (workspaceId === undefined)
-    return usageError(io, `--workspace=<id|segment> is required. ${USAGE}`)
+    return usageError(io, `--workspace=<id|handle/segment|segment> is required. ${USAGE}`)
   if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
 
   const outcome = await grantMember(await openKeeperDb(dataDir, env), { workspaceId, user })
