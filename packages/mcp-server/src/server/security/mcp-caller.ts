@@ -8,9 +8,17 @@
  * which is exactly those surfaces' behaviour today.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import {
+  describeThrown,
+  generateDocumentId,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
+import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
+import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
+import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
+import { serverModeToolErrorText } from './server-mode-redaction.js'
 import { type MembershipDenial, membershipRefusal, workspaceAccess } from './workspace-access.js'
 
 export interface McpCaller {
@@ -19,6 +27,27 @@ export interface McpCaller {
 }
 
 const callers = new AsyncLocalStorage<McpCaller>()
+
+/**
+ * The text a failed tool call answers with. Server mode's caller is a member,
+ * not the operator, so a fault's text (a storage path, SQL, engine detail)
+ * goes to the log rather than to them; the local daemon and stdio answer
+ * their owner with all of it.
+ */
+export function toolErrorText(tool: string, err: unknown): string {
+  return callers.getStore() === undefined ? describeThrown(err) : serverModeToolErrorText(tool, err)
+}
+
+/**
+ * The gate's own refusals. Named, so server mode's error text passes them to
+ * the caller verbatim as the refusals they are.
+ */
+class McpCallRefusalError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'McpCallRefusalError'
+  }
+}
 
 export function runAsMcpCaller<T>(caller: McpCaller, fn: () => Promise<T>): Promise<T> {
   return callers.run(caller, fn)
@@ -46,14 +75,31 @@ interface WorkspaceScopedInput {
   readonly createWorkspace?: unknown
 }
 
+type GateIndex = Pick<DocumentIndex, 'resolveWorkspace' | 'createWorkspace'>
+
 function refused(denial: MembershipDenial): Error {
   const { error, message } = membershipRefusal(denial)
-  return new Error(`${error}: ${message}`)
+  return new McpCallRefusalError(`${error}: ${message}`)
 }
 
 /**
- * Wraps a record of tools so a call runs only for a member of the workspace it
- * names, and a call naming none is refused unless the tool is in
+ * `mcp:call` opens the endpoint; what the call may DO is the scope its `/api`
+ * twin needs. Without this a token scoped for reading could delete through
+ * `/mcp` what it could only read through `/api`. A tool with no entry is
+ * refused, so an unmapped tool fails closed. The scopes are not quoted, as no
+ * other auth refusal quotes them.
+ */
+function scopeRefusal(caller: McpCaller, toolName: string): Error | null {
+  const required = MCP_TOOL_SCOPES[toolName]
+  if (required !== undefined && hasRequiredScopes(caller.grant.scopes, required)) return null
+  return new McpCallRefusalError(
+    `insufficient_scope: this credential's scopes do not reach ${toolName}`,
+  )
+}
+
+/**
+ * Wraps a record of tools so a call runs only for a caller whose scopes reach
+ * the tool and who is a member of the workspace it names, and a call naming none is refused unless the tool is in
  * `WORKSPACE_OPTIONAL_TOOLS` — the same record-level seam as server-core's handle
  * resolution, and for its reason: a per-tool step is one the next tool would
  * not have. The tool objects are spread, so their schemas keep identity.
@@ -65,7 +111,7 @@ function refused(denial: MembershipDenial): Error {
  */
 export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>(
   tools: T,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
 ): T {
   const wrapped: Record<string, WorkspaceScopedTool> = {}
   for (const [key, tool] of Object.entries(tools)) {
@@ -74,13 +120,17 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       execute: (input: never) => {
         const caller = callers.getStore()
         if (caller === undefined) return tool.execute(input)
+        const insufficient = scopeRefusal(caller, tool.name)
+        if (insufficient !== null) return Promise.reject(insufficient)
         const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
         if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
         if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
           return tool.execute(input)
         }
         return Promise.reject(
-          new Error(`workspace_required: ${tool.name} must name the workspace it acts on`),
+          new McpCallRefusalError(
+            `workspace_required: ${tool.name} must name the workspace it acts on`,
+          ),
         )
       },
     }
@@ -90,14 +140,21 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
 
 async function gatedCall(
   caller: McpCaller,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
   handle: string,
   tool: WorkspaceScopedTool,
   input: never,
 ): Promise<unknown> {
-  const existing = await index.resolveWorkspace(handle)
+  let existing = await index.resolveWorkspace(handle)
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
-    return createAsFirstMember(caller, index, handle, () => tool.execute(input))
+    const minted = await mintAsFirstMember(caller, index, handle)
+    if (minted === 'unmintable') return tool.execute(input)
+    if (minted !== 'taken') {
+      return tool.execute({ ...(input as object), workspaceId: minted } as never)
+    }
+    // Someone else minted the segment after the check above: it is theirs,
+    // and joining it takes a membership like any other workspace.
+    existing = await index.resolveWorkspace(handle)
   }
   const access = await workspaceAccess(
     caller.grant,
@@ -111,27 +168,36 @@ async function gatedCall(
   return tool.execute({ ...(input as object), workspaceId: existing.workspaceId } as never)
 }
 
-// ponytail: two people creating the same new segment at the same instant both
-// pass the "does not exist" check, and the loser's write lands in the winner's
-// workspace; membership still goes only to whoever finishes first. Closing it
-// needs the mint to take the membership in the same write, in server-core.
-async function createAsFirstMember(
+/**
+ * The gate mints the workspace ITSELF, before the tool runs, and makes the
+ * caller its member before anything is written. Left to the tool, the mint
+ * converges on whichever creator's write lands first, so a second person
+ * creating the same segment at the same instant would have their documents
+ * filed in the first one's workspace, where the first one reads them. Here
+ * the segment's unique index decides: whoever loses gets `taken` and is
+ * refused like any non-member, with nothing written. The id is fresh and
+ * known only to this call until the membership lands.
+ *
+ * A batch refused after the mint leaves the caller a member of an empty
+ * workspace, so their retry reaches it. A handle that cannot be a segment
+ * is `unmintable`: the tool refuses it with its own reason, minting nothing.
+ */
+async function mintAsFirstMember(
   caller: McpCaller,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
   handle: string,
-  run: () => Promise<unknown>,
-): Promise<unknown> {
+): Promise<string | 'taken' | 'unmintable'> {
   const person = caller.grant.person
   const profile = person === undefined ? null : await caller.members.profileForBinding(person)
   if (profile === null) throw refused('requires_person_session')
+  if (!workspaceSegmentSchema.safeParse(handle).success) return 'unmintable'
+  const workspaceId = generateDocumentId()
   try {
-    return await run()
-  } finally {
-    // Also when the batch failed after minting: otherwise the creator's retry
-    // is refused from a workspace that exists and has no member.
-    const created = await index.resolveWorkspace(handle)
-    if (created !== null && !(await caller.members.membersOnly(created.workspaceId))) {
-      await caller.members.addMember(created.workspaceId, profile.id)
-    }
+    await index.createWorkspace({ workspaceId, segment: handle })
+  } catch (err) {
+    if (isWorkspaceSegmentTakenError(err)) return 'taken'
+    throw err
   }
+  await caller.members.addMember(workspaceId, profile.id)
+  return workspaceId
 }

@@ -52,7 +52,10 @@ const STORE_DIRS: readonly string[] = [
 ]
 
 /** `Interface.method` to why production never calls it. Empty is the goal. */
-const LEDGER: Readonly<Record<string, string>> = {}
+const LEDGER: Readonly<Record<string, string>> = {
+  'MemberProfileStore.membersOnly':
+    "the members-only marker's only reader. The /mcp gate stopped consulting it once it mints a workspace and admits the creator before anything is written, and every workspace is members-only regardless, so only tests read it, as the observable that a removal never clears the marker. Retiring the method with its table is its own increment",
+}
 
 /** `Class.method` to why nothing in the source calls it. Only hooks a runtime or protocol invokes by name. */
 const CLASS_METHOD_LEDGER: Readonly<Record<string, string>> = {

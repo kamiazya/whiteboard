@@ -52,6 +52,7 @@ import {
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
+import { createServerModeStoredDataRedaction } from './security/server-mode-redaction.js'
 import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { readLatestCompactedAt } from './store/document-store.js'
@@ -131,6 +132,8 @@ function mountApiAuth(
   credentialResolver: CredentialResolver,
 ): void {
   if (options.authMode === 'server-mode') {
+    // Outermost, so it sees every answer the routes below give a member.
+    app.use('/api/*', createServerModeStoredDataRedaction())
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy, options.people))
     return
   }
