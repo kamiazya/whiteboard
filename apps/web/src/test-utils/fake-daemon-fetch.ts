@@ -81,7 +81,12 @@ export function withSummaryDefaults(rows: Rows) {
 }
 
 export interface FakeDaemonRoutes {
-  workspaces: Array<{ workspaceId: string; segment?: string; displayName?: string }>
+  workspaces: Array<{
+    workspaceId: string
+    namespace?: string
+    segment?: string
+    displayName?: string
+  }>
   /** Rows per workspace, or a thunk read on every list. A workspace absent here lists 500. */
   documentsByWorkspace: Record<string, Rows | (() => Rows)>
   namesByWorkspace?: Record<

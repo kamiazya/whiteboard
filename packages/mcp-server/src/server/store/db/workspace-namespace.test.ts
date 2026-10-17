@@ -76,6 +76,7 @@ describe('a segment is unique within its namespace', () => {
     await upsertWorkspaceRow(handle.db, 'ws-bob', { segment: 'plans', namespace: 'bob' })
 
     expect(await renameWorkspaceRow(handle.db, 'ws-bob', { segment: 'design' })).toEqual({
+      namespace: 'bob',
       segment: 'design',
       displayName: null,
     })

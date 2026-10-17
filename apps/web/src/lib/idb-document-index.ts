@@ -143,7 +143,7 @@ export class IdbDocumentIndex {
    * is one every later reader of it would have to tolerate.
    */
   async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
-    const { workspaceId, segment, displayName } = createWorkspaceInputSchema.parse(input)
+    const { workspaceId, namespace, segment, displayName } = createWorkspaceInputSchema.parse(input)
     await this.tx([WORKSPACES_STORE, TOMBSTONE_STORE], 'readwrite', async (tx) => {
       // A removed workspace is not "never created": a tab still holding its
       // id would otherwise register it again (`workspace-tombstone.ts`).
@@ -169,6 +169,7 @@ export class IdbDocumentIndex {
       // annotation would otherwise make.
       const entry: WorkspaceEntry = {
         workspaceId,
+        ...(namespace === undefined ? {} : ({ namespace } satisfies Partial<WorkspaceEntry>)),
         ...(segment === undefined ? {} : ({ segment } satisfies Partial<WorkspaceEntry>)),
         ...(displayName === undefined ? {} : ({ displayName } satisfies Partial<WorkspaceEntry>)),
       }

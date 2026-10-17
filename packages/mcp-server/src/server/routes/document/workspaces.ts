@@ -140,18 +140,11 @@ async function summarizeWorkspace(
   deps: ServerDeps,
   options: WorkspacesRouterOptions,
   row: WorkspaceEntry,
-  callerNamespace: string,
 ) {
-  // A bare segment means the caller's own namespace (ADR-0053), and the web
-  // app addresses a listed workspace by its segment when it carries one — so
-  // a segment from somebody else's namespace would address nothing for this
-  // caller. Such a row is listed by its id alone until addresses carry the
-  // namespace.
-  const addressable =
-    row.segment !== undefined && (row.namespace ?? SINGLE_PERSON_NAMESPACE) === callerNamespace
   return {
     workspaceId: row.workspaceId,
-    ...(addressable ? { segment: row.segment } : {}),
+    ...(row.namespace === undefined ? {} : { namespace: row.namespace }),
+    ...(row.segment === undefined ? {} : { segment: row.segment }),
     ...(row.displayName === undefined ? {} : { displayName: row.displayName }),
     documentCount: await countDocuments(deps.documentIndex, row.workspaceId),
     ...(options.replicaTier === undefined
@@ -194,7 +187,12 @@ async function createWorkspaceRow(
     ...(segment === undefined ? {} : { segment }),
     displayName,
   })
-  return { workspaceId, ...(segment === undefined ? {} : { segment }), displayName }
+  return {
+    workspaceId,
+    ...(namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace }),
+    ...(segment === undefined ? {} : { segment }),
+    displayName,
+  }
 }
 
 export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
@@ -226,7 +224,6 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // control a person opens by clicking. Revisit if this list ever feeds
       // something that polls.
       const counted = []
-      const callerNamespace = callerNamespaceOf(c)
       for (const row of workspaces) {
         // ponytail: N x (profileForBinding + isWorkspaceMember) per list — two
         // lookups a row, the first answering the same person every time; a
@@ -240,7 +237,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
           continue
         }
         // Awaited IN the loop, never gathered: see the note above.
-        counted.push(await summarizeWorkspace(deps, options, row, callerNamespace))
+        counted.push(await summarizeWorkspace(deps, options, row))
       }
       const response: ListWorkspacesResponse = { workspaces: counted }
       return c.json(response)
@@ -306,6 +303,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
       const response: WorkspaceSummary = {
         workspaceId: renamed.workspaceId,
+        ...(renamed.namespace === undefined ? {} : { namespace: renamed.namespace }),
         ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
         ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),
       }

@@ -18,7 +18,14 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const view = parseWorkspaceRoute(pathname)
-  const onView = (next: WorkspaceRoute) => navigate(workspaceRoutePath(next))
+  // Index to index is the page naming the workspace an address already
+  // reached — the opaque `/w/<id>` a link carries becoming the in-app
+  // `/w/<handle>/<segment>` once the list says who may see it (ADR-0053) — so
+  // it REPLACES: back must not return to an address that rewrites itself.
+  const onView = (next: WorkspaceRoute) =>
+    navigate(workspaceRoutePath(next), {
+      replace: view?.kind === 'index' && next.kind === 'index',
+    })
   if (view === null) return null
   return (
     <div className="flex h-dvh flex-col overflow-hidden">

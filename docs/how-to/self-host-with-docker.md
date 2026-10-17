@@ -240,6 +240,14 @@ A workspace can have at most 50 links waiting at once. Creating one more is
 refused with `409 too_many_invitations` until one is accepted, expires or is
 revoked.
 
+To point a member at a workspace, use **Copy link** in its header. The link
+is `/w/<workspace id>`, never the address the app shows
+(`/w/<handle>/<workspace>`): a link can reach somebody who is not a member,
+and the readable address would tell them whose workspace it is and what it is
+called. A member who opens it, once signed in, is moved onto the readable
+address; anybody else is refused as for any address they cannot reach. The
+link grants nothing by itself — only membership does.
+
 Only an owner can change anything. A workspace always keeps at least one
 owner, so demoting or removing the last owner is refused with `last_owner`.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool

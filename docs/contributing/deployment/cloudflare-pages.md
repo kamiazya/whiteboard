@@ -43,7 +43,7 @@ npx wrangler pages deploy apps/web/dist --project-name kamiazya-whiteboard
 
 ## Single-page-app fallback
 
-The app has client-side routes (`/w/:workspace`, `/w/:workspace/d/<document path>`, …) with no file in `dist/`. Pages serves `index.html` for those paths on its own **as long as the project has no top-level `404.html`**; adding one turns that behaviour off and every deep link answers 404. There is no `_redirects` file: a `/* /index.html 200` rule is rejected by wrangler as an infinite loop and ignored, and deep links answer 200 without it. `smoke-artifact.mjs` asserts that `dist/` carries neither file.
+The app has client-side routes (`/w/:namespace/:workspace`, `/w/:namespace/:workspace/d/<document path>`, `/w/:workspaceId`, …) with no file in `dist/`. Pages serves `index.html` for those paths on its own **as long as the project has no top-level `404.html`**; adding one turns that behaviour off and every deep link answers 404. There is no `_redirects` file: a `/* /index.html 200` rule is rejected by wrangler as an infinite loop and ignored, and deep links answer 200 without it. `smoke-artifact.mjs` asserts that `dist/` carries neither file.
 
 ## Preview origins
 

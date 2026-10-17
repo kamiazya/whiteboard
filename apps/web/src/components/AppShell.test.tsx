@@ -42,7 +42,7 @@ const WORKSPACES = {
 
 function renderShell(
   daemonConnected: boolean,
-  at = '/w/default/d/c1',
+  at = '/w/me/default/d/c1',
   onWorkInBrowser?: () => void,
   workspaces?: KeeperWorkspaces,
 ) {
@@ -73,7 +73,7 @@ describe('AppShell', () => {
     // mark IS the switcher (the "Mark as Switcher" design record), and the
     // workspace is a fact on every page — so there is always something for
     // the popover to say, and the plain-link-home shape cannot survive.
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     expect(screen.queryByRole('link', { name: 'Home' })).toBeNull()
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     expect(await screen.findByRole('menuitem', { name: /design team/i })).toBeTruthy()
@@ -86,7 +86,7 @@ describe('AppShell', () => {
     // the most expensive way to promise one. Leaving a document is the
     // page's own affordance (`WorkspaceTopBar`'s back), and every workspace
     // is reachable from the list above.
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     // The subject is PRESENT — the popover really opened — so the absence
     // below is a decision and not a menu that never rendered.
@@ -99,7 +99,7 @@ describe('AppShell', () => {
     // "where does the workspace name appear at all?" with "the shell need
     // not name it". The name rides the mark's ACCESSIBLE name, so it is
     // stated without being drawn.
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     const trigger = await screen.findByTestId('shell-mark-trigger')
     expect(trigger.getAttribute('aria-label')).toContain('Design team')
     // Asserted on the header itself, not on the document: the popover names
@@ -110,7 +110,7 @@ describe('AppShell', () => {
   })
 
   it('names and lists the workspaces inside the mark popover', async () => {
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     // The head states the current one; the list is what you switch to.
     // An editable field now, not a caption: the head IS where you rename it.
@@ -149,7 +149,7 @@ describe('AppShell', () => {
         displayName: 'Renamed team',
       }),
     )
-    renderShell(true, '/w/default', undefined, {
+    renderShell(true, '/w/me/default', undefined, {
       source: {
         list: () =>
           Promise.resolve([
@@ -181,10 +181,10 @@ describe('AppShell', () => {
 
   it('switches from the mark popover by handle, and closes it', async () => {
     const onSwitch = vi.fn()
-    renderShell(true, '/w/default', undefined, { ...WORKSPACES, onSwitch })
+    renderShell(true, '/w/me/default', undefined, { ...WORKSPACES, onSwitch })
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('menuitem', { name: /notes/i }))
-    expect(onSwitch).toHaveBeenCalledWith('notes')
+    expect(onSwitch).toHaveBeenCalledWith('me/notes')
   })
 
   it('alpha chip opens the honesty popover with a protect link', async () => {
@@ -196,10 +196,10 @@ describe('AppShell', () => {
   })
 
   it('settings gear navigates to /settings carrying the entry point', () => {
-    const router = renderShell(true, '/w/default/d/c1')
+    const router = renderShell(true, '/w/me/default/d/c1')
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(router.state.location.pathname).toBe('/settings')
-    expect((router.state.location.state as { from?: string }).from).toBe('/w/default/d/c1')
+    expect((router.state.location.state as { from?: string }).from).toBe('/w/me/default/d/c1')
   })
 
   it('names what the dot is about, so it reads as a task and not a warning', () => {
@@ -401,7 +401,7 @@ describe('AppShell — the mark as the connection carrier', () => {
       },
     }))
     setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     const notice = await screen.findByTestId('replica-cache-notice')
     expect(notice.textContent).toMatch(/cached in this browser/i)
@@ -412,7 +412,7 @@ describe('AppShell — the mark as the connection carrier', () => {
 
   it('no replica claim for a daemon workspace this browser holds no replica of', async () => {
     setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
-    renderShell(true, '/w/default', undefined, WORKSPACES)
+    renderShell(true, '/w/me/default', undefined, WORKSPACES)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     // Subject presence: the popover named the workspace, so the absence is a
     // decision, not an unopened menu.
@@ -548,7 +548,7 @@ describe('AppShell — a count the keeper can only produce expensively', () => {
     // merged LCP floor exists to refuse. The popover's content is what asks,
     // and Radix does not mount content until it opens.
     const counts = vi.fn(() => Promise.resolve(new Map([[COUNTED, 4]])))
-    renderShell(true, '/w/default', undefined, {
+    renderShell(true, '/w/me/default', undefined, {
       ...WORKSPACES,
       source: { ...WORKSPACES.source, counts },
     })
@@ -564,7 +564,7 @@ describe('AppShell — a count the keeper can only produce expensively', () => {
 
   it('shows the count on the row once opening the popover has bought it', async () => {
     const counts = vi.fn(() => Promise.resolve(new Map([[COUNTED, 4]])))
-    renderShell(true, '/w/default', undefined, {
+    renderShell(true, '/w/me/default', undefined, {
       ...WORKSPACES,
       source: { ...WORKSPACES.source, counts },
     })

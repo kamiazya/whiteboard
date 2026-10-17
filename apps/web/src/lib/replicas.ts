@@ -1,11 +1,12 @@
 /**
  * Lookup over the replica registry (storage.replicas) by whatever name an
  * address carries. The registry keys by the CANONICAL workspace id, but a
- * URL usually carries the segment — and offline, the segment cannot be
+ * URL usually carries the qualified segment — and offline, it cannot be
  * resolved against the daemon, which is why each entry captured it at sync
  * time.
  */
 import type { UserSettings } from './user-settings-store.js'
+import { resolveWorkspaceAddress } from './workspace-handle.js'
 
 export interface ReplicaEntryInput {
   daemonBaseUrl: string
@@ -107,15 +108,13 @@ export function forgetReplicaEntry(current: UserSettings, workspaceId: string): 
   return { ...current, storage: { ...current.storage, replicas: rest } }
 }
 
+/**
+ * The copy an address names. A replica is a daemon workspace, and a daemon
+ * reached from this browser has the one namespace `me`, so the captured
+ * segment is read in it.
+ */
 export function findReplicaForHandle(settings: UserSettings, handle: string): ReplicaMatch | null {
-  const replicas = settings.storage.replicas
-  if (replicas === undefined) return null
-  for (const [workspaceId, entry] of Object.entries(replicas)) {
-    if (workspaceId === handle || entry.segment === handle) {
-      return { workspaceId, ...entry }
-    }
-  }
-  return null
+  return resolveWorkspaceAddress(listReplicas(settings), handle)
 }
 
 /**

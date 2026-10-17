@@ -26,15 +26,12 @@
  *   freeing quota is a normal recovery a reload should not be required for.
  */
 import { describeThrown, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
-import {
-  resolveWorkspaceHandle,
-  storedWorkspaceEntrySchema,
-  type WorkspaceEntry,
-} from '@kamiazya/whiteboard-ports'
+import { storedWorkspaceEntrySchema, type WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { createSubscribers } from './subscribers.js'
+import { resolveWorkspaceAddress, workspaceHandle } from './workspace-handle.js'
 
 type ResolutionState =
   | { readonly kind: 'unresolved' }
@@ -166,14 +163,14 @@ async function readWorkspaceIdentity(
   handle: string | undefined,
 ): Promise<BrowserWorkspaceIdentity> {
   const entries = await readRegistryEntries(dbName)
-  // The address decides which workspace is ACTIVE (ADR-0019), through ports'
-  // one definition of segment-first-then-id. A handle naming nothing falls
+  // The address decides which workspace is ACTIVE (ADR-0019), through the
+  // one definition of what a URL address names. A handle naming nothing falls
   // back rather than refusing: a stale bookmark should still open the app,
   // and turning an unmatched name into not-found is the ROUTE layer's job,
   // where there is a page to say so. `switchBrowserWorkspace` is strict for
   // the opposite reason, and says so in place.
   const chosen =
-    (handle === undefined ? null : resolveWorkspaceHandle(entries, handle)) ?? entries[0]
+    (handle === undefined ? null : resolveWorkspaceAddress(entries, handle)) ?? entries[0]
   if (chosen === undefined) throw new Error('no browser workspace exists')
   if (!workspaceCanonicalIdSchema.safeParse(chosen.workspaceId).success) {
     throw new Error(`browser workspace is not keyed by a canonical id: ${chosen.workspaceId}`)
@@ -228,7 +225,7 @@ export async function switchBrowserWorkspace(
   handle: string,
   dbName?: string,
 ): Promise<BrowserWorkspaceIdentity | null> {
-  const chosen = resolveWorkspaceHandle(await readRegistryEntries(dbName), handle)
+  const chosen = resolveWorkspaceAddress(await readRegistryEntries(dbName), handle)
   if (chosen === null) return null
   const identity: BrowserWorkspaceIdentity = {
     workspaceId: chosen.workspaceId,
@@ -296,16 +293,15 @@ export function browserWorkspaceIdOrNull(): string | null {
  */
 export function browserWorkspaceHandleOrNull(): string | null {
   try {
-    const identity = getBrowserWorkspaceIdentity()
-    return identity.segment ?? identity.workspaceId
+    return workspaceHandle(getBrowserWorkspaceIdentity())
   } catch {
     return null
   }
 }
 
 /**
- * Whether an address names THIS browser workspace — by its segment, or by the
- * canonical id ADR-0019 keeps resolvable in the same position.
+ * Whether an address names THIS browser workspace — by its qualified segment,
+ * or by the canonical id ADR-0019 keeps resolvable in the same position.
  *
  * Both layers, and that is the whole point: the id form is the DURABLE link,
  * the one that survives a rename. A comparison against the handle alone reads
@@ -320,8 +316,7 @@ export function browserWorkspaceHandleOrNull(): string | null {
  */
 export function browserWorkspaceMatches(handle: string): boolean {
   try {
-    const identity = getBrowserWorkspaceIdentity()
-    return identity.segment === handle || identity.workspaceId === handle
+    return resolveWorkspaceAddress([getBrowserWorkspaceIdentity()], handle) !== null
   } catch {
     return false
   }

@@ -25,7 +25,7 @@ function renderMenu(
     onSwitch = vi.fn(),
     onRenamed = vi.fn(),
     onCounted = vi.fn(),
-    current = 'design',
+    current = 'me/design',
   }: {
     onSwitch?: () => void
     onRenamed?: (entry: WorkspaceEntry) => void
@@ -62,7 +62,7 @@ describe('WorkspaceMenu — switching', () => {
       { onSwitch },
     )
     fireEvent.click(screen.getByRole('menuitem', { name: /notes & ideas/i }))
-    expect(onSwitch).toHaveBeenCalledWith('notes')
+    expect(onSwitch).toHaveBeenCalledWith('me/notes')
   })
 
   it('addresses a workspace with no segment by its canonical id', () => {
@@ -144,7 +144,7 @@ describe('WorkspaceMenu — creating', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
     fireEvent.change(screen.getByLabelText(/new workspace name/i), { target: { value: 'Design' } })
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('design-2'))
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('me/design-2'))
   })
 
   it('creates once when Create is pressed twice before the first settles', async () => {
@@ -198,7 +198,7 @@ describe('WorkspaceMenu — creating', () => {
     fireEvent.change(screen.getByLabelText(/new workspace name/i), { target: { value: 'Notes' } })
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('notes'))
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('me/notes'))
     // Back to the menu: the form served its purpose and the workspace it
     // made is the one being switched to.
     await waitFor(() => expect(screen.queryByLabelText(/new workspace name/i)).toBeNull())
@@ -299,7 +299,7 @@ describe('WorkspaceMenu — naming, in place', () => {
 
     fireEvent.keyDown(url, { key: 'Enter' })
     await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { segment: 'marketing' }))
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('marketing'))
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('me/marketing'))
   })
 
   it('commits a URL edit on blur too, so leaving the field is not a silent discard', async () => {

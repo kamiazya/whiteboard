@@ -16,10 +16,15 @@ import {
   type ShellWorkspaceRows,
   useShellWorkspaceRows,
 } from '../../hooks/use-shell-workspace-rows.js'
-import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
+import { workspacePath } from '../../lib/app-routes.js'
 import { givenUpAnnouncement } from '../../lib/connection-state.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
-import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
+import {
+  resolveWorkspaceAddress,
+  workspaceHandle,
+  workspaceLabel,
+  workspaceLink,
+} from '../../lib/workspace-handle.js'
 import type { KeeperWorkspaces } from '../../lib/workspace-switcher-source.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { WorkspaceIdentityFields } from '../shell/WorkspaceIdentityFields.js'
@@ -82,10 +87,10 @@ function WorkspacePicker({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
   const [open, setOpen] = useState(false)
   if (listFailed) return <PickerUnavailable onRetry={reload} />
   if (rows.length < 2) return null
-  // The address may name a workspace by its id rather than its segment.
-  const here = rows.find(
-    (w) => w.workspaceId === handleInAddress || workspaceHandle(w) === handleInAddress,
-  )
+  const here =
+    handleInAddress === null
+      ? undefined
+      : (resolveWorkspaceAddress(rows, handleInAddress) ?? undefined)
   const label = here === undefined ? 'Workspaces' : workspaceLabel(here)
   return (
     <details
@@ -107,7 +112,7 @@ function WorkspacePicker({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
         {rows.map((w) => (
           <li key={w.workspaceId}>
             <Link
-              to={workspacePath(w.workspaceId)}
+              to={workspacePath(workspaceHandle(w))}
               title={workspaceLabel(w)}
               aria-current={w === here ? 'page' : undefined}
               onClick={() => setOpen(false)}
@@ -154,9 +159,13 @@ function WorkspaceRenameDisclosure({
   )
 }
 
-/** The open workspace's people: who is in it, and for an owner, who may be. */
-function WorkspacePeopleLink() {
-  const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
+/**
+ * The open workspace's people: who is in it, and for an owner, who may be.
+ * Named by the workspace's id, the form the people routes take; absent until
+ * the list has said which workspace the address names.
+ */
+function WorkspacePeopleLink({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
+  const current = shell.activeRow?.workspaceId
   if (current === undefined) return null
   return (
     <Link
@@ -165,6 +174,43 @@ function WorkspacePeopleLink() {
     >
       People
     </Link>
+  )
+}
+
+/**
+ * Copies a link to the open workspace for somebody else. Always the opaque
+ * `/w/<workspaceId>` (ADR-0053 decision 1), never the address bar's
+ * `/w/<handle>/<segment>`: a link may reach a person who is not a member, and
+ * the readable form would tell them whose namespace holds it and what it is
+ * called. A member who opens it is moved onto the readable form; anyone else
+ * gets the refusal every unreachable address gets.
+ *
+ * "Copied" is a claim about the clipboard, so it waits for the write; a
+ * refusal says so rather than leaving the label alone.
+ */
+function CopyWorkspaceLink({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
+  const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const active = shell.activeRow
+  if (active === undefined) return null
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(workspaceLink(window.location.origin, active))
+      setCopied('copied')
+    } catch {
+      setCopied('failed')
+    }
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => void copy()}>
+        {copied === 'copied' ? 'Link copied' : 'Copy link'}
+      </Button>
+      {copied === 'failed' && (
+        <span role="alert" className="text-destructive">
+          Could not copy the link.
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -193,7 +239,8 @@ export function ServerModeShell({
       {workspaces !== undefined && (
         <WorkspaceRenameDisclosure workspaces={workspaces} shell={shell} />
       )}
-      <WorkspacePeopleLink />
+      <WorkspacePeopleLink shell={shell} />
+      <CopyWorkspaceLink shell={shell} />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
           already in it is not announced. */}

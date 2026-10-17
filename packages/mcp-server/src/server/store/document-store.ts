@@ -148,6 +148,7 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
       if (updated === null) throw new WorkspaceNotFoundError(input.workspaceId)
       return {
         workspaceId: input.workspaceId,
+        ...(updated.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: updated.namespace }),
         ...(updated.segment === null ? {} : { segment: updated.segment }),
         ...(updated.displayName === null ? {} : { displayName: updated.displayName }),
       }

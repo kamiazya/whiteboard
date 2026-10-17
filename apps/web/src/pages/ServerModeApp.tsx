@@ -35,7 +35,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { type WorkspaceRoute, workspacePath, workspaceRoutePath } from '../lib/app-routes.js'
 import { DaemonContractError, readDaemonJson } from '../lib/daemon-contract-error.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
-import { workspaceLabel } from '../lib/workspace-handle.js'
+import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
 import { TenantPeoplePage, WorkspacePeoplePage } from './ServerModePeoplePage.js'
@@ -248,7 +248,7 @@ function WorkspaceList({ source }: Readonly<{ source: KeeperWorkspaces['source']
       {workspaces.map((w) => (
         <li key={w.workspaceId}>
           <Link
-            to={workspacePath(w.workspaceId)}
+            to={workspacePath(workspaceHandle(w))}
             className="block rounded-md border px-3 py-2 text-sm hover:bg-muted"
           >
             {workspaceLabel(w)}

@@ -214,7 +214,7 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   put the only door out of a workspace behind having opened a document first.
 
   What the popover reads FROM is the address: the workspace is the outermost
-  layer of `/w/:workspace/d/:path`, and the URL is what decides which one is
+  layer of `/w/:namespace/:workspace/d/:path`, and the URL is what decides which one is
   active. Until the rows load, the mark names the handle the address carries —
   a true statement about where you are, and better than a blank in an
   accessible name.
@@ -249,8 +249,8 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   intermediate values that are real addresses and can collide. Escape there
   reverts the box without writing.
 
-  The URL is drawn as the URL — a `/w/` prefix and the editable part — and
-  carries no visible label. ADR-0019 calls the layer the `segment`, which is
+  The URL is drawn as the URL — a `/w/<namespace>/` prefix and the editable
+  part — and carries no visible label. ADR-0019 calls the layer the `segment`, which is
   not a word to put in front of somebody, and every plainer substitute
   invents a FOURTH name for a layer that has three. The warning that old
   links will break appears only once the box actually differs from what is
@@ -261,7 +261,7 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   can be refused for a collision.
 - **A document's path is drawn as the URL too — but it keeps its label.** The
   create and rename forms put the head of the document's address in front of
-  the box (`/w/<handle>/d/`), so the text a person types is visibly a URL and
+  the box (`/w/<namespace>/<segment>/d/`), so the text a person types is visibly a URL and
   not a loose string. That head is sliced from `app-routes`' own builders,
   separators included: a literal written into the component would go on
   reading correctly long after the grammar moved, and a form that shows the

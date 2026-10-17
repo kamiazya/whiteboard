@@ -238,7 +238,7 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     })
     resetBrowserWorkspaceIdForTests()
 
-    window.history.replaceState(null, '', '/w/second/d/anything')
+    window.history.replaceState(null, '', '/w/me/second/d/anything')
     await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
 
     expect(getBrowserWorkspaceId()).toBe(ADDRESSED_ULID)

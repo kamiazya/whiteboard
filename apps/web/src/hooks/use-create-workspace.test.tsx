@@ -57,7 +57,7 @@ describe('useCreateWorkspace', () => {
 
     await act(async () => result.current.submit('Plans, the sequel'))
 
-    expect(onSwitch).toHaveBeenCalledExactlyOnceWith('plans')
+    expect(onSwitch).toHaveBeenCalledExactlyOnceWith('me/plans')
   })
 
   it('releases busy after success and tells the caller before it switches', async () => {

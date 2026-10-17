@@ -94,14 +94,17 @@ async function createNamed(name: string) {
 describe('the server-mode workspaces page creates a workspace', () => {
   it('offers it to a person with no workspaces, posts the name, and opens the result by its address', async () => {
     const fake = renderSignedIn([], (displayName) =>
-      jsonResponse({ workspaceId: 'ws-1', segment: 'design-team', displayName }, 201),
+      jsonResponse(
+        { workspaceId: 'ws-1', namespace: 'ada', segment: 'design-team', displayName },
+        201,
+      ),
     )
     expect(await screen.findByText(/not a member of any workspace/i)).toBeTruthy()
 
     await createNamed('  Design team  ')
 
     await waitFor(() =>
-      expect(opened.at(-1)).toMatchObject({ workspace: 'design-team', serverMode: true }),
+      expect(opened.at(-1)).toMatchObject({ workspace: 'ada/design-team', serverMode: true }),
     )
     const [[url, init]] = posts(fake)
     expect(String(url)).toMatch(/\/api\/workspaces$/)
@@ -159,7 +162,7 @@ describe('the server-mode workspaces page creates a workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(posts(fake)).toHaveLength(2))
-    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'plans' }))
+    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'me/plans' }))
   })
 
   it('does not post twice for one submit', async () => {
@@ -176,7 +179,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
   const plans: Workspace = { workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' }
 
   it('offers the name and the address of the workspace the address names', async () => {
-    renderSignedIn([plans], undefined, { at: '/w/plans' })
+    renderSignedIn([plans], undefined, { at: '/w/me/plans' })
 
     expect(((await screen.findByLabelText('Workspace name')) as HTMLInputElement).value).toBe(
       'Plans',
@@ -187,7 +190,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
   it('patches the canonical id even when the address carries the segment', async () => {
     const patches: Array<{ url: string; body: unknown }> = []
     renderSignedIn([plans], undefined, {
-      at: '/w/plans',
+      at: '/w/me/plans',
       onPatch: (url, body) => {
         patches.push({ url, body })
         return jsonResponse({ workspaceId: 'ws-1', displayName: 'Roadmap', segment: 'plans' })
@@ -205,7 +208,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
   it("says the keeper's refusal, and leaves the address where it was", async () => {
     renderSignedIn([plans], undefined, {
-      at: '/w/plans',
+      at: '/w/me/plans',
       onPatch: () =>
         jsonResponse(
           { error: 'segment_taken', message: 'Workspace segment "notes" is taken' },
@@ -218,7 +221,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
     fireEvent.keyDown(url, { key: 'Enter' })
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/notes/)
-    expect(opened.at(-1)).toMatchObject({ workspace: 'plans' })
+    expect(opened.at(-1)).toMatchObject({ workspace: 'me/plans' })
   })
 
   // The switcher beside the rename names the same workspace, so it must read
@@ -228,7 +231,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
   it('names the renamed workspace in the switcher without reopening it', async () => {
     renderSignedIn([plans, other], undefined, {
-      at: '/w/plans',
+      at: '/w/me/plans',
       onPatch: () =>
         jsonResponse({ workspaceId: 'ws-1', displayName: 'Roadmap', segment: 'plans' }),
     })
@@ -243,7 +246,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
   it('still names the workspace in the switcher after its address moves', async () => {
     const fake = renderSignedIn([plans, other], undefined, {
-      at: '/w/plans',
+      at: '/w/me/plans',
       onPatch: () => jsonResponse({ workspaceId: 'ws-1', displayName: 'Plans', segment: 'notes' }),
     })
     await pickerSummary('Plans')
@@ -252,7 +255,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
     fireEvent.change(url, { target: { value: 'notes' } })
     fireEvent.keyDown(url, { key: 'Enter' })
 
-    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'notes' }))
+    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'me/notes' }))
     expect(await pickerSummary('Plans')).toBeTruthy()
     // Moving the address is not a reason to list again: a re-list racing the
     // rename is how the switcher lost the row it had just renamed.
@@ -284,7 +287,7 @@ describe('a workspace list that fails to load offers a retry', () => {
   })
 
   it('in the shell, rather than leaving the switcher out', async () => {
-    renderSignedIn([plans, other], undefined, { at: '/w/plans', onList: failingOnce() })
+    renderSignedIn([plans, other], undefined, { at: '/w/me/plans', onList: failingOnce() })
 
     expect((await screen.findByRole('alert')).textContent).toMatch(
       /could not load your workspaces/i,
@@ -351,7 +354,7 @@ describe('a session read that fails is not a sign-out', () => {
   }
 
   it('offers a retry in front of a workspace too', async () => {
-    renderSession('/w/plans', failedReads['a 503'] as () => Promise<Response>)
+    renderSession('/w/me/plans', failedReads['a 503'] as () => Promise<Response>)
 
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy()
     await expectLoggedFailure('could not read the session')
@@ -359,7 +362,7 @@ describe('a session read that fails is not a sign-out', () => {
   })
 
   it('still sends a browser the keeper says is signed out to sign in', async () => {
-    renderSession('/w/plans', () => Promise.resolve(jsonResponse({ signedIn: false })))
+    renderSession('/w/me/plans', () => Promise.resolve(jsonResponse({ signedIn: false })))
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy()
   })

@@ -3,9 +3,9 @@
 **Status:** Accepted, 2026-10-17. The owner chose the direction that day
 ("namespace segments per owner", design first), then answered the four open
 questions this record raised. The answers are the Decision section below.
-The implementation is sliced at the end of this record; slices 1 and 2
-(model/ports, and the daemon registry with its three oracle paths) are
-built, slices 3 and 4 are not.
+The implementation is sliced at the end of this record; slices 1 to 3
+(model/ports, the daemon registry with its three oracle paths, and the web
+app's grammar) are built, slice 4 is not.
 
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
@@ -388,8 +388,8 @@ the fixed handle **`me`**.
 - `local` was not used for this, because the vocabulary rule retires it
   for anything about where a workspace is kept.
 
-**Existing `/w/<segment>` links: break them, do not redirect.** This is
-the recommendation, to be confirmed in the web-grammar slice.
+**Existing `/w/<segment>` links: break them, do not redirect.** Confirmed
+in the web-grammar slice, as built.
 
 - After the change, a one-component `/w/<x>` resolves ONLY as a canonical
   id. A non-ULID one-component path gets the same unknown-address answer as
@@ -459,7 +459,7 @@ in `workspaceIdSchema`, and describing all three forms, changes a published
 tool surface. Its exact shape is settled by that slice's `mcp-tool-surface`
 procedure, not here.
 
-### Implementation slices (1 and 2 built)
+### Implementation slices (1 to 3 built)
 
 The slices are listed in `architecture-map.md`'s dependency order. Each
 starts from a failing test at its nearest layer.
@@ -492,9 +492,9 @@ starts from a failing test at its nearest layer.
      admits nobody, and `me` — which no server-mode user can hold — leaves it
      reachable by its id alone until an operator grants it a member. A
      workspace with members but no owner is refused, as above. Until slice 3
-     the server-mode listing omits the segment of a workspace held in
-     another namespace, since the web app would otherwise address it by a
-     bare segment that means the caller's own namespace.
+     the server-mode listing omitted the segment of a workspace held in
+     another namespace, since the web app would otherwise have addressed it
+     by a bare segment that means the caller's own namespace.
 3. **The web app's grammar.**
    - `workspacePath`, `documentPath`, `parseWorkspaceRoute` and
      `workspaceHandle` move to `/w/<handle>/<segment>`.
@@ -502,6 +502,23 @@ starts from a failing test at its nearest layer.
    - A copy-link surface that emits only the opaque form.
    - The single-person keepers' `me`.
    - Browser-mode coverage of the route flow.
+   - As built: a route's workspace is an address string, `<namespace>/<segment>`
+     or a canonical id, and the first URL component decides which — a
+     ULID-shaped one is the id form and nothing else, any other is a
+     namespace, so a segment spelled `d` stays addressable. A one-component
+     address still parses, as the id form, and the web app resolves it by
+     id ALONE (`resolveWorkspaceAddress`, beside `workspaceHandle`), never
+     as ports' caller-relative bare segment — that shorthand is for MCP
+     arguments. No API route takes the qualified form (`workspaceIdSchema`
+     admits no `/` until slice 4), so every request the web app sends names
+     the workspace's id, and the address is derived from the listing, whose
+     summaries now carry `namespace`; the slice-2 stop-gap that hid a foreign
+     segment is gone. The copy-link surface is server mode's **Copy link**
+     in the workspace header. The opaque-to-readable move is a REPLACE made
+     once the listing names the workspace. Not built here: an
+     unauthenticated deep link is still sent to sign-in without the path it
+     asked for, so it lands on the workspace list rather than back on the
+     link, and an accepted invitation likewise lands on the list.
 4. **The MCP tool surface**, through the `mcp-tool-surface` procedure.
    - The qualified handle and the three forms' descriptions.
    - ADR-0031's scoreboards re-pinned.

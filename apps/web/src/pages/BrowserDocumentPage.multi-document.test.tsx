@@ -31,10 +31,10 @@ import {
   idbContentClock,
   listBrowserDocuments,
 } from '../lib/browser-document-summary.js'
-import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
+import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import {
   clearWhiteboardDb,
   describeBrowserStore,
@@ -80,7 +80,7 @@ async function seedTwoDocuments(store: FoldingBrowserIndex): Promise<[string, st
 
 async function openDocument(path: string): Promise<void> {
   await act(async () => {
-    navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, path))
+    navigateTo(documentPath(BROWSER_DEFAULT_ADDRESS, path))
   })
 }
 

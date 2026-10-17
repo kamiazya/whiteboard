@@ -2,7 +2,7 @@ import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { parseWorkspaceRoute } from '../lib/app-routes.js'
-import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import { resolveWorkspaceAddress, workspaceLabel } from '../lib/workspace-handle.js'
 import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
 
 const log = getAppLogger('shell-workspace-rows')
@@ -64,7 +64,7 @@ export function useShellWorkspaceRows(
   const activeRow =
     handleInAddress === null
       ? undefined
-      : rows.find((row) => workspaceHandle(row) === handleInAddress)
+      : (resolveWorkspaceAddress(rows, handleInAddress) ?? undefined)
 
   return {
     rows,

@@ -24,7 +24,7 @@ it('records an open under the daemon and workspace id, not the segment', async (
   installFakeDaemonFetch({
     workspaces: [{ workspaceId: WS_ULID, segment: 'default' }],
     documentsByWorkspace: {
-      default: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
     },
   })
   render(

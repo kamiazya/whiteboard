@@ -2,6 +2,7 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentNameSchema,
+  namespaceHandleSchema,
   spatialCanvasSchema,
   versionLabelSchema,
   workspaceDisplayNameSchema,
@@ -245,6 +246,13 @@ export const DAEMON_DEFAULT_SEGMENT = 'default'
 // renamed to repair it). The bounds stay on the request schemas below.
 export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
+  /**
+   * The handle of the namespace holding the workspace, and so the one its
+   * `segment` is unique within (ADR-0053): an address names the workspace as
+   * `<namespace>/<segment>`, never by the segment alone. Absent is the
+   * single-person keeper's one namespace, `me`.
+   */
+  namespace: unknownIsAbsent(namespaceHandleSchema),
   segment: unknownIsAbsent(workspaceSegmentSchema),
   displayName: unknownIsAbsent(workspaceDisplayNameSchema),
   /**
