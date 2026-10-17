@@ -41,4 +41,23 @@ describe('renderDiagramFragment (real mermaid)', () => {
     ).resolves.toBeUndefined()
     expect(logged.join('\n')).toContain('[markdown-fragments] mermaid rendering failed')
   })
+
+  it('ignores a themeCSS an init directive tries to inject', async () => {
+    const marker = 'wbinjectedcssmarker'
+    const fragment = await renderDiagramFragment(
+      'mermaid',
+      `%%{init: {"themeCSS": ".${marker} { fill: red; }"}}%%\ngraph TD; A-->B`,
+    )
+    expect(fragment?.svg).toContain('<svg')
+    expect(fragment?.svg).not.toContain(marker)
+  })
+
+  it('ignores a dompurifyConfig an init directive tries to loosen', async () => {
+    const fragment = await renderDiagramFragment(
+      'mermaid',
+      '%%{init: {"dompurifyConfig": {"ADD_ATTR": ["onclick"]}}}%%\ngraph TD; A["<b onclick=x>hi</b>"]-->B',
+    )
+    expect(fragment?.svg).toContain('<svg')
+    expect(fragment?.svg).not.toMatch(/onclick/i)
+  })
 })

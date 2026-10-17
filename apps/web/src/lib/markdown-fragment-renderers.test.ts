@@ -8,7 +8,7 @@
  * markdown-fragment-renderers.browser.test.tsx instead.
  */
 import { describe, expect, it } from 'vitest'
-import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
+import { FRAGMENT_ENGINES, fragmentIsEmbeddable } from './markdown-fragment-renderers.js'
 
 const { math: renderMathFragment, diagram: renderDiagramFragment } = FRAGMENT_ENGINES
 
@@ -58,5 +58,30 @@ describe('renderMathFragment (real MathJax)', () => {
 describe('renderDiagramFragment', () => {
   it('declines every non-mermaid language without loading an engine', async () => {
     await expect(renderDiagramFragment('ts', 'const x = 1')).resolves.toBeUndefined()
+  })
+})
+
+describe('fragmentIsEmbeddable', () => {
+  it('accepts a fragment whose only references are local', () => {
+    expect(fragmentIsEmbeddable('<svg><use href="#g1"/><text>on=1 onclick=x</text></svg>')).toBe(
+      true,
+    )
+  })
+
+  it('refuses a non-local href', () => {
+    expect(fragmentIsEmbeddable('<svg><a href="javascript:alert(1)">x</a></svg>')).toBe(false)
+  })
+
+  it('refuses a script element in any case', () => {
+    expect(fragmentIsEmbeddable('<svg><script>alert(1)</script></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable('<svg><SCRIPT>alert(1)</SCRIPT></svg>')).toBe(false)
+  })
+
+  it('refuses an event-handler attribute in any case', () => {
+    expect(fragmentIsEmbeddable('<svg><rect onclick="alert(1)"/></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable('<svg ONLOAD="alert(1)"></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable("<svg><rect\nonmouseover = 'x'/></svg>")).toBe(false)
+    // A `>` inside an earlier quoted value does not end the tag.
+    expect(fragmentIsEmbeddable('<svg><rect style="a>b" onclick="x"/></svg>')).toBe(false)
   })
 })
