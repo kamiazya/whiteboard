@@ -150,7 +150,7 @@ export function postTransferResult(
   session: TransferSession,
   result:
     | Omit<Extract<TransferResponse, { ok: true }>, 'type' | 'nonce'>
-    | { ok: false; reason: string },
+    | Omit<Extract<TransferResponse, { ok: false }>, 'type' | 'nonce'>,
 ): void {
   // Addressed to the sender's origin rather than '*': a reply says what
   // landed in somebody's workspace, and '*' would hand it to whatever
@@ -159,4 +159,21 @@ export function postTransferResult(
     { type: 'transfer-result', nonce: session.nonce, ...result },
     session.senderOrigin,
   )
+}
+
+/**
+ * The whole of what a decline tells the opener: that this attempt is over
+ * and nothing was merged. Nothing about this keeper's workspaces or its
+ * signed-in person goes back, because the person has just said they do not
+ * know who is asking.
+ */
+export function postTransferDecline(
+  target: { postMessage: (message: unknown, targetOrigin: string) => void },
+  session: TransferSession,
+): void {
+  postTransferResult(target, session, {
+    ok: false,
+    declined: true,
+    reason: 'The transfer was declined at the destination, so nothing was merged there.',
+  })
 }

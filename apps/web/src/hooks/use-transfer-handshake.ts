@@ -15,6 +15,7 @@ import { listWorkspaces } from '../lib/daemon-api-client.js'
 import {
   type OfferedTransfer,
   openTransferSession,
+  postTransferDecline,
   postTransferResult,
   readOfferedTransfer,
   type TransferSession,
@@ -26,7 +27,15 @@ export type TransferStage =
   | { kind: 'not-a-transfer' }
   /** Listening, having told the opener so. */
   | { kind: 'waiting' }
+  /**
+   * An offer arrived from the origin the fragment named — which can be ANY
+   * web origin, since a server-mode keeper accepts a transfer from whoever
+   * sends one. Nothing is acceptable until the person says they started it.
+   */
+  | { kind: 'confirming'; offer: Extract<OfferedTransfer, { kind: 'offer' }> }
   | { kind: 'offered'; offer: Extract<OfferedTransfer, { kind: 'offer' }> }
+  /** The person did not recognise the transfer; the opener was told so and nothing more. */
+  | { kind: 'declined' }
   | { kind: 'accepting' }
   | { kind: 'done'; documentCount: number; imagesMissing: number; shadowed: string[] }
   | { kind: 'refused'; reason: string }
@@ -45,6 +54,9 @@ export interface TransferHandshake {
   targetsUnavailable: boolean
   targetId: string
   setTargetId: (id: string) => void
+  /** The person started this transfer: show the offer as acceptable. */
+  confirm: () => void
+  decline: () => void
   accept: () => Promise<void>
 }
 
@@ -66,10 +78,7 @@ export function useTransferHandshake({
     enabled: session !== null,
     keeperFetch: fetchFn,
   })
-  // Held in a ref as well as in state: the accept handler must act on the
-  // bytes it was given, and a re-render between the offer and the press must
-  // not be able to hand it a different snapshot.
-  const offered = useRef<Extract<OfferedTransfer, { kind: 'offer' }> | null>(null)
+  const { confirm, decline, confirmedOffer } = useOfferDecision(session, opener, setStage)
 
   // A message posted to a window that has not run its script yet is simply
   // LOST, and there is no event for "the other side is ready" other than the
@@ -82,26 +91,8 @@ export function useTransferHandshake({
     )
   }, [session, opener])
 
-  useEffect(() => {
-    if (session === null) return
-    const onMessage = (event: MessageEvent): void => {
-      const read = readOfferedTransfer(session, { origin: event.origin, data: event.data })
-      // `ignored` is the common case and deliberately silent — see
-      // receive-transfer.ts on why a wrong origin is not an error.
-      if (read.kind === 'ignored') return
-      if (read.kind === 'refused') {
-        setStage({ kind: 'refused', reason: read.reason })
-        return
-      }
-      offered.current = read
-      setStage({ kind: 'offered', offer: read })
-    }
-    globalThis.addEventListener('message', onMessage)
-    return () => globalThis.removeEventListener('message', onMessage)
-  }, [session])
-
   const accept = useCallback(async () => {
-    const offer = offered.current
+    const offer = confirmedOffer()
     if (offer === null || session === null || targetId === '') return
     setStage({ kind: 'accepting' })
     const outcome = await acceptTransferredRecord({
@@ -125,9 +116,72 @@ export function useTransferHandshake({
       // and the carried planes it did not report holding.
       postTransferResult(opener, session, { ...outcome, workspaceId: targetId })
     }
-  }, [session, fetchFn, targetId, opener])
+  }, [session, fetchFn, targetId, opener, confirmedOffer])
 
-  return { session, stage, targets, targetsUnavailable, targetId, setTargetId, accept }
+  return {
+    session,
+    stage,
+    targets,
+    targetsUnavailable,
+    targetId,
+    setTargetId,
+    confirm,
+    decline,
+    accept,
+  }
+}
+
+type Offer = Extract<OfferedTransfer, { kind: 'offer' }>
+
+/**
+ * What has arrived and what the person decided about it. Held in a ref as
+ * well as in state: accept must act on the bytes the person confirmed, and a
+ * re-render between the offer and the press must not hand it a different
+ * snapshot or a stale decision.
+ */
+function useOfferDecision(
+  session: TransferSession | null,
+  opener: TransferOpener,
+  setStage: (stage: TransferStage) => void,
+): { confirm: () => void; decline: () => void; confirmedOffer: () => Offer | null } {
+  const held = useRef({ offer: null as Offer | null, confirmed: false, declined: false })
+
+  useEffect(() => {
+    if (session === null) return
+    const onMessage = (event: MessageEvent): void => {
+      // A declined attempt is over; re-offering does not get to ask again.
+      if (held.current.declined) return
+      const read = readOfferedTransfer(session, { origin: event.origin, data: event.data })
+      // `ignored` is the common case and deliberately silent — see
+      // receive-transfer.ts on why a wrong origin is not an error.
+      if (read.kind === 'ignored') return
+      if (read.kind === 'offer') held.current = { offer: read, confirmed: false, declined: false }
+      setStage(
+        read.kind === 'offer'
+          ? { kind: 'confirming', offer: read }
+          : { kind: 'refused', reason: read.reason },
+      )
+    }
+    globalThis.addEventListener('message', onMessage)
+    return () => globalThis.removeEventListener('message', onMessage)
+  }, [session, setStage])
+
+  const confirm = useCallback(() => {
+    const { offer, declined } = held.current
+    if (offer === null || declined) return
+    held.current = { offer, confirmed: true, declined: false }
+    setStage({ kind: 'offered', offer })
+  }, [setStage])
+
+  const decline = useCallback(() => {
+    if (held.current.offer === null || held.current.declined || session === null) return
+    held.current = { offer: null, confirmed: false, declined: true }
+    setStage({ kind: 'declined' })
+    if (opener) postTransferDecline(opener, session)
+  }, [session, opener, setStage])
+
+  const confirmedOffer = useCallback(() => (held.current.confirmed ? held.current.offer : null), [])
+  return { confirm, decline, confirmedOffer }
 }
 
 /**
@@ -156,8 +210,9 @@ function useKeeperWorkspaceTargets({
     if (!enabled) return
     void listWorkspaces(keeperFetch, '')
       .then((response) => {
+        // No default: the person names the workspace a stranger's data
+        // lands in, rather than accepting whichever happens to list first.
         setTargets(response.workspaces)
-        setTargetId((current) => current || (response.workspaces[0]?.workspaceId ?? ''))
       })
       // A keeper that cannot list its own workspaces cannot accept into one;
       // the accept control stays disabled and the page says why.

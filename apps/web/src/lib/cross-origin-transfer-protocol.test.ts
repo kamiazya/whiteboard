@@ -157,6 +157,20 @@ describe('the transfer result', () => {
     expect(refused.success).toBe(true)
   })
 
+  it('marks a decline as one, so the sender can tell it from a keeper refusing', () => {
+    const decline = {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: false,
+      declined: true,
+      reason: 'The transfer was declined at the destination, so nothing was merged there.',
+    }
+    const parsed = transferResponseSchema.safeParse(decline)
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual(decline)
+    expect(transferResponseSchema.safeParse({ ...decline, declined: false }).success).toBe(false)
+  })
+
   it('refuses a refusal with no reason, since the sender shows the reason as-is', () => {
     const parsed = transferResponseSchema.safeParse({
       type: 'transfer-result',

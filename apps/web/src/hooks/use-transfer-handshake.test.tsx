@@ -13,7 +13,10 @@ import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from '../lib/cross-origin-transfer-protocol.js'
+import {
+  CROSS_ORIGIN_TRANSFER_PROTOCOL,
+  transferResponseSchema,
+} from '../lib/cross-origin-transfer-protocol.js'
 import { useTransferHandshake } from './use-transfer-handshake.js'
 
 const SENDER = 'https://app.example'
@@ -81,7 +84,8 @@ describe('useTransferHandshake', () => {
     const { result } = renderHook(() =>
       useTransferHandshake({ hash: HASH, fetchFn, opener: { postMessage: vi.fn() } }),
     )
-    await waitFor(() => expect(result.current.targetId).toBe('ws-here'))
+    await waitFor(() => expect(result.current.targets).toHaveLength(1))
+    act(() => result.current.setTargetId('ws-here'))
 
     await act(() => result.current.accept())
 
@@ -94,9 +98,11 @@ describe('useTransferHandshake', () => {
     const { result } = renderHook(() =>
       useTransferHandshake({ hash: HASH, fetchFn: keeper(target), opener: null }),
     )
-    await waitFor(() => expect(result.current.targetId).toBe('ws-here'))
+    await waitFor(() => expect(result.current.targets).toHaveLength(1))
     act(() => offerArrives())
-    await waitFor(() => expect(result.current.stage.kind).toBe('offered'))
+    await waitFor(() => expect(result.current.stage.kind).toBe('confirming'))
+    act(() => result.current.confirm())
+    act(() => result.current.setTargetId('ws-here'))
 
     // Awaited through the stage: `await act(accept)` never settled on this
     // path under jsdom. The promise is then held to resolving, not rejecting.
@@ -106,5 +112,69 @@ describe('useTransferHandshake', () => {
 
     expect(result.current.stage).toMatchObject({ kind: 'done', documentCount: 1 })
     expect(readWorkspaceDocuments(target).map((entry) => entry.path)).toEqual(['notes/roadmap'])
+  })
+
+  it('asks first: an offer is not acceptable until the person confirms they started it', async () => {
+    const fetchFn = keeper(new LoroDoc())
+    const opener = { postMessage: vi.fn() }
+    const { result } = renderHook(() => useTransferHandshake({ hash: HASH, fetchFn, opener }))
+    await waitFor(() => expect(result.current.targets).toHaveLength(1))
+    act(() => offerArrives())
+    await waitFor(() => expect(result.current.stage.kind).toBe('confirming'))
+    act(() => result.current.setTargetId('ws-here'))
+
+    await act(() => result.current.accept())
+
+    expect(result.current.stage.kind).toBe('confirming')
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/workspaces'])
+    // Only the ready handshake has gone back to the opener.
+    expect(opener.postMessage.mock.calls.map(([message]) => message.type)).toEqual([
+      'transfer-ready',
+    ])
+  })
+
+  it('preselects no target even when the keeper lists exactly one workspace', async () => {
+    const fetchFn = keeper(new LoroDoc())
+    const { result } = renderHook(() => useTransferHandshake({ hash: HASH, fetchFn, opener: null }))
+    await waitFor(() => expect(result.current.targets).toHaveLength(1))
+    act(() => offerArrives())
+    await waitFor(() => expect(result.current.stage.kind).toBe('confirming'))
+    act(() => result.current.confirm())
+
+    expect(result.current.stage.kind).toBe('offered')
+    expect(result.current.targetId).toBe('')
+    await act(() => result.current.accept())
+    expect(result.current.stage.kind).toBe('offered')
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/workspaces'])
+  })
+
+  it('declining posts only a decline to the opener and merges nothing', async () => {
+    const target = new LoroDoc()
+    const fetchFn = keeper(target)
+    const opener = { postMessage: vi.fn() }
+    const { result } = renderHook(() => useTransferHandshake({ hash: HASH, fetchFn, opener }))
+    await waitFor(() => expect(result.current.targets).toHaveLength(1))
+    act(() => offerArrives())
+    await waitFor(() => expect(result.current.stage.kind).toBe('confirming'))
+
+    act(() => result.current.decline())
+
+    expect(result.current.stage).toEqual({ kind: 'declined' })
+    const [ready, decline, ...rest] = opener.postMessage.mock.calls
+    expect(rest).toEqual([])
+    expect(ready?.[0].type).toBe('transfer-ready')
+    expect(decline?.[1]).toBe(SENDER)
+    expect(transferResponseSchema.parse(decline?.[0])).toEqual({
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: false,
+      declined: true,
+      reason: expect.any(String),
+    })
+    // A later offer on the same attempt is not asked about again.
+    act(() => offerArrives())
+    expect(result.current.stage).toEqual({ kind: 'declined' })
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/workspaces'])
+    expect(readWorkspaceDocuments(target)).toEqual([])
   })
 })

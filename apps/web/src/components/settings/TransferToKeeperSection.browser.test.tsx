@@ -116,7 +116,9 @@ describe('TransferToKeeperSection', () => {
     await userEvent.fill(screen.getByTestId('transfer-keeper-address'), KEEPER)
     await userEvent.click(screen.getByTestId('transfer-send'))
     // The receiver's own confirmation, at the destination.
-    await userEvent.click(await screen.findByTestId('receive-transfer-accept'))
+    await userEvent.click(await screen.findByTestId('receive-transfer-confirm-yes'))
+    await userEvent.selectOptions(screen.getByTestId('receive-transfer-target'), 'ws-there')
+    await userEvent.click(screen.getByTestId('receive-transfer-accept'))
 
     await waitFor(() =>
       expect(screen.getByTestId('transfer-report').textContent).toMatch(/Sent 1 document\./),
