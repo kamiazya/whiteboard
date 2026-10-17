@@ -448,10 +448,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   fixed message and goes to the operator's log with its detail; an export
   names its file within the workspace's exports directory, not the absolute
   path.
-- **A PNG export is bounded, and reads no host file.** A render past the pixel
-  budget is refused before it is drawn, and an inline Markdown image draws in
-  a PNG only from a `data:` URL — the exporter never reads a file the URL
-  names on the server, nor fetches a remote one. Both are in
+- **A PNG export is bounded in pixels, and reads no host file.** Two things
+  are bounded before anything is drawn: the size of the picture the export
+  produces, and the pixels the inline images it carries declare between them,
+  read from each image's own header. An export past either budget is
+  refused. An image whose type the exporter does not draw, or whose header it
+  cannot read, is left out rather than trusted to be small. An inline
+  Markdown image draws in a PNG only from a `data:` URL — the exporter never
+  reads a file the URL names on the server, nor fetches a remote one. What is
+  NOT bounded is time: the drawing itself runs in the serving process with
+  no deadline. All of it is in
   [Export formats](../reference/export-formats.md).
 - **A render lays out a bounded number of embedded documents.** Embeds nest
   three levels deep, and one render lays out at most 128 embedded documents

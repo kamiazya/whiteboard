@@ -43,7 +43,10 @@ surface resolves the URL to a workspace attachment, or when the URL is
 `http:`, `https:` or `data:`. Any other URL — a bare or relative file path,
 `file:` — draws as its alt text. The daemon's PNG export goes one step
 further and draws only `data:` images: it never reads a file the URL names on
-the daemon's host, and never fetches a remote one.
+the daemon's host, and never fetches a remote one. Of those it draws only PNG,
+JPEG, GIF, WebP and SVG, written as `data:<type>,…` or `data:<type>;base64,…`
+with no other parameter, and only when it can read the image's size from its
+header. Any other image draws nothing.
 
 ## How large a markdown document may be
 
@@ -422,6 +425,12 @@ A PNG is at most **16384 pixels a side** and **67,108,864 pixels** (64 Mi) in al
 after `scale` and `padding`. A document whose export would be larger is refused with a
 `400 invalid_request` naming the size it would have been, before anything is drawn; lower
 `scale`, or export SVG, which has no limit.
+
+The inline `data:` images a PNG export draws share the same **67,108,864 pixel** budget,
+counted from the width and height each image's header declares and summed across the
+document — a decoder allocates what the header declares, however few bytes encode it. A
+document past it is refused with a `400 invalid_request` before anything is drawn; shrink or
+remove an image, or export SVG.
 
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face

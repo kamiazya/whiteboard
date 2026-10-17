@@ -1,0 +1,243 @@
+// An inline `data:` image is decoded by resvg at the size its own header
+// declares, on the serving loop. A few hundred encoded bytes can declare a
+// 65535x65535 frame, so the export reads every header first and never hands
+// resvg an image it has not sized. These tests stop at the constructor seam:
+// a refused image must never reach a real decoder in this process.
+
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const constructed = vi.hoisted(() => ({ svgs: [] as string[] }))
+
+vi.mock('@resvg/resvg-js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@resvg/resvg-js')>()
+  class RecordingResvg extends actual.Resvg {
+    constructor(svg: string | Buffer, options?: ConstructorParameters<typeof actual.Resvg>[1]) {
+      constructed.svgs.push(String(svg))
+      super(svg, options)
+    }
+  }
+  return { ...actual, Resvg: RecordingResvg }
+})
+
+import { boundedDataImages } from './data-image-budget.js'
+import { EXPORT_MAX_PIXELS } from './export-budget.js'
+import { renderSpatialCanvasToPng } from './headless-renderer.js'
+
+const FONTS_DIR = '/nonexistent/wb-data-image-budget-fonts'
+
+const be16 = (n: number): number[] => [(n >> 8) & 0xff, n & 0xff]
+const le16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff]
+const be32 = (n: number): number[] => [...be16(n >>> 16), ...be16(n & 0xffff)]
+const ascii = (s: string): number[] => [...s].map((c) => c.charCodeAt(0))
+
+/** A PNG signature and IHDR declaring `width`x`height`; no pixel data follows. */
+const pngHeader = (width: number, height: number): number[] => [
+  0x89,
+  ...ascii('PNG\r\n\x1a\n'),
+  ...be32(13),
+  ...ascii('IHDR'),
+  ...be32(width),
+  ...be32(height),
+  8,
+  6,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+]
+
+/** SOI, a DQT stub, then SOF0 declaring `width`x`height`, then EOI. */
+const jpegHeader = (width: number, height: number, sof = 0xc0): number[] => [
+  0xff,
+  0xd8,
+  0xff,
+  0xdb,
+  ...be16(3),
+  0,
+  0xff,
+  sof,
+  ...be16(11),
+  8,
+  ...be16(height),
+  ...be16(width),
+  1,
+  1,
+  0x11,
+  0,
+  0xff,
+  0xd9,
+]
+
+const gifHeader = (sw: number, sh: number, fw: number, fh: number): number[] => [
+  ...ascii('GIF89a'),
+  ...le16(sw),
+  ...le16(sh),
+  0,
+  0,
+  0,
+  0x21,
+  0xf9,
+  4,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0x2c,
+  ...le16(0),
+  ...le16(0),
+  ...le16(fw),
+  ...le16(fh),
+  0,
+]
+
+const webpHeader = (chunk: 'VP8 ' | 'VP8L' | 'VP8X', width: number, height: number): number[] => {
+  const head = [...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP'), ...ascii(chunk), 0, 0, 0, 0]
+  if (chunk === 'VP8 ') {
+    return [...head, 0, 0, 0, 0x9d, 0x01, 0x2a, ...le16(width), ...le16(height)]
+  }
+  if (chunk === 'VP8L') {
+    const bits = ((width - 1) & 0x3fff) | (((height - 1) & 0x3fff) << 14)
+    return [...head, 0x2f, bits & 0xff, (bits >> 8) & 0xff, (bits >> 16) & 0xff, bits >>> 24]
+  }
+  const le24 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff]
+  return [...head, 0, 0, 0, 0, ...le24(width - 1), ...le24(height - 1)]
+}
+
+const dataUrl = (mime: string, bytes: number[]): string =>
+  `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`
+
+const imageSvg = (...hrefs: string[]): string =>
+  `<svg width="100" height="100">${hrefs.map((h) => `<image x="0" href="${h}"/>`).join('')}</svg>`
+
+/** A real 1x1 PNG. */
+const ONE_PIXEL_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+const canvasNaming = (...urls: string[]): SpatialCanvas => ({
+  nodes: urls.map((url, i) =>
+    textNode({ id: `n${i}`, x: i * 300, y: 0, width: 240, height: 240, text: `![x](${url})` }),
+  ),
+  edges: [],
+})
+
+afterEach(() => {
+  constructed.svgs.length = 0
+})
+
+describe('a data: image whose header declares more pixels than the export budget', () => {
+  it('refuses a JPEG declaring 65535x65535 before resvg is constructed', async () => {
+    const bomb = dataUrl('image/jpeg', jpegHeader(65535, 65535))
+    await expect(renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR)).rejects.toMatchObject({
+      name: 'ExportTooLargeError',
+    })
+    expect(constructed.svgs).toHaveLength(0)
+  })
+
+  it('refuses a PNG declaring 16384x16384 before resvg is constructed', async () => {
+    const bomb = dataUrl('image/png', pngHeader(16384, 16384))
+    await expect(renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR)).rejects.toMatchObject({
+      name: 'ExportTooLargeError',
+    })
+    expect(constructed.svgs).toHaveLength(0)
+  })
+
+  it('sums the declared pixels across every image in the document', () => {
+    const half = dataUrl('image/png', pngHeader(4096, EXPORT_MAX_PIXELS / 4096 / 2))
+    expect(() => boundedDataImages(imageSvg(half, half))).not.toThrow()
+    expect(() => boundedDataImages(imageSvg(half, half, half))).toThrow(
+      expect.objectContaining({ name: 'ExportTooLargeError' }),
+    )
+  })
+
+  it.each([
+    ['a progressive JPEG', 'image/jpeg', jpegHeader(20000, 20000, 0xc2)],
+    ['a GIF logical screen', 'image/gif', gifHeader(20000, 20000, 1, 1)],
+    ['a GIF frame larger than its screen', 'image/gif', gifHeader(1, 1, 20000, 20000)],
+    ['a lossy WebP', 'image/webp', webpHeader('VP8 ', 16000, 16000)],
+    ['a lossless WebP', 'image/webp', webpHeader('VP8L', 16384, 16384)],
+    ['an extended WebP', 'image/webp', webpHeader('VP8X', 100000, 100000)],
+    [
+      'an SVG',
+      'image/svg+xml',
+      ascii('<svg xmlns="http://www.w3.org/2000/svg" width="20000" height="20000"/>'),
+    ],
+    [
+      'an SVG sized by its viewBox',
+      'image/svg+xml',
+      ascii('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20000 20000"/>'),
+    ],
+  ])('reads the size %s declares', (_name, mime, bytes) => {
+    expect(() => boundedDataImages(imageSvg(dataUrl(mime, bytes)))).toThrow(
+      expect.objectContaining({ name: 'ExportTooLargeError' }),
+    )
+  })
+
+  it('reads an image written percent-encoded rather than in base64', () => {
+    const svg = encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="20000" height="20000"/>',
+    )
+    expect(() => boundedDataImages(imageSvg(`data:image/svg+xml,${svg}`))).toThrow(
+      expect.objectContaining({ name: 'ExportTooLargeError' }),
+    )
+  })
+
+  it('reads an href through its XML character references', () => {
+    const encoded = Buffer.from(pngHeader(16384, 16384)).toString('base64')
+    const escaped = `<svg width="1" height="1"><image href="data:image/png;base64,${encoded.replace(/A/g, '&#65;')}"/></svg>`
+    expect(escaped).toContain('&#65;')
+    expect(() => boundedDataImages(escaped)).toThrow(
+      expect.objectContaining({ name: 'ExportTooLargeError' }),
+    )
+  })
+})
+
+describe('a data: image the exporter cannot size', () => {
+  it.each([
+    ['a header too short to read', 'data:image/png;base64,AA'],
+    ['a type not on the allowlist', dataUrl('image/bmp', pngHeader(1, 1))],
+    ['no type at all', 'data:,AA'],
+    ['plain text resvg would sniff', dataUrl('text/plain', pngHeader(1, 1))],
+    ['bytes of another format than declared', dataUrl('image/png', jpegHeader(1, 1))],
+    ['a JPEG whose height is left to a later marker', dataUrl('image/jpeg', jpegHeader(1, 0))],
+    [
+      'a JPEG with a marker before its frame a decoder may not skip by length',
+      dataUrl('image/jpeg', [0xff, 0xd8, 0xff, 0x01, 0, 2, ...jpegHeader(1, 1).slice(2)]),
+    ],
+    ['a parameter besides base64', `data:image/png;x=1;base64,${ONE_PIXEL_PNG.split(',')[1]}`],
+    [
+      'base64 with characters outside the alphabet',
+      `${ONE_PIXEL_PNG.slice(0, 40)}*${ONE_PIXEL_PNG.slice(40)}`,
+    ],
+    [
+      'an SVG sized in percent',
+      dataUrl('image/svg+xml', ascii('<svg width="100%" height="100%"/>')),
+    ],
+  ])('drops %s instead of trusting it', (_name, href) => {
+    const out = boundedDataImages(imageSvg(href))
+    expect(out).toContain('<image x="0"/>')
+    expect(out).not.toContain('href=')
+  })
+
+  it('keeps a readable image within the budget', () => {
+    expect(boundedDataImages(imageSvg(ONE_PIXEL_PNG))).toContain(`href="${ONE_PIXEL_PNG}"`)
+  })
+
+  it('hands resvg a readable image unchanged', async () => {
+    await renderSpatialCanvasToPng(canvasNaming(ONE_PIXEL_PNG), FONTS_DIR)
+    expect(constructed.svgs).toHaveLength(1)
+    expect(constructed.svgs[0]).toContain(`href="${ONE_PIXEL_PNG}"`)
+  })
+
+  it('hands resvg no unreadable image', async () => {
+    await renderSpatialCanvasToPng(canvasNaming('data:image/png;base64,AA'), FONTS_DIR)
+    expect(constructed.svgs).toHaveLength(1)
+    expect(constructed.svgs[0]).toContain('<image')
+    expect(constructed.svgs[0]).not.toContain('data:image/png;base64,AA')
+  })
+})
