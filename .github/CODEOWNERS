@@ -10,6 +10,11 @@
 /package.json @kamiazya
 /.github/CODEOWNERS @kamiazya
 
+# The required ci-gate check is computed by workflow and script code that a
+# pull request can change, so changes to them need the owner's review.
+/.github/** @kamiazya
+/tools/checks/** @kamiazya
+
 # Runtime / daemon lifecycle
 /packages/mcp-server/src/server/** @kamiazya
 /packages/mcp-server/src/daemon/** @kamiazya

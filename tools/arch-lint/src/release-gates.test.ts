@@ -41,6 +41,10 @@ describe('release gate: CODEOWNERS', () => {
     '*',
     '/package.json',
     '/.github/CODEOWNERS',
+    // The code that computes the required ci-gate check: a pull request can
+    // change it, so it needs the owner's review on its own rule.
+    '/.github/**',
+    '/tools/checks/**',
     // Runtime / daemon lifecycle
     '/packages/mcp-server/src/server/**',
     '/packages/mcp-server/src/daemon/**',
