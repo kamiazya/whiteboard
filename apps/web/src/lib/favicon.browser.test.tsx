@@ -114,6 +114,18 @@ describe('renderFavicon with a document symbol', () => {
     )
   })
 
+  it.each([
+    'constructor',
+    'toString',
+    '__proto__',
+    'hasOwnProperty',
+  ])('an icon name every object inherits (%s) degrades like an unknown one', (name) => {
+    const inherited = { kind: 'icon', name } as const
+    expect(renderFavicon({ style: 'dot', status: 'quiet', rects: [], symbol: inherited })).toBe(
+      renderFavicon({ style: 'dot', status: 'quiet', rects: [] }),
+    )
+  })
+
   it('the status grammar still reads over a symbol', () => {
     // The dot and the offline dashes belong to the board, not to the mark,
     // so replacing the mark must leave them working.

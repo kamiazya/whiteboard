@@ -62,6 +62,20 @@ export const LUCIDE_ICONS: Readonly<Record<string, ReadonlyArray<LucideIconEleme
 }
 
 /**
+ * The vendored geometry for `name`, or undefined when the set does not
+ * carry it — the one lookup a document-supplied name may go through.
+ *
+ * `LUCIDE_ICONS` is a plain object, so indexing it by `constructor`,
+ * `toString` or `__proto__` answers an inherited function or the prototype
+ * itself; a caller iterating that throws, and the symbol facet admits any
+ * non-empty name. An own-property check makes such a name degrade like any
+ * unknown one.
+ */
+export function iconGeometry(name: string): ReadonlyArray<LucideIconElement> | undefined {
+  return Object.hasOwn(LUCIDE_ICONS, name) ? LUCIDE_ICONS[name] : undefined
+}
+
+/**
  * The vendored set's names, sorted — the published answer to "which icons
  * can this renderer draw". A picker offers exactly these, so an editor
  * never lists a name the backend would silently drop.
