@@ -7,7 +7,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import { type WorkspaceEntry, WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
@@ -34,6 +34,7 @@ function tools() {
   const index = {
     resolveWorkspace: async (h: string) =>
       workspaces.get(h) ?? [...workspaces.values()].find((w) => w.workspaceId === h) ?? null,
+    createWorkspace,
   }
   return gatedByMembership(
     {
@@ -56,6 +57,12 @@ function tools() {
     index,
   ).edit
 }
+
+async function createWorkspace(entry: { workspaceId: string; segment: string }) {
+  if (workspaces.has(entry.segment)) throw new WorkspaceSegmentTakenError(entry.segment)
+  workspaces.set(entry.segment, entry)
+}
+const idOf = (segment: string) => workspaces.get(segment)?.workspaceId ?? 'none'
 
 const asAda = <T>(fn: () => Promise<T>) => runAsMcpCaller({ grant: bearerOf(ada), members }, fn)
 
@@ -105,7 +112,7 @@ describe('gatedByMembership', () => {
   it('makes the creator of a new workspace its first member', async () => {
     const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     await asAda(() => tools().execute({ workspaceId: 'fresh', createWorkspace: true }))
-    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).toBe('member')
+    expect(await members.isWorkspaceMember(idOf('fresh'), profile.id)).toBe('member')
     await asAda(() => tools().execute({ workspaceId: 'fresh' }))
     expect(executed).toHaveLength(2)
   })
@@ -143,55 +150,35 @@ describe('gatedByMembership', () => {
     await expect(
       asAda(() => tools().execute({ workspaceId: 'fresh', createWorkspace: true, fail: true })),
     ).rejects.toThrow(/op 2 failed/)
-    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).toBe('member')
+    expect(await members.isWorkspaceMember(idOf('fresh'), profile.id)).toBe('member')
   })
 
-  // A batch refused before it minted anything has no workspace to grant: its
-  // own error must reach the caller rather than a failure from the grant.
-  it('rethrows the error of a batch that failed before minting, and makes nobody a member', async () => {
+  // The gate mints before the batch runs, so a batch it refuses still leaves
+  // the creator in the workspace they asked for, and the batch's own error
+  // reaches them rather than a failure from the grant.
+  it('rethrows the error of a refused batch, keeping its creator a member', async () => {
     const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     const gated = gatedByMembership(
       {
         edit: {
           name: 'wb_workspace_edit',
           async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
-            throw new Error('refused before minting')
+            throw new Error('refused before writing')
           },
         },
       },
-      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null, createWorkspace },
     ).edit
     await expect(
       asAda(() => gated.execute({ workspaceId: 'fresh', createWorkspace: true })),
-    ).rejects.toThrow(/refused before minting/)
-    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).not.toBe('member')
+    ).rejects.toThrow(/refused before writing/)
+    expect(await members.isWorkspaceMember(idOf('fresh'), profile.id)).toBe('member')
   })
 
-  // Two people creating the same new segment at once: the winner minted it and
-  // is its first member by the time the loser's batch finishes, and a
-  // workspace that already has members is not the loser's to join.
-  it('does not make the creator a member of a workspace that is already members-only', async () => {
-    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
-    const bob = await members.ensureProfile({
-      binding: { authenticator: 'oidc:test', subject: 'bob' },
-      displayName: 'Bob',
-    })
-    const gated = gatedByMembership(
-      {
-        edit: {
-          name: 'wb_workspace_edit',
-          async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
-            workspaces.set('fresh', { workspaceId: 'ws-fresh', segment: 'fresh' })
-            await members.addMember('ws-fresh', bob.id)
-            return { ok: true }
-          },
-        },
-      },
-      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
-    ).edit
-    await asAda(() => gated.execute({ workspaceId: 'fresh', createWorkspace: true }))
-    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).not.toBe('member')
-    expect(await members.isWorkspaceMember('ws-fresh', bob.id)).toBe('member')
+  it('leaves a handle that cannot be a segment to the tool, minting nothing', async () => {
+    await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await asAda(() => tools().execute({ workspaceId: '-', createWorkspace: true }))
+    expect(executed).toEqual([{ workspaceId: '-', createWorkspace: true }])
   })
 
   // The gate selects on the workspace field, so a call without it must not be
@@ -214,7 +201,7 @@ describe('gatedByMembership', () => {
     }
     const gated = gatedByMembership(
       { facetList: { ...optional, name: 'wb_facet_list' } },
-      { resolveWorkspace: async () => null },
+      { resolveWorkspace: async () => null, createWorkspace },
     )
     await asAda(() => gated.facetList.execute({}))
     expect(executed).toEqual([{}])
@@ -224,7 +211,7 @@ describe('gatedByMembership', () => {
     await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     const gated = gatedByMembership(
       { facetList: { name: 'wb_facet_list', execute: async (input: unknown) => input } },
-      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null, createWorkspace },
     )
     await expect(asAda(() => gated.facetList.execute({ workspaceId: 'plans' }))).rejects.toThrow(
       /not_a_member/,
@@ -244,10 +231,59 @@ describe('gatedByMembership', () => {
   it('refuses a tool that has no scope entry, whatever the grant holds', async () => {
     const gated = gatedByMembership(
       { unmapped: { name: 'wb_unmapped', execute: async (input: unknown) => input } },
-      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null, createWorkspace },
     )
     await expect(asAda(() => gated.unmapped.execute({ workspaceId: 'plans' }))).rejects.toThrow(
       /insufficient_scope/,
     )
+  })
+
+  // Two people creating one new segment at once: the other mints it between
+  // this call's "does not exist" and its write. Converging on the winner's
+  // workspace would file this caller's documents where the winner reads them.
+  it('refuses a create whose segment another person minted mid-call, writing nothing there', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const bob = await members.ensureProfile({
+      binding: { authenticator: 'oidc:test', subject: 'bob' },
+      displayName: 'Bob',
+    })
+    const writes: string[] = []
+    let raced = false
+    const index = {
+      async resolveWorkspace(h: string) {
+        const found =
+          workspaces.get(h) ?? [...workspaces.values()].find((w) => w.workspaceId === h) ?? null
+        if (h === 'fresh' && !raced) {
+          raced = true
+          workspaces.set('fresh', { workspaceId: 'ws-bob', segment: 'fresh' })
+          await members.addMember('ws-bob', bob.id)
+        }
+        return found
+      },
+      async createWorkspace({ workspaceId, segment }: { workspaceId: string; segment: string }) {
+        if (workspaces.has(segment)) throw new WorkspaceSegmentTakenError(segment)
+        workspaces.set(segment, { workspaceId, segment })
+      },
+    }
+    // Like wb_workspace_edit: createWorkspace converges on whatever the
+    // handle resolves to, minting only when it names nothing.
+    const gated = gatedByMembership(
+      {
+        edit: {
+          name: 'wb_workspace_edit',
+          async execute(input: { workspaceId: string; createWorkspace?: boolean }) {
+            const entry = await index.resolveWorkspace(input.workspaceId)
+            writes.push(entry?.workspaceId ?? `minted-${input.workspaceId}`)
+            return { ok: true }
+          },
+        },
+      },
+      index,
+    ).edit
+    await expect(
+      asAda(() => gated.execute({ workspaceId: 'fresh', createWorkspace: true })),
+    ).rejects.toThrow(/not_a_member/)
+    expect(writes).toEqual([])
+    expect(await members.isWorkspaceMember('ws-bob', profile.id)).not.toBe('member')
   })
 })

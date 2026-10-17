@@ -8,7 +8,8 @@
  * which is exactly those surfaces' behaviour today.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
@@ -48,6 +49,8 @@ interface WorkspaceScopedInput {
   readonly createWorkspace?: unknown
 }
 
+type GateIndex = Pick<DocumentIndex, 'resolveWorkspace' | 'createWorkspace'>
+
 function refused(denial: MembershipDenial): Error {
   const { error, message } = membershipRefusal(denial)
   return new Error(`${error}: ${message}`)
@@ -80,7 +83,7 @@ function scopeRefusal(caller: McpCaller, toolName: string): Error | null {
  */
 export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>(
   tools: T,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
 ): T {
   const wrapped: Record<string, WorkspaceScopedTool> = {}
   for (const [key, tool] of Object.entries(tools)) {
@@ -107,14 +110,21 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
 
 async function gatedCall(
   caller: McpCaller,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
   handle: string,
   tool: WorkspaceScopedTool,
   input: never,
 ): Promise<unknown> {
-  const existing = await index.resolveWorkspace(handle)
+  let existing = await index.resolveWorkspace(handle)
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
-    return createAsFirstMember(caller, index, handle, () => tool.execute(input))
+    const minted = await mintAsFirstMember(caller, index, handle)
+    if (minted === 'unmintable') return tool.execute(input)
+    if (minted !== 'taken') {
+      return tool.execute({ ...(input as object), workspaceId: minted } as never)
+    }
+    // Someone else minted the segment after the check above: it is theirs,
+    // and joining it takes a membership like any other workspace.
+    existing = await index.resolveWorkspace(handle)
   }
   const access = await workspaceAccess(
     caller.grant,
@@ -128,27 +138,36 @@ async function gatedCall(
   return tool.execute({ ...(input as object), workspaceId: existing.workspaceId } as never)
 }
 
-// ponytail: two people creating the same new segment at the same instant both
-// pass the "does not exist" check, and the loser's write lands in the winner's
-// workspace; membership still goes only to whoever finishes first. Closing it
-// needs the mint to take the membership in the same write, in server-core.
-async function createAsFirstMember(
+/**
+ * The gate mints the workspace ITSELF, before the tool runs, and makes the
+ * caller its member before anything is written. Left to the tool, the mint
+ * converges on whichever creator's write lands first, so a second person
+ * creating the same segment at the same instant would have their documents
+ * filed in the first one's workspace, where the first one reads them. Here
+ * the segment's unique index decides: whoever loses gets `taken` and is
+ * refused like any non-member, with nothing written. The id is fresh and
+ * known only to this call until the membership lands.
+ *
+ * A batch refused after the mint leaves the caller a member of an empty
+ * workspace, so their retry reaches it. A handle that cannot be a segment
+ * is `unmintable`: the tool refuses it with its own reason, minting nothing.
+ */
+async function mintAsFirstMember(
   caller: McpCaller,
-  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  index: GateIndex,
   handle: string,
-  run: () => Promise<unknown>,
-): Promise<unknown> {
+): Promise<string | 'taken' | 'unmintable'> {
   const person = caller.grant.person
   const profile = person === undefined ? null : await caller.members.profileForBinding(person)
   if (profile === null) throw refused('requires_person_session')
+  if (!workspaceSegmentSchema.safeParse(handle).success) return 'unmintable'
+  const workspaceId = generateDocumentId()
   try {
-    return await run()
-  } finally {
-    // Also when the batch failed after minting: otherwise the creator's retry
-    // is refused from a workspace that exists and has no member.
-    const created = await index.resolveWorkspace(handle)
-    if (created !== null && !(await caller.members.membersOnly(created.workspaceId))) {
-      await caller.members.addMember(created.workspaceId, profile.id)
-    }
+    await index.createWorkspace({ workspaceId, segment: handle })
+  } catch (err) {
+    if (isWorkspaceSegmentTakenError(err)) return 'taken'
+    throw err
   }
+  await caller.members.addMember(workspaceId, profile.id)
+  return workspaceId
 }

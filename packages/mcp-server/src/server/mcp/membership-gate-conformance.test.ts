@@ -57,7 +57,7 @@ describe('the membership gate over the registered tools', () => {
   })
 
   it('refuses every tool to a caller who is not signed in as a person', async () => {
-    const index = { resolveWorkspace: async () => null }
+    const index = { resolveWorkspace: async () => null, createWorkspace: async () => {} }
     const gated = gatedByMembership(realTools(), index)
     const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
     const members = {
@@ -77,7 +77,10 @@ describe('the membership gate over the registered tools', () => {
   })
 
   it('lets through, naming no workspace, exactly the tools whose schema allows it', async () => {
-    const gated = gatedByMembership(realTools(), { resolveWorkspace: async () => null })
+    const gated = gatedByMembership(realTools(), {
+      resolveWorkspace: async () => null,
+      createWorkspace: async () => {},
+    })
     const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
     const members = { membersOnly: async () => true } as unknown as MemberProfileStore
     const passed: string[] = []

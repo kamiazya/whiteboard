@@ -230,7 +230,11 @@ call that names a workspace the caller is not a member of fails with
 reveal which workspaces exist. A call that creates a workspace
 (`wb_workspace_edit` with `createWorkspace: true`) makes the caller its first
 member; on a workspace that already exists it is an ordinary write, and a
-non-member is refused.
+non-member is refused. The workspace is created, with the caller as its
+member, before any document is written. If two people create the same new
+workspace at once, one of them gets it and the other is refused with
+`not_a_member`, and nothing of theirs is written into it. A batch that fails
+after that still leaves the caller with the workspace, so they can retry.
 
 A person must be a **user** of this keeper before they can be a member. A
 browser sign-in makes one. A bearer token makes one only when its issuer is a
