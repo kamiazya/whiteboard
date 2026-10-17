@@ -73,13 +73,13 @@ function qualifiedAddress(namespace: string, segment: string): string | null {
 
 /** The route after `/w/` when it is a qualified address: `<ns>/<seg>` or `<ns>/<seg>/d/<path>`. */
 function qualifiedRoute(rest: string): WorkspaceRoute | null {
-  const documentMatch = rest.match(/^([^/]+)\/([^/]+)\/d\/(.+?)\/?$/)
+  const documentMatch = /^([^/]+)\/([^/]+)\/d\/(.+?)\/?$/.exec(rest)
   if (documentMatch) {
     const workspace = qualifiedAddress(documentMatch[1] as string, documentMatch[2] as string)
     const path = documentTail(documentMatch[3] as string)
     return workspace === null || path === null ? null : { kind: 'document', workspace, path }
   }
-  const indexMatch = rest.match(/^([^/]+)\/([^/]+)\/?$/)
+  const indexMatch = /^([^/]+)\/([^/]+)\/?$/.exec(rest)
   if (indexMatch) {
     const workspace = qualifiedAddress(indexMatch[1] as string, indexMatch[2] as string)
     return workspace === null ? null : { kind: 'index', workspace }
@@ -89,13 +89,13 @@ function qualifiedRoute(rest: string): WorkspaceRoute | null {
 
 /** The route after `/w/` when it is a one-component (id-form) address: `<id>` or `<id>/d/<path>`. */
 function idRoute(rest: string): WorkspaceRoute | null {
-  const documentMatch = rest.match(/^([^/]+)\/d\/(.+?)\/?$/)
+  const documentMatch = /^([^/]+)\/d\/(.+?)\/?$/.exec(rest)
   if (documentMatch) {
     const workspace = decodeSegment(documentMatch[1] as string)
     const path = documentTail(documentMatch[2] as string)
     return workspace === null || path === null ? null : { kind: 'document', workspace, path }
   }
-  const indexMatch = rest.match(/^([^/]+)\/?$/)
+  const indexMatch = /^([^/]+)\/?$/.exec(rest)
   if (indexMatch) {
     const workspace = decodeSegment(indexMatch[1] as string)
     return workspace === null ? null : { kind: 'index', workspace }

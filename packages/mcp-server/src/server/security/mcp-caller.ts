@@ -165,8 +165,8 @@ async function gatedCall(
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
     const minted = await mintAsFirstMember(caller, index, handle)
     if (minted === 'unmintable') return tool.execute(input)
-    if (minted !== 'taken' && minted !== 'foreign') {
-      return tool.execute({ ...(input as object), workspaceId: minted } as never)
+    if (typeof minted === 'object') {
+      return tool.execute({ ...(input as object), workspaceId: minted.workspaceId } as never)
     }
     // `taken`: a concurrent call of the caller's own minted the segment after
     // the check above; it is in their namespace, so the gate below admits
@@ -205,7 +205,7 @@ async function mintAsFirstMember(
   caller: McpCaller,
   index: GateIndex,
   handle: string,
-): Promise<string | 'taken' | 'foreign' | 'unmintable'> {
+): Promise<{ readonly workspaceId: string } | 'taken' | 'foreign' | 'unmintable'> {
   const person = caller.grant.person
   const profile = person === undefined ? null : await caller.members.profileForBinding(person)
   if (profile === null) throw refused('requires_person_session')
@@ -221,5 +221,5 @@ async function mintAsFirstMember(
     throw err
   }
   await caller.members.addMember(workspaceId, profile.id)
-  return workspaceId
+  return { workspaceId }
 }

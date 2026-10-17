@@ -76,7 +76,7 @@ export async function homeWithItsOwner(db: TenantScoped, workspaceId: string): P
       .select(['id', 'namespace', 'segment'])
       .where('id', '=', workspaceId)
       .executeTakeFirst()
-    if (workspace === undefined || workspace.namespace !== SINGLE_PERSON_NAMESPACE) return
+    if (workspace?.namespace !== SINGLE_PERSON_NAMESPACE) return
     await moveIntoNamespace(trx, workspace, await oldestOwnerNamespace(trx, workspaceId))
   })
 }
