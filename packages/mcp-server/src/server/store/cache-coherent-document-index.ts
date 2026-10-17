@@ -129,7 +129,11 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
       const purged = await super.purgeTrashEntry(input)
       if (purged) {
         const db = await this.scope.db()
-        await db.deleteFrom('versions').where('documentId', '=', input.documentId).execute()
+        await db
+          .deleteFrom('versions')
+          .where('workspaceId', '=', input.workspaceId)
+          .where('documentId', '=', input.documentId)
+          .execute()
       }
       return purged
     })

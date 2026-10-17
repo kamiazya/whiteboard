@@ -418,7 +418,11 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
         // delete-completeness lives here for a delete that left nothing a
         // restore could bring back, and in the purge for one that did.
         if (!(await isInTrash(workspaceId, documentId, scope))) {
-          await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+          await db
+            .deleteFrom('versions')
+            .where('workspaceId', '=', workspaceId)
+            .where('documentId', '=', documentId)
+            .execute()
         }
 
         // Force the next getDoc() to reload from disk (there is nothing left to

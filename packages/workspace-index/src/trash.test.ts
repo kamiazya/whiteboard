@@ -237,6 +237,31 @@ describe('restoring a document', () => {
       documentId,
     ])
   })
+
+  it('answers null and places nothing when the bytes hold a different document', async () => {
+    // A trash row is synced data, so it can name any blob the keeper holds —
+    // here the bytes another row evacuated.
+    const named = await createAndDelete('design')
+    const other = await createAndDelete('elsewhere')
+    const otherRow = (await index.listTrash({ workspaceId: WS })).find(
+      (row) => row.documentId === other,
+    )
+    if (otherRow === undefined) throw new Error('expected a trash row')
+    recordTrashEntry(docs.peek(WS), {
+      documentId: named,
+      path: 'design',
+      deletedAt: 1,
+      blob: otherRow.blob,
+    })
+
+    expect(await index.restoreDocument({ workspaceId: WS, documentId: named })).toBeNull()
+
+    expect(await index.resolveDocumentById({ workspaceId: WS, documentId: other })).toBeNull()
+    expect(await index.listDocuments({ workspaceId: WS })).toEqual([])
+    expect(
+      (await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId).sort(),
+    ).toEqual([named, other].sort())
+  })
 })
 
 describe('purging a trashed document', () => {
