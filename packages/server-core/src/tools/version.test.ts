@@ -3,6 +3,7 @@ import { documentIdSchema, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
+import { RestoredDocumentIdMissingError } from '../operations/restore-version.js'
 import type {
   CanvasClientNotifier,
   RestoreProgressEvent,
@@ -430,5 +431,25 @@ describe('wb_version_restore', () => {
         versionId: saved.id,
       }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
+  })
+
+  // Past what the operation's own save lets through, so pinned here: server
+  // mode answers an unnamed error as internal_error, so it must be a named
+  // class for its text to reach the caller.
+  test('says by name when the restored target lists no document id', async () => {
+    const { deps, versions, live } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'v1',
+    })
+    live.list = async () => []
+    await expect(
+      createVersionRestoreTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        versionId: saved.id,
+        targetPath: 'notes/plan-copy',
+      }),
+    ).rejects.toBeInstanceOf(RestoredDocumentIdMissingError)
   })
 })

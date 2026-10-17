@@ -247,6 +247,18 @@ async function restoreToTarget(
 }
 
 /**
+ * The restore landed but the target's row lists no document id, so the
+ * caller cannot be told which document now holds it. Named, so a server-mode
+ * caller reads this rather than a bare internal error.
+ */
+export class RestoredDocumentIdMissingError extends Error {
+  constructor(public readonly targetPath: string) {
+    super(`restored document has no id: ${targetPath}`)
+    this.name = 'RestoredDocumentIdMissingError'
+  }
+}
+
+/**
  * The id of the document a write just placed at `path`, read after the save
  * so a freshly created row is the one answered. A caller that restored into a
  * target goes on to address THAT document, so the source's id would send its
@@ -260,7 +272,7 @@ async function documentIdAt(
 ): Promise<string> {
   const row = (await live.list(workspaceId)).find((candidate) => candidate.path === path)
   if (row?.documentId === undefined) {
-    throw new Error(`restored document has no id: ${path}`)
+    throw new RestoredDocumentIdMissingError(path)
   }
   return row.documentId
 }

@@ -254,3 +254,34 @@ describe('server mode — a corrupt stored file is refused without its storage p
     }
   })
 })
+
+// Server mode answers a fault with a fixed internal-error text, so a refusal
+// the member could act on reaches them only when it is a named error class.
+describe('server mode /mcp — a refusal reaches the member in its own words', () => {
+  it('answers an unknown render style and a move with nothing to do verbatim', async () => {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', createPlans)
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const { results } = created.structuredContent as { results: Array<{ documentId: string }> }
+      const documentId = results[0]?.documentId
+
+      const rendered = await ada.call('wb_scene_render', {
+        workspaceId: 'plans',
+        documentId,
+        style: 'visual.nope',
+      })
+      expect(rendered.isError).toBe(true)
+      expect(textOf(rendered)).toMatch(/no theme "visual\.nope" is registered/)
+
+      const moved = await ada.call('wb_workspace_edit', {
+        workspaceId: 'plans',
+        ops: [{ op: 'document.move', documentId }],
+      })
+      expect(moved.isError).toBe(true)
+      expect(textOf(moved)).toMatch(/a move needs a `path` to move it, a `name` to rename it/)
+    } finally {
+      await ada.close()
+    }
+  })
+})

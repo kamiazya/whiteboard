@@ -64,6 +64,14 @@ const canvasRenderSvgOutputSchema = z
   .strict()
 export type CanvasRenderSvgOutput = z.infer<typeof canvasRenderSvgOutputSchema>
 
+/** A `style` no registered theme draws. Named, so the caller reads which ones are. */
+class UnknownRenderStyleError extends Error {
+  constructor(refusal: string) {
+    super(refusal)
+    this.name = 'UnknownRenderStyleError'
+  }
+}
+
 /** A `fragment` the document does not hold. Named, so the caller can fix the address. */
 class FragmentNotFoundError extends Error {
   constructor(documentId: string, fragment: string, kind: DocumentKind) {
@@ -150,7 +158,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
       const refusal = unknownStyleRefusal(input.style)
-      if (refusal !== undefined) throw new Error(refusal)
+      if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       const measurer = await resolveTextMeasurer(deps)
       const { measure } = measurer
