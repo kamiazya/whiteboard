@@ -11,9 +11,29 @@
 // path — including a document whose own last segment collides with an action
 // name (`.../document/a/snapshot/snapshot` is the document `a/snapshot`).
 
+/**
+ * One URL path segment, encoded. `encodeURIComponent` leaves dots alone, and
+ * the URL parser fetch runs resolves a `.` or `..` segment before anything is
+ * sent, so a URL built from one reaches a different same-origin `/api` path
+ * than the one it names. No identifier or document path the model admits is
+ * a dot segment (`DOCUMENT_PATH_SEGMENT_PATTERN` has no `.` at all), so one
+ * arriving here is refused rather than built.
+ */
+export function encodePathSegment(segment: string): string {
+  if (isDotSegment(segment)) {
+    throw new Error(`refusing to build a URL from the dot segment ${JSON.stringify(segment)}`)
+  }
+  return encodeURIComponent(segment)
+}
+
+/** `.` or `..`: a segment the URL parser resolves rather than keeps. */
+export function isDotSegment(segment: string): boolean {
+  return segment === '.' || segment === '..'
+}
+
 /** Per-segment encoding: the separators are structure, not data. */
 export function encodeDocumentPath(path: string): string {
-  return path.split('/').map(encodeURIComponent).join('/')
+  return path.split('/').map(encodePathSegment).join('/')
 }
 
 /**
@@ -37,11 +57,11 @@ export function documentApiUrl(
   path: string,
   action: DocumentApiAction,
 ): string {
-  return `/api/w/${encodeURIComponent(workspaceId)}/document/${encodeDocumentPath(path)}/${action}`
+  return `/api/w/${encodePathSegment(workspaceId)}/document/${encodeDocumentPath(path)}/${action}`
 }
 
 export function documentFileApiUrl(workspaceId: string, path: string, fileId: string): string {
-  return `/api/w/${encodeURIComponent(workspaceId)}/document/${encodeDocumentPath(path)}/file/${encodeURIComponent(fileId)}`
+  return `/api/w/${encodePathSegment(workspaceId)}/document/${encodeDocumentPath(path)}/file/${encodePathSegment(fileId)}`
 }
 
 /** The workspace's own record, which a keeper moves between hosts (`snapshot`/`update`/`promote`). */
@@ -52,7 +72,7 @@ export function workspaceDocumentApiUrl(
   workspaceId: string,
   action: WorkspaceDocumentApiAction,
 ): string {
-  return `/api/w/${encodeURIComponent(workspaceId)}/workspace-document/${action}`
+  return `/api/w/${encodePathSegment(workspaceId)}/workspace-document/${action}`
 }
 
 /**

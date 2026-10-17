@@ -16,10 +16,10 @@ import {
   type SearchQueryInput,
   searchQueryString,
 } from '@kamiazya/whiteboard-server-core/search-query'
-import { encodeDocumentPath } from './document-url.js'
+import { encodeDocumentPath, encodePathSegment } from './document-url.js'
 import type { SignInRefusal } from './sign-in.js'
 
-const enc = encodeURIComponent
+const enc = encodePathSegment
 
 export function workspacesApiUrl(): string {
   return '/api/workspaces'

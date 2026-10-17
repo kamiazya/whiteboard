@@ -34,6 +34,19 @@ const MATHJAX_EX_TO_PX = 8
 
 type MathJaxConvert = (value: string) => string
 
+/**
+ * TeX packages that let document text choose markup or CSS in SVG this app
+ * injects into its own DOM: `html` (`\\href`, `\\class`, `\\cssId`,
+ * `\\style` — an id can clobber a global, a class borrow the app's CSS),
+ * `bbox` (any `name: value` in its option becomes an inline style) and
+ * `unicode` (its optional font argument becomes a `font-family` style, cached
+ * per code point across documents). `require` and `autoload` load packages at
+ * typeset time, `html` included under their default allow lists; neither is
+ * in `AllPackages` today, and naming them keeps it that way across an
+ * upgrade. `fragmentIsEmbeddable` is the output-side guard for URLs alone.
+ */
+const REFUSED_TEX_PACKAGES = new Set(['html', 'bbox', 'unicode', 'require', 'autoload'])
+
 let mathjaxSingleton: Promise<MathJaxConvert | undefined> | undefined
 
 async function loadMathJax(): Promise<MathJaxConvert | undefined> {
@@ -55,15 +68,10 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     ])
     const adaptor = liteAdaptor()
     RegisterHTMLHandler(adaptor)
+    const tex = new TeX({ packages: AllPackages.filter((name) => !REFUSED_TEX_PACKAGES.has(name)) })
     // fontCache 'local' keeps each fragment self-contained: 'global' would
     // put shared glyph <defs> outside the fragment, which cannot survive
     // being embedded into the preview's larger SVG document.
-    // The `html` package is excluded: it provides \href, \class, \cssId and
-    // \style, which put an attacker-chosen URL, class, id or inline style
-    // into SVG this app injects into its own DOM (an id can clobber a
-    // global, a class can borrow the app's CSS). fragmentHrefsAreLocal is
-    // the output-side guard for the URL alone.
-    const tex = new TeX({ packages: AllPackages.filter((name) => name !== 'html') })
     const svg = new SVG({ fontCache: 'local' })
     const doc = mathjax.document('', { InputJax: tex, OutputJax: svg })
     return (value: string) => {
@@ -97,13 +105,23 @@ function fragmentHrefsAreLocal(svg: string): boolean {
   return true
 }
 
-const SCRIPT_ELEMENT = /<script\b/i
+// Each element pattern admits a namespace prefix: an exported SVG opened on
+// its own is parsed as XML, where `<s:script>` under a prefix bound to the
+// SVG namespace is the same element as `<script>`.
+const SCRIPT_ELEMENT = /<(?:[\w.-]+:)?script\b/i
 /**
  * Live HTML inside an SVG: a `<foreignObject>` carries arbitrary XHTML (a
  * form, a button) that works in the app-origin preview and in an exported
  * SVG opened on its own.
  */
-const HTML_ISLAND_ELEMENT = /<(?:foreignObject|form)\b/i
+const HTML_ISLAND_ELEMENT = /<(?:[\w.-]+:)?(?:foreignObject|form)\b/i
+/**
+ * SMIL animation rewrites an attribute after every check here has read it —
+ * `<set attributeName="href" to="javascript:…">` turns a local link into a
+ * script one in an exported SVG, which has no CSP. Neither engine animates.
+ */
+const ANIMATION_ELEMENT =
+  /<(?:[\w.-]+:)?(?:animate|animateMotion|animateTransform|animateColor|set)[\s/>]/i
 /** Any `url(` whose target is not a fragment-local `#id` (CSS or attribute). */
 const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
 const FORM_ATTRIBUTE = /^(?:form)?action$/i
@@ -141,14 +159,18 @@ function attributeValue(svg: string, from: number, end: number): string {
   return svg.slice(quoted ? from + 1 : from, quoted ? end - 1 : end).trim()
 }
 
+/** `src`, and `href` under any prefix — XML binds `x:href` to xlink as readily as `xlink:href`. */
+const LINK_ATTRIBUTE = /^(?:src|(?:[\w.-]+:)?href)$/i
+
 /**
  * An attribute that runs script (`on<event>`), submits a form
- * (`action`/`formaction`), or loads from outside the fragment (`src` not
- * naming a local `#id`).
+ * (`action`/`formaction`), or loads from outside the fragment (a `src` or
+ * `href` not naming a local `#id`, quoted or not — `fragmentHrefsAreLocal`
+ * reads quoted values only).
  */
 function isRefusedAttribute(name: string, value: string): boolean {
   if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name)) return true
-  return /^src$/i.test(name) && !value.startsWith('#')
+  return LINK_ATTRIBUTE.test(name) && !value.startsWith('#')
 }
 
 /**
@@ -197,7 +219,8 @@ function hasRefusedAttribute(svg: string): boolean {
 
 /**
  * Whether an engine's SVG may be embedded verbatim: every reference is
- * local, nothing in it runs script or submits a form, and it holds no HTML.
+ * local, nothing in it runs script, submits a form or animates, and it holds
+ * no HTML.
  * Refusing `<foreignObject>` costs nothing at the engines' configuration —
  * neither emits one — so a fragment that carries one was steered there by
  * document text.
@@ -207,6 +230,7 @@ export function fragmentIsEmbeddable(svg: string): boolean {
     fragmentHrefsAreLocal(svg) &&
     !SCRIPT_ELEMENT.test(svg) &&
     !HTML_ISLAND_ELEMENT.test(svg) &&
+    !ANIMATION_ELEMENT.test(svg) &&
     !NON_LOCAL_URL.test(svg) &&
     !hasRefusedAttribute(svg)
   )

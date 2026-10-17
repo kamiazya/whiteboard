@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   decodeSegment,
+  documentApiUrl,
+  documentFileApiUrl,
   documentPathForAction,
   documentPathForFile,
+  encodeDocumentPath,
   parseDocumentApiPath,
 } from './document-url.js'
 
@@ -53,5 +56,26 @@ describe('documentPathForFile', () => {
 
   it('splits a well-formed tail into path and file id', () => {
     expect(documentPathForFile(['a', 'file', 'x'])).toEqual({ path: 'a', fileId: 'x' })
+  })
+})
+
+// The URL parser resolves a `.` or `..` segment (and `%2e` spelling either)
+// before fetch sends anything, so a URL built from one names a different
+// same-origin `/api` path than the one it was built for. No document path,
+// workspace id or file id the model admits is a dot segment.
+describe('dot segments', () => {
+  it.each(['.', '..', 'a/../b', 'a/./b', 'a/..'])('refuses the document path %j', (path) => {
+    expect(() => encodeDocumentPath(path)).toThrow(/dot segment/)
+    expect(() => documentApiUrl('ws', path, 'snapshot')).toThrow(/dot segment/)
+  })
+
+  it('refuses a dot-segment workspace id or file id', () => {
+    expect(() => documentApiUrl('..', 'a', 'snapshot')).toThrow(/dot segment/)
+    expect(() => documentFileApiUrl('ws', 'a', '..')).toThrow(/dot segment/)
+  })
+
+  it('keeps segments that merely contain dots', () => {
+    expect(encodeDocumentPath('...')).toBe('...')
+    expect(encodeDocumentPath('a.b/%2e')).toBe('a.b/%252e')
   })
 })

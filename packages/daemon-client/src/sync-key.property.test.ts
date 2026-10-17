@@ -16,7 +16,8 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 // A handle is a workspace segment or a canonical id (ADR-0019); neither
 // contains '/' or ':'. A path is any non-empty string: slashes are the normal
 // case, and arbitrary characters (including ':' and a leading 'workspace:')
-// must not change which workspace the key names.
+// must not change which workspace the key names; only the URL builders refuse
+// a dot segment.
 const handleArb = fc.oneof(workspaceSegmentArbitrary, canonicalUlidArbitrary)
 const pathArb = fc.oneof(
   fc.string({ minLength: 1 }),
@@ -34,7 +35,12 @@ describe('a per-document sync key names the workspace it was built from', () => 
     },
   )
 
-  fcTest.prop([handleArb, pathArb], withDefaults())(
+  // A dot segment is no document path, and the URL builders refuse one.
+  const addressablePathArb = pathArb.filter((path) =>
+    path.split('/').every((segment) => segment !== '.' && segment !== '..'),
+  )
+
+  fcTest.prop([handleArb, addressablePathArb], withDefaults())(
     'the update and snapshot routes address the same handle the key was built from',
     (handle, path) => {
       const key = documentSyncKey(handle, path)
