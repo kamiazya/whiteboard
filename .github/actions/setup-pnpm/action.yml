@@ -53,9 +53,8 @@ runs:
     - name: Activate pnpm via corepack
       shell: bash
       run: |
-        # Exact-pinned and script-free, for the reason the wrangler install in
-        # preview-pr-deploy.yml is: an unpinned `npm install -g` in CI fetches
-        # whatever `latest` is at that moment, with no lockfile behind it, and
+        # Exact-pinned and script-free: an unpinned `npm install -g` in CI
+        # fetches whatever `latest` is at that moment, with no lockfile behind it, and
         # this action runs in every job of every workflow — the widest place in
         # the repo for a lifecycle script to run. corepack needs none, and its
         # own version only has to be recent enough to read `packageManager`,
