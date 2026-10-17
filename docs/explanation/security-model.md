@@ -330,15 +330,20 @@ that SVG, so it is held to what SVG text can do:
   diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
   loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
   one shows as its source.
-- MathJax runs without its `html` extension, so `\href`, `\class`, `\cssId`
-  and `\style` are not commands: math cannot carry a link, or put an id, a
-  class or an inline style of its choosing into the page. Written in a math
-  block, they show as unknown commands.
+- MathJax runs without its `html`, `bbox` and `unicode` extensions, and
+  without `require`, which could load one back. So `\href`, `\class`,
+  `\cssId`, `\style`, `\bbox` and `\unicode` are not commands: math cannot
+  carry a link, or put an id, a class, an inline style or a font of its
+  choosing into the page. Written in a math block, they show as unknown
+  commands.
 - Whatever either engine returns is checked before it is used: a fragment
-  carrying an HTML island (`<foreignObject>`), a form, a script, an event
-  handler, an `action` or `formaction` attribute, or any `href`, `src` or
-  `url(…)` that points outside the fragment is refused, and the block keeps
-  its source.
+  carrying an HTML island (`<foreignObject>`), a form, a script, an
+  animation element (`<animate>`, `<set>` and the rest, which could rewrite a
+  link after the check has read it), an event handler, an `action` or
+  `formaction` attribute, or any `href`, `src` or `url(…)` that points outside
+  the fragment, quoted or not, is refused, and the block keeps its source.
+  This matters beyond the app: an exported SVG opened on its own has no
+  content security policy behind it.
 - The hosted app's policy carries `form-action 'none'`: nothing in the app
   submits a form natively, so a form that did reach the page would have
   nowhere to post.

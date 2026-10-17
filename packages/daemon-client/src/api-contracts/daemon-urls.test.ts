@@ -211,3 +211,16 @@ describe('server-mode sign-in URLs read back through their own readers', () => {
     expect(built).toBe(before)
   })
 })
+
+// The URL parser fetch runs resolves `.`/`..` before sending, so a builder fed
+// one would reach a different `/api` route than the one it names.
+describe('daemon URL builders refuse a dot segment', () => {
+  it.each([
+    ['workspaceApiUrl', () => urls.workspaceApiUrl('..')],
+    ['documentRecordApiUrl', () => urls.documentRecordApiUrl('ws', 'a/..')],
+    ['trashEntryApiUrl', () => urls.trashEntryApiUrl('ws', '..')],
+    ['tenantPersonApiUrl', () => urls.tenantPersonApiUrl('.')],
+  ])('%s', (_name, build) => {
+    expect(build).toThrow(/dot segment/)
+  })
+})

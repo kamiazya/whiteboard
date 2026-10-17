@@ -29,10 +29,23 @@ const ACTIONS = DOCUMENT_API_ACTIONS
 const segmentArb = fc.oneof(
   { arbitrary: fc.string({ minLength: 1, maxLength: 12 }), weight: 3 },
   {
-    arbitrary: fc.constantFrom('/', '%', '%2F', 'a/b', 'file', '..', ' ', '導線', ...ACTIONS),
+    arbitrary: fc.constantFrom(
+      '/',
+      '%',
+      '%2F',
+      'a/b',
+      'file',
+      '...',
+      '%2e',
+      ' ',
+      '導線',
+      ...ACTIONS,
+    ),
     weight: 1,
   },
 )
+
+const isDotSegment = (segment: string) => segment === '.' || segment === '..'
 
 const documentPathArb = fc
   .array(segmentArb, { minLength: 1, maxLength: 4 })
@@ -40,9 +53,12 @@ const documentPathArb = fc
   // A segment that is itself '/' produces an empty segment once joined,
   // which the parser rejects by contract ("not-a-match rather than a
   // throw") — keep the generator on paths every segment of which is data.
-  .filter((path) => path.split('/').every((segment) => segment.length > 0))
+  .filter((path) =>
+    path.split('/').every((segment) => segment.length > 0 && !isDotSegment(segment)),
+  )
 
-const workspaceIdArb = segmentArb
+const workspaceIdArb = segmentArb.filter((segment) => !isDotSegment(segment))
+const fileIdArb = workspaceIdArb
 
 describe('document-url round trip', () => {
   fcTest.prop([workspaceIdArb, documentPathArb, fc.constantFrom(...ACTIONS)], withDefaults())(
@@ -55,13 +71,57 @@ describe('document-url round trip', () => {
     },
   )
 
-  fcTest.prop([workspaceIdArb, documentPathArb, segmentArb], withDefaults())(
+  fcTest.prop([workspaceIdArb, documentPathArb, fileIdArb], withDefaults())(
     'documentFileApiUrl -> parseDocumentApiPath -> documentPathForFile recovers path and fileId',
     (workspaceId, path, fileId) => {
       const parsed = parseDocumentApiPath(documentFileApiUrl(workspaceId, path, fileId))
       expect(parsed).not.toBeNull()
       expect(parsed?.workspaceId).toBe(workspaceId)
       expect(documentPathForFile(parsed?.tail ?? [])).toEqual({ path, fileId })
+    },
+  )
+})
+
+/**
+ * Segments dense in what the URL parser rewrites: both dot segments, their
+ * percent-encoded spellings, and near misses that must survive as data.
+ */
+const dottySegmentArb = fc.constantFrom('.', '..', '%2e', '%2E%2e', '.%2e', '...', 'a', 'a.b')
+const dottyPathArb = fc
+  .array(dottySegmentArb, { minLength: 1, maxLength: 3 })
+  .map((segments) => segments.join('/'))
+
+/** Whether a builder's answer is one the URL parser leaves exactly as written. */
+function urlParserKeeps(build: () => string): boolean {
+  let url: string
+  try {
+    url = build()
+  } catch {
+    return true
+  }
+  return new URL(url, 'http://localhost').pathname === url
+}
+
+// The oracle is the WHATWG URL parser fetch itself runs, not this module: a
+// URL it would normalise reaches a different same-origin path than the one
+// built, so the builders either answer a stable URL or refuse.
+describe('document-url builders and the URL parser', () => {
+  fcTest.prop([dottySegmentArb, dottyPathArb, dottySegmentArb], withDefaults())(
+    'every URL a builder answers is left unchanged by the URL parser',
+    (workspaceId, path, fileId) => {
+      expect(urlParserKeeps(() => documentApiUrl(workspaceId, path, 'snapshot'))).toBe(true)
+      expect(urlParserKeeps(() => documentFileApiUrl(workspaceId, path, fileId))).toBe(true)
+    },
+  )
+
+  // The near misses (`...`, `a.b`, a literal `%2e`) are data, so the refusal
+  // is no wider than the dot segments themselves.
+  fcTest.prop([dottyPathArb], withDefaults())(
+    'refuses exactly the paths holding a dot segment',
+    (path) => {
+      const build = () => documentApiUrl('ws', path, 'snapshot')
+      if (path.split('/').some(isDotSegment)) expect(build).toThrow(/dot segment/)
+      else expect(build).not.toThrow()
     },
   )
 })

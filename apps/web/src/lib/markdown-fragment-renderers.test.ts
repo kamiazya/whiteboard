@@ -65,6 +65,34 @@ describe('renderMathFragment (real MathJax)', () => {
     const style = await renderMathFragment('\\style{outline:9px solid}{y}')
     expect(style?.svg ?? '').not.toContain('outline')
   })
+
+  // `\require` loads a package at typeset time, and its default allow list
+  // admits `html` — so excluding the package from the list is not enough on
+  // its own.
+  it('gives \\require no way to load the html package back', async () => {
+    const id = await renderMathFragment('\\require{html}\\cssId{wbreqid}{y}')
+    expect(id?.svg ?? '').not.toContain('wbreqid')
+    const cls = await renderMathFragment('\\require{html}\\class{wbreqclass}{y}')
+    expect(cls?.svg ?? '').not.toContain('wbreqclass')
+    const style = await renderMathFragment('\\require{html}\\style{outline:9px solid}{y}')
+    expect(style?.svg ?? '').not.toContain('outline')
+    const href = await renderMathFragment('\\require{html}\\href{https://evil.example}{y}')
+    expect(href?.svg ?? '').not.toContain('evil.example')
+  })
+
+  // `\unicode[font]{n}` writes its optional font argument into the glyph's
+  // style, which is document text choosing CSS.
+  it('gives \\unicode no way to name a font', async () => {
+    const fragment = await renderMathFragment('\\unicode[wbinjectedfont]{x41}')
+    expect(fragment?.svg ?? '').not.toContain('wbinjectedfont')
+  })
+
+  // `\bbox[…]` passes any `name: value` part of its option through as the
+  // box's inline style — `\style` by another name.
+  it('gives \\bbox no way to write an inline style', async () => {
+    const fragment = await renderMathFragment('\\bbox[outline:9px solid red]{x}')
+    expect(fragment?.svg ?? '').not.toContain('outline')
+  })
 })
 
 describe('renderDiagramFragment', () => {
@@ -138,5 +166,51 @@ describe('fragmentIsEmbeddable refuses live HTML and remote loads', () => {
         '<svg><text>&lt;form action="https://x"&gt; formaction=y src=z</text></svg>',
       ),
     ).toBe(true)
+  })
+})
+
+// An exported SVG opened on its own has no CSP, so what a fragment can do
+// without script still matters: SMIL can rewrite an attribute (an href) after
+// every check here has read it, and an unquoted href value is still a link.
+describe('fragmentIsEmbeddable refuses animation and unquoted links', () => {
+  it.each([
+    '<svg><animate attributeName="href" to="javascript:alert(1)"/></svg>',
+    '<svg><set attributeName="href" to="https://evil.example"/></svg>',
+    '<svg><ANIMATEMOTION dur="1s"/></svg>',
+    '<svg><animateTransform attributeName="transform"/></svg>',
+    '<svg><a><Set\nattributeName="href"/></a></svg>',
+    '<svg xmlns:s="http://www.w3.org/2000/svg"><s:set attributeName="href"/></svg>',
+  ])('refuses the animation element in %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('reads label text naming an animation element as text', () => {
+    expect(fragmentIsEmbeddable('<svg><text>set animate &lt;set</text><settings/></svg>')).toBe(
+      true,
+    )
+  })
+
+  it.each([
+    '<svg><a href=javascript:alert(1)>x</a></svg>',
+    '<svg><a xlink:href=https://evil.example>x</a></svg>',
+    '<svg><use HREF = //evil.example/x.svg#a /></svg>',
+    '<svg xmlns:x="http://www.w3.org/1999/xlink"><a x:href=https://evil.example>x</a></svg>',
+  ])('refuses the unquoted non-local href in %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('accepts an unquoted fragment-local href', () => {
+    expect(fragmentIsEmbeddable('<svg><use href=#g1 /><use xlink:href=#g2></use></svg>')).toBe(true)
+  })
+})
+
+// A standalone SVG is parsed as XML, where any prefix bound to the SVG
+// namespace names the same element, so the element checks read through one.
+describe('fragmentIsEmbeddable reads through a namespace prefix', () => {
+  it.each([
+    '<svg xmlns:s="http://www.w3.org/2000/svg"><s:script>alert(1)</s:script></svg>',
+    '<svg xmlns:s="http://www.w3.org/2000/svg"><s:foreignObject/></svg>',
+  ])('refuses %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 })
