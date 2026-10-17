@@ -16,10 +16,11 @@ import {
   exportWorkspaceSubtree,
   readMarkdownBody,
   recordTrashEntry,
+  resolveWorkspaceDocumentById,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -199,7 +200,9 @@ const DRAFTED_VERSION_ID = '01BRWVERSAAAAAAAAAAAAAAAA0'
  * before its last edit, and one trashed note evacuated the way the browser
  * keeper deletes: the subtree exported, its sha-256 recorded on the entry.
  */
-function browserRecordWithTrashAndVersion() {
+function browserRecordWithTrashAndVersion(
+  trashed: { readonly path?: string; readonly body?: string } = {},
+) {
   const doc = new LoroDoc()
   doc.setPeerId(2n)
   createWorkspaceDocumentAtPath(doc, {
@@ -212,14 +215,14 @@ function browserRecordWithTrashAndVersion() {
   const drafted = encodeFrontiers(doc.oplogFrontiers())
   writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# after the meeting')
   createWorkspaceDocumentAtPath(doc, { path: 'gone', documentId: GONE_ID, kind: 'markdown' })
-  writeMarkdownBody(documentContainers(doc, GONE_ID), '# trashed in the browser')
+  writeMarkdownBody(documentContainers(doc, GONE_ID), trashed.body ?? '# trashed in the browser')
   doc.commit()
   const evacuated = exportWorkspaceSubtree(doc, 'gone')
   if (evacuated === null) throw new Error('no subtree to evacuate')
   deleteWorkspaceNodeAtPath(doc, 'gone')
   recordTrashEntry(doc, {
     documentId: GONE_ID,
-    path: 'gone',
+    path: trashed.path ?? 'gone',
     deletedAt: 1,
     blob: { algorithm: 'sha-256', digestHex: createHash('sha256').update(evacuated).digest('hex') },
   })
@@ -255,6 +258,25 @@ it('carries a trashed document so the daemon restores it with its content', asyn
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
+})
+
+// A carried trash row and its bytes are the other keeper's choice, and the
+// trash map is not node meta, so nothing at promote time judges them: the
+// restore does, as it would any sync write.
+it.each([
+  ['a path off the document grammar', { path: '../gone' }],
+  ['a body past the length bound', { body: 'x'.repeat(MARKDOWN_MAX_CHARS + 1) }],
+])('refuses to restore carried trash holding %s', async (_, trashed) => {
+  const { app, promote } = harness()
+  const res = await promote(browserRecordWithTrashAndVersion(trashed))
+  expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
+
+  const restored = await app.request(`/api/workspaces/session1/trash/${GONE_ID}/restore`, {
+    method: 'POST',
+  })
+  expect(restored.status).toBe(404)
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  expect(resolveWorkspaceDocumentById(workspaceDoc, GONE_ID)).toBeNull()
 })
 
 // The daemon keeps ONE blob store per tenant, keyed by digest alone, so the

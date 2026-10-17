@@ -85,7 +85,8 @@ import {
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
+import { isRestorableTrash } from './restore-judgement.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
 /**
@@ -221,17 +222,14 @@ export class LoroWorkspaceDocumentIndex
       // would answer "there was never anything to restore".
       if (stored === null) return null
       // A trash row is synced data, so the blob it names is whatever the row's
-      // writer chose — another row's bytes included. Read on a scratch copy, so
-      // bytes holding some other document are refused before anything is placed.
-      if (importWorkspaceSubtree(new LoroDoc(), stored.bytes)?.documentId !== input.documentId) {
+      // writer chose — another row's bytes included — and its path is whatever
+      // the writer wrote. Judged on scratch copies, so nothing is placed first.
+      const segments = entry.path.split('/')
+      const parentPath = segments.length > 1 ? segments.slice(0, -1).join('/') : undefined
+      if (!isRestorableTrash(stored.bytes, { documentId: input.documentId, parentPath })) {
         return null
       }
-      const segments = entry.path.split('/')
-      const restored = importWorkspaceSubtree(
-        doc,
-        stored.bytes,
-        segments.length > 1 ? segments.slice(0, -1).join('/') : undefined,
-      )
+      const restored = importWorkspaceSubtree(doc, stored.bytes, parentPath)
       if (restored === null) return null
       forgetTrashEntry(doc, input.documentId)
       await this.docs.save(input.workspaceId, doc)
