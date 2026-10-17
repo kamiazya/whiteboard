@@ -44,12 +44,13 @@ export { DB_FILENAME } from './location.js'
 const cache = new Map<string, Promise<Database>>()
 
 /**
- * libSQL creates the file under the process umask (0644 by default), so every
- * local user could read the rows. Creating it first, owner-only, is enough:
- * SQLite gives its `-wal` and `-shm` files the main file's mode. An existing
- * file is left as it is.
+ * Both owner-only. libSQL creates the database under the process umask (0644
+ * by default), so every local user could read the rows; creating the file
+ * first is enough, since SQLite gives its `-wal` and `-shm` files the main
+ * file's mode. An existing file is left as it is.
  */
-async function createDatabaseFileOwnerOnly(dataDir: string, url: string): Promise<void> {
+async function makeDataDirAndDatabaseFile(dataDir: string, url: string): Promise<void> {
+  await mkdir(dataDir, { recursive: true, mode: 0o700 })
   const path = join(dataDir, DB_FILENAME)
   if (url !== `file:${path}`) return
   await (await open(path, 'a', 0o600)).close()
@@ -59,9 +60,8 @@ async function buildDb(dataDir: string): Promise<Database> {
   // The data directory is still made whatever the database is: blobs, version
   // thumbnails and the daemon's identity marker live there regardless of
   // where the rows do.
-  await mkdir(dataDir, { recursive: true, mode: 0o700 })
   const location = resolveDatabaseLocation(dataDir)
-  await createDatabaseFileOwnerOnly(dataDir, location.url)
+  await makeDataDirAndDatabaseFile(dataDir, location.url)
   // Written by whoever opens the database, because this is the only moment
   // the answer is available. `whiteboard server backup` runs later,
   // host-side, against a stopped deployment: it has neither this environment
