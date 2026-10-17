@@ -404,6 +404,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   sign-in session authenticates a write (any method but `GET`, `HEAD` or
   `OPTIONS`) only when the request's `Origin` is the server's own origin —
   otherwise the session is ignored and the request needs a bearer token.
+  Reads are held to the browser's `Sec-Fetch-Site` header where it is sent:
+  the session counts only for `same-origin` (this server's own pages) or
+  `none` (a navigation the user started), so a page on a sibling subdomain
+  cannot spend a signed-in person's live-sync streams. A client that sends
+  no `Sec-Fetch-Site` reads with the session as before.
   Allowlist entries may be exact origins
   or a `https://*.example.com` leftmost-label wildcard subdomain pattern for
   deployment-preview shapes (e.g. Cloudflare Pages branch previews); bare `*`
@@ -441,9 +446,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
-  update, a promote, an upload or a document created from its content is read
-  whole before it is applied, so the bodies in flight are capped per user and
-  per instance, and the next one is refused before it is read. The limits are
+  update, a promote, an upload, a document created from its content or a
+  JSON-RPC request to `/mcp` is read whole before it is applied, so the
+  bodies in flight are capped per user and per instance, and the next one is
+  refused before it is read. Callers whose grant names no user on the
+  instance share one user's allowance. The limits are
   [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,

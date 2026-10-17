@@ -5,12 +5,17 @@ import {
   createServer as createDocumentServer,
 } from '@kamiazya/whiteboard-server-core'
 import { createMcpHandler } from '@modelcontextprotocol/server'
-import { type Context, Hono } from 'hono'
+import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
-import { armContentSlots, CONTENT_REQUEST_CAPS, createContentSlots } from './content-slots.js'
+import {
+  armContentSlots,
+  CONTENT_REQUEST_CAPS,
+  createContentSlots,
+  takeContentSlot,
+} from './content-slots.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -167,6 +172,7 @@ function mountMcpMiddleware(
       app.use('/mcp', createServerModeOriginMiddleware(exposure.allowedOrigins))
     }
     app.use('/mcp', createServerModeMcpAuthMiddleware(options.authStrategy, options.people))
+    app.use('/mcp', mcpContentSlot())
   } else {
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
   }
@@ -185,6 +191,25 @@ function mountMcpMiddleware(
         ),
     }),
   )
+}
+
+// A JSON-RPC body may be as large as `/mcp`'s 4 MiB ceiling, and is read
+// whole before any tool runs, so it is held to the same content slots as
+// `/api`'s content-sized bodies (`content-slots.ts`): taken after the caller is
+// known and before the body limit reads, held until the handler answers.
+function mcpContentSlot(): MiddlewareHandler {
+  return async (c, next) => {
+    if (c.req.method.toUpperCase() !== 'POST') return next()
+    const slot = await takeContentSlot(c, (refused, message) =>
+      refused.json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null }, 429),
+    )
+    if (slot instanceof Response) return slot
+    try {
+      await next()
+    } finally {
+      slot()
+    }
+  }
 }
 
 // The people store a composition keeps, where it keeps one: what lets a

@@ -31,25 +31,29 @@ interface ContentSlots {
   take(userId: string | null): (() => void) | CapReached
 }
 
+// The one bucket every grant naming no user here shares: nothing tells two
+// such callers apart, so each counted alone could hold the whole instance.
+const NO_USER = Symbol('no user')
+
 export function createContentSlots(caps: ContentRequestCaps): ContentSlots {
   let total = 0
-  const byUser = new Map<string, number>()
+  const byUser = new Map<string | typeof NO_USER, number>()
   return {
     take(userId) {
+      const key = userId ?? NO_USER
       if (total >= caps.total) return 'total'
-      const held = userId === null ? 0 : (byUser.get(userId) ?? 0)
-      if (userId !== null && held >= caps.perUser) return 'per_user'
+      const held = byUser.get(key) ?? 0
+      if (held >= caps.perUser) return 'per_user'
       total += 1
-      if (userId !== null) byUser.set(userId, held + 1)
+      byUser.set(key, held + 1)
       let released = false
       return () => {
         if (released) return
         released = true
         total -= 1
-        if (userId === null) return
-        const left = (byUser.get(userId) ?? 1) - 1
-        if (left === 0) byUser.delete(userId)
-        else byUser.set(userId, left)
+        const left = (byUser.get(key) ?? 1) - 1
+        if (left === 0) byUser.delete(key)
+        else byUser.set(key, left)
       }
     },
   }
@@ -57,7 +61,7 @@ export function createContentSlots(caps: ContentRequestCaps): ContentSlots {
 
 interface ArmedSlots {
   readonly slots: ContentSlots
-  /** Whose request this is; null for a grant that names no user, counted in the total only. */
+  /** Whose request this is; null for a grant that names no user, all of which count as one. */
   readonly userOf: (c: Context) => Promise<string | null>
   /** Told of each refusal, so the composition can log it with its own logger. */
   readonly refused: (userId: string | null, cap: CapReached) => void
@@ -76,12 +80,21 @@ export function armContentSlots(arm: ArmedSlots): MiddlewareHandler {
   }
 }
 
+/** How a slotted route answers a refusal; `/mcp` answers in JSON-RPC's shape instead. */
+type RefusalAnswer = (c: Context, message: string) => Response
+
+const apiRefusal: RefusalAnswer = (c, message) =>
+  c.json(errorBody('too_many_requests', message), 429)
+
 /**
  * Takes a content slot for this request, if its composition armed any: the
  * release to call once the handler is done, or the 429 that refuses it —
  * answered before any of the body is read.
  */
-export async function takeContentSlot(c: Context): Promise<(() => void) | Response> {
+export async function takeContentSlot(
+  c: Context,
+  answer: RefusalAnswer = apiRefusal,
+): Promise<(() => void) | Response> {
   const arm = armed.get(c.req.raw)
   if (arm === undefined) return () => {}
   const userId = await arm.userOf(c)
@@ -93,5 +106,5 @@ export async function takeContentSlot(c: Context): Promise<(() => void) | Respon
     slot === 'per_user'
       ? 'this user already has as many large requests in flight as the keeper allows'
       : 'the keeper already has as many large requests in flight as it allows'
-  return c.json(errorBody('too_many_requests', message), 429)
+  return answer(c, message)
 }
