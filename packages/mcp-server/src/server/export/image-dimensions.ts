@@ -89,22 +89,99 @@ const webp: Reader = (b) => {
   return undefined
 }
 
-const SVG_ROOT = /<svg\b[^>]*>/
 const SVG_LENGTH = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/
+const XML_SPACE = /[ \t\r\n]/
+const ATTRIBUTE_NAME = /[^ \t\r\n=/>"'<]+/y
 
-const svgAttr = (root: string, name: string): string | undefined =>
-  new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(root)?.slice(1).find(Boolean)
+/** The offset after the first `close` at or past `from`, or -1 when there is none. */
+const after = (text: string, close: string, from: number): number => {
+  const at = text.indexOf(close, from)
+  return at < 0 ? -1 : at + close.length
+}
+
+const skipSpace = (text: string, from: number): number => {
+  let at = from
+  while (at < text.length && XML_SPACE.test(text[at] ?? '')) at++
+  return at
+}
+
+const isRootStart = (text: string, at: number): boolean =>
+  text.startsWith('<svg', at) && /[ \t\r\n/>]/.test(text[at + 4] ?? '')
+
+/** The offset after the prolog item at `at`, or -1 when it is not one this reader can skip. */
+const afterPrologItem = (text: string, at: number): number => {
+  if (text.startsWith('<?', at)) return after(text, '?>', at)
+  if (text.startsWith('<!--', at)) return after(text, '-->', at)
+  if (!text.startsWith('<!DOCTYPE', at)) return -1
+  const end = text.indexOf('>', at)
+  return end < 0 || text.slice(at, end).includes('[') ? -1 : end + 1
+}
+
+/**
+ * Where the root `<svg` start tag begins, past the prolog: declarations,
+ * comments and processing instructions. Anything else first — another root,
+ * a DOCTYPE with an internal subset that could declare entities — is a
+ * document this reader and the XML parser might read differently.
+ */
+const rootStart = (text: string): number | undefined => {
+  let at = skipSpace(text, text.charCodeAt(0) === 0xfeff ? 1 : 0)
+  while (at < text.length) {
+    if (isRootStart(text, at)) return at
+    const next = afterPrologItem(text, at)
+    if (next < 0) return undefined
+    at = skipSpace(text, next)
+  }
+  return undefined
+}
+
+/** The quoted attribute starting at `at`, or `undefined` when it is not well-formed. */
+const readAttribute = (
+  text: string,
+  at: number,
+): { name: string; value: string; end: number } | undefined => {
+  ATTRIBUTE_NAME.lastIndex = at
+  const name = ATTRIBUTE_NAME.exec(text)?.[0]
+  if (name === undefined) return undefined
+  const equals = skipSpace(text, at + name.length)
+  if (text[equals] !== '=') return undefined
+  const open = skipSpace(text, equals + 1)
+  const quote = text[open]
+  if (quote !== '"' && quote !== "'") return undefined
+  const close = text.indexOf(quote, open + 1)
+  return close < 0 ? undefined : { name, value: text.slice(open + 1, close), end: close + 1 }
+}
+
+/**
+ * The root element's attributes, tokenised the way an XML parser reads them:
+ * a quoted value is one unit, so text inside it never reads as another
+ * attribute. A start tag that is not well-formed — an unquoted value, an
+ * unterminated quote, a repeated name — answers `undefined`.
+ */
+const svgRootAttributes = (text: string): ReadonlyMap<string, string> | undefined => {
+  const start = rootStart(text)
+  if (start === undefined) return undefined
+  const attributes = new Map<string, string>()
+  let at = start + 4
+  for (;;) {
+    const spaced = skipSpace(text, at)
+    if (text.startsWith('>', spaced) || text.startsWith('/>', spaced)) return attributes
+    const attribute = spaced === at ? undefined : readAttribute(text, spaced)
+    if (attribute === undefined || attributes.has(attribute.name)) return undefined
+    attributes.set(attribute.name, attribute.value)
+    at = attribute.end
+  }
+}
 
 /** `width`/`height` in user units, else the `viewBox`'s; a percentage or unit is unreadable. */
 const svg: Reader = (b) => {
-  const root = SVG_ROOT.exec(new TextDecoder().decode(b))?.[0]
+  const root = svgRootAttributes(new TextDecoder().decode(b))
   if (root === undefined) return undefined
-  const width = SVG_LENGTH.exec(svgAttr(root, 'width') ?? '')?.[1]
-  const height = SVG_LENGTH.exec(svgAttr(root, 'height') ?? '')?.[1]
+  const width = SVG_LENGTH.exec(root.get('width') ?? '')?.[1]
+  const height = SVG_LENGTH.exec(root.get('height') ?? '')?.[1]
   if (width !== undefined && height !== undefined) {
     return area(Math.ceil(Number(width)), Math.ceil(Number(height)))
   }
-  const box = (svgAttr(root, 'viewBox') ?? '')
+  const box = (root.get('viewBox') ?? '')
     .trim()
     .split(/[\s,]+/)
     .map(Number)

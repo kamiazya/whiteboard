@@ -172,6 +172,23 @@ describe('a data: image whose header declares more pixels than the export budget
       'image/svg+xml',
       ascii('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20000 20000"/>'),
     ],
+    [
+      'an SVG whose other attribute quotes a smaller size',
+      'image/svg+xml',
+      ascii(`<svg data-note=' width="1" height="1"' width="20000" height="20000"/>`),
+    ],
+    [
+      'an SVG whose root has a quoted >',
+      'image/svg+xml',
+      ascii('<svg data-note=">" width="20000" height="20000"/>'),
+    ],
+    [
+      'an SVG after a comment quoting a smaller root',
+      'image/svg+xml',
+      ascii(
+        '<?xml version="1.0"?><!-- <svg width="1" height="1"> --><svg width="20000" height="20000"/>',
+      ),
+    ],
   ])('reads the size %s declares', (_name, mime, bytes) => {
     expect(() => boundedDataImages(imageSvg(dataUrl(mime, bytes)))).toThrow(
       expect.objectContaining({ name: 'ExportTooLargeError' }),
@@ -213,6 +230,14 @@ describe('a data: image the exporter cannot size', () => {
     [
       'base64 with characters outside the alphabet',
       `${ONE_PIXEL_PNG.slice(0, 40)}*${ONE_PIXEL_PNG.slice(40)}`,
+    ],
+    [
+      'an SVG root attribute with an unquoted value',
+      dataUrl('image/svg+xml', ascii('<svg width=1 height="1"/>')),
+    ],
+    [
+      'an SVG whose root repeats an attribute',
+      dataUrl('image/svg+xml', ascii('<svg width="1" height="1" width="20000"/>')),
     ],
     [
       'an SVG sized in percent',
