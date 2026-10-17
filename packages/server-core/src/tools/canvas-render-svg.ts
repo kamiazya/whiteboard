@@ -24,6 +24,7 @@ import { loadReferenceGraph } from '../render/reference-graph.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { taggedDrawingLibrary } from './tag-library.js'
 
 /**
@@ -159,6 +160,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
       const refusal = unknownStyleRefusal(input.style)
       if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       const measurer = await resolveTextMeasurer(deps)
       const { measure } = measurer

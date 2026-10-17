@@ -26,7 +26,10 @@ diagrams — in the document's own text, in a note or board it embeds with
 embed, so there only the version's own text is typeset. On screen a block
 shows its source until its engine has rendered it; an export waits for every
 one. The thumbnails and previews in the web app's document list draw them as
-source.
+source. A Mermaid diagram's labels are drawn as SVG text, so a `$$…$$` label
+shows its source and HTML in a label shows as written; a diagram whose
+`%%{init}%%` asks for HTML text stays a plain code block (see the
+[security model](../explanation/security-model.md#math-and-diagrams-drawn-from-document-text-web-app)).
 
 A document created before formats were recorded has no answer here and is
 refused rather than guessed at; writing its content through a `document.set` op

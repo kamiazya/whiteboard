@@ -70,6 +70,7 @@ export function mdastOptionsFor(
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
     ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
     embedPath: [...options.activeEmbedPath],
+    nestedLayoutBudget: options.nestedLayoutBudget,
     layoutEmbeddedCanvas: (canvas, box) => layoutCanvasMiniature(canvas, box, options),
   }
 }

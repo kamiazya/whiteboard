@@ -61,7 +61,6 @@ describe('the membership gate over the registered tools', () => {
     const gated = gatedByMembership(realTools(), index)
     const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
     const members = {
-      membersOnly: async () => true,
       profileForBinding: async () => null,
     } as unknown as MemberProfileStore
     const entries = Object.values(gated)
@@ -82,7 +81,7 @@ describe('the membership gate over the registered tools', () => {
       createWorkspace: async () => {},
     })
     const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ALL_AUTH_SCOPES }
-    const members = { membersOnly: async () => true } as unknown as MemberProfileStore
+    const members = {} as unknown as MemberProfileStore
     const passed: string[] = []
     for (const tool of Object.values(gated)) {
       const outcome = await runAsMcpCaller({ grant, members }, () =>

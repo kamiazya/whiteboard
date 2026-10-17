@@ -4,6 +4,7 @@ import {
   readMarkdownBody,
   resolveWorkspaceDocumentById,
   SYNC_TEXT_BREACH_CODES,
+  WORKSPACE_TREE_KEY,
   writeCommentThread,
   writeMarkdownBody,
   writeSpatialEdge,
@@ -27,7 +28,7 @@ import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { promoteWorkspace } from './promote-workspace.js'
+import { PROMOTE_MAX_DOCUMENTS, promoteWorkspace } from './promote-workspace.js'
 import { OffGrammarPathError, syncWriteAnswer } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
@@ -37,6 +38,38 @@ const CONTESTED_ID = '01BRWAAAAAAAAAAAAAAAAAAAA2'
 const DAEMON_OWN_ID = '01BRWAAAAAAAAAAAAAAAAAAAA3'
 
 const operator = { kind: 'human' as const, displayName: 'Yuki' }
+
+/**
+ * A record of `count` empty markdown documents, written as raw tree nodes in
+ * one commit: the path-checked create walks the whole tree per call, which
+ * makes a fixture this size take minutes.
+ */
+function recordOf(count: number): Uint8Array {
+  const record = new LoroDoc()
+  const tree = record.getTree(WORKSPACE_TREE_KEY)
+  for (let i = 0; i < count; i++) {
+    const node = tree.createNode()
+    node.data.set('documentId', `01BRWB${crockford(i).padStart(20, '0')}`)
+    node.data.set('segment', `d${i}`)
+    node.data.set('kind', 'markdown')
+    node.data.set('createdAt', 1_000)
+    node.data.set('updatedAt', 1_000)
+  }
+  record.commit()
+  return record.export({ mode: 'snapshot' }) as Uint8Array
+}
+
+/** `n` in the ULID alphabet, so a minted id is canonical. */
+function crockford(n: number): string {
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+  let out = ''
+  let rest = n
+  do {
+    out = alphabet[rest % 32] + out
+    rest = Math.floor(rest / 32)
+  } while (rest > 0)
+  return out
+}
 
 /**
  * Who wins a contested path is the tree's sibling order: position first,
@@ -426,5 +459,37 @@ describe('promoteWorkspace', () => {
     expect(refusal).toMatchObject({ breach: { shape }, at: { path: at } })
     expect((refusal as Error).message).toMatch(new RegExp(`^The document at "${at}" `))
     expect(fake.saves()).toBe(0)
+  })
+
+  it('refuses a record holding more documents than a promote carries, before merging any of it', async () => {
+    const fake = fakes()
+    const documents = PROMOTE_MAX_DOCUMENTS + 1
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: recordOf(documents), operator },
+    )
+    expect(result).toEqual({ kind: 'too-many-documents', documents, limit: PROMOTE_MAX_DOCUMENTS })
+    expect(fake.saves()).toBe(0)
+    expect(fake.versions.saves).toHaveLength(0)
+  })
+
+  it('promotes a record holding exactly as many documents as a promote carries', async () => {
+    const fake = fakes()
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: recordOf(PROMOTE_MAX_DOCUMENTS), operator },
+    )
+    expect(result.kind).toBe('promoted')
+    expect(fake.versions.saves).toHaveLength(PROMOTE_MAX_DOCUMENTS)
   })
 })

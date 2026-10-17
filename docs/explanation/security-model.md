@@ -272,7 +272,7 @@ the boundary described above.
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
 - **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today). A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
-- **Security headers**: every response carries `frame-ancestors 'none'` (unless the route sets its own CSP), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself.
+- **Security headers**: every response carries `frame-ancestors 'none'` (unless the route sets its own CSP), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 - **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 10s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
 
@@ -317,6 +317,26 @@ properties, not implementation detail.
 - **Size cap and timeout** bound a hostile or broken response.
 - **The bytes must parse as a font before anything is written.** A file that
   `opentype.js` cannot parse never reaches the data directory.
+
+## Math and diagrams drawn from document text (web app)
+
+The web app typesets `$$` math blocks and draws `` ```mermaid `` fences in the
+note preview, the canvas editor and the SVG/PNG exports, and the SVG it gets
+back is placed into the page as markup. Document text decides what goes into
+that SVG, so it is held to what SVG text can do:
+
+- Mermaid runs at its `strict` security level with HTML labels off, and a
+  diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
+  loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
+  one shows as its source.
+- Whatever either engine returns is checked before it is used: a fragment
+  carrying an HTML island (`<foreignObject>`), a form, a script, an event
+  handler, an `action` or `formaction` attribute, or any `href`, `src` or
+  `url(…)` that points outside the fragment is refused, and the block keeps
+  its source.
+- The hosted app's policy carries `form-action 'none'`: nothing in the app
+  submits a form natively, so a form that did reach the page would have
+  nowhere to post.
 
 ## Browser-dependent operations
 
@@ -415,6 +435,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   deactivation before sending each update and ends the stream when either
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
+- **A restore from the trash is held to the bounds of any other write.** A
+  trash entry syncs with the workspace and a move carries the bytes it names,
+  so both are the writer's choice: a restore that would place a document at a
+  path outside the path grammar, give it a name past the length limit, or
+  bring back a body or node text past its limit is refused and changes
+  nothing, in the browser and on the daemon alike.
+- **An MCP tool reads only a document its named workspace holds.** A
+  `documentId` paired with a `workspaceId` that does not place it is refused
+  as not found, by the read tools as by the write tools.
 - **What a member is answered carries no storage detail.** A fault answers a
   fixed message and goes to the operator's log with its detail; an export
   names its file within the workspace's exports directory, not the absolute
@@ -424,9 +453,21 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   a PNG only from a `data:` URL — the exporter never reads a file the URL
   names on the server, nor fetches a remote one. Both are in
   [Export formats](../reference/export-formats.md).
+- **A render lays out a bounded number of embedded documents.** Embeds nest
+  three levels deep, and one render lays out at most 128 embedded documents
+  across every level and both kinds of embed (a file node's canvas preview,
+  a `![[…]]` in a body). So a workspace whose documents each embed many
+  others cannot make one render cost the cube of its fan-out. Past the
+  budget an embed draws as its placeholder or card. The budget holds for
+  `wb_scene_render`, export and the web app's preview alike.
+- **A move into the daemon is bounded.** Moving a browser workspace to the
+  daemon is one request of at most 24 MiB carrying at most 2000 documents.
+  The daemon counts the documents before it merges anything, and refuses a
+  larger record whole (`promote_too_many_documents`). So one request cannot
+  make the daemon write an unbounded number of saved versions.
 - **The data directory answers to the operator.** The stdio entry and the
-  local daemon require a data directory owned by this user and make it
-  owner-only. Server mode leaves its ownership and mode as the operator set
+  local daemon require a data directory owned by this user, refuse one that
+  is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set
   them: a platform volume may be owned by another user and shared through a
   group, and a bind mount is often opened to every uid so the container's
   user can write it. Keeping that directory closed to other users of the

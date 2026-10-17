@@ -16,10 +16,12 @@ import {
   exportWorkspaceSubtree,
   readMarkdownBody,
   recordTrashEntry,
+  resolveWorkspaceDocumentById,
+  WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -156,6 +158,37 @@ it('answers bytes that are not a record in the code family, under a code of thei
   })
 })
 
+// The cap as the route's caller reads it (ADR-0044's desktop browser-keeper
+// limit), stated here rather than imported so the test judges the operation.
+const PROMOTE_DOCUMENT_CAP = 2000
+
+it('refuses a record past the document cap with 413 under its own code, and keeps none of it', async () => {
+  const { promote, documents } = harness()
+  // Raw tree nodes in one commit: the path-checked create walks the whole
+  // tree per call, which makes a fixture this size take minutes.
+  const record = new LoroDoc()
+  const tree = record.getTree(WORKSPACE_TREE_KEY)
+  const ulid = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+  for (let i = 0; i <= PROMOTE_DOCUMENT_CAP; i++) {
+    const node = tree.createNode()
+    const suffix = `${ulid[Math.floor(i / 1024) % 32]}${ulid[Math.floor(i / 32) % 32]}${ulid[i % 32]}`
+    node.data.set('documentId', `01BRWC${suffix.padStart(20, '0')}`)
+    node.data.set('segment', `d${i}`)
+    node.data.set('kind', 'markdown')
+    node.data.set('createdAt', 1_000)
+    node.data.set('updatedAt', 1_000)
+  }
+  record.commit()
+
+  const res = await promote({ snapshot: b64u(new Uint8Array(record.export({ mode: 'snapshot' }))) })
+  expect(res.status).toBe(413)
+  const body = (await res.json()) as { error: string; message: string }
+  expect(body.error).toBe('promote_too_many_documents')
+  expect(body.message).toContain(String(PROMOTE_DOCUMENT_CAP))
+  expect(await documents()).toHaveLength(0)
+  expect(await new FileVersionStore().list('session1', 'd0')).toHaveLength(0)
+})
+
 it('answers 404 for a workspace the daemon never registered', async () => {
   const { app } = harness()
   const res = await app.request('/api/w/unregistered/workspace-document/promote', {
@@ -199,7 +232,9 @@ const DRAFTED_VERSION_ID = '01BRWVERSAAAAAAAAAAAAAAAA0'
  * before its last edit, and one trashed note evacuated the way the browser
  * keeper deletes: the subtree exported, its sha-256 recorded on the entry.
  */
-function browserRecordWithTrashAndVersion() {
+function browserRecordWithTrashAndVersion(
+  trashed: { readonly path?: string; readonly body?: string } = {},
+) {
   const doc = new LoroDoc()
   doc.setPeerId(2n)
   createWorkspaceDocumentAtPath(doc, {
@@ -212,14 +247,14 @@ function browserRecordWithTrashAndVersion() {
   const drafted = encodeFrontiers(doc.oplogFrontiers())
   writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# after the meeting')
   createWorkspaceDocumentAtPath(doc, { path: 'gone', documentId: GONE_ID, kind: 'markdown' })
-  writeMarkdownBody(documentContainers(doc, GONE_ID), '# trashed in the browser')
+  writeMarkdownBody(documentContainers(doc, GONE_ID), trashed.body ?? '# trashed in the browser')
   doc.commit()
   const evacuated = exportWorkspaceSubtree(doc, 'gone')
   if (evacuated === null) throw new Error('no subtree to evacuate')
   deleteWorkspaceNodeAtPath(doc, 'gone')
   recordTrashEntry(doc, {
     documentId: GONE_ID,
-    path: 'gone',
+    path: trashed.path ?? 'gone',
     deletedAt: 1,
     blob: { algorithm: 'sha-256', digestHex: createHash('sha256').update(evacuated).digest('hex') },
   })
@@ -255,6 +290,25 @@ it('carries a trashed document so the daemon restores it with its content', asyn
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
+})
+
+// A carried trash row and its bytes are the other keeper's choice, and the
+// trash map is not node meta, so nothing at promote time judges them: the
+// restore does, as it would any sync write.
+it.each([
+  ['a path off the document grammar', { path: '../gone' }],
+  ['a body past the length bound', { body: 'x'.repeat(MARKDOWN_MAX_CHARS + 1) }],
+])('refuses to restore carried trash holding %s', async (_, trashed) => {
+  const { app, promote } = harness()
+  const res = await promote(browserRecordWithTrashAndVersion(trashed))
+  expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
+
+  const restored = await app.request(`/api/workspaces/session1/trash/${GONE_ID}/restore`, {
+    method: 'POST',
+  })
+  expect(restored.status).toBe(404)
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  expect(resolveWorkspaceDocumentById(workspaceDoc, GONE_ID)).toBeNull()
 })
 
 // The daemon keeps ONE blob store per tenant, keyed by digest alone, so the

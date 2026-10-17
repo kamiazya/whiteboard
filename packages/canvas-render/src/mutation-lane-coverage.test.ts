@@ -312,9 +312,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // schema on its own so a type-only reader does not pull the theme layer.
     // Outside the lane: the decoder's table test pins every branch, and the
     // schema is a two-member enum.
+    //
+    // 108 with `layout/nodes/embed-budget.ts`, the nested-layout budget every
+    // embed spends from. Outside the lane: a counter whose budget test pins
+    // both the bound and that the excess still draws.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 22,
-      production: 107,
+      production: 108,
     })
   })
 

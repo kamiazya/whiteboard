@@ -166,6 +166,14 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
      * translate without knowing the vocabulary.
      */
     reason: z.string().min(1),
+    /**
+     * The person at the destination said they did not start this transfer,
+     * so the offer was never acted on. Distinct from a keeper refusing: a
+     * decline says nothing about the destination's workspaces, its sign-in
+     * or its capacity, and must not — the sender may be a page the person
+     * never meant to talk to. Optional, so it is not a protocol bump.
+     */
+    declined: z.literal(true).optional(),
   }),
 ])
 

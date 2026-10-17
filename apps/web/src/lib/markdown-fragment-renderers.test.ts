@@ -85,3 +85,46 @@ describe('fragmentIsEmbeddable', () => {
     expect(fragmentIsEmbeddable('<svg><rect style="a>b" onclick="x"/></svg>')).toBe(false)
   })
 })
+
+describe('fragmentIsEmbeddable refuses live HTML and remote loads', () => {
+  it('refuses a foreignObject in any case', () => {
+    expect(fragmentIsEmbeddable('<svg><foreignObject><div>x</div></foreignObject></svg>')).toBe(
+      false,
+    )
+    expect(fragmentIsEmbeddable('<svg><FOREIGNOBJECT/></svg>')).toBe(false)
+  })
+
+  it('refuses a form element and a form-submitting attribute', () => {
+    expect(fragmentIsEmbeddable('<svg><form><input name="q"/></form></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable('<svg><g action="https://evil.example"/></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable("<svg><g FormAction = 'https://evil.example'/></svg>")).toBe(false)
+  })
+
+  it('refuses a non-local src and accepts a local one', () => {
+    expect(fragmentIsEmbeddable('<svg><image src="https://evil.example/p.png"/></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable('<svg><image src=data:image/png;base64,AA/></svg>')).toBe(false)
+    expect(fragmentIsEmbeddable('<svg><g src="#local"/></svg>')).toBe(true)
+  })
+
+  it('refuses a non-local url() and accepts a fragment-local one', () => {
+    expect(
+      fragmentIsEmbeddable('<svg><style>g{background:url(https://evil.example)}</style></svg>'),
+    ).toBe(false)
+    expect(fragmentIsEmbeddable('<svg><rect style="fill: URL( \'//evil.example\' )"/></svg>')).toBe(
+      false,
+    )
+    expect(
+      fragmentIsEmbeddable(
+        '<svg><path marker-end="url(#arrow)"/><rect fill="url( \'#g\' )"/></svg>',
+      ),
+    ).toBe(true)
+  })
+
+  it('reads attributes only inside tags, so label text naming them is accepted', () => {
+    expect(
+      fragmentIsEmbeddable(
+        '<svg><text>&lt;form action="https://x"&gt; formaction=y src=z</text></svg>',
+      ),
+    ).toBe(true)
+  })
+})

@@ -453,7 +453,7 @@ export interface EmbedPlaceholderNode {
   readonly bbox: BoundingBox
   readonly documentId: string
   readonly title: string
-  readonly reason: 'cycle' | 'depthCap' | 'unresolvable'
+  readonly reason: 'cycle' | 'depthCap' | 'budget' | 'unresolvable'
 }
 
 export interface EmbedResolvedNode {

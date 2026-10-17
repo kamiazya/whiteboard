@@ -9,6 +9,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
 import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
 
@@ -39,19 +40,20 @@ export {
  * document, and the `/okf` route reaches it directly for the workspace tree.
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
-  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-  const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this
   // emits is a projection, and an unnamed document emits none rather than
   // being handed its path as a title.
-  const entry = await deps.documentIndex.resolveDocumentById({
-    workspaceId: input.workspaceId,
-    documentId: input.documentId,
-  })
+  const entry = await resolveDocumentInWorkspace(
+    deps.documentIndex,
+    input.workspaceId,
+    input.documentId,
+  )
+  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+  const coreFacets = readCoreFacets(doc)
   // A document that predates kinds carries none on its own doc; its index row
   // may. One with neither is read as the markdown it has always been taken for.
-  const kind = readDocumentKind(doc) ?? entry?.kind
+  const kind = readDocumentKind(doc) ?? entry.kind
   if (kind !== undefined && kind !== 'markdown') {
     throw new DocumentKindMismatchError(
       input.documentId,
@@ -70,7 +72,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     // with one, so this only answers for a row that predates that, and says
     // what a body with no declared type is.
     ...(coreFacets ?? { type: BARE_BODY_TYPE }),
-    ...(entry?.name === undefined ? {} : { title: entry.name }),
+    ...(entry.name === undefined ? {} : { title: entry.name }),
     ...(trust ?? {}),
     facets,
   }

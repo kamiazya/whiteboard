@@ -159,6 +159,17 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     if (result.kind === 'unmatched-carried') {
       return c.json(errorBody('unmatched_carried', result.reason), 400)
     }
+    if (result.kind === 'too-many-documents') {
+      // The message names the count, the limit and the way out, for whoever reads it.
+      return c.json(
+        errorBody(
+          'promote_too_many_documents',
+          `This workspace holds ${result.documents} documents; one move carries at most ${result.limit}. ` +
+            'Move some documents to another workspace first, then move this one.',
+        ),
+        413,
+      )
+    }
     const response: PromoteWorkspaceResponse = {
       ok: true,
       recorded: [...result.recorded],

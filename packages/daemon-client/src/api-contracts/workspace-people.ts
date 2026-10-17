@@ -45,12 +45,46 @@ export const invitationLinkResponseSchema = z.object({
 })
 
 /**
+ * How many links into one workspace may be pending (unredeemed and
+ * unexpired) at once. A link is a credential that admits whoever holds it,
+ * so an owner who mints them in a loop is stopped well before the list stops
+ * being something a person can review; revoking one makes room.
+ */
+export const MAX_PENDING_WORKSPACE_INVITATIONS = 50
+
+/**
+ * A link into this workspace that is still pending, as its owners review it.
+ * Never the token or its hash: the link was shown once, at minting, and a
+ * list that carried it would hand every owner every other owner's links.
+ */
+const pendingInvitationSchema = z.object({
+  id: z.string().min(1),
+  invitedBy: z.string().min(1),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+})
+
+export const pendingInvitationsResponseSchema = z.object({
+  invitations: z.array(pendingInvitationSchema),
+})
+
+export const revokeInvitationResponseSchema = z.object({ revoked: z.literal(true) })
+
+/**
  * Why a change was refused. `last_owner`: the product never leaves a
  * workspace without an owner, so its last owner can be neither demoted nor
- * removed. A narrowing of `apiErrorBodySchema`'s `{ error, message }` arm.
+ * removed. `too_many_invitations`: {@link MAX_PENDING_WORKSPACE_INVITATIONS}
+ * links are already pending. A narrowing of `apiErrorBodySchema`'s `{ error, message }` arm.
  */
 export const workspacePeopleRefusalSchema = z.object({
-  error: z.enum(['not_an_owner', 'unknown_user', 'not_a_member', 'last_owner']),
+  error: z.enum([
+    'not_an_owner',
+    'unknown_user',
+    'not_a_member',
+    'last_owner',
+    'unknown_invitation',
+    'too_many_invitations',
+  ]),
   message: z.string().min(1),
 })
 

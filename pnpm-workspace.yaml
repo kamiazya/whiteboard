@@ -196,6 +196,14 @@ auditConfig:
     # vulnerable code path is unreachable. The v7 -> v8 migration is tracked as
     # a backlog item; remove this entry when react-router reaches >=8.3.0.
     - GHSA-qwww-vcr4-c8h2
+    # sprintf-js DoS through unbounded precision specifiers (moderate). The
+    # advisory names >=1.1.4 as patched, but npm's latest is 1.1.3, so there
+    # is nothing to override to. It is reached only through the optional
+    # search runtime (@huggingface/transformers > onnxruntime-node >
+    # global-agent > roarr), whose format strings are library-internal, never
+    # user input. Remove this entry when a patched sprintf-js is published
+    # (then add an override instead) or when that dependency path goes away.
+    - GHSA-hp3w-g68c-fv3c
 
 # Multiple concurrent agent-driven git worktrees are routine in this repo;
 # without this, pnpm materializes a full node_modules/.pnpm copy per

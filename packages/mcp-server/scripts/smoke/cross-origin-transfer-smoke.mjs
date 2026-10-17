@@ -22,10 +22,13 @@
 //
 // What it pins:
 // 1. Signed out at B, the transfer window shows the sign-in notice, Accept
-//    stays disabled, and nothing is merged.
+//    stays disabled once the person confirms they started it, and nothing
+//    is merged.
 // 2. Signed in at B as a member of a workspace, the window at B's
-//    `/receive-transfer` hears from its opener, Accept merges, the sender
-//    reports it, and B's own API lists the document afterwards.
+//    `/receive-transfer` hears from its opener and asks whether the person
+//    started the transfer; once they confirm and choose the workspace,
+//    Accept merges, the sender reports it, and B's own API lists the
+//    document afterwards.
 //
 // Needs the built dist (`pnpm build`) and Playwright's Chromium or
 // WHITEBOARD_CHROME_PATH. Run: `pnpm smoke:transfer`.
@@ -342,6 +345,8 @@ try {
       'signed out, the transfer window says to sign in',
       await textOf(popup.locator('main')),
     )
+    // Any origin may offer, so the window asks first; Accept exists only after.
+    await popup.getByTestId('receive-transfer-confirm-yes').click()
     const accept = popup.getByTestId('receive-transfer-accept')
     check(
       (await accept.count()) === 1 && (await accept.isDisabled()),
@@ -369,14 +374,18 @@ try {
       popup.url(),
     )
     // The offer only arrives if the window could announce itself to its
-    // opener, so this is where a severed `window.opener` shows.
-    const offered = await appears(popup.getByTestId('receive-transfer-offer'))
+    // opener, so this is where a severed `window.opener` shows. It arrives
+    // as a question naming the sender, with no Accept until it is answered.
+    const asked = await appears(popup.getByTestId('receive-transfer-confirm'))
     check(
-      offered,
-      'the window hears its opener: the offer arrives',
+      asked && (await popup.getByTestId('receive-transfer-accept').count()) === 0,
+      'the window hears its opener: the offer arrives as a question, with no Accept yet',
       await textOf(popup.locator('main')),
     )
-    if (offered) {
+    if (asked) {
+      await popup.getByTestId('receive-transfer-confirm-yes').click()
+      // No target is preselected: the person names the workspace.
+      await popup.getByTestId('receive-transfer-target').selectOption(workspaceId)
       await popup.getByTestId('receive-transfer-accept').click()
       check(
         await appears(popup.getByTestId('receive-transfer-done')),

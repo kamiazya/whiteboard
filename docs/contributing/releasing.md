@@ -278,10 +278,19 @@ The Docker image is keyless-signed by cosign via Sigstore OIDC. The signing
 identity is tied to the GitHub Actions OIDC token of the `production-docker`
 environment, not to any stored private key.
 
+The certificate identity is the signing workflow's URL at the ref it ran
+from: `release.yml` on `refs/heads/main` for a release-please release, or on
+the dispatched ref for a forced re-publish (dispatch it with `--ref <tag>`;
+see **Force-publish via release.yml** below). Pin both ends of the identity
+and the repository — an unanchored `--certificate-identity-regexp` accepts
+any workflow whose URL merely contains the repository path, such as one in a
+fork on a branch named after it.
+
 Verification:
 ```bash
 cosign verify ghcr.io/kamiazya/whiteboard:<tag> \
-  --certificate-identity-regexp "github.com/kamiazya/whiteboard" \
+  --certificate-identity-regexp '^https://github\.com/kamiazya/whiteboard/\.github/workflows/release\.yml@refs/(heads/main|tags/mcp-server-v[0-9]+\.[0-9]+\.[0-9]+)$' \
+  --certificate-github-workflow-repository kamiazya/whiteboard \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
 
@@ -337,6 +346,12 @@ only a failed image push with `publish_npm` off, and `docker-publish-sign` re-ta
 `latest` when it runs. A dispatch with no tag runs neither. The tag must match
 `mcp-server-v<semver>` and the `production-npm` and `production-docker` environments
 must approve.
+
+Dispatch a forced npm publish **from the tag itself**:
+`gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance
+attests the commit the run was dispatched from, so `publish-mcp` fails before
+`npm publish --provenance` when the checked-out tag is a different commit — a
+dispatch from `main` would otherwise publish the tag's tarball under `main`'s provenance.
 
 ---
 

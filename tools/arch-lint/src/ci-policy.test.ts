@@ -596,3 +596,21 @@ describe('release.yml — either publish half can be retried alone', () => {
     expect(jobRuns(jobs['docker-publish-sign']?.if ?? '', event)).toBe(true)
   })
 })
+
+describe('ci.yml — jobs that never talk to the remote do not keep the token', () => {
+  // actions/checkout writes the job token into .git/config unless told not to,
+  // where every later step — the install, the PR's own tests — can read it.
+  const ci = parseYaml(readFileSync(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')) as {
+    jobs: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }>
+  }
+  it.each([
+    'check',
+    'stress-changed-tests',
+  ])('%s checks out with persist-credentials: false', (id) => {
+    const checkouts = (ci.jobs[id]?.steps ?? []).filter((s) =>
+      (s.uses ?? '').startsWith('actions/checkout@'),
+    )
+    expect(checkouts.length).toBeGreaterThan(0)
+    for (const step of checkouts) expect(step.with?.['persist-credentials']).toBe(false)
+  })
+})

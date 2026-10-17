@@ -26,7 +26,6 @@ const TENANT_SCOPE = {
   workspaceMemberships: 'tenant',
   tenantAdministrators: 'tenant',
   workspaceReplicaKeys: 'tenant',
-  workspaceMembersOnly: 'tenant',
   leases: 'keeper-wide: leader election between instances of one keeper, about the process',
   runtime: 'keeper-wide: the local daemon’s own settings, such as its current workspace',
   tenants: 'keeper-wide: the list of tenants itself',

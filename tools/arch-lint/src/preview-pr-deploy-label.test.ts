@@ -251,3 +251,77 @@ describe('preview cleanup and retention compute the label the deploy used', () =
     expect(new Set(copies).size).toBe(1)
   })
 })
+
+/**
+ * Runs the deploy job's pre-deploy guard against a fixture artifact. Pages
+ * executes an artifact's `_worker.js` (file or directory) as server code on
+ * the preview hostname, and `_routes.json` decides which requests reach it —
+ * neither may be published from a PR build.
+ */
+function runGuardStep(
+  populate: (dist: string) => void,
+  branch = 'feat-x',
+): { status: number | null; outputs: Record<string, string> } {
+  const step = deploySteps().find((s) => s.id === 'guard')
+  if (!step?.run) throw new Error('preview-pr-deploy.yml: no `guard` step with a run block')
+  const cwd = mkdtempSync(join(tmpdir(), 'preview-guard-'))
+  tmpRoots.push(cwd)
+  const dist = join(cwd, 'artifacts/preview-pr-dist')
+  mkdirSync(dist, { recursive: true })
+  writeFileSync(join(dist, 'index.html'), '<!doctype html>')
+  populate(dist)
+  const outFile = join(cwd, 'github-output')
+  writeFileSync(outFile, '')
+  const res = spawnSync('bash', ['-e', '-c', step.run], {
+    cwd,
+    env: {
+      PATH: process.env.PATH ?? '/usr/bin:/bin',
+      GITHUB_OUTPUT: outFile,
+      BRANCH: branch,
+      HAS_CLOUDFLARE: 'true',
+    },
+    encoding: 'utf-8',
+  })
+  const outputs: Record<string, string> = {}
+  for (const line of readFileSync(outFile, 'utf-8').split('\n')) {
+    const eq = line.indexOf('=')
+    if (eq > 0) outputs[line.slice(0, eq)] = line.slice(eq + 1)
+  }
+  return { status: res.status, outputs }
+}
+
+describe('preview-pr-deploy.yml — publishes static files only', () => {
+  it('a plain static artifact passes the guard', () => {
+    const res = runGuardStep(() => {})
+    expect(res.status).toBe(0)
+    expect(res.outputs.ready).toBe('true')
+  })
+
+  const hostile: [string, (dist: string) => void][] = [
+    ['a _worker.js file', (d) => writeFileSync(join(d, '_worker.js'), 'export default {}')],
+    [
+      'a _worker.js directory',
+      (d) => {
+        mkdirSync(join(d, '_worker.js'))
+        writeFileSync(join(d, '_worker.js/index.js'), 'export default {}')
+      },
+    ],
+    ['a _routes.json', (d) => writeFileSync(join(d, '_routes.json'), '{"version":1}')],
+  ]
+  it.each(hostile)('refuses an artifact carrying %s', (_label, populate) => {
+    const res = runGuardStep(populate)
+    expect(res.status).not.toBe(0)
+    expect(res.outputs.ready).toBeUndefined()
+  })
+
+  it('refuses a reserved branch label', () => {
+    for (const branch of ['', ...RESERVED_LABELS]) {
+      expect(runGuardStep(() => {}, branch).status, branch).not.toBe(0)
+    }
+  })
+
+  it('deploys only once the guard has passed', () => {
+    const deploy = deploySteps().find((s) => s.id === 'deploy') as { if?: string } | undefined
+    expect(deploy?.if).toContain("steps.guard.outputs.ready == 'true'")
+  })
+})

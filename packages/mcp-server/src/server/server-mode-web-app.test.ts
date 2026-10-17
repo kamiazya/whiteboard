@@ -55,6 +55,15 @@ describe('mountServerModeWebApp', () => {
     expect(res.headers.get('content-security-policy')).toContain(`'nonce-${nonce}'`)
   })
 
+  // A diagram label or pasted markup that reaches the DOM as a <form> must
+  // not be able to post what someone types to another origin; the app sends
+  // everything through fetch, so no native submission is needed.
+  it('forbids native form submission in the shell policy', async () => {
+    await withBuild()
+    const res = await app().request('/')
+    expect(res.headers.get('content-security-policy')).toContain("form-action 'none'")
+  })
+
   // The transfer receiver is a popup opened by ANOTHER origin, and the
   // handshake is `window.opener.postMessage`: under the baseline's
   // `same-origin` COOP the browser severs the opener and the sender waits

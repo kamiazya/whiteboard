@@ -3,6 +3,7 @@ import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 
 /**
  * `workspaceId` is passed to the store inside the `DocRef`: the daemon's
@@ -34,6 +35,7 @@ export async function exportJsonCanvas(
   deps: ServerDeps,
   input: ExportJsonCanvasInput,
 ): Promise<ExportJsonCanvasOutput> {
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
   const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
   return { json: serializeSpatial(canvas, mode) }

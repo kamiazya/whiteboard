@@ -22,7 +22,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      # Nothing in this job talks to the remote after checkout, so the token
+      # is not left in .git/config for the install and the tests to read.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 
@@ -331,9 +335,12 @@ jobs:
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
+      # The changed-file diff is local (HEAD^1 of the merge ref), so the
+      # token need not stay in .git/config for the PR's tests to read.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 

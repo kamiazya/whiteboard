@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
+import { createNestedLayoutBudget } from './embed-budget.js'
 import {
   codeLineHeightPx,
   placeFragment,
@@ -12,6 +13,7 @@ const options: ResolvedMdastOptions = {
   maxWidth: 240,
   fontFamily: 'sans-serif',
   theme: MARKDOWN_THEME_NODE,
+  nestedLayoutBudget: createNestedLayoutBudget(),
 }
 
 function place(fragment: { svg: string; width?: number; height?: number }) {

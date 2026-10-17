@@ -68,6 +68,7 @@ import { routeEdge } from './edges/edge-router.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
+import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import { nodePassagesOf } from './passage-highlight.js'
 import { composeProposals } from './proposals.js'
@@ -303,6 +304,7 @@ export function layoutSpatialCanvasWithAnchors(
     highlightCode: options.highlightCode ?? highlightCode,
     activeEmbedPath: new Set(options.embedPath ?? []),
     embedDepth: options.embedPath?.length ?? 0,
+    nestedLayoutBudget: options.nestedLayoutBudget ?? createNestedLayoutBudget(),
     fitToBox: true,
   })
 }
@@ -348,6 +350,7 @@ export function naturalNodeContentSize(
       highlightCode: options.highlightCode ?? highlightCode,
       activeEmbedPath: new Set(),
       embedDepth: 0,
+      nestedLayoutBudget: options.nestedLayoutBudget ?? createNestedLayoutBudget(),
       fitToBox: false,
     }),
   ).filter(
@@ -651,6 +654,7 @@ export function layoutSpatialEdges(
       highlightCode: options.highlightCode ?? highlightCode,
       activeEmbedPath: new Set(),
       embedDepth: 0,
+      nestedLayoutBudget: options.nestedLayoutBudget ?? createNestedLayoutBudget(),
       fitToBox: true,
     }),
   ).content

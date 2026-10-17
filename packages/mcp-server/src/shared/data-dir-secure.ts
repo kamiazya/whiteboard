@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } from 'node:fs'
+import { accessSync, chmodSync, constants as fsConstants, lstatSync, mkdirSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
@@ -109,6 +109,9 @@ export function secureDataDir(dir: string, trust: DataDirTrust = 'owner'): void 
  * and so the socket and token a client trusts — a real risk when the dir is
  * a directory in the shared temp dir, which any user can create first. Mode bits say
  * nothing here: an owner-only dir is exactly what that user would make.
+ * A symlink is refused, never followed: whoever owns the link can repoint it
+ * once the target has been judged, and a link in the shared temp dir may be
+ * another user's aimed at a dir of this user's.
  * A dir that does not exist yet is fine; where there is no uid (Windows)
  * there is nothing to compare.
  */
@@ -118,13 +121,19 @@ export function assertDataDirOwnedByUser(
   { mustExist = false }: { mustExist?: boolean } = {},
 ): void {
   if (uid === undefined) return
-  let stat: ReturnType<typeof statSync>
+  let stat: ReturnType<typeof lstatSync>
   try {
-    stat = statSync(dir)
+    stat = lstatSync(dir)
   } catch (err) {
     if (!isMissingFileError(err)) throw err
     if (!mustExist) return
     throw new Error(`the data directory ${dir} no longer exists while a file in it is open.`)
+  }
+  if (stat.isSymbolicLink()) {
+    throw new Error(
+      `the data directory ${dir} is a symlink; refusing to follow it. ` +
+        'Set WHITEBOARD_DATA_DIR to the real directory it points at.',
+    )
   }
   if (stat.uid !== uid) {
     throw new Error(

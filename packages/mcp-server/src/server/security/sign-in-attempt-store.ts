@@ -5,6 +5,7 @@
  * the browser that began the attempt.
  */
 import { randomBytes } from 'node:crypto'
+import { isIP } from 'node:net'
 import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantDatabase } from '../store/db/tenant-database.js'
 
@@ -12,6 +13,8 @@ interface BeginInput {
   readonly providerId: string
   readonly returnTo: string
   readonly invitationToken?: string
+  /** The client's network address, when the transport knows it. */
+  readonly source: string | undefined
   readonly now: number
   readonly ttlMs: number
 }
@@ -36,32 +39,74 @@ interface SignInAttemptStoreOptions {
 }
 
 // Beginning an attempt needs no credential, so without a ceiling a flood of
-// begins grows the table for as long as it lasts. When full, the OLDEST
-// attempt goes rather than the new one being refused: refusing would let a
-// flood of this size every ten minutes lock everybody out of signing in,
-// while eviction only costs a person whose attempt is older than the last
-// ten thousand begun, which takes a flood far faster than that to reach.
-// The returnTo and invitation the route stores are both bounded, so a full
-// table is a few tens of megabytes at most.
+// begins grows the table for as long as it lasts. When full, an attempt goes
+// rather than the new one being refused — refusing would let a flood of this
+// size every ten minutes lock everybody out of signing in — and the one that
+// goes is the oldest of the SOURCE holding the most, so a flood from one
+// client sheds its own attempts and leaves everybody else's standing. The
+// returnTo and invitation the route stores are both bounded, so a full table
+// is a few tens of megabytes at most.
 const DEFAULT_MAX_PENDING = 10_000
 
 const random = () => randomBytes(32).toString('base64url')
 
+// The eight 16-bit groups of an IPv6 address, after the URL parser has put it
+// in canonical form (dotted IPv4 tails become hex groups).
+function ipv6Groups(address: string): readonly string[] | null {
+  const host = URL.parse(`http://[${address}]/`)?.hostname.slice(1, -1)
+  if (host === undefined) return null
+  const [head = '', tail] = host.split('::')
+  const left = head === '' ? [] : head.split(':')
+  const right = tail === undefined || tail === '' ? [] : tail.split(':')
+  const fill = tail === undefined ? [] : Array(8 - left.length - right.length).fill('0')
+  return [...left, ...fill, ...right].map((g) => g.padStart(4, '0'))
+}
+
+// What counts as one client. An IPv6 subscriber is routinely handed a whole
+// /64, so that prefix is the source; an IPv4-mapped address is its IPv4 one.
+// Behind a reverse proxy every client shares the proxy's address and this
+// degrades to one source, which is exactly the shedding a single ceiling did.
+function sourceKey(address: string | undefined): string {
+  if (address === undefined || isIP(address) !== 6) return address ?? ''
+  const groups = ipv6Groups(address)
+  if (groups === null) return address
+  if (groups.slice(0, 5).every((g) => g === '0000') && groups[5] === 'ffff') {
+    const [hi = 0, lo = 0] = [groups[6], groups[7]].map((g) => Number.parseInt(g ?? '0', 16))
+    return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+  }
+  return `${groups.slice(0, 4).join(':')}::/64`
+}
+
 // Leaves room for one more attempt. An attempt nobody finished is otherwise
 // never removed; beginning one sheds them, at the rate of sign-ins and with
-// no worker to declare — the expired first, then the oldest past the ceiling.
+// no worker to declare — the expired first, then, past the ceiling, the
+// oldest of whichever source holds the most (the oldest such source on a tie).
 async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<void> {
   await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
-  const overflow = await db
+  const { pending } = await db
     .selectFrom('signInAttempts')
-    .select('state')
-    .orderBy('expiresAt', 'desc')
-    .limit(-1)
-    .offset(keep)
-    .execute()
-  if (overflow.length === 0) return
-  const states = overflow.map((row) => row.state)
-  await db.deleteFrom('signInAttempts').where('state', 'in', states).execute()
+    .select((eb) => eb.fn.countAll<number>().as('pending'))
+    .executeTakeFirstOrThrow()
+  for (let excess = Number(pending) - keep; excess > 0; excess--) {
+    const heaviest = await db
+      .selectFrom('signInAttempts')
+      .select('source')
+      .groupBy('source')
+      .orderBy((eb) => eb.fn.countAll(), 'desc')
+      .orderBy((eb) => eb.fn.min('expiresAt'), 'asc')
+      .limit(1)
+      .executeTakeFirst()
+    if (heaviest === undefined) return
+    const oldest = await db
+      .selectFrom('signInAttempts')
+      .select('state')
+      .where('source', '=', heaviest.source)
+      .orderBy('expiresAt', 'asc')
+      .limit(1)
+      .executeTakeFirst()
+    if (oldest === undefined) return
+    await db.deleteFrom('signInAttempts').where('state', '=', oldest.state).execute()
+  }
 }
 
 export function createSignInAttemptStore(
@@ -70,7 +115,7 @@ export function createSignInAttemptStore(
 ): SignInAttemptStore {
   const keep = Math.max(maxPending - 1, 0)
   return {
-    async begin({ providerId, returnTo, invitationToken, now, ttlMs }) {
+    async begin({ providerId, returnTo, invitationToken, source, now, ttlMs }) {
       await makeRoom(db, now, keep)
       const minted = {
         state: random(),
@@ -94,6 +139,7 @@ export function createSignInAttemptStore(
           invitationTokenHash: minted.invitationTokenHash,
           returnTo,
           expiresAt: now + ttlMs,
+          source: sha256Hex(sourceKey(source)),
         })
         .execute()
       return minted

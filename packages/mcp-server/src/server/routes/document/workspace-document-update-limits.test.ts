@@ -22,6 +22,7 @@ import { syncWriteRefusalOf } from '@kamiazya/whiteboard-daemon-client/api-contr
 import {
   documentContainers,
   readSpatialCanvas,
+  readTrashEntries,
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -224,14 +225,20 @@ describe('a record holding a container under a key past the bound from before it
     expect(readSpatialCanvas(copy).nodes.map((node) => node.id)).toEqual(['n-a'])
   })
 
-  it('restores the document from the trash and still opens', async () => {
+  // A restore places everything the bytes hold as new, and the bytes cannot
+  // say who evacuated them — a synced row can name any blob the keeper holds —
+  // so it is judged as a sync write bringing that container in, and refused.
+  it('keeps the trash row and still opens when the restore is refused', async () => {
     const { app, documentId } = await plantedSetup()
 
     const deleted = await app.request(documentRecordApiUrl(WS, 'c'), { method: 'DELETE' })
     expect(deleted.status).toBe(200)
     const restored = await app.request(trashRestoreApiUrl(WS, documentId), { method: 'POST' })
 
-    expect(restored.status).toBe(200)
-    expect(await nodesAfterRestart()).toEqual(['n-a'])
+    expect(restored.status).toBe(404)
+    expect(
+      readTrashEntries(await serverDeps.workspaceDocuments.get(WS)).map((row) => row.documentId),
+    ).toEqual([documentId])
+    expect(await nodesAfterRestart()).toEqual([])
   })
 })

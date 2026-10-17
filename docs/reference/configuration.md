@@ -178,6 +178,8 @@ each tab opens its own. These limits are fixed, not configurable:
 | Open streams per user | 16 | server mode | The next open is refused with `429 too_many_streams` and `Retry-After: 5`. The page keeps retrying with backoff and connects once one of that user's streams closes. |
 | Open streams in total, per instance | 1024 | server mode | Same refusal, for everyone, until a stream closes. |
 | Data written to a stream and not yet read by the page | about 43.7 MiB (two of the largest possible updates) | server mode and the local daemon | The keeper ends that stream. The page reconnects, subscribes again and reads what it missed from the keeper, so a slow reader loses nothing. |
+| Data written to all of one user's streams and not yet read | about 87.3 MiB (two streams' worth) | server mode | The keeper ends that user's oldest stream that has data waiting, and keeps doing so until the total fits. Each page reconnects as above, so nothing is lost. |
+| Data written to every stream on the instance and not yet read | about 349.3 MiB (eight streams' worth) | server mode and the local daemon | The keeper ends the oldest stream on the instance that has data waiting, whoever holds it, until the total fits. |
 
 In server mode a stream belongs to the user who opened it: only that user may
 subscribe it to a workspace, and a credential that names no user of the
@@ -186,13 +188,15 @@ sent down a stream, the instance holding it re-checks that its user is still a
 member of the workspace and not deactivated, and ends the stream if not — so a
 removal or deactivation made on another instance, or with
 `whiteboard server deactivate-user`, takes effect on streams that are already
-open.
+open. On the instance that handles the change it is immediate: removing someone
+from a workspace ends their streams that follow that workspace, and
+deactivating them ends every stream they hold.
 
 ## Codex sandbox constraints
 
 Inside the Codex sandbox, two issues are common:
 
-- **Writing to `~/.whiteboard` may fail.** Without `WHITEBOARD_DATA_DIR`, the app falls back to `$TMPDIR/.whiteboard-<uid>` (owner-only; a directory another user owns or can write is refused) and logs a warning naming that path. A temp directory is not durable, and a daemon or browser running outside the sandbox looks in `~/.whiteboard`, so work an agent saves there is not seen by them. Set `WHITEBOARD_DATA_DIR` to a directory both sides can reach.
+- **Writing to `~/.whiteboard` may fail.** Without `WHITEBOARD_DATA_DIR`, the app falls back to `$TMPDIR/.whiteboard-<uid>` (owner-only; a directory another user owns or can write, or a symlink, is refused) and logs a warning naming that path. A temp directory is not durable, and a daemon or browser running outside the sandbox looks in `~/.whiteboard`, so work an agent saves there is not seen by them. Set `WHITEBOARD_DATA_DIR` to a directory both sides can reach.
 - **Creating the daemon's socket may be blocked.** The daemon listens on a Unix socket under `$XDG_RUNTIME_DIR/whiteboard/` (or a `whiteboard-<uid>` directory in the temp directory); a sandbox that forbids creating or listening on it fails daemon startup. Run in an environment that allows it or adjust the sandbox configuration.
 
 ## Storage layout

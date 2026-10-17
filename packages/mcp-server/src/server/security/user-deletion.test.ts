@@ -114,7 +114,9 @@ describe('createUserDeletion', () => {
   })
 
   it('keeps an invitation they issued that was already redeemed, and drops one still open', async () => {
-    const user = await deactivated(ada, 'Ada')
+    // Redeemed while its inviter could still invite, then they were deactivated.
+    const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await members.addMember('ws-1', user.id)
     const redeemed = await invitations.createLink({
       invitedBy: user.id,
       workspaceId: 'ws-1',
@@ -127,9 +129,13 @@ describe('createUserDeletion', () => {
       now: 0,
       ttlMs: HOUR,
     })
-    await invitations.redeem(redeemed.invitation.id, 'p-bob', 1)
+    expect(await invitations.redeem(redeemed.invitation.id, 'p-bob', 1)).toBe(true)
+    await createUserDeactivation(handle.db).deactivate(user.id, 1)
+    const other = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
+    await members.addMember('ws-1', other.id)
+    await createWorkspaceRoles(handle.db).setRole('ws-1', other.id, 'owner')
 
-    await deletion().delete(user.id)
+    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
 
     // A deleted row answers 'unknown'; a kept redeemed one still says it was redeemed.
     expect(await invitations.openLink(redeemed.token, 2)).toEqual({ ok: false, reason: 'redeemed' })

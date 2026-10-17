@@ -55,15 +55,20 @@ export interface CompleteSignInDeps extends NewcomerStores {
 export function createCompleteSignInDeps(
   db: TenantDatabase,
   sessionTtlMs: number,
+  configuredAdministrators: readonly AuthenticatorBinding[] = [],
 ): CompleteSignInDeps {
+  const invitationOptions = { configuredAdministrators }
   return {
     members: createMemberProfileStore(db),
-    invitations: createInvitationStore(db),
+    invitations: createInvitationStore(db, invitationOptions),
     sessions: createSignInSessionStore(db),
     sessionTtlMs,
     atomically: (fn) =>
       inTenantTransaction(db, (trx) =>
-        fn({ members: createMemberProfileStore(trx), invitations: createInvitationStore(trx) }),
+        fn({
+          members: createMemberProfileStore(trx),
+          invitations: createInvitationStore(trx, invitationOptions),
+        }),
       ),
   }
 }

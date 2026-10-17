@@ -31,6 +31,7 @@ import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
 
 /**
@@ -353,6 +354,23 @@ export function projectCanvasSnapshot(
   }
 }
 
+/** The canvas the snapshot reads: placed in the named workspace, and spatial. */
+async function loadOwnedCanvas(
+  deps: ServerDeps,
+  input: CanvasSnapshotInput,
+): Promise<Awaited<ReturnType<typeof loadDocument>>> {
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const loaded = await loadDocument(deps, input.workspaceId, input.documentId)
+  await assertSpatialDocument(
+    deps,
+    input.workspaceId,
+    input.documentId,
+    loaded.doc,
+    'wb_canvas_snapshot',
+  )
+  return loaded
+}
+
 /**
  * The compact, semantic read of a spatial canvas — what an agent should
  * reach for before editing one.
@@ -380,15 +398,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
-      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-      await assertSpatialDocument(
-        deps,
-        input.workspaceId,
-        input.documentId,
-        doc,
-        'wb_canvas_snapshot',
-      )
-
+      const { doc, canvas } = await loadOwnedCanvas(deps, input)
       const snapshot = projectCanvasSnapshot(
         input.documentId,
         canvas,

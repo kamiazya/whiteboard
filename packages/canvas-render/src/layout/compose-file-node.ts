@@ -14,6 +14,7 @@ import {
   placeAboveNode,
   placeInNode,
 } from './node-box.js'
+import { spendNestedLayout } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import { fitSceneIntoBox } from './scale-scene.js'
 
@@ -25,8 +26,8 @@ const FILE_EMBED_DEPTH_CAP = 3
  * out at native size, scaled to fit the node's content area (never
  * upscaled), and placed under the label band. Returns undefined whenever
  * the card should render instead — no resolver, policy says collapsed,
- * unresolvable reference, cycle on the current path, depth cap, or a
- * degenerate fit.
+ * unresolvable reference, cycle on the current path, depth cap, the
+ * render's nested-layout budget spent, or a degenerate fit.
  */
 function composeFileEmbed(
   node: SpatialNode,
@@ -40,7 +41,8 @@ function composeFileEmbed(
   if (
     file === undefined ||
     options.embedDepth >= FILE_EMBED_DEPTH_CAP ||
-    options.activeEmbedPath.has(file)
+    options.activeEmbedPath.has(file) ||
+    !spendNestedLayout(options.nestedLayoutBudget)
   ) {
     return undefined
   }

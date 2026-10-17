@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -118,55 +118,6 @@ describe('removing a member', () => {
     expect(await store.profileForBinding(passkeyBinding('https://a.example', 'cred-1'))).toEqual(
       profile,
     )
-  })
-})
-
-describe('membersOnly', () => {
-  it('is false for a fresh store', async () => {
-    expect(await store.membersOnly('ws-1')).toBe(false)
-  })
-
-  it('is true after addMember, and stays true after removing the only member', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-1', profile.id)
-    expect(await store.membersOnly('ws-1')).toBe(true)
-
-    await dropMembership('ws-1', profile.id)
-    expect(await store.membersOnly('ws-1')).toBe(true)
-  })
-
-  it('does not mark an unrelated workspace', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-a', profile.id)
-    expect(await store.membersOnly('ws-b')).toBe(false)
-  })
-
-  it('a repeated addMember does not change since', async () => {
-    vi.useFakeTimers()
-    try {
-      const profile = await store.ensureProfile({
-        binding: passkeyBinding('https://a.example', 'cred-1'),
-        displayName: 'Ada',
-      })
-      vi.setSystemTime(1_000)
-      await store.addMember('ws-1', profile.id)
-      vi.setSystemTime(2_000)
-      await store.addMember('ws-1', profile.id)
-      const row = await handle.db
-        .selectFrom('workspaceMembersOnly')
-        .selectAll()
-        .where('workspaceId', '=', 'ws-1')
-        .executeTakeFirstOrThrow()
-      expect(row.since).toBe(1_000)
-    } finally {
-      vi.useRealTimers()
-    }
   })
 })
 

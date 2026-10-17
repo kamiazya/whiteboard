@@ -73,7 +73,9 @@ export interface SignInRoutesDeps {
 // and `/\host` are another host once parsed. Resolving against our own
 // origin and keeping the result only when the origin survives covers every
 // such spelling; a control character is refused outright, since nothing
-// legitimate carries one.
+// legitimate carries one. Resolving also collapses dot segments, so
+// `/.//host` keeps our origin yet leaves a pathname of `//host` — which the
+// browser reads as scheme-relative once it is sent back as a Location.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
 
@@ -84,6 +86,7 @@ function safeReturnPath(requested: string | undefined, publicBaseUrl: string): s
   const ours = new URL(publicBaseUrl)
   const resolved = URL.parse(requested, ours)
   if (resolved === null || resolved.origin !== ours.origin) return '/'
+  if (resolved.pathname.startsWith('//')) return '/'
   return `${resolved.pathname}${resolved.search}${resolved.hash}`
 }
 
@@ -104,6 +107,7 @@ interface Routing {
   readonly now: () => number
   readonly callbackUrl: (providerId: string) => string
   readonly proxied: (c: Context, provider: TrustedHeaderProvider) => Promise<TrustedIdentity>
+  readonly peerOf: (c: Context) => string | undefined
 }
 
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
@@ -116,6 +120,10 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
     providerId: provider.id,
     returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),
     ...(invitation === undefined ? {} : { invitationToken: invitation }),
+    // The socket's peer, never a forwarded-for header a caller can write:
+    // behind a proxy that is the proxy, which costs per-client shedding and
+    // nothing else.
+    source: routing.peerOf(c),
     now: now(),
     ttlMs: ATTEMPT_TTL_MS,
   })
@@ -287,18 +295,21 @@ async function signOut(c: Context, deps: SignInRoutesDeps) {
   return c.body(null, 204)
 }
 
+// A request the Node adapter did not serve — `app.request`, another runtime —
+// has no socket to read, so it has no address rather than an error.
 function nodePeer(c: Context): string | undefined {
+  const env: unknown = c.env
+  if (typeof env !== 'object' || env === null) return undefined
   return getConnInfo(c).remote.address
 }
 
 // One reader per proxy provider, built once, so its key set is fetched once.
-function proxiedReader(deps: SignInRoutesDeps): Routing['proxied'] {
+function proxiedReader(deps: SignInRoutesDeps, peerOf: Routing['peerOf']): Routing['proxied'] {
   const readers = new Map(
     deps.providers
       .filter((p): p is TrustedHeaderProvider => p.kind === 'trusted-header')
       .map((p) => [p.id, createTrustedIdentityReader(p)]),
   )
-  const peerOf = deps.peerAddress ?? nodePeer
   return async (c, provider) => {
     const read = readers.get(provider.id)
     if (read === undefined) return { ok: false, why: 'no_identity' }
@@ -310,11 +321,13 @@ function proxiedReader(deps: SignInRoutesDeps): Routing['proxied'] {
 export function createSignInRoutes(deps: SignInRoutesDeps): Hono {
   const app = new Hono()
   const providerById = new Map(deps.providers.map((p) => [p.id, p]))
+  const peerOf = deps.peerAddress ?? nodePeer
   const routing: Routing = {
     deps,
+    peerOf,
     now: deps.now ?? Date.now,
     callbackUrl: (id) => new URL(`/auth/callback/${id}`, deps.publicBaseUrl).toString(),
-    proxied: proxiedReader(deps),
+    proxied: proxiedReader(deps, peerOf),
   }
   const withProvider =
     (step: (c: Context, routing: Routing, provider: SignInRouteProvider) => Promise<Response>) =>
