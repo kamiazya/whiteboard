@@ -435,6 +435,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   deactivation before sending each update and ends the stream when either
   fails, and open streams are capped per user and per instance. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
+- **Server mode reads a bounded number of large bodies at once.** A sync
+  update, a promote, an upload or a document created from its content is read
+  whole before it is applied, so the bodies in flight are capped per user and
+  per instance, and the next one is refused before it is read. The limits are
+  [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,
   so both are the writer's choice: a restore that would place a document at a

@@ -20,7 +20,7 @@ import type { StoreScope } from '../store/store-scope.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { validateFileId, validationErrorBody } from '../validators.js'
 import { parseWorkspaceHandle } from '../workspace-handle.js'
-import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from './body-limit.js'
 import { onDocumentFile } from './document/path-route.js'
 
 // The set of types and the per-file ceiling are the contract the editor
@@ -175,7 +175,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       })
       return c.body(null, 204)
     },
-    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Upload'),
+    limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Upload'),
   )
 
   // GET /api/w/:workspaceId/document/<path>/file/:fileId

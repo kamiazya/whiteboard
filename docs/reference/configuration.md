@@ -192,6 +192,24 @@ open. On the instance that handles the change it is immediate: removing someone
 from a workspace ends their streams that follow that workspace, and
 deactivating them ends every stream they hold.
 
+## Large request limits
+
+The requests that carry stored content — a document's or a workspace's sync
+`update`, a workspace `promote`, a file upload, and an `/api/v1` document
+created from its content — have bodies of up to 16 MiB (24 MiB for a
+promote), and each is read whole before it is applied. Server mode therefore
+limits how many of them it reads at once. These limits are fixed, not
+configurable:
+
+| Limit | Value | Applies to | When it is reached |
+|---|---|---|---|
+| Such requests in flight per user | 4 | server mode | The next one is refused with `429 too_many_requests` and `Retry-After: 1`, before any of its body is read. The web app's sync retries it after that delay, so an edit is delayed, not lost. |
+| Such requests in flight in total, per instance | 16 | server mode | Same refusal, for everyone, until one finishes. |
+
+A request counts from the moment its route starts reading the body until it
+is answered, so ordinary edits, which are small and quick, rarely meet either
+limit. The local daemon serves one person and applies neither.
+
 ## Codex sandbox constraints
 
 Inside the Codex sandbox, two issues are common:

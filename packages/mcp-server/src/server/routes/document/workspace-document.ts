@@ -20,7 +20,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
-import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
 import { defaultHumanDisplayName } from './_shared.js'
 
@@ -222,7 +222,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
 
   app.post(
     '/api/w/:workspaceId/workspace-document/update',
-    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
+    limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
     async (c) => {
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
@@ -248,7 +248,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
 
   app.post(
     '/api/w/:workspaceId/workspace-document/promote',
-    limitBody(PROMOTE_REQUEST_LIMIT_BYTES, 'Promotion'),
+    limitContentBody(PROMOTE_REQUEST_LIMIT_BYTES, 'Promotion'),
     promoteHandler(options),
   )
 
