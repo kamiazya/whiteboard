@@ -112,14 +112,22 @@ function addTo(text: string, alsoIndex: AlsoIndex): string {
   return extra === '' ? text : `${text} ${extra}`
 }
 
-interface TokenBag {
-  readonly doc: SearchableDocument
-  /** How often each index token occurs across the document's path, name and texts. */
+/**
+ * What one document contributes to the index: how often each index token
+ * occurs across its path, name and texts, and how many tokens that is.
+ *
+ * A pure function of the document's text and the expander, so what it costs
+ * per document can be measured without running a query.
+ */
+export interface DocumentTerms {
   readonly counts: ReadonlyMap<string, number>
   readonly length: number
 }
 
-function tokenBag(doc: SearchableDocument, alsoIndex: AlsoIndex | undefined): TokenBag {
+export function documentTerms(
+  doc: Pick<SearchableDocument, 'path' | 'name' | 'texts'>,
+  alsoIndex?: AlsoIndex,
+): DocumentTerms {
   const counts = new Map<string, number>()
   let length = 0
   for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
@@ -128,7 +136,11 @@ function tokenBag(doc: SearchableDocument, alsoIndex: AlsoIndex | undefined): To
       length++
     }
   }
-  return { doc, counts, length }
+  return { counts, length }
+}
+
+interface TokenBag extends DocumentTerms {
+  readonly doc: SearchableDocument
 }
 
 /**
@@ -144,7 +156,7 @@ export function fullTextSearch(
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
 
-  const bags = documents.map((doc) => tokenBag(doc, alsoIndex))
+  const bags: TokenBag[] = documents.map((doc) => ({ doc, ...documentTerms(doc, alsoIndex) }))
   const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
   // Once per query token, not per (document, token) pair: counting the
   // documents that hold a token inside the scoring loop made one query
