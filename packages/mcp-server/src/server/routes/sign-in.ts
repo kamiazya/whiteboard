@@ -28,6 +28,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { getLogger } from '../log.js'
 import type { AdministratorCheck } from '../security/administrator-check.js'
 import { type CompleteSignInDeps, completeSignIn } from '../security/complete-sign-in.js'
+import { isInvitationTokenShaped } from '../security/invitation-token.js'
 import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-party.js'
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
 import type { SignInAttemptStore } from '../security/sign-in-attempt-store.js'
@@ -43,6 +44,9 @@ const log = getLogger('sign-in')
 
 const ATTEMPT_COOKIE = '__Host-wb_signin'
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
+// A return path is a page of the web app; beginning a sign-in needs no
+// credential, so a longer one is dropped rather than stored for whoever asks.
+const MAX_RETURN_PATH = 2048
 
 /** A provider a person signs in with here: through a browser redirect to an
  *  OIDC provider, or through the reverse proxy in front of the keeper. */
@@ -73,6 +77,7 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
 
 function safeReturnPath(requested: string | undefined, publicBaseUrl: string): string {
   if (requested === undefined || !requested.startsWith('/')) return '/'
+  if (requested.length > MAX_RETURN_PATH) return '/'
   if (CONTROL_CHARACTER.test(requested)) return '/'
   const ours = new URL(publicBaseUrl)
   const resolved = URL.parse(requested, ours)
@@ -92,6 +97,9 @@ interface Routing {
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
   const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
+  if (invitation !== undefined && !isInvitationTokenShaped(invitation)) {
+    return refusedTo(c, 'invitation_unusable')
+  }
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
     returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),

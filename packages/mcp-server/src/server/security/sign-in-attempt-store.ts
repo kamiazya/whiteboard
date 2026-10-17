@@ -29,13 +29,50 @@ export interface SignInAttemptStore {
   take(state: string, browserBinding: string, now: number): Promise<Attempt | null>
 }
 
+interface SignInAttemptStoreOptions {
+  /** The most attempts kept in flight for one tenant at once. */
+  readonly maxPending?: number
+}
+
+// Beginning an attempt needs no credential, so without a ceiling a flood of
+// begins grows the table for as long as it lasts. When full, the OLDEST
+// attempt goes rather than the new one being refused: refusing would let a
+// flood of this size every ten minutes lock everybody out of signing in,
+// while eviction only costs a person whose attempt is older than the last
+// ten thousand begun, which takes a flood far faster than that to reach.
+// The returnTo and invitation the route stores are both bounded, so a full
+// table is a few tens of megabytes at most.
+const DEFAULT_MAX_PENDING = 10_000
+
 const random = () => randomBytes(32).toString('base64url')
-export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore {
+export function createSignInAttemptStore(
+  db: TenantDatabase,
+  { maxPending = DEFAULT_MAX_PENDING }: SignInAttemptStoreOptions = {},
+): SignInAttemptStore {
+  // Room for the attempt about to be inserted.
+  const keep = Math.max(maxPending - 1, 0)
   return {
     async begin({ providerId, returnTo, invitationToken, now, ttlMs }) {
       // An attempt nobody finished is otherwise never removed; beginning one
       // sheds them, at the rate of sign-ins and with no worker to declare.
       await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
+      const overflow = await db
+        .selectFrom('signInAttempts')
+        .select('state')
+        .orderBy('expiresAt', 'desc')
+        .limit(-1)
+        .offset(keep)
+        .execute()
+      if (overflow.length > 0) {
+        await db
+          .deleteFrom('signInAttempts')
+          .where(
+            'state',
+            'in',
+            overflow.map((row) => row.state),
+          )
+          .execute()
+      }
       const minted = {
         state: random(),
         browserBinding: random(),

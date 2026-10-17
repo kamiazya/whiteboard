@@ -67,4 +67,23 @@ describe('sign-in attempts', () => {
     const taken = await attempts.take(begun.state, begun.browserBinding, T0 + 1)
     expect(taken?.invitationToken).toBe('inv-token')
   })
+
+  // Beginning needs no credential, so a flood must not grow the table without
+  // bound; the OLDEST attempt goes, so a sign-in begun just now still lands.
+  it('keeps no more than its ceiling of attempts, shedding the oldest', async () => {
+    const capped = createSignInAttemptStore(handle.db, { maxPending: 3 })
+    const begun = []
+    for (let i = 0; i < 6; i++) {
+      begun.push(await capped.begin({ providerId: 'corp', returnTo: '/', now: T0 + i, ttlMs: TTL }))
+    }
+    const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+    expect(rows.length).toBeLessThanOrEqual(3)
+    const newest = begun.at(-1)
+    expect(newest).toBeDefined()
+    expect(
+      await capped.take(newest?.state ?? '', newest?.browserBinding ?? '', T0 + 7),
+    ).not.toBeNull()
+    const oldest = begun[0]
+    expect(await capped.take(oldest?.state ?? '', oldest?.browserBinding ?? '', T0 + 7)).toBeNull()
+  })
 })

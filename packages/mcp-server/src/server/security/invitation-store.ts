@@ -15,6 +15,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantScoped } from '../store/db/tenant-database.js'
+import { INVITATION_TOKEN_BYTES } from './invitation-token.js'
 
 const invitationSchema = z
   .object({
@@ -96,7 +97,7 @@ async function redeem(db: TenantScoped, invitationId: string, redeemedBy: string
 export function createInvitationStore(db: TenantScoped): InvitationStore {
   return {
     async createLink(input) {
-      const token = randomBytes(32).toString('base64url')
+      const token = randomBytes(INVITATION_TOKEN_BYTES).toString('base64url')
       return { token, invitation: await insert(db, input, sha256Hex(token)) }
     },
     openLink: (token, now) => openLink(db, token, now),

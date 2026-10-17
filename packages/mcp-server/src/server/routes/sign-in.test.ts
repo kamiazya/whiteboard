@@ -275,6 +275,36 @@ describe('sign-in through an OIDC provider', () => {
     expect(res.headers.get('location')).toBe('/')
   })
 
+  // Beginning a sign-in needs no credential and stores a row, so what one
+  // request can make the keeper hold is bounded by the route, not by the
+  // header limit of whatever server is in front.
+  describe('what an unauthenticated begin can store', () => {
+    const SIXTY_FOUR_KB = 64 * 1024
+    const stored = () => handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+
+    it('keeps a return path up to 2048 characters and drops a longer one', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const longest = `/${'a'.repeat(2047)}`
+      for (const target of [longest, `/${'a'.repeat(SIXTY_FOUR_KB)}`]) {
+        await app.request(`${BASE}/auth/sign-in/corp?return=${encodeURIComponent(target)}`)
+      }
+      expect((await stored()).map((row) => row.returnTo).sort()).toEqual(['/', longest].sort())
+    })
+
+    it.for([
+      ['a 64 KB value', 'x'.repeat(64 * 1024)],
+      ['a value one character past the token', 'A'.repeat(44)],
+      ['a value outside the token alphabet', `${'A'.repeat(42)}=`],
+    ])('refuses an invitation that is %s and stores nothing', async ([, invitation]) => {
+      const { app } = appFor({ createAccounts: true })
+      const res = await app.request(
+        `${BASE}/auth/sign-in/corp?invitation=${encodeURIComponent(invitation as string)}`,
+      )
+      expect(res.headers.get('location')).toBe('/sign-in?error=invitation_unusable')
+      expect(await stored()).toEqual([])
+    })
+  })
+
   // The web app's sign-in screen lists these; it never learns an issuer or
   // a client id.
   it('lists the browser providers by id and display name', async () => {
