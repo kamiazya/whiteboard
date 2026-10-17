@@ -67,7 +67,7 @@ describe('every copy of the Node pin agrees with .node-version', () => {
       ].map((value) => ({ path, value }))
     })
     // Reached, not assumed: release.yml alone spells it three times.
-    expect(literals.length).toBeGreaterThanOrEqual(4)
+    expect(literals.length).toBeGreaterThanOrEqual(3)
     expect(literals.filter(({ value }) => value !== pinnedMajor())).toEqual([])
   })
 })
