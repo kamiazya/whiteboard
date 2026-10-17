@@ -12,7 +12,7 @@ import type { ResolvedGrant } from './credential-resolver.js'
 import type { InvitationStore } from './invitation-store.js'
 import { runAsMcpCaller } from './mcp-caller.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
-import { membershipRefusalFor, rememberCaller } from './membership-gate.js'
+import { membershipRefusalFor, rememberCaller, rememberGrant } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
@@ -128,12 +128,21 @@ async function sessionGrant(
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+// What `Sec-Fetch-Site` says of a request this host's own pages made, or of a
+// navigation the user started themselves (typed, bookmarked).
+const OWN_FETCH_SITES = new Set(['same-origin', 'none'])
+
 // The browser attaches the cookie to a request any page makes to this host —
-// a sibling subdomain's page included, which SameSite=Lax does not stop — so
-// a write carries the session only from this host's own pages. Browsers send
-// `Origin` on every non-GET request, same-origin ones too; one without it is
-// not a page of ours.
+// a sibling subdomain's page included, which SameSite=Lax does not stop. A
+// read is no exception: such a page could hold the sync streams a user may
+// open only so many of, and lock them out. So where the browser says whose
+// page asked, only this host's own pages carry the session; a client that
+// sends no `Sec-Fetch-Site` reads as before. A write also needs `Origin`,
+// which browsers send on every non-GET request, same-origin ones too; one
+// without it is not a page of ours.
 function fromThisHost(c: Context, origin: string): boolean {
+  const site = c.req.header('sec-fetch-site')
+  if (site !== undefined && !OWN_FETCH_SITES.has(site)) return false
   if (SAFE_METHODS.has(c.req.method.toUpperCase())) return true
   const from = c.req.header('origin')
   return from !== undefined && from === origin
@@ -232,6 +241,8 @@ export function createServerModeMcpAuthMiddleware(
   return async (c, next) => {
     const resolved = await bearerGrant(c, authStrategy, ['mcp:call'], people)
     if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
+    // For what is counted per user after this, such as the content slots.
+    rememberGrant(c, resolved.grant)
     await runAsMcpCaller({ grant: resolved.grant, members: people.members }, next)
   }
 }
