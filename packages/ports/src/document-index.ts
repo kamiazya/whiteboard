@@ -158,12 +158,14 @@ export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
 export const storedWorkspaceEntrySchema = z
   .object({
     workspaceId: workspaceIdSchema,
+    namespace: namespaceHandleSchema.optional().catch(undefined),
     segment: workspaceSegmentSchema.optional().catch(undefined),
     displayName: workspaceDisplayNameSchema.optional().catch(undefined),
   })
   .transform(
-    ({ workspaceId, segment, displayName }): WorkspaceEntry => ({
+    ({ workspaceId, namespace, segment, displayName }): WorkspaceEntry => ({
       workspaceId,
+      ...(namespace === undefined ? {} : { namespace }),
       ...(segment === undefined ? {} : { segment }),
       ...(displayName === undefined ? {} : { displayName }),
     }),
