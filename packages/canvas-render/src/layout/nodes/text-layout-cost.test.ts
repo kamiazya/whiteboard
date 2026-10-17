@@ -12,13 +12,21 @@ import { typesetMdastBlocks } from './mdast-blocks.js'
  * as long as its whole body; a layout that re-measures the accumulated line
  * per step is quadratic in that length, and this is what would show it.
  *
- * The same five shapes through the daemon's opentype measurer at 8192
- * characters cost 0.2s (fits whole), 58s (prose one pixel under natural),
- * 0.4s (prose at 200), 301s (fence cut by one glyph) and 0.07s (fence at
- * 200) of CPU — the counts below are what those seconds are proportional to.
+ * Under the per-segment and per-character scans this replaced, the same
+ * five shapes through the daemon's opentype measurer at 8192 characters
+ * cost 0.2s (fits whole), 58s (prose one pixel under natural), 0.4s (prose
+ * at 200), 301s (fence cut by one glyph) and 0.07s (fence at 200) of CPU,
+ * at 16,385 / 6,012,640 / 44,553 / 33,574,911 / 8,490 characters measured.
  */
 
 const LENGTH = 8192
+/**
+ * The ceiling for a line that has to be searched: a few measures of the
+ * whole line per line, never one per segment or per character. Measured at
+ * 1.0x (prose) and 1.1x (fence) of `L log2 L`; the scans the search replaced
+ * measured 56x and 315x.
+ */
+const SEARCHED_LINE_CEILING = 2 * LENGTH * Math.log2(LENGTH)
 
 interface Counted {
   readonly measure: MeasureText
@@ -93,24 +101,28 @@ describe('characters measured for one long line', () => {
   // so width 1e6 alone is the cheap case; the expensive one is a line that
   // holds nearly all of it and still has to be broken.
   it('prose paragraph that fits its line whole at width 1e6', () => {
-    expect(charactersMeasured(paragraphOf(prose(LENGTH)), 1e6)).toBe(16_385)
+    expect(charactersMeasured(paragraphOf(prose(LENGTH)), 1e6)).toBeLessThanOrEqual(2 * LENGTH + 1)
   })
 
   it('prose paragraph wrapped one pixel under its natural width', () => {
     const root = paragraphOf(prose(LENGTH))
-    expect(charactersMeasured(root, proseWidthJustUnderNatural(root))).toBe(6_012_640)
+    expect(charactersMeasured(root, proseWidthJustUnderNatural(root))).toBeLessThanOrEqual(
+      SEARCHED_LINE_CEILING,
+    )
   })
 
   it('prose paragraph at width 200', () => {
-    expect(charactersMeasured(paragraphOf(prose(LENGTH)), 200)).toBe(44_553)
+    expect(charactersMeasured(paragraphOf(prose(LENGTH)), 200)).toBeLessThanOrEqual(8 * LENGTH)
   })
 
   it('code fence line cut by one glyph', () => {
     const root = fenceOf(codeLine(LENGTH))
-    expect(charactersMeasured(root, widthJustUnderNatural(root))).toBe(33_574_911)
+    expect(charactersMeasured(root, widthJustUnderNatural(root))).toBeLessThanOrEqual(
+      SEARCHED_LINE_CEILING,
+    )
   })
 
   it('code fence line at width 200', () => {
-    expect(charactersMeasured(fenceOf(codeLine(LENGTH)), 200)).toBe(8_490)
+    expect(charactersMeasured(fenceOf(codeLine(LENGTH)), 200)).toBeLessThanOrEqual(2 * LENGTH)
   })
 })

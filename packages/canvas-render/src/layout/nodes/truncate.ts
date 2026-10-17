@@ -1,5 +1,6 @@
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
+import { longestFittingCount } from './longest-fit.js'
 
 /**
  * `granularity` is stated rather than defaulted. Dropping the whole options
@@ -120,9 +121,10 @@ export interface FittedText {
  * text unchanged, matching how layout treats an unusable wrap width
  * everywhere else.
  *
- * ponytail: linear scan, one measure per code point. Labels are short and it
- * only runs on text that already overflowed; binary-search the prefix length
- * (width is monotone in it) if a long-label case ever shows up in a profile.
+ * The prefix is found by `longestFittingCount`, not a unit-by-unit scan:
+ * the scan re-measured the whole kept prefix once per unit, which is
+ * quadratic in what fits — a code-fence line one glyph over its panel
+ * measured tens of millions of characters (`text-layout-cost.test.ts`).
  */
 export function fitToWidth(
   text: string,
@@ -132,18 +134,29 @@ export function fitToWidth(
 ): FittedText {
   if (!Number.isFinite(maxWidth) || maxWidth <= 0) return { text }
   if (clampAdvance(measure(text, font).advanceWidth) <= maxWidth) return { text }
-  let fitted = ''
-  // Read only when `fitted` is still empty, which can only happen if the loop
-  // broke on its FIRST iteration — so the guard below and an unconditional
-  // assignment cannot differ, and the mutation lane is right to survive it.
-  let firstUnit = ''
-  for (const unit of cutUnits(text)) {
-    if (firstUnit === '') firstUnit = unit
-    const candidate = fitted + unit
-    if (clampAdvance(measure(candidate, font).advanceWidth) > maxWidth) break
-    fitted = candidate
+  // Units are pulled lazily and only as far as the search probes, so a
+  // long line that is cut early never segments its tail.
+  const units = cutUnits(text)
+  const ends: number[] = [0]
+  let exhausted = false
+  const endOf = (count: number): number | undefined => {
+    while (!exhausted && ends.length <= count) {
+      const next = units.next()
+      if (next.done) exhausted = true
+      else ends.push((ends.at(-1) ?? 0) + next.value.length)
+    }
+    return ends[count]
   }
-  const kept = fitted === '' ? firstUnit : fitted
+  // The whole text was measured above and does not fit, so a probe reaching
+  // it is answered without measuring it again.
+  const fits = (count: number): boolean => {
+    const end = endOf(count)
+    if (end === undefined || end >= text.length) return false
+    return clampAdvance(measure(text.slice(0, end), font).advanceWidth) <= maxWidth
+  }
+  const count = longestFittingCount(fits, text.length)
+  const fitted = text.slice(0, ends[count] ?? 0)
+  const kept = fitted === '' ? text.slice(0, endOf(1) ?? 0) : fitted
   return {
     text: kept,
     ...(kept === text ? {} : { truncated: true as const }),
