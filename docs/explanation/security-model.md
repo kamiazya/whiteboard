@@ -454,8 +454,8 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   names on the server, nor fetches a remote one. Both are in
   [Export formats](../reference/export-formats.md).
 - **The data directory answers to the operator.** The stdio entry and the
-  local daemon require a data directory owned by this user and make it
-  owner-only. Server mode leaves its ownership and mode as the operator set
+  local daemon require a data directory owned by this user, refuse one that
+  is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set
   them: a platform volume may be owned by another user and shared through a
   group, and a bind mount is often opened to every uid so the container's
   user can write it. Keeping that directory closed to other users of the

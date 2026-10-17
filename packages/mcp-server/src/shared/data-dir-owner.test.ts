@@ -11,6 +11,7 @@ import {
   readFileOwnedByUser,
   refuseForeignRecordFile,
   resolveDataDir,
+  secureDataDir,
 } from './data-dir-secure.js'
 import { ROOT_IS_SOMEONE_ELSES } from './test-utils/root-is-someone-elses.js'
 
@@ -38,6 +39,29 @@ describe('assertDataDirOwnedByUser', () => {
   it('has nothing to compare where there is no uid', () => {
     expect(() => assertDataDirOwnedByUser(dir, undefined)).not.toThrow()
   })
+
+  // Whoever owns a symlink can repoint it after the check, so the target
+  // judged here is not the one written to later — and in the shared temp dir
+  // that owner may be another user, aiming it at a dir of this user's.
+  it.skipIf(process.platform === 'win32')('refuses a data dir that is a symlink', async () => {
+    const real = join(dir, 'real')
+    const linked = join(dir, 'linked')
+    secureDataDir(real)
+    await symlink(real, linked)
+    expect(() => assertDataDirOwnedByUser(linked, statSync(real).uid)).toThrow(/symlink/)
+    expect(() => secureDataDir(linked)).toThrow(/symlink/)
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'leaves a symlinked data dir to the operator in operator trust',
+    async () => {
+      const real = join(dir, 'real')
+      const linked = join(dir, 'linked')
+      secureDataDir(real)
+      await symlink(real, linked)
+      expect(() => secureDataDir(linked, 'operator')).not.toThrow()
+    },
+  )
 })
 
 describe.skipIf(!ROOT_IS_SOMEONE_ELSES)('a data dir another user owns', () => {

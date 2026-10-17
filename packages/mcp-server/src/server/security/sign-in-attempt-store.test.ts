@@ -8,6 +8,7 @@ import { createSignInAttemptStore, type SignInAttemptStore } from './sign-in-att
 
 const T0 = 1_800_000_000_000
 const TTL = 10 * 60 * 1000
+const PEER = '192.0.2.10'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -28,6 +29,7 @@ describe('sign-in attempts', () => {
     const begun = await attempts.begin({
       providerId: 'corp',
       returnTo: '/w/1',
+      source: PEER,
       now: T0,
       ttlMs: TTL,
     })
@@ -40,19 +42,37 @@ describe('sign-in attempts', () => {
 
   // A mismatched browser must not burn the attempt for its rightful owner.
   it('keeps the attempt for its owner when another browser presents the state', async () => {
-    const begun = await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0, ttlMs: TTL })
+    const begun = await attempts.begin({
+      providerId: 'corp',
+      returnTo: '/',
+      source: PEER,
+      now: T0,
+      ttlMs: TTL,
+    })
     await attempts.take(begun.state, 'another-browser', T0 + 1)
     expect(await attempts.take(begun.state, begun.browserBinding, T0 + 2)).not.toBeNull()
   })
 
   it('does not hand back an expired attempt', async () => {
-    const begun = await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0, ttlMs: TTL })
+    const begun = await attempts.begin({
+      providerId: 'corp',
+      returnTo: '/',
+      source: PEER,
+      now: T0,
+      ttlMs: TTL,
+    })
     expect(await attempts.take(begun.state, begun.browserBinding, T0 + TTL)).toBeNull()
   })
 
   it('deletes abandoned attempts when a new one begins', async () => {
-    await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0, ttlMs: TTL })
-    await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0 + TTL, ttlMs: TTL })
+    await attempts.begin({ providerId: 'corp', returnTo: '/', source: PEER, now: T0, ttlMs: TTL })
+    await attempts.begin({
+      providerId: 'corp',
+      returnTo: '/',
+      source: PEER,
+      now: T0 + TTL,
+      ttlMs: TTL,
+    })
     const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
     expect(rows).toHaveLength(1)
   })
@@ -65,6 +85,7 @@ describe('sign-in attempts', () => {
       providerId: 'corp',
       returnTo: '/',
       invitationToken: token,
+      source: PEER,
       now: T0,
       ttlMs: TTL,
     })
@@ -80,7 +101,15 @@ describe('sign-in attempts', () => {
     const capped = createSignInAttemptStore(handle.db, { maxPending: 3 })
     const begun = []
     for (let i = 0; i < 6; i++) {
-      begun.push(await capped.begin({ providerId: 'corp', returnTo: '/', now: T0 + i, ttlMs: TTL }))
+      begun.push(
+        await capped.begin({
+          providerId: 'corp',
+          returnTo: '/',
+          source: PEER,
+          now: T0 + i,
+          ttlMs: TTL,
+        }),
+      )
     }
     const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
     expect(rows.length).toBeLessThanOrEqual(3)
@@ -91,5 +120,57 @@ describe('sign-in attempts', () => {
     ).not.toBeNull()
     const oldest = begun[0]
     expect(await capped.take(oldest?.state ?? '', oldest?.browserBinding ?? '', T0 + 7)).toBeNull()
+  })
+
+  // The ceiling holds against a flood, but what a full table sheds is the
+  // flooding client's own attempts: beginning needs no credential, so evicting
+  // the oldest overall would let one source end everybody else's sign-in.
+  describe('when one source floods the ceiling', () => {
+    const victimBegins = (store: SignInAttemptStore, source: string) =>
+      store.begin({ providerId: 'corp', returnTo: '/', source, now: T0, ttlMs: TTL })
+    const flood = async (store: SignInAttemptStore, sourceOf: (i: number) => string) => {
+      for (let i = 1; i <= 40; i++) {
+        await store.begin({
+          providerId: 'corp',
+          returnTo: '/',
+          source: sourceOf(i),
+          now: T0 + i,
+          ttlMs: TTL,
+        })
+      }
+    }
+
+    it('keeps another source’s attempt and still holds the ceiling', async () => {
+      const capped = createSignInAttemptStore(handle.db, { maxPending: 10 })
+      const victim = await victimBegins(capped, '203.0.113.7')
+      await flood(capped, () => '198.51.100.9')
+      const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+      expect(rows.length).toBeLessThanOrEqual(10)
+      expect(await capped.take(victim.state, victim.browserBinding, T0 + 50)).not.toBeNull()
+    })
+
+    // One IPv6 subscriber is routinely handed a whole /64, so addresses
+    // inside it are one source rather than 2^64 of them.
+    it('counts every address in one IPv6 /64 as one source', async () => {
+      const capped = createSignInAttemptStore(handle.db, { maxPending: 10 })
+      const victim = await victimBegins(capped, '2001:db8:1::5')
+      await flood(capped, (i) => `2001:db8:2::${i.toString(16)}`)
+      expect(await capped.take(victim.state, victim.browserBinding, T0 + 50)).not.toBeNull()
+    })
+
+    it('counts an IPv4-mapped IPv6 address as its IPv4 address', async () => {
+      for (const source of ['198.51.100.9', '::ffff:198.51.100.9', '::ffff:c633:6409']) {
+        await victimBegins(attempts, source)
+      }
+      await victimBegins(attempts, '198.51.100.10')
+      const rows = await handle.rawDb.selectFrom('signInAttempts').select('source').execute()
+      expect(new Set(rows.map((row) => row.source)).size).toBe(2)
+    })
+
+    it('never stores the client address itself', async () => {
+      await victimBegins(attempts, '203.0.113.7')
+      const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+      expect(JSON.stringify(rows)).not.toContain('203.0.113.7')
+    })
   })
 })

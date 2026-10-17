@@ -218,6 +218,8 @@ interface SignInAttemptsTable {
   invitationTokenHash: string | null
   returnTo: string
   expiresAt: Timestamp
+  /** SHA-256 of the client's network source, never the address itself. */
+  source: string
 }
 
 // Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,

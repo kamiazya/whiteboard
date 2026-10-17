@@ -114,6 +114,7 @@ export const LEDGER: Ledger = {
     invitationTokenHash: textOrNull,
     returnTo: text,
     expiresAt: integer,
+    source: text,
   },
   workspaceMemberships: { workspaceId: text, profileId: text, createdAt: integer, role: text },
   tenantAdministrators: { profileId: text, appointedBy: textOrNull, appointedAt: integer },

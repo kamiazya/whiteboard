@@ -196,7 +196,7 @@ deactivating them ends every stream they hold.
 
 Inside the Codex sandbox, two issues are common:
 
-- **Writing to `~/.whiteboard` may fail.** Without `WHITEBOARD_DATA_DIR`, the app falls back to `$TMPDIR/.whiteboard-<uid>` (owner-only; a directory another user owns or can write is refused) and logs a warning naming that path. A temp directory is not durable, and a daemon or browser running outside the sandbox looks in `~/.whiteboard`, so work an agent saves there is not seen by them. Set `WHITEBOARD_DATA_DIR` to a directory both sides can reach.
+- **Writing to `~/.whiteboard` may fail.** Without `WHITEBOARD_DATA_DIR`, the app falls back to `$TMPDIR/.whiteboard-<uid>` (owner-only; a directory another user owns or can write, or a symlink, is refused) and logs a warning naming that path. A temp directory is not durable, and a daemon or browser running outside the sandbox looks in `~/.whiteboard`, so work an agent saves there is not seen by them. Set `WHITEBOARD_DATA_DIR` to a directory both sides can reach.
 - **Creating the daemon's socket may be blocked.** The daemon listens on a Unix socket under `$XDG_RUNTIME_DIR/whiteboard/` (or a `whiteboard-<uid>` directory in the temp directory); a sandbox that forbids creating or listening on it fails daemon startup. Run in an environment that allows it or adjust the sandbox configuration.
 
 ## Storage layout
