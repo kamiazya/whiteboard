@@ -348,8 +348,8 @@ export function createApp(options: AppOptions) {
 
   // The config is judged before any other option is read, so a caller with
   // an invalid server-mode config is refused for that and nothing else.
-  const { instanceId, identity, token, credentialResolver, mcpAuth, serverModeGetStatus } =
-    appWiring(options)
+  const wiring = appWiring(options)
+  const { identity, credentialResolver, mcpAuth } = wiring
   const membership = membershipWiring(options)
 
   // Tracing middleware first so the request span wraps every other
@@ -437,16 +437,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())
-  app.route(
-    '/',
-    runtimeRouter(options, scope, {
-      instanceId,
-      identity,
-      token,
-      credentialResolver,
-      serverModeGetStatus,
-    }),
-  )
+  app.route('/', runtimeRouter(options, scope, wiring))
   if (options.authMode === 'server-mode') {
     mountServerModeUi(app, options.signIn)
     // Same shape as the local-daemon return below, so callers see one type
