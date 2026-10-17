@@ -164,14 +164,14 @@ async function gatedCall(
   let existing = await index.resolveWorkspace(handle, namespace)
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
     const minted = await mintAsFirstMember(caller, index, handle)
-    if (minted === 'unmintable') return tool.execute(input)
     if (typeof minted === 'object') {
       return tool.execute({ ...(input as object), workspaceId: minted.workspaceId } as never)
     }
     // `taken`: a concurrent call of the caller's own minted the segment after
     // the check above; it is in their namespace, so the gate below admits
-    // them. `foreign`: another namespace's segment, which the gate below
-    // refuses whether or not it exists.
+    // them. `foreign`: another namespace's segment, and `unmintable`: a
+    // handle that cannot be a segment — both refused by the gate below,
+    // since nothing was minted that the caller could be a member of.
     existing = await index.resolveWorkspace(handle, namespace)
   }
   const access = await workspaceAccess(
@@ -198,8 +198,8 @@ async function gatedCall(
  * A batch refused after the mint leaves the caller a member of an empty
  * workspace, so their retry reaches it. A handle qualified by another
  * namespace is `foreign` and never minted (ADR-0053). One that cannot be a
- * segment is `unmintable`: the tool refuses it with its own reason, minting
- * nothing.
+ * segment is `unmintable`, minting nothing; the gate then refuses both like
+ * any workspace the caller is not in.
  */
 async function mintAsFirstMember(
   caller: McpCaller,

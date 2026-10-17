@@ -22,17 +22,28 @@ export interface WorkspacePeopleKeeper {
   readonly invitations?: { readonly store: InvitationStore; readonly origin: string }
 }
 
+/**
+ * Whether the person behind this request is an owner of `workspaceId` — what
+ * every owner-only change on server mode asks, a workspace's people and its
+ * segment alike.
+ */
+export async function callerOwns(
+  c: Context,
+  members: MemberProfileStore,
+  workspaceId: string,
+): Promise<boolean> {
+  const caller = await callerUserId(c, members)
+  if (caller === null) return false
+  return (await members.membershipRole(workspaceId, caller)) === 'owner'
+}
+
 export function serverModePeopleKeeper(deps: {
   readonly members: MemberProfileStore
   readonly invitations: InvitationStore
   readonly origin: string
 }): WorkspacePeopleKeeper {
   return {
-    async canManage(c, workspaceId) {
-      const caller = await callerUserId(c, deps.members)
-      if (caller === null) return false
-      return (await deps.members.membershipRole(workspaceId, caller)) === 'owner'
-    },
+    canManage: (c, workspaceId) => callerOwns(c, deps.members, workspaceId),
     actingUserId: (c) => callerUserId(c, deps.members),
     invitations: { store: deps.invitations, origin: deps.origin },
   }

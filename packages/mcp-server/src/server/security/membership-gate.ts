@@ -81,6 +81,13 @@ export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
 }
 
 /**
+ * Whether this request's person owns the workspace (ADR-0049) — what an
+ * owner-only change asks before it runs. Absent where there are no people to
+ * tell apart.
+ */
+export type WorkspaceOwnership = (c: Context, workspaceId: string) => Promise<boolean>
+
+/**
  * ADR-0046 decision 10: on a keeper where every workspace is members-only
  * from the start, the person creating one is its first member — otherwise
  * nobody could open what they just made.

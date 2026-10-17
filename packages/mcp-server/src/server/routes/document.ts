@@ -1,7 +1,11 @@
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
+import type {
+  FirstMember,
+  WorkspaceAdmit,
+  WorkspaceOwnership,
+} from '../security/membership-gate.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto-version.js'
 import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
@@ -66,6 +70,8 @@ export interface DocumentRouterOptions {
   admit?: WorkspaceAdmit
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
   firstMember?: FirstMember
+  /** Threaded to `createWorkspacesRouter` — see its own doc. */
+  ownsWorkspace?: WorkspaceOwnership
 }
 
 // The checkpoint trigger the live-doc and workspace-document update routes fire.
@@ -92,6 +98,7 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
     ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
     ...(options.admit === undefined ? {} : { admit: options.admit }),
     ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
+    ...(options.ownsWorkspace === undefined ? {} : { ownsWorkspace: options.ownsWorkspace }),
   }
 }
 

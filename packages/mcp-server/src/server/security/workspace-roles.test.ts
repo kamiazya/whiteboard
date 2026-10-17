@@ -6,9 +6,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
-import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, type Selectable } from 'kysely'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { busyRetryingDialect } from '../store/db/busy-retry.js'
 import { DB_FILENAME } from '../store/db/index.js'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import { tenantDatabase } from '../store/db/tenant-database.js'
@@ -109,9 +109,11 @@ describe('createWorkspaceRoles — two connections at once', () => {
   it('lets one demotion through and refuses the other as the last owner', async () => {
     const fileRoot = await mkdtemp(join(tmpdir(), 'wb-workspace-roles-race-'))
     const first = await createIsolatedDb({ dataDir: fileRoot, memory: false })
+    // The production dialect on both sides: a role change is a transaction,
+    // which waits out the other's write lock rather than failing on it.
     const second = tenantDatabase(
       new Kysely<DatabaseSchema>({
-        dialect: new LibsqlDialect({ url: `file:${join(fileRoot, DB_FILENAME)}` }),
+        dialect: busyRetryingDialect({ url: `file:${join(fileRoot, DB_FILENAME)}` }),
       }),
       SELF_HOST_TENANT_ID,
     )
