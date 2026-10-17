@@ -151,6 +151,10 @@ describe('parseWorkspaceRoute', () => {
     '/w/me/w1/d/a/%2e%2E',
     '/w/me/w1/d/%2e',
     '/w/01ARZ3NDEKTSV4RRFFQ69G5FAV/d/a/%2E%2e/b',
+    // An encoded separator decodes to one: `a%2F..` is the path `a/..`.
+    '/w/me/w1/d/a%2F..',
+    '/w/me/w1/d/a%2F%2E',
+    '/w/me/w1/d/a%2F%2Fb',
   ])('treats a dot segment in the tail as not-a-route: %s', (pathname) => {
     expect(parseWorkspaceRoute(pathname)).toBeNull()
   })

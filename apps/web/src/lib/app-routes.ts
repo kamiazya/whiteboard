@@ -65,11 +65,13 @@ export type WorkspaceRoute =
  * away.
  */
 function documentTail(tail: string): string | null {
-  const segments = tail.split('/').map(decodeSegment)
-  if (segments.some((segment) => segment === null || segment === '' || isDotSegment(segment))) {
-    return null
-  }
-  return segments.join('/')
+  const decoded = tail.split('/').map(decodeSegment)
+  if (decoded.some((segment) => segment === null)) return null
+  // Judged after the join: `%2F` decodes to a separator, so `a%2F..` is the
+  // path `a/..` even though no single URL segment spelled `..`.
+  const path = decoded.join('/')
+  if (path.split('/').some((segment) => segment === '' || isDotSegment(segment))) return null
+  return path
 }
 
 /** The address a qualified pair of URL components spells, or null when the address grammar refuses it. */
