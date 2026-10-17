@@ -101,6 +101,9 @@ export interface SyncSseRouterOptions {
   admit?: WorkspaceAdmit
   /** Whose stream this is, so losing access can end it. Absent: nobody's. */
   userOf?: (c: Context) => Promise<string | null>
+  /** Whether a user still reaches a workspace — re-asked before a broadcast
+   *  goes down their stream. Absent: nobody can lose access. */
+  holdsAccess?: (userId: string, workspaceId: string) => Promise<boolean>
 }
 
 /**
@@ -296,6 +299,7 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
+    const { holdsAccess } = options
     return streamSSE(c, async (stream) => {
       const entry: SyncStream = {
         docs: new Map(),
@@ -303,6 +307,9 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
           void stream.writeSSE({ event, data: JSON.stringify(data) })
         },
         userId,
+        ...(userId === null || holdsAccess === undefined
+          ? {}
+          : { admits: (workspaceId: string) => holdsAccess(userId, workspaceId) }),
         end: () => stream.abort(),
       }
       registerSyncStream(streamId, entry)

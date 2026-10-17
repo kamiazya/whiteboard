@@ -8,6 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { deactivateUser } from '../cli/server-deactivate-user.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import {
@@ -21,6 +22,7 @@ import { testDataLayout } from './routes/_test-helpers.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
+import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-streams.js'
 
@@ -169,6 +171,54 @@ describe('server mode — a stream open before someone loses access ends with it
     sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
     expect(await next(stream)).toBe('closed')
     // Only the person who lost access: the owner still following it is not.
+    expect(await next(bystander)).toMatch(/^event: update/)
+  })
+})
+
+// Access can be lost where this instance never hears of it: the operator's CLI
+// writes the database from another process, and with several instances the
+// removal is handled by whichever one the request reached. The stream is
+// re-checked where it lives, before anything more is sent down it.
+describe('server mode — access lost in another process ends the stream here', () => {
+  it('ends the stream of a person the operator deactivated from the CLI', async () => {
+    const bob = await signedIn('bob')
+    const { workspaceId } = (await (await create(bob, 'Plans')).json()) as { workspaceId: string }
+    const stream = await followed(bob, workspaceId)
+
+    const outcome = await deactivateUser(handle.db, { user: 'bob', reactivate: false, now: 1 })
+    expect(outcome).toMatchObject({ kind: 'ok', changed: true })
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
+    expect(await next(stream)).toBe('closed')
+  })
+
+  it('keeps a re-checked stream’s updates in the order they were broadcast', async () => {
+    const bob = await signedIn('bob')
+    const { workspaceId } = (await (await create(bob, 'Plans')).json()) as { workspaceId: string }
+    const stream = await followed(bob, workspaceId)
+
+    for (const byte of [1, 2, 3]) sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([byte]))
+    let text = ''
+    while ((text.match(/event: update/g) ?? []).length < 3) {
+      const chunk = await next(stream)
+      expect(chunk).not.toBe('closed')
+      text += chunk
+    }
+    const order = [...text.matchAll(/"update":"([^"]+)"/g)].map((m) => m[1])
+    expect(order).toEqual(['AQ==', 'Ag==', 'Aw=='])
+  })
+
+  it('ends the stream of someone another instance removed from the workspace', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+    await members.addMember(workspaceId, bobId as string)
+    const stream = await followed(bob, workspaceId)
+    const bystander = await followed(ada, workspaceId)
+
+    expect(await createWorkspaceRoles(handle.db).remove(workspaceId, bobId as string)).toBe('ok')
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
+    expect(await next(stream)).toBe('closed')
     expect(await next(bystander)).toMatch(/^event: update/)
   })
 })

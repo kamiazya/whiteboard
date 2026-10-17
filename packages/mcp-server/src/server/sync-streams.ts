@@ -56,7 +56,90 @@ export interface SyncStream {
   send: (frame: SyncFrame) => void
   /** The user who opened it, where the keeper knows people; null otherwise. */
   userId: string | null
+  /**
+   * Whether the stream's user still reaches a workspace, asked before each
+   * broadcast is sent down it. Absent where nobody can lose access (the local
+   * daemon), and then a broadcast is sent at once.
+   */
+  admits?: (workspaceId: string) => Promise<boolean>
   end: () => void
+}
+
+/**
+ * Each re-checked stream's broadcasts, in the order they were made: the check
+ * is a read, and two broadcasts resolving out of order would deliver a
+ * workspace's updates out of order.
+ */
+const deliveries = new WeakMap<SyncStream, Promise<void>>()
+
+/**
+ * The access reads one broadcast makes, by user: a user following a workspace
+ * from several tabs is read once per broadcast, not once per stream. Nothing
+ * outlives the broadcast, so a removal is seen by the next one after it.
+ *
+ * ponytail: one indexed read (~0.25ms, 200 users x 20 workspaces) per
+ * subscribed user per broadcast; a short-lived cache or a membership epoch if
+ * busy workspaces with many followers make that show on the serving loop.
+ */
+type AccessReads = Map<string, Promise<boolean>>
+
+function admitted(
+  reads: AccessReads,
+  stream: SyncStream,
+  admits: NonNullable<SyncStream['admits']>,
+  workspaceId: string,
+): Promise<boolean> {
+  const key = stream.userId ?? ''
+  let read = reads.get(key)
+  if (read === undefined) {
+    read = admits(workspaceId).catch((err: unknown) => {
+      log.warning({ workspaceId, err }, 'sync stream access re-check failed')
+      return false
+    })
+    reads.set(key, read)
+  }
+  return read
+}
+
+/**
+ * Send `frames` down a stream, re-checking its user's access first where they
+ * can lose it. Removal and deactivation also end streams directly
+ * (`endSyncStreamsOf`), but only on the instance that handled them; this is
+ * what reaches a stream held by another instance, or a change the operator's
+ * CLI wrote from another process. A read that fails ends the stream too: the
+ * client reconnects, and its resubscribe is decided afresh.
+ */
+function deliver(
+  streamId: string,
+  stream: SyncStream,
+  workspaceId: string,
+  frames: readonly SyncFrame[],
+  reads: AccessReads,
+): void {
+  const admits = stream.admits
+  if (admits === undefined) {
+    for (const frame of frames) stream.send(frame)
+    return
+  }
+  // Asked now, in broadcast order, and awaited behind this stream's earlier
+  // deliveries so frames keep that order whatever order the reads settle in.
+  const read = admitted(reads, stream, admits, workspaceId)
+  const previous = deliveries.get(stream) ?? Promise.resolve()
+  const next = previous.then(async () => {
+    const decision = await read
+    if (streams.get(streamId) !== stream) return
+    if (decision) {
+      for (const frame of frames) stream.send(frame)
+      return
+    }
+    streams.delete(streamId)
+    stream.end()
+    log.info(
+      { streamId, workspaceId },
+      'sync stream ended: its user no longer reaches the workspace',
+    )
+  })
+  deliveries.set(stream, next)
 }
 
 const streams = new Map<string, SyncStream>()
@@ -125,11 +208,14 @@ function toBase64(bytes: Uint8Array): string {
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)
   const encoded = toBase64(update)
-  for (const stream of streams.values()) {
+  const reads: AccessReads = new Map()
+  for (const [streamId, stream] of streams) {
+    const frames: SyncFrame[] = []
     for (const [as, entry] of stream.docs) {
       if (entry.key !== key) continue
-      stream.send({ event: 'update', data: { doc: as, update: encoded } })
+      frames.push({ event: 'update', data: { doc: as, update: encoded } })
     }
+    if (frames.length > 0) deliver(streamId, stream, workspaceId, frames, reads)
   }
 }
 
@@ -141,15 +227,24 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
  * landing on another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
-  sendText(docKey(workspaceId, path), raw, () => true)
+  sendText(workspaceId, path, raw, () => true)
 }
 
-function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => boolean): void {
-  for (const stream of streams.values()) {
+function sendText(
+  workspaceId: string,
+  path: string,
+  raw: string,
+  wants: (entry: SyncStreamDoc) => boolean,
+): void {
+  const key = docKey(workspaceId, path)
+  const reads: AccessReads = new Map()
+  for (const [streamId, stream] of streams) {
+    const frames: SyncFrame[] = []
     for (const [as, entry] of stream.docs) {
-      if (entry.key !== key || !admits(entry)) continue
-      stream.send({ event: 'message', data: { doc: as, raw } })
+      if (entry.key !== key || !wants(entry)) continue
+      frames.push({ event: 'message', data: { doc: as, raw } })
     }
+    if (frames.length > 0) deliver(streamId, stream, workspaceId, frames, reads)
   }
 }
 
@@ -170,7 +265,7 @@ export function sseClientCount(workspaceId: string, path: string, readyOnly: boo
 
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: string): void {
-  sendText(docKey(workspaceId, path), raw, (entry) => entry.ready)
+  sendText(workspaceId, path, raw, (entry) => entry.ready)
 }
 
 /**

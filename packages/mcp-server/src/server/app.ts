@@ -188,7 +188,13 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
   return {
     workspaceDocuments: options.serverDeps.workspaceDocuments,
     ...(admit === undefined ? {} : { admit }),
-    ...(members === undefined ? {} : { userOf: (c: Context) => callerUserId(c, members) }),
+    ...(members === undefined
+      ? {}
+      : {
+          userOf: (c: Context) => callerUserId(c, members),
+          holdsAccess: (userId: string, workspaceId: string) =>
+            members.holdsAccess(workspaceId, userId),
+        }),
   }
 }
 
