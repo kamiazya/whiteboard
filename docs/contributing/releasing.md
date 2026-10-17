@@ -347,6 +347,12 @@ only a failed image push with `publish_npm` off, and `docker-publish-sign` re-ta
 `mcp-server-v<semver>` and the `production-npm` and `production-docker` environments
 must approve.
 
+Dispatch a forced npm publish **from the tag itself**:
+`gh workflow run release.yml --ref <tag> -f force_publish_tag=<tag>`. npm provenance
+attests the commit the run was dispatched from, so `publish-mcp` fails before
+`npm publish --provenance` when the checked-out tag is a different commit — a
+dispatch from `main` would otherwise publish the tag's tarball under `main`'s provenance.
+
 ---
 
 ## Placeholder Gate Policy

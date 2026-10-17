@@ -1,6 +1,9 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
 
 // Static release-gate contract. Failing here means a release-sensitive
@@ -105,5 +108,79 @@ describe('release gate: package.json bin + scripts contract', () => {
   it('prepublishOnly verifies the `whiteboard` bin is executable', () => {
     const prepublish = pkg.scripts?.prepublishOnly ?? ''
     expect(prepublish).toContain('test -x dist/cli/index.js')
+  })
+})
+
+describe('release gate: a forced npm publish attests the commit it publishes', () => {
+  // `npm publish --provenance` attests GITHUB_SHA — the commit the dispatch
+  // ran from — while a forced publish checks out and packs the TAG. Dispatched
+  // from main, the provenance would name a commit the tarball was not built
+  // from, so the job must refuse before it publishes.
+  interface Step {
+    name?: string
+    uses?: string
+    if?: string
+    run?: string
+  }
+  const release = parseYaml(
+    readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8'),
+  ) as {
+    jobs: Record<string, { steps: Step[] }>
+  }
+  const steps = release.jobs['publish-mcp']?.steps ?? []
+  const guardIndex = steps.findIndex(
+    (s) => /git rev-parse HEAD/.test(s.run ?? '') && /GITHUB_SHA/.test(s.run ?? ''),
+  )
+  const checkoutIndex = steps.findIndex((s) => (s.uses ?? '').startsWith('actions/checkout@'))
+  const publishIndex = steps.findIndex((s) => /npm publish[^\n]*--provenance/.test(s.run ?? ''))
+
+  const tmpRoots: string[] = []
+  afterAll(() => {
+    for (const dir of tmpRoots) rmSync(dir, { recursive: true, force: true })
+  })
+
+  function runGuard(sha: (head: string) => string): { status: number | null; stderr: string } {
+    const cwd = mkdtempSync(join(tmpdir(), 'release-provenance-'))
+    tmpRoots.push(cwd)
+    const git = (...args: string[]) =>
+      spawnSync('git', args, { cwd, encoding: 'utf-8' }).stdout.trim()
+    git('init', '-q')
+    git(
+      '-c',
+      'user.email=t@example.com',
+      '-c',
+      'user.name=t',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'tag',
+    )
+    const head = git('rev-parse', 'HEAD')
+    const res = spawnSync('bash', ['-e', '-c', steps[guardIndex]?.run ?? 'exit 99'], {
+      cwd,
+      env: { PATH: process.env.PATH ?? '/usr/bin:/bin', GITHUB_SHA: sha(head) },
+      encoding: 'utf-8',
+    })
+    return { status: res.status, stderr: `${res.stdout}${res.stderr}` }
+  }
+
+  it('checks HEAD against GITHUB_SHA after checkout and before npm publish --provenance', () => {
+    expect(checkoutIndex).toBeGreaterThanOrEqual(0)
+    expect(publishIndex).toBeGreaterThan(checkoutIndex)
+    expect(guardIndex).toBeGreaterThan(checkoutIndex)
+    expect(guardIndex).toBeLessThan(publishIndex)
+    expect(steps[guardIndex]?.if).toContain('inputs.force_publish_tag')
+  })
+
+  it('refuses when the checked-out tag is not the dispatched commit, and says how to dispatch', () => {
+    const res = runGuard(() => 'f'.repeat(40))
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('--ref')
+  })
+
+  it('passes when the dispatch ran from the tag it publishes', () => {
+    const res = runGuard((head) => head)
+    expect(res.status, res.stderr).toBe(0)
   })
 })
