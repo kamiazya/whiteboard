@@ -155,14 +155,21 @@ describe('preview-pr-deploy.yml — the label never names a reserved alias', () 
     }
   })
 
-  it('refuses a run whose pull request head is not the built commit', () => {
+  it('skips, without deploying, a run whose pull request head is not the built commit', () => {
     const res = runLabelStep(
       event('feat-x', {
         pull_requests: [{ number: 42, head: { ref: 'feat-x', sha: 'b'.repeat(40) } }],
       }),
     )
-    expect(res.status).not.toBe(0)
+    expect(res.status, res.stderr).toBe(0)
+    expect(res.outputs.skip).toBe('true')
     expect(res.outputs.branch).toBeUndefined()
+  })
+
+  it('gates the deploy step on the skip the label step can answer', () => {
+    expect(readWorkflow('preview-pr-deploy.yml')).toContain(
+      "if: steps.meta.outputs.skip != 'true' &&",
+    )
   })
 })
 

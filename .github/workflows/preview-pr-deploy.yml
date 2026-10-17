@@ -80,14 +80,17 @@ jobs:
             ''|*[!0-9]*) echo "no pull request attached to this run; refusing to deploy" >&2; exit 1 ;;
           esac
           if [ "$PR_HEAD_SHA" != "$RUN_HEAD_SHA" ]; then
-            echo "PR #$PR_NUMBER head ($PR_HEAD_SHA) is not the built commit ($RUN_HEAD_SHA); refusing" >&2
-            exit 1
+            # A newer push superseded this build; its own run deploys. Skip
+            # rather than fail, so a superseded run does not read as red.
+            echo "::notice::PR #$PR_NUMBER head ($PR_HEAD_SHA) is not the built commit ($RUN_HEAD_SHA); skipping this superseded build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "pr=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$(preview_label "$HEAD_BRANCH" "$PR_NUMBER")" >> "$GITHUB_OUTPUT"
       - name: Deploy the built artifact (no PR code executes here)
         id: deploy
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        if: steps.meta.outputs.skip != 'true' && env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
         env:
           BRANCH: ${{ steps.meta.outputs.branch }}
         run: |

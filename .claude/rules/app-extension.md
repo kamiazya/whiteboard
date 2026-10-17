@@ -42,6 +42,14 @@ extension id from it, and the native host's manifest allows exactly that id
 private half is not kept: releases are loaded by hand while 0.0.x (ADR-0050
 addendum decision 5), and a store signs what it publishes.
 
+The DEVELOPMENT build carries a second public key, so its id
+(`WHITEBOARD_DEV_EXTENSION_ID`) differs from production's: a native host
+installed for everyday use never starts for a dev build, whose loopback
+admission any local web server could otherwise drive. A dev host is
+installed with `native-host install --development`, which refuses without
+an explicit manifest dir; the page addresses the id `extensionIdForPage`
+answers for its origin.
+
 ## Build, load, and the smoke
 
 - `pnpm --filter @kamiazya/whiteboard-extension build` writes

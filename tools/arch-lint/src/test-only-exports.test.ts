@@ -272,6 +272,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the replay fold that is the reason the flight recorder stores whole events, proven by gesture-trace.test.ts reproducing a recorded run',
   'apps/web/src/components/spatial-editor/gesture-trace.ts#parseGestureTrace':
     'the reader a pasted trace replays through, refusing another format or an event this build does not know; the developer half of the flight recorder, called from tests by design (docs/how-to/report-a-gesture-problem.md)',
+  'apps/web/src/lib/markdown-fragment-renderers.ts#fragmentIsEmbeddable':
+    'the one guard both fragment engines apply before their SVG is embedded, exported so markdown-fragment-renderers.test.ts can hold each refusal (script, handler, non-local href) without driving MathJax or mermaid to emit one',
   'apps/web/src/components/spatial-editor/navigation.ts#NAVIGATION_MEMORY_KEYS':
     'the declared set of fields allowed to outlive a gesture, over which the idle invariant is stated for the whole state type',
   'apps/web/src/lib/png-embed.ts#extractTextFromPng':

@@ -5,7 +5,7 @@ import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { type StoreScope, storeScope } from '../server/store/store-scope.js'
 import type { DataLayout } from '../server/tenant/data-layout-seam.js'
-import { secureDataDir } from '../shared/data-dir-secure.js'
+import { type DataDirTrust, secureDataDir } from '../shared/data-dir-secure.js'
 import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
 
 /**
@@ -20,8 +20,8 @@ import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
  * `prepareDataDir` itself, which is how a root once got migrated by accident —
  * naming both here is what stops that being load-bearing.
  */
-async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
-  secureDataDir(dataDir)
+async function prepareSelfHostDataDir(dataDir: string, trust: DataDirTrust): Promise<void> {
+  secureDataDir(dataDir, trust)
   await prepareDataDir(dataDir)
   await ensureWorkspaceId(dataDir)
 }
@@ -68,6 +68,8 @@ export async function bootSelfHostDeps(
      * because its refusal is uniform on purpose.
      */
     readonly nameKnownWorkspaces?: boolean
+    /** `operator` for server mode; see `DataDirTrust`. Defaults to `owner`. */
+    readonly dataDirTrust?: DataDirTrust
   } = {},
 ): Promise<{
   readonly db: TenantDatabase
@@ -75,7 +77,7 @@ export async function bootSelfHostDeps(
   readonly dataLayout: DataLayout
   readonly scope: StoreScope
 }> {
-  await prepareSelfHostDataDir(dataDir)
+  await prepareSelfHostDataDir(dataDir, options.dataDirTrust ?? 'owner')
   const db = await getDb(dataDir)
   const scope = storeScope(dataDir)
   const deps = resolveSelfHostServerDeps(db, dataDir)

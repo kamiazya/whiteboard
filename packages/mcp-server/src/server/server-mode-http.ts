@@ -70,6 +70,9 @@ export interface ServerModeRunning {
   close: () => Promise<void>
 }
 
+/** Server mode's data dir is the operator's to name; see `DataDirTrust`. */
+const OPERATOR = { dataDirTrust: 'operator' } as const
+
 export async function startServerModeHttp(
   options: StartServerModeHttpOptions,
 ): Promise<ServerModeRunning> {
@@ -79,7 +82,7 @@ export async function startServerModeHttp(
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
   const dataDir = getDataDir()
-  const { serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(dataDir)
+  const { serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(dataDir, OPERATOR)
   const shared = createSharedWorkers(instanceId, scope, options)
   const close = createRootShutdown({
     stopBackgroundWork: () => backgroundWork.stopAll(),
