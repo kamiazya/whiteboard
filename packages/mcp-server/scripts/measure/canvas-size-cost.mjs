@@ -108,8 +108,8 @@ tidy(warm)
 console.log(' nodes  edges  layout ms    tidy ms')
 for (const count of nodeCounts) {
   const canvas = clusteredCanvas(count)
-  const layoutMs = only === 'tidy' ? NaN : layOut(canvas)
-  const tidyMs = only === 'layout' ? NaN : tidy(canvas)
+  const layoutMs = only === 'tidy' ? Number.NaN : layOut(canvas)
+  const tidyMs = only === 'layout' ? Number.NaN : tidy(canvas)
   console.log(
     `${String(canvas.nodes.length).padStart(6)} ${String(canvas.edges.length).padStart(6)} ${layoutMs.toFixed(0).padStart(10)} ${tidyMs.toFixed(0).padStart(10)}`,
   )
