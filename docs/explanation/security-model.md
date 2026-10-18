@@ -450,6 +450,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `mcp:call`, and a tool call also needs the scope the same operation needs
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **What describes the whole server is an administrator's.** The runtime
+  status (the process and every user's open live-sync streams) and the
+  storage report (every workspace's size) answer only a tenant
+  administrator. Any other signed-in person is refused, even though their
+  session holds the `runtime:read` scope that the font catalogue needs.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either

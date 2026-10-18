@@ -48,6 +48,14 @@ export interface RuntimeRouterOptions {
    */
   serverModeGrant?: (c: Context) => ResolvedGrant | undefined
   /**
+   * Set on server mode only: whether this request may read what describes the
+   * whole instance — `status` (the process, every user's open streams) and
+   * `storage` (every workspace's bytes). Every signed-in person holds
+   * `runtime:read`, because the font catalogue sits on it, so on a shared
+   * server the scope alone would hand any member the tenant's statistics.
+   */
+  readsInstance?: (c: Context) => Promise<boolean>
+  /**
    * The storage usage report for the data directory this router serves.
    * Handed in because producing it walks the disk, which is a mechanic and
    * not this adapter's.
@@ -91,9 +99,8 @@ function mountEndpointProof(app: Hono, key: string | undefined): void {
   })
 }
 
-export function createRuntimeRouter(options: RuntimeRouterOptions) {
-  const app = new Hono()
-
+/** `/api/runtime/ping`. Public: the liveness probe and the daemon's identity. */
+function mountPing(app: Hono, options: Pick<RuntimeRouterOptions, 'instanceId' | 'identity'>) {
   app.get('/api/runtime/ping', (c) => {
     return c.json(
       daemonPingResponseSchema.parse({
@@ -107,7 +114,28 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
       }),
     )
   })
+}
 
+/**
+ * See `readsInstance`. Mounted after the public routes and the credential
+ * check, so a runtime route added later is instance-wide by default rather
+ * than open to every member.
+ */
+function mountInstanceReadGate(app: Hono, readsInstance: RuntimeRouterOptions['readsInstance']) {
+  if (readsInstance === undefined) return
+  app.use('/api/runtime/*', async (c, next) => {
+    if (await readsInstance(c)) return next()
+    return c.json(
+      errorBody('not_an_administrator', 'only an administrator of this server can read this'),
+      403,
+    )
+  })
+}
+
+export function createRuntimeRouter(options: RuntimeRouterOptions) {
+  const app = new Hono()
+
+  mountPing(app, options)
   mountEndpointProof(app, options.endpointProofKey)
 
   app.use('/api/runtime/*', async (c, next) => {
@@ -139,6 +167,8 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     }
     return c.json({ error: 'unauthorized' }, 401)
   })
+
+  mountInstanceReadGate(app, options.readsInstance)
 
   app.get('/api/runtime/status', (c) => {
     options.touch()
