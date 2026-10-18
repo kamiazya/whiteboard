@@ -363,8 +363,15 @@ the same things through either surface:
 | `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
 | `workspace:read` | `wb_document_list` |
 | `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
-| `versions:read` | `wb_version_list` |
+| `versions:read` | `wb_version_list`. Over HTTP it also opens a saved version, so it reads what a document said in the past |
 | `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
+
+`workspace:read` lists documents and resolves their ids. It reads nothing
+they say. Over HTTP, reading content needs `canvas:read`: a document's OKF
+projection (`GET /api/v1/workspaces/<id>/documents/<id>/okf`), search
+results, backlinks, and the tags documents carry. Linking a document's
+mentions (`POST …/linkify-mentions`) rewrites its content, so it needs
+`canvas:write`.
 
 Restoring a version anywhere but in place also writes other documents, so it
 needs `workspace:write` as well as `versions:write`: `wb_version_restore`
