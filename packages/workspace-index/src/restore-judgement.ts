@@ -7,7 +7,8 @@
  * the live record without passing the sync-write checks — the trash map is not
  * node meta, so no placement check sees the row change — so it is held to the
  * same bounds here: the text limits `importWithinTextLimits` judges, the
- * document path grammar, the name bound, and readable node meta.
+ * path grammar on every node it places, folders included, the name bound,
+ * and readable node meta.
  *
  * Judged on scratch records, before anything touches the live one, so a
  * refusal leaves the workspace as it was. Both keepers restore through
@@ -16,21 +17,27 @@
 import {
   importWithinTextLimits,
   importWorkspaceSubtree,
-  readWorkspaceDocuments,
+  readWorkspaceNodes,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
+import {
+  DOCUMENT_NAME_MAX_LENGTH,
+  DOCUMENT_PATH_MAX_LENGTH,
+  documentPathSchema,
+  isSelfOrDescendant,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 
 /**
- * How many documents the bytes would place for `documentId` under
- * `parentPath` — the document and any it held — or `null` when they may not
- * be placed at all.
+ * How many documents and folders the bytes would place for `documentId`
+ * under `parentPath` — the document and everything it held, not counting
+ * the folders `parentPath` itself needs — or `null` when they may not be
+ * placed at all.
  */
 export function restorableTrashDocuments(
   bytes: Uint8Array,
   input: { readonly documentId: string; readonly parentPath: string | undefined },
-): number | null {
+): { readonly documents: number; readonly folders: number } | null {
   // An empty record replays no runs, so this judges what the bytes HOLD — a
   // body or node text past its bound — at the cost of loading a snapshot.
   const { breach } = importWithinTextLimits(new LoroDoc(), bytes)
@@ -43,10 +50,29 @@ export function restorableTrashDocuments(
   // a row can only bring back the document it is for.
   if (restored?.documentId !== input.documentId) return null
   if (unreadableWorkspaceNodes(placed).length > 0) return null
-  const documents = readWorkspaceDocuments(placed)
-  for (const entry of documents) {
-    if (!documentPathSchema.safeParse(entry.path).success) return null
-    if ((entry.name?.length ?? 0) > DOCUMENT_NAME_MAX_LENGTH) return null
+  return placeableNodes(placed, restored.path)
+}
+
+/**
+ * The documents and the folders below `top` that `placed` holds, or `null`
+ * when any node sits at a path the grammar refuses or a document carries a
+ * name past the bound.
+ */
+function placeableNodes(
+  placed: LoroDoc,
+  top: string,
+): { readonly documents: number; readonly folders: number } | null {
+  let documents = 0
+  let folders = 0
+  for (const node of readWorkspaceNodes(placed)) {
+    if (node.path.length > DOCUMENT_PATH_MAX_LENGTH) return null
+    if (!documentPathSchema.safeParse(node.path).success) return null
+    if (node.type === 'document') {
+      if ((node.meta.name?.length ?? 0) > DOCUMENT_NAME_MAX_LENGTH) return null
+      documents += 1
+    } else if (isSelfOrDescendant(node.path, top)) {
+      folders += 1
+    }
   }
-  return documents.length
+  return { documents, folders }
 }

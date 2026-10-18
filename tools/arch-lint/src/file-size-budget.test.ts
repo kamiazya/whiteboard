@@ -182,8 +182,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // writers here, which are the only place every keeper's rename converges.
   // Raised by 6 for the node-meta keys the content write must skip: they are
   // derived from the node schema declared here, and the rule itself lives in
-  // `content-sync.ts` (`rootFitsNode`).
-  'packages/loro-adapter/src/workspace-tree.ts': 981,
+  // `content-sync.ts` (`rootFitsNode`). Raised by 29 when the tree walk and
+  // the subtree copies went to an explicit stack: a sync client chooses how
+  // deep the tree is, and the recursive walk overflowed at about 1800 nested
+  // folders.
+  'packages/loro-adapter/src/workspace-tree.ts': 1010,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -425,8 +428,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
   // router it builds is handed the test wiring, since routers compose nothing of
-  // their own.
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1024,
+  // their own. Raised by 10 for the move route's folder-ceiling answer, which
+  // needs this file's failing-index router.
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1034,
   // One test pins that saves to two documents of one workspace collapse into one
   // compaction, since compaction is workspace-keyed.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,

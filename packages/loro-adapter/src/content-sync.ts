@@ -19,16 +19,29 @@ import { type LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { openMergeableMap } from './mergeable-containers.js'
 import { spliceText } from './minimal-change.js'
 
-/** Structural equality for the plain-JSON values the bridge stores in map entries. */
-function jsonEqual(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const aRec = a as Record<string, unknown>
-  const bRec = b as Record<string, unknown>
-  const aKeys = Object.keys(aRec)
-  if (aKeys.length !== Object.keys(bRec).length) return false
-  return aKeys.every((key) => key in bRec && jsonEqual(aRec[key], bRec[key]))
+/**
+ * Structural equality for the plain-JSON values the bridge stores in map
+ * entries. Pairs still to compare are held on a stack rather than in
+ * recursion, since a stored value is nested as deep as its writer chose.
+ */
+export function jsonEqual(a: unknown, b: unknown): boolean {
+  const pending: Array<readonly [unknown, unknown]> = [[a, b]]
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const [left, right] = next
+    if (Object.is(left, right)) continue
+    if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null)
+      return false
+    if (Array.isArray(left) !== Array.isArray(right)) return false
+    const leftRec = left as Record<string, unknown>
+    const rightRec = right as Record<string, unknown>
+    const leftKeys = Object.keys(leftRec)
+    if (leftKeys.length !== Object.keys(rightRec).length) return false
+    for (const key of leftKeys) {
+      if (!(key in rightRec)) return false
+      pending.push([leftRec[key], rightRec[key]])
+    }
+  }
+  return true
 }
 
 /**

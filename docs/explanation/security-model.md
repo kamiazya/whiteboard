@@ -461,7 +461,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   cannot reach its place in the workspace either: one that adds a part named
   after the document's id, segment, kind, name or timestamps, or a part of
   the wrong kind under a name the document already uses, is refused with
-  `400 {"error":"invalid_document_root"}`. Moving
+  `400 {"error":"invalid_document_root"}`. A
+  live-sync update is judged after it is taken into the keeper's working
+  copy, so one the keeper cannot finish judging — a check that fails rather
+  than answering, or a save that fails — is dropped with that copy unsaved,
+  exactly as a refused one is, and never rides a later save. So is one
+  that builds on a change the keeper does not hold: the engine would park
+  those changes where no check reads them and apply them once the gap
+  filled, so the update is answered `409` (`causal_gap`) and kept nowhere,
+  and the client sends it again once the keeper holds what it builds on. Moving
   a whole workspace in needs `canvas:write`, `workspace:write` and
   `versions:write`.
 - **A version grant restores in place, and writes no other document.**
@@ -558,7 +566,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   a create through `/api/v1` or `wb_workspace_edit`, a document's update to a
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
-  checkpointed one at a time, not all at once.
+  checkpointed one at a time, not all at once. Folders are bounded the same
+  way, at 4000 (`too_many_folders`), since every listing walks them as it
+  walks documents, and each folder's path is held to the 1,024-character path
+  bound a document's is (`invalid_path`), which bounds how deep the tree can
+  nest. A record stored before either bound still lists.
 - **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
   board holds at most 2000 nodes and 2000 edges and lines together (a line is

@@ -57,11 +57,11 @@ import {
   hasDescendants,
   moveIntoSelf,
   notFoundAs,
+  pastWorkspaceCeiling,
   pathTakenAs,
   refusedBy,
   segmentTaken,
   titleRefusal,
-  tooManyDocuments,
   workspaceNotFound,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -465,6 +465,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
           moveIntoSelf,
           pathTakenAs(),
           corruptStored,
+          pastWorkspaceCeiling,
         ])
         if (owned) return c.json(owned.body, owned.status)
         if (isDatabaseBusy(err)) throw err
@@ -525,7 +526,7 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
         const owned = firstOwned(err, [
           notFoundAs(`No document "${path}" to duplicate`),
           cannotPlaceCopy,
-          tooManyDocuments,
+          pastWorkspaceCeiling,
         ])
         if (owned) return c.json(owned.body, owned.status)
         throw err

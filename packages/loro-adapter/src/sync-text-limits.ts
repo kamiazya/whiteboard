@@ -39,7 +39,6 @@ import {
   THREADS_KEY,
 } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
-import { liftStoredNode } from './legacy-lifts.js'
 import {
   annotationBreach,
   annotationCounts,
@@ -47,6 +46,13 @@ import {
   type OpenAnnotationsBreach,
   SMALLEST_ANNOTATION_BOUND,
 } from './sync-annotation-limits.js'
+import {
+  fieldLength,
+  longestTag,
+  nodeLocationLength,
+  nodeTextLength,
+  tagsIn,
+} from './value-lengths.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
@@ -159,48 +165,19 @@ export interface SyncTextJudgement {
    * placement checks it only then.
    */
   readonly touchesNodeMeta: boolean
+  /**
+   * Whether the import parked changes that build on a change the document
+   * does not hold. Loro keeps them outside the oplog, so the judgement never
+   * read them, and applies them as soon as a later import supplies what they
+   * build on — so a keeper refuses the update and drops the instance, the
+   * one way to be rid of them.
+   */
+  readonly pending: boolean
 }
 
 type Op = JsonSchema['changes'][number]['ops'][number]
 type LongValue = { container: ContainerID; key: string; bound: BoundedValue }
 type Run = { counter: number; pos: number; units: number }
-
-/**
- * A node value's text as the reader lifts it (`liftStoredNode`): a value
- * carrying a legacy kind is read from its `text` whatever `resource` it also
- * holds, so the judge measures the lifted value rather than guessing which
- * field wins. The longer of the two, since a value the lift leaves holding
- * both is one the reader drops anyway.
- */
-function nodeTextLength(value: unknown): number {
-  const lifted = liftStoredNode(value)
-  if (typeof lifted !== 'object' || lifted === null) return 0
-  const resource = (lifted as { resource?: unknown }).resource
-  return Math.max(fieldLength(resource, 'content'), fieldLength(lifted, 'text'))
-}
-
-/**
- * A node value's longest location as every reader lifts it: the resource's
- * `location` or `subpath`, the legacy `url`, `file` or `subpath` field, or a
- * group's `background` — an image location every reader of image references
- * follows.
- */
-function nodeLocationLength(value: unknown): number {
-  if (typeof value !== 'object' || value === null) return 0
-  const resource = (value as { resource?: unknown }).resource
-  return Math.max(
-    fieldLength(resource, 'location'),
-    fieldLength(resource, 'subpath'),
-    ...['url', 'file', 'subpath', 'background'].map((field) => fieldLength(value, field)),
-  )
-}
-
-/** The length of a value's string field, 0 when it has none. */
-function fieldLength(value: unknown, field: string): number {
-  if (typeof value !== 'object' || value === null) return 0
-  const held = (value as Record<string, unknown>)[field]
-  return typeof held === 'string' ? held.length : 0
-}
 
 /**
  * Whether `container` is a thread's message map — under a document's root or
@@ -223,26 +200,6 @@ interface BoundedValue {
   readonly length: (value: unknown) => number
   readonly holds: (doc: LoroDoc, container: ContainerID, key: string) => boolean
   readonly breach: (amount: number, key: string, container: ContainerID) => SyncTextBreach
-}
-
-/**
- * The tags a map value carries: a node's or edge's own `tags` field, or —
- * for the board, whose tags are one value under their own key — the value
- * itself.
- */
-function tagsIn(value: unknown): readonly unknown[] {
-  if (Array.isArray(value)) return value
-  if (typeof value !== 'object' || value === null) return []
-  const held = (value as { tags?: unknown }).tags
-  return Array.isArray(held) ? held : []
-}
-
-function longestTag(value: unknown): number {
-  let longest = 0
-  for (const tag of tagsIn(value)) {
-    if (typeof tag === 'string' && tag.length > longest) longest = tag.length
-  }
-  return longest
 }
 
 /**
@@ -592,7 +549,9 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  * On a breach `doc` holds operations it must not keep, possibly still
  * detached: the caller discards the instance. Bytes the engine refuses are
  * rethrown with `doc` as it was. An engine trap is rethrown as it came; the
- * instance it struck is unusable.
+ * instance it struck is unusable. Anything else thrown once the import has
+ * landed is rethrown as `UnjudgedImportError`, so a caller cannot read it as
+ * refused bytes and keep an instance holding operations nobody judged.
  */
 export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTextJudgement {
   const from = doc.oplogVersion()
@@ -603,16 +562,42 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   // does not bar a record from a fresh workspace.
   const replays = from.length() > 0
   if (replays) doc.detach()
+  let pending: boolean
   try {
-    doc.import(update)
+    pending = (doc.import(update).pending?.size ?? 0) > 0
   } catch (err) {
     // A refused import left the oplog as it was; a trapped instance is never touched again.
     if (replays && !isEngineTrap(err)) doc.attach()
     throw err
   }
+  try {
+    return { ...judgeImported(doc, from, replays), pending }
+  } catch (err) {
+    if (isEngineTrap(err)) throw err
+    throw new UnjudgedImportError(err)
+  }
+}
+
+/**
+ * An update landed in a document and its judgement threw before it could
+ * answer. The document holds the update's operations, judged or not, so it
+ * must be discarded exactly as a refused one is.
+ */
+export class UnjudgedImportError extends Error {
+  constructor(cause: unknown) {
+    super('The update was imported but could not be judged', { cause })
+    this.name = 'UnjudgedImportError'
+  }
+}
+
+function judgeImported(
+  doc: LoroDoc,
+  from: VersionVector,
+  replays: boolean,
+): Omit<SyncTextJudgement, 'pending'> {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
-  const judged = (breach: SyncTextBreach | null): SyncTextJudgement => ({
+  const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
   })
@@ -795,8 +780,10 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
     // Dropped before the judgement, and kept only once it passes: a breach,
     // refused bytes and an engine trap each leave the copy unusable.
     copy = null
-    const { breach } = importWithinTextLimits(judging, update)
-    if (breach === null) copy = judging
+    const { breach, pending } = importWithinTextLimits(judging, update)
+    // A copy holding parked changes would apply them when a later update
+    // fills their gap, and judge that update by them.
+    if (breach === null && !pending) copy = judging
     return breach
   }
 }

@@ -23,6 +23,7 @@ import {
   isDatabaseBusy,
   isWorkspaceNotFoundError,
   TooManyDocumentsError,
+  TooManyFoldersError,
 } from '@kamiazya/whiteboard-ports'
 import { type ApiErrorBody, errorBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
@@ -63,9 +64,9 @@ async function answering(
     if (isWorkspaceNotFoundError(err)) {
       return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
-    // Answered here rather than through `_shared`'s `tooManyDocuments`, which
-    // would pull `node:os` into a route that otherwise has none.
-    if (err instanceof TooManyDocumentsError) {
+    // Answered here rather than through `_shared`'s `pastWorkspaceCeiling`,
+    // which would pull `node:os` into a route that otherwise has none.
+    if (err instanceof TooManyDocumentsError || err instanceof TooManyFoldersError) {
       return c.json(errorBody(err.code, err.message), 413)
     }
     if (isDatabaseBusy(err)) throw err
