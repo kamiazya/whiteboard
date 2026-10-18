@@ -13,11 +13,12 @@
  * the file is named by a hash of the data dir rather than by the data dir.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { chmodSync, lstatSync, mkdirSync, rmSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, rmSync, type Stats } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { createAdaptorServer } from '@hono/node-server'
+import { errnoCode, isErrnoCode, isMissingFileError } from '../shared/errno.js'
 
 interface SocketPathContext {
   readonly env: Readonly<Record<string, string | undefined>>
@@ -65,14 +66,66 @@ export function daemonSocketPath(
  */
 export function prepareSocketDirectory(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const stat = lstatSync(dir)
-  const uid = process.getuid?.()
+  const refusal = socketDirectoryRefusal(lstatSync(dir), process.getuid?.())
+  if (refusal !== undefined) throw new Error(refusal)
+}
+
+/** The one rule a socket's directory is held to, by the daemon and its clients alike. */
+function socketDirectoryRefusal(stat: Stats, uid: number | undefined): string | undefined {
   if (!stat.isDirectory() || (uid !== undefined && stat.uid !== uid)) {
-    throw new Error('the socket directory is not a directory this user owns')
+    return 'the socket directory is not a directory this user owns'
   }
-  if ((stat.mode & 0o077) !== 0) {
-    throw new Error('the socket directory must be owner-only (0700)')
+  if ((stat.mode & 0o077) !== 0) return 'the socket directory must be owner-only (0700)'
+  return undefined
+}
+
+interface SocketTrustSeams {
+  /** Whose socket it has to be; absent where the platform has no uids. */
+  readonly uid?: number | undefined
+  readonly lstat?: (path: string) => Stats
+}
+
+/**
+ * Why the socket at `path` may be someone else's, or undefined when nothing
+ * says so — asked by every client before it sends the record's token there.
+ *
+ * A record outlives a daemon that did not stop cleanly, and the temp-dir
+ * fallback's directory is a predictable name: once a reboot empties the temp
+ * dir, another user can create it and listen at the recorded path. The
+ * directory being this user's and closed is what makes the socket inside it
+ * this user's, so it is checked here as `prepareSocketDirectory` checks it.
+ *
+ * Nothing at the path is not a refusal: there is nothing to send the token
+ * to, and the connection that follows answers that in its own words. A file
+ * that is no socket in a directory this user holds alone is likewise only
+ * something nothing listens through. A named pipe has no directory, and is
+ * held to its endpoint proof instead.
+ */
+export function untrustedSocketReason(
+  path: string,
+  { uid = process.getuid?.(), lstat = lstatSync }: SocketTrustSeams = {},
+): string | undefined {
+  if (isNamedPipe(path)) return undefined
+  let socket: Stats
+  try {
+    socket = lstat(path)
+  } catch (err) {
+    if (isMissingFileError(err) || isErrnoCode(err, 'ENOTDIR')) return undefined
+    return `the socket could not be inspected (${errnoCode(err) ?? 'unknown error'})`
   }
+  if (socket.isSymbolicLink()) return 'the socket path is a symbolic link'
+  let directory: Stats
+  try {
+    directory = lstat(dirname(path))
+  } catch (err) {
+    return `the socket directory could not be inspected (${errnoCode(err) ?? 'unknown error'})`
+  }
+  const refusal = socketDirectoryRefusal(directory, uid)
+  if (refusal !== undefined) return refusal
+  if (socket.isSocket() && uid !== undefined && socket.uid !== uid) {
+    return 'the socket is not owned by this user'
+  }
+  return undefined
 }
 
 /**

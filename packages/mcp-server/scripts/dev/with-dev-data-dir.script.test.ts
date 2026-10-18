@@ -55,7 +55,9 @@ function fakeCheckout({ gated = false }: { gated?: boolean } = {}): {
   const cwd = mkdtempSync(join(tmpdir(), 'wb-with-dev-data-dir-'))
   cleanups.push(() => rmSync(cwd, { recursive: true, force: true }))
   execFileSync('git', ['init', '-q', cwd])
-  mkdirSync(join(cwd, 'data'), { recursive: true })
+  // Owner-only, as a real data dir is: the fixtures put their sockets here,
+  // and a socket in a directory others can enter is never sent a token.
+  mkdirSync(join(cwd, 'data'), { recursive: true, mode: 0o700 })
   mkdirSync(join(cwd, 'children'), { recursive: true })
   const tsxDir = join(cwd, 'packages/mcp-server/node_modules/tsx/dist')
   mkdirSync(tsxDir, { recursive: true })

@@ -1,14 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { endpointProof } from '../shared/endpoint-proof.js'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
 import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
+import { untrustedSocketReason } from './daemon-socket.js'
 
 const startedAt = '2026-01-01T00:00:00.000Z'
 const writtenAtMs = Date.parse(startedAt)
@@ -66,6 +67,7 @@ const alive = { isAlive: () => true }
 const startedBefore = { ...alive, startMs: () => writtenAtMs - 1_000 }
 // A forward wall-clock step of 6 s: the daemon reads as starting after its record.
 const startedAfter = { ...alive, startMs: () => writtenAtMs + 6_000 }
+const noStartTime = { ...alive, startMs: () => null }
 
 describe('daemonLiveness', () => {
   it('answers dead for a pid no process has', async () => {
@@ -169,6 +171,65 @@ describe('daemonLiveness', () => {
   })
 })
 
+/**
+ * A listener that answers every request as the recorded daemon would, under
+ * any credential, and keeps each Authorization header it was sent — what a
+ * socket another user prepared at the recorded path would collect.
+ */
+async function collectingSocket(dirMode: number) {
+  const socketPath = testSocketPath()
+  chmodSync(dirname(socketPath), dirMode)
+  const authorizations: (string | undefined)[] = []
+  const server = createServer((req, res) => {
+    authorizations.push(req.headers.authorization)
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ pid: PID }))
+  })
+  await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
+  onTestFinished(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve())
+        server.closeAllConnections()
+      }),
+  )
+  return { socketPath, authorizations }
+}
+
+describe('daemonLiveness against a socket this user does not hold alone', () => {
+  const ANOTHER_UID = (process.getuid?.() ?? 0) + 1
+
+  it.each([
+    ['started after its record', startedAfter],
+    ['whose start time cannot be read', noStartTime],
+    ['started before its record', startedBefore],
+  ])('refuses, sending no token, a socket in a directory others can enter, for a pid %s', async (_, identity) => {
+    const socket = await collectingSocket(0o755)
+    const record = { pid: PID, startedAt, socketPath: socket.socketPath, token: TOKEN }
+    const liveness = await daemonLiveness(record, identity)
+    expect(liveness.state).toBe('unconfirmed')
+    expect(liveness).toMatchObject({ untrustedSocket: expect.stringContaining('owner-only') })
+    expect(socket.authorizations).toEqual([])
+  })
+
+  it('refuses, sending no token, a socket and directory another uid owns', async () => {
+    const socket = await collectingSocket(0o700)
+    const record = { pid: PID, startedAt, socketPath: socket.socketPath, token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...startedAfter,
+      socketRefusal: (path) => untrustedSocketReason(path, { uid: ANOTHER_UID }),
+    })
+    expect(liveness).toMatchObject({ state: 'unconfirmed', untrustedSocket: expect.any(String) })
+    expect(socket.authorizations).toEqual([])
+  })
+
+  it('asks, under the token, a socket in an owner-only directory of its own', async () => {
+    const socket = await collectingSocket(0o700)
+    const record = { pid: PID, startedAt, socketPath: socket.socketPath, token: TOKEN }
+    expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'running' })
+    expect(socket.authorizations).toEqual([`Bearer ${TOKEN}`])
+  })
+})
+
 type ProofReply = (res: ServerResponse, body: string) => void
 
 /**
@@ -194,7 +255,6 @@ async function provingSocket(reply: ProofReply) {
 }
 
 const PIPE = String.raw`\\.\pipe\wb-liveness-test`
-const noStartTime = { ...alive, startMs: () => null }
 
 describe('daemonLiveness over a named pipe', () => {
   const record = { pid: PID, startedAt, socketPath: PIPE, token: TOKEN }

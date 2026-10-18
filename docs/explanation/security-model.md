@@ -23,6 +23,17 @@ The local daemon has one person: the machine's owner
   socket itself is `0600`. On Windows it listens on a named pipe whose name
   is random per start, so another user cannot predict it and create it
   first. Only the daemon's record, `daemon.json` (owner-only), says where.
+- **Clients check the socket before they send the token.** A record can
+  outlive its daemon (a crash, a kill, a power loss), and after a reboot
+  empties the temp directory another user could recreate
+  `whiteboard-<uid>` there and listen at the recorded path. So before a
+  client sends the token to a Unix socket, it checks that the socket's
+  directory is a real directory owned by this user and owner-only (`0700`),
+  and that the socket is owned by this user and is not a symbolic link. If
+  any of that fails, the client sends nothing to the socket and reports that
+  it may belong to another user. `whiteboard daemon run` and `daemon stop`
+  then leave the record alone and signal no process, and the native host
+  relays nothing.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no
@@ -643,8 +654,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   the client reports that a process holds the pipe without confirming it is
   the recorded daemon. A pipe nobody serves is treated as a stale record.
   The token itself never travels until the proof succeeds. On Linux and
-  macOS nothing changes: the socket's owner-only directory already keeps
-  every other account out.
+  macOS there is no proof: clients check instead that the socket's directory
+  is still owner-only and the socket is this user's (see the trust boundary
+  above).
 
 - Server mode is shipped and used today for team/remote deployments (see
   above); it is not itself production-hardened beyond what is documented on
