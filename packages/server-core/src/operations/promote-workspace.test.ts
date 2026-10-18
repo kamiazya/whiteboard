@@ -154,6 +154,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** A test that builds a ceiling-sized record; measured 1.2 s alone. */
+const CEILING_TIMEOUT_MS = 30_000
+
 describe('promoteWorkspace', () => {
   it('merges the record and writes one explicit human checkpoint per promoted document', async () => {
     const fake = fakes()
@@ -528,8 +531,11 @@ describe('promoteWorkspace', () => {
   })
 
   // The target already holds one document of its own, so this record brings
-  // the merged workspace exactly to the ceiling.
-  it('promotes a record that brings the workspace exactly to the document ceiling', async () => {
+  // the merged workspace exactly to the ceiling. A ceiling-sized record:
+  // 1.2 s alone, past the 5 s default under a full parallel run.
+  it('promotes a record that brings the workspace exactly to the document ceiling', {
+    timeout: CEILING_TIMEOUT_MS,
+  }, async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
       {
@@ -544,7 +550,9 @@ describe('promoteWorkspace', () => {
     expect(fake.versions.saves).toHaveLength(WORKSPACE_MAX_DOCUMENTS - 1)
   })
 
-  it('refuses a record within the ceiling whose merge would take the workspace past it', async () => {
+  it('refuses a record within the ceiling whose merge would take the workspace past it', {
+    timeout: CEILING_TIMEOUT_MS,
+  }, async () => {
     const fake = fakes()
     const refusal = await promoteWorkspace(
       {

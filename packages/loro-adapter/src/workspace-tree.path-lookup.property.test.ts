@@ -186,7 +186,7 @@ describe('finding the node at a path', () => {
           const answered = ensureFolderPath(doc, segments)
 
           const fresh = [...liveIds(doc)].filter((id) => !before.has(id))
-          expect(fresh.length).toBe(creations.length)
+          expect(fresh).toHaveLength(creations.length)
           const actualOf: TreeID[] = []
           const resolve = (parent: Parent): TreeID | undefined =>
             parent === undefined || typeof parent === 'string' ? parent : actualOf[parent.created]
