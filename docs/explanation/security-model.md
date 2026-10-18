@@ -450,6 +450,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `mcp:call`, and a tool call also needs the scope the same operation needs
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **A tool call tells its caller what went wrong, not how.** A failed call
+  answers a member with the refusal or a generic fault, never the storage
+  path, SQL or engine detail behind it. The server's log records are not
+  forwarded to them over MCP logging either, since a record can carry a raw
+  error or another user's ids; the operator reads them on stderr.
 - **What describes the whole server is an administrator's.** The runtime
   status (the process and every user's open live-sync streams) and the
   storage report (every workspace's size) answer only a tenant

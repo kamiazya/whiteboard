@@ -41,6 +41,16 @@ export function toolErrorText(tool: string, err: unknown): string {
 }
 
 /**
+ * Whether a tool call's log records may be forwarded to its caller over
+ * `notifications/message`. Only where the caller is the keeper's owner: a
+ * server-mode member would receive raw errors (stacks, storage paths) and
+ * records naming other users, which `toolErrorText` withholds from them.
+ */
+export function callerReadsServerLog(): boolean {
+  return callers.getStore() === undefined
+}
+
+/**
  * The gate's own refusals. Named, so server mode's error text passes them to
  * the caller verbatim as the refusals they are.
  */

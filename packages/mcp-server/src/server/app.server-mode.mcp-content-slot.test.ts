@@ -37,6 +37,15 @@ vi.mock('./config.js', () => ({
   DIST_WEB_APP_DIR: '/tmp/whiteboard/dist/web-app',
 }))
 
+// Server mode forwards no log record to a member's call, and the record is
+// the only mid-call notification a tool here sends. The slot has to hold
+// whatever turns an answer into a stream, so this file turns forwarding back
+// on to make one.
+vi.mock('./security/mcp-caller.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./security/mcp-caller.js')>()),
+  callerReadsServerLog: () => true,
+}))
+
 const { createApp } = await import('./app.js')
 const { getLogger } = await import('./log.js')
 
