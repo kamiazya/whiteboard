@@ -429,20 +429,24 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 69,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
+  // Both raised (+2, +3) for the layout's routing budget, which the repair
+  // pass's routes and the search spend from.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 71,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 55,
   'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
   // The trial evaluator's three steps are named closures (applySelfCosts /
   // applyPairCosts / rescorePairsOf / rescorePairInto), each carrying the
   // invariant that would otherwise be a comment inside the loop it came from.
   // The closure is longer by those doc comments and shorter by nothing; the next
   // real shrink is lifting the score object into a module of its own, which
-  // needs its eight captured caches passed as a bundle.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 308,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 94,
+  // needs its eight captured caches passed as a bundle. +1 for the routing
+  // budget its routes spend from.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 309,
+  // +3, threading the routing budget to both runs of a region.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 97,
   // `improveEdge` replaces the candidate loop's body and brings its
-  // incumbent-wins-ties rationale with it.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 102,
+  // incumbent-wins-ties rationale with it. +3 for the routing budget.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 105,
   'packages/canvas-render/src/layout/edges/edge-anchors.ts#patchAnchorGroups': 54,
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeEdge': 75,
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
@@ -463,7 +467,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // their doc comments with them.
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 87,
   'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
-  'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 68,
+  // +3: one routing budget for the side pass and the final routes together.
+  'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 71,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,

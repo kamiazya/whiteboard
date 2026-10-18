@@ -1,5 +1,6 @@
 import type { Point, Rect } from './edge-geometry.js'
 import { MinHeap } from './min-heap.js'
+import type { RoutingBudget } from './routing-budget.js'
 
 // A rectilinear shortest path around rectangles, used ONLY as a fallback
 // when the enumerated candidates in `spatial-edges.ts` all fail.
@@ -284,6 +285,10 @@ interface GridSearch {
   readonly heuristic: (i: number, j: number) => number
   /** Two states per cell — arrived horizontally or vertically. */
   readonly stateOf: (i: number, j: number, axis: Axis) => number
+  /** Obstacle tests this call may make, bucketing included. */
+  readonly allowance: number
+  /** Obstacle tests made so far, one per bucketed obstacle a step scans. */
+  spent: number
 }
 
 /**
@@ -301,7 +306,13 @@ interface GridSearch {
  * Two states per cell so a turn can be CHARGED. Collapsing them would make
  * the first arrival win regardless of how many corners it took to get there.
  */
-function prepareSearch(grid: Grid, ei: number, ej: number): GridSearch {
+function prepareSearch(
+  grid: Grid,
+  ei: number,
+  ej: number,
+  allowance: number,
+  bucketing: number,
+): GridSearch {
   const { xs, ys, near } = grid
   const width = xs.length
   const goalX = xs[ei] as number
@@ -334,6 +345,8 @@ function prepareSearch(grid: Grid, ei: number, ej: number): GridSearch {
     cameFrom: new Int32Array(stateCount).fill(-1),
     heuristic: (i, j) => Math.abs((xs[i] as number) - goalX) + Math.abs((ys[j] as number) - goalY),
     stateOf: (i, j, axis) => (j * width + i) * 2 + axis,
+    allowance,
+    spent: bucketing,
   }
 }
 
@@ -350,9 +363,14 @@ function expand(g: GridSearch, heap: MinHeap, state: number, axis: Axis, i: numb
     const to = along[step.along(ni, nj)] as number
     const lo = Math.min(from, to)
     const hi = Math.max(from, to)
-    if (spanBlocked(line.blockers[index] as readonly Rect[], step, lo, hi)) continue
+    const blockers = line.blockers[index] as readonly Rect[]
+    const borders = line.borders[index] as readonly Rect[]
+    // Charged as a bound — `spanBlocked` may stop early and `tracedAlong` runs
+    // only when the step is open — so the account never under-counts.
+    g.spent += blockers.length + borders.length
+    if (spanBlocked(blockers, step, lo, hi)) continue
     const turn = axis === step.axis ? 0 : BEND_COST_PX
-    const traced = tracedAlong(line.borders[index] as readonly Rect[], step, lo, hi)
+    const traced = tracedAlong(borders, step, lo, hi)
     // The successor's g accumulates from `best[state]`, never from the popped
     // f — adding to f instead would charge the heuristic once per step and
     // stop being a shortest-path search at all.
@@ -383,6 +401,9 @@ function searchGrid(g: GridSearch, si: number, sj: number, ei: number, ej: numbe
     if ((g.best[state] as number) + g.heuristic(i, j) < cost) continue
     if (i === ei && j === ej) return state
     expand(g, heap, state, axis, i, j)
+    // Abandoned exactly as an oversized grid is, so the caller keeps its
+    // enumerated candidate.
+    if (g.spent > g.allowance) return undefined
   }
   return undefined
 }
@@ -390,15 +411,21 @@ function searchGrid(g: GridSearch, si: number, sj: number, ei: number, ej: numbe
 /**
  * The cheapest rectilinear path from `start` to `end` whose interior avoids
  * every rect in `obstacles`, or undefined when there is none (or the grid is
- * too large to search). The returned path always begins at `start` and ends
- * at `end`, with collinear intermediate points removed.
+ * too large to search, or the search would spend more obstacle tests than
+ * `budget.grid` has left). The returned path always begins at `start` and
+ * ends at `end`, with collinear intermediate points removed.
+ *
+ * `budget` is the layout's account (`routing-budget.ts`), spent by what each
+ * call actually tests; omitted, the call is unbounded.
  */
 export function routeOnGrid(
   start: Point,
   end: Point,
   obstacles: readonly Rect[],
   clearance: number,
+  budget?: Pick<RoutingBudget, 'grid'>,
 ): Point[] | undefined {
+  const allowance = budget?.grid ?? Number.POSITIVE_INFINITY
   const grid = buildGrid(start, end, obstacles, clearance)
   if (grid === undefined) return undefined
   const si = grid.xs.indexOf(start.x)
@@ -406,8 +433,13 @@ export function routeOnGrid(
   const ei = grid.xs.indexOf(end.x)
   const ej = grid.ys.indexOf(end.y)
   if (si < 0 || sj < 0 || ei < 0 || ej < 0) return undefined
-  const search = prepareSearch(grid, ei, ej)
+  // Bucketing tests every obstacle against every line, twice. Known before
+  // any of it is done, so a call the account cannot cover spends nothing.
+  const bucketing = 2 * grid.near.length * (grid.xs.length + grid.ys.length)
+  if (bucketing > allowance) return undefined
+  const search = prepareSearch(grid, ei, ej, allowance, bucketing)
   const goal = searchGrid(search, si, sj, ei, ej)
+  if (budget !== undefined) budget.grid -= search.spent
   if (goal === undefined) return undefined
   return reconstructPath(goal, search.cameFrom, search.xs, search.ys, search.width)
 }

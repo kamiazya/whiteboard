@@ -83,7 +83,7 @@ function cagedBoard(walls: number, totalNodes: number, edges: number): SpatialCa
 
 describe('grid routing cost per layout', () => {
   it('bounds the obstacle tests one layout spends on grid searches', () => {
-    const board = cagedBoard(600, 2000, 10)
+    const board = cagedBoard(600, 2000, 30)
     grid.calls = 0
     grid.reads = 0
     const scene = layoutSpatialEdges(board, {
@@ -94,11 +94,12 @@ describe('grid routing cost per layout', () => {
 
     // The subject is present: every edge is drawn, and the board drove the
     // grid search far more often than once per edge.
-    expect(scene.filter((n) => n.kind === 'edge')).toHaveLength(10)
-    expect(grid.calls).toBeGreaterThan(100)
-    // Unbounded, this board reads 3.7e8 coordinates over 297 searches, about
-    // 1.2e6 each: the work tracks grid lines times obstacles, which the cell
-    // cap does not see, and the search count grows faster than the edges.
-    expect(grid.reads).toBeLessThanOrEqual(60_000_000)
+    expect(scene.filter((n) => n.kind === 'edge')).toHaveLength(30)
+    expect(grid.calls).toBeGreaterThan(1000)
+    // Unbounded, this board reads 3.9e9 coordinates over 1376 searches (90s
+    // on a dev machine), 3.7e8 over 297 at a third of the edges: the work
+    // tracks grid lines times obstacles, which the cell cap does not see,
+    // and the search count grows faster than the edges. Bounded, 1.9e8.
+    expect(grid.reads).toBeLessThanOrEqual(250_000_000)
   }, 300_000)
 })

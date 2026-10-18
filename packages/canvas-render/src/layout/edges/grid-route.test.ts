@@ -62,3 +62,50 @@ describe('routeOnGrid', () => {
     expect(routeOnGrid({ x: 0, y: 100 }, { x: 150, y: 100 }, walls, 16)).toBeUndefined()
   })
 })
+
+describe('routeOnGrid within a routing budget', () => {
+  const start = { x: 0, y: 50 }
+  const end = { x: 200, y: 50 }
+  const obstacles = [rect(80, 0, 40, 100), rect(80, 130, 40, 40)]
+  const unbounded = () => ({ grid: Number.POSITIVE_INFINITY })
+
+  /** What one search spends when nothing stops it. */
+  function spendOf(): number {
+    const budget = { grid: 1_000_000 }
+    routeOnGrid(start, end, obstacles, 16, budget)
+    return 1_000_000 - budget.grid
+  }
+
+  it('routes exactly as unbudgeted when the budget covers the search', () => {
+    const spend = spendOf()
+    expect(spend).toBeGreaterThan(0)
+    const budget = { grid: spend }
+    const path = routeOnGrid(start, end, obstacles, 16, budget)
+    expect(path).toBeDefined()
+    expect(path).toEqual(routeOnGrid(start, end, obstacles, 16))
+    expect(path).toEqual(routeOnGrid(start, end, obstacles, 16, unbounded()))
+    expect(budget.grid).toBe(0)
+  })
+
+  it('abandons a search that would spend one test more than is left', () => {
+    const budget = { grid: spendOf() - 1 }
+    expect(routeOnGrid(start, end, obstacles, 16, budget)).toBeUndefined()
+  })
+
+  it('spends nothing on a call whose bucketing alone is past the budget', () => {
+    const budget = { grid: 1 }
+    expect(routeOnGrid(start, end, obstacles, 16, budget)).toBeUndefined()
+    expect(budget.grid).toBe(1)
+  })
+
+  it('charges the search its scans on top of its bucketing', () => {
+    // Fifty copies of one box: the grid has 4 x-lines (both ends, both
+    // offset borders) and 3 y-lines, so bucketing tests 2 * 50 * 7 = 700.
+    // Copies add no line, so it is the search's own scans of the buckets
+    // that grow with them, and they have to be charged too.
+    const copies = Array.from({ length: 50 }, () => rect(80, 0, 40, 100))
+    const budget = { grid: 1_000_000 }
+    expect(routeOnGrid(start, end, copies, 16, budget)).toBeDefined()
+    expect(1_000_000 - budget.grid).toBeGreaterThan(2 * 50 * 7)
+  })
+})
