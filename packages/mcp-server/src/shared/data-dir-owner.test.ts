@@ -1,7 +1,9 @@
-import { statSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { chmod, link, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import { parseDaemonRecord } from '../daemon/daemon-record.js'
@@ -148,6 +150,82 @@ describe('the record file itself', () => {
       message: expect.stringMatching(/writable by other users/),
     })
   })
+})
+
+describe('readFileOwnedByUser in a directory it cannot trust', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'wb-record-untrusted-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  // The directory is judged before anything in it is opened, so even an
+  // absent record there is a refusal: absence is not something such a
+  // directory can vouch for. Mode-based, so it holds when the suite runs as root.
+  it('refuses before opening anything, an absent record included', async () => {
+    await chmod(dir, 0o777)
+    expect(await readFileOwnedByUser(join(dir, 'server-mode.json'), statSync(dir).uid)).toEqual({
+      kind: 'not-owned',
+      message: expect.stringMatching(/writable by other users/),
+    })
+  })
+})
+
+/**
+ * Whether this platform can make a FIFO. PROBED: a missing `mkfifo` binary or
+ * a filesystem that refuses one is a premise the test cannot establish, which
+ * is a skip, not a failure — and Windows has neither.
+ */
+function canMakeFifo(): boolean {
+  if (process.platform === 'win32') return false
+  const probeDir = mkdtempSync(join(tmpdir(), 'wb-fifo-probe-'))
+  try {
+    return spawnSync('mkfifo', [join(probeDir, 'p')]).status === 0
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true })
+  }
+}
+const CAN_MAKE_FIFO = canMakeFifo()
+const MCP_SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+
+// A FIFO opened for reading blocks until a writer appears, and the read is
+// synchronous, so a refusal that fails here would hang the worker rather than
+// fail the test: it runs in a child with a deadline.
+describe.skipIf(!CAN_MAKE_FIFO)('a record path that is not a regular file', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'wb-record-fifo-'))
+    await chmod(dir, 0o700)
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('refuses a FIFO planted as the record instead of waiting on it', () => {
+    const path = join(dir, 'server-mode.json')
+    expect(spawnSync('mkfifo', [path]).status).toBe(0)
+    const module = pathToFileURL(join(MCP_SERVER_DIR, 'src/shared/data-dir-secure.ts')).href
+    const child = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx/esm',
+        '--input-type=module',
+        '--eval',
+        `const { readFileOwnedByUserSync } = await import(${JSON.stringify(module)})
+process.stdout.write(JSON.stringify(readFileOwnedByUserSync(${JSON.stringify(path)})))`,
+      ],
+      { cwd: MCP_SERVER_DIR, encoding: 'utf8', timeout: 20_000 },
+    )
+    expect(child.signal, 'the read blocked on the FIFO').toBeNull()
+    expect(child.status, child.stderr).toBe(0)
+    expect(JSON.parse(child.stdout)).toEqual({
+      kind: 'not-owned',
+      message: expect.stringMatching(/not a regular file/),
+    })
+  }, 30_000)
 })
 
 describe('resolveDataDir', () => {

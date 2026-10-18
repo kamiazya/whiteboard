@@ -232,10 +232,24 @@ export async function readFileOwnedByUser(
 
 /** `readFileOwnedByUser` for a caller that reads synchronously; one judgement. */
 export function readFileOwnedByUserSync(path: string, uid = process.getuid?.()): OwnedFileRead {
+  // Judged before the open as well as after it: nothing in a directory this
+  // user cannot trust is opened at all, since opening can itself act — a FIFO
+  // blocks, a device answers.
+  try {
+    assertDataDirOwnedByUser(dirname(path), uid)
+  } catch (err) {
+    return { kind: 'not-owned', message: (err as Error).message }
+  }
   let fd: number
   try {
-    // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
-    fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+    // O_NONBLOCK so a FIFO planted at the path opens at once and is refused
+    // below as not a regular file, rather than blocking until a writer comes.
+    // O_NOFOLLOW and O_NONBLOCK are undefined on Windows, where they are
+    // simply absent.
+    fd = openSync(
+      path,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0),
+    )
   } catch (err) {
     if (isMissingFileError(err)) return { kind: 'missing' }
     if (isErrnoCode(err, 'ELOOP'))
@@ -248,7 +262,10 @@ export function readFileOwnedByUserSync(path: string, uid = process.getuid?.()):
     } catch (err) {
       return { kind: 'not-owned', message: (err as Error).message }
     }
-    const refusal = refuseForeignRecordFile(fstatSync(fd), path, uid)
+    const stat = fstatSync(fd)
+    if (!stat.isFile())
+      return { kind: 'not-owned', message: `${path} is not a regular file; refusing to read it.` }
+    const refusal = refuseForeignRecordFile(stat, path, uid)
     if (refusal !== undefined) return refusal
     return { kind: 'text', text: readFileSync(fd, 'utf-8') }
   } finally {
