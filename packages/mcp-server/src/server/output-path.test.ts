@@ -143,6 +143,20 @@ describe('validateOutputPath', () => {
       ).resolves.toBeUndefined()
     })
 
+    it('accepts the real spelling of an allowedDir reached through a symlink', async () => {
+      // The exports directory may sit under a symlinked parent (macOS /tmp), and a path
+      // named through its real location is the same place.
+      await mkdir(join(tempDir, 'real-exports'))
+      await symlink(join(tempDir, 'real-exports'), join(tempDir, 'exports'))
+      await expect(
+        validateOutputPath(
+          join(tempDir, 'real-exports', 'out.png'),
+          false,
+          join(tempDir, 'exports'),
+        ),
+      ).resolves.toBeUndefined()
+    })
+
     it('rejects a path with control characters', async () => {
       await expect(
         validateOutputPath(join(tempDir, 'bad\x00.png'), false, tempDir),

@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { isMissingFileError } from '../shared/errno.js'
 import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../shared/path-containment.js'
 
@@ -53,6 +53,16 @@ async function canonicalizeOutputTarget(resolvedPath: string): Promise<string> {
   }
 }
 
+// Containment on the spelling alone, so it touches no file system. The allowed
+// directory is also taken canonicalised, since a caller handed its real path
+// (through a symlinked parent) names the same place; that resolution reads
+// only the allowed directory's own ancestry, never the caller's path.
+async function isLexicallyWithin(resolvedPath: string, resolvedDir: string): Promise<boolean> {
+  const inside = (dir: string) =>
+    resolvedPath === dir || resolvedPath.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+  return inside(resolvedDir) || inside(await canonicalizeWithMissingTail(resolvedDir))
+}
+
 export async function validateOutputPath(
   outputPath: string,
   overwrite: boolean,
@@ -76,6 +86,16 @@ export async function validateOutputPath(
     // write creates its target wherever it points. (Best-effort against the
     // validate-to-writeFile TOCTOU window, not an O_NOFOLLOW guarantee.)
     const resolvedPath = resolve(outputPath)
+    // Refused before any lstat of the caller's path: past this point an errno
+    // (ENOTDIR under a regular file, EACCES under a closed directory) would
+    // answer differently from a missing path, and the difference would say
+    // what exists on the host outside the allowed directory.
+    if (!(await isLexicallyWithin(resolvedPath, resolvedDir))) {
+      throw new OutputPathError(
+        'invalid_output_path',
+        `outputPath must be inside the allowed directory (${resolvedDir})`,
+      )
+    }
     const canonicalTarget = await canonicalizeOutputTarget(resolvedPath)
     if (!(await isWithinAllowedRoots(canonicalTarget, [resolvedDir]))) {
       throw new OutputPathError(
