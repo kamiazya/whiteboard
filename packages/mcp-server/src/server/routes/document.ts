@@ -17,7 +17,7 @@ import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
 import { DOCUMENT_WILDCARD } from './document/path-route.js'
-import { createRestoreRouter } from './document/restore.js'
+import { type CallerScopes, createRestoreRouter } from './document/restore.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
@@ -74,6 +74,8 @@ export interface DocumentRouterOptions {
   daemonActor?: string
   /** Threaded to the version-save and promote routes — see `VersionsRouterOptions.callerName`. */
   callerName?: CallerName
+  /** Threaded to the restore route — see `RestoreRouterOptions.callerScopes`. */
+  callerScopes?: CallerScopes
   /** Resolves the read plane's effective tier for GET /api/workspaces to
    *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
@@ -177,15 +179,15 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
       ...(options.exportPaths === undefined ? {} : { exportPaths: options.exportPaths }),
     }),
   )
-  const restoreProgress: RestoreProgress = async (event) => {
-    sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
-  }
   app.route(
     '/',
     createRestoreRouter({
       versionStore,
       serverDeps: options.serverDeps,
-      progress: restoreProgress,
+      progress: async (event) => {
+        sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
+      },
+      ...(options.callerScopes === undefined ? {} : { callerScopes: options.callerScopes }),
     }),
   )
 

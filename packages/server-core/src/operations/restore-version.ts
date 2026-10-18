@@ -1,5 +1,6 @@
 import {
   countSpatialNodes,
+  judgeStateWithinTextLimits,
   projectWorkspaceDocument,
   readWorkspaceNodes,
   reconcileDocContent,
@@ -9,6 +10,7 @@ import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-mod
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
+import { textBreachRefusal } from './sync-write-refusals.js'
 
 export interface RestoreVersionInput {
   readonly workspaceId: string
@@ -104,6 +106,11 @@ interface RestoreContext {
  * `targetPath` is validated HERE against model's `documentPathSchema` as the
  * backstop no surface can skip; an adapter with richer per-segment
  * diagnostics may still run its own validation for the message.
+ *
+ * A saved state past a limit the sync surface enforces is refused before any
+ * write, thrown as that surface's `TextBreachRefusalError`: a version is
+ * written back as it stands, and one a promote carried names a state no sync
+ * write judged (`withinSyncLimits`).
  */
 export async function restoreVersion(
   deps: Pick<ServerDeps, 'versions' | 'liveDocuments'>,
@@ -222,6 +229,7 @@ async function restoreToTarget(
   // there is nothing to reconcile against. The restored content is
   // whatever the source stores, so the new row carries the source's own
   // kind rather than the store default.
+  withinSyncLimits(past, targetPath)
   try {
     const sourceKind = await live.kind(workspaceId, path)
     await live.save(workspaceId, targetPath, past, {
@@ -277,6 +285,23 @@ async function documentIdAt(
   return row.documentId
 }
 
+/**
+ * The documents the version held in the subtree, and the past state of each
+ * it can project — every one judged before the rollback's first deletion, so
+ * a refusal leaves the subtree as it was rather than half rolled back.
+ */
+function judgedPastSubtree(pastWorkspace: LoroDoc, inSubtree: (path: string) => boolean) {
+  const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
+    node.type === 'document' && inSubtree(node.path) ? [node] : [],
+  )
+  const restoring = pastDocs.flatMap((node) => {
+    const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
+    return pastDoc === null ? [] : [{ node, pastDoc }]
+  })
+  for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path)
+  return { pastDocs, restoring }
+}
+
 /** Mode 1: roll the document AND every descendant back together. */
 async function restoreSubtree(
   live: LiveDocuments,
@@ -288,9 +313,7 @@ async function restoreSubtree(
   const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
   if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
   const inSubtree = (p: string) => isSelfOrDescendant(p, path)
-  const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
-    node.type === 'document' && inSubtree(node.path) ? [node] : [],
-  )
+  const { pastDocs, restoring } = judgedPastSubtree(pastWorkspace, inSubtree)
   const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
   // A row without an id cannot be correlated to the version and is left
   // alone.
@@ -313,9 +336,7 @@ async function restoreSubtree(
         await live.delete(workspaceId, row.path)
       }
     }
-    for (const node of pastDocs) {
-      const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
-      if (pastDoc === null) continue
+    for (const { node, pastDoc } of restoring) {
       await restoreOneDocument(live, workspaceId, node, pastDoc, rowsById.get(node.meta.documentId))
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
@@ -354,6 +375,16 @@ async function restoreOneDocument(
   const liveDoc = await live.get(workspaceId, node.path)
   reconcileDocContent(liveDoc, pastDoc)
   await live.save(workspaceId, node.path, liveDoc, { overwrite: true, kind: node.meta.kind })
+}
+
+/**
+ * Throws the sync surface's refusal when `past`, written whole, breaks a limit
+ * that surface enforces — the same judgement, by `judgeStateWithinTextLimits`,
+ * so a restore cannot store what no sync write could.
+ */
+function withinSyncLimits(past: LoroDoc, path: string): void {
+  const breach = judgeStateWithinTextLimits(past)
+  if (breach !== null) throw textBreachRefusal(breach, { path })
 }
 
 /**
@@ -404,6 +435,7 @@ async function reconcileAndSave(
   })
   try {
     try {
+      withinSyncLimits(past, targetPath)
       reconcileDocContent(doc, past)
       await live.save(workspaceId, targetPath, doc, {
         overwrite: true,

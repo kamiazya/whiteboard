@@ -292,6 +292,11 @@ documents is refused, with `too_many_documents`, when the two together would
 hold more — and at 2000 the daemon refuses any new document, however it is
 added, with the same error.
 
+A saved version is held to the same limits as the documents themselves: a
+move whose saved versions include one with a body, node text or board past
+its limit is refused whole, under the error a sync write past that limit
+gets (for example `markdown_too_large`), and keeps none of it.
+
 Once the daemon confirms it holds every document, image, trashed document
 and saved version that moved, the old browser copy is removed — its Trash
 and saved versions with it: the daemon is the workspace's one keeper, and this browser

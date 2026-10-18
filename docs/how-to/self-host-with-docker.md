@@ -214,10 +214,12 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
-A version a member saves, and the checkpoint left when a workspace is moved
-in from a browser, show that member's profile name in the History panel. The
-server takes the name from whoever signed in, not from the request, so a
-member cannot save a version under someone else's name.
+A version a member saves, the checkpoint left when a workspace is moved
+in from a browser, and each saved version that move carries show that
+member's profile name in the History panel. The server takes the name from
+whoever signed in, not from the request, so a member cannot save a version
+under someone else's name. A carried version keeps the date the browser
+saved it, except that none is dated after the move itself.
 
 To bring in someone who is not a user yet, an owner creates an invitation
 with `POST /api/workspaces/<workspace>/invitations`. The response carries a
@@ -350,7 +352,15 @@ the same things through either surface:
 | `workspace:read` | `wb_document_list` |
 | `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
 | `versions:read` | `wb_version_list` |
-| `versions:write` | `wb_version_save`, `wb_version_restore` |
+| `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
+
+Restoring a version anywhere but in place also writes other documents, so it
+needs `workspace:write` as well as `versions:write`: `wb_version_restore`
+with a `targetPath` (a new document, or one it replaces with `overwrite`) or
+with `subtree: true` (which reverts, brings back and deletes the document's
+descendants). The HTTP restore route asks the same, answering `403` with
+`insufficient_scope`; there a `targetPath` equal to the document's own path is
+the in-place restore. A browser session holds both scopes.
 
 A call without the scope fails with `insufficient_scope` and changes nothing.
 The HTTP API draws the same line. A live-sync update with only

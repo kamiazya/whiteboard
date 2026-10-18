@@ -17,7 +17,7 @@ import {
 import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
-import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
+import { MCP_TOOL_INPUT_SCOPES, MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
 import { namespaceOfGrant } from './membership-gate.js'
 import { serverModeToolErrorText } from './server-mode-redaction.js'
@@ -96,14 +96,19 @@ function refused(denial: MembershipDenial): Error {
 
 /**
  * `mcp:call` opens the endpoint; what the call may DO is the scope its `/api`
- * twin needs. Without this a token scoped for reading could delete through
+ * twin needs — for a call whose input asks for more, as `MCP_TOOL_INPUT_SCOPES`
+ * reads it. Without this a token scoped for reading could delete through
  * `/mcp` what it could only read through `/api`. A tool with no entry is
  * refused, so an unmapped tool fails closed. The scopes are not quoted, as no
  * other auth refusal quotes them.
  */
-function scopeRefusal(caller: McpCaller, toolName: string): Error | null {
+function scopeRefusal(caller: McpCaller, toolName: string, input: unknown): Error | null {
   const required = MCP_TOOL_SCOPES[toolName]
-  if (required !== undefined && hasRequiredScopes(caller.grant.scopes, required)) return null
+  const asked = (input ?? {}) as Readonly<Record<string, unknown>>
+  const more = MCP_TOOL_INPUT_SCOPES[toolName]?.(asked) ?? []
+  if (required !== undefined && hasRequiredScopes(caller.grant.scopes, [...required, ...more])) {
+    return null
+  }
   return new McpCallRefusalError(
     `insufficient_scope: this credential's scopes do not reach ${toolName}`,
   )
@@ -132,7 +137,7 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       execute: (input: never) => {
         const caller = callers.getStore()
         if (caller === undefined) return tool.execute(input)
-        const insufficient = scopeRefusal(caller, tool.name)
+        const insufficient = scopeRefusal(caller, tool.name, input)
         if (insufficient !== null) return Promise.reject(insufficient)
         const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
         if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)

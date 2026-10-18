@@ -457,6 +457,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   the grant also holds `workspace:write`, and nothing of it is kept. Moving
   a whole workspace in needs `canvas:write`, `workspace:write` and
   `versions:write`.
+- **A version grant restores in place, and writes no other document.**
+  `versions:write` restores a document to one of its own saved versions. A
+  restore into another path, or of a whole subtree, creates, replaces or
+  deletes other documents, so it also needs `workspace:write` — over HTTP
+  and through `wb_version_restore` alike — and is refused with
+  `insufficient_scope`, writing nothing, without it.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
@@ -481,6 +487,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   refuses and writes nothing, and a move leaves such a document as written,
   which the daemon reports. The details are in
   [Export formats](../reference/export-formats.md#how-large-a-markdown-document-may-be).
+- **A saved version is held to the bounds of any other write.** A move into
+  the daemon carries the browser's saved versions, each naming a past state
+  of the record, and a sync write is judged only on the state it leaves. So
+  the daemon judges each carried version's state too, and refuses the move
+  whole — in the same error a sync write gets (`markdown_too_large`,
+  `too_many_nodes_or_edges`, …) — when one holds a body, node text, label or
+  board past its limit. A restore judges the state it is about to write the
+  same way, in every mode, and refuses with that error before writing
+  anything.
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.

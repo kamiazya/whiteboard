@@ -18,6 +18,7 @@ import {
 } from './loro-bridge.js'
 import {
   importWithinTextLimits,
+  judgeStateWithinTextLimits,
   SYNC_TEXT_BREACH_CODES,
   syncTextLimitJudge,
 } from './sync-text-limits.js'
@@ -216,5 +217,33 @@ it('judges a short update against the board as the record holds it now, not as t
   expect(judge(updateFrom("a document's own root", record, addNode))).toMatchObject({
     shape: 'canvas-size',
     count: CANVAS_MAX_NODES + 1,
+  })
+})
+
+describe('judgeStateWithinTextLimits', () => {
+  it('judges the state a checked-out document shows, not its head', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, canvasOf(CANVAS_MAX_NODES + 1, 0))
+    doc.commit()
+    const oversized = doc.frontiers()
+    writeSpatialCanvas(doc, canvasOf(1, 0))
+    doc.commit()
+    expect(judgeStateWithinTextLimits(doc)).toBeNull()
+    doc.checkout(oversized)
+    expect(judgeStateWithinTextLimits(doc)).toMatchObject({
+      shape: 'canvas-size',
+      measure: 'nodes',
+      count: CANVAS_MAX_NODES + 1,
+    })
+    // Left as it was: still checked out where the caller put it.
+    expect(doc.isDetached()).toBe(true)
+    expect(doc.frontiers()).toEqual(oversized)
+  })
+
+  it('admits a state at the limit', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, canvasOf(CANVAS_MAX_NODES, CANVAS_MAX_EDGES))
+    doc.commit()
+    expect(judgeStateWithinTextLimits(doc)).toBeNull()
   })
 })

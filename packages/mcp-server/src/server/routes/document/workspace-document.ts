@@ -124,6 +124,36 @@ function decodeCarried(body: PromoteWorkspaceRequest) {
   }
 }
 
+/**
+ * Carried versions as server mode records them: each row names the member
+ * who carried it, as `personOperator` names the move's own checkpoint,
+ * because what the request states about who saved a row is the caller's
+ * word and server mode does not take a member's word for who another member
+ * is. A row is dated no later than the move — a future date would outrank
+ * every later checkpoint in the newest-first history, the auto-version cap
+ * and the unchanged-since check — while an earlier date and `auto` stand:
+ * the move keeps a history's dates, and the row now reads as the claim of
+ * the member it names. With no caller name (the local daemon, one person),
+ * the rows stand as stated.
+ */
+async function attributedToCaller(
+  c: Context,
+  callerName: CallerName | undefined,
+  carried: ReturnType<typeof decodeCarried>,
+): Promise<ReturnType<typeof decodeCarried>> {
+  if (callerName === undefined) return carried
+  const operator = await personOperator(c, callerName)
+  const now = Date.now()
+  return {
+    ...carried,
+    versions: carried.versions.map((version) => ({
+      ...version,
+      operator,
+      createdAt: Math.min(version.createdAt, now),
+    })),
+  }
+}
+
 // Promotion (ADR-0023): the browser keeper's whole record merged in, as the
 // update route would merge it, with the trash bytes and saved versions it
 // points at, plus one explicit human checkpoint per promoted document — the
@@ -144,7 +174,7 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     const body = await readJsonBody(c, promoteWorkspaceRequestSchema, PROMOTE_BODY)
     if ('refusal' in body) return body.refusal
     const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
-    const carried = decodeCarried(body.data)
+    const carried = await attributedToCaller(c, options.callerName, decodeCarried(body.data))
 
     // The device that wrote the row (ADR-0035 decision 2), as every other
     // human row this daemon writes.

@@ -5,7 +5,7 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { CANVAS_MAX_NODES, generateDocumentId } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -14,6 +14,7 @@ import type { LiveDocuments, RestoreProgressEvent, VersionHistory } from '../ser
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { VersionEntry } from '../versions/version-entry.js'
 import { type RestoreVersionResult, restoreVersion } from './restore-version.js'
+import { TextBreachRefusalError } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 // Joins a workspace id and a path into one map key. NUL cannot occur in
@@ -759,5 +760,40 @@ describe('a restore records the merge point it creates', () => {
     expect(versions.saved).toHaveLength(1)
     expect(versions.saved[0]?.path).toBe('canvas-b')
     expect(versions.saved[0]?.options.restoredFrom).toBe('v-past')
+  })
+})
+
+// A version a promote carried was never a head any sync write judged.
+describe('restoreVersion refuses a saved state past a sync limit', () => {
+  const oversizedIds = Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`)
+
+  it.each([
+    ['in place', {}],
+    ['into a new target', { targetPath: 'canvas-new' }],
+    ['onto an existing target', { targetPath: 'canvas-b', overwrite: true }],
+    ['as a subtree rollback', { subtree: true }],
+  ] as const)('%s, writing nothing', async (_mode, input) => {
+    const live = new FakeLive()
+    const rootId = live.seed('canvas-a', spatialDoc(['n1']))
+    live.seed('canvas-b', spatialDoc(['b1']))
+    live.seed('canvas-a/later', spatialDoc(['l1']))
+    const workspace = new LoroDoc()
+    createWorkspaceDocumentAtPath(workspace, {
+      path: 'canvas-a',
+      documentId: rootId,
+      kind: 'spatial',
+    })
+    writeWorkspaceDocumentContent(workspace, rootId, spatialDoc(oversizedIds))
+    const versions = versionsWith({ v1: { doc: spatialDoc(oversizedIds), workspace } })
+
+    const refused = await run(live, versions, input).catch((err: unknown) => err)
+    expect(refused).toBeInstanceOf(TextBreachRefusalError)
+    expect(refused).toMatchObject({ code: 'too_many_nodes_or_edges', status: 413 })
+    const writes = live.calls.map((c) => c.method).filter((m) => m === 'save' || m === 'delete')
+    expect(writes).toEqual([])
+    expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
+    expect(nodeIdsAt(live, 'canvas-b')).toEqual(['b1'])
+    expect(live.paths()).toEqual(['canvas-a', 'canvas-a/later', 'canvas-b'])
+    expect(versions.saved).toEqual([])
   })
 })
