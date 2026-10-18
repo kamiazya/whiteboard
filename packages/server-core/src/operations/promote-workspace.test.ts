@@ -7,10 +7,12 @@ import {
   WORKSPACE_TREE_KEY,
   writeCommentThread,
   writeMarkdownBody,
+  writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  CANVAS_MAX_NODES,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
   LABEL_MAX_CHARS,
@@ -424,6 +426,16 @@ describe('promoteWorkspace', () => {
           anchor: { kind: 'document' },
           status: 'open',
           messages: [{ id: 'm1', body: 'hello' }],
+        }),
+    },
+    'canvas-size': {
+      at: 'sketch',
+      write: (board: Board) =>
+        writeSpatialCanvas(board, {
+          nodes: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) =>
+            textNode({ id: `n${i}`, x: 0, y: 0, width: 100, height: 40, text: 'n' }),
+          ),
+          edges: [],
         }),
     },
   } satisfies Record<

@@ -99,6 +99,30 @@ export function mintId(taken: ReadonlySet<string>, prefix: string): string {
 }
 
 /**
+ * A by-id lookup over an element array, rebuilt only when the array was
+ * REPLACED: the session reassigns its arrays on every write and never splices
+ * them, so identity says whether the index is current. A batch resolves ids
+ * many times between writes — a tidy scope or a region list can name every
+ * node on the board — and a linear `find` per id made that quadratic. The
+ * first element under an id wins, which is what `find` answered.
+ */
+function lookupById<T extends { readonly id: string }>(): (
+  list: readonly T[],
+  id: string,
+) => T | undefined {
+  let indexed: readonly T[] | undefined
+  let byId = new Map<string, T>()
+  return (list, id) => {
+    if (list !== indexed) {
+      byId = new Map()
+      for (const item of list) if (!byId.has(item.id)) byId.set(item.id, item)
+      indexed = list
+    }
+    return byId.get(id)
+  }
+}
+
+/**
  * The in-memory canvas one `wb_canvas_edit` batch edits, and the helpers that
  * keep its invariants.
  *
@@ -137,6 +161,12 @@ export class CanvasEditSession {
   readonly geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
   readonly cursor = new PlacementCursor()
   /**
+   * Whether this batch has tidied. A tidy lays out the whole board, so a
+   * batch takes one: a second is refused rather than run, since a batch of
+   * them costs the write lock a whole-board layout per op.
+   */
+  tidied = false
+  /**
    * Groups this batch put at the cursor, with the sizes they were given
    * (a default is not a choice). A caller that adds a group with no
    * position and then declares its members has said where the group
@@ -163,8 +193,10 @@ export class CanvasEditSession {
     this.measure = measure
   }
 
-  nodeAt = (id: string) => this.nodes.find((node) => node.id === id)
-  edgeAt = (id: string) => this.edges.find((edge) => edge.id === id)
+  private readonly nodeById = lookupById<SpatialNode>()
+  private readonly edgeById = lookupById<CanvasEdge>()
+  nodeAt = (id: string) => this.nodeById(this.nodes, id)
+  edgeAt = (id: string) => this.edgeById(this.edges, id)
   lineAt = (id: string) => this.lines.find((line) => line.id === id)
 
   groupNamed = (index: number, opName: string, id: string): SpatialNode => {

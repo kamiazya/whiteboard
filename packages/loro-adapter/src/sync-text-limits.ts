@@ -5,6 +5,8 @@
 // keeper accepted and the other would refuse, which is what promoting a
 // browser-kept workspace to the daemon would otherwise trip over.
 import {
+  CANVAS_MAX_EDGES,
+  CANVAS_MAX_NODES,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
   growsPast,
@@ -50,8 +52,13 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`), a node's, edge's or
  * board's tags past `TAGS_PER_ELEMENT_MAX` in number or with one past
  * `TAG_MAX_CHARS` (`tags`), or a container it brought in named past
- * `CONTAINER_NAME_MAX_CHARS` (`container-name`). Lengths are UTF-16 units,
- * the length every limit counts.
+ * `CONTAINER_NAME_MAX_CHARS` (`container-name`), or a board it grew past
+ * `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES` edges (`canvas-size`).
+ * Lengths are UTF-16 units, the length every limit counts.
+ *
+ * The board's size is judged here with its text because it is the same
+ * judgement on the same bytes, owed by the same keepers: what an update
+ * leaves for every later render to lay out again.
  */
 export type SyncTextBreach =
   | {
@@ -101,6 +108,15 @@ export type SyncTextBreach =
       /** The container whose name is past the bound. */
       readonly container: ContainerID
     }
+  | {
+      readonly shape: 'canvas-size'
+      /** Which bound: the board's nodes, or its edges. */
+      readonly measure: 'nodes' | 'edges'
+      /** How many the board would hold. */
+      readonly count: number
+      /** The map holding them, so a caller can name the document. */
+      readonly container: ContainerID
+    }
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -116,6 +132,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   'comment-message': 'comment_too_large',
   tags: 'tags_too_large',
   'container-name': 'container_name_too_long',
+  'canvas-size': 'too_many_nodes_or_edges',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -326,6 +343,8 @@ interface UpdateWrites {
   longValues: Map<string, LongValue>
   /** Where the update may bring in a container named past `CONTAINER_NAME_MAX_CHARS`. */
   names: NameSuspect[]
+  /** Every map the update set a key in — the only maps a board can have grown in. */
+  setInto: Set<ContainerID>
   touchesNodeMeta: boolean
 }
 
@@ -365,6 +384,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
     net: new Map(),
     longValues: new Map(),
     names: [],
+    setInto: new Set(),
     touchesNodeMeta: false,
   }
   for (const change of json.changes) {
@@ -383,6 +403,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
 function readMapWrite(writes: UpdateWrites, op: Op): void {
   const content = op.content as MapOp
   if (content.type !== 'insert') return
+  writes.setInto.add(op.container)
   BOUNDED_VALUES.forEach((bound, index) => {
     if (bound.length(content.value) <= bound.max) return
     writes.longValues.set(`${op.container} ${content.key} ${index}`, {
@@ -442,6 +463,43 @@ function valueBreach(
     const length = lengthIn(doc, value)
     if (growsPast(value.bound.max, before.get(id) ?? 0, length)) {
       return value.bound.breach(length, value.key, value.container)
+    }
+  }
+  return null
+}
+
+/** The bound a board's map holds, by the key it sits under. */
+const CANVAS_BOUNDS = [
+  { key: NODES_KEY, measure: 'nodes', max: CANVAS_MAX_NODES },
+  { key: EDGES_KEY, measure: 'edges', max: CANVAS_MAX_EDGES },
+] as const
+
+/** How many entries the map `container` holds in the doc's current state; 0 when there is none. */
+function entriesIn(doc: LoroDoc, container: ContainerID): number {
+  try {
+    return (doc.getContainerById(container) as LoroMap | undefined)?.size ?? 0
+  } catch {
+    // A container the update itself creates does not exist in the earlier state.
+    return 0
+  }
+}
+
+/**
+ * A board the update grew past a per-canvas bound. Only the maps it set a key
+ * in can have grown, and a board past a bound before the update is judged
+ * against itself, by `growsPast`, so removing is how it shrinks.
+ */
+function canvasBreach(
+  doc: LoroDoc,
+  setInto: ReadonlySet<ContainerID>,
+  before: ReadonlyMap<ContainerID, number>,
+): SyncTextBreach | null {
+  for (const container of setInto) {
+    const bound = CANVAS_BOUNDS.find(({ key }) => isContentContainer(doc, container, key))
+    if (bound === undefined) continue
+    const count = entriesIn(doc, container)
+    if (growsPast(bound.max, before.get(container) ?? 0, count)) {
+      return { shape: 'canvas-size', measure: bound.measure, count, container }
     }
   }
   return null
@@ -513,11 +571,16 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
     replays ? [...writes.longValues].map(([id, value]) => [id, lengthIn(doc, value)]) : [],
   )
   const namedBefore = replays ? heldBefore(doc, writes.names) : new Set<ContainerID>()
+  const entriesBefore = new Map(
+    replays ? [...writes.setInto].map((container) => [container, entriesIn(doc, container)]) : [],
+  )
   if (replays) doc.attach()
   const longName = longNameBreach(doc, writes.names, namedBefore)
   return judged(
     longName === null
-      ? (bodyBreach(doc, writes.net) ?? valueBreach(doc, writes.longValues, before))
+      ? (bodyBreach(doc, writes.net) ??
+          valueBreach(doc, writes.longValues, before) ??
+          canvasBreach(doc, writes.setInto, entriesBefore))
       : { shape: 'container-name', ...longName },
   )
 }
@@ -540,6 +603,54 @@ function longestBody(doc: LoroDoc): number {
 }
 
 /**
+ * The most nodes or edges any board in `doc` holds, at its root or under any
+ * workspace-tree node — opened only where present, as `longestBody` does.
+ */
+function largestBoard(doc: LoroDoc): number {
+  const roots = doc.getShallowValue()
+  let largest = 0
+  for (const { key } of CANVAS_BOUNDS) {
+    if (key in roots) largest = Math.max(largest, doc.getMap(key).size)
+  }
+  if (!(WORKSPACE_TREE_KEY in roots)) return largest
+  for (const node of doc.getTree(WORKSPACE_TREE_KEY).getNodes()) {
+    for (const { key } of CANVAS_BOUNDS) {
+      largest = Math.max(largest, (node.data.get(key) as LoroMap | undefined)?.size ?? 0)
+    }
+  }
+  return largest
+}
+
+/** No update this short can take a board past either per-canvas bound from where `largestBoard` found it. */
+const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
+
+/**
+ * At least what `measure` answers of `record` now, without walking it on
+ * every call: a walk is held as a bound and raised by the byte length of
+ * whatever `record` gained since, since no gain adds more characters or map
+ * entries than it has bytes. `walk` asks for a fresh reading, taken only when
+ * the held one was raised rather than read.
+ */
+function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: boolean) => number {
+  let held: { readonly at: VersionVector; readonly value: number; readonly read: boolean } | null =
+    null
+  return (walk) => {
+    const at = record.oplogVersion()
+    const current = held !== null && at.compare(held.at) === 0
+    if (held !== null && current && (held.read || !walk)) return held.value
+    held =
+      held === null || walk
+        ? { at, value: measure(record), read: true }
+        : {
+            at,
+            value: held.value + record.export({ mode: 'update', from: held.at }).byteLength,
+            read: false,
+          }
+    return held.value
+  }
+}
+
+/**
  * The verdict `importWithinTextLimits` gives each update offered to `record`,
  * leaving `record` as it was — for a keeper with no cached instance to
  * discard. The caller imports into `record` what the judge lets through.
@@ -550,15 +661,16 @@ function longestBody(doc: LoroDoc): number {
  * it carry more tags than bytes (`sync-text-limits.test.ts` and
  * `sync-text-limits.tags.test.ts` pin that encoding). An update short
  * enough that no limit can be reached — no longer than the smallest bound,
- * a label's, and not enough to take the longest body past its own — is
- * therefore answered without being applied.
+ * a label's, and not enough to take the longest body past its own, nor the
+ * largest board past a node or edge bound, since an update adds no more map
+ * entries than it has bytes — is therefore answered without being applied.
  *
- * The longest body is not walked for each update: every document's body
- * would be read on every keystroke, in a workspace of hundreds of notes. It
- * is walked once and then held as a bound, raised by the byte length of
- * whatever `record` gained since — the same encoding argument, applied to
- * that gain — and walked again only when the bound would let an update
- * through no more.
+ * Neither the longest body nor the largest board is walked for each update:
+ * every document would be read on every keystroke, in a workspace of
+ * hundreds of notes. Each is walked once and then held as a bound
+ * (`heldBound`), raised by the byte length of whatever `record` gained since
+ * — the same encoding argument, applied to that gain — and walked again only
+ * when the bound would let an update through no more.
  *
  * Any other update is judged on a copy of the record. The copy is made once
  * and brought up to `record` before each judgement by what `record` gained
@@ -575,22 +687,14 @@ function longestBody(doc: LoroDoc): number {
  */
 export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => SyncTextBreach | null {
   let copy: LoroDoc | null = null
-  let bodies: { readonly at: VersionVector; readonly longest: number } | null = null
-  /** At least the longest body `record` holds now: the held bound, or a fresh walk when `walk`. */
-  const longestBodyAtMost = (walk: boolean): number => {
-    const at = record.oplogVersion()
-    let longest: number
-    if (bodies === null || walk) longest = longestBody(record)
-    else if (at.compare(bodies.at) === 0) longest = bodies.longest
-    else longest = bodies.longest + record.export({ mode: 'update', from: bodies.at }).byteLength
-    bodies = { at, longest }
-    return longest
-  }
+  const longestBodyAtMost = heldBound(record, longestBody)
+  const largestBoardAtMost = heldBound(record, largestBoard)
   return (update) => {
     const most = update.byteLength
     if (most <= SMALLEST_VALUE_BOUND) {
-      const fits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
-      if (fits(false) || fits(true)) return null
+      const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
+      const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
+      if ((bodyFits(false) || bodyFits(true)) && (boardFits(false) || boardFits(true))) return null
     }
     if (copy === null) copy = record.fork()
     else copy.import(record.export({ mode: 'update', from: copy.oplogVersion() }))

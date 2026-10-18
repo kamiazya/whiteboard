@@ -6,8 +6,13 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES,
+  CANVAS_MAX_NODES,
+  CANVAS_NODES_LIMIT_PHRASE,
   compareCodeUnit,
   type ExtensionFacets,
+  growsPast,
   type SpatialCanvas,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
@@ -389,6 +394,33 @@ function editedCanvas(canvas: SpatialCanvas, s: CanvasEditSession): SpatialCanva
   }
 }
 
+/**
+ * Refuses the op that takes the board past a per-canvas ceiling, judged
+ * against the board as loaded: a canvas stored past one still takes a batch
+ * that ends no larger than it began, so removing is how it shrinks.
+ */
+function refuseCanvasGrowth(
+  canvas: SpatialCanvas,
+  s: CanvasEditSession,
+  index: number,
+  op: string,
+): void {
+  if (growsPast(CANVAS_MAX_NODES, canvas.nodes.length, s.nodes.length)) {
+    fail(
+      index,
+      op,
+      `the canvas would hold ${s.nodes.length} nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
+    )
+  }
+  if (growsPast(CANVAS_MAX_EDGES, canvas.edges.length, s.edges.length)) {
+    fail(
+      index,
+      op,
+      `the canvas would hold ${s.edges.length} edges, past ${CANVAS_EDGES_LIMIT_PHRASE}`,
+    )
+  }
+}
+
 async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<CanvasEditOutput> {
   const facetRegistry = await resolveEditRegistry(deps, input)
   const proposing = decideProposing(input)
@@ -410,6 +442,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const ctx: CanvasEditContext = { s, facetRegistry }
   input.ops.forEach((op, index) => {
     applyCanvasOp(ctx, op, index)
+    refuseCanvasGrowth(canvas, s, index, op.op)
   })
 
   const candidate = editedCanvas(canvas, s)

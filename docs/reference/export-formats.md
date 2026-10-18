@@ -223,6 +223,29 @@ the bound still takes a write, and a copy of its document stays readable. A
 browser-kept workspace refuses the same change the way it refuses an
 over-long node.
 
+## How many nodes and edges one canvas may hold
+
+One canvas holds at most **2,000 nodes** and at most **2,000 edges**. Every
+render, export, layout read and tidy lays the whole board out again, and the
+cost grows with how many edges are routed among how many boxes: about seven
+seconds for a board of 2,000 nodes and 2,000 edges, and minutes for boards
+several times that size. `wb_canvas_edit` refuses the op that would take a
+board past either bound, naming it — "the canvas would hold 2001 nodes, past
+the 2000-node limit for one canvas" — and writes nothing; the same bound
+applies to a batch stored as a proposal. A `tidy` op's `scope` and a
+`region.set` op's `nodes` list at most 2,000 ids, and its `edges` at most
+2,000.
+
+The daemon's sync routes — a document's `update`, the workspace document's
+`update` and `promote` — refuse an update that grows a board past either bound
+with `413` and `{"error":"too_many_nodes_or_edges"}`, storing nothing; `promote` names
+the canvas. A browser-kept workspace refuses the same change the way it
+refuses an over-long node: nothing is saved, the page goes back to what is
+stored, and the notice says why. A board stored past a bound before it existed
+still reads, and still takes any change that leaves it no larger — moving,
+restyling, or replacing one node with another — so removing nodes or edges is
+how it shrinks.
+
 ## How many ops one call may carry
 
 One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit`,
@@ -235,6 +258,11 @@ so the bound is what keeps one call's cost near a second on the largest body a
 document may hold. `wb_body_edit` stores a proposed passage at the offsets its
 quote was found at, as `wb_thread_edit` does for a thread, so reading the
 proposal back does not search again.
+
+A `wb_canvas_edit` batch tidies at most once: a second `tidy` op is refused
+with "a batch tidies at most once", and nothing is written. One tidy lays out
+the whole board, so name every node to tidy in that op's `scope`, or tidy
+again in another call.
 
 ## OKF frontmatter this server does not model
 

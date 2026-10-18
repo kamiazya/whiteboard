@@ -1,5 +1,9 @@
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES,
+  CANVAS_MAX_NODES,
+  CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_LIMIT_PHRASE,
@@ -71,6 +75,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     }),
   'container-name': () =>
     textBreachRefusal({ shape: 'container-name', chars: 70_000, container: MAP }),
+  'canvas-size': () =>
+    textBreachRefusal({ shape: 'canvas-size', measure: 'nodes', count: 2_001, container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -237,6 +243,26 @@ describe('a refused container name', () => {
   it('names the document holding it, once resolved', () => {
     expect(refusal({ path: 'boards/ops' })).toBe(
       `The document at "boards/ops" holds a container named with ${CONTAINER_NAME_MAX_CHARS + 1} characters, past ${CONTAINER_NAME_LIMIT_PHRASE}`,
+    )
+  })
+})
+
+describe('a refused canvas size', () => {
+  const refusal = (measure: 'nodes' | 'edges', count: number, at?: refusals.RefusedIn) =>
+    textBreachRefusal({ shape: 'canvas-size', measure, count, container: MAP }, at).message
+
+  it('says how large the board would be and ends on the bound the tool holds', () => {
+    expect(refusal('nodes', CANVAS_MAX_NODES + 1)).toBe(
+      `This update would leave a canvas of ${CANVAS_MAX_NODES + 1} nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
+    )
+    expect(refusal('edges', CANVAS_MAX_EDGES + 1)).toBe(
+      `This update would leave a canvas of ${CANVAS_MAX_EDGES + 1} edges, past ${CANVAS_EDGES_LIMIT_PHRASE}`,
+    )
+  })
+
+  it('names the document holding it, once resolved', () => {
+    expect(refusal('nodes', 2_500, { path: 'boards/ops' })).toBe(
+      `The document at "boards/ops" is a canvas of 2500 nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
     )
   })
 })

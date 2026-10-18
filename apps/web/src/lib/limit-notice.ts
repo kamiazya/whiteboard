@@ -112,9 +112,9 @@ export function tagCountNotice(count: number): string {
 }
 
 /**
- * Why a keeper refused a write past a text bound, for the notice above the
- * page. The refusal carries no length, so these name the bound rather than
- * a count.
+ * Why a keeper refused a write past a text bound or a canvas size bound, for
+ * the notice above the page. The refusal carries no length, so these name
+ * the bound rather than a count.
  */
 export const KEEPER_LIMIT_REASON = {
   markdown_too_large: `It would make this document longer than one document may be. ${MARKDOWN_BODY_ADVICE}`,
@@ -127,6 +127,8 @@ export const KEEPER_LIMIT_REASON = {
     'It would give a link node a URL, a file node a path, or a group a background, longer than one may be.',
   tags_too_large:
     'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
+  too_many_nodes_or_edges:
+    'It would give this canvas more nodes or edges than one canvas may hold. Remove some first, or split the board across canvases.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>
 
 /**
