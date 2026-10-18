@@ -32,6 +32,38 @@ const queues = new Map<string, Promise<void>>()
 // must still queue normally rather than run concurrently.
 const heldByThisChain = new AsyncLocalStorage<ReadonlySet<string>>()
 
+/**
+ * What a writer must still pass when it enters the lock, for the request it
+ * serves: rejects to refuse the write. A request is admitted before its body
+ * is read, and the body may take as long to arrive as the transport allows;
+ * every write to a workspace's content enters this lock, so this is the one
+ * place a check can run after the body and right before the change.
+ */
+type WriteAdmission = (workspaceId: string) => Promise<void>
+
+const admissionOfThisChain = new AsyncLocalStorage<WriteAdmission>()
+
+/**
+ * Runs `fn` with `admit` asked on each write lock it enters (not re-entries),
+ * until `fn` settles. Work `fn` schedules for later inherits this chain, and
+ * once `fn` has answered what it writes was already accepted, so it is not
+ * asked again.
+ */
+export async function runWithWriteAdmission<T>(
+  admit: WriteAdmission,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let open = true
+  try {
+    return await admissionOfThisChain.run(
+      (workspaceId) => (open ? admit(workspaceId) : Promise.resolve()),
+      fn,
+    )
+  } finally {
+    open = false
+  }
+}
+
 export async function withWorkspaceWriteLock<T>(
   workspaceId: string,
   fn: () => Promise<T>,
@@ -63,6 +95,7 @@ export async function withWorkspaceWriteLock<T>(
     // surfaced to that caller.
   }
   try {
+    await admissionOfThisChain.getStore()?.(workspaceId)
     const nextHeld = new Set(alreadyHeld ?? [])
     nextHeld.add(workspaceId)
     return await heldByThisChain.run(nextHeld, fn)

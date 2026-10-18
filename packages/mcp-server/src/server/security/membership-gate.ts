@@ -5,8 +5,10 @@
  * addresses, and the same answer for handlers that decide membership
  * themselves (the workspace list, the SSE transport).
  */
-import type { Context } from 'hono'
+import type { Context, Next } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { getLogger } from '../log.js'
+import { runWithWriteAdmission } from '../store/workspace-lock.js'
 import {
   NO_NAMESPACE,
   rememberCallerNamespace,
@@ -18,6 +20,7 @@ import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
 import {
   membershipRefusal,
+  OPERATOR_ISSUED_KINDS,
   type WorkspaceAccessDecision,
   workspaceAccess,
 } from './workspace-access.js'
@@ -65,6 +68,45 @@ export async function membershipRefusalFor(
     'membership refused',
   )
   return c.json(membershipRefusal(access), 403)
+}
+
+const READS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Runs an admitted request so its writes check membership again as they are
+ * made. The gate above judged the request when it arrived, before its body;
+ * a person removed (or deactivated) while that body was still arriving must
+ * not have the write land. The check is one indexed read on each workspace
+ * write lock the request enters for the workspace it addresses, and only
+ * while the request is being answered: work it schedules for later (a
+ * checkpoint) writes what was already accepted.
+ *
+ * Only a person's grant is re-checked — an operator-issued one is admitted
+ * by kind, which no removal changes.
+ */
+export async function whileStillAdmitted(
+  c: Context,
+  grant: ResolvedGrant,
+  members: MemberProfileStore,
+  next: Next,
+): Promise<void> {
+  if (READS.has(c.req.method.toUpperCase())) return next()
+  if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return next()
+  const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
+  if (gated.kind !== 'handle' || grant.person === undefined) return next()
+  const userId = (await members.profileForBinding(grant.person))?.id
+  if (userId === undefined) return next()
+  const workspaceId = await workspaceIdFromHandle(c, gated.handle)
+  const admit = async (writing: string) => {
+    if (writing !== workspaceId) return
+    if (await members.holdsAccess(workspaceId, userId)) return
+    log.warning(
+      { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: 'not_a_member' },
+      'write refused: membership ended while the request was in flight',
+    )
+    throw new HTTPException(403, { res: c.json(membershipRefusal('not_a_member'), 403) })
+  }
+  await runWithWriteAdmission(admit, next)
 }
 
 /**

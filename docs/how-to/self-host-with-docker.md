@@ -214,6 +214,11 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
+Removing a member, or deactivating them, also stops a write of theirs that is
+still arriving: an update or upload whose body was in transit when they were
+removed is refused with `403 not_a_member` and changes nothing. Their open
+live-sync streams end as well.
+
 A version a member saves, the checkpoint left when a workspace is moved
 in from a browser, and each saved version that move carries show that
 member's profile name in the History panel. The server takes the name from
