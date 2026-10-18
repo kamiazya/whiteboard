@@ -1,5 +1,5 @@
 /**
- * The most nodes, and the most edges, one canvas may hold.
+ * The most nodes, and the most edges and lines together, one canvas may hold.
  *
  * A COST bound, sized against what every read of the board repeats: a
  * render, an export, a layout read and a tidy each lay the whole canvas out
@@ -19,6 +19,13 @@
  * `wb_canvas_snapshot` read lists, and far past what an agent-drawn board
  * reaches.
  *
+ * Lines (ink) count against the edge bound, beside the edges, because the
+ * layout routes both through one pipeline and a line costs what an edge
+ * costs: 1819 edges and 1831 lines lay out in 15.7 s, 3489 edges alone in
+ * 14.9 s, and 1872 lines alone in 9.0 s against 8.3 s for 1819 edges alone
+ * (the same script, `LINES_PER_CLUSTER`). A bound of its own for lines would
+ * let a board route twice what the edge bound was sized to.
+ *
  * Counted per canvas because that is what one render pays for. What a
  * workspace holds in all is `WORKSPACE_MAX_DOCUMENTS`' concern.
  *
@@ -28,11 +35,11 @@
  */
 export const CANVAS_MAX_NODES = 2000
 
-/** See `CANVAS_MAX_NODES`. */
-export const CANVAS_MAX_EDGES = 2000
+/** How many edges and lines one canvas may hold between them. See `CANVAS_MAX_NODES`. */
+export const CANVAS_MAX_EDGES_AND_LINES = 2000
 
 /** The node bound as every refusal of it ends. */
 export const CANVAS_NODES_LIMIT_PHRASE = `the ${CANVAS_MAX_NODES}-node limit for one canvas; remove nodes first, or split the board across canvases`
 
-/** The edge bound as every refusal of it ends. */
-export const CANVAS_EDGES_LIMIT_PHRASE = `the ${CANVAS_MAX_EDGES}-edge limit for one canvas; remove edges first, or split the board across canvases`
+/** The edge-and-line bound as every refusal of it ends. */
+export const CANVAS_EDGES_AND_LINES_LIMIT_PHRASE = `the limit of ${CANVAS_MAX_EDGES_AND_LINES} edges and lines together for one canvas; remove edges or lines first, or split the board across canvases`

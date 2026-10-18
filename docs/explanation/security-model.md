@@ -506,9 +506,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
   checkpointed one at a time, not all at once.
-- **A canvas holds a bounded number of nodes and edges.** Every render,
+- **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
-  board holds at most 2000 nodes and 2000 edges, however the change arrives:
+  board holds at most 2000 nodes and 2000 edges and lines together (a line is
+  routed like an edge and costs the same), however the change arrives:
   `wb_canvas_edit` refuses the op that would pass either, and a sync update
   or a move is refused whole (`too_many_nodes_or_edges`). One batch tidies at most
   once, so a single call cannot repeat a whole-board layout once per op. What

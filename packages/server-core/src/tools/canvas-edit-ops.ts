@@ -6,8 +6,8 @@
 import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
 import {
   annotationIdInputSchema,
-  CANVAS_EDGES_LIMIT_PHRASE,
-  CANVAS_MAX_EDGES,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
   canvasCommentDraftSchema,
@@ -560,7 +560,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
         ),
       edges: z
         .array(nodeIdSchema)
-        .max(CANVAS_MAX_EDGES, `more edges than ${CANVAS_EDGES_LIMIT_PHRASE}`)
+        .max(CANVAS_MAX_EDGES_AND_LINES, `more edges than ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`)
         .optional()
         .describe('Edges to keep among the members; omitted keeps every edge whose ends survive.'),
     })

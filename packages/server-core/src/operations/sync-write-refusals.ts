@@ -4,7 +4,7 @@
 // a refusal added here reaches each surface with the same code and status.
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
   CONTAINER_NAME_LIMIT_PHRASE,
@@ -237,7 +237,8 @@ class ContainerNameTooLongError extends TextBreachRefusalError {
 }
 
 /**
- * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES` edges —
+ * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES`
+ * edges and lines together —
  * the bounds every tool write holds, since each render, export and tidy lays
  * the whole board out again. A board stored past one still takes an edit that
  * does not grow it.
@@ -249,13 +250,15 @@ class CanvasTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'canvas-size'>,
     readonly at?: RefusedIn,
   ) {
-    const board = `a canvas of ${breach.count} ${breach.measure}`
+    const board = `a canvas of ${breach.count} ${breach.measure === 'nodes' ? 'nodes' : 'edges and lines'}`
     super(
       valueRefusalMessage(
         at,
         `leave ${board}`,
         `is ${board}`,
-        breach.measure === 'nodes' ? CANVAS_NODES_LIMIT_PHRASE : CANVAS_EDGES_LIMIT_PHRASE,
+        breach.measure === 'nodes'
+          ? CANVAS_NODES_LIMIT_PHRASE
+          : CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
       ),
     )
     this.name = 'CanvasTooLargeError'

@@ -1,7 +1,7 @@
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
-  CANVAS_MAX_EDGES,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
@@ -248,15 +248,15 @@ describe('a refused container name', () => {
 })
 
 describe('a refused canvas size', () => {
-  const refusal = (measure: 'nodes' | 'edges', count: number, at?: refusals.RefusedIn) =>
+  const refusal = (measure: 'nodes' | 'edges-and-lines', count: number, at?: refusals.RefusedIn) =>
     textBreachRefusal({ shape: 'canvas-size', measure, count, container: MAP }, at).message
 
   it('says how large the board would be and ends on the bound the tool holds', () => {
     expect(refusal('nodes', CANVAS_MAX_NODES + 1)).toBe(
       `This update would leave a canvas of ${CANVAS_MAX_NODES + 1} nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
     )
-    expect(refusal('edges', CANVAS_MAX_EDGES + 1)).toBe(
-      `This update would leave a canvas of ${CANVAS_MAX_EDGES + 1} edges, past ${CANVAS_EDGES_LIMIT_PHRASE}`,
+    expect(refusal('edges-and-lines', CANVAS_MAX_EDGES_AND_LINES + 1)).toBe(
+      `This update would leave a canvas of ${CANVAS_MAX_EDGES_AND_LINES + 1} edges and lines, past ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`,
     )
   })
 

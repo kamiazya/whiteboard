@@ -6,8 +6,8 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
-  CANVAS_MAX_EDGES,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
   compareCodeUnit,
@@ -412,11 +412,14 @@ function refuseCanvasGrowth(
       `the canvas would hold ${s.nodes.length} nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
     )
   }
-  if (growsPast(CANVAS_MAX_EDGES, canvas.edges.length, s.edges.length)) {
+  // One bound for both: the layout routes edges and lines through one pipeline.
+  const routedBefore = canvas.edges.length + (canvas.lines?.length ?? 0)
+  const routed = s.edges.length + s.lines.length
+  if (growsPast(CANVAS_MAX_EDGES_AND_LINES, routedBefore, routed)) {
     fail(
       index,
       op,
-      `the canvas would hold ${s.edges.length} edges, past ${CANVAS_EDGES_LIMIT_PHRASE}`,
+      `the canvas would hold ${routed} edges and lines, past ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`,
     )
   }
 }

@@ -223,28 +223,31 @@ the bound still takes a write, and a copy of its document stays readable. A
 browser-kept workspace refuses the same change the way it refuses an
 over-long node.
 
-## How many nodes and edges one canvas may hold
+## How many nodes, edges and lines one canvas may hold
 
-One canvas holds at most **2,000 nodes** and at most **2,000 edges**. Every
+One canvas holds at most **2,000 nodes** and at most **2,000 edges and lines
+together** — a line (ink) counts against the same bound as an edge, because
+the layout routes both the same way and one costs what the other does. Every
 render, export, layout read and tidy lays the whole board out again, and the
-cost grows with how many edges are routed among how many boxes: about seven
-seconds for a board of 2,000 nodes and 2,000 edges, and minutes for boards
-several times that size. `wb_canvas_edit` refuses the op that would take a
-board past either bound, naming it — "the canvas would hold 2001 nodes, past
-the 2000-node limit for one canvas" — and writes nothing; the same bound
-applies to a batch stored as a proposal. A `tidy` op's `scope` and a
-`region.set` op's `nodes` list at most 2,000 ids, and its `edges` at most
-2,000.
+cost grows with how many edges and lines are routed among how many boxes:
+about seven seconds for a board of 2,000 nodes and 2,000 edges, and minutes
+for boards several times that size. `wb_canvas_edit` refuses the op that would
+take a board past either bound, naming it — "the canvas would hold 2001 nodes,
+past the 2000-node limit for one canvas", or "the canvas would hold 2001 edges
+and lines, past the limit of 2000 edges and lines together for one canvas" —
+and writes nothing; the same bound applies to a batch stored as a proposal. A
+`tidy` op's `scope` and a `region.set` op's `nodes` list at most 2,000 ids,
+and its `edges` at most 2,000.
 
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — refuse an update that grows a board past either bound
-with `413` and `{"error":"too_many_nodes_or_edges"}`, storing nothing; `promote` names
-the canvas. A browser-kept workspace refuses the same change the way it
-refuses an over-long node: nothing is saved, the page goes back to what is
-stored, and the notice says why. A board stored past a bound before it existed
-still reads, and still takes any change that leaves it no larger — moving,
-restyling, or replacing one node with another — so removing nodes or edges is
-how it shrinks.
+with `413` and `{"error":"too_many_nodes_or_edges"}` (the code covers lines
+too), storing nothing; `promote` names the canvas. A browser-kept workspace
+refuses the same change the way it refuses an over-long node: nothing is
+saved, the page goes back to what is stored, and the notice says why. A board
+stored past a bound before it existed still reads, and still takes any change
+that leaves it no larger — moving, restyling, or replacing one node with
+another — so removing nodes, edges or lines is how it shrinks.
 
 ## How many ops one call may carry
 
