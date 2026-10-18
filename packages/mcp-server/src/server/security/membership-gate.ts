@@ -147,6 +147,22 @@ export async function callerUserId(
   return (await members.profileForBinding(person))?.id ?? null
 }
 
+/**
+ * The name a row a person writes (a saved version, a promote checkpoint)
+ * records, on a keeper with people to tell apart: the caller's own profile
+ * name, or null when the grant names no user here. Absent where there is one
+ * person (the local daemon), whose rows keep today's self-report.
+ */
+export type CallerName = (c: Context) => Promise<string | null>
+
+export function callerDisplayName(members: MemberProfileStore): CallerName {
+  return async (c) => {
+    const person = callerPerson(c)
+    if (person === undefined) return null
+    return (await members.profileForBinding(person))?.displayName ?? null
+  }
+}
+
 export function creatorAsFirstMember(members: MemberProfileStore): FirstMember {
   return {
     profileFor: (c) => callerUserId(c, members),

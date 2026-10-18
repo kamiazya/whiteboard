@@ -9,16 +9,12 @@ import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
+import type { CallerName } from '../../security/membership-gate.js'
 import { getDoc, listDocuments } from '../../store/document-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
-import {
-  defaultHumanDisplayName,
-  firstOwned,
-  refusalReason,
-  STORED_DOCUMENT_ANSWERS,
-} from './_shared.js'
+import { firstOwned, personOperator, refusalReason, STORED_DOCUMENT_ANSWERS } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
@@ -31,6 +27,8 @@ export interface VersionsRouterOptions {
    * than an invented one; `app.ts` always passes it.
    */
   daemonActor?: string
+  /** Who the caller is, where the keeper knows; see `personOperator`. */
+  callerName?: CallerName
 }
 
 /**
@@ -76,7 +74,7 @@ async function pastContent(
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
-  const { versionStore, daemonActor, scope } = options
+  const { versionStore, daemonActor, scope, callerName } = options
 
   // List versions for one canvas in reverse chronological order.
   onDocumentsRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
@@ -153,7 +151,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       // fails no test, because nothing can get an `actor` past the schema to
       // notice. A caller that names no operator at all still gets one.
       const nextOperator: OperatorInfo = {
-        ...(operator ?? { kind: 'human' as const, displayName: defaultHumanDisplayName() }),
+        ...(await personOperator(c, callerName, operator)),
         ...(daemonActor === undefined ? {} : { actor: daemonActor }),
       }
       const entry = await versionStore.save(workspaceId, path, doc, {

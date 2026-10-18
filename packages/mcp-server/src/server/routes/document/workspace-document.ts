@@ -18,11 +18,12 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
+import type { CallerName } from '../../security/membership-gate.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
-import { defaultHumanDisplayName } from './_shared.js'
+import { personOperator } from './_shared.js'
 
 export interface WorkspaceDocumentRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
@@ -31,6 +32,8 @@ export interface WorkspaceDocumentRouterOptions {
   serverDeps: ServerDeps
   /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
   daemonActor?: string
+  /** Who the caller is, where the keeper knows — see `VersionsRouterOptions.callerName`. */
+  callerName?: CallerName
 }
 
 // The workspace-granularity sync surface (order 7 of the workspace-document
@@ -143,8 +146,7 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     // The device that wrote the row (ADR-0035 decision 2), as every other
     // human row this daemon writes.
     const operator: OperatorInfo = {
-      kind: 'human',
-      displayName: defaultHumanDisplayName(),
+      ...(await personOperator(c, options.callerName)),
       ...(options.daemonActor === undefined ? {} : { actor: options.daemonActor }),
     }
     let result: Awaited<ReturnType<typeof promoteWorkspace>>

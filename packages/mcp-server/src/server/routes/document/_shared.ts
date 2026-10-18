@@ -1,4 +1,5 @@
 import { userInfo } from 'node:os'
+import type { saveVersionRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   documentPathForAction,
   documentPathForFile,
@@ -22,8 +23,9 @@ import {
   type ServerDeps,
   WorkspaceNotFoundForCallerError,
 } from '@kamiazya/whiteboard-server-core'
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import type { z } from 'zod'
+import type { CallerName } from '../../security/membership-gate.js'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validateDocumentPath, validationErrorBody } from '../../validators.js'
 import {
@@ -32,7 +34,7 @@ import {
   workspaceIdFromHandle,
 } from '../../workspace-handle.js'
 
-export function defaultHumanDisplayName(): string {
+function defaultHumanDisplayName(): string {
   try {
     const name = userInfo().username.trim()
     if (name.length > 0) return name
@@ -40,6 +42,31 @@ export function defaultHumanDisplayName(): string {
     /* ignore */
   }
   return 'human'
+}
+
+/** An operator as a request may state it: everything but the device. */
+type StatedOperator = NonNullable<z.infer<typeof saveVersionRequestSchema>['operator']>
+
+/**
+ * Who a row a person asked for names, before the keeper stamps its device.
+ *
+ * Where the keeper knows its caller (`callerName`, server mode), the row
+ * names that member and nothing the request stated: any member could
+ * otherwise save under another's name, and an unnamed save would carry the
+ * server's OS account rather than anyone who used it. Where it does not (the
+ * local daemon, one person), the request's own operator stands, and the OS
+ * account is that person.
+ */
+export async function personOperator(
+  c: Context,
+  callerName: CallerName | undefined,
+  requested?: StatedOperator,
+): Promise<StatedOperator> {
+  if (callerName === undefined) {
+    return requested ?? { kind: 'human', displayName: defaultHumanDisplayName() }
+  }
+  const displayName = await callerName(c)
+  return displayName === null ? { kind: 'human' } : { kind: 'human', displayName }
 }
 
 export function handleCorruptStoredData(

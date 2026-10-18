@@ -43,6 +43,8 @@ import { createDaemonIdentity } from './security/daemon-identity.js'
 import { createLocalTokenMcpHttpAuthStrategy } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware } from './security/mcp-http.js'
 import {
+  type CallerName,
+  callerDisplayName,
   callerGrant,
   callerUserId,
   creatorAsFirstMember,
@@ -101,14 +103,16 @@ function membershipWiring(options: AppOptions): {
   admit: WorkspaceAdmit | undefined
   firstMember: FirstMember | undefined
   ownsWorkspace: WorkspaceOwnership | undefined
+  callerName: CallerName | undefined
 } {
   const members = options.authMode === 'server-mode' ? options.people.members : undefined
   return members === undefined
-    ? { admit: undefined, firstMember: undefined, ownsWorkspace: undefined }
+    ? { admit: undefined, firstMember: undefined, ownsWorkspace: undefined, callerName: undefined }
     : {
         admit: membershipAdmit(members),
         firstMember: creatorAsFirstMember(members),
         ownsWorkspace: (c, workspaceId) => callerOwns(c, members, workspaceId),
+        callerName: callerDisplayName(members),
       }
 }
 
@@ -119,6 +123,7 @@ function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>
     ...(membership.admit === undefined ? {} : { admit: membership.admit }),
     ...(membership.firstMember === undefined ? {} : { firstMember: membership.firstMember }),
     ...(membership.ownsWorkspace === undefined ? {} : { ownsWorkspace: membership.ownsWorkspace }),
+    ...(membership.callerName === undefined ? {} : { callerName: membership.callerName }),
   }
 }
 

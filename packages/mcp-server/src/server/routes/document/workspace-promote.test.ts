@@ -118,6 +118,24 @@ it('merges the record and leaves one explicit human checkpoint per document', as
   expect(versions[0]?.attestation).toBeUndefined()
 })
 
+it("names the calling member on the promote checkpoint, not the server's OS account", async () => {
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+      callerName: async () => 'Ada',
+    }),
+  )
+  const res = await app.request('/api/w/session1/workspace-document/promote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snapshot: b64u(browserSnapshot()) }),
+  })
+  expect(res.status).toBe(200)
+  const versions = await new FileVersionStore().list('session1', 'sketch')
+  expect(versions[0]?.operator).toEqual({ kind: 'human', displayName: 'Ada' })
+})
+
 it('refuses an attestation as a body outside the contract, since no passkey is pinned here, and merges nothing', async () => {
   const { promote, documents } = harness()
   const snapshot = browserSnapshot()
