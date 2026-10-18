@@ -238,7 +238,10 @@ still read, and still take a change that does not add to them.
 A text anchor's `prefix` and `suffix` — the context either side of a quoted
 passage — each carry at most **32 characters**. They tell one occurrence of a
 repeated passage from another, and finding the passage compares them against
-every occurrence, so their length is paid once per occurrence. `wb_thread_edit`
+each occurrence, so their length is paid once per occurrence. Only the
+**1,024 occurrences** nearest where the passage last was are compared: a
+passage quoted that often is placed among those, and one further away is
+not considered. `wb_thread_edit`
 refuses a longer one on `thread.add`, and `wb_body_edit` on `body.replace`,
 with "a text anchor's context is longer than the 32-character limit"; keep the
 characters nearest the passage. The editor writes 16. An anchor stored with a

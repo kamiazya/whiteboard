@@ -86,16 +86,17 @@ const OCCURRENCES = 32 * 1024
 /**
  * At most the occurrences nearest the stored offsets are scored, each read
  * for at most the context window on either side plus the character that
- * ends it; a few reads for the offsets' own check. Before the bound every
- * one of the 32,768 occurrences was collected and scored: 32,769 searches
- * and 2,096,640 reads per anchor.
+ * ends it; a few reads for the offsets' own check. Measured at 4,098
+ * searches and 65,536 reads per anchor; before the bound every one of the
+ * 32,768 occurrences was collected and scored, 32,769 searches and 2,096,640
+ * reads.
  */
 const SCORED_MAX = 1024
 const READ_CEILING = SCORED_MAX * 2 * (TEXT_ANCHOR_CONTEXT_MAX_CHARS + 1) + 64
 const SEARCH_CEILING = 12_000
 
 describe('re-placing an anchor whose offsets missed', () => {
-  it.fails('costs a bounded amount however often its quote occurs', () => {
+  it('costs a bounded amount however often its quote occurs', () => {
     const body = periodic(OCCURRENCES)
     const work = counted(body, (proxied) => {
       for (let i = 0; i < ANCHORS; i += 1) {

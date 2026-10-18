@@ -1,11 +1,14 @@
 /**
  * Making resolution cheap must not move any anchor a writer is allowed to
  * store: neither the bounded context window nor the linear search for a long
- * quote.
+ * quote — and the bound on how many occurrences are scored may move one only
+ * by leaving out occurrences further away than it scores.
  *
- * The oracle is the resolver as it stood before either, kept here verbatim
- * — unbounded context, `indexOf` for every quote: comparing against the
- * module under test would be the same code twice. Bodies are built from two
+ * The oracle is the resolver as it stood before any of them, kept here
+ * verbatim — unbounded context, `indexOf` for every quote, every occurrence
+ * scored — plus, for the last, a cut made by sorting every occurrence by
+ * distance: comparing against the module under test would be the same code
+ * twice. Bodies are built from two
  * lines, one of them rare, so occurrences of a quote share long runs of
  * context and differ only where the rare line falls — the arrangement where
  * characters far from the passage decide the winner, and the one a random
@@ -46,13 +49,33 @@ function referenceAfter(body: string, at: number, suffix: string): number {
   return shared
 }
 
-/** The unbounded resolver, for a body with no live mark. */
-function referenceResolve(body: string, anchor: TextAnchor): Resolved {
+/**
+ * The occurrences that get scored: all of them, or — past `scoredMax` — the
+ * `scoredMax` nearest the stored start, the lower first on a tie, found by
+ * sorting every occurrence rather than by searching outward.
+ */
+function referenceScored(occurrences: number[], start: number, scoredMax: number): number[] {
+  if (occurrences.length <= scoredMax) return occurrences
+  return [...occurrences]
+    .sort((x, y) => Math.abs(x - start) - Math.abs(y - start) || x - y)
+    .slice(0, scoredMax)
+    .sort((x, y) => x - y)
+}
+
+/**
+ * The unbounded resolver, for a body with no live mark; with `scoredMax`,
+ * the same resolver scoring only that many occurrences.
+ */
+function referenceResolve(
+  body: string,
+  anchor: TextAnchor,
+  scoredMax = Number.POSITIVE_INFINITY,
+): Resolved {
   const { exact, prefix = '', suffix = '' } = anchor.quote
   if (anchor.end <= body.length && body.slice(anchor.start, anchor.end) === exact) {
     return { kind: 'placed', start: anchor.start, end: anchor.end }
   }
-  const candidates = referenceOccurrences(body, exact)
+  const candidates = referenceScored(referenceOccurrences(body, exact), anchor.start, scoredMax)
   if (candidates.length === 0) return { kind: 'orphaned' }
   const at = candidates[0] as number
   if (candidates.length === 1) return { kind: 'placed', start: at, end: at + exact.length }
@@ -206,7 +229,68 @@ const LONG_QUOTES = {
   maxWidth: 900,
 }
 
-const tally = { scored: 0, decidedPastHalf: 0, longOverlapping: 0 }
+/**
+ * Over a thousand of one short line with a few rare ones, quoting the line
+ * break before a rare line: the quote occurs more often than resolution
+ * scores, and
+ * the occurrence whose context matches best is one the stored offsets may
+ * be too far from to score — the case the bound decides. Lines of four to
+ * eight characters keep the body under twenty thousand characters, which the
+ * sorting oracle can afford a hundred times over, while the occurrences
+ * scored on either side span more than one step of the outward search.
+ */
+const crowdedCase: fc.Arbitrary<Case> = fc
+  .record({
+    common: fc.stringMatching(/^[ab ]{3,7}$/).map((text) => `${text}\n`),
+    rare: line,
+    // Unbiased: fast-check favours small numbers, which would keep the body
+    // barely past the bound and the rare line and the stored offsets both
+    // near the top, inside it.
+    count: fc.noBias(fc.integer({ min: 1300, max: 2400 })),
+    rareAt: fc.array(fc.noBias(fc.nat()), { minLength: 1, maxLength: 2 }),
+    width: fc.integer({ min: 1, max: 2 }),
+    before: contextLength(TEXT_ANCHOR_CONTEXT_MAX_CHARS),
+    after: contextLength(TEXT_ANCHOR_CONTEXT_MAX_CHARS),
+    stored: fc.noBias(fc.nat()),
+  })
+  .map((drawn) => {
+    // Never the first line, so a line break precedes every rare one.
+    const rareLines = drawn.rareAt.map((at) => 1 + (at % (drawn.count - 1)))
+    const lines = Array.from({ length: drawn.count }, () => drawn.common)
+    for (const at of rareLines) lines[at] = drawn.rare
+    const body = lines.join('')
+    // The line break ending the line before a rare one, so the quote is as
+    // common as lines are and only its suffix tells this one apart.
+    const at = lines.slice(0, rareLines[0]).join('').length - 1
+    const exact = body.slice(at, Math.min(body.length, at + drawn.width))
+    const prefix = body.slice(Math.max(0, at - drawn.before), at)
+    const suffix = body.slice(at + exact.length, at + exact.length + drawn.after)
+    const start = drawn.stored % (body.length + 1)
+    return {
+      body,
+      anchor: {
+        kind: 'text' as const,
+        quote: {
+          exact,
+          ...(prefix === '' ? {} : { prefix }),
+          ...(suffix === '' ? {} : { suffix }),
+        },
+        start,
+        end: start,
+      },
+    }
+  })
+
+/** `SCORED_OCCURRENCES_MAX` in `text-anchor.ts`. */
+const SCORED_MAX = 1024
+
+const tally = {
+  scored: 0,
+  decidedPastHalf: 0,
+  longOverlapping: 0,
+  crowded: 0,
+  decidedByBound: 0,
+}
 
 describe('the bounded context window', () => {
   fcTest.prop(
@@ -268,4 +352,28 @@ describe('finding every occurrence of a long quote', () => {
       expect(tally.longOverlapping).toBeGreaterThan(5)
     },
   )
+})
+
+describe('scoring only the occurrences nearest the stored offsets', () => {
+  fcTest.prop([crowdedCase], withDefaults({ numRuns: 100 }))(
+    'places a crowded quote as the resolver scoring its nearest occurrences',
+    ({ body, anchor }) => {
+      const expected = referenceResolve(body, anchor, SCORED_MAX)
+      expect(resolveTextAnchor(body, anchor)).toEqual(expected)
+
+      // Reachability: the bound has to be exceeded, and has to change the
+      // answer, for this to judge the search that finds the nearest ones.
+      if (referenceOccurrences(body, anchor.quote.exact).length > SCORED_MAX) tally.crowded += 1
+      if (JSON.stringify(referenceResolve(body, anchor)) !== JSON.stringify(expected)) {
+        tally.decidedByBound += 1
+      }
+    },
+  )
+
+  afterAllFloor(['places a crowded quote as the resolver scoring its nearest occurrences'], () => {
+    // Floors at about two thirds of the lowest of 25 sampled runs (crowded
+    // min 58, decided-by-bound min 11).
+    expect(tally.crowded).toBeGreaterThan(40)
+    expect(tally.decidedByBound).toBeGreaterThan(6)
+  })
 })

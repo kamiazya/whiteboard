@@ -138,6 +138,43 @@ describe('the cost of a long quote', () => {
   })
 })
 
+describe('a quote that occurs more often than resolution scores', () => {
+  // `q` every fourth character, `ccc` between; the one at `rare` has `ddd`
+  // before it instead, so it is the only occurrence the prefix matches.
+  const OCCURRENCES = 1200
+  const SITE = 600
+  const bodyWithRareAt = (rare: number): string =>
+    Array.from({ length: OCCURRENCES }, (_, i) => `${i === rare ? 'ddd' : 'ccc'}q`).join('')
+  const at = (occurrence: number) => 4 * occurrence + 3
+  // Stored ON an occurrence with an empty range, so the offsets miss and the
+  // nearest occurrences come in pairs, one either side at each distance.
+  const anchor: TextAnchor = {
+    kind: 'text',
+    quote: { exact: 'q', prefix: 'ddd' },
+    start: at(SITE),
+    end: at(SITE),
+  }
+
+  // The site itself, then 511 pairs, then the lower of the 512th pair: of
+  // two equally near at the cut, the lower is scored, as the tiebreak among
+  // scored ones prefers it.
+  test('of two equally near at the cut, scores the lower', () => {
+    expect(resolveTextAnchor(bodyWithRareAt(SITE - 512), anchor)).toEqual({
+      kind: 'placed',
+      start: at(SITE - 512),
+      end: at(SITE - 512) + 1,
+    })
+  })
+
+  test('leaves out an occurrence further than the ones it scores', () => {
+    expect(resolveTextAnchor(bodyWithRareAt(SITE + 512), anchor)).toEqual({
+      kind: 'placed',
+      start: at(SITE),
+      end: at(SITE) + 1,
+    })
+  })
+})
+
 describe('placeTextAnchor', () => {
   const anchor = (start: number, end: number): TextAnchor => ({
     kind: 'text',
