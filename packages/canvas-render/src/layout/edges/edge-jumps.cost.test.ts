@@ -170,6 +170,30 @@ describe('computeEdgeJumps cost', () => {
     }
   })
 
+  it('stops examining pairs past a per-scene budget on a board that never crosses', () => {
+    // 2000 zigzags of 65 long, almost-horizontal segments, stacked 1px
+    // apart: every segment shares its coarse cells with every other edge's,
+    // yet none crosses another, so no hop cap ever engages. Examining every
+    // candidate pair is 481_759_000 narrow-phase tests (1m26s measured).
+    const L = 10_000
+    const edges = Array.from({ length: 2000 }, (_, i) =>
+      routed(
+        `z${i}`,
+        Array.from({ length: 66 }, (_, k) => ({ x: k * L, y: i + (k % 2) * 0.25 })),
+      ),
+    )
+    narrowTests.count = 0
+    narrowTests.budget = 20_000_000
+    try {
+      const jumps = computeEdgeJumps(edges)
+      expect(jumps.size).toBe(0)
+      expect(narrowTests.count).toBeGreaterThan(1_000_000)
+      expect(narrowTests.count).toBeLessThanOrEqual(4_000_000)
+    } finally {
+      narrowTests.budget = Number.POSITIVE_INFINITY
+    }
+  })
+
   it('caps the hops one segment draws', () => {
     // One long later edge across 1000 earlier verticals 20px apart: every
     // crossing has room for its own arc, so only the cap bounds the count.
