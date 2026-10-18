@@ -337,6 +337,11 @@ export function authSignInUrl(providerId: string, query: SignInQuery = {}): stri
   return withSignInQuery(`/auth/sign-in/${enc(providerId)}`, query)
 }
 
+/** POST: accept an invitation on the invite page, beginning a sign-in with `providerId`. */
+export function authAcceptInvitationUrl(providerId: string): string {
+  return `/auth/accept-invitation/${enc(providerId)}`
+}
+
 export function authSessionUrl(): string {
   return '/auth/session'
 }

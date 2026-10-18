@@ -35,6 +35,26 @@ export const signInSessionResponseSchema = z.discriminatedUnion('signedIn', [
 export type SignInSessionResponse = z.infer<typeof signInSessionResponseSchema>
 
 /**
+ * The invite page's Accept: a same-origin POST, because a link — on another
+ * site, inside a document here, in a mail client — is a navigation, and a
+ * navigation must never be what joins a person to a workspace. The token
+ * travels in the body, so it stays out of a URL a proxy logs.
+ */
+export const acceptInvitationRequestSchema = z.object({
+  invitation: z.string(),
+  returnTo: z.string().optional(),
+})
+
+export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>
+
+/** Where the browser goes next: the provider, or the sign-in screen with a refusal. */
+export const acceptInvitationResponseSchema = z.object({
+  location: z.string().min(1),
+})
+
+export type AcceptInvitationResponse = z.infer<typeof acceptInvitationResponseSchema>
+
+/**
  * Why a sign-in came back refused. The keeper's callback sends the browser to
  * the sign-in screen with one of these as `?error=`, and the screen explains
  * it; an unknown value is shown as a generic failure.

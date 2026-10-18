@@ -12,8 +12,15 @@ import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { invitePageUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { signInRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
+import {
+  authAcceptInvitationUrl,
+  invitePageUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
+import {
+  type AcceptInvitationRequest,
+  acceptInvitationResponseSchema,
+  signInRefusalSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { Hono } from 'hono'
 import type { CustomFetch } from 'openid-client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -112,6 +119,24 @@ async function signInThrough(
   beforeCallback?.()
   const cookie = cookieOverride ?? `__Host-wb_signin=${binding}`
   return app.request(callback, { headers: { cookie } })
+}
+
+function accept(app: Hono, body: AcceptInvitationRequest, providerId = 'corp') {
+  return app.request(`${BASE}${authAcceptInvitationUrl(providerId)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: BASE },
+    body: JSON.stringify(body),
+  })
+}
+
+// The invite page's click, then the provider's round trip.
+async function acceptThrough(app: Hono, body: AcceptInvitationRequest) {
+  const accepted = await accept(app, body)
+  const binding = cookieFrom(accepted, '__Host-wb_signin')
+  const { location } = acceptInvitationResponseSchema.parse(await accepted.json())
+  return app.request(idp.authorize(location), {
+    headers: { cookie: `__Host-wb_signin=${binding}` },
+  })
 }
 
 beforeEach(async () => {
@@ -264,7 +289,7 @@ describe('sign-in through an OIDC provider', () => {
     expect(res.headers.get('location')).toBe('/sign-in?error=not_invited')
   })
 
-  it('lets an invited person in through the link they arrived with', async () => {
+  it('lets an invited person in through the invite page they arrived at', async () => {
     const { app, signIn } = appFor({})
     const bob = await signIn.members.ensureProfile({
       binding: { authenticator: 'oidc:https://other.example', subject: 'bob' },
@@ -277,15 +302,17 @@ describe('sign-in through an OIDC provider', () => {
       ttlMs: HOUR,
     })
     idp.next({ sub: 'ada-1', name: 'Ada' })
-    const res = await signInThrough(app, `?invitation=${token}`)
+    const res = await acceptThrough(app, { invitation: token })
     expect(res.status).toBe(302)
     expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
   })
 
-  // A link straight to the begin route skips the invite page's click, so a
-  // page on another site could otherwise join a person already signed in at
-  // the provider to a workspace of its choosing and land them in it.
-  describe('an invitation begun from another site', () => {
+  // Accepting is the invite page's click. Any navigation to the begin route —
+  // a link on another site, a link inside a document on this one, a link
+  // opened from a mail client — would skip it, and for someone already signed
+  // in at the provider the whole round trip is silent: they would be joined
+  // to whatever workspace the link names and landed in it.
+  describe('an invitation reached by a link', () => {
     async function workspaceInvitation(signIn: ReturnType<typeof appFor>['signIn']) {
       const owner = await signIn.members.ensureProfile({
         binding: { authenticator: 'oidc:https://other.example', subject: 'owner' },
@@ -312,13 +339,19 @@ describe('sign-in through an OIDC provider', () => {
       return ada
     }
 
-    it('is sent to the invite page to be accepted there, joining nobody', async () => {
+    it.for([
+      'cross-site',
+      'same-site',
+      'same-origin',
+      'none',
+      undefined,
+    ])('is sent to the invite page when Sec-Fetch-Site is %s, joining nobody', async (site) => {
       const { app, signIn } = appFor({ createAccounts: true })
       const ada = await existingAda(app, signIn)
       const token = await workspaceInvitation(signIn)
       const res = await app.request(
         `${BASE}/auth/sign-in/corp?invitation=${token}&return=%2Fw%2Fws-attacker`,
-        { headers: { 'sec-fetch-site': 'cross-site' } },
+        { headers: site === undefined ? {} : { 'sec-fetch-site': site } },
       )
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe(invitePageUrl(BASE, token))
@@ -327,23 +360,80 @@ describe('sign-in through an OIDC provider', () => {
       expect((await signIn.invitations.openLink(token, Date.now())).ok).toBe(true)
     })
 
-    it.for([
-      'same-origin',
-      'none',
-      undefined,
-    ])('joins the workspace when Sec-Fetch-Site is %s', async (site) => {
+    it('joins the workspace once the invite page accepts it', async () => {
       const { app, signIn } = appFor({ createAccounts: true })
       const ada = await existingAda(app, signIn)
       const token = await workspaceInvitation(signIn)
-      const started = await app.request(`${BASE}/auth/sign-in/corp?invitation=${token}`, {
-        headers: site === undefined ? {} : { 'sec-fetch-site': site },
-      })
       idp.next({ sub: 'ada-1' })
-      const res = await app.request(idp.authorize(started.headers.get('location') as string), {
-        headers: { cookie: `__Host-wb_signin=${cookieFrom(started, '__Host-wb_signin')}` },
-      })
+      const res = await acceptThrough(app, { invitation: token, returnTo: '/w/ws-attacker' })
+      expect(res.headers.get('location')).toBe('/w/ws-attacker')
       expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
       expect(await signIn.members.isWorkspaceMember('ws-attacker', ada.id)).toBe('member')
+    })
+
+    // A document link is a GET; a form another site submits carries that
+    // site's Origin, and a sibling subdomain's carries its own.
+    it.for([
+      ['no Origin', {}],
+      ['another site', { origin: 'https://evil.example' }],
+      ['a sibling origin', { origin: 'https://evil.board.example' }],
+    ])('refuses an accept arriving with %s, beginning nothing', async ([, extra]) => {
+      const { app, signIn } = appFor({ createAccounts: true })
+      const token = await workspaceInvitation(signIn)
+      const res = await app.request(`${BASE}${authAcceptInvitationUrl('corp')}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(extra as object) },
+        body: JSON.stringify({ invitation: token }),
+      })
+      expect(res.status).toBe(403)
+      expect(res.headers.getSetCookie()).toEqual([])
+      expect(await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()).toEqual([])
+    })
+
+    it('spends an accept on the sign-in it began', async () => {
+      const { app, signIn } = appFor({ createAccounts: true })
+      const token = await workspaceInvitation(signIn)
+      const accepted = await accept(app, { invitation: token })
+      const binding = cookieFrom(accepted, '__Host-wb_signin')
+      const { location } = acceptInvitationResponseSchema.parse(await accepted.json())
+      idp.next({ sub: 'ada-1' })
+      const callback = idp.authorize(location)
+      const cookie = { cookie: `__Host-wb_signin=${binding}` }
+      expect(
+        cookieFrom(await app.request(callback, { headers: cookie }), SESSION_COOKIE),
+      ).toBeTruthy()
+      const replayed = await app.request(callback, { headers: cookie })
+      expect(replayed.headers.get('location')).toBe('/sign-in?error=sign_in_attempt_unknown')
+    })
+
+    it('answers an accept of an unusable invitation with its refusal, storing nothing', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const res = await accept(app, { invitation: 'x'.repeat(64) })
+      expect(acceptInvitationResponseSchema.parse(await res.json())).toEqual({
+        location: '/sign-in?error=invitation_unusable',
+      })
+      expect(res.headers.getSetCookie()).toEqual([])
+      expect(await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()).toEqual([])
+    })
+
+    it('answers an accept naming no provider here with its refusal', async () => {
+      const { app, signIn } = appFor({ createAccounts: true })
+      const token = await workspaceInvitation(signIn)
+      const res = await accept(app, { invitation: token }, 'nobody')
+      expect(acceptInvitationResponseSchema.parse(await res.json())).toEqual({
+        location: '/sign-in?error=unknown_provider',
+      })
+    })
+
+    it('refuses an accept whose body is not an invitation', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const res = await app.request(`${BASE}${authAcceptInvitationUrl('corp')}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: BASE },
+        body: JSON.stringify({ token: 'nope' }),
+      })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'invalid_body' })
     })
 
     it('still begins a plain sign-in from another site', async () => {
@@ -527,7 +617,9 @@ describe('sign-in through an OIDC provider', () => {
     ].map((url) => readFileSync(url, 'utf8'))
     const produced = new Set(
       producers.flatMap((source) =>
-        [...source.matchAll(/\b(?:refusedTo\(c, |refuse\()'([a-z_]+)'/g)].map((m) => m[1]),
+        [...source.matchAll(/\b(?:refusedTo\(c, |refuse\(|signInPageUrl\()'([a-z_]+)'/g)].map(
+          (m) => m[1],
+        ),
       ),
     )
     expect(produced.size).toBeGreaterThan(10)

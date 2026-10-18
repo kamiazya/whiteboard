@@ -3,6 +3,7 @@
  * OpenID Connect provider:
  *
  *   GET  /auth/sign-in/:providerId  — begin: redirect to the provider
+ *   POST /auth/accept-invitation/:providerId — begin, accepting an invitation
  *   GET  /auth/callback/:providerId — finish: exchange, admit, open a session
  *   GET  /auth/reauthenticate       — begin again, asking to sign in anew (ADR-0051)
  *   POST /auth/sign-out             — end this browser's session
@@ -19,10 +20,12 @@ import {
   signInPageUrl,
   signInQueryOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import type {
-  SignInProvidersResponse,
-  SignInRefusal,
-  SignInSessionResponse,
+import {
+  type AcceptInvitationResponse,
+  acceptInvitationRequestSchema,
+  type SignInProvidersResponse,
+  type SignInRefusal,
+  type SignInSessionResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
@@ -42,6 +45,7 @@ import {
   type TrustedHeaderRequest,
   type TrustedIdentity,
 } from '../security/trusted-header-identity.js'
+import { readJsonBody } from './read-json-body.js'
 
 const log = getLogger('sign-in')
 
@@ -101,22 +105,15 @@ function failureOf(err: unknown): { readonly name: string; readonly code?: strin
   return code === undefined ? { name: err.name } : { name: err.name, code }
 }
 
-// What `Sec-Fetch-Site` says of a navigation this host's own pages started,
-// or one the person started themselves (typed, bookmarked).
-const OWN_FETCH_SITES = new Set(['same-origin', 'none'])
-
-// Accepting an invitation is the invite page's click. A link from another
-// site straight to the begin route would skip it, and for someone already
-// signed in at the provider the whole round trip is silent — they would be
-// joined to whatever workspace the link names and landed in it. So such a
-// begin goes to the invite page instead, where the person decides. A browser
-// that sends no `Sec-Fetch-Site` begins as before.
-function invitationFromAnotherSite(c: Context): boolean {
-  const site = c.req.header('sec-fetch-site')
-  return site !== undefined && !OWN_FETCH_SITES.has(site)
-}
-
-// Where a begin carrying `invitation` goes instead of the provider, if not there.
+// Accepting an invitation is the invite page's click, which POSTs to the
+// accept route. A navigation to the begin route carrying one — a link on
+// another site, a link inside a document on this one, a mail client's — would
+// skip it, and for someone already signed in at the provider the whole round
+// trip is silent: they would be joined to whatever workspace the link names
+// and landed in it. `Sec-Fetch-Site` cannot tell those apart (a document link
+// here is `same-origin`, a mail client's `none`, and some browsers send
+// nothing), so no navigation begins one: it goes to the invite page, where
+// the person decides.
 function invitationTurnedAway(
   c: Context,
   deps: SignInRoutesDeps,
@@ -124,11 +121,19 @@ function invitationTurnedAway(
 ): Response | null {
   if (invitation === undefined) return null
   if (!isInvitationTokenShaped(invitation)) return refusedTo(c, 'invitation_unusable')
-  if (invitationFromAnotherSite(c)) {
-    return c.redirect(invitePageUrl(deps.publicBaseUrl, invitation), 302)
-  }
-  return null
+  return c.redirect(invitePageUrl(deps.publicBaseUrl, invitation), 302)
 }
+
+// The browser attaches nothing a cross-site POST could use here, but what
+// this route begins is a join, so only this host's own pages may ask: a page
+// on another site or a sibling subdomain sends its own `Origin`, and browsers
+// send `Origin` on every POST.
+function fromOwnPage(c: Context, deps: SignInRoutesDeps): boolean {
+  return c.req.header('origin') === new URL(deps.publicBaseUrl).origin
+}
+
+// The most an accept body carries: a token and a return path.
+const ACCEPT_BODY_LIMIT_BYTES = 4 * 1024
 
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
 
@@ -140,15 +145,25 @@ interface Routing {
   readonly peerOf: (c: Context) => string | undefined
 }
 
-async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
+interface AttemptRequest {
+  readonly returnTo: string | undefined
+  readonly invitation?: string
+  readonly fresh?: boolean
+}
+
+// Stores the attempt, binds it to this browser, and answers where the browser
+// goes next: the provider, or the sign-in screen with the reason it cannot.
+async function startAttempt(
+  c: Context,
+  routing: Routing,
+  provider: SignInRouteProvider,
+  request: AttemptRequest,
+): Promise<string> {
   const { deps, now, callbackUrl } = routing
-  const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
-  const turnedAway = invitationTurnedAway(c, deps, invitation)
-  if (turnedAway !== null) return turnedAway
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
-    returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),
-    ...(invitation === undefined ? {} : { invitationToken: invitation }),
+    returnTo: safeReturnPath(request.returnTo, deps.publicBaseUrl),
+    ...(request.invitation === undefined ? {} : { invitationToken: request.invitation }),
     // The socket's peer, never a forwarded-for header a caller can write:
     // behind a proxy that is the proxy, which costs per-client shedding and
     // nothing else.
@@ -166,7 +181,7 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
   if (provider.kind === 'trusted-header') {
     const to = new URL(callbackUrl(provider.id))
     to.searchParams.set('state', attempt.state)
-    return c.redirect(to.toString(), 302)
+    return to.toString()
   }
   // Discovery reaches the provider over the network, so an outage lands here
   // and is a reason the person can read, not a 500.
@@ -176,7 +191,7 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
       state: attempt.state,
       nonce: attempt.nonce,
       codeVerifier: attempt.codeVerifier,
-      fresh,
+      fresh: request.fresh ?? false,
     })
     .catch((err: unknown) => {
       log.warning(
@@ -185,8 +200,35 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
       )
       return null
     })
-  if (to === null) return refusedTo(c, 'provider_unreachable')
-  return c.redirect(to.toString(), 302)
+  return to === null ? signInPageUrl('provider_unreachable') : to.toString()
+}
+
+async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
+  const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
+  const turnedAway = invitationTurnedAway(c, routing.deps, invitation)
+  if (turnedAway !== null) return turnedAway
+  return c.redirect(await startAttempt(c, routing, provider, { returnTo, fresh }), 302)
+}
+
+// The invite page's Accept. Its answer is where to go rather than a redirect,
+// because a fetch that follows one cross-origin to the provider would land the
+// provider's page in a response the page cannot show.
+async function acceptInvitation(c: Context, routing: Routing, providerById: ProviderById) {
+  if (!fromOwnPage(c, routing.deps)) {
+    return c.json(errorBody('forbidden', 'Accept an invitation on this server’s own page.'), 403)
+  }
+  const body = await readJsonBody(c, acceptInvitationRequestSchema, {
+    voice: 'code',
+    refuseShape: () => errorBody('invalid_body', 'The body names no invitation.'),
+    maxBytes: ACCEPT_BODY_LIMIT_BYTES,
+  })
+  if ('refusal' in body) return body.refusal
+  const { invitation, returnTo } = body.data
+  const goTo = (location: string) => c.json({ location } satisfies AcceptInvitationResponse)
+  const provider = providerById.get(c.req.param('providerId') ?? '')
+  if (provider === undefined) return goTo(signInPageUrl('unknown_provider'))
+  if (!isInvitationTokenShaped(invitation)) return goTo(signInPageUrl('invitation_unusable'))
+  return goTo(await startAttempt(c, routing, provider, { returnTo, invitation }))
 }
 
 // The relying party's checks, with a failure turned into a refusal rather
@@ -347,9 +389,11 @@ function proxiedReader(deps: SignInRoutesDeps, peerOf: Routing['peerOf']): Routi
   }
 }
 
+type ProviderById = ReadonlyMap<string, SignInRouteProvider>
+
 export function createSignInRoutes(deps: SignInRoutesDeps): Hono {
   const app = new Hono()
-  const providerById = new Map(deps.providers.map((p) => [p.id, p]))
+  const providerById: ProviderById = new Map(deps.providers.map((p) => [p.id, p]))
   const peerOf = deps.peerAddress ?? nodePeer
   const routing: Routing = {
     deps,
@@ -371,6 +415,7 @@ export function createSignInRoutes(deps: SignInRoutesDeps): Hono {
   app.get('/auth/providers', (c) => c.json(listed))
   app.get('/auth/session', (c) => session(c, deps, routing.now))
   app.get('/auth/sign-in/:providerId', withProvider(begin))
+  app.post('/auth/accept-invitation/:providerId', (c) => acceptInvitation(c, routing, providerById))
   app.get('/auth/reauthenticate', (c) => reauthenticate(c, routing))
   app.get('/auth/callback/:providerId', withProvider(finish))
   app.post('/auth/sign-out', (c) => signOut(c, deps))
