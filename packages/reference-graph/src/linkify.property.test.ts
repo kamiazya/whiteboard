@@ -3,12 +3,31 @@
  * reference to the intended document, whatever the document is named. The
  * scanner is the grammar's reader, so it — not a re-statement of its rules —
  * is the oracle.
+ *
+ * And a canvas node's text is rewritten exactly as a markdown body is: the
+ * body is spliced in place through Loro's own text, the node is rebuilt as a
+ * string, so the one is an oracle for the other that shares no rewriting
+ * code with it.
  */
 
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  MARKDOWN_BODY_KEY,
+  readSpatialCanvas,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import {
+  afterAllFloor,
+  fc,
+  fcTest,
+  textNode,
+  withDefaults,
+} from '@kamiazya/whiteboard-model/test-utils'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { linkMarkupFor } from './linkify.js'
+import { linkifyMentionsIn, linkMarkupFor } from './linkify.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -61,6 +80,52 @@ describe('linkMarkupFor, read back by the scanner', () => {
       expect(reference?.target).toBe(path)
       // A label that repeats the path says nothing the bare reference does not.
       expect(reference?.alias).toBe(name === path ? undefined : name)
+    },
+  )
+})
+
+// Mentions packed next to each other, inside references the rewrite must
+// step over, and beside brackets that open or close nothing — drawn as whole
+// tokens, since a character alphabet almost never spells a closed reference.
+const MENTION_TOKEN = fc.constantFrom('N', 'N', 'o', ' ', '[[N]]', '[[n|N]]', '[[', ']]', '[', '|')
+const mentionTextArbitrary = fc
+  .array(MENTION_TOKEN, { minLength: 1, maxLength: 24 })
+  .map((tokens) => tokens.join(''))
+const mentionNameArbitrary = fc.constantFrom('N', 'No', 'N N', 'o')
+
+describe('linkifyMentionsIn, a canvas node against a markdown body', () => {
+  const reached = { runs: 0, severalLinks: 0, aMentionLeftLinked: 0 }
+  afterAllFloor(['writes the same text and counts the same links'], () => {
+    // Where splice order matters: two or more links in one text, and a
+    // mention inside an existing reference that the rewrite must step over.
+    // Measured at 12-16% and 18-23% of runs; the floors sit well below.
+    expect(reached.severalLinks / reached.runs).toBeGreaterThan(0.05)
+    expect(reached.aMentionLeftLinked / reached.runs).toBeGreaterThan(0.08)
+  })
+
+  fcTest.prop([mentionTextArbitrary, mentionNameArbitrary], withDefaults())(
+    'writes the same text and counts the same links',
+    (text, name) => {
+      const target = { documentId: ID, path: 'n', name }
+      const body = new LoroDoc()
+      writeMarkdownBody(body, text)
+      const board = new LoroDoc()
+      writeSpatialCanvas(board, {
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text })],
+        edges: [],
+      })
+
+      const inBody = linkifyMentionsIn(body, 'markdown', target)
+      const onBoard = linkifyMentionsIn(board, 'spatial', target)
+
+      reached.runs += 1
+      if (inBody >= 2) reached.severalLinks += 1
+      if (text.split(name).length - 1 > inBody) reached.aMentionLeftLinked += 1
+      expect(onBoard).toBe(inBody)
+      const [node] = readSpatialCanvas(board).nodes
+      expect(node === undefined ? undefined : nodeText(node)).toBe(
+        body.getText(MARKDOWN_BODY_KEY).toString(),
+      )
     },
   )
 })

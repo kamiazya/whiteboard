@@ -90,34 +90,42 @@ export function linkifyMentionsIn(
   const nodes = canvas.nodes.map((node) => {
     const text = nodeText(node)
     if (text === undefined) return node
-    const result = rewriteMentions(text, target.name, markup)
-    if (growsPast(NODE_TEXT_MAX_CHARS, text.length, result.text.length)) {
+    const spans = unlinkedNameSpans(text, target.name)
+    if (spans.length === 0) return node
+    // Judged from the span count before anything is built, as the body is.
+    const grown = text.length + spans.length * (markup.length - target.name.length)
+    if (growsPast(NODE_TEXT_MAX_CHARS, text.length, grown)) {
       throw new ReferenceRewriteTooLargeError({
         shape: 'node-text',
-        chars: result.text.length,
+        chars: grown,
         nodeId: node.id,
         container: doc.getMap(NODES_KEY).id,
       })
     }
-    linked += result.count
-    return result.count === 0 ? node : withNodeText(node, result.text)
+    linked += spans.length
+    return withNodeText(node, spliced(text, spans, markup))
   })
   if (linked > 0)
     reconcileSpatialCanvas(doc, canvas, spatialCanvasSchema.parse({ ...canvas, nodes }))
   return linked
 }
 
-function rewriteMentions(
+/**
+ * `text` with each span replaced by `markup`, in one forward pass: the
+ * pieces between spans are collected and joined once, so a node with many
+ * mentions costs its length rather than its length per mention.
+ */
+function spliced(
   text: string,
-  name: string,
+  spans: readonly { readonly index: number; readonly length: number }[],
   markup: string,
-): { text: string; count: number } {
-  const spans = unlinkedNameSpans(text, name)
-  let out = text
-  // Reverse order so earlier spans' offsets stay valid while later ones are
-  // spliced.
-  for (const span of [...spans].reverse()) {
-    out = out.slice(0, span.index) + markup + out.slice(span.index + span.length)
+): string {
+  const pieces: string[] = []
+  let from = 0
+  for (const span of spans) {
+    pieces.push(text.slice(from, span.index), markup)
+    from = span.index + span.length
   }
-  return { text: out, count: spans.length }
+  pieces.push(text.slice(from))
+  return pieces.join('')
 }
