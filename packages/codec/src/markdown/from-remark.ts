@@ -65,8 +65,15 @@ function flattenText(node: RemarkNode): string {
 const tooDeep = (node: RemarkNode, depth: number): boolean =>
   depth >= MAX_NESTING_DEPTH && node.children !== undefined
 
+const phrasingAt = (node: RemarkNode, depth: number): MdastPhrasingContent =>
+  tooDeep(node, depth) ? { type: 'text', value: flattenText(node) } : toPhrasing(node, depth)
+
+const flowAt = (node: RemarkNode, depth: number): MdastFlowContent =>
+  tooDeep(node, depth)
+    ? { type: 'paragraph', children: [{ type: 'text', value: flattenText(node) }] }
+    : toFlow(node, depth)
+
 function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
-  if (tooDeep(node, depth)) return { type: 'text', value: flattenText(node) }
   switch (node.type) {
     case 'text':
       return { type: 'text', value: textOf(node, 'value') }
@@ -79,17 +86,17 @@ function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
     case 'inlineMath':
       return { type: 'inlineMath', value: textOf(node, 'value') }
     case 'emphasis':
-      return { type: 'emphasis', children: childrenOf(node, depth, toPhrasing) }
+      return { type: 'emphasis', children: childrenOf(node, depth, phrasingAt) }
     case 'strong':
-      return { type: 'strong', children: childrenOf(node, depth, toPhrasing) }
+      return { type: 'strong', children: childrenOf(node, depth, phrasingAt) }
     case 'delete':
-      return { type: 'delete', children: childrenOf(node, depth, toPhrasing) }
+      return { type: 'delete', children: childrenOf(node, depth, phrasingAt) }
     case 'link':
       return {
         type: 'link',
         url: textOf(node, 'url'),
         title: optionalOf<string>(node, 'title'),
-        children: childrenOf(node, depth, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'image':
       return {
@@ -104,7 +111,7 @@ function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
         identifier: textOf(node, 'identifier'),
         label: optionalOf<string>(node, 'label'),
         referenceType: node.referenceType as 'shortcut' | 'collapsed' | 'full',
-        children: childrenOf(node, depth, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'imageReference':
       return {
@@ -123,25 +130,22 @@ function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
 }
 
 function toCellPhrasing(node: RemarkNode, depth: number): MdastCellPhrasingContent {
-  const phrasing = toPhrasing(node, depth)
+  const phrasing = phrasingAt(node, depth)
   return phrasing as MdastCellPhrasingContent
 }
 
 function toFlow(node: RemarkNode, depth: number): MdastFlowContent {
-  if (tooDeep(node, depth)) {
-    return { type: 'paragraph', children: [{ type: 'text', value: flattenText(node) }] }
-  }
   switch (node.type) {
     case 'paragraph':
-      return { type: 'paragraph', children: childrenOf(node, depth, toPhrasing) }
+      return { type: 'paragraph', children: childrenOf(node, depth, phrasingAt) }
     case 'heading':
       return {
         type: 'heading',
         depth: node.depth as 1 | 2 | 3 | 4 | 5 | 6,
-        children: childrenOf(node, depth, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'blockquote':
-      return { type: 'blockquote', children: childrenOf(node, depth, toFlow) }
+      return { type: 'blockquote', children: childrenOf(node, depth, flowAt) }
     case 'list':
       return {
         type: 'list',
@@ -191,7 +195,7 @@ function toListItem(node: RemarkNode, depth: number): MdastListItem {
     type: 'listItem',
     checked: node.checked as boolean | null | undefined,
     spread: optionalOf<boolean>(node, 'spread'),
-    children: childrenOf(node, depth, toFlow),
+    children: childrenOf(node, depth, flowAt),
   }
 }
 
@@ -205,5 +209,5 @@ function toTableCell(node: RemarkNode, depth: number): MdastTableCell {
 
 /** Converts a raw remark/mdast-util Root into the model MdastRoot subset. */
 export function fromRemarkRoot(root: RemarkNode): MdastRoot {
-  return { type: 'root', children: childrenOf(root, 0, toFlow) }
+  return { type: 'root', children: childrenOf(root, 0, flowAt) }
 }
