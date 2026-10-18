@@ -151,31 +151,48 @@ function attachContentContainers(node: LoroTreeNode): void {
 }
 
 type Read =
-  | {
-      readonly type: 'document'
-      readonly meta: WorkspaceNodeMeta
-      /**
-       * The content containers as `toJSON` handed them over, kept for the
-       * listing to digest. Picked here, from the one `toJSON` every walk
-       * already pays for; HASHED only by `readWorkspaceDocuments`, because
-       * every write path walks the tree to find its node and must not pay
-       * for a digest nobody reads.
-       */
-      readonly content: Record<string, unknown>
-    }
+  | { readonly type: 'document'; readonly meta: WorkspaceNodeMeta }
   | { readonly type: 'folder'; readonly segment: string }
 
+/** A stored value as the map's `toJSON` would hand it over. */
+function jsonOf(value: unknown): unknown {
+  return containerKind(value) === null ? value : (value as { toJSON(): unknown }).toJSON()
+}
+
+/**
+ * What a node records about itself, read WITHOUT its content.
+ *
+ * Every walk reads every node, and a document node holds that document's
+ * whole content, so reading the node map whole would copy every body and
+ * canvas in the record out of the engine on each walk — paid by every write
+ * that looks its node up, however little of the record it touches. Only the
+ * meta keys' values are read; any other key is present with a placeholder,
+ * because neither schema reads one: the document schema strips it and the
+ * strict folder schema refuses it whatever it holds.
+ */
 function readMeta(node: LoroTreeNode): Read | null {
-  const raw = node.data.toJSON() as Record<string, unknown>
+  const data = node.data
+  const raw: Record<string, unknown> = {}
+  for (const key of data.keys()) raw[key] = NODE_META_KEYS.has(key) ? jsonOf(data.get(key)) : null
   const asDocument = workspaceNodeMetaSchema.safeParse(raw)
-  if (asDocument.success) {
-    const content: Record<string, unknown> = {}
-    for (const { key } of CONTENT_CONTAINER_KEYS) if (key in raw) content[key] = raw[key]
-    return { type: 'document', meta: asDocument.data, content }
-  }
+  if (asDocument.success) return { type: 'document', meta: asDocument.data }
   const asFolder = workspaceFolderMetaSchema.safeParse(raw)
   if (asFolder.success) return { type: 'folder', segment: asFolder.data.segment }
   return null
+}
+
+/**
+ * A document node's content containers as `toJSON` hands them over, for the
+ * digest — read only by the paths that answer an entry, never by a walk.
+ */
+function contentOf(node: LoroTreeNode): Record<string, unknown> {
+  const data = node.data
+  const content: Record<string, unknown> = {}
+  for (const { key } of CONTENT_CONTAINER_KEYS) {
+    const value = data.get(key)
+    if (value !== undefined) content[key] = jsonOf(value)
+  }
+  return content
 }
 
 /**
@@ -389,6 +406,7 @@ export function readWorkspaceNodes(doc: LoroDoc): WorkspaceNode[] {
  * content the same way. A second spelling would be a second key.
  */
 function entryOf(
+  node: LoroTreeNode,
   read: Extract<Read, { type: 'document' }>,
   path: string,
   shadowed = false,
@@ -396,7 +414,7 @@ function entryOf(
   return {
     ...read.meta,
     path,
-    contentDigest: contentDigestOf(read.content),
+    contentDigest: contentDigestOf(contentOf(node)),
     ...(shadowed ? { shadowed: true as const } : {}),
   }
 }
@@ -407,7 +425,7 @@ function entryOfNode(node: LoroTreeNode, path: string): WorkspaceDocumentEntry {
   if (read === null || read.type !== 'document') {
     throw new Error('a document node written here does not read back as one')
   }
-  return entryOf(read, path)
+  return entryOf(node, read, path)
 }
 
 /**
@@ -423,14 +441,14 @@ function entryOfNode(node: LoroTreeNode, path: string): WorkspaceDocumentEntry {
 export function readWorkspaceDocuments(doc: LoroDoc): WorkspaceDocumentEntry[] {
   const seen = new Set<string>()
   const out: WorkspaceDocumentEntry[] = []
-  for (const { read, path } of walk(doc)) {
+  for (const { node, read, path } of walk(doc)) {
     // Folders are not documents. They hold a path component so a descendant
     // has somewhere to hang, and a listing that showed them would invent
     // documents the caller never created.
     if (read.type !== 'document') continue
     const shadowed = seen.has(path)
     seen.add(path)
-    out.push(entryOf(read, path, shadowed))
+    out.push(entryOf(node, read, path, shadowed))
   }
   return out
 }
@@ -445,7 +463,7 @@ export function resolveWorkspaceDocument(
 ): WorkspaceDocumentEntry | null {
   for (const entry of walk(doc)) {
     if (entry.path === path && entry.read.type === 'document') {
-      return entryOf(entry.read, entry.path)
+      return entryOf(entry.node, entry.read, entry.path)
     }
   }
   return null
@@ -457,7 +475,7 @@ export function resolveWorkspaceDocumentById(
 ): WorkspaceDocumentEntry | null {
   for (const entry of walk(doc)) {
     if (entry.read.type === 'document' && entry.read.meta.documentId === documentId) {
-      return entryOf(entry.read, entry.path)
+      return entryOf(entry.node, entry.read, entry.path)
     }
   }
   return null
@@ -558,10 +576,49 @@ export function deleteWorkspaceDocument(doc: LoroDoc, input: { documentId: strin
  * shadowed one from one lookup and the owner from another.
  */
 function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
-  for (const entry of walk(doc)) {
-    if (entry.path === path) return entry
+  return nodesAlong(doc, path).get(path) ?? null
+}
+
+/** A node's own segment as a walk would read it, or `undefined` when it has none. */
+function segmentOf(node: LoroTreeNode): string | undefined {
+  const segment = jsonOf(node.data.get('segment'))
+  return typeof segment === 'string' ? segment : undefined
+}
+
+/**
+ * The first node in tree order at `path` and at each path on the way to it,
+ * keyed by path — what `walk` would answer for those paths, found by stepping
+ * down only through the children whose path leads toward `path`.
+ *
+ * A client chooses how deep a path is, and a walk per segment made a deep
+ * placement cost its depth times the whole record. This costs the nodes along
+ * the way and their siblings. More than one branch is followed when siblings
+ * share a segment, since the first node in tree order at a deeper path need
+ * not hang off the first at a shallower one. A path is matched as a STRING,
+ * the way a walk derives one, so a segment that itself holds a `/` is found
+ * where a walk finds it.
+ */
+function nodesAlong(doc: LoroDoc, path: string): Map<string, Walked> {
+  const found = new Map<string, Walked>()
+  const stack: Array<{ readonly node: LoroTreeNode; readonly path: string }> = []
+  const pushToward = (children: readonly LoroTreeNode[], prefix: string): void => {
+    for (let i = children.length - 1; i >= 0; i--) {
+      const child = children[i] as LoroTreeNode
+      const segment = segmentOf(child)
+      if (segment === undefined) continue
+      const at = prefix === '' ? segment : `${prefix}/${segment}`
+      if (at === path || path.startsWith(`${at}/`)) stack.push({ node: child, path: at })
+    }
   }
-  return null
+  pushToward(tree(doc).roots(), '')
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    const read = readMeta(next.node)
+    // Skipped with its subtree, as `walk` skips it.
+    if (read === null) continue
+    if (!found.has(next.path)) found.set(next.path, { node: next.node, read, path: next.path })
+    if (next.path !== path) pushToward(next.node.children() ?? [], next.path)
+  }
+  return found
 }
 
 /**
@@ -572,12 +629,15 @@ function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
  * hangs off `a` rather than making a second `a`.
  */
 export function ensureFolderPath(doc: LoroDoc, segments: readonly string[]): TreeID | undefined {
+  // Read once: a folder created below holds nothing yet, so it cannot be
+  // the first node at any deeper prefix.
+  const along = nodesAlong(doc, segments.join('/'))
   let parent: TreeID | undefined
   let prefix = ''
   for (const segment of segments) {
     prefix = prefix === '' ? segment : `${prefix}/${segment}`
-    const existing = nodeAtPath(doc, prefix)
-    if (existing !== null) {
+    const existing = along.get(prefix)
+    if (existing !== undefined) {
       parent = existing.node.id
       continue
     }

@@ -18,6 +18,7 @@ import {
   exportWorkspaceSubtree,
   importWorkspaceSubtree,
   moveWorkspaceNodeToPath,
+  resolveWorkspaceDocumentById,
 } from './workspace-tree.js'
 
 const DEEP = 400
@@ -118,6 +119,14 @@ const PLACEMENTS: Record<string, (count: number, depth: number) => Cost> = {
 }
 
 describe('placing a document at a deep path', () => {
+  // Without this, a counter that saw nothing would pass every equality below.
+  it('counts a content copy and a node read', () => {
+    const doc = seededRecord(1)
+    const cost = measure(() => resolveWorkspaceDocumentById(doc, documentId(0)))
+    expect(cost.copies).toBeGreaterThan(0)
+    expect(cost.nodeReads).toBeGreaterThan(0)
+  })
+
   for (const [name, place] of Object.entries(PLACEMENTS)) {
     it(
       `${name}: copies no more content at depth ${DEEP} than at depth 1`,
@@ -125,7 +134,6 @@ describe('placing a document at a deep path', () => {
         const shallow = place(LARGE_RECORD, 1)
         const deep = place(LARGE_RECORD, DEEP)
 
-        expect(shallow.copies).toBeGreaterThan(0)
         expect(deep.copies).toBe(shallow.copies)
       },
       COST_TIMEOUT_MS,
@@ -136,8 +144,8 @@ describe('placing a document at a deep path', () => {
       () => {
         const perDepth = (count: number) => place(count, DEEP).nodeReads - place(count, 1).nodeReads
 
-        // The subject is present: a deeper path does read more nodes.
-        expect(perDepth(SMALL_RECORD)).toBeGreaterThan(DEEP)
+        // The subject is present: every segment a path adds is a node to place.
+        expect(perDepth(SMALL_RECORD)).toBeGreaterThanOrEqual(DEEP - 1)
         expect(perDepth(LARGE_RECORD)).toBe(perDepth(SMALL_RECORD))
       },
       COST_TIMEOUT_MS,
