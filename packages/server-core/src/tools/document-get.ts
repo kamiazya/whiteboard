@@ -136,7 +136,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_get' as const,
     description:
-      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. A document too large to answer whole keeps its whole content but carries only the leading threads and proposals that fit, with `annotationsTruncated: true`. A document that cannot be read is reported in `failed` rather than failing the whole call.',
+      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. Threads and proposals too large to answer whole are trimmed and flagged `annotationsTruncated`. A document that cannot be read is reported in `failed` rather than failing the whole call.',
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
