@@ -373,7 +373,7 @@ the same things through either surface:
 | `canvas:read` | `wb_document_get`, `wb_document_search`, `wb_canvas_snapshot`, `wb_scene_render`, `wb_facet_list`, `canvas_view` |
 | `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
 | `workspace:read` | `wb_document_list` |
-| `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
+| `workspace:write` | `wb_workspace_edit` (creating, moving, renaming and deleting documents, and `createWorkspace`). Writing a body with it also needs `canvas:write` |
 | `versions:read` | `wb_version_list`. Over HTTP it also opens a saved version, so it reads what a document said in the past |
 | `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
 
@@ -383,6 +383,13 @@ projection (`GET /api/v1/workspaces/<id>/documents/<id>/okf`), search
 results, backlinks, and the tags documents carry. Linking a document's
 mentions (`POST …/linkify-mentions`) rewrites its content, so it needs
 `canvas:write`.
+
+Writing a document's body is content too, so it needs `canvas:write` as well
+as `workspace:write`: a `wb_workspace_edit` batch with a `document.set` op, or
+a `document.create` op that carries `markdown`. Creating a document over HTTP
+(`POST /api/v1/workspaces/<id>/documents`) with a `markdown` body asks the
+same, answering `403` with `insufficient_scope`. Creating an empty document,
+or a spatial one, needs `workspace:write` alone.
 
 Restoring a version anywhere but in place also writes other documents, so it
 needs `workspace:write` as well as `versions:write`: `wb_version_restore`

@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import type { AuthScope } from './auth-strategy.js'
-import { MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
-import { resolveApiRouteScope } from './route-scope-registry.js'
+import { MCP_TOOL_INPUT_SCOPES, MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
+import { createBodyScopes, resolveApiRouteScope } from './route-scope-registry.js'
 
 type V1RouteScope =
   | { readonly twin: keyof typeof MCP_TOOL_SCOPES }
@@ -69,5 +69,30 @@ describe('/api/v1 routes ask the scopes their MCP twins ask', () => {
       kind: 'scoped',
       scopes: expected,
     })
+  })
+})
+
+describe('a create carrying a body asks the same scopes on both surfaces', () => {
+  const required = (scopes: readonly AuthScope[]) => [...new Set(scopes)].sort()
+  const mcpCreate = (op: Record<string, unknown>) =>
+    required([
+      ...(MCP_TOOL_SCOPES.wb_workspace_edit ?? []),
+      ...(MCP_TOOL_INPUT_SCOPES.wb_workspace_edit?.({ ops: [op] }) ?? []),
+    ])
+
+  const creates: ReadonlyArray<readonly [string, { kind: string; markdown?: string }]> = [
+    ['with markdown', { kind: 'markdown', markdown: '# Plan' }],
+    ['with no body', { kind: 'markdown' }],
+    ['spatial', { kind: 'spatial' }],
+  ]
+  it.for(creates)('%s', ([, body]) => {
+    const v1 = required(createBodyScopes(body))
+    expect(mcpCreate({ op: 'document.create', path: 'plan', ...body })).toEqual(v1)
+  })
+
+  it('a body is content: canvas:write', () => {
+    expect(createBodyScopes({ markdown: '# Plan' })).toContain('canvas:write')
+    expect(createBodyScopes({})).not.toContain('canvas:write')
+    expect(createBodyScopes({ markdown: '' })).not.toContain('canvas:write')
   })
 })

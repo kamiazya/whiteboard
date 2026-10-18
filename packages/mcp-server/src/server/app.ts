@@ -34,6 +34,7 @@ import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createTenantPeopleRouter } from './routes/tenant-people.js'
+import { holdV1CreateBodyToScope } from './routes/v1-create-scope.js'
 import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
 import type { AdministratorCheck } from './security/administrator-check.js'
 import {
@@ -509,6 +510,10 @@ export function createApp(options: AppOptions) {
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
   app.use('/api/v1/*', limitV1WriteBody())
+  app.use(
+    '/api/v1/*',
+    holdV1CreateBodyToScope((c) => callerGrant(c)?.scopes),
+  )
   app.route('/', createDocumentServer(options.serverDeps).app)
 
   const admit = membership.admit
