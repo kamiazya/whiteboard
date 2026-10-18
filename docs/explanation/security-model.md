@@ -468,6 +468,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   path outside the path grammar, give it a name past the length limit, or
   bring back a body or node text past its limit is refused and changes
   nothing, in the browser and on the daemon alike.
+- **Rewriting references is held to the same text bounds.** Linking a
+  document's mentions, or following a move into the documents that name the
+  old path, never leaves a body or a node's text past its limit: Link
+  refuses and writes nothing, and a move leaves such a document as written,
+  which the daemon reports. The details are in
+  [Export formats](../reference/export-formats.md#how-large-a-markdown-document-may-be).
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.

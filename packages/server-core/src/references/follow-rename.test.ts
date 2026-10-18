@@ -1,5 +1,5 @@
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -239,6 +239,31 @@ describe('followReferencesAfterRename', () => {
       type: 'hologram',
       shimmer: true,
     })
+  })
+
+  it('leaves a document the longer path would carry past the ceiling as written, and reports it', async () => {
+    const deps = makeTestDeps()
+    const { create, write, bodyOf } = await seed(deps)
+    const target = await create('a')
+    const dense = await create('dense')
+    const plain = await create('plain')
+    const denseBody = '[[a]] '.repeat(Math.floor(MARKDOWN_MAX_CHARS / 12))
+    await write(dense.documentId, denseBody)
+    await write(plain.documentId, 'see [[a]]')
+
+    const to = `archive/${'x'.repeat(60)}`
+    const before = await entriesBefore(deps)
+    await deps.documentIndex.moveDocument({ workspaceId: WS, from: 'a', to })
+    const result = await followReferencesAfterRename(deps, {
+      workspaceId: WS,
+      entriesBefore: before,
+      moves: [{ movedId: target.documentId, from: 'a', to }],
+    })
+
+    expect(result.failedDocumentIds).toEqual([dense.documentId])
+    expect(result.updatedDocumentIds).toEqual([plain.documentId])
+    expect(await bodyOf(dense.documentId)).toBe(denseBody)
+    expect(await bodyOf(plain.documentId)).toBe(`see [[${to}]]`)
   })
 
   it('touches nothing when no reference named the moved document', async () => {

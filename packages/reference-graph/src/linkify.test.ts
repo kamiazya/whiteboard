@@ -4,11 +4,18 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText, type SpatialCanvas, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import {
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+  nodeText,
+  type SpatialCanvas,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { linkifyMentionsIn, linkMarkupFor } from './linkify.js'
+import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 const TARGET = { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'redis', name: 'Redis' }
 
@@ -99,6 +106,66 @@ describe('linkifyMentionsIn', () => {
     expect(Object.keys(doc.getMap('nodes').toJSON())).toContain('future-node')
     expect(Object.keys(doc.getMap('edges').toJSON())).toEqual(['future-edge'])
     expect(Object.keys(doc.getMap('lines').toJSON())).toEqual(['future-line'])
+  })
+})
+
+describe('linkifyMentionsIn, held to the text ceilings', () => {
+  const SHORT = { documentId: TARGET.documentId, path: 'a-long-target-path', name: 'x' }
+
+  it('refuses to grow a body past the markdown ceiling, and writes nothing', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, 'x '.repeat(Math.floor(MARKDOWN_MAX_CHARS / 4)))
+    const before = doc.oplogVersion().encode()
+
+    const thrown = (() => {
+      try {
+        linkifyMentionsIn(doc, 'markdown', SHORT)
+      } catch (err) {
+        return err
+      }
+    })()
+    expect(thrown).toBeInstanceOf(ReferenceRewriteTooLargeError)
+    expect((thrown as ReferenceRewriteTooLargeError).breach).toMatchObject({ shape: 'body' })
+    expect((thrown as ReferenceRewriteTooLargeError).breach.chars).toBeGreaterThan(
+      MARKDOWN_MAX_CHARS,
+    )
+    expect(doc.oplogVersion().encode()).toEqual(before)
+  })
+
+  it('refuses to grow a text node past the node ceiling, and writes nothing', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({ id: 'small', x: 0, y: 0, width: 10, height: 10, text: 'x' }),
+        textNode({
+          id: 'dense',
+          x: 0,
+          y: 20,
+          width: 10,
+          height: 10,
+          text: 'x '.repeat(Math.floor(NODE_TEXT_MAX_CHARS / 4)),
+        }),
+      ],
+      edges: [],
+    })
+    const before = doc.oplogVersion().encode()
+
+    expect(() => linkifyMentionsIn(doc, 'spatial', SHORT)).toThrow(
+      expect.objectContaining({
+        breach: expect.objectContaining({ shape: 'node-text', nodeId: 'dense' }),
+      }),
+    )
+    expect(doc.oplogVersion().encode()).toEqual(before)
+  })
+
+  it('still links a body the links leave at the ceiling exactly', () => {
+    const markup = linkMarkupFor(SHORT)
+    const filler = 'y'.repeat(MARKDOWN_MAX_CHARS - markup.length)
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, `${filler}x`)
+
+    expect(linkifyMentionsIn(doc, 'markdown', SHORT)).toBe(1)
+    expect(doc.getText(MARKDOWN_BODY_KEY).toString()).toHaveLength(MARKDOWN_MAX_CHARS)
   })
 })
 

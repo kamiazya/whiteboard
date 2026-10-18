@@ -1,4 +1,4 @@
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
 import { loadDocument } from '../document-io.js'
@@ -201,5 +201,19 @@ describe('POST /linkify-mentions', () => {
     const src = await h.create('src', 'markdown')
     expect((await h.linkify(src.documentId, nameless.documentId)).status).toBe(400)
     expect((await h.linkify(src.documentId, '01ARZ3NDEKTSV4RRFFQ69G5FAV')).status).toBe(404)
+  })
+
+  it('refuses links that would carry a body past the markdown ceiling, and writes nothing', async () => {
+    const deps = makeDeps()
+    const h = await harness(deps)
+    const target = await h.create('a-long-target-path', 'markdown', 'x')
+    const src = await h.create('src', 'markdown')
+    const body = 'x '.repeat(Math.floor(MARKDOWN_MAX_CHARS / 4))
+    await h.writeBody(src.documentId, body)
+
+    const out = await h.linkify(src.documentId, target.documentId)
+    expect(out.status).toBe(413)
+    expect(out.body).toMatchObject({ error: 'markdown_too_large' })
+    expect(await h.readBody(src.documentId)).toBe(body)
   })
 })

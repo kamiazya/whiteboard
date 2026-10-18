@@ -1,3 +1,4 @@
+import { SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
 import {
   DocumentHasDescendantsError,
   DocumentPathTakenError,
@@ -9,6 +10,7 @@ import {
   StoredDocumentUnreadableError,
   TooManyDocumentsError,
 } from '@kamiazya/whiteboard-ports'
+import { ReferenceRewriteTooLargeError } from '@kamiazya/whiteboard-reference-graph'
 import type { Context, ErrorHandler, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -526,6 +528,13 @@ const REFUSALS: readonly Refusal[] = [
   // A create into a workspace at its document ceiling, in the code the sync
   // routes answer the same refusal with.
   refusalOf(TooManyDocumentsError, (err: TooManyDocumentsError) => err.code, 413),
+  // Link-mentions would carry a body or a node past its text ceiling: the
+  // code and status a sync write past the same ceiling is refused with.
+  refusalOf(
+    ReferenceRewriteTooLargeError,
+    (err: ReferenceRewriteTooLargeError) => SYNC_TEXT_BREACH_CODES[err.breach.shape],
+    413,
+  ),
   // The caller asked to create a workspace under a handle that cannot be a
   // segment (ADR-0019): the NAME is the problem, and only the caller can pick
   // another one.
