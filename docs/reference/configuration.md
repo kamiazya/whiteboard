@@ -259,6 +259,7 @@ server mode alike. These limits are fixed, not configurable:
 |---|---|---|
 | Automatic checkpoints per document | 50 | The oldest are removed as new ones are taken. A restore's merge point, and the version it restored, are kept. |
 | Manual versions per document | 200 | The next manual save — `POST …/documents/<path>/versions` or `wb_version_save` — is refused with `413 {"error":"too_many_versions"}` and nothing is saved. A promote into a document already at the limit still lands its content and skips the version it would have recorded there. Automatic checkpoints keep being taken. |
+| Restore points per document | 200 | A restore records a merge point on each document it changed — one per document for a subtree restore — and these points are never removed. Past the limit a restore still lands its content and records no further point there. A restore that changes nothing (the document already holds that content) records no point at all. |
 | Versions per page of `GET …/documents/<path>/versions` | 100 | The answer carries `nextCursor`; pass it back as `?cursor=` for the next, older page. `?limit=` asks for a shorter page. The web app reads every page. |
 
 ## Codex sandbox constraints

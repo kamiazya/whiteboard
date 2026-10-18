@@ -4,6 +4,7 @@ import {
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   MAX_MANUAL_PER_DOCUMENT,
+  MAX_RESTORE_POINTS_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
 import {
@@ -337,6 +338,9 @@ export class FileVersionStore implements VersionStore {
       }
       const documentId = entry.documentId
       if (!opts.auto) await refusePastManualCeiling(db, workspaceId, documentId)
+      if (opts.restoredFrom !== undefined) {
+        await refusePastRestorePointCeiling(db, workspaceId, documentId)
+      }
       const frontiers = frontiersToBase64(storedWorkspace.frontiers())
       await db
         .insertInto('versions')
@@ -785,6 +789,29 @@ async function refusePastManualCeiling(
     .executeTakeFirstOrThrow()
   if (Number(held.n) >= MAX_MANUAL_PER_DOCUMENT) {
     throw new TooManyVersionsError(MAX_MANUAL_PER_DOCUMENT)
+  }
+}
+
+/**
+ * Throws `TooManyVersionsError` when the document already keeps the most
+ * restore merge points one document may. Neither retention pass retires
+ * lineage, so this ceiling is the only bound a restore loop meets; the
+ * restore's caller records its point best-effort, so the content still lands.
+ */
+async function refusePastRestorePointCeiling(
+  db: TenantDatabase,
+  workspaceId: string,
+  documentId: string,
+): Promise<void> {
+  const held = await db
+    .selectFrom('versions')
+    .select((eb) => eb.fn.countAll<number>().as('n'))
+    .where('workspaceId', '=', workspaceId)
+    .where('documentId', '=', documentId)
+    .where('restoredFrom', 'is not', null)
+    .executeTakeFirstOrThrow()
+  if (Number(held.n) >= MAX_RESTORE_POINTS_PER_DOCUMENT) {
+    throw new TooManyVersionsError(MAX_RESTORE_POINTS_PER_DOCUMENT)
   }
 }
 

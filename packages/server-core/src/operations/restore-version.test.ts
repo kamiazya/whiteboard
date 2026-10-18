@@ -648,6 +648,23 @@ describe('restoreVersion subtree mode', () => {
     expect(versions.saved.every((s) => s.options.restoredFrom === 'v1')).toBe(true)
   })
 
+  it('records no merge point on a document of the subtree the rollback left as it was', async () => {
+    const live = new FakeLive()
+    const rootId = generateDocumentId()
+    const childId = generateDocumentId()
+    live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
+    live.seed('canvas-a/child', spatialDoc(['child-same']), 'spatial', childId)
+    const pastWorkspace = workspaceDocWith([
+      { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
+      { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-same'] },
+    ])
+    const versions = versionsWith({
+      v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },
+    })
+    await run(live, versions, { subtree: true })
+    expect(versions.saved.map((s) => s.path)).toEqual(['canvas-a'])
+  })
+
   // Deletions run first, and the order is load-bearing: a document the
   // version holds may sit at a path some later-born document now occupies.
   // The test above cannot see that order — its born-later document sits at a
