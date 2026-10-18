@@ -1,4 +1,4 @@
-import { hasRequiredScopes } from './auth-strategy.js'
+import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 import { parseBearerAuthorizationHeader } from './bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from './credential-resolver.js'
 
@@ -8,7 +8,8 @@ interface McpAuthRequestContext {
 }
 
 type McpAuthDecision =
-  | { ok: true }
+  /** `scopes` set for a narrow credential, whose tool calls it bounds. */
+  | { ok: true; scopes?: readonly AuthScope[] }
   | {
       ok: false
       status: 401 | 403
@@ -87,7 +88,10 @@ export function createLocalTokenMcpHttpAuthStrategy(options: {
       }
 
       const admitted = admitsMcp(grant)
-      if (admitted) return { ok: true }
+      // A macaroon is narrow by construction; its scopes go on to each tool
+      // call (mcp-caller.ts), as server mode's bearers' do.
+      if (admitted)
+        return grant.kind === 'macaroon' ? { ok: true, scopes: grant.scopes } : { ok: true }
 
       // No `WWW-Authenticate`: the credential verified, so a retry with it
       // changes nothing.
