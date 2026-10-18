@@ -211,13 +211,15 @@ describe('computeEdgeJumps cost', () => {
     }
   })
 
-  it.fails('charges filing into coarser levels to the per-scene budget', () => {
+  it('charges filing into coarser levels to the per-scene budget', () => {
     // Eight edges whose 512 segments each sit at a level of their own,
     // 4^1 through 4^511 px, every one spanning the origin; before them, 1992
     // small staircases that never cross, each of which is then filed at
     // every one of those levels. Filing is work the pair budget must see:
     // measured 3_545_854 cell visits beside 50 staircases, 13_356_498 beside
     // 200, and the worker killed out of memory after 183s at 1992.
+    // Charged, the search stops at the budget: 1.8s unspied, against 0.27s
+    // for the staircases alone.
     const levels: ResolvedEdgeNode[] = Array.from({ length: 8 }, (_, e) =>
       routed(
         `l${e}`,
@@ -244,10 +246,14 @@ describe('computeEdgeJumps cost', () => {
     const edges = [...cross, ...stairs, ...levels]
     const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
 
-    const { jumps } = jumpsWithinCellBudget(edges, 64 * segments)
+    const { jumps, visits } = jumpsWithinCellBudget(edges, 64 * segments)
     // The hop found before the budget ran out stays.
     expect(jumps.get('v')).toEqual([{ segment: 0, x: -1e6 + 100, y: 1e6 }])
-  })
+    // Measured 4_091_454: the budget, plus the reads that found it spent.
+    expect(visits).toBeGreaterThan(1_000_000)
+    expect(visits).toBeLessThanOrEqual(4_500_000)
+    // Every one of those visits goes through the spy: about 8s alone.
+  }, 60_000)
 
   it('caps the hops one segment draws', () => {
     // One long later edge across 1000 earlier verticals 20px apart: every

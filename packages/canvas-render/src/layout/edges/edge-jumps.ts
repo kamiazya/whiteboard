@@ -25,16 +25,19 @@ interface Crossing {
 const MAX_HOPS_PER_SEGMENT = 64
 const MAX_HOPS_PER_SCENE = 4096
 /**
- * Most candidate pairs one scene examines. The hop caps bound what is
- * drawn, not what is searched: segments that share cells and never cross
- * draw nothing and still cost a pair each. Past this the search stops and
+ * Most broad-phase work one scene does. The hop caps bound what is drawn,
+ * not what is searched: segments that share cells and never cross draw
+ * nothing and still cost a pair each. Past this the search stops and
  * draws no further hops, keeping those already found, so the output stays
- * deterministic. A pair is a filed entry read, duplicates included, so the
- * count runs a little ahead of the narrow-phase tests it bounds. Measured
- * in those tests: 4_160 on a 66_000-segment board, 1.3 million beside
- * twenty board-spanning diagonals, both far below it.
+ * deterministic. A unit is a filed entry read, duplicates included, so the
+ * count runs a little ahead of the narrow-phase tests it bounds — and also
+ * every coarser level a segment is checked against and every cell it is
+ * filed into, since a segment is filed at each coarser level it reaches
+ * and a board can hold hundreds of levels over one spot. Measured in those
+ * tests: 4_160 pairs on a 66_000-segment board, 1.3 million beside twenty
+ * board-spanning diagonals, both far below it.
  */
-const MAX_PAIRS_PER_SCENE = 4_000_000
+const MAX_GRID_WORK_PER_SCENE = 4_000_000
 
 interface IndexedSegment {
   readonly a: Point
@@ -226,20 +229,25 @@ class SegmentGrid {
     const reached: Reached = []
     for (const level of this.levels) {
       if (level.id < p.level) continue
+      // Past the budget `candidates` answers undefined, so nothing more is needed.
+      if (this.work > MAX_GRID_WORK_PER_SCENE) break
+      this.work += 1
       const own = level.id === p.level
       if (!own && !reaches(p, level.bounds, level.cell)) continue
-      reached.push({ level, own, keys: cellsOf(p, level.cell) })
+      const keys = cellsOf(p, level.cell)
+      this.work += keys.length
+      reached.push({ level, own, keys })
     }
     return reached
   }
 
-  /** Filed entries read so far, duplicates included, against MAX_PAIRS_PER_SCENE. */
-  private examined = 0
+  /** Broad-phase work so far, against MAX_GRID_WORK_PER_SCENE. */
+  private work = 0
 
   private takeFiled(cells: Map<string, number[]>, keys: readonly string[], found: number[]): void {
     for (const key of keys) {
       const filed = cells.get(key) ?? []
-      this.examined += filed.length
+      this.work += filed.length
       for (const index of filed) {
         if (this.seenStamp[index] === this.stamp) continue
         this.seenStamp[index] = this.stamp
@@ -253,7 +261,7 @@ class SegmentGrid {
    * once each and in the order they were filed. The order is fixed because
    * two crossings can tie along a segment while their points differ in the
    * last bits, and the spacing rule keeps whichever comes first.
-   * `undefined` once the scene's pair budget is spent.
+   * `undefined` once the scene's work budget is spent.
    */
   candidates(reached: Reached): IndexedSegment[] | undefined {
     this.stamp += 1
@@ -264,7 +272,7 @@ class SegmentGrid {
       if (own && level.finer.size > 0) this.takeFiled(level.finer, keys, found)
     }
     // Checked per segment, so no segment is searched in part.
-    if (this.examined > MAX_PAIRS_PER_SCENE) return undefined
+    if (this.work > MAX_GRID_WORK_PER_SCENE) return undefined
     found.sort((p, q) => p - q)
     return found.map((index) => this.segments[index] as IndexedSegment)
   }
@@ -355,7 +363,7 @@ export function computeEdgeJumps(
       const { a, b } = p.seg
       const candidates = grid.candidates(r)
       if (candidates === undefined) {
-        // The pair budget is spent: no further hops anywhere in the scene,
+        // The work budget is spent: no further hops anywhere in the scene,
         // and the remaining segments are not even filed.
         sceneBudget = 0
         return
