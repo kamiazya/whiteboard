@@ -29,11 +29,16 @@ The local daemon has one person: the machine's owner
   `whiteboard-<uid>` there and listen at the recorded path. So before a
   client sends the token to a Unix socket, it checks that the socket's
   directory is a real directory owned by this user and owner-only (`0700`),
-  and that the socket is owned by this user and is not a symbolic link. If
-  any of that fails, the client sends nothing to the socket and reports that
-  it may belong to another user. `whiteboard daemon run` and `daemon stop`
+  and that the socket is owned by this user and is not a symbolic link. The
+  directory is checked even when no socket is there yet, because another
+  user could swap their own directory for one holding their socket between
+  the check and the connection. If any of that fails, the client sends
+  nothing to the socket and reports that it may belong to another user, and
+  how to move the socket somewhere of your own (`XDG_RUNTIME_DIR`, or
+  `TMPDIR` when that is unset). `whiteboard daemon run` and `daemon stop`
   then leave the record alone and signal no process, and the native host
-  relays nothing.
+  relays nothing. When the directory does not exist at all, no daemon can be
+  listening there: the client sends nothing and treats the record as stale.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no

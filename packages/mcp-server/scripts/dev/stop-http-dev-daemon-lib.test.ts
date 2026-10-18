@@ -36,6 +36,8 @@ function world({
       request: async (): Promise<{ status: number; contentType: string; text: string }> => {
         throw Object.assign(new Error('connect ENOENT /gone.sock'), { code: 'ENOENT' })
       },
+      // The record's socket path is a fixture, judged by the seams above alone.
+      socketTrust: () => ({ kind: 'trusted' as const }),
       startMs: (pid: number) =>
         startedAfter.includes(pid) ? RECORDED_AT + 60_000 : RECORDED_AT - 1,
       readWrapper: () => (wrapper === null ? null : { pid: wrapper, writtenAtMs: RECORDED_AT }),

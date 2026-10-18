@@ -36,6 +36,7 @@ import {
  *   kill: (pid: number, signal: string) => unknown,
  *   sleep: (ms: number) => Promise<unknown>,
  *   request?: NonNullable<Parameters<typeof assessRecordedDaemon>[1]>['request'],
+ *   socketTrust?: NonNullable<Parameters<typeof assessRecordedDaemon>[1]>['socketTrust'],
  *   startMs?: (pid: number) => number | null,
  *   timeoutMs?: number,
  *   pollMs?: number,
@@ -56,6 +57,7 @@ export async function stopDevDaemon({
   kill,
   sleep,
   request,
+  socketTrust,
   startMs = readProcessStartMs,
   timeoutMs = 10_000,
   pollMs = 100,
@@ -64,7 +66,7 @@ export async function stopDevDaemon({
   const wrapper = readWrapper(dataDir)
   const record = readRecord(dataDir)
   if (record === null) return stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock })
-  const daemon = await assessRecordedDaemon(record, { isAlive, startMs, request })
+  const daemon = await assessRecordedDaemon(record, { isAlive, startMs, request, socketTrust })
   if (daemon.process === 'foreign') {
     const refusal = unconfirmedForeign(record, daemon.liveness)
     if (refusal !== null) return refusal

@@ -45,7 +45,7 @@ import {
   type DaemonRequest,
   requestDaemon,
 } from './daemon-request.js'
-import { isNamedPipe, untrustedSocketReason } from './daemon-socket.js'
+import { isNamedPipe, type SocketTrust, socketTrust } from './daemon-socket.js'
 
 /**
  * - `running`: the pid is the process that wrote the record.
@@ -59,7 +59,8 @@ import { isNamedPipe, untrustedSocketReason } from './daemon-socket.js'
  *   one only this user could have made: whoever holds it, the record's token
  *   is not sent there.
  * - `pid-reused`: the pid is alive, started after the record, and nothing
- *   accepts a connection on the record's socket. A socket that accepts and
+ *   accepts a connection on the record's socket — or its directory does not
+ *   exist, in which case nothing is asked at all. A socket that accepts and
  *   then stays silent past the ask's timeout is `unconfirmed`: something is
  *   serving it, and a daemon busy on a large write is the likeliest thing.
  * - `dead`: no process has the pid.
@@ -87,8 +88,8 @@ export function servingPidOf(liveness: DaemonLiveness): { servingPid?: number } 
 
 export interface DaemonLivenessSeams extends ProcessIdentitySeams {
   readonly request?: (req: DaemonRequest) => Promise<DaemonAnswer>
-  /** Why the record's socket may be another user's; `untrustedSocketReason` by default. */
-  readonly socketRefusal?: (socketPath: string) => string | undefined
+  /** Whether the record's socket may be sent its token; `socketTrust` by default. */
+  readonly socketTrust?: (socketPath: string) => SocketTrust
 }
 
 /**
@@ -179,7 +180,7 @@ export async function daemonLiveness(
   record: RecordedDaemon,
   {
     request = requestDaemon,
-    socketRefusal = untrustedSocketReason,
+    socketTrust: trustOf = socketTrust,
     ...identitySeams
   }: DaemonLivenessSeams = {},
 ): Promise<DaemonLiveness> {
@@ -187,13 +188,13 @@ export async function daemonLiveness(
   const identity = recordedProcess(record.pid, writtenAtMs, identitySeams)
   if (identity === 'dead') return { state: 'dead' }
   const { socketPath } = record
-  const untrustedSocket = socketPath === undefined ? undefined : socketRefusal(socketPath)
-  if (untrustedSocket !== undefined) return { state: 'unconfirmed', untrustedSocket }
+  const trust = socketPath === undefined ? undefined : trustOf(socketPath)
+  if (trust?.kind === 'refused') return { state: 'unconfirmed', untrustedSocket: trust.reason }
   if (identity === 'writer') return { state: 'running' }
   if (identity === 'unknown') {
     if (socketPath === undefined || !isNamedPipe(socketPath)) return { state: 'running' }
     return provenPipe(request, socketPath, record.token)
   }
-  if (socketPath === undefined) return { state: 'pid-reused' }
+  if (socketPath === undefined || trust?.kind === 'absent') return { state: 'pid-reused' }
   return confirmedPid(request, record, socketPath)
 }

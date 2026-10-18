@@ -9,7 +9,7 @@ import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
 import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
-import { untrustedSocketReason } from './daemon-socket.js'
+import { socketTrust } from './daemon-socket.js'
 
 const startedAt = '2026-01-01T00:00:00.000Z'
 const writtenAtMs = Date.parse(startedAt)
@@ -216,10 +216,42 @@ describe('daemonLiveness against a socket this user does not hold alone', () => 
     const record = { pid: PID, startedAt, socketPath: socket.socketPath, token: TOKEN }
     const liveness = await daemonLiveness(record, {
       ...startedAfter,
-      socketRefusal: (path) => untrustedSocketReason(path, { uid: ANOTHER_UID }),
+      socketTrust: (path) => socketTrust(path, { uid: ANOTHER_UID }),
     })
     expect(liveness).toMatchObject({ state: 'unconfirmed', untrustedSocket: expect.any(String) })
     expect(socket.authorizations).toEqual([])
+  })
+
+  it('sends nothing to a missing socket in a directory another uid owns', async () => {
+    const asked: DaemonRequest[] = []
+    const record = { pid: PID, startedAt, socketPath: silentSocketPath(), token: TOKEN }
+    await daemonLiveness(record, {
+      ...startedAfter,
+      request: async (req) => {
+        asked.push(req)
+        return { status: 200, body: { pid: PID } }
+      },
+      socketTrust: (path) => socketTrust(path, { uid: ANOTHER_UID }),
+    })
+    expect(asked).toEqual([])
+  })
+
+  it.each([
+    ['started after its record', startedAfter],
+    ['whose start time cannot be read', noStartTime],
+  ])('sends nothing, and holds nothing, where the socket directory does not exist, for a pid %s', async (_, identity) => {
+    const asked: DaemonRequest[] = []
+    const socketPath = join(silentSocketPath(), 'gone', 'd.sock')
+    const record = { pid: PID, startedAt, socketPath, token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...identity,
+      request: async (req) => {
+        asked.push(req)
+        return { status: 200, body: { pid: PID } }
+      },
+    })
+    expect(asked).toEqual([])
+    expect(liveness.state).toBe(identity === startedAfter ? 'pid-reused' : 'running')
   })
 
   it('asks, under the token, a socket in an owner-only directory of its own', async () => {

@@ -3,12 +3,12 @@ import { createServer as createSocketServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, onTestFinished } from 'vitest'
-import { untrustedSocketReason as daemonUntrustedSocketReason } from '../../src/daemon/daemon-socket.js'
+import { socketTrust as daemonSocketTrust } from '../../src/daemon/daemon-socket.js'
 import {
   requestDaemon,
   STATUS_PATH,
+  socketTrust,
   UNTRUSTED_SOCKET,
-  untrustedSocketReason,
 } from './dev-daemon-socket-lib.mjs'
 
 const dirs: string[] = []
@@ -28,6 +28,7 @@ describe("the socket ownership check against the daemon's own", () => {
     const dir = join(root, 's')
     mkdirSync(dir, { mode: 0o700 })
     const path = join(dir, 'd.sock')
+    if (kind === 'no-directory') return join(root, 'gone', 'd.sock')
     if (kind === 'absent') return path
     if (kind === 'file') {
       writeFileSync(path, '')
@@ -45,18 +46,34 @@ describe("the socket ownership check against the daemon's own", () => {
   }
 
   it.each([
-    ['absent', undefined, false],
-    ['file', undefined, false],
-    ['symlink', undefined, true],
-    ['own-socket', undefined, false],
-    ['open-directory', undefined, true],
-    ['own-socket', ANOTHER_UID, true],
-  ])('agrees on a %s path checked for uid %s', async (kind, uid, refused) => {
+    ['absent', undefined, 'trusted'],
+    ['absent', ANOTHER_UID, 'refused'],
+    ['no-directory', undefined, 'absent'],
+    ['file', undefined, 'trusted'],
+    ['symlink', undefined, 'refused'],
+    ['own-socket', undefined, 'trusted'],
+    ['open-directory', undefined, 'refused'],
+    ['own-socket', ANOTHER_UID, 'refused'],
+  ])('agrees on a %s path checked for uid %s', async (kind, uid, expected) => {
     const path = await arrangement(kind)
     const seams = uid === undefined ? {} : { uid }
-    const reason = daemonUntrustedSocketReason(path, seams)
-    expect(reason !== undefined).toBe(refused)
-    expect(untrustedSocketReason(path, seams)).toBe(reason)
+    const trust = daemonSocketTrust(path, seams)
+    expect(trust.kind).toBe(expected)
+    expect(socketTrust(path, seams)).toEqual(trust)
+  })
+
+  it('sends no token, and answers as a missing socket, where the socket directory does not exist', async () => {
+    const path = await arrangement('no-directory')
+    await expect(
+      requestDaemon(
+        { socketPath: path },
+        { path: STATUS_PATH, headers: { authorization: 'Bearer t' } },
+      ),
+    ).rejects.toMatchObject({
+      code: 'ENOENT',
+      // Answered before any connect, which would say `connect ENOENT`.
+      message: expect.stringMatching(/^no socket directory for /),
+    })
   })
 
   it('refuses, before connecting, to send a token to a socket in an open directory', async () => {

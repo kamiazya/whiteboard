@@ -25,7 +25,7 @@ import {
   daemonSocketPath,
   listenOnSocket,
   prepareSocketDirectory,
-  untrustedSocketReason,
+  socketTrust,
 } from './daemon-socket.js'
 
 let scratch: string
@@ -134,7 +134,7 @@ describe('prepareSocketDirectory', () => {
   )
 })
 
-describe('untrustedSocketReason', () => {
+describe('socketTrust', () => {
   const UID = process.getuid?.() ?? 0
 
   async function listeningIn(dir: string): Promise<string> {
@@ -158,38 +158,66 @@ describe('untrustedSocketReason', () => {
 
   it('finds nothing against a socket of its own in an owner-only directory', async () => {
     const path = await listeningIn(join(scratch, 'own'))
-    expect(untrustedSocketReason(path, { uid: UID })).toBeUndefined()
+    expect(socketTrust(path, { uid: UID })).toEqual({ kind: 'trusted' })
   })
 
-  it('finds nothing where nothing is there to be sent a token', () => {
-    expect(untrustedSocketReason(join(scratch, 'missing', 'd.sock'))).toBeUndefined()
+  it('finds nothing against a missing socket in an owner-only directory of its own', () => {
+    mkdirSync(join(scratch, 'empty'), { mode: 0o700 })
+    expect(socketTrust(join(scratch, 'empty', 'd.sock'), { uid: UID })).toEqual({ kind: 'trusted' })
+  })
+
+  // Another user can swap a directory they own between the check and the
+  // connect, so a missing socket says nothing until its directory is checked.
+  it('refuses a missing socket whose directory another uid owns', () => {
+    mkdirSync(join(scratch, 'swapped'), { mode: 0o700 })
+    const path = join(scratch, 'swapped', 'd.sock')
+    const lstat = ownedBy(dirname(path), UID + 1)
+    expect(socketTrust(path, { uid: UID, lstat })).toMatchObject({
+      kind: 'refused',
+      // Names the way out: a socket directory of the user's own.
+      reason: expect.stringMatching(/not a directory this user owns.*XDG_RUNTIME_DIR.*TMPDIR/),
+    })
+  })
+
+  it('does not trust a socket whose directory does not exist', () => {
+    expect(socketTrust(join(scratch, 'missing', 'd.sock'))).toEqual({ kind: 'absent' })
   })
 
   it('refuses a socket in a directory others can enter', async () => {
     const path = await listeningIn(join(scratch, 'open'))
     chmodSync(dirname(path), 0o755)
-    expect(untrustedSocketReason(path, { uid: UID })).toMatch(/owner-only/)
+    expect(socketTrust(path, { uid: UID })).toMatchObject({
+      kind: 'refused',
+      reason: expect.stringMatching(/owner-only/),
+    })
   })
 
   it('refuses a socket whose closed directory another uid owns', async () => {
     const path = await listeningIn(join(scratch, 'theirs'))
     const lstat = ownedBy(dirname(path), UID + 1)
-    expect(untrustedSocketReason(path, { uid: UID, lstat })).toMatch(
-      /not a directory this user owns/,
-    )
+    expect(socketTrust(path, { uid: UID, lstat })).toMatchObject({
+      kind: 'refused',
+      reason: expect.stringMatching(/not a directory this user owns/),
+    })
   })
 
   it('refuses a socket another uid owns inside a closed directory of its own', async () => {
     const path = await listeningIn(join(scratch, 'planted'))
     const lstat = ownedBy(path, UID + 1)
-    expect(untrustedSocketReason(path, { uid: UID, lstat })).toMatch(/not owned by this user/)
+    expect(socketTrust(path, { uid: UID, lstat })).toMatchObject({
+      kind: 'refused',
+      reason: expect.stringMatching(/not owned by this user/),
+    })
   })
 
   it('refuses a symlink standing at the socket path', () => {
     mkdirSync(join(scratch, 'linked'), { mode: 0o700 })
     const path = join(scratch, 'linked', 'd.sock')
     symlinkSync(join(scratch, 'elsewhere.sock'), path)
-    expect(untrustedSocketReason(path)).toMatch(/symbolic link/)
+    expect(socketTrust(path)).toMatchObject({
+      kind: 'refused',
+      reason: expect.stringMatching(/symbolic link/),
+    })
   })
 })
 

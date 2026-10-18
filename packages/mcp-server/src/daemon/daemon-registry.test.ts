@@ -188,7 +188,12 @@ describe('daemon-registry', () => {
   it("asks liveness through the caller's seams", async () => {
     await writeFile(
       getDaemonRecordPath(dataDir),
-      JSON.stringify({ pid: DEAD_PID, socketPath: '/run/x.sock', token: 7, version: '9.0.0' }),
+      JSON.stringify({
+        pid: DEAD_PID,
+        socketPath: join(dataDir, 'x.sock'),
+        token: 7,
+        version: '9.0.0',
+      }),
     )
     await expect(
       loadDaemonRecord(dataDir, { isAlive: () => true, startMs: () => null }),

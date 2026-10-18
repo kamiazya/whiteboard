@@ -73,7 +73,11 @@ export function prepareSocketDirectory(dir: string): void {
 /** The one rule a socket's directory is held to, by the daemon and its clients alike. */
 function socketDirectoryRefusal(stat: Stats, uid: number | undefined): string | undefined {
   if (!stat.isDirectory() || (uid !== undefined && stat.uid !== uid)) {
-    return 'the socket directory is not a directory this user owns'
+    return (
+      'the socket directory is not a directory this user owns. ' +
+      'Set XDG_RUNTIME_DIR to a directory of your own (the socket lives in its whiteboard/ subdirectory), ' +
+      'or TMPDIR when XDG_RUNTIME_DIR is unset.'
+    )
   }
   if ((stat.mode & 0o077) !== 0) return 'the socket directory must be owner-only (0700)'
   return undefined
@@ -86,46 +90,82 @@ interface SocketTrustSeams {
 }
 
 /**
- * Why the socket at `path` may be someone else's, or undefined when nothing
- * says so — asked by every client before it sends the record's token there.
+ * - `trusted`: nothing says the socket may be someone else's.
+ * - `absent`: its directory does not exist, so no daemon can be listening
+ *   there — and nothing is to be sent, since whoever makes the directory
+ *   before the connect decides who answers it.
+ * - `refused`: the socket, or its directory, may be another user's.
+ */
+export type SocketTrust =
+  | { readonly kind: 'trusted' }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'refused'; readonly reason: string }
+
+const TRUSTED: SocketTrust = { kind: 'trusted' }
+
+function refused(reason: string): SocketTrust {
+  return { kind: 'refused', reason }
+}
+
+/** `path`'s lstat, or undefined when nothing is there or a parent is no directory. */
+function statUnlessMissing(lstat: (path: string) => Stats, path: string): Stats | undefined {
+  try {
+    return lstat(path)
+  } catch (err) {
+    if (isMissingFileError(err) || isErrnoCode(err, 'ENOTDIR')) return undefined
+    throw err
+  }
+}
+
+/**
+ * Whether the socket at `path` may be sent the record's token — asked by every
+ * client before it sends it there.
  *
  * A record outlives a daemon that did not stop cleanly, and the temp-dir
  * fallback's directory is a predictable name: once a reboot empties the temp
  * dir, another user can create it and listen at the recorded path. The
  * directory being this user's and closed is what makes the socket inside it
- * this user's, so it is checked here as `prepareSocketDirectory` checks it.
+ * this user's, so it is checked here as `prepareSocketDirectory` checks it —
+ * even when the socket itself is missing, since a directory another user owns
+ * can be swapped for one holding their socket between this check and the
+ * connect. A directory this user owns, in a sticky temp dir, nobody else can
+ * swap.
  *
- * Nothing at the path is not a refusal: there is nothing to send the token
- * to, and the connection that follows answers that in its own words. A file
- * that is no socket in a directory this user holds alone is likewise only
+ * A file that is no socket in a directory this user holds alone is only
  * something nothing listens through. A named pipe has no directory, and is
  * held to its endpoint proof instead.
  */
-export function untrustedSocketReason(
+export function socketTrust(
   path: string,
   { uid = process.getuid?.(), lstat = lstatSync }: SocketTrustSeams = {},
-): string | undefined {
-  if (isNamedPipe(path)) return undefined
-  let socket: Stats
+): SocketTrust {
+  if (isNamedPipe(path)) return TRUSTED
+  let socket: Stats | undefined
   try {
-    socket = lstat(path)
+    socket = statUnlessMissing(lstat, path)
   } catch (err) {
-    if (isMissingFileError(err) || isErrnoCode(err, 'ENOTDIR')) return undefined
-    return `the socket could not be inspected (${errnoCode(err) ?? 'unknown error'})`
+    return refused(`the socket could not be inspected (${errnoCode(err) ?? 'unknown error'})`)
   }
-  if (socket.isSymbolicLink()) return 'the socket path is a symbolic link'
-  let directory: Stats
+  if (socket?.isSymbolicLink()) return refused('the socket path is a symbolic link')
+  let directory: Stats | undefined
   try {
-    directory = lstat(dirname(path))
+    directory = statUnlessMissing(lstat, dirname(path))
   } catch (err) {
-    return `the socket directory could not be inspected (${errnoCode(err) ?? 'unknown error'})`
+    return refused(
+      `the socket directory could not be inspected (${errnoCode(err) ?? 'unknown error'})`,
+    )
+  }
+  if (directory === undefined) {
+    return socket === undefined
+      ? { kind: 'absent' }
+      : refused('the socket directory could not be inspected (ENOENT)')
   }
   const refusal = socketDirectoryRefusal(directory, uid)
-  if (refusal !== undefined) return refusal
-  if (socket.isSocket() && uid !== undefined && socket.uid !== uid) {
-    return 'the socket is not owned by this user'
+  if (refusal !== undefined) return refused(refusal)
+  if (socket?.isSocket() && uid !== undefined && socket.uid !== uid) {
+    return refused('the socket is not owned by this user')
   }
-  return undefined
+  return TRUSTED
 }
 
 /**
