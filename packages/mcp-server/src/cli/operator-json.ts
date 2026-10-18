@@ -92,7 +92,8 @@ export const nativeHostInstallOutputSchema = z
     schemaVersion,
     ok: z.boolean(),
     reason: z.string().optional(),
-    launcher: z.string(),
+    // Absent only on a refusal that wrote nothing.
+    launcher: z.string().optional(),
     manifests: z.array(manifestDirSchema),
   })
   .strict()

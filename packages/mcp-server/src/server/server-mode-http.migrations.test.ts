@@ -51,6 +51,7 @@ afterEach(async () => {
 describe('startServerModeHttp on a data dir nothing has migrated', () => {
   it('serves /api/v1 rather than answering "no such table", and holds its current workspace', async () => {
     running = await startServerModeHttp({
+      dataDirTrust: 'operator',
       host: 'board.example',
       port: 443,
       publicBaseUrl: PUBLIC_URL,

@@ -28,6 +28,9 @@ export type ServerRestoreOutcome =
 
 type ServerRestoreResult = z.infer<typeof serverRestoreOutputSchema>
 
+/** The target is always one the operator named. */
+const readNamedTargetRecord = (dir: string) => readServerModeRecord(dir, 'operator')
+
 export async function runServerRestore(
   options: RunServerRestoreOptions,
 ): Promise<ServerRestoreOutcome> {
@@ -35,7 +38,7 @@ export async function runServerRestore(
     args,
     env = process.env,
     isPidAlive = defaultIsPidAlive,
-    doReadRecord = readServerModeRecord,
+    doReadRecord = readNamedTargetRecord,
     doRestore = restoreServerModeDataDir,
   } = options
 

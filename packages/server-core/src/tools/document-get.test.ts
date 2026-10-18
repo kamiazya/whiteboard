@@ -3,6 +3,7 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -233,6 +234,76 @@ describe('wb_document_get reads a document in its own format', () => {
     expect(result.documents.map((entry) => entry.documentId)).toEqual([md, sp])
     expect(result.documents.map((entry) => entry.kind)).toEqual(['markdown', 'spatial'])
     expect(result.failed).toEqual([])
+  })
+
+  it('an id asked for twice is read once', async () => {
+    const deps = makeDeps()
+    const md = await createDoc(deps, 'markdown')
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: Array.from({ length: 20 }, () => md),
+    })
+
+    expect(result.documents.map((entry) => entry.documentId)).toEqual([md])
+    expect(result.failed).toEqual([])
+  })
+
+  it('stops filling the answer past its content budget, and names the rest as read-alone', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const body = `${'x'.repeat(MARKDOWN_MAX_CHARS - 1)}\n`
+    const ids: string[] = []
+    // The last is small enough to fit anywhere: once the budget is reached
+    // nothing more is read, so the answer stops where it stopped.
+    for (let i = 0; i < 20; i += 1) {
+      const { documentId } = await wbDocumentCreate(deps, {
+        workspaceId: 'ws',
+        path: `big-${i}`,
+        kind: 'markdown',
+      })
+      const doc = await loadOrCreateDocument(deps, 'ws', documentId)
+      writeMarkdownBody(doc, i === 19 ? 'small\n' : body)
+      await saveDocumentSnapshot(deps, 'ws', documentId, doc)
+      ids.push(documentId)
+    }
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: ids,
+    })
+
+    const returned = result.documents.map((entry) => entry.documentId)
+    const refused = result.failed.map((entry) => entry.documentId)
+    // Every id is answered exactly once, in order: what fit, then the rest.
+    expect([...returned, ...refused]).toEqual(ids)
+    expect(returned.length).toBeGreaterThan(0)
+    expect(refused.length).toBeGreaterThan(1)
+    expect(refused.at(-1)).toBe(ids.at(-1))
+    const total = result.documents.reduce((sum, entry) => sum + entry.content.length, 0)
+    expect(total).toBeLessThan((ids.length * MARKDOWN_MAX_CHARS) / 2)
+    for (const entry of result.failed) expect(entry.reason).toMatch(/alone/)
+  })
+
+  it('a document larger than the budget still reads when asked for alone', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const { documentId } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'huge',
+      kind: 'markdown',
+    })
+    const doc = await loadOrCreateDocument(deps, 'ws', documentId)
+    writeMarkdownBody(doc, `${'y'.repeat(MARKDOWN_MAX_CHARS * 8)}\n`)
+    await saveDocumentSnapshot(deps, 'ws', documentId, doc)
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [documentId],
+    })
+
+    expect(result.failed).toEqual([])
+    expect(result.documents[0]?.content.length).toBeGreaterThan(MARKDOWN_MAX_CHARS * 8)
   })
 
   it('one unreadable document does not lose the others', async () => {

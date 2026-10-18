@@ -33,6 +33,7 @@ import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import {
   OffGrammarPathError,
@@ -153,6 +154,9 @@ function fakes(peer = 1n) {
 afterEach(() => {
   vi.restoreAllMocks()
 })
+
+/** A test that builds a ceiling-sized record; measured 1.2 s alone. */
+const CEILING_TIMEOUT_MS = 30_000
 
 describe('promoteWorkspace', () => {
   it('merges the record and writes one explicit human checkpoint per promoted document', async () => {
@@ -528,8 +532,11 @@ describe('promoteWorkspace', () => {
   })
 
   // The target already holds one document of its own, so this record brings
-  // the merged workspace exactly to the ceiling.
-  it('promotes a record that brings the workspace exactly to the document ceiling', async () => {
+  // the merged workspace exactly to the ceiling. A ceiling-sized record:
+  // 1.2 s alone, past the 5 s default under a full parallel run.
+  it('promotes a record that brings the workspace exactly to the document ceiling', {
+    timeout: CEILING_TIMEOUT_MS,
+  }, async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
       {
@@ -544,7 +551,28 @@ describe('promoteWorkspace', () => {
     expect(fake.versions.saves).toHaveLength(WORKSPACE_MAX_DOCUMENTS - 1)
   })
 
-  it('refuses a record within the ceiling whose merge would take the workspace past it', async () => {
+  it('lands a record into a document whose history is full, skipping only its version', async () => {
+    const fake = fakes()
+    fake.versions.save = async () => {
+      throw new TooManyVersionsError(200)
+    }
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: recordOf(2), operator },
+    )
+    expect(result.kind).toBe('promoted')
+    expect(result.kind === 'promoted' ? result.recorded : null).toEqual([])
+    expect(fake.saves()).toBeGreaterThan(0)
+  })
+
+  it('refuses a record within the ceiling whose merge would take the workspace past it', {
+    timeout: CEILING_TIMEOUT_MS,
+  }, async () => {
     const fake = fakes()
     const refusal = await promoteWorkspace(
       {

@@ -233,6 +233,46 @@ describe('gatedByMembership', () => {
     expect(executed).toEqual([])
   })
 
+  it.for([
+    ['a document.set', [{ op: 'document.set', documentId: 'd1', markdown: '# Plan' }]],
+    [
+      'a create carrying a body',
+      [{ op: 'document.create', path: 'notes', kind: 'markdown', markdown: '# Plan' }],
+    ],
+  ] as const)('holds %s to canvas:write, as content is everywhere else', async ([, ops]) => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await members.addMember('ws-plans', profile.id)
+    const placer: ResolvedGrant = { ...bearerOf(ada), scopes: ['mcp:call', 'workspace:write'] }
+    await expect(
+      runAsMcpCaller({ grant: placer, members }, () =>
+        tools().execute({ workspaceId: 'plans', ops } as never),
+      ),
+    ).rejects.toThrow(/insufficient_scope/)
+    expect(executed).toEqual([])
+
+    const writer: ResolvedGrant = { ...placer, scopes: [...placer.scopes, 'canvas:write'] }
+    await runAsMcpCaller({ grant: writer, members }, () =>
+      tools().execute({ workspaceId: 'plans', ops } as never),
+    )
+    expect(executed).toHaveLength(1)
+  })
+
+  it('lets workspace:write alone place documents that carry no body', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await members.addMember('ws-plans', profile.id)
+    const placer: ResolvedGrant = { ...bearerOf(ada), scopes: ['mcp:call', 'workspace:write'] }
+    const ops = [
+      { op: 'document.create', path: 'empty', kind: 'markdown' },
+      { op: 'document.create', path: 'board', kind: 'spatial' },
+      { op: 'document.move', documentId: 'd1', path: 'moved' },
+      { op: 'document.delete', documentId: 'd2' },
+    ]
+    await runAsMcpCaller({ grant: placer, members }, () =>
+      tools().execute({ workspaceId: 'plans', ops } as never),
+    )
+    expect(executed).toHaveLength(1)
+  })
+
   it('refuses a tool that has no scope entry, whatever the grant holds', async () => {
     const gated = gatedByMembership(
       { unmapped: { name: 'wb_unmapped', execute: async (input: unknown) => input } },

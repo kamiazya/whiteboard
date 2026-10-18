@@ -269,6 +269,42 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     expect(capturedPort).toBe(4399)
   })
 
+  // A dir nobody named defaults into the home dir or, failing that, the
+  // shared temp dir, where another local user can prepare it first; a named
+  // one is the operator's to have set as their platform requires.
+  it.each([
+    ['nobody named', {}, 'owner'],
+    ['the environment names', { WHITEBOARD_DATA_DIR: '/srv/whiteboard' }, 'operator'],
+  ] as const)('judges a data dir %s as its trust requires', async (_label, extra, trust) => {
+    let captured: string | undefined
+    const startServer: StartServerFn = async (opts) => {
+      captured = opts.dataDirTrust
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
+    }
+    // runServerRun hands a named dir to the server through process.env.
+    vi.stubEnv('WHITEBOARD_DATA_DIR', process.env.WHITEBOARD_DATA_DIR)
+    try {
+      const outcome = await runServerRun({
+        flags: dryRunFlags({ dryRun: false }),
+        env: { ...VALID_ENV, ...extra },
+        startServer,
+        writeRecord: () => {},
+      })
+      expect(outcome.kind).toBe('running')
+      expect(captured).toBe(trust)
+      if (outcome.kind === 'running') await outcome.close()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('passes plan-derived publicBaseUrl and allowedOrigins to startServer', async () => {
     let capturedPublicBaseUrl: string | undefined
     let capturedAllowedOrigins: readonly string[] | undefined

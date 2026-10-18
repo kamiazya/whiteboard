@@ -15,6 +15,7 @@
 
 import { getConnInfo } from '@hono/node-server/conninfo'
 import {
+  invitePageUrl,
   signInPageUrl,
   signInQueryOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
@@ -100,6 +101,35 @@ function failureOf(err: unknown): { readonly name: string; readonly code?: strin
   return code === undefined ? { name: err.name } : { name: err.name, code }
 }
 
+// What `Sec-Fetch-Site` says of a navigation this host's own pages started,
+// or one the person started themselves (typed, bookmarked).
+const OWN_FETCH_SITES = new Set(['same-origin', 'none'])
+
+// Accepting an invitation is the invite page's click. A link from another
+// site straight to the begin route would skip it, and for someone already
+// signed in at the provider the whole round trip is silent — they would be
+// joined to whatever workspace the link names and landed in it. So such a
+// begin goes to the invite page instead, where the person decides. A browser
+// that sends no `Sec-Fetch-Site` begins as before.
+function invitationFromAnotherSite(c: Context): boolean {
+  const site = c.req.header('sec-fetch-site')
+  return site !== undefined && !OWN_FETCH_SITES.has(site)
+}
+
+// Where a begin carrying `invitation` goes instead of the provider, if not there.
+function invitationTurnedAway(
+  c: Context,
+  deps: SignInRoutesDeps,
+  invitation: string | undefined,
+): Response | null {
+  if (invitation === undefined) return null
+  if (!isInvitationTokenShaped(invitation)) return refusedTo(c, 'invitation_unusable')
+  if (invitationFromAnotherSite(c)) {
+    return c.redirect(invitePageUrl(deps.publicBaseUrl, invitation), 302)
+  }
+  return null
+}
+
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
 
 interface Routing {
@@ -113,9 +143,8 @@ interface Routing {
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
   const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
-  if (invitation !== undefined && !isInvitationTokenShaped(invitation)) {
-    return refusedTo(c, 'invitation_unusable')
-  }
+  const turnedAway = invitationTurnedAway(c, deps, invitation)
+  if (turnedAway !== null) return turnedAway
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
     returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),

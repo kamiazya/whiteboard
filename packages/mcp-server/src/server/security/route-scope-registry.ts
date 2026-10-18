@@ -439,6 +439,22 @@ export function restoreScopes(
 }
 
 /**
+ * What a document create needs beyond the `workspace:write` that places a
+ * document: a create carrying a markdown body writes content, which is
+ * `canvas:write` on every other surface — the per-document update, the body
+ * edit, the linkify rewrite. A create with no body, or a spatial one, writes
+ * none. Judged after the body is parsed, as `restoreScopes` is.
+ */
+export function createBodyScopes(asked: { readonly markdown?: unknown }): readonly AuthScope[] {
+  return carriesBody(asked) ? ['workspace:write', 'canvas:write'] : ['workspace:write']
+}
+
+/** Whether a create request names a markdown body with something in it. */
+export function carriesBody(asked: { readonly markdown?: unknown }): boolean {
+  return typeof asked.markdown === 'string' && asked.markdown.length > 0
+}
+
+/**
  * The workspace HANDLE this request's route reaches, for the membership
  * gate — the FIRST claiming rule's extractor, same first-match-wins order
  * as `resolveApiRouteScope`.

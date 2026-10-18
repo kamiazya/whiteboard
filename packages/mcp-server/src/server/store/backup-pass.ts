@@ -1,4 +1,4 @@
-import { readdir, rename, rm } from 'node:fs/promises'
+import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { errnoCode } from '../../shared/errno.js'
@@ -9,6 +9,7 @@ import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
 import { mirrorBlobsIntoBackup } from './backup-blob-mirror.js'
 import { withBackupMarker } from './backup-in-progress.js'
+import { BACKUP_DIR_MODE, restrictTreeToOwner } from './backup-modes.js'
 import { DB_FILENAME, databaseIsInsideDataDir, dataDirHasDatabaseFile } from './db/location.js'
 import { readDatabaseLocationRecord } from './db/location-record.js'
 import { snapshotDatabaseInto } from './db/snapshot.js'
@@ -120,6 +121,18 @@ async function stagedStep(
 }
 
 /**
+ * A fresh staging dir, clearing whatever an abandoned pass left there.
+ * Owner-only from its first byte, so nothing assembled in it is readable by
+ * anyone else while the pass runs; a backup root this creates is too.
+ */
+async function createStaging(outputDir: string, staging: string): Promise<void> {
+  await rm(staging, { recursive: true, force: true }).catch(() => {})
+  await mkdir(dirname(outputDir), { recursive: true, mode: BACKUP_DIR_MODE })
+  await mkdir(staging, { mode: BACKUP_DIR_MODE })
+  await chmod(staging, BACKUP_DIR_MODE)
+}
+
+/**
  * Rename a finished staging directory into place, durably.
  *
  * A directory rename orders none of the data inside it, so without the tree
@@ -132,6 +145,9 @@ async function stagedStep(
  * durable, but whether the NAME survives a crash is not known.
  */
 async function sealBackup(staging: string, outputDir: string): Promise<void> {
+  // The copy carries the source's modes and the snapshot the umask's; the
+  // name a backup is read under only ever appears over an owner-only tree.
+  await restrictTreeToOwner(staging)
   await syncTree(staging)
   await rename(staging, outputDir)
   await syncDirectory(dirname(outputDir))
@@ -253,9 +269,8 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // leader lease admits one pass at a time, and `backupDataDir` refuses a
     // destination that is not empty, so a leftover would otherwise wedge
     // every future attempt.
-    await rm(staging, { recursive: true, force: true }).catch(() => {})
-
     const failed = { kind: 'error', message: 'backup failed' } as const
+    if (!(await stagedStep(staging, () => createStaging(outputDir, staging)))) return failed
 
     const copied = await stagedStep(staging, () =>
       doBackup(dataDir, staging, {

@@ -13,7 +13,7 @@ import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictWorkspaceDocs } from './doc-cache.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
-import { withWorkspaceWriteLock } from './workspace-lock.js'
+import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-lock.js'
 
 /**
  * The live WORKSPACE documents this process serves and writes through, one
@@ -38,7 +38,101 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  * therefore asks the store whether the record holds ops this document lacks
  * (`followRecord`) before it serves the document.
  */
-const workspaceDocCache = new Map<string, LoroDoc>()
+const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>()
+
+/**
+ * How many workspace records stay resident, least recently used dropped first.
+ *
+ * Without a bound every record the process ever opened stayed for its
+ * lifetime — the daily file-GC sweep opens every workspace it keeps — and in
+ * server mode one process serves every tenant over one WASM heap.
+ * `scripts/measure/workspace-record-memory.mjs` puts a live record at 8.5MB
+ * for 90 documents and 64.5MB for 360 (super-linear in document count), so 16
+ * holds about 136MB of typical workspaces and about 1GiB of 360-document ones,
+ * well inside a wasm32 heap with room left for an export's amplification.
+ * A miss costs one read of the stored record, which is what a restart costs.
+ *
+ * Dropping a record is safe because this module already serves a writer it
+ * cannot see: another process over the same data dir. A caller still holding
+ * a dropped instance saves through `DocumentStoreWorkspaceDocs.save`, which
+ * appends only what the stored frontier lacks, and the reopened instance
+ * catches up from the record on its next access (`followRecord`). What would
+ * NOT be safe is dropping ops that were never saved, and every writer mutates
+ * the record under the workspace write lock, so a record whose lock is held
+ * or awaited is never chosen; the cache runs over the bound instead until it
+ * is released, and the next access, hit or miss, trims it back.
+ *
+ * Dropping a record also drops what it was following: no `followRecord` runs
+ * for it until it is reopened, so a write another process makes meanwhile is
+ * seen by nobody here. Two things derived from the record would then be
+ * wrong, and `openFollowed` settles both when it reopens one. The per-document
+ * projections in `doc-cache.ts` were cut from the OLD record, so a hit would
+ * serve the content from before that write and the next save of it would
+ * write that content back over it — they are evicted on every open that
+ * misses, which covers an explicit eviction as well as this bound. And the
+ * subscribers were told only what the old instance held, while a reopened
+ * instance already level with the record gives `followRecord` nothing to
+ * announce — so the version a record was dropped at is kept
+ * (`droppedVersions`) and its gain is announced on reopen.
+ * `followedTo` is keyed by the instance and leaves with it.
+ *
+ * ponytail: a bound by count, not bytes. A byte-weighted bound needs a size
+ * this module does not have on a hit without an export, which is O(record).
+ */
+export const WORKSPACE_DOC_CACHE_MAX_ENTRIES = 16
+
+function cachedRecord(key: string): LoroDoc | undefined {
+  const entry = workspaceDocCache.get(key)
+  if (entry === undefined) return undefined
+  // Reinserted so Map order is recency order, oldest first.
+  workspaceDocCache.delete(key)
+  workspaceDocCache.set(key, entry)
+  // A record kept past the bound because its lock was in use is trimmed by
+  // whichever access comes next, so the cache returns to the bound once
+  // the lock is released rather than staying over it until another miss.
+  trimToBound(key)
+  return entry.doc
+}
+
+/**
+ * The encoded version each record was dropped at by the bound, so a reopen
+ * can announce what arrived while nothing here followed it. Only the bound
+ * records one: an explicit eviction drops a record that may hold ops storage
+ * refused, and a version taken from it would announce nothing that is true.
+ *
+ * ponytail: bounded by count, oldest forgotten first; a workspace forgotten
+ * here and written by another process before its reopen reaches its
+ * subscribers when they next resubscribe rather than at once.
+ */
+const droppedVersions = new Map<string, Uint8Array>()
+const DROPPED_VERSIONS_MAX_ENTRIES = 1024
+
+function rememberDropped(key: string, doc: LoroDoc): void {
+  droppedVersions.delete(key)
+  droppedVersions.set(key, doc.version().encode())
+  for (const oldest of droppedVersions.keys()) {
+    if (droppedVersions.size <= DROPPED_VERSIONS_MAX_ENTRIES) break
+    droppedVersions.delete(oldest)
+  }
+}
+
+function keepRecord(key: string, workspaceId: string, doc: LoroDoc): void {
+  workspaceDocCache.delete(key)
+  workspaceDocCache.set(key, { workspaceId, doc })
+  trimToBound(key)
+}
+
+/** Drops least recently used records over the bound, never `keep` nor a locked one. */
+function trimToBound(keep: string): void {
+  let excess = workspaceDocCache.size - WORKSPACE_DOC_CACHE_MAX_ENTRIES
+  for (const [candidate, entry] of workspaceDocCache) {
+    if (excess <= 0) break
+    if (candidate === keep || workspaceWriteLockInUse(entry.workspaceId)) continue
+    workspaceDocCache.delete(candidate)
+    rememberDropped(candidate, entry.doc)
+    excess -= 1
+  }
+}
 
 /**
  * Where each cached document last read the record up to.
@@ -79,6 +173,7 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 /** Test-only: drops every cached live workspace document, simulating a restart. */
 export function _clearWorkspaceDocCacheForTests(): void {
   workspaceDocCache.clear()
+  droppedVersions.clear()
 }
 
 /**
@@ -91,7 +186,9 @@ export function evictWorkspaceDocCache(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): void {
-  workspaceDocCache.delete(workspaceDocCacheKey(scope, workspaceId))
+  const key = workspaceDocCacheKey(scope, workspaceId)
+  workspaceDocCache.delete(key)
+  droppedVersions.delete(key)
 }
 
 /**
@@ -193,7 +290,14 @@ async function openFollowed(
   const doc = await open(docs).catch((err) => rethrowOpenFailure(workspaceId, err))
   if (doc === null) return null
   followedTo.set(doc, cursor)
-  workspaceDocCache.set(workspaceDocCacheKey(scope, workspaceId), doc)
+  const key = workspaceDocCacheKey(scope, workspaceId)
+  keepRecord(key, workspaceId, doc)
+  evictWorkspaceDocs(workspaceId, scope)
+  const dropped = droppedVersions.get(key)
+  if (dropped !== undefined) {
+    droppedVersions.delete(key)
+    announceGain(workspaceId, doc, VersionVector.decode(dropped))
+  }
   return doc
 }
 
@@ -201,7 +305,7 @@ export async function getWorkspaceDoc(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
-  const cached = workspaceDocCache.get(workspaceDocCacheKey(scope, workspaceId))
+  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
   if (cached !== undefined) {
     await followRecord(workspaceId, cached, scope)
     return cached
@@ -215,7 +319,7 @@ export async function openWorkspaceDocIfStored(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc | null> {
-  const cached = workspaceDocCache.get(workspaceDocCacheKey(scope, workspaceId))
+  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
   if (cached !== undefined) {
     await followRecord(workspaceId, cached, scope)
     return cached
@@ -311,7 +415,7 @@ export async function catchUpWorkspaceDoc(
   scope: StoreScope = globalStoreScope,
 ): Promise<WorkspaceDocCursor> {
   const docs = cacheBackedWorkspaceDocs(scope)
-  const cached = workspaceDocCache.get(workspaceDocCacheKey(scope, workspaceId))
+  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
   if (cached === undefined) return docs.readCursor(workspaceId)
   // A COLD cursor, not the record's current one. Nothing tracks where the
   // cached document stands — it is mutated in place by every local write —

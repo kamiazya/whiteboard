@@ -18,7 +18,7 @@
 import { resolve } from 'node:path'
 import { describeThrown } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { resolveDefaultDataDir, serverModeDataDir } from '../daemon/data-dir.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/config-file.js'
 import { getLogger } from '../server/log.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
@@ -32,6 +32,7 @@ import { daemonStopResultSchema } from '../shared/api-contracts/daemon-stop.js'
 import { searchFetchModelOutputSchema } from '../shared/api-contracts/search-fetch-model.js'
 import { serverStatusResultSchema } from '../shared/api-contracts/server-status.js'
 import { serverStopResultSchema } from '../shared/api-contracts/server-stop.js'
+import { secureDataDir } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   parseDaemonReplicaKeyArgs,
@@ -380,6 +381,14 @@ async function dispatchSearch(
   // naming it here does not drag in server/config, which mkdirs on load.
   const { searchModelCacheDir } = await import('../server/search/model-cache-dir.js')
   const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
+  // The daemon loads what lands here, so the dir gets the judgement its own
+  // boot gives it before anything is downloaded into it.
+  try {
+    secureDataDir(dataDir)
+  } catch (err) {
+    process.stderr.write(`whiteboard search fetch-model: ${describeThrown(err)}\n`)
+    return 1
+  }
   const { runSearchFetchModel } = await import('./search-fetch-model.js')
   const { result, exitCode } = await runSearchFetchModel({
     cacheDir: searchModelCacheDir(dataDir),
@@ -499,9 +508,8 @@ async function dispatchServerStatus(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStatus } = await import('./server-status.js')
-  const { result, exitCode } = await runServerStatus({ dataDir })
+  const { result, exitCode } = await runServerStatus(serverModeDataDir(parsed.dataDir, process.env))
   writeJsonObject(serverStatusResultSchema, result)
   return exitCode
 }
@@ -512,9 +520,8 @@ async function dispatchServerStop(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStop } = await import('./server-stop.js')
-  const { result, exitCode } = await runServerStop({ dataDir })
+  const { result, exitCode } = await runServerStop(serverModeDataDir(parsed.dataDir, process.env))
   writeJsonObject(serverStopResultSchema, result)
   return exitCode
 }

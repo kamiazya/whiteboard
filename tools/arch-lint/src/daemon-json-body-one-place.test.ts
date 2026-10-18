@@ -35,6 +35,8 @@ const OWNER = `${SERVER_ROOT}/routes/read-json-body.ts`
 const LEFT_IN_PLACE: Readonly<Record<string, string>> = {
   [`${SERVER_ROOT}/routes/mcp.ts`]:
     "a JSON-RPC envelope is parsed once and handed to both transports, and anything that is not a JSON POST reads as absent rather than refused, so the answer to unparseable input is the MCP transport's, not a 400",
+  [`${SERVER_ROOT}/security/v1-create-body-scope.ts`]:
+    "reads the /api/v1 create's body only to judge which scope it needs, in front of server-core's route; a body it cannot read passes untouched, so every refusal of its shape is that route's own answer, given once",
 }
 
 const BODY_READERS: ReadonlySet<string> = new Set(['json', 'text', 'formData', 'parseBody'])

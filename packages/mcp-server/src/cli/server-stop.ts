@@ -12,7 +12,7 @@
 // operators need it to correlate with OS-level tools.
 
 import { rm } from 'node:fs/promises'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { serverModeDataDir } from '../daemon/data-dir.js'
 import type {
   ServerModeRecord,
   ServerModeRecordReadResult,
@@ -25,6 +25,7 @@ import {
   type ServerStopResult,
   serverStopResultSchema,
 } from '../shared/api-contracts/server-stop.js'
+import type { DataDirTrust } from '../shared/data-dir-secure.js'
 import { isErrnoCode } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
@@ -35,6 +36,10 @@ export const SERVER_STOP_SCHEMA_VERSION = 1 as const
 
 export interface RunServerStopOptions {
   dataDir?: string
+  /** Whose judgement `dataDir` gets; a named dir is the operator's by default. */
+  dataDirTrust?: DataDirTrust
+  /** Whose files an `owner` dir's must be; this process's user unless a test substitutes it. */
+  uid?: number
   isPidAlive?: (pid: number) => boolean
   /** Injection seam: confirm the running process is the managed server.
    *  Default: HTTP GET /api/runtime/ping, compare the returned instanceId to record.instanceId. */
@@ -165,11 +170,12 @@ const UNUSABLE_RECORD = {
  */
 async function stopRefusal(
   dataDir: string,
+  readRecord: () => ServerModeRecordReadResult,
   removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
   isPidAlive: NonNullable<RunServerStopOptions['isPidAlive']>,
   verifyIdentity: NonNullable<RunServerStopOptions['verifyIdentity']>,
 ): Promise<{ record: ServerModeRecord } | { outcome: RunServerStopOutcome }> {
-  const readResult = readServerModeRecord(dataDir)
+  const readResult = readRecord()
 
   if (readResult.kind !== 'ok') {
     const { exitCode, forget, ...result } = UNUSABLE_RECORD[readResult.kind]
@@ -248,7 +254,12 @@ function stopOutcome(
 }
 
 export async function runServerStop(options: RunServerStopOptions): Promise<RunServerStopOutcome> {
-  const dataDir = options.dataDir ?? resolveDefaultDataDir(process.env)
+  const { dataDir, dataDirTrust } = serverModeDataDir(
+    options.dataDir,
+    process.env,
+    options.dataDirTrust,
+  )
+  const readRecord = () => readServerModeRecord(dataDir, dataDirTrust, options.uid)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
   const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity
   const killFn = options.killFn ?? defaultKillFn
@@ -257,7 +268,7 @@ export async function runServerStop(options: RunServerStopOptions): Promise<RunS
   const stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
 
-  const refusal = await stopRefusal(dataDir, removeRecord, isPidAlive, verifyIdentity)
+  const refusal = await stopRefusal(dataDir, readRecord, removeRecord, isPidAlive, verifyIdentity)
   if ('outcome' in refusal) return refusal.outcome
   const { record } = refusal
 

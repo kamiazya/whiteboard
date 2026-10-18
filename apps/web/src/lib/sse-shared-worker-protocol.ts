@@ -49,6 +49,10 @@ export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
 ])
 
 export const sseWorkerEventSchema = z.discriminatedUnion('type', [
+  // The worker's answer to `init`, sent before anything that waits on the
+  // daemon: the one sign of life a tab can bound its wait on, since a worker
+  // that never loads is not guaranteed to say so through `onerror`.
+  z.object({ type: z.literal('ready') }),
   z.object({ type: z.literal('message'), doc: z.string(), raw: z.string() }),
   // Whether a stream is currently carrying this document. Addressed like the
   // others so a tab watching several documents routes it the same way; the

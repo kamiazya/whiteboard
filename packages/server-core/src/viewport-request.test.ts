@@ -1,4 +1,4 @@
-import { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from '@kamiazya/whiteboard-model'
+import { CANVAS_MAX_NODES, MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
 import { viewportRequestParamsSchema } from './viewport-request.js'
 
@@ -26,5 +26,17 @@ describe('viewportRequestParamsSchema zoom', () => {
     const result = viewportRequestParamsSchema.safeParse({ zoom: 100 })
     expect(result.success).toBe(false)
     expect(JSON.stringify(result.error?.issues)).toContain(String(MAX_VIEWPORT_ZOOM))
+  })
+})
+
+describe('viewportRequestParamsSchema elementIds', () => {
+  test('refuses more ids than one canvas can hold', () => {
+    const elementIds = Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`)
+    expect(viewportRequestParamsSchema.safeParse({ mode: 'fit', elementIds }).success).toBe(false)
+  })
+
+  test('accepts as many ids as one canvas can hold', () => {
+    const elementIds = Array.from({ length: CANVAS_MAX_NODES }, (_, i) => `n${i}`)
+    expect(viewportRequestParamsSchema.safeParse({ mode: 'fit', elementIds }).success).toBe(true)
   })
 })

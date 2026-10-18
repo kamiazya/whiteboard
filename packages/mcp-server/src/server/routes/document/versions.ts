@@ -1,12 +1,18 @@
 import {
   type ListVersionsResponse,
+  listVersionsRequestSchema,
+  type SaveVersionRefusal,
   type SaveVersionResponse,
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
-import { errorBody } from '@kamiazya/whiteboard-server-core'
-import { Hono } from 'hono'
+import {
+  errorBody,
+  invalidRequestBody,
+  TooManyVersionsError,
+} from '@kamiazya/whiteboard-server-core'
+import { type Context, Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { CallerName } from '../../security/membership-gate.js'
@@ -14,7 +20,13 @@ import { getDoc, listDocuments } from '../../store/document-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
-import { firstOwned, personOperator, refusalReason, STORED_DOCUMENT_ANSWERS } from './_shared.js'
+import {
+  type ErrorAnswer,
+  firstOwned,
+  personOperator,
+  refusalReason,
+  STORED_DOCUMENT_ANSWERS,
+} from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
@@ -52,6 +64,18 @@ const SAVE_VERSION_BODY: ReadJsonBodyOptions = {
   refuseShape: (error) => errorBody('invalid_body', saveVersionIssueMessage(error)),
 }
 
+/** A manual save past the document's version ceiling. */
+const pastVersionCeiling: ErrorAnswer = (err) => {
+  if (!(err instanceof TooManyVersionsError)) return null
+  const body: SaveVersionRefusal = { error: err.code, message: err.message }
+  return { status: err.status, body }
+}
+
+const SAVE_VERSION_ANSWERS: readonly ErrorAnswer[] = [
+  pastVersionCeiling,
+  ...STORED_DOCUMENT_ANSWERS,
+]
+
 /**
  * A past state as the contract answers it. The workspace entry's kind is the
  * fallback: a document the web editor saved records its kind on the node and
@@ -70,24 +94,41 @@ async function pastContent(
   return readDocumentContent(past, entryKind)
 }
 
+/**
+ * One page of a document's versions, newest first; `nextCursor` names the
+ * next. Paged so a request costs its page, however long the history.
+ */
+async function versionPage(
+  c: Context,
+  versionStore: VersionStore,
+  workspaceId: string,
+  path: string,
+): Promise<Response> {
+  const query = listVersionsRequestSchema.safeParse(c.req.query())
+  if (!query.success) return c.json(invalidRequestBody(query.error), 400)
+  try {
+    const response: ListVersionsResponse = await versionStore.listPage(
+      workspaceId,
+      path,
+      query.data,
+    )
+    return c.json(response)
+  } catch (err) {
+    const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+    if (owned) return c.json(owned.body, owned.status)
+    throw err
+  }
+}
+
 // GET /api/workspaces/:workspaceId/documents/:path/versions
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
   const { versionStore, daemonActor, scope, callerName } = options
 
-  // List versions for one canvas in reverse chronological order.
-  onDocumentsRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
-    try {
-      const versions = await versionStore.list(workspaceId, path)
-      const response: ListVersionsResponse = { versions }
-      return c.json(response)
-    } catch (err) {
-      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
-      if (owned) return c.json(owned.body, owned.status)
-      throw err
-    }
-  })
+  onDocumentsRoute(app, 'get', ['versions'], (c, workspaceId, path) =>
+    versionPage(c, versionStore, workspaceId, path),
+  )
 
   /**
    * One version's CONTENT, for previewing it before deciding to restore.
@@ -110,8 +151,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
         // The version must belong to THIS document. Without the check an id
         // alone would read another document's history through this path — the
         // refusal `restoreVersion` makes for the same reason.
-        const owned = (await versionStore.list(workspaceId, path)).some((v) => v.id === id)
-        if (!owned)
+        if (!(await versionStore.belongsTo(workspaceId, path, id)))
           return c.json(
             errorBody('version_not_found', 'no version with that id belongs to this document'),
             404,
@@ -162,7 +202,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response: SaveVersionResponse = { version: entry }
       return c.json(response)
     } catch (err) {
-      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      const owned = firstOwned(err, SAVE_VERSION_ANSWERS)
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }

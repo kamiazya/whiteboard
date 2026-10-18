@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { invitePageUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { signInRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { Hono } from 'hono'
 import type { CustomFetch } from 'openid-client'
@@ -279,6 +280,79 @@ describe('sign-in through an OIDC provider', () => {
     const res = await signInThrough(app, `?invitation=${token}`)
     expect(res.status).toBe(302)
     expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
+  })
+
+  // A link straight to the begin route skips the invite page's click, so a
+  // page on another site could otherwise join a person already signed in at
+  // the provider to a workspace of its choosing and land them in it.
+  describe('an invitation begun from another site', () => {
+    async function workspaceInvitation(signIn: ReturnType<typeof appFor>['signIn']) {
+      const owner = await signIn.members.ensureProfile({
+        binding: { authenticator: 'oidc:https://other.example', subject: 'owner' },
+        displayName: 'Owner',
+      })
+      await signIn.members.addMember('ws-attacker', owner.id)
+      const { token } = await signIn.invitations.createLink({
+        invitedBy: owner.id,
+        workspaceId: 'ws-attacker',
+        now: Date.now(),
+        ttlMs: HOUR,
+      })
+      return token
+    }
+
+    async function existingAda(app: Hono, signIn: ReturnType<typeof appFor>['signIn']) {
+      idp.next({ sub: 'ada-1' })
+      await signInThrough(app)
+      const ada = await signIn.members.profileForBinding({
+        authenticator: providerAuthenticator(providerConfig({ createAccounts: true })[0]!),
+        subject: 'ada-1',
+      })
+      if (ada === null) throw new Error('the first sign-in made no user')
+      return ada
+    }
+
+    it('is sent to the invite page to be accepted there, joining nobody', async () => {
+      const { app, signIn } = appFor({ createAccounts: true })
+      const ada = await existingAda(app, signIn)
+      const token = await workspaceInvitation(signIn)
+      const res = await app.request(
+        `${BASE}/auth/sign-in/corp?invitation=${token}&return=%2Fw%2Fws-attacker`,
+        { headers: { 'sec-fetch-site': 'cross-site' } },
+      )
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe(invitePageUrl(BASE, token))
+      expect(cookieFrom(res, '__Host-wb_signin')).toBeUndefined()
+      expect(await signIn.members.isWorkspaceMember('ws-attacker', ada.id)).not.toBe('member')
+      expect((await signIn.invitations.openLink(token, Date.now())).ok).toBe(true)
+    })
+
+    it.for([
+      'same-origin',
+      'none',
+      undefined,
+    ])('joins the workspace when Sec-Fetch-Site is %s', async (site) => {
+      const { app, signIn } = appFor({ createAccounts: true })
+      const ada = await existingAda(app, signIn)
+      const token = await workspaceInvitation(signIn)
+      const started = await app.request(`${BASE}/auth/sign-in/corp?invitation=${token}`, {
+        headers: site === undefined ? {} : { 'sec-fetch-site': site },
+      })
+      idp.next({ sub: 'ada-1' })
+      const res = await app.request(idp.authorize(started.headers.get('location') as string), {
+        headers: { cookie: `__Host-wb_signin=${cookieFrom(started, '__Host-wb_signin')}` },
+      })
+      expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
+      expect(await signIn.members.isWorkspaceMember('ws-attacker', ada.id)).toBe('member')
+    })
+
+    it('still begins a plain sign-in from another site', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const res = await app.request(`${BASE}/auth/sign-in/corp`, {
+        headers: { 'sec-fetch-site': 'cross-site' },
+      })
+      expect(new URL(res.headers.get('location') as string).origin).toBe(ISSUER)
+    })
   })
 
   it.for([

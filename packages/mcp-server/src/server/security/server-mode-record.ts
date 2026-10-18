@@ -12,10 +12,15 @@
 //     no secret (see the field constraint above); what it shares with the key
 //     files is the MODE, which is what that helper is about.
 //   - Read path is side-effect-free (no mkdirSync, no probe).
+//   - Read owner-checked unless the operator named the dir: `server stop`
+//     signals the pid it names, and a record planted in a dir another local
+//     user could prepare (the temp-dir fallback) would aim that signal at any
+//     process of this user's.
 
 import { readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { type DataDirTrust, readFileOwnedByUserSync } from '../../shared/data-dir-secure.js'
 import { isMissingFileError } from '../../shared/errno.js'
 import { writeSecretFileAtomicSync } from './secret-file-mode.js'
 
@@ -55,11 +60,27 @@ export type ServerModeRecordReadResult =
   | { kind: 'unreadable' }
   | { kind: 'malformed' }
 
-export function readServerModeRecord(dataDir: string): ServerModeRecordReadResult {
+/**
+ * `trust` follows `DataDirTrust`: an `owner` dir's record must be this user's
+ * own file in this user's own dir, and one that is not reads `unreadable` —
+ * nothing it says is believed, and it is not ours to delete. An `operator`
+ * dir is read as the operator set it.
+ */
+export function readServerModeRecord(
+  dataDir: string,
+  trust: DataDirTrust = 'owner',
+  uid: number | undefined = process.getuid?.(),
+): ServerModeRecordReadResult {
   const path = getServerModeRecordPath(dataDir)
   let raw: string
   try {
-    raw = readFileSync(path, 'utf8')
+    if (trust === 'operator') {
+      raw = readFileSync(path, 'utf8')
+    } else {
+      const read = readFileOwnedByUserSync(path, uid)
+      if (read.kind !== 'text') return { kind: read.kind === 'missing' ? 'missing' : 'unreadable' }
+      raw = read.text
+    }
   } catch (err) {
     return isMissingFileError(err) ? { kind: 'missing' } : { kind: 'unreadable' }
   }

@@ -187,6 +187,14 @@ function deactivateRow(
     }
     const user = await update.returning('accountId').executeTakeFirst()
     if (user === undefined) return false
+    // A link speaks with its inviter's authority, which reactivating would
+    // restore — and with it every link they minted before, as deletion does
+    // not allow either.
+    await trx
+      .deleteFrom('invitations')
+      .where('invitedBy', '=', profileId)
+      .where('redeemedAt', 'is', null)
+      .execute()
     // A session names a binding, not a user, so each of the account's
     // bindings is ended here.
     const bindings = await trx

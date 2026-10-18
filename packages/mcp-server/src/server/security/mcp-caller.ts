@@ -15,6 +15,8 @@ import {
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
+import { getLogger } from '../log.js'
+import { runWithWriteAdmission } from '../store/workspace-lock.js'
 import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { MCP_TOOL_INPUT_SCOPES, MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
@@ -22,6 +24,9 @@ import type { MemberProfileStore } from './member-profile-store.js'
 import { namespaceOfGrant } from './membership-gate.js'
 import { serverModeToolErrorText } from './server-mode-redaction.js'
 import { type MembershipDenial, membershipRefusal, workspaceAccess } from './workspace-access.js'
+import { membershipRecheck } from './write-admission.js'
+
+const log = getLogger('membership-gate')
 
 export interface McpCaller {
   readonly grant: ResolvedGrant
@@ -217,7 +222,10 @@ async function gatedCall(
   if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
     const minted = await mintAsFirstMember(caller, index, handle)
     if (typeof minted === 'object') {
-      return tool.execute({ ...(input as object), workspaceId: minted.workspaceId } as never)
+      return executeAdmitted(caller, minted.workspaceId, tool, {
+        ...(input as object),
+        workspaceId: minted.workspaceId,
+      } as never)
     }
     // `taken`: a concurrent call of the caller's own minted the segment after
     // the check above; it is in their namespace, so the gate below admits
@@ -235,7 +243,39 @@ async function gatedCall(
   // The id just authorized, not the handle: the tool would resolve it again,
   // and a rename in between could point that at another workspace.
   if (existing === null) return tool.execute(input)
-  return tool.execute({ ...(input as object), workspaceId: existing.workspaceId } as never)
+  return executeAdmitted(caller, existing.workspaceId, tool, {
+    ...(input as object),
+    workspaceId: existing.workspaceId,
+  } as never)
+}
+
+/**
+ * Runs an admitted call so each write lock it enters for `workspaceId` asks
+ * about membership again, as an `/api` write does: the gate judged the call
+ * when it started, and a write waiting behind another writer, or many ops
+ * into a batch, must not land for a person removed in the meantime.
+ */
+async function executeAdmitted(
+  caller: McpCaller,
+  workspaceId: string,
+  tool: WorkspaceScopedTool,
+  input: never,
+): Promise<unknown> {
+  const admit = await membershipRecheck(
+    caller.grant,
+    caller.members,
+    () => Promise.resolve(workspaceId),
+    () => {
+      log.warning(
+        { workspaceId, tool: tool.name, reason: 'not_a_member' },
+        'write refused: membership ended while the tool call was in flight',
+      )
+      return refused('not_a_member')
+    },
+  )
+  return admit === null
+    ? tool.execute(input)
+    : runWithWriteAdmission(admit, () => tool.execute(input))
 }
 
 /**

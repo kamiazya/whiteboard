@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import {
   assertDataDirOwnedByUser,
   DATA_DIR,
-  readFileOwnedByUser,
+  readFileOwnedByUserSync,
 } from '../shared/data-dir-secure.js'
 import { isErrnoCode, isMissingFileError } from '../shared/errno.js'
 import { type DaemonLiveness, type DaemonLivenessSeams, daemonLiveness } from './daemon-liveness.js'
@@ -132,9 +132,9 @@ async function readRecordText(dataDir: string): Promise<ReadOutcome> {
     // it is there is all a report may say of it.
     return { kind: 'unreadable', error: err as Error, recordFound: await recordExists(recordPath) }
   }
-  let read: Awaited<ReturnType<typeof readFileOwnedByUser>>
+  let read: Awaited<ReturnType<typeof readFileOwnedByUserSync>>
   try {
-    read = await readFileOwnedByUser(recordPath)
+    read = readFileOwnedByUserSync(recordPath)
   } catch (err) {
     return {
       kind: 'unreadable',

@@ -497,6 +497,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   that role. One dismissed, demoted, removed or deactivated in between is
   refused and changes nothing. An invitation link is checked the same way
   when it is accepted.
+- **An invitation is accepted on this server's own invite page.** A
+  sign-in begun with an invitation from another site — where the browser's
+  `Sec-Fetch-Site` says neither `same-origin` nor `none` — is sent to the
+  `/invite` page to be accepted there, so a link elsewhere cannot silently
+  join a person already signed in at the provider to a workspace and land
+  them in it.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either

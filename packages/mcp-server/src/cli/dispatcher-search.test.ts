@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-
+import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
+import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { main, USAGE } from './dispatcher.js'
 
 const fetched = {
@@ -25,6 +29,13 @@ function captureStdout(): { text: () => string; restore: () => void } {
 }
 
 describe('whiteboard search fetch-model', () => {
+  let scratch: string
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), 'wb-fetch-model-'))
+    runSearchFetchModel.mockReset()
+  })
+  afterEach(() => rmSync(scratch, { recursive: true, force: true }))
+
   it('routes to the fetch command and writes its result as one JSON object', async () => {
     runSearchFetchModel.mockResolvedValue({
       result: fetched,
@@ -66,14 +77,30 @@ describe('whiteboard search fetch-model', () => {
     runSearchFetchModel.mockResolvedValue({ result: fetched, exitCode: 0 })
     const stdout = captureStdout()
     try {
-      await main(['search', 'fetch-model', '--json', '--data-dir=/tmp/wb-data'])
+      await main(['search', 'fetch-model', '--json', `--data-dir=${scratch}`])
     } finally {
       stdout.restore()
     }
     expect(runSearchFetchModel).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cacheDir: '/tmp/wb-data/models' }),
+      expect.objectContaining({ cacheDir: join(scratch, 'models') }),
     )
   })
+
+  // The daemon loads these weights, so a data dir another local user can
+  // write is one they could fill with their own model before it does.
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'refuses a data dir other users may write, and fetches nothing into it',
+    async () => {
+      chmodSync(scratch, 0o777)
+      const { result, stderr } = await captureStdio(() =>
+        main(['search', 'fetch-model', '--json', `--data-dir=${scratch}`]),
+      )
+      expect(result).toBe(1)
+      expect(stderr).toMatch(/writable by other users/)
+      expect(runSearchFetchModel).not.toHaveBeenCalled()
+      expect(existsSync(join(scratch, 'models'))).toBe(false)
+    },
+  )
 
   it('refuses to print a result carrying a field its schema does not declare', async () => {
     runSearchFetchModel.mockResolvedValue({

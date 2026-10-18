@@ -575,6 +575,7 @@ type RequestOf<Kind extends WorkerRequest['type']> = Extract<WorkerRequest, { ty
  * forever, for a port that has moved on.
  */
 function handleInit(port: MessagePort, msg: RequestOf<'init'>): void {
+  postWorkerEvent(port, { type: 'ready' })
   const existing = ports.get(port)
   if (existing?.baseUrl === msg.baseUrl) return
   if (existing) {

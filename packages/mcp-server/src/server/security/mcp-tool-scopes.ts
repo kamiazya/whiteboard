@@ -7,8 +7,11 @@
  * deletes none, exactly as it would over `/api`. `api-v1-tool-twin-scopes.test.ts`
  * holds every `/api/v1` route to its twin's entry here.
  *
- * Document create / set / delete sit at `workspace:write` because that is what
- * the `/api/v1/workspaces` document surface asks. Restore in place needs only
+ * Document create / move / delete sit at `workspace:write` because that is what
+ * the `/api/v1/workspaces` document surface asks. A `wb_workspace_edit` batch
+ * that writes a body — a `document.set`, or a create carrying markdown — also
+ * needs `canvas:write`, as content does on every surface (`MCP_TOOL_INPUT_SCOPES`;
+ * the `/api/v1` create judges the same body by `createBodyScopes`). Restore in place needs only
  * `versions:write`, as the `/api` restore route does; a call that asks for
  * more is held to more by `MCP_TOOL_INPUT_SCOPES`.
  *
@@ -16,7 +19,7 @@
  * `mcp-tool-scopes.test.ts` holds the keys to the registered tool list.
  */
 import type { AuthScope } from './auth-strategy.js'
-import { restoreScopes } from './route-scope-registry.js'
+import { carriesBody, restoreScopes } from './route-scope-registry.js'
 
 export const MCP_TOOL_SCOPES: Readonly<Record<string, readonly AuthScope[]>> = {
   wb_facet_list: ['canvas:read'],
@@ -50,4 +53,14 @@ export const MCP_TOOL_INPUT_SCOPES: Readonly<
   Record<string, (input: Readonly<Record<string, unknown>>) => readonly AuthScope[]>
 > = {
   wb_version_restore: (input) => restoreScopes(input),
+  wb_workspace_edit: (input) => (batchWritesContent(input.ops) ? ['canvas:write'] : []),
+}
+
+function batchWritesContent(ops: unknown): boolean {
+  if (!Array.isArray(ops)) return false
+  return ops.some((op: unknown) => {
+    if (op === null || typeof op !== 'object') return false
+    const named = op as { readonly op?: unknown; readonly markdown?: unknown }
+    return named.op === 'document.set' || (named.op === 'document.create' && carriesBody(named))
+  })
 }

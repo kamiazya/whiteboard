@@ -55,6 +55,7 @@ afterEach(async () => {
 describe('startServerModeHttp tracing', () => {
   it('initialises tracing as the server role', async () => {
     running = await startServerModeHttp({
+      dataDirTrust: 'operator',
       host: 'board.example',
       port: 443,
       publicBaseUrl: PUBLIC_URL,

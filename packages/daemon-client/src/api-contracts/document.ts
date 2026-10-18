@@ -46,6 +46,7 @@ import {
   requestOperatorSchema,
   versionEntrySchema,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
+import { versionRefusalCodeSchema } from '@kamiazya/whiteboard-server-core/versions/version-refusal'
 
 export { operatorInfoSchema, versionEntrySchema }
 
@@ -132,13 +133,50 @@ export const versionDocumentResponseSchema = z.discriminatedUnion('kind', [
 ])
 export type VersionDocumentResponse = z.infer<typeof versionDocumentResponseSchema>
 
+/**
+ * Where the next page of a version list starts. Opaque to a caller, which
+ * hands back what the previous page answered; the daemon reads it as the
+ * last row's save time and insertion order.
+ */
+export const versionsCursorSchema = z.string().regex(/^\d{1,15}\.\d{1,15}$/)
+
+/** The most versions one page of `GET …/versions` answers. */
+export const VERSIONS_PAGE_MAX = 100
+
+// GET /api/workspaces/:workspaceId/documents/:path/versions — the request,
+// carried in the query string. Without
+// a `cursor` the page starts at the newest version; `limit` defaults to the
+// page maximum.
+export const listVersionsRequestSchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(VERSIONS_PAGE_MAX).optional(),
+    cursor: versionsCursorSchema.optional(),
+  })
+  .strict()
+
+/**
+ * One page of a document's versions, newest first. `nextCursor` is present
+ * while older versions remain: a page as long as `limit` may still be the
+ * last, and is answered without one.
+ */
 export const listVersionsResponseSchema = z.object({
   versions: z.array(versionEntryAnswerSchema),
+  nextCursor: versionsCursorSchema.optional(),
 })
 
 export const saveVersionResponseSchema = z.object({
   version: versionEntryAnswerSchema,
 })
+
+// POST /api/workspaces/:workspaceId/documents/:path/versions — the refusal a
+// save past a version ceiling is answered with (413). A client reads its
+// `message` through `refusalReasonOf` like any other refusal; the code is
+// what a caller matches on.
+const saveVersionRefusalSchema = z.object({
+  error: versionRefusalCodeSchema,
+  message: z.string(),
+})
+export type SaveVersionRefusal = z.infer<typeof saveVersionRefusalSchema>
 
 // POST /api/w/:workspaceId/document/<path>/update — success body.
 export const updateDocumentResponseSchema = z.object({
@@ -389,6 +427,7 @@ export const duplicateDocumentResponseSchema = z.object({
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
+export type ListVersionsRequest = z.infer<typeof listVersionsRequestSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>

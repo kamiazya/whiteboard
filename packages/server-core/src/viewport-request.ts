@@ -1,4 +1,9 @@
-import { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM, nodeIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  CANVAS_MAX_NODES,
+  MAX_VIEWPORT_ZOOM,
+  MIN_VIEWPORT_ZOOM,
+  nodeIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -29,9 +34,10 @@ export const viewportRequestParamsSchema = z
       ),
     /**
      * What to frame. Omitted with `mode: 'fit'` means the WHOLE board, which
-     * is rarely what an agent pointing at something wants.
+     * is rarely what an agent pointing at something wants. Bounded by what
+     * one canvas can hold: a longer list names ids no board has.
      */
-    elementIds: z.array(nodeIdSchema).optional(),
+    elementIds: z.array(nodeIdSchema).max(CANVAS_MAX_NODES).optional(),
     scrollX: z.number().finite().optional().describe('move: pan offset on x; omitted is 0.'),
     scrollY: z.number().finite().optional().describe('move: pan offset on y; omitted is 0.'),
     // Bounded by the editor's own range: an unbounded zoom is acted on or

@@ -25,7 +25,7 @@ import { isTestPath, walkSourceFiles } from './source-scan.js'
 const SCANNED = 'packages/mcp-server/src'
 const RESOLVER = 'packages/mcp-server/src/daemon/data-dir.ts'
 
-const RESOLVER_NAMES = ['resolveDefaultDataDir']
+const RESOLVER_NAMES = ['resolveDefaultDataDir', 'serverModeDataDir']
 
 const LOCAL =
   "layered: reached only through the dispatcher's main(), which loads the config file into the environment before any command runs"

@@ -242,10 +242,18 @@ a member of that workspace. The token is in the link's fragment, so the
 browser never sends it to a server and it does not appear in a `Referer`.
 The link is the secret, and it is shown only in that response.
 
+Accepting is a click on that page. A link from another site straight to the
+sign-in route (`/auth/sign-in/<provider>?invitation=…`) is sent to the
+`/invite` page first, so someone already signed in at the provider is never
+joined to a workspace without choosing to. A browser that does not send the
+`Sec-Fetch-Site` header is not held to this.
+
 A link speaks for the owner who created it, so it works only while they could
 still create it. If they are removed from the workspace, made a member, or
 deactivated, every link they created and nobody has accepted stops working.
 Whoever arrives through one is refused, the same as with an expired link.
+Deactivating them deletes those links, so reactivating them later does not
+bring one back.
 
 Owners can review and take back the links still waiting to be accepted:
 
@@ -365,7 +373,7 @@ the same things through either surface:
 | `canvas:read` | `wb_document_get`, `wb_document_search`, `wb_canvas_snapshot`, `wb_scene_render`, `wb_facet_list`, `canvas_view` |
 | `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
 | `workspace:read` | `wb_document_list` |
-| `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
+| `workspace:write` | `wb_workspace_edit` (creating, moving, renaming and deleting documents, and `createWorkspace`). Writing a body with it also needs `canvas:write` |
 | `versions:read` | `wb_version_list`. Over HTTP it also opens a saved version, so it reads what a document said in the past |
 | `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
 
@@ -375,6 +383,13 @@ projection (`GET /api/v1/workspaces/<id>/documents/<id>/okf`), search
 results, backlinks, and the tags documents carry. Linking a document's
 mentions (`POST …/linkify-mentions`) rewrites its content, so it needs
 `canvas:write`.
+
+Writing a document's body is content too, so it needs `canvas:write` as well
+as `workspace:write`: a `wb_workspace_edit` batch with a `document.set` op, or
+a `document.create` op that carries `markdown`. Creating a document over HTTP
+(`POST /api/v1/workspaces/<id>/documents`) with a `markdown` body asks the
+same, answering `403` with `insufficient_scope`. Creating an empty document,
+or a spatial one, needs `workspace:write` alone.
 
 Restoring a version anywhere but in place also writes other documents, so it
 needs `workspace:write` as well as `versions:write`: `wb_version_restore`
@@ -508,7 +523,9 @@ about to open. After that, a sign-in is refused with
 `deactivated`, and any request with a session or bearer token gets `403`
 with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
-have to sign in again because their old sessions do not come back.
+have to sign in again because their old sessions do not come back. Nor do
+the invitation links they created that nobody had accepted: deactivating
+deletes them.
 
 ### Reading the output in a script
 
@@ -531,7 +548,11 @@ since there is then no provider to look up. A script reading these outputs
 should parse stdout only when it is non-empty rather than assuming every
 non-zero exit carries a line. `whiteboard native-host install --json` prints the
 same `schemaVersion` with `ok`, `launcher`, `manifests` and, when `ok` is
-false, a `reason`.
+false, a `reason`. A refused data directory or launcher answers `ok: false`
+with no `launcher` and no manifests, since nothing was written. A failure after
+the launcher was written (a manifest directory that cannot be created, a
+registry write) answers `ok: false` naming the `launcher` and the `manifests`
+already in place.
 
 ### Deleting a user
 
@@ -737,6 +758,13 @@ docker exec whiteboard-server node dist/cli/index.js server stop --json
 `docker stop` sends SIGTERM to the container's PID 1 (the server process) and
 waits for it to exit cleanly. The server handles SIGTERM gracefully.
 
+A data directory you name — `--data-dir` or `WHITEBOARD_DATA_DIR`, as the
+image sets it — is used exactly as you set it up. Outside a container with
+neither, `server run`, `status` and `stop` use the default data directory and
+hold it to the local daemon's rule: it must be yours and not writable by other
+users, and a `server-mode.json` there that is not your own file is never acted
+on — `server stop` answers `server-record-unreadable` and signals nothing.
+
 ## Backup and restore
 
 The `whiteboard server backup` and `whiteboard server restore` CLI commands
@@ -809,6 +837,14 @@ reach the shared database skips the pass rather than assuming it is alone.
 
   `restore` still requires the target to be stopped and empty: it is putting
   a whole data directory back, not reading one.
+- **A backup is readable by its owner alone.** Every directory a pass
+  creates is `0700` and every file it writes — the database snapshot, the
+  copied tree, the blob mirror and its manifest — is `0600`, so a backup
+  directory under a path other users can traverse does not hand them its
+  documents. A `WHITEBOARD_BACKUP_DIR` that already exists keeps the mode you
+  gave it (a mounted volume's is the platform's to set), while the mirror's
+  `blobs/` and `files/` inside it are closed on every pass. Restore as the
+  same user that took the backup.
 - **A backup never carries a key or a live credential.** A backup directory
   is the opposite of owner-only — it is copied to another disk, shipped to
   support, kept for months — so three files are excluded, along with the

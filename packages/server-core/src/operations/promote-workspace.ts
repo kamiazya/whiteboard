@@ -3,6 +3,7 @@ import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { OperatorInfo } from '../versions/version-entry.js'
+import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import {
   type CarriedTrashBytes,
@@ -38,7 +39,11 @@ export type PromoteWorkspaceResult =
   | { kind: 'too-many-carried'; plane: 'trash' | 'versions'; carried: number; limit: number }
   | {
       kind: 'promoted'
-      /** The documents the record carried, each now with an explicit checkpoint. */
+      /**
+       * The documents the record carried that now have an explicit checkpoint.
+       * A document whose history is already full keeps the merged content and
+       * is left out: its point would pass the manual-version ceiling.
+       */
       recorded: readonly string[]
       /**
        * Documents that arrived shadowed — the target already held another
@@ -210,10 +215,18 @@ async function checkpointPromoted(
       continue
     }
     const doc = await deps.liveDocuments.get(input.workspaceId, entry.path)
-    await deps.versions.save(input.workspaceId, entry.path, doc, {
-      auto: false,
-      operator: input.operator,
-    })
+    try {
+      await deps.versions.save(input.workspaceId, entry.path, doc, {
+        auto: false,
+        operator: input.operator,
+      })
+    } catch (err) {
+      // The merge has already landed, so a full history must not fail the
+      // promote: the content is kept and only this document's point is
+      // skipped, which `recorded` leaving it out says.
+      if (err instanceof TooManyVersionsError) continue
+      throw err
+    }
     recorded.push(documentId)
   }
   return { recorded, shadowed }

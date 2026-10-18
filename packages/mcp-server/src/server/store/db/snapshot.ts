@@ -1,4 +1,4 @@
-import { mkdir, stat } from 'node:fs/promises'
+import { chmod, mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { createClient } from '@libsql/client'
 import { resolveDatabaseLocation } from './location.js'
@@ -26,7 +26,7 @@ export async function snapshotDatabaseInto(dataDir: string, destPath: string): P
   if (await pathExists(destPath)) {
     throw new Error(`snapshot destination already exists: ${destPath}`)
   }
-  await mkdir(dirname(destPath), { recursive: true })
+  await mkdir(dirname(destPath), { recursive: true, mode: 0o700 })
 
   const client = createClient(resolveDatabaseLocation(dataDir))
   try {
@@ -38,6 +38,8 @@ export async function snapshotDatabaseInto(dataDir: string, destPath: string): P
   } finally {
     client.close()
   }
+  // SQLite creates the file under the umask; it holds every row.
+  await chmod(destPath, 0o600)
 }
 
 async function pathExists(path: string): Promise<boolean> {

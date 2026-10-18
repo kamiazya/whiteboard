@@ -220,7 +220,8 @@ async function collectBundle(options: ServerSupportBundleOptions): Promise<Suppo
     platform = { os: process.platform, nodeVersion: process.version },
     doRunStatus = defaultRunStatus,
     doRunDoctor = defaultRunDoctor,
-    doReadRecord = readServerModeRecord,
+    // Reported, never acted on: the bundle signals nothing it reads.
+    doReadRecord = (dir: string) => readServerModeRecord(dir, 'operator'),
   } = options
 
   const [statusOutcome, doctorOutcome] = await Promise.all([

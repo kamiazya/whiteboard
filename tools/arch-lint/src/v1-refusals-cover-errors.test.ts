@@ -77,6 +77,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
   DocumentContentLossError:
     'raised by a markdown write to a document with no kind; POST …/documents writes the kind at birth, so what it writes into is never unkinded',
   NotASpatialDocumentError: 'raised by the render tools on a document that is not spatial',
+  TooManyVersionsError:
+    'raised by a manual version save — the daemon versions route and wb_version_save; /api/v1 saves no version',
   DocumentCreationRefusedError:
     'raised only by the per-document sync update’s lazy create, a daemon route; /api/v1 creates documents by POST …/documents',
   FragmentNotFoundError: CANVAS_TOOLS,

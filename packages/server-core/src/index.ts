@@ -66,6 +66,7 @@ export type {
   OperatorInfo,
 } from './versions/version-entry.js'
 export { attestationSchema } from './versions/version-entry.js'
+export { TooManyVersionsError } from './versions/version-refusal.js'
 export type {
   ViewportRequest,
   ViewportRequestParams,

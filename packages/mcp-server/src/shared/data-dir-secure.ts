@@ -1,5 +1,15 @@
-import { accessSync, chmodSync, constants as fsConstants, lstatSync, mkdirSync } from 'node:fs'
-import { open } from 'node:fs/promises'
+import {
+  accessSync,
+  chmodSync,
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+} from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { isErrnoCode, isMissingFileError } from './errno.js'
@@ -59,6 +69,26 @@ export function resolveDataDir(
 }
 
 /**
+ * The same verdict `canWriteDir` reaches, without creating anything: a home
+ * candidate that is a writable dir, or that is absent under a writable
+ * parent — the one `canWriteDir` would create. Readable as well as writable,
+ * as `canWriteDir` demands: a dir only one of the two passes names a dir no
+ * root would serve. A command that reads the data dir before any root has
+ * started must name the dir that root will create;
+ * answering the temp fallback instead points it at a path in the shared temp
+ * dir that another local user can create first.
+ */
+export function homeDataDirIsUsable(path: string): boolean {
+  try {
+    if (!statSync(path).isDirectory()) return false
+    accessSync(path, fsConstants.R_OK | fsConstants.W_OK)
+    return true
+  } catch (err) {
+    return isMissingFileError(err) && parentIsWritable(path)
+  }
+}
+
+/**
  * The data dir used when the home directory cannot be written. Every local
  * user shares the temp dir, so a fixed name there is one another user can
  * create first and then read or rewrite every document in; the uid in the
@@ -89,13 +119,17 @@ export type DataDirTrust = 'owner' | 'operator'
  * into it. Every self-hosting root boots through this, so the stdio entry is
  * held to what the daemon's startup lock already demands.
  */
-export function secureDataDir(dir: string, trust: DataDirTrust = 'owner'): void {
+export function secureDataDir(
+  dir: string,
+  trust: DataDirTrust = 'owner',
+  uid: number | undefined = process.getuid?.(),
+): void {
   if (trust === 'operator') {
     mkdirSync(dir, { recursive: true })
     return
   }
   mkdirSync(dir, { recursive: true, mode: POSIX_DATA_DIR_MODE })
-  assertDataDirOwnedByUser(dir)
+  assertDataDirOwnedByUser(dir, uid)
   if (platform() === 'win32') return
   try {
     chmodSync(dir, POSIX_DATA_DIR_MODE)
@@ -184,16 +218,30 @@ export function refuseForeignRecordFile(
  * A symlink is never followed (a planted one could point at a file this user
  * does own), and the directory is judged again once the file is open in it.
  */
-export async function readFileOwnedByUser(
-  path: string,
-  uid = process.getuid?.(),
-): Promise<
-  { kind: 'text'; text: string } | { kind: 'missing' } | { kind: 'not-owned'; message: string }
-> {
-  let handle: Awaited<ReturnType<typeof open>>
+export type OwnedFileRead =
+  | { kind: 'text'; text: string }
+  | { kind: 'missing' }
+  | { kind: 'not-owned'; message: string }
+
+export function readFileOwnedByUserSync(path: string, uid = process.getuid?.()): OwnedFileRead {
+  // Judged before the open as well as after it: nothing in a directory this
+  // user cannot trust is opened at all, since opening can itself act — a FIFO
+  // blocks, a device answers.
   try {
-    // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
-    handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+    assertDataDirOwnedByUser(dirname(path), uid)
+  } catch (err) {
+    return { kind: 'not-owned', message: (err as Error).message }
+  }
+  let fd: number
+  try {
+    // O_NONBLOCK so a FIFO planted at the path opens at once and is refused
+    // below as not a regular file, rather than blocking until a writer comes.
+    // O_NOFOLLOW and O_NONBLOCK are undefined on Windows, where they are
+    // simply absent.
+    fd = openSync(
+      path,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0),
+    )
   } catch (err) {
     if (isMissingFileError(err)) return { kind: 'missing' }
     if (isErrnoCode(err, 'ELOOP'))
@@ -206,11 +254,14 @@ export async function readFileOwnedByUser(
     } catch (err) {
       return { kind: 'not-owned', message: (err as Error).message }
     }
-    const refusal = refuseForeignRecordFile(await handle.stat(), path, uid)
+    const stat = fstatSync(fd)
+    if (!stat.isFile())
+      return { kind: 'not-owned', message: `${path} is not a regular file; refusing to read it.` }
+    const refusal = refuseForeignRecordFile(stat, path, uid)
     if (refusal !== undefined) return refusal
-    return { kind: 'text', text: await handle.readFile('utf-8') }
+    return { kind: 'text', text: readFileSync(fd, 'utf-8') }
   } finally {
-    await handle.close()
+    closeSync(fd)
   }
 }
 

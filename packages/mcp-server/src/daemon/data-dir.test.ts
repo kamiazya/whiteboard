@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveDefaultDataDir } from './data-dir.js'
+import { resolveDefaultDataDir, serverModeDataDir } from './data-dir.js'
 
 // The temp fallback is per user: a fixed name in the shared temp dir is one
 // another user can create first. Spelled out here rather than imported, so
@@ -89,6 +89,14 @@ describe('resolveDefaultDataDir — defaultCheckWritable filesystem behavior', (
     expect(result).toBe(whiteboardDir)
   })
 
+  // `daemon run` and stdio create ~/.whiteboard on first start, so a command
+  // run before either (`native-host install`, `server stop`) must name the
+  // same dir rather than a temp-dir path another local user can create first.
+  it('returns the home candidate when ~/.whiteboard does not exist yet but home is writable', () => {
+    const result = resolveDefaultDataDir({}, { homeDir: tempHome, tmpDir: tempTmp })
+    expect(result).toBe(join(tempHome, '.whiteboard'))
+  })
+
   it('falls back to tmp when home candidate is a regular file (not a directory)', async () => {
     // config.ts::canWriteDir fails with EEXIST+ENOTDIR when ~/.whiteboard
     // is a file, so the server falls back to tmp. This resolver must agree.
@@ -96,5 +104,21 @@ describe('resolveDefaultDataDir — defaultCheckWritable filesystem behavior', (
     await writeFile(whiteboardFile, 'not a directory')
     const result = resolveDefaultDataDir({}, { homeDir: tempHome, tmpDir: tempTmp })
     expect(result).toBe(join(tempTmp, TMP_FALLBACK_NAME))
+  })
+})
+
+describe('serverModeDataDir', () => {
+  // A dir the operator named is theirs to have set up as their platform
+  // requires; the default nobody named may be one another local user made.
+  it('leaves a dir named by flag or environment to the operator, and judges the default', () => {
+    expect(serverModeDataDir('/srv/flag', {})).toEqual({
+      dataDir: '/srv/flag',
+      dataDirTrust: 'operator',
+    })
+    expect(serverModeDataDir(undefined, { WHITEBOARD_DATA_DIR: '/srv/env' })).toEqual({
+      dataDir: '/srv/env',
+      dataDirTrust: 'operator',
+    })
+    expect(serverModeDataDir(undefined, {}).dataDirTrust).toBe('owner')
   })
 })

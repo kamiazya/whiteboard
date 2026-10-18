@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonContractError } from './daemon-contract-error.js'
-import { createDaemonVersionsBackend } from './versions-backend.js'
+import { createDaemonVersionsBackend, VersionsRequestError } from './versions-backend.js'
 
 const backendAnswering = (response: Response) =>
   createDaemonVersionsBackend(vi.fn().mockResolvedValue(response))
@@ -69,6 +69,47 @@ describe('the daemon versions backend, refused', () => {
     const backend = backendAnswering(new Response(cut, { status: 409 }))
     await expect(backend.restore('ws', 'notes/a', 'v1')).rejects.toMatchObject({
       name: 'FetchFailedError',
+    })
+  })
+})
+
+describe('the daemon versions backend, paging a long history', () => {
+  const row = (id: string) => ({
+    id,
+    path: 'notes/a',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    elementCount: 0,
+    auto: false,
+  })
+
+  it('reads every page of a list, handing each cursor back', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ versions: [row('v3'), row('v2')], nextCursor: '9.2' }))
+      .mockResolvedValueOnce(jsonResponse({ versions: [row('v1')] }))
+    const backend = createDaemonVersionsBackend(fetchFn)
+
+    const versions = await backend.list('ws', 'notes/a')
+
+    expect(versions.map((v) => v.id)).toEqual(['v3', 'v2', 'v1'])
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(String(fetchFn.mock.calls[1]?.[0])).toMatch(/\/versions\?cursor=9\.2$/)
+  })
+
+  it('carries the daemon\u2019s reason when a save is refused past the version ceiling', async () => {
+    const backend = backendAnswering(
+      jsonResponse(
+        { error: 'too_many_versions', message: 'This document already keeps 200 saved versions' },
+        413,
+      ),
+    )
+
+    const failure = await contractFailure(backend.save('ws', 'notes/a', { label: 'x' }))
+
+    expect(failure).toBeInstanceOf(VersionsRequestError)
+    expect(failure).toMatchObject({
+      status: 413,
+      reason: 'This document already keeps 200 saved versions',
     })
   })
 })

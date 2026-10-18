@@ -130,6 +130,17 @@ export async function withWorkspaceWriteLock<T>(
   }
 }
 
+/**
+ * Whether a writer holds this workspace's lock or is queued for it. A writer
+ * mutates the cached workspace record before saving it, so a cache that drops
+ * the record meanwhile would lose those ops: this is what the cache asks
+ * before choosing one to drop. Keyed by workspace id alone, so it answers for
+ * every data dir at once — conservative, never unsafe.
+ */
+export function workspaceWriteLockInUse(workspaceId: string): boolean {
+  return queues.has(workspaceId)
+}
+
 // Test-only helper.
 export function _resetWorkspaceLocksForTests(): void {
   queues.clear()

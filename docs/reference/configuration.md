@@ -29,7 +29,7 @@ enumerate which spellings of true it accepts.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
+| `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` — also before anything has created it, as long as the home directory is writable (falls back to the OS temp directory if unwritable) |
 | `WHITEBOARD_DAEMON_TOKEN` | The bearer token the local daemon (`whiteboard daemon run`) accepts, in place of a random one minted at each start. The preferred way to fix a token: unlike a config file's `token` it is not stored in a file, and unlike `--token` (refused, since a command line is visible to every process) it is not on the command line. It cannot be combined with `--token-stdin`; the daemon refuses to start with both, and refuses to start when the variable is set but empty: an empty token is a configured token no bearer can match, not an open daemon (a macaroon still resolves on its own root key; only the daemon-token grant and the anonymous fallback are closed). | unset (a random token per start) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
 | `WHITEBOARD_LOG_LEVEL` | Minimum severity the server emits, using the RFC 5424 names (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). `warn` is accepted for `warning`, matching the wider Node ecosystem, and the value is case-insensitive with surrounding whitespace trimmed. Any other value **aborts startup**: it used to become `warning` silently, so an operator who set `debug` to investigate an incident got no debug output and no reason. `MCP_HTTP_DEBUG=1` lowers this to `info` on its own. An MCP client receives only the records emitted inside its own tool call, at or above this level: over stdio a 2025-era client can raise its threshold with `logging/setLevel` for the connection, and over HTTP `/mcp` only a 2026-07-28 call that sets `_meta` `io.modelcontextprotocol/logLevel` receives any. A server-mode `/mcp` caller receives none: the records stay on the server's stderr. | `warning` |
@@ -235,6 +235,31 @@ limit.
 A request counts from the moment its route starts reading the body until it
 is answered, so ordinary edits, which are small and quick, rarely meet either
 limit. The local daemon serves one person and applies neither.
+
+## MCP stream limits
+
+Two kinds of `/mcp` stream carry no tool call. Server mode bounds both; the
+local daemon serves one person and leaves both as they are:
+
+| Stream | Server mode | When it is reached |
+|---|---|---|
+| The legacy standalone stream (`GET /mcp`) | Not offered | Answered `405 Method Not Allowed` with `Allow: POST`, as the MCP specification provides for a server that offers no such stream. Nothing is ever sent down it, so a client loses nothing: the MCP SDK's client treats a `405` here as "no stream". |
+| `subscriptions/listen` streams open per user | 16 | The next one is refused with `429` and a JSON-RPC error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`). A place frees when one of that user's streams ends, errors or is closed by its client. |
+| `subscriptions/listen` streams open in total, per instance | 1024 | Same refusal, for everyone, until a stream closes. |
+
+As with the large request limits, every caller whose grant names no user on
+this instance counts as one user.
+
+## Version history limits
+
+The daemon keeps a bounded history per document, on the local daemon and in
+server mode alike. These limits are fixed, not configurable:
+
+| Limit | Value | When it is reached |
+|---|---|---|
+| Automatic checkpoints per document | 50 | The oldest are removed as new ones are taken. A restore's merge point, and the version it restored, are kept. |
+| Manual versions per document | 200 | The next manual save — `POST …/documents/<path>/versions` or `wb_version_save` — is refused with `413 {"error":"too_many_versions"}` and nothing is saved. A promote into a document already at the limit still lands its content and skips the version it would have recorded there. Automatic checkpoints keep being taken. |
+| Versions per page of `GET …/documents/<path>/versions` | 100 | The answer carries `nextCursor`; pass it back as `?cursor=` for the next, older page. `?limit=` asks for a shorter page. The web app reads every page. |
 
 ## Codex sandbox constraints
 

@@ -148,6 +148,13 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'list', method: 'GET', url: daemonUrls.documentVersionsApiUrl(...doc) },
     { label: 'save', method: 'POST', url: daemonUrls.documentVersionsApiUrl(...doc) },
   ],
+  documentVersionsPageApiUrl: [
+    {
+      label: 'list page',
+      method: 'GET',
+      url: daemonUrls.documentVersionsPageApiUrl(...doc, { cursor: '1000.1', limit: 10 }),
+    },
+  ],
   versionDocumentApiUrl: [
     { label: 'read', method: 'GET', url: daemonUrls.versionDocumentApiUrl(...doc, 'v1') },
   ],

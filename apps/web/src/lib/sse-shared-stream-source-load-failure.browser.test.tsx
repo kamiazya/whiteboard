@@ -5,7 +5,12 @@
  * with the event but not that a browser sends it: a module worker that fails
  * to load constructs fine, so the only evidence is the event itself. Pointed
  * at a module the dev server does not have, which is the shape of a chunk
- * missing from a deploy.
+ * missing from a deploy: the server answers it with the SPA's HTML, as a
+ * static host with an SPA fallback does, and the worker refuses that by MIME
+ * type. The source does not rely on that refusal arriving as `error` — an
+ * event the browser never delivers would leave the read waiting forever — so
+ * the read settles on the event or on the source's start bound, whichever
+ * comes first, and either is the fall-back this asserts.
  */
 import { afterEach, expect, it } from 'vitest'
 import { createSharedSseStreamSource } from './sse-shared-stream-source.js'
@@ -35,4 +40,24 @@ it('a missing worker chunk rejects the read and falls back', async () => {
   await expect(source?.snapshot('workspace:w')).resolves.toEqual(new Uint8Array([4, 2]))
   expect(createSharedSseStreamSource(origin, pageFetch)).toBe(source)
   expect(constructed).toBe(1)
+})
+
+it('a refused worker chunk whose error never arrives still falls back', async () => {
+  // The same refused chunk, with the browser's `error` withheld from the
+  // source: what a page sees when the refusal is never delivered.
+  globalThis.SharedWorker = class extends RealSharedWorker {
+    constructor(_url: string | URL, options?: string | WorkerOptions) {
+      super(new URL('/no-such-sse-worker-chunk.js', location.href), options)
+    }
+    override set onerror(_handler: SharedWorker['onerror']) {}
+    override get onerror(): SharedWorker['onerror'] {
+      return null
+    }
+  }
+  const pageFetch = (async () => new Response(new Uint8Array([4, 2]))) as typeof fetch
+  const source = createSharedSseStreamSource(`http://silent-${crypto.randomUUID()}.test`, pageFetch)
+  expect(source).not.toBeNull()
+
+  await expect(source?.snapshot('workspace:w')).rejects.toThrow()
+  await expect(source?.snapshot('workspace:w')).resolves.toEqual(new Uint8Array([4, 2]))
 })

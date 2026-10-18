@@ -11,7 +11,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdir, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
@@ -21,6 +21,8 @@ import {
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { z } from 'zod'
+import { secureDataDir } from '../../shared/data-dir-secure.js'
+import { isMissingFileError } from '../../shared/errno.js'
 
 /**
  * Under the data dir: the launcher on every platform, and on Windows the
@@ -141,6 +143,8 @@ interface InstallOptions {
   extensionBuild?: ExtensionBuild
   /** Sets a registry key's default value; `reg add` unless a test substitutes it. */
   register?: (key: string, value: string) => Promise<void>
+  /** Whose dirs these must be; this process's user unless a test substitutes it. */
+  uid?: number
 }
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
@@ -164,6 +168,31 @@ function regAdd(key: string, value: string): Promise<void> {
   })
 }
 
+async function refuseUntrustedLauncher(
+  launcher: string,
+  uid: number | undefined,
+  windows: boolean,
+): Promise<void> {
+  let stat: Awaited<ReturnType<typeof lstat>>
+  try {
+    stat = await lstat(launcher)
+  } catch (err) {
+    if (isMissingFileError(err)) return
+    throw err
+  }
+  if (stat.isSymbolicLink())
+    throw new Error(`${launcher} is a symlink; refusing to write through it.`)
+  if (uid !== undefined && stat.uid !== uid)
+    throw new Error(`${launcher} is owned by uid ${stat.uid}, not this user (uid ${uid}).`)
+  // Writing replaces the content, not the inode, so whoever could write the
+  // file before could still write it after — and the browser runs it as this
+  // user. Windows has no such mode bits to judge.
+  if (!windows && (stat.mode & 0o022) !== 0)
+    throw new Error(
+      `${launcher} is writable by group or others (mode ${(stat.mode & 0o777).toString(8)}); refusing to write it.`,
+    )
+}
+
 /** The launcher the browser starts, in the platform's own script language. */
 async function writeLauncher(options: InstallOptions): Promise<string> {
   const windows = (options.platform ?? process.platform) === 'win32'
@@ -176,36 +205,71 @@ async function writeLauncher(options: InstallOptions): Promise<string> {
   const script = windows
     ? `@echo off\r\nset ${cmdQuote(`WHITEBOARD_DATA_DIR=${options.dataDir}`)}\r\n${command.map(cmdQuote).join(' ')} native-host run %*\r\n`
     : `#!/bin/sh\nWHITEBOARD_DATA_DIR=${shellQuote(options.dataDir)} exec ${command.map(shellQuote).join(' ')} native-host run "$@"\n`
-  await mkdir(dirname(launcher), { recursive: true, mode: 0o700 })
-  await writeFile(launcher, script)
+  // The browser runs the launcher as this user, so a dir another local user
+  // can write — one prepared in the shared temp dir, say — would let them
+  // swap it. The data dir and the launcher's own dir get the judgement every
+  // root's data dir gets, and an existing launcher is never written through.
+  const uid = options.uid ?? process.getuid?.()
+  secureDataDir(options.dataDir, 'owner', uid)
+  secureDataDir(dirname(launcher), 'owner', uid)
+  await refuseUntrustedLauncher(launcher, uid, windows)
+  await writeFile(launcher, script, { mode: 0o700 })
   await chmod(launcher, 0o700)
   return launcher
+}
+
+/**
+ * An install that failed after the launcher was written. Carries what is on
+ * disk — the launcher, and each manifest fully written (and registered) before
+ * the failure — so a caller answers what is there instead of "nothing".
+ */
+export class NativeHostInstallIncompleteError extends Error {
+  constructor(
+    readonly launcher: string,
+    readonly manifests: readonly ManifestDir[],
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause })
+    this.name = 'NativeHostInstallIncompleteError'
+  }
 }
 
 export async function installNativeHost(
   options: InstallOptions,
 ): Promise<{ launcher: string; manifests: ManifestDir[] }> {
   const launcher = await writeLauncher(options)
+  const written: ManifestDir[] = []
+  try {
+    for (const manifestDir of options.manifestDirs) {
+      await writeManifest(options, launcher, manifestDir)
+      written.push(manifestDir)
+    }
+  } catch (err) {
+    throw new NativeHostInstallIncompleteError(launcher, written, err)
+  }
+  return { launcher, manifests: written }
+}
+
+async function writeManifest(
+  options: InstallOptions,
+  launcher: string,
+  { dir, engine, registryKey }: ManifestDir,
+): Promise<void> {
   const register = options.register ?? regAdd
   const allowed = ALLOWED[options.extensionBuild ?? 'production']
-
-  for (const { dir, engine, registryKey } of options.manifestDirs) {
-    const manifest = {
-      name: NATIVE_HOST_NAME,
-      description: 'Relays the whiteboard extension to the local whiteboard daemon',
-      path: launcher,
-      type: 'stdio',
-      // Only the engine's own key: Firefox refuses a manifest that also
-      // carries Chromium's, as "No such native application".
-      ...(engine === 'firefox'
-        ? { allowed_extensions: [allowed.firefox] }
-        : { allowed_origins: [`chrome-extension://${allowed.chromium}/`] }),
-    }
-    const manifestPath = join(dir, `${NATIVE_HOST_NAME}.json`)
-    await mkdir(dir, { recursive: true })
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    if (registryKey !== undefined)
-      await register(`${registryKey}\\${NATIVE_HOST_NAME}`, manifestPath)
+  const manifest = {
+    name: NATIVE_HOST_NAME,
+    description: 'Relays the whiteboard extension to the local whiteboard daemon',
+    path: launcher,
+    type: 'stdio',
+    // Only the engine's own key: Firefox refuses a manifest that also
+    // carries Chromium's, as "No such native application".
+    ...(engine === 'firefox'
+      ? { allowed_extensions: [allowed.firefox] }
+      : { allowed_origins: [`chrome-extension://${allowed.chromium}/`] }),
   }
-  return { launcher, manifests: [...options.manifestDirs] }
+  const manifestPath = join(dir, `${NATIVE_HOST_NAME}.json`)
+  await mkdir(dir, { recursive: true })
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  if (registryKey !== undefined) await register(`${registryKey}\\${NATIVE_HOST_NAME}`, manifestPath)
 }

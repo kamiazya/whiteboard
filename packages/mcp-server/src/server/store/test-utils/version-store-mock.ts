@@ -18,10 +18,13 @@ export function versionStoreMock(overrides: Partial<VersionStoreMock> = {}): Ver
   return {
     save: vi.fn(),
     load: vi.fn(),
+    openCheckouts: vi.fn(),
     loadWorkspaceAt: vi.fn(),
     list: vi.fn(),
     adopt: vi.fn().mockResolvedValue([]),
     listIdsByDocument: vi.fn().mockResolvedValue([]),
+    listPage: vi.fn().mockResolvedValue({ versions: [] }),
+    belongsTo: vi.fn().mockResolvedValue(false),
     earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
     isUnchangedSinceLastVersion: vi.fn().mockResolvedValue(false),
     pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),

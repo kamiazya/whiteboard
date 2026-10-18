@@ -1,5 +1,6 @@
 import {
   documentVersionsApiUrl,
+  documentVersionsPageApiUrl,
   listVersionsResponseSchema,
   type saveVersionRequestSchema,
   saveVersionResponseSchema,
@@ -73,15 +74,40 @@ export class VersionsRequestError extends Error {
   }
 }
 
+/**
+ * A document's whole history, read a page at a time. The daemon answers a
+ * list in pages; the panel shows the whole history, so every page is read. A
+ * document's history is bounded — its automatic checkpoints are capped and
+ * its manual saves have a ceiling — so this is a handful of requests, not an
+ * open-ended walk.
+ */
+async function listEveryPage(
+  fetchFn: typeof globalThis.fetch,
+  workspaceId: string,
+  path: string,
+): Promise<VersionEntry[]> {
+  const versions: VersionEntry[] = []
+  let cursor: string | undefined
+  do {
+    const url = documentVersionsPageApiUrl(
+      workspaceId,
+      path,
+      cursor === undefined ? {} : { cursor },
+    )
+    const res = await fetchFn(url)
+    if (!res.ok) throw new VersionsRequestError(res.status, 'versions request')
+    const page = await readDaemonJson(url, res, listVersionsResponseSchema)
+    versions.push(...page.versions)
+    // A cursor repeated would read the same page forever.
+    cursor = page.nextCursor === cursor ? undefined : page.nextCursor
+  } while (cursor !== undefined)
+  return versions
+}
+
 /** The daemon's history, over its documents routes. */
 export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): VersionsBackend {
   return {
-    async list(workspaceId, path) {
-      const url = documentVersionsApiUrl(workspaceId, path)
-      const res = await fetchFn(url)
-      if (!res.ok) throw new VersionsRequestError(res.status, 'versions request')
-      return (await readDaemonJson(url, res, listVersionsResponseSchema)).versions
-    },
+    list: (workspaceId, path) => listEveryPage(fetchFn, workspaceId, path),
     async loadPast(workspaceId, path, versionId) {
       const url = versionDocumentApiUrl(workspaceId, path, versionId)
       const res = await fetchFn(url)
@@ -96,7 +122,12 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label } satisfies z.infer<typeof saveVersionRequestSchema>),
       })
-      if (!res.ok) throw new VersionsRequestError(res.status, 'save version')
+      if (!res.ok) {
+        // The daemon's own reason, so a refusal that will always repeat — a
+        // document at its version ceiling — is not answered with "try again".
+        const { reason } = await refusalReasonOf(res, '')
+        throw new VersionsRequestError(res.status, 'save version', reason || undefined)
+      }
       return (await readDaemonJson(url, res, saveVersionResponseSchema)).version
     },
     async restore(workspaceId, path, versionId) {
