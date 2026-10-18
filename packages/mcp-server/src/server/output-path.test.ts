@@ -189,3 +189,29 @@ describe('validateOutputPath', () => {
     expect(eacces).not.toBeInstanceOf(OutputPathError)
   })
 })
+
+describe('validateOutputPath containment by path component', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'whiteboard-output-path-components-'))
+    await mkdir(join(root, 'exports'))
+    await mkdir(join(root, 'exports-other'))
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('refuses a sibling whose name only starts with the allowed directory', async () => {
+    await expect(
+      validateOutputPath(join(root, 'exports-other', 'a.png'), false, join(root, 'exports')),
+    ).rejects.toMatchObject({ code: 'invalid_output_path' })
+  })
+
+  it('accepts a file inside whose name starts with two dots', async () => {
+    await expect(
+      validateOutputPath(join(root, 'exports', '..notes.png'), false, join(root, 'exports')),
+    ).resolves.toBeUndefined()
+  })
+})

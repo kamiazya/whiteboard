@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isMissingFileError } from '../shared/errno.js'
 import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../shared/path-containment.js'
 
@@ -58,8 +58,13 @@ async function canonicalizeOutputTarget(resolvedPath: string): Promise<string> {
 // (through a symlinked parent) names the same place; that resolution reads
 // only the allowed directory's own ancestry, never the caller's path.
 async function isLexicallyWithin(resolvedPath: string, resolvedDir: string): Promise<boolean> {
-  const inside = (dir: string) =>
-    resolvedPath === dir || resolvedPath.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+  // `relative` compares components the way the platform does, so a Windows
+  // path that differs from the allowed directory only in case still counts
+  // as inside it, and a sibling sharing a name prefix never does.
+  const inside = (dir: string) => {
+    const rel = relative(dir, resolvedPath)
+    return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  }
   return inside(resolvedDir) || inside(await canonicalizeWithMissingTail(resolvedDir))
 }
 
