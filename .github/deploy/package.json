@@ -1,0 +1,8 @@
+{
+  "name": "whiteboard-pages-deploy",
+  "private": true,
+  "description": "The wrangler the Cloudflare Pages deploy jobs run, outside the pnpm workspace so a deploy job installs it from this lockfile alone, with --ignore-scripts, and never runs the workspace's dependency code beside the deploy token. tools/arch-lint/src/workflow-credentials.test.ts holds the pin and the jobs to it.",
+  "dependencies": {
+    "wrangler": "4.123.0"
+  }
+}
