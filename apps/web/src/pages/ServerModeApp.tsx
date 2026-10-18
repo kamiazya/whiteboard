@@ -148,7 +148,7 @@ const providerButton = buttonVariants({ variant: 'outline', className: 'w-full' 
 
 /**
  * Where the keeper sends the browser once this invitation is accepted, or
- * `'unavailable'`. Accepting is this POST and never a link: a link is a
+ * null when it could not be — kept apart from any string a keeper may answer. Accepting is this POST and never a link: a link is a
  * navigation anything can start — a page elsewhere, a link inside a document
  * here — and the keeper sends every navigation carrying an invitation back to
  * this page.
@@ -157,7 +157,7 @@ async function acceptInvitation(
   fetchFn: Fetch,
   providerId: string,
   invitation: string,
-): Promise<string | 'unavailable'> {
+): Promise<string | null> {
   const route = authAcceptInvitationUrl(providerId)
   const body: AcceptInvitationRequest = { invitation, returnTo: '/' }
   try {
@@ -174,7 +174,7 @@ async function acceptInvitation(
       log.warn('could not accept the invitation', { route, err })
     }
   }
-  return 'unavailable'
+  return null
 }
 
 function AcceptInvitation({
@@ -194,7 +194,7 @@ function AcceptInvitation({
   const accept = async () => {
     setBusy(true)
     const location = await acceptInvitation(fetchFn, provider.id, invitation)
-    if (location === 'unavailable') {
+    if (location === null) {
       setBusy(false)
       onUnavailable()
       return
@@ -208,7 +208,7 @@ function AcceptInvitation({
   )
 }
 
-function Page({ children }: { children: React.ReactNode }) {
+function Page({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 p-6">
       {children}
@@ -258,11 +258,11 @@ function SignInPage({
   fetchFn,
   goTo,
   invitation,
-}: {
+}: Readonly<{
   fetchFn: Fetch
   goTo: GoTo
   invitation?: string
-}) {
+}>) {
   const [providers, retry] = useProviders(fetchFn)
   const [acceptFailed, setAcceptFailed] = useState(false)
   const refusal = refusalMessage(useLocation().search)
@@ -304,7 +304,7 @@ function SignInPage({
 
 // The token rides the fragment, which the browser never sends to a server
 // or puts in a Referer.
-function InvitePage({ fetchFn, goTo }: { fetchFn: Fetch; goTo: GoTo }) {
+function InvitePage({ fetchFn, goTo }: Readonly<{ fetchFn: Fetch; goTo: GoTo }>) {
   const token = inviteTokenOf(useLocation().hash)
   return (
     <SignInPage
@@ -486,7 +486,7 @@ const assignLocation: GoTo = (location) => window.location.assign(location)
 export function ServerModeApp({
   fetchFn = sameOriginFetch,
   goTo = assignLocation,
-}: ServerModeAppProps) {
+}: Readonly<ServerModeAppProps>) {
   return (
     <Routes>
       <Route path={SIGN_IN_PAGE_PATH} element={<SignInPage fetchFn={fetchFn} goTo={goTo} />} />
