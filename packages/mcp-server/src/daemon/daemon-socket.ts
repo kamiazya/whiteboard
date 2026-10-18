@@ -85,7 +85,7 @@ function socketDirectoryRefusal(stat: Stats, uid: number | undefined): string | 
 
 interface SocketTrustSeams {
   /** Whose socket it has to be; absent where the platform has no uids. */
-  readonly uid?: number | undefined
+  readonly uid?: number
   readonly lstat?: (path: string) => Stats
 }
 

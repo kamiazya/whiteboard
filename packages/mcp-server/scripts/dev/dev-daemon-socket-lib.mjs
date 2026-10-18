@@ -129,7 +129,7 @@ export function socketTrust(path, { uid = process.getuid?.(), lstat = lstatSync 
       ? { kind: 'absent' }
       : refused('the socket directory could not be inspected (ENOENT)')
   }
-  if (!directory.isDirectory() || (uid !== undefined && directory.uid !== uid)) {
+  if (!directory.isDirectory() || (typeof uid === 'number' && directory.uid !== uid)) {
     return refused(
       'the socket directory is not a directory this user owns. ' +
         'Set XDG_RUNTIME_DIR to a directory of your own (the socket lives in its whiteboard/ subdirectory), ' +
@@ -138,7 +138,7 @@ export function socketTrust(path, { uid = process.getuid?.(), lstat = lstatSync 
   }
   if ((directory.mode & 0o077) !== 0)
     return refused('the socket directory must be owner-only (0700)')
-  if (socket?.isSocket() && uid !== undefined && socket.uid !== uid) {
+  if (socket?.isSocket() && typeof uid === 'number' && socket.uid !== uid) {
     return refused('the socket is not owned by this user')
   }
   return { kind: 'trusted' }

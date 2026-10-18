@@ -62,6 +62,24 @@ describe("the socket ownership check against the daemon's own", () => {
     expect(socketTrust(path, seams)).toEqual(trust)
   })
 
+  // Where the platform has no uids, ownership cannot be compared and only the
+  // directory's mode is held to; neither side may read a missing uid as a
+  // foreign one.
+  it.each([
+    ['own-socket', 'trusted'],
+    ['open-directory', 'refused'],
+  ])('agrees on a %s path where the platform has no uids', async (kind, expected) => {
+    const path = await arrangement(kind)
+    const getuid = process.getuid
+    process.getuid = undefined
+    try {
+      expect(daemonSocketTrust(path).kind).toBe(expected)
+      expect(socketTrust(path)).toEqual(daemonSocketTrust(path))
+    } finally {
+      process.getuid = getuid
+    }
+  })
+
   it('sends no token, and answers as a missing socket, where the socket directory does not exist', async () => {
     const path = await arrangement('no-directory')
     await expect(
