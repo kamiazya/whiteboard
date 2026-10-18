@@ -14,7 +14,7 @@
 // is the whole point of decision 5 — file-GC must never delete from the
 // backup, and the backup must never delete on GC's behalf.
 
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
@@ -24,6 +24,7 @@ import { isSafePathSegment, isSafeRelativePosixPath } from '../../shared/path-co
 import { sha256Hex } from '../../shared/sha256.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
+import { BACKUP_DIR_MODE, BACKUP_FILE_MODE } from './backup-modes.js'
 import {
   BLOBS_DIRNAME,
   blobShardDir,
@@ -245,7 +246,11 @@ async function mirrorShard(
     const destination = blobShardPath(join(backupRoot, BLOBS_DIRNAME), digest)
     const held = await sizeOf(destination)
     if (held !== undefined && held >= ((await sizeOf(source)) ?? 0)) continue
-    await mkdir(blobShardDir(join(backupRoot, BLOBS_DIRNAME), digest), { recursive: true })
+    await mkdirOwnerOnly(
+      backupRoot,
+      BLOBS_DIRNAME,
+      blobShardDir(join(backupRoot, BLOBS_DIRNAME), digest),
+    )
     await copyAtomically(source, destination)
   }
 }
@@ -292,8 +297,12 @@ async function mirrorNamedTree(
     into[file.relative] = digest
     const destination = blobShardPath(join(backupRoot, FILES_DIRNAME), digest)
     if ((await sizeOf(destination)) === bytes.length) continue
-    await mkdir(blobShardDir(join(backupRoot, FILES_DIRNAME), digest), { recursive: true })
-    await writeFileAtomic(destination, bytes)
+    await mkdirOwnerOnly(
+      backupRoot,
+      FILES_DIRNAME,
+      blobShardDir(join(backupRoot, FILES_DIRNAME), digest),
+    )
+    await writeFileAtomic(destination, bytes, { mode: BACKUP_FILE_MODE })
   }
 }
 
@@ -426,10 +435,11 @@ function byKey([a]: [string, unknown], [b]: [string, unknown]): number {
 
 async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {
   const manifest = recordableManifest(references)
-  await mkdir(backupDir, { recursive: true })
+  await mkdir(backupDir, { recursive: true, mode: BACKUP_DIR_MODE })
   await writeFileAtomic(
     join(backupDir, BLOB_MANIFEST_FILENAME),
     `${JSON.stringify(manifest, null, 2)}\n`,
+    { mode: BACKUP_FILE_MODE },
   )
 }
 
@@ -444,7 +454,18 @@ async function writeManifest(backupDir: string, references: BackupBlobReferences
  * the size check at each skip is what repairs an entry torn before that held.
  */
 async function copyAtomically(from: string, to: string): Promise<void> {
-  await writeFileAtomic(to, await readFile(from))
+  await writeFileAtomic(to, await readFile(from), { mode: BACKUP_FILE_MODE })
+}
+
+/**
+ * A shard dir in the mirror, owner-only. The mirror's top dir is tightened
+ * too, every time: one written before the mirror was closed keeps the
+ * umask's mode, and it holds every upload a retained backup still names.
+ */
+async function mkdirOwnerOnly(backupRoot: string, top: string, shardDir: string): Promise<void> {
+  await mkdir(shardDir, { recursive: true, mode: BACKUP_DIR_MODE })
+  await chmod(join(backupRoot, top), BACKUP_DIR_MODE)
+  await chmod(shardDir, BACKUP_DIR_MODE)
 }
 
 /** A file's size, or `undefined` when there is none to stat. */

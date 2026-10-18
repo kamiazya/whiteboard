@@ -1,4 +1,4 @@
-import { readdir, rename, rm } from 'node:fs/promises'
+import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { errnoCode } from '../../shared/errno.js'
@@ -8,6 +8,7 @@ import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
 import { mirrorBlobsIntoBackup } from './backup-blob-mirror.js'
+import { BACKUP_DIR_MODE, restrictTreeToOwner } from './backup-modes.js'
 import { withBackupMarker } from './backup-in-progress.js'
 import { DB_FILENAME, databaseIsInsideDataDir, dataDirHasDatabaseFile } from './db/location.js'
 import { readDatabaseLocationRecord } from './db/location-record.js'
@@ -132,6 +133,9 @@ async function stagedStep(
  * durable, but whether the NAME survives a crash is not known.
  */
 async function sealBackup(staging: string, outputDir: string): Promise<void> {
+  // The copy carries the source's modes and the snapshot the umask's; the
+  // name a backup is read under only ever appears over an owner-only tree.
+  await restrictTreeToOwner(staging)
   await syncTree(staging)
   await rename(staging, outputDir)
   await syncDirectory(dirname(outputDir))
@@ -256,6 +260,15 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     await rm(staging, { recursive: true, force: true }).catch(() => {})
 
     const failed = { kind: 'error', message: 'backup failed' } as const
+
+    // Owner-only from its first byte, so nothing assembled in it is readable
+    // by anyone else while the pass runs; a backup root this creates is too.
+    const prepared = await stagedStep(staging, async () => {
+      await mkdir(dirname(outputDir), { recursive: true, mode: BACKUP_DIR_MODE })
+      await mkdir(staging, { mode: BACKUP_DIR_MODE })
+      await chmod(staging, BACKUP_DIR_MODE)
+    })
+    if (!prepared) return failed
 
     const copied = await stagedStep(staging, () =>
       doBackup(dataDir, staging, {
