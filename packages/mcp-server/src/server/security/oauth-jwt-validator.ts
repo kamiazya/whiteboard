@@ -51,6 +51,9 @@ import type {
 
 const KNOWN_AUTH_SCOPES: ReadonlySet<string> = new Set<string>(AUTH_SCOPES)
 
+/** The clock drift a token's time claims are tolerated by unless configured otherwise. */
+export const DEFAULT_CLOCK_SKEW_SECONDS = 60
+
 function isAuthScope(s: string): s is AuthScope {
   return KNOWN_AUTH_SCOPES.has(s)
 }
@@ -174,7 +177,7 @@ export function createOAuthJwtValidator(
   const {
     issuer,
     audience,
-    clockSkewSeconds = 60,
+    clockSkewSeconds = DEFAULT_CLOCK_SKEW_SECONDS,
     allowedAlgorithms = ['RS256', 'ES256'],
     scopeClaim = 'scope',
     allowUntypedAccessTokens = false,

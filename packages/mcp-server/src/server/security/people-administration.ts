@@ -17,6 +17,7 @@ import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/
 import type { AdministratorCheck } from './administrator-check.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { MemberProfileStore } from './member-profile-store.js'
+import { DEFAULT_CLOCK_SKEW_SECONDS } from './oauth-jwt-validator.js'
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
 import type { UserDeletion } from './user-deletion.js'
@@ -40,6 +41,14 @@ type SoleOwner = Refused<'sole_owner'> & { readonly workspaceIds: readonly strin
  * administrator's action. Listing people is not an action and is not gated.
  */
 export const ADMINISTRATION_WINDOW_MS = 15 * 60 * 1000
+
+/**
+ * How far ahead of this server's clock a sign-in time may be: the drift a
+ * token's own time claims are allowed (`oauth-jwt-validator.ts`). A time
+ * further ahead is not a sign-in that happened, and would otherwise sit
+ * inside the window for as long as it stays in the future.
+ */
+export const ADMINISTRATION_CLOCK_SKEW_MS = DEFAULT_CLOCK_SKEW_SECONDS * 1000
 
 interface Person {
   readonly userId: string
@@ -96,7 +105,11 @@ export function createAdministrationAccess(deps: {
       // A bearer has no browser to send back to the provider, so it never may.
       if (grant?.kind !== 'signed-in') return { kind: 'refused', reason: 'sign_in_required' }
       const at = grant.authenticatedAt ?? null
-      if (at === null || now - at > ADMINISTRATION_WINDOW_MS) {
+      if (
+        at === null ||
+        now - at > ADMINISTRATION_WINDOW_MS ||
+        at - now > ADMINISTRATION_CLOCK_SKEW_MS
+      ) {
         return { kind: 'refused', reason: 'reauthentication_required' }
       }
       return { kind: 'authorized', userId }

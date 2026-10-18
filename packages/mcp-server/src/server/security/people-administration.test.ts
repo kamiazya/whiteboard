@@ -7,6 +7,7 @@ import { createAdministratorCheck } from './administrator-check.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import {
+  ADMINISTRATION_CLOCK_SKEW_MS,
   ADMINISTRATION_WINDOW_MS,
   type AdministrationAccess,
   createAdministrationAccess,
@@ -119,6 +120,23 @@ describe('authorizing an administration action', () => {
     expect(
       (await access.authorize(signedIn('ada', NOW - ADMINISTRATION_WINDOW_MS), NOW)).kind,
     ).toBe('authorized')
+  })
+
+  // A provider clock running ahead is tolerated as far as a token's own
+  // clock checks are; past that, a future time would pass the window forever.
+  it('refuses a sign-in time further in the future than the clock skew', async () => {
+    expect(
+      (await access.authorize(signedIn('ada', NOW + ADMINISTRATION_CLOCK_SKEW_MS), NOW)).kind,
+    ).toBe('authorized')
+    expect(
+      await access.authorize(signedIn('ada', NOW + ADMINISTRATION_CLOCK_SKEW_MS + 1), NOW),
+    ).toEqual({ kind: 'refused', reason: 'reauthentication_required' })
+    expect(
+      await access.authorize(
+        signedIn('ada', NOW + 365 * 24 * 3_600_000),
+        NOW + ADMINISTRATION_WINDOW_MS,
+      ),
+    ).toEqual({ kind: 'refused', reason: 'reauthentication_required' })
   })
 
   it('answers who administers without asking for a recent sign-in', async () => {

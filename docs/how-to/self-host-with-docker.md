@@ -463,6 +463,8 @@ the change again.
 
 - The time is the ID token's `auth_time`. A provider that does not send it
   leaves every session unable to administer, and the refusal is the same.
+  So does an `auth_time` more than 60 seconds ahead of the server's clock:
+  keep the server's clock in sync with the provider's.
 - A provider behind a reverse proxy (`kind: trusted-header`) cannot be asked
   to sign someone in again, so its administrators cannot make changes from
   the web app.
