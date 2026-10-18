@@ -62,12 +62,38 @@ export interface FontsRouterDeps {
   readonly mayInstall?: (c: Context) => Promise<boolean>
 }
 
+function mountInstall(
+  app: Hono,
+  { fontsDir, install, mayInstall }: FontsRouterDeps & { readonly install: typeof installFont },
+) {
+  app.post('/api/fonts/:id/install', async (c) => {
+    if (mayInstall !== undefined && !(await mayInstall(c))) {
+      return c.json(
+        {
+          error: 'not_an_administrator',
+          message: 'only an administrator of this server can install a font',
+        } satisfies ApiErrorBody,
+        403,
+      )
+    }
+    try {
+      const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
+      return c.json({ id, family, bytes } satisfies InstallFontResponse)
+    } catch (err) {
+      if (!(err instanceof FontInstallError)) throw err
+      const { body, status } = refusalOf(err)
+      return c.json(body, status)
+    }
+  })
+}
+
 export function createFontsRouter({
   fontsDir,
   install = installFont,
   mayInstall,
 }: FontsRouterDeps) {
   const app = new Hono()
+  mountInstall(app, { fontsDir, install, mayInstall })
 
   app.get('/api/fonts', async (c) => {
     const stems = new Set((await installedFontFiles(fontsDir)).map(stemOf))
@@ -101,26 +127,6 @@ export function createFontsRouter({
       // writes the same catalogue file under the same id.
       'Cache-Control': 'private, max-age=86400',
     })
-  })
-
-  app.post('/api/fonts/:id/install', async (c) => {
-    if (mayInstall !== undefined && !(await mayInstall(c))) {
-      return c.json(
-        {
-          error: 'not_an_administrator',
-          message: 'only an administrator of this server can install a font',
-        } satisfies ApiErrorBody,
-        403,
-      )
-    }
-    try {
-      const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
-      return c.json({ id, family, bytes } satisfies InstallFontResponse)
-    } catch (err) {
-      if (!(err instanceof FontInstallError)) throw err
-      const { body, status } = refusalOf(err)
-      return c.json(body, status)
-    }
   })
 
   return app
