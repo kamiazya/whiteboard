@@ -250,6 +250,17 @@ local daemon serves one person and leaves both as they are:
 As with the large request limits, every caller whose grant names no user on
 this instance counts as one user.
 
+## Version history limits
+
+The daemon keeps a bounded history per document, on the local daemon and in
+server mode alike. These limits are fixed, not configurable:
+
+| Limit | Value | When it is reached |
+|---|---|---|
+| Automatic checkpoints per document | 50 | The oldest are removed as new ones are taken. A restore's merge point, and the version it restored, are kept. |
+| Manual versions per document | 200 | The next manual save — `POST …/documents/<path>/versions` or `wb_version_save` — is refused with `413 {"error":"too_many_versions"}` and nothing is saved. A promote into a document already at the limit still lands its content and skips the version it would have recorded there. Automatic checkpoints keep being taken. |
+| Versions per page of `GET …/documents/<path>/versions` | 100 | The answer carries `nextCursor`; pass it back as `?cursor=` for the next, older page. `?limit=` asks for a shorter page. The web app reads every page. |
+
 ## Codex sandbox constraints
 
 Inside the Codex sandbox, two issues are common:

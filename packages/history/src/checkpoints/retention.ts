@@ -15,6 +15,16 @@
 /** The most automatic checkpoints a document keeps, before the oldest go. */
 export const MAX_AUTO_PER_DOCUMENT = 50
 
+/**
+ * The most manual versions a document keeps. A manual save is a person's
+ * save-point and is never retired, so this is a CEILING a keeper refuses a
+ * save past, not a cap it prunes to. Bounded at all because every saved
+ * point is walked by file collection and listed by the history panel, and a
+ * caller in a loop could otherwise grow both without end. Four times the
+ * automatic cap: room for a save-point at every step of a long piece of work.
+ */
+export const MAX_MANUAL_PER_DOCUMENT = 4 * MAX_AUTO_PER_DOCUMENT
+
 /** A row as lineage sees it: its id, and the version it restored, if any. */
 export interface LineageCandidate {
   readonly id: string

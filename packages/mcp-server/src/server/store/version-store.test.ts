@@ -1,9 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { restorePointOptions } from '@kamiazya/whiteboard-history'
+import { MAX_MANUAL_PER_DOCUMENT, restorePointOptions } from '@kamiazya/whiteboard-history'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { TooManyVersionsError } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
@@ -24,6 +25,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { FileVersionStore } = await import('./version-store.js')
+
 const { saveDocument } = await import('./document-store.js')
 const { getWorkspaceDoc, _clearWorkspaceDocCacheForTests } = await import(
   './workspace-doc-cache.js'
@@ -618,6 +620,116 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     it('answers false where the document has no checkpoint, and where it does not exist', async () => {
       expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-z')).toBe(false)
       expect(await store.isUnchangedSinceLastVersion('sess-1', 'no-such-document')).toBe(false)
+    })
+  })
+
+  /** The document id `path` resolves to, read off the row a save writes. */
+  async function documentIdOf(path: string): Promise<string> {
+    const { id } = await store.save('sess-1', path, new LoroDoc(), { auto: true })
+    const row = await handle.db
+      .selectFrom('versions')
+      .select('documentId')
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow()
+    return row.documentId
+  }
+
+  /** `count` manual rows for `documentId`, carried in as a promote would. */
+  async function carryManualRows(documentId: string, count: number): Promise<void> {
+    await store.adopt(
+      'sess-1',
+      Array.from({ length: count }, (_, i) => ({
+        id: `carried-${String(i).padStart(4, '0')}`,
+        documentId,
+        createdAt: 1 + i,
+        auto: false,
+        frontiers: [],
+        elementCount: 0,
+        contentDigest: 'x',
+      })),
+    )
+  }
+
+  describe('the manual-version ceiling', () => {
+    it('refuses the manual save past the ceiling, and still takes an automatic one', async () => {
+      const documentId = await documentIdOf('canvas-x')
+      await carryManualRows(documentId, MAX_MANUAL_PER_DOCUMENT - 1)
+
+      // The ceiling itself is taken.
+      await store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: false, label: 'last' })
+      // One past it is refused, and writes nothing.
+      const refused = store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: false })
+      await expect(refused).rejects.toBeInstanceOf(TooManyVersionsError)
+      await expect(refused).rejects.toMatchObject({ code: 'too_many_versions', status: 413 })
+      const manual = await handle.db
+        .selectFrom('versions')
+        .select((eb) => eb.fn.countAll<number>().as('n'))
+        .where('documentId', '=', documentId)
+        .where('auto', '=', 0)
+        .executeTakeFirstOrThrow()
+      expect(Number(manual.n)).toBe(MAX_MANUAL_PER_DOCUMENT)
+
+      // Checkpoints are capped by retention, not refused.
+      await expect(
+        store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: true }),
+      ).resolves.toMatchObject({ auto: true })
+    })
+
+    it('counts per document, so a sibling at the ceiling leaves this one free', async () => {
+      await carryManualRows(await documentIdOf('canvas-x'), MAX_MANUAL_PER_DOCUMENT)
+      await expect(
+        store.save('sess-1', 'canvas-y', new LoroDoc(), { auto: false }),
+      ).resolves.toMatchObject({ auto: false })
+    })
+  })
+
+  describe('listPage', () => {
+    it('pages newest first through same-millisecond saves, ending with no cursor', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+      const labels = ['one', 'two', 'three', 'four', 'five']
+      for (const label of labels) {
+        await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label })
+      }
+      now.mockRestore()
+
+      const first = await store.listPage('sess-1', 'canvas-r', { limit: 2 })
+      expect(first.versions.map((v) => v.label)).toEqual(['five', 'four'])
+      expect(first.nextCursor).toBeDefined()
+      const second = await store.listPage('sess-1', 'canvas-r', {
+        limit: 2,
+        cursor: first.nextCursor,
+      })
+      expect(second.versions.map((v) => v.label)).toEqual(['three', 'two'])
+      const third = await store.listPage('sess-1', 'canvas-r', {
+        limit: 2,
+        cursor: second.nextCursor,
+      })
+      expect(third.versions.map((v) => v.label)).toEqual(['one'])
+      expect(third.nextCursor).toBeUndefined()
+    })
+
+    it('answers a page that exactly ends the history with no cursor', async () => {
+      await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label: 'a' })
+      await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label: 'b' })
+      const page = await store.listPage('sess-1', 'canvas-r', { limit: 2 })
+      expect(page.versions).toHaveLength(2)
+      expect(page.nextCursor).toBeUndefined()
+    })
+
+    it('answers an empty page for a path with no document', async () => {
+      expect(await store.listPage('sess-1', 'no-such-document', { limit: 5 })).toEqual({
+        versions: [],
+      })
+    })
+  })
+
+  describe('belongsTo', () => {
+    it('answers whether a version is one of the document at that path', async () => {
+      const mine = await store.save('sess-1', 'canvas-a', new LoroDoc(), { auto: false })
+      expect(await store.belongsTo('sess-1', 'canvas-a', mine.id)).toBe(true)
+      expect(await store.belongsTo('sess-1', 'canvas-b', mine.id)).toBe(false)
+      expect(await store.belongsTo('sess-1', 'no-such-document', mine.id)).toBe(false)
+      expect(await store.belongsTo('sess-1', 'canvas-a', 'unknown-id')).toBe(false)
     })
   })
 })

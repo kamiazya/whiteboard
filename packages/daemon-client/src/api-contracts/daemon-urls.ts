@@ -16,6 +16,7 @@ import {
   type SearchQueryInput,
   searchQueryString,
 } from '@kamiazya/whiteboard-server-core/search-query'
+import type { ListVersionsRequest } from './document.js'
 import { encodeDocumentPath, encodePathSegment } from './document-url.js'
 import type { SignInRefusal } from './sign-in.js'
 
@@ -79,6 +80,23 @@ export function documentDuplicateApiUrl(workspaceId: string, path: string): stri
 
 export function documentVersionsApiUrl(workspaceId: string, path: string): string {
   return documentsFamilyUrl(workspaceId, path, 'versions')
+}
+
+/**
+ * One page of `documentVersionsApiUrl`'s list: the first without a cursor,
+ * the next from the `nextCursor` the previous page answered.
+ */
+export function documentVersionsPageApiUrl(
+  workspaceId: string,
+  path: string,
+  query: ListVersionsRequest = {},
+): string {
+  const params = new URLSearchParams()
+  if (query.cursor !== undefined) params.set('cursor', query.cursor)
+  if (query.limit !== undefined) params.set('limit', String(query.limit))
+  const search = params.toString()
+  const base = documentVersionsApiUrl(workspaceId, path)
+  return search === '' ? base : `${base}?${search}`
 }
 
 // The version id is data, so it is encoded here — the one place that builds

@@ -3,6 +3,7 @@ import {
   frontiersFromBase64,
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
+  MAX_MANUAL_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
 import {
@@ -21,6 +22,7 @@ import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import type { DatabaseSchema } from './db/schema.js'
+import type { TenantDatabase } from './db/tenant-database.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -48,15 +50,19 @@ const log = getLogger('version-store')
 // z.infer of the shared wire schema, not a hand-written twin: a separately
 // written interface beside a Zod schema is the drift recipe the Zod
 // discipline names, and this pair had three copies of one shape.
-import type {
-  OperatorInfo,
-  VersionEntry,
+import {
+  type ListVersionsRequest,
+  type ListVersionsResponse,
+  type OperatorInfo,
+  VERSIONS_PAGE_MAX,
+  type VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import {
   type AdoptedVersion,
   type Attestation,
   attestationSchema,
+  TooManyVersionsError,
   type VersionHistory,
 } from '@kamiazya/whiteboard-server-core'
 
@@ -72,6 +78,23 @@ export interface VersionStore extends VersionHistory {
   // path resolves to another document, yet both keep their versions — what
   // file collection must still walk.
   listIdsByDocument(workspaceId: string, documentId: string): Promise<string[]>
+  /**
+   * One bounded page of `list`, newest first, starting after `cursor` (a
+   * previous page's `nextCursor`) or at the newest version, `limit` long or
+   * `VERSIONS_PAGE_MAX` when it says nothing. What a route
+   * answers, so a request costs its page rather than the whole history.
+   */
+  listPage(
+    workspaceId: string,
+    path: string,
+    page: ListVersionsRequest,
+  ): Promise<ListVersionsResponse>
+  /**
+   * Whether `versionId` is a version of the document at `path` — the
+   * ownership a read by id must check, so an id alone cannot read another
+   * document's history — without listing the history to find out.
+   */
+  belongsTo(workspaceId: string, path: string, versionId: string): Promise<boolean>
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -313,6 +336,7 @@ export class FileVersionStore implements VersionStore {
         throw new DocumentNotFoundError(workspaceId, path)
       }
       const documentId = entry.documentId
+      if (!opts.auto) await refusePastManualCeiling(db, workspaceId, documentId)
       const frontiers = frontiersToBase64(storedWorkspace.frontiers())
       await db
         .insertInto('versions')
@@ -493,6 +517,66 @@ export class FileVersionStore implements VersionStore {
       .orderBy(sql`rowid`, 'desc')
       .execute()
     return rows.map((row) => row.id)
+  }
+
+  async listPage(
+    workspaceId: string,
+    path: string,
+    page: ListVersionsRequest,
+  ): Promise<ListVersionsResponse> {
+    validateWorkspaceId(workspaceId)
+    validateDocumentPath(path)
+    const documentId = await this.resolveDocumentId(workspaceId, path)
+    if (!documentId) return { versions: [] }
+    const after = page.cursor === undefined ? null : parseCursor(page.cursor)
+    const limit = page.limit ?? VERSIONS_PAGE_MAX
+    const db = await this.scope.db()
+    let query = db
+      .selectFrom('versions')
+      .selectAll()
+      .select(sql<number>`rowid`.as('seq'))
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+    if (after !== null) {
+      // The list's own order, as a keyset: older by save time, or saved in
+      // the same millisecond and inserted earlier.
+      query = query.where((eb) =>
+        eb.or([
+          eb('createdAt', '<', after.createdAt),
+          eb.and([eb('createdAt', '=', after.createdAt), eb(sql`rowid`, '<', after.seq)]),
+        ]),
+      )
+    }
+    // One row past the page says whether another page exists.
+    const rows = await query
+      .orderBy('createdAt', 'desc')
+      .orderBy(sql`rowid`, 'desc')
+      .limit(limit + 1)
+      .execute()
+    const shown = rows.slice(0, limit)
+    const last = shown.at(-1)
+    return {
+      versions: shown.map(({ seq: _seq, ...r }) => rowToEntry({ ...r, path } as VersionRow)),
+      ...(rows.length > limit && last !== undefined
+        ? { nextCursor: `${last.createdAt}.${last.seq}` }
+        : {}),
+    }
+  }
+
+  async belongsTo(workspaceId: string, path: string, versionId: string): Promise<boolean> {
+    validateWorkspaceId(workspaceId)
+    validateDocumentPath(path)
+    const documentId = await this.resolveDocumentId(workspaceId, path)
+    if (!documentId) return false
+    const db = await this.scope.db()
+    const row = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .where('id', '=', versionId)
+      .executeTakeFirst()
+    return row !== undefined
   }
 
   async pruneSandwichedAutoVersions(
@@ -679,4 +763,36 @@ function checkoutVersion(doc: LoroDoc, versionId: string, frontiers: string): vo
       `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
     )
   }
+}
+
+/**
+ * Throws `TooManyVersionsError` when the document already keeps the most
+ * manual versions one document may. Asked before the row is written, so a
+ * refusal leaves nothing behind; under the workspace write barrier `save`
+ * holds, so two saves racing for the last place cannot both take it.
+ */
+async function refusePastManualCeiling(
+  db: TenantDatabase,
+  workspaceId: string,
+  documentId: string,
+): Promise<void> {
+  const held = await db
+    .selectFrom('versions')
+    .select((eb) => eb.fn.countAll<number>().as('n'))
+    .where('workspaceId', '=', workspaceId)
+    .where('documentId', '=', documentId)
+    .where('auto', '=', 0)
+    .executeTakeFirstOrThrow()
+  if (Number(held.n) >= MAX_MANUAL_PER_DOCUMENT) {
+    throw new TooManyVersionsError(MAX_MANUAL_PER_DOCUMENT)
+  }
+}
+
+/** A `versionsCursorSchema` cursor, as the keyset it names. */
+function parseCursor(cursor: string): { createdAt: number; seq: number } {
+  const [createdAt, seq] = cursor.split('.').map(Number)
+  if (!Number.isSafeInteger(createdAt) || !Number.isSafeInteger(seq)) {
+    throw new RangeError(`not a versions cursor: ${cursor}`)
+  }
+  return { createdAt: createdAt as number, seq: seq as number }
 }

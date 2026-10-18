@@ -1,6 +1,12 @@
 import { mkdir } from 'node:fs/promises'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import {
+  listVersionsResponseSchema,
+  type SaveVersionRefusal,
+  VERSIONS_PAGE_MAX,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { MAX_MANUAL_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
 import { writeMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
@@ -37,6 +43,8 @@ const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
 const { createVersionsRouter } = await import('./versions.js')
+const { FileVersionStore } = await import('../../store/version-store.js')
+
 const { createDocumentRouter } = await import('../document.js')
 
 // A real published did:key — what a daemon's identity answers with. The
@@ -410,7 +418,101 @@ describe('versions API', () => {
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
   })
+
+  it('pages GET /versions by limit and cursor, the last page carrying no cursor', async () => {
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
+    )
+    for (const label of ['one', 'two', 'three']) {
+      await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+        method: 'POST',
+        body: JSON.stringify({ label }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    const url = '/api/workspaces/session1/documents/canvas-a/versions'
+    const first = listVersionsResponseSchema.parse(
+      await (await app.request(`${url}?limit=2`)).json(),
+    )
+    expect(first.versions.map((v) => v.label)).toEqual(['three', 'two'])
+    expect(first.nextCursor).toBeDefined()
+    const rest = listVersionsResponseSchema.parse(
+      await (await app.request(`${url}?limit=2&cursor=${first.nextCursor}`)).json(),
+    )
+    expect(rest.versions.map((v) => v.label)).toEqual(['one'])
+    expect(rest.nextCursor).toBeUndefined()
+  })
+
+  it('bounds an unasked page at the page maximum', async () => {
+    const versionStore = new FileVersionStore(testStoreScope())
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({ serverDeps, versionStore, autoVersionQuietMs: 60_000 }),
+    )
+    await carryManualRows(versionStore, 'canvas-a', VERSIONS_PAGE_MAX + 1)
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const body = listVersionsResponseSchema.parse(await res.json())
+    expect(body.versions).toHaveLength(VERSIONS_PAGE_MAX)
+    expect(body.nextCursor).toBeDefined()
+  })
+
+  it('refuses a page size past the maximum, and a query key it does not read', async () => {
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
+    )
+    const url = '/api/workspaces/session1/documents/canvas-a/versions'
+    for (const query of [`limit=${VERSIONS_PAGE_MAX + 1}`, 'limit=0', 'cursor=x', 'after=1']) {
+      const res = await app.request(`${url}?${query}`)
+      expect(res.status, query).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'invalid_request' })
+    }
+  })
+
+  it('refuses a manual save past the version ceiling with 413 too_many_versions', async () => {
+    const versionStore = new FileVersionStore(testStoreScope())
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({ serverDeps, versionStore, autoVersionQuietMs: 60_000 }),
+    )
+    await carryManualRows(versionStore, 'canvas-a', MAX_MANUAL_PER_DOCUMENT)
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      body: JSON.stringify({ label: 'one too many' }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    expect(res.status).toBe(413)
+    const body = (await res.json()) as SaveVersionRefusal
+    expect(body).toEqual({
+      error: 'too_many_versions',
+      message: expect.stringContaining(String(MAX_MANUAL_PER_DOCUMENT)),
+    })
+  })
 })
+
+/** `count` manual rows for the document at `path`, carried in as a promote would. */
+async function carryManualRows(
+  versionStore: InstanceType<typeof FileVersionStore>,
+  path: string,
+  count: number,
+): Promise<void> {
+  const { id } = await versionStore.save('session1', path, new LoroDoc(), { auto: true })
+  const db = await testStoreScope().db()
+  const { documentId } = await db
+    .selectFrom('versions')
+    .select('documentId')
+    .where('id', '=', id)
+    .executeTakeFirstOrThrow()
+  await versionStore.adopt(
+    'session1',
+    Array.from({ length: count }, (_, i) => ({
+      id: `carried-${String(i).padStart(4, '0')}`,
+      documentId,
+      createdAt: 1 + i,
+      auto: false,
+      frontiers: [],
+      elementCount: 0,
+      contentDigest: 'x',
+    })),
+  )
+}
 
 // Reading a past state, which is what makes "see it, then decide" possible.
 // Without this read, restore behind a confirmation is the only way to learn
