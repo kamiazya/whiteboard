@@ -565,6 +565,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in
   [Export formats](../reference/export-formats.md).
+  On a server running several instances these ceilings are checked by each
+  instance on its own, so writes landing at once through different
+  instances can together pass one; see
+  [Running several instances](../how-to/self-host-with-docker.md#running-several-instances).
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set

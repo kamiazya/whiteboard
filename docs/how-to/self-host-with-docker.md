@@ -632,6 +632,17 @@ make that visible to the people using them:
    away its browsers reconnect wherever the load balancer sends them next. MCP
    clients need no affinity: `/mcp` keeps no per-connection state.
 
+**The size ceilings are judged per instance.** A workspace's 2000 documents,
+a canvas's 2000 nodes and 2000 edges and lines, and a document's 500 open
+comment threads and 1000 open proposed changes are each checked by the
+instance a write arrives at, against the record as that instance holds it,
+one write at a time. Writes arriving at different instances at the same
+moment are checked without seeing each other, so each can add whatever room
+was left: k such writes can take the record past a ceiling by up to k − 1
+times that room. Nothing is lost or corrupted. Once a record is past a
+ceiling, every write that would grow it further is refused, until it is
+back under. A single instance never overshoots.
+
 ## Persistent data volume
 
 The container writes all data (SQLite database, server-mode record) under
