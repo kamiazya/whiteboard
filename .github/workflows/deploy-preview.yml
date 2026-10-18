@@ -37,6 +37,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm
+        with:
+          # A cold store: this job's output is published, and the store cache is
+          # written by default-branch jobs that run every dev and test dependency.
+          cache-store: 'false'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build apps/web

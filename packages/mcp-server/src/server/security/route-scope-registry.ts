@@ -311,10 +311,27 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: always('runtime:admin'),
   },
 
+  // The /api/v1 routes that answer with, or rewrite, what documents SAY: the
+  // OKF projection, ranked hits with excerpts, backlinks with context, the
+  // tags documents carry beside the tag and stencil libraries, and the
+  // linkify rewrite of a body. Content is the canvas scopes' on every other
+  // surface — the snapshot route, wb_document_get, wb_document_search — so
+  // workspace:read, which lists and resolves documents, must not read it here.
+  // Above 'workspaces (rest)', which would otherwise claim them first.
+  {
+    name: 'v1 document content',
+    claims: matching(
+      /^\/api\/v1\/workspaces\/[^/]+\/(?:search|document-tags|documents\/[^/]+\/(?:okf|backlinks|linkify-mentions))$/,
+    ),
+    decide: byAccess('canvas:write', 'canvas:read'),
+    workspace: workspacesHandle,
+  },
+
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   //
-  // The /api/v1 document surface (server-core's createServer, mounted when
-  // the daemon is given ServerDeps) takes the SAME decision deliberately,
+  // The rest of the /api/v1 document surface (server-core's createServer,
+  // mounted when the daemon is given ServerDeps) — listing, resolving,
+  // creating and deleting documents — takes the SAME decision deliberately,
   // because what differs between the two is how a document is ADDRESSED — by
   // path there, by the id the index assigned here — not what a caller may do
   // to it. Splitting them would mean one grant that reaches a document by id

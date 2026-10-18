@@ -23,6 +23,8 @@ import {
   type TenantScoped,
   type TenantTransaction,
 } from '../store/db/tenant-database.js'
+import type { AuthenticatorBinding } from './member-profile-store.js'
+import { administersNow } from './user-deactivation.js'
 import { moveIntoNamespace, oldestOwnerNamespace } from './workspace-namespace-home.js'
 
 type UserDeletionOutcome =
@@ -30,9 +32,20 @@ type UserDeletionOutcome =
   | { readonly kind: 'unknown-user' }
   | { readonly kind: 'not-deactivated' }
   | { readonly kind: 'sole-owner'; readonly workspaceIds: readonly string[] }
+  | { readonly kind: 'not-an-administrator' }
 
 export interface UserDeletion {
-  delete(profileId: string): Promise<UserDeletionOutcome>
+  /**
+   * `by` is the administrator deleting them, refused when they no longer
+   * administer the tenant by the time the deletion runs; null for the
+   * operator, who is not held to it.
+   */
+  delete(profileId: string, by: string | null): Promise<UserDeletionOutcome>
+}
+
+interface UserDeletionOptions {
+  /** The administrators the sign-in configuration names (ADR-0049 decision 2). */
+  readonly configuredAdministrators?: readonly AuthenticatorBinding[]
 }
 
 // Workspaces this person owns with no other owner. Another owner counts
@@ -109,10 +122,15 @@ async function removeTheirRows(trx: TenantTransaction, profileId: string, accoun
 export function createUserDeletion(
   db: TenantScoped,
   retireAccount: (accountId: string) => Promise<unknown>,
+  options: UserDeletionOptions = {},
 ): UserDeletion {
+  const configured = options.configuredAdministrators ?? []
   return {
-    async delete(profileId) {
+    async delete(profileId, by) {
       const outcome = await inTenantTransaction(db, async (trx) => {
+        if (by !== null && !(await administersNow(trx, configured, by))) {
+          return { kind: 'not-an-administrator' } as const
+        }
         const user = await trx
           .selectFrom('memberProfiles')
           .select(['accountId', 'deactivatedAt', 'handle'])

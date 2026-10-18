@@ -110,6 +110,29 @@ describe('resolveRequestedOutputPath', () => {
     ).resolves.toEqual({ outputPath })
   })
 
+  // A path outside the exports directory is refused on its spelling alone: if
+  // the refusal waited on the file system, ENOTDIR under a regular file would
+  // surface as a 500 while a missing path answered 400, and the status would
+  // tell a caller what exists anywhere on the host.
+  it('refuses outside paths identically whether or not they exist on the host', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'export-request-host-'))
+    onTestFinished(() => rm(root, { recursive: true, force: true }))
+    const exportsDir = join(root, 'exports')
+    await writeFile(join(root, 'regular-file'), 'x')
+    const throughAFile = await resolveRequestedOutputPath(
+      { outputPath: join(root, 'regular-file', 'x') },
+      'ws',
+      exportsAt(exportsDir),
+    )
+    const missing = await resolveRequestedOutputPath(
+      { outputPath: join(root, 'missing', 'x') },
+      'ws',
+      exportsAt(exportsDir),
+    )
+    expect(throughAFile).toMatchObject({ status: 400, error: { error: 'invalid_output_path' } })
+    expect(throughAFile).toEqual(missing)
+  })
+
   // A failure that is not a judgement on the path is the file system's, and
   // answering it as a 400 would blame the caller for it.
   it('rethrows a file-system failure rather than refusing the path', async () => {

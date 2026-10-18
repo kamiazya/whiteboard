@@ -143,6 +143,20 @@ describe('validateOutputPath', () => {
       ).resolves.toBeUndefined()
     })
 
+    it('accepts the real spelling of an allowedDir reached through a symlink', async () => {
+      // The exports directory may sit under a symlinked parent (macOS /tmp), and a path
+      // named through its real location is the same place.
+      await mkdir(join(tempDir, 'real-exports'))
+      await symlink(join(tempDir, 'real-exports'), join(tempDir, 'exports'))
+      await expect(
+        validateOutputPath(
+          join(tempDir, 'real-exports', 'out.png'),
+          false,
+          join(tempDir, 'exports'),
+        ),
+      ).resolves.toBeUndefined()
+    })
+
     it('rejects a path with control characters', async () => {
       await expect(
         validateOutputPath(join(tempDir, 'bad\x00.png'), false, tempDir),
@@ -173,5 +187,31 @@ describe('validateOutputPath', () => {
     // distinguish "permission problem on the destination" from a benign
     // "file is missing".
     expect(eacces).not.toBeInstanceOf(OutputPathError)
+  })
+})
+
+describe('validateOutputPath containment by path component', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'whiteboard-output-path-components-'))
+    await mkdir(join(root, 'exports'))
+    await mkdir(join(root, 'exports-other'))
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('refuses a sibling whose name only starts with the allowed directory', async () => {
+    await expect(
+      validateOutputPath(join(root, 'exports-other', 'a.png'), false, join(root, 'exports')),
+    ).rejects.toMatchObject({ code: 'invalid_output_path' })
+  })
+
+  it('accepts a file inside whose name starts with two dots', async () => {
+    await expect(
+      validateOutputPath(join(root, 'exports', '..notes.png'), false, join(root, 'exports')),
+    ).resolves.toBeUndefined()
   })
 })

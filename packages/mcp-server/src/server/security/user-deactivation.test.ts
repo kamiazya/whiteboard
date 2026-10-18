@@ -149,6 +149,19 @@ describe('deactivating while keeping an administrator', () => {
     )
   })
 
+  it('reactivates on an administrator’s behalf, refusing one dismissed since', async () => {
+    const adaId = await appointed(ada, 'Ada')
+    const bobId = await appointed(bob, 'Bob')
+    const cyId = (await members.ensureProfile({ binding: cy, displayName: 'Cy' })).id
+    await deactivation.deactivate(cyId, 1_000)
+    expect(await deactivation.reactivateAsAdministrator(cyId, adaId)).toBe('reactivated')
+    expect(await deactivation.reactivateAsAdministrator(cyId, adaId)).toBe('unchanged')
+    await deactivation.deactivate(cyId, 2_000)
+    await createTenantAdministratorStore(handle.db).dismissKeepingAnAdministrator(adaId, bobId)
+    expect(await deactivation.reactivateAsAdministrator(cyId, adaId)).toBe('not-an-administrator')
+    expect(await members.isDeactivated(cy)).toBe(true)
+  })
+
   it('counts an administrator the configuration names, and holds one to the rule too', async () => {
     const guarded = createUserDeactivation(handle.db, { configuredAdministrators: [cy] })
     const adaId = await appointed(ada, 'Ada')

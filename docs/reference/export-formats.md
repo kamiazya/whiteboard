@@ -111,7 +111,10 @@ not:
   ceiling of their own, 4000, answered with
   `413 {"error":"too_many_folders"}` by the workspace document's `update` and
   `promote`, and by a create, a move or a trash restore whose new folders
-  would pass it, in the browser and on the daemon alike. A workspace already
+  would pass it, in the browser and on the daemon alike — and on the daemon
+  by a document's `update` to a path no document holds yet and by a version
+  restored to a new path, whose missing parent folders count the same way.
+  A workspace already
   holding more still lists, and still takes a write that adds no folder.
   A sync `update` also refuses, with
   `409 {"error":"causal_gap"}` and nothing stored, an update that builds on a

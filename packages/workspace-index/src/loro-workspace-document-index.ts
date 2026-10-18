@@ -41,7 +41,6 @@ import {
   deriveCopyPath,
   generateDocumentId,
   isSelfOrDescendant,
-  rebasePath,
 } from '@kamiazya/whiteboard-model'
 import type {
   BlobRef,
@@ -76,11 +75,14 @@ import {
   DocumentPathContestedError,
   DocumentPathTakenError,
   duplicateDocumentInputSchema,
+  foldersIn,
+  foldersMissingFor,
   KeyedSerializer,
   moveDocumentInputSchema,
   NoRoomForCopyError,
   refuseNewDocuments,
   refuseNewFolders,
+  refuseNewFoldersAt,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -88,6 +90,7 @@ import {
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
+import { moveCollision } from './move-collision.js'
 import { restorableTrashDocuments } from './restore-judgement.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
@@ -344,7 +347,7 @@ export class LoroWorkspaceDocumentIndex
       // live one, so a refused create must leave nothing in it.
       const nodes = readWorkspaceNodes(doc)
       refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
-      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.path))
+      refuseNewFoldersAt(nodes, input.path)
       const created = createWorkspaceDocumentAtPath(doc, {
         path: input.path,
         documentId: generateDocumentId(),
@@ -454,7 +457,7 @@ export class LoroWorkspaceDocumentIndex
       }
       const taken = moveCollision(nodes, moving, input.from, input.to)
       if (taken !== undefined) throw new DocumentPathTakenError(input.workspaceId, taken)
-      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.to))
+      refuseNewFoldersAt(nodes, input.to)
       // ONE tree move. The descendants come with it because their paths are
       // their ancestors' — there is no per-row rewrite to order, so the
       // depth-ordering a row-backed store needs does not arise.
@@ -555,79 +558,6 @@ export class LoroWorkspaceDocumentIndex
       await this.docs.save(input.workspaceId, doc)
     })
   }
-}
-
-type WorkspaceNodes = ReturnType<typeof readWorkspaceNodes>
-
-const foldersIn = (nodes: WorkspaceNodes) => nodes.filter((node) => node.type === 'folder').length
-
-/**
- * How many folders placing something at `path` would create: one for each
- * ancestor no node holds yet, since an existing node of either kind is
- * reused as the parent (`ensureFolderPath`).
- */
-function foldersMissingFor(nodes: WorkspaceNodes, path: string): number {
-  const held = new Set(nodes.map((node) => node.path))
-  const segments = path.split('/')
-  let missing = 0
-  for (let depth = 1; depth < segments.length; depth++) {
-    if (!held.has(segments.slice(0, depth).join('/'))) missing += 1
-  }
-  return missing
-}
-
-/**
- * Every path the move frees: the moving nodes' own, and every FOLDER the
- * move empties. The folder case is the one a row-backed index never meets:
- * it has no row at `a` at all, while the tree has a folder there holding the
- * very subtree that is leaving. Counting it as occupied refuses `a/b` -> `a`,
- * which the port says must succeed.
- */
-function vacatedPaths(nodes: WorkspaceNodes, moving: WorkspaceNodes): Set<string> {
-  const movingPaths = new Set(moving.map((node) => node.path))
-  const vacated = new Set(movingPaths)
-  for (const node of nodes) {
-    if (node.type !== 'folder') continue
-    const below = nodes.filter(
-      (other) => other.path !== node.path && isSelfOrDescendant(other.path, node.path),
-    )
-    if (below.length > 0 && below.every((other) => movingPaths.has(other.path))) {
-      vacated.add(node.path)
-    }
-  }
-  return vacated
-}
-
-/**
- * The produced path to refuse the move over, or `undefined` when it is free.
- *
- * Every collision is collected before one is named, because the FIRST one
- * found is often a folder the destination merely passes through (`a` -> `c`
- * hits the folder `c` before the document `c/d` under it), and naming the
- * folder sends the caller to retry a rename that was never the problem. A
- * document collision is the real conflict, so it wins the report; a
- * folder-only collision still refuses — the tree cannot hold two nodes at one
- * path — but is only named when nothing better exists.
- *
- * A path the move is itself emptying is free. `a/b` moving to `a` produces
- * `a/b` again from `a/b/b`, and treating that as occupied would refuse a move
- * that is perfectly well defined.
- */
-function moveCollision(
-  nodes: WorkspaceNodes,
-  moving: WorkspaceNodes,
-  from: string,
-  to: string,
-): string | undefined {
-  const vacated = vacatedPaths(nodes, moving)
-  const collisions = moving
-    .map((node) => rebasePath(node.path, from, to))
-    .filter((produced) => !vacated.has(produced))
-    .flatMap((produced) => {
-      const occupant = nodes.find((other) => other.path === produced)
-      return occupant === undefined ? [] : [{ produced, withFolder: occupant.type === 'folder' }]
-    })
-  return (collisions.find((c) => !c.withFolder) ?? collisions[0])?.produced
 }
 
 /** Whether a purge or restore of `entry` must leave its bytes for another trash row. */

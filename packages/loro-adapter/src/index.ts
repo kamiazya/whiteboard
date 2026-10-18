@@ -94,7 +94,6 @@ export {
   deleteWorkspaceDocument,
   deleteWorkspaceNodeAtPath,
   documentContainers,
-  ensureFolderPath,
   exportWorkspaceSubtree,
   forgetTrashEntry,
   importWorkspaceSubtree,

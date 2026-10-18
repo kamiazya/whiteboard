@@ -267,7 +267,7 @@ describe('nested element budget', () => {
     const embeds = count(scene.nodes, 'embedResolved')
     expect(embeds).toBe(Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(big)))
     // Every hub node still draws, the excess as its card.
-    expect(scene.nodes.filter((n) => n.kind === 'shape').length).toBe(NESTED_LAYOUT_BUDGET)
+    expect(scene.nodes.filter((n) => n.kind === 'shape')).toHaveLength(NESTED_LAYOUT_BUDGET)
   })
 
   it('charges a body embed of a canvas by the canvas it lays out', () => {

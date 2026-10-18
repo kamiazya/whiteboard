@@ -71,6 +71,14 @@ async function ownedBy(c: Context, keeper: WorkspacePeopleKeeper): Promise<strin
   return (await keeper.canManage(c, workspaceId)) ? workspaceId : null
 }
 
+// `ownedBy` and who is acting, for a change that must re-check, when it runs,
+// that they still own the workspace.
+async function actingOwner(c: Context, keeper: WorkspacePeopleKeeper) {
+  const workspaceId = await ownedBy(c, keeper)
+  const by = workspaceId === null ? null : await keeper.actingUserId(c)
+  return workspaceId === null || by === null ? null : { workspaceId, by }
+}
+
 async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: string) {
   const found = (await roles.list(workspaceId)).find((m) => m.profile.id === userId)
   return found === undefined ? null : toPerson(found)
@@ -83,10 +91,11 @@ function mountRemoval(
   keeper: WorkspacePeopleKeeper,
 ): void {
   app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
-    const workspaceId = await ownedBy(c, keeper)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const owner = await actingOwner(c, keeper)
+    if (owner === null) return refuse(c, 'not_an_owner')
+    const { workspaceId, by } = owner
     const userId = c.req.param('userId')
-    const removed = await people.remove(workspaceId, userId)
+    const removed = await people.remove(workspaceId, userId, by)
     if (removed.kind === 'refused') return refuse(c, removed.reason)
     // First, before anything that can fail: a stream they already hold would
     // otherwise keep delivering the workspace (ADR-0042).
@@ -128,10 +137,12 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
   })
 
   app.delete('/api/workspaces/:workspace/invitations/:invitationId', async (c) => {
-    const workspaceId = await ownedBy(c, keeper)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
-    const revoked = await store.revoke(workspaceId, c.req.param('invitationId'))
-    if (!revoked) return refuse(c, 'unknown_invitation')
+    const owner = await actingOwner(c, keeper)
+    if (owner === null) return refuse(c, 'not_an_owner')
+    const { workspaceId, by } = owner
+    const revoked = await store.revoke(workspaceId, c.req.param('invitationId'), by)
+    if (revoked === 'not-an-owner') return refuse(c, 'not_an_owner')
+    if (revoked === 'unknown') return refuse(c, 'unknown_invitation')
     log.notice({ workspaceId, invitationId: c.req.param('invitationId') }, 'invitation revoked')
     return c.json(revokeInvitationResponseSchema.parse({ revoked: true }), 200)
   })
@@ -140,7 +151,6 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
 export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOptions) {
   const { people, roles, keeper } = options
   const app = new Hono()
-  const ownedWorkspace = (c: Context) => ownedBy(c, keeper)
   const personIn = (workspaceId: string, userId: string) => findPerson(roles, workspaceId, userId)
 
   app.get('/api/workspaces/:workspace/people', async (c) => {
@@ -156,10 +166,11 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
       refuseShape: invalidRequestBody,
     })
     if ('refusal' in body) return body.refusal
-    const workspaceId = await ownedWorkspace(c)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const owner = await actingOwner(c, keeper)
+    if (owner === null) return refuse(c, 'not_an_owner')
+    const { workspaceId, by } = owner
     const { userId } = body.data
-    const added = await people.add(workspaceId, userId)
+    const added = await people.add(workspaceId, userId, by)
     if (added.kind === 'refused') return refuse(c, added.reason)
     return c.json(await personIn(workspaceId, userId), 201)
   })
@@ -170,10 +181,11 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
       refuseShape: invalidRequestBody,
     })
     if ('refusal' in body) return body.refusal
-    const workspaceId = await ownedWorkspace(c)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const owner = await actingOwner(c, keeper)
+    if (owner === null) return refuse(c, 'not_an_owner')
+    const { workspaceId, by } = owner
     const userId = c.req.param('userId')
-    const changed = await people.changeRole(workspaceId, userId, body.data.role)
+    const changed = await people.changeRole(workspaceId, userId, body.data.role, by)
     if (changed.kind === 'refused') return refuse(c, changed.reason)
     return c.json(await personIn(workspaceId, userId), 200)
   })

@@ -185,8 +185,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `content-sync.ts` (`rootFitsNode`). Raised by 29 when the tree walk and
   // the subtree copies went to an explicit stack: a sync client chooses how
   // deep the tree is, and the recursive walk overflowed at about 1800 nested
-  // folders.
-  'packages/loro-adapter/src/workspace-tree.ts': 1010,
+  // folders. Raised by 64 when path lookup stopped walking the whole record:
+  // `nodesAlong` steps down only toward the requested path and the walk reads
+  // node meta without copying content, which needs the tree's own node reader
+  // and so cannot leave this file without a value cycle back into it.
+  'packages/loro-adapter/src/workspace-tree.ts': 1074,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush

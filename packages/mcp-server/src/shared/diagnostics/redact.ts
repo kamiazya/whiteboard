@@ -13,10 +13,23 @@ const BEARER_TOKEN_RE = /Bearer\s+\S+/g
 // Matches paths like /opt/wb/server.ts or /Users/me/project.
 const UNIX_PATH_RE = /\/[A-Za-z_][A-Za-z0-9_\-/.]+/g
 
+// Absolute Windows paths: a drive letter with either separator (C:\Users\me,
+// d:/data), and anything rooted at two backslashes — a UNC share
+// (\\server\share), a device path (\\?\C:\...) or a named pipe (\\.\pipe\...).
+// Taken before the Unix pattern, so C:/Users/me is one path rather than a
+// drive letter left beside a redacted tail. A path runs to whitespace, a
+// quote, or a character Windows forbids in a name.
+const DRIVE_PATH_RE = /\b[A-Za-z]:[\\/][^\s"'<>|]*/g
+const DOUBLE_BACKSLASH_PATH_RE = /\\\\[^\s"'<>|]+/g
+
 // No switch to keep paths: every caller forwards text off the machine, and an
 // option on a redactor is a way for one of them to turn it off.
 export function redactDiagnosticText(text: string): string {
-  return text.replace(BEARER_TOKEN_RE, 'Bearer [REDACTED]').replace(UNIX_PATH_RE, '[REDACTED_PATH]')
+  return text
+    .replace(BEARER_TOKEN_RE, 'Bearer [REDACTED]')
+    .replace(DOUBLE_BACKSLASH_PATH_RE, '[REDACTED_PATH]')
+    .replace(DRIVE_PATH_RE, '[REDACTED_PATH]')
+    .replace(UNIX_PATH_RE, '[REDACTED_PATH]')
 }
 
 // Drop the `Authorization` / `Bearer` marker keywords from text AFTER

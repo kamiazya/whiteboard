@@ -15,7 +15,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
-import { mcpCallerNamespace } from '../server/security/mcp-caller.js'
+import { mcpCallerNamespace, toolErrorText } from '../server/security/mcp-caller.js'
 import { createDocumentTeardown } from '../server/store/document-store.js'
 import { createDocumentWritten } from '../server/store/document-written.js'
 import { liveDocuments, workspaceDocuments } from '../server/store/live-documents.js'
@@ -142,5 +142,8 @@ export function resolveServerDeps(
       request === undefined
         ? ((await mcpCallerNamespace()) ?? SINGLE_PERSON_NAMESPACE)
         : callerNamespaceOfRequest(request),
+    // A fault a tool reports in its answer is held to the judgement a thrown
+    // one gets: a server-mode member reads a refusal, never a fault's text.
+    reportedFaultText: toolErrorText,
   }
 }

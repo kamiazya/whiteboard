@@ -4,7 +4,8 @@
  * tool's `/api` twin is registered under in `route-scope-registry.ts`, so one
  * grant reaches the same operations whichever surface it arrives through:
  * a token scoped `canvas:read mcp:call` reads documents over `/mcp` and
- * deletes none, exactly as it would over `/api`.
+ * deletes none, exactly as it would over `/api`. `api-v1-tool-twin-scopes.test.ts`
+ * holds every `/api/v1` route to its twin's entry here.
  *
  * Document create / set / delete sit at `workspace:write` because that is what
  * the `/api/v1/workspaces` document surface asks. Restore in place needs only

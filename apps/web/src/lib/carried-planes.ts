@@ -161,6 +161,17 @@ function versionsWithinCap(
   return { kept: versions.filter((version) => keep.has(version)), dropped: versions.length - cap }
 }
 
+interface CarriedPlaneCaps {
+  readonly trash: number
+  readonly versions: number
+}
+
+/** The most trash entries and versions the keeper accepts in one move. */
+const PROMOTE_CAPS: CarriedPlaneCaps = {
+  trash: PROMOTE_MAX_TRASH,
+  versions: PROMOTE_MAX_VERSIONS,
+}
+
 /**
  * The planes that fit beside `snapshot` inside the ceiling the keeper refuses
  * past, and inside the most trash entries and versions one move carries. The
@@ -172,10 +183,7 @@ export function fitCarriedPlanes(
   snapshot: string,
   planes: Pick<CarriedPlanes, 'trash' | 'versions' | 'trashPaths'>,
   limitBytes: number = PROMOTE_REQUEST_LIMIT_BYTES,
-  caps: { readonly trash: number; readonly versions: number } = {
-    trash: PROMOTE_MAX_TRASH,
-    versions: PROMOTE_MAX_VERSIONS,
-  },
+  caps: CarriedPlaneCaps = PROMOTE_CAPS,
 ): FittedPlanes {
   const encoder = new TextEncoder()
   const { kept: versions, dropped } = versionsWithinCap(planes.versions, caps.versions)

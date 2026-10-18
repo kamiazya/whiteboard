@@ -6,7 +6,7 @@ import {
   type ListFontsResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { FontInstallError, installFont } from '../export/install-font.js'
 import { installedFontFiles } from '../export/installed-fonts.js'
 
@@ -53,10 +53,47 @@ export interface FontsRouterDeps {
   readonly fontsDir: string
   /** Injected so a route test never reaches the network. */
   readonly install?: typeof installFont
+  /**
+   * Whether this request's caller may install. Server mode answers its
+   * administrators alone: the scope says what a credential may do, and an
+   * identity provider can grant `runtime:admin` to anyone it signs in, while
+   * an install changes every workspace's exports. Absent: the scope is the bar.
+   */
+  readonly mayInstall?: (c: Context) => Promise<boolean>
 }
 
-export function createFontsRouter({ fontsDir, install = installFont }: FontsRouterDeps) {
+function mountInstall(
+  app: Hono,
+  { fontsDir, install, mayInstall }: FontsRouterDeps & { readonly install: typeof installFont },
+) {
+  app.post('/api/fonts/:id/install', async (c) => {
+    if (mayInstall !== undefined && !(await mayInstall(c))) {
+      return c.json(
+        {
+          error: 'not_an_administrator',
+          message: 'only an administrator of this server can install a font',
+        } satisfies ApiErrorBody,
+        403,
+      )
+    }
+    try {
+      const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
+      return c.json({ id, family, bytes } satisfies InstallFontResponse)
+    } catch (err) {
+      if (!(err instanceof FontInstallError)) throw err
+      const { body, status } = refusalOf(err)
+      return c.json(body, status)
+    }
+  })
+}
+
+export function createFontsRouter({
+  fontsDir,
+  install = installFont,
+  mayInstall,
+}: FontsRouterDeps) {
   const app = new Hono()
+  mountInstall(app, { fontsDir, install, mayInstall })
 
   app.get('/api/fonts', async (c) => {
     const stems = new Set((await installedFontFiles(fontsDir)).map(stemOf))
@@ -90,17 +127,6 @@ export function createFontsRouter({ fontsDir, install = installFont }: FontsRout
       // writes the same catalogue file under the same id.
       'Cache-Control': 'private, max-age=86400',
     })
-  })
-
-  app.post('/api/fonts/:id/install', async (c) => {
-    try {
-      const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
-      return c.json({ id, family, bytes } satisfies InstallFontResponse)
-    } catch (err) {
-      if (!(err instanceof FontInstallError)) throw err
-      const { body, status } = refusalOf(err)
-      return c.json(body, status)
-    }
   })
 
   return app

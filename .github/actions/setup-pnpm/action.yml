@@ -33,6 +33,10 @@ runs:
         node-version: ${{ inputs.node-version }}
         node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
         registry-url: ${{ inputs.registry-url }}
+        # The store cache below is the only one, so cache-store alone decides
+        # whether anything is restored; setup-node would otherwise detect a
+        # package manager from package.json and cache for it on its own.
+        package-manager-cache: false
 
     # corepack prepare (no argument) reads packageManager from package.json
     # and downloads that exact pnpm build directly from the npm registry.

@@ -1,4 +1,5 @@
 import { type DocumentKind, describeThrown } from '@kamiazya/whiteboard-model'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * Thrown when a write is in a format the document is not in.
@@ -113,4 +114,12 @@ export class PassageNotApplicableError extends Error {
     super(`Passage ${changeId} does not apply: ${detail}`)
     this.name = 'PassageNotApplicableError'
   }
+}
+
+/**
+ * The text a tool's answer carries for a fault it reports instead of
+ * throwing, as the composition root's `reportedFaultText` decides it.
+ */
+export function reportedFaultText(deps: ServerDeps, tool: string, fault: unknown): string {
+  return deps.reportedFaultText?.(tool, fault) ?? describeThrown(fault)
 }

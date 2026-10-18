@@ -19,6 +19,7 @@ import {
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
+import { reportedFaultText } from './errors.js'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 
 /** A `document.move` that names neither where to move nor what to rename to. */
@@ -356,7 +357,7 @@ const WORKSPACE_EDIT_HANDLERS: {
         op: op.op,
         documentId: op.documentId,
         path,
-        ...(moved === undefined ? {} : followOf(moved)),
+        ...(moved === undefined ? {} : followOf(ctx.deps, moved)),
       },
     }
   },
@@ -371,10 +372,9 @@ const WORKSPACE_EDIT_HANDLERS: {
 }
 
 /** The follow report a move's result row carries — absent when there is nothing to say. */
-function followOf(moved: WbDocumentMoveResult): Pick<ResultRow, 'follow'> {
+function followOf(deps: ServerDeps, moved: WbDocumentMoveResult): Pick<ResultRow, 'follow'> {
   if ('error' in moved.follow) {
-    const { error } = moved.follow
-    return { follow: { error: describeThrown(error) } }
+    return { follow: { error: reportedFaultText(deps, 'wb_workspace_edit', moved.follow.error) } }
   }
   const { updatedDocumentIds, failedDocumentIds } = moved.follow
   if (updatedDocumentIds.length === 0 && failedDocumentIds.length === 0) return {}

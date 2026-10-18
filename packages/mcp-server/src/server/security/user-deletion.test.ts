@@ -28,6 +28,7 @@ const retireAccount = vi.fn(async (_accountId: string) => {})
 
 const ada = { authenticator: 'oidc:https://id.example', subject: 'ada' }
 const bob = { authenticator: 'oidc:https://id.example', subject: 'bob' }
+const cy = { authenticator: 'oidc:https://id.example', subject: 'cy' }
 const HOUR = 3_600_000
 
 async function deactivated(binding: typeof ada, displayName: string) {
@@ -54,12 +55,37 @@ afterEach(async () => {
 describe('createUserDeletion', () => {
   it('refuses someone who is not deactivated, and leaves them as they were', async () => {
     const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'not-deactivated' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'not-deactivated' })
     expect((await members.profileForBinding(ada))?.id).toBe(user.id)
   })
 
   it('refuses a user id this tenant does not have', async () => {
-    expect(await deletion().delete('nobody')).toEqual({ kind: 'unknown-user' })
+    expect(await deletion().delete('nobody', null)).toEqual({ kind: 'unknown-user' })
+  })
+
+  it('refuses an actor dismissed after their request was authorized, deleting nothing', async () => {
+    const user = await deactivated(ada, 'Ada')
+    const admins = createTenantAdministratorStore(handle.db)
+    const [bobId, cyId] = [
+      (await members.ensureProfile({ binding: bob, displayName: 'Bob' })).id,
+      (await members.ensureProfile({ binding: cy, displayName: 'Cy' })).id,
+    ]
+    await admins.appoint(bobId, null)
+    await admins.appoint(cyId, null)
+    expect(await admins.dismissKeepingAnAdministrator(bobId, cyId)).toBe('dismissed')
+    expect(await deletion().delete(user.id, bobId)).toEqual({ kind: 'not-an-administrator' })
+    expect((await members.listUsers()).map((u) => u.id)).toContain(user.id)
+    expect(retireAccount).not.toHaveBeenCalled()
+    expect(await deletion().delete(user.id, cyId)).toEqual({ kind: 'deleted' })
+  })
+
+  it('counts an actor the configuration names as administering', async () => {
+    const user = await deactivated(ada, 'Ada')
+    const bobId = (await members.ensureProfile({ binding: bob, displayName: 'Bob' })).id
+    const guarded = createUserDeletion(handle.db, retireAccount, {
+      configuredAdministrators: [bob],
+    })
+    expect(await guarded.delete(user.id, bobId)).toEqual({ kind: 'deleted' })
   })
 
   it('refuses the sole owner of a workspace, naming it, and counts another owner however deactivated', async () => {
@@ -71,7 +97,7 @@ describe('createUserDeletion', () => {
     await createWorkspaceRoles(handle.db).setRole('ws-shared', other.id, 'owner')
     await createUserDeactivation(handle.db).deactivate(other.id, 2_000)
 
-    expect(await deletion().delete(user.id)).toEqual({
+    expect(await deletion().delete(user.id, null)).toEqual({
       kind: 'sole-owner',
       workspaceIds: ['ws-alone'],
     })
@@ -79,13 +105,14 @@ describe('createUserDeletion', () => {
   })
 
   it('removes who they were, keeps everyone else, and hands the account on to be retired', async () => {
-    const user = await deactivated(ada, 'Ada')
+    const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     const other = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
     await members.addMember('ws-1', other.id)
     await members.addMember('ws-1', user.id)
     const admins = createTenantAdministratorStore(handle.db)
     await admins.appoint(user.id, null)
-    await admins.appoint(other.id, user.id)
+    expect(await admins.appoint(other.id, user.id)).toBe('appointed')
+    await createUserDeactivation(handle.db).deactivate(user.id, 1_000)
     const pending = await invitations.createLink({
       invitedBy: user.id,
       workspaceId: 'ws-1',
@@ -94,7 +121,7 @@ describe('createUserDeletion', () => {
     })
     const bobs = await sessions.create(bob, 0, HOUR)
 
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     expect((await members.listUsers()).map((u) => u.id)).toEqual([other.id])
     expect(await members.isWorkspaceMember('ws-1', user.id)).toBe('not-a-member')
@@ -136,7 +163,7 @@ describe('createUserDeletion', () => {
     await members.addMember('ws-1', other.id)
     await createWorkspaceRoles(handle.db).setRole('ws-1', other.id, 'owner')
 
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     // A deleted row answers 'unknown'; a kept redeemed one still says it was redeemed.
     expect(await invitations.openLink(redeemed.token, 2)).toEqual({ ok: false, reason: 'redeemed' })
@@ -149,7 +176,7 @@ describe('createUserDeletion', () => {
     // A session opened after deactivation cannot happen through sign-in; it
     // stands for one that a racing request created.
     const late = await sessions.create(ada, 0, HOUR)
-    await deletion().delete(user.id)
+    await deletion().delete(user.id, null)
     expect(await sessions.resolve(late, 1)).toBeNull()
   })
 
@@ -157,7 +184,7 @@ describe('createUserDeletion', () => {
     const user = await deactivated(ada, 'Ada')
     const namesake = { authenticator: 'oidc:https://other.example', subject: ada.subject }
     const namesakes = await sessions.create(namesake, 0, HOUR)
-    await deletion().delete(user.id)
+    await deletion().delete(user.id, null)
     expect(await sessions.resolve(namesakes, 1)).toEqual(namesake)
   })
 })
@@ -195,7 +222,7 @@ describe('createUserDeletion — the namespace a deleted person held', () => {
       .where('profileId', '!=', user.id)
       .execute()
 
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     const [first] = [bobUser, carolUser].sort((a, b) => (a.id < b.id ? -1 : 1))
     expect(await placed('ws-1')).toEqual({ namespace: first?.handle, segment: 'design' })
@@ -210,7 +237,7 @@ describe('createUserDeletion — the namespace a deleted person held', () => {
     await members.addMember('ws-ada', bobUser.id)
     await createWorkspaceRoles(handle.db).setRole('ws-ada', bobUser.id, 'owner')
 
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     expect(await placed('ws-ada')).toEqual({ namespace: bobUser.handle, segment: 'design-2' })
     expect(await placed('ws-bob')).toEqual({ namespace: bobUser.handle, segment: 'design' })
@@ -220,7 +247,7 @@ describe('createUserDeletion — the namespace a deleted person held', () => {
     const user = await deactivated(ada, 'Ada')
     await workspaceRow('ws-empty', user.handle, 'design')
 
-    expect(await deletion().delete(user.id)).toEqual({ kind: 'deleted' })
+    expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     expect(await placed('ws-empty')).toEqual({ namespace: 'me', segment: 'design' })
   })

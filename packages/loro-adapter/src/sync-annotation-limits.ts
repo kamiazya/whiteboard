@@ -90,6 +90,17 @@ function annotationMaps(doc: LoroDoc, map: LoroMap, bound: AnnotationBound): [st
 }
 
 /**
+ * How deep below its root a write can still open an annotation: a proposal's
+ * changes sit two maps under the proposals map, a thread one under the
+ * threads map, and a legacy comment is the comments map itself.
+ */
+function deepestAnnotationDepth(key: unknown): number {
+  if (key === PROPOSALS_KEY) return 3
+  if (key === THREADS_KEY) return 2
+  return 1
+}
+
+/**
  * The annotation bound a write to the map `container` can move, when it is
  * one: a threads, legacy comments or proposals map itself (one added), one
  * thread's or proposal's own map (a status set), or a proposal's changes (a
@@ -116,7 +127,7 @@ function annotationWrite(
   const bound = ANNOTATION_BOUNDS.find(({ keys }) => (keys as readonly unknown[]).includes(key))
   if (bound === undefined) return undefined
   const depth = path.length - base
-  const deepest = key === PROPOSALS_KEY ? 3 : key === THREADS_KEY ? 2 : 1
+  const deepest = deepestAnnotationDepth(key)
   if (depth > deepest) return undefined
   let map = doc.getContainerById(container) as LoroMap | undefined
   for (let up = 1; up < depth && map !== undefined; up += 1) {

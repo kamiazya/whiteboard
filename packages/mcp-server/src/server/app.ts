@@ -422,6 +422,16 @@ function runtimeRouter(
   })
 }
 
+/** On a shared server only an administrator installs a font; the local daemon's scope is its bar. */
+function fontsRouter(options: AppOptions, scope: StoreScope) {
+  return createFontsRouter({
+    fontsDir: scope.layout.fontsDir,
+    ...(options.authMode === 'server-mode'
+      ? { mayInstall: administersTenant(options.people.administration.check) }
+      : {}),
+  })
+}
+
 /** Whether the request's person administers this tenant; a grant naming nobody does not. */
 function administersTenant(check: AdministratorCheck) {
   return async (c: Context): Promise<boolean> => {
@@ -540,7 +550,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createFilesRouter({ versionStore, scope }))
   const { liveDocuments } = options.serverDeps
   app.route('/', createExportRouter({ liveDocuments, scope, exportPaths }))
-  app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
+  app.route('/', fontsRouter(options, scope))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())

@@ -26,6 +26,7 @@ import type { DatabaseSchema } from '../store/db/schema.js'
 import type { TenantScoped } from '../store/db/tenant-database.js'
 import { INVITATION_TOKEN_BYTES } from './invitation-token.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
+import { actorOwns, ownsNow } from './workspace-roles.js'
 
 const invitationSchema = z
   .object({
@@ -40,6 +41,8 @@ const invitationSchema = z
 type Invitation = z.infer<typeof invitationSchema>
 
 type LinkRefusal = 'unknown' | 'expired' | 'redeemed'
+
+type Revocation = 'revoked' | 'unknown' | 'not-an-owner'
 
 type OpenedLink = { ok: true; invitation: Invitation } | { ok: false; reason: LinkRefusal }
 
@@ -61,8 +64,11 @@ export interface InvitationStore {
   redeem(invitationId: string, redeemedBy: string, now: number): Promise<boolean>
   /** The links into `workspaceId` neither redeemed nor expired, oldest first. */
   listPending(workspaceId: string, now: number): Promise<Invitation[]>
-  /** Takes back an unredeemed link into `workspaceId`; false when there is none by that id. */
-  revoke(workspaceId: string, invitationId: string): Promise<boolean>
+  /**
+   * Takes back an unredeemed link into `workspaceId` on behalf of `by`,
+   * refused unless `by` is still an active owner of it when the delete runs.
+   */
+  revoke(workspaceId: string, invitationId: string, by: string): Promise<Revocation>
 }
 
 async function insert(db: TenantScoped, input: IssueInput, tokenHash: string): Promise<Invitation> {
@@ -202,15 +208,23 @@ async function listPending(db: TenantScoped, workspaceId: string, now: number) {
 
 // A revoked link is deleted, so it then opens as one never issued. A
 // redeemed one is kept: it records who let that person in.
-async function revoke(db: TenantScoped, workspaceId: string, invitationId: string) {
+async function revoke(
+  db: TenantScoped,
+  workspaceId: string,
+  invitationId: string,
+  by: string,
+): Promise<Revocation> {
   const deleted = await db
     .deleteFrom('invitations')
     .where('id', '=', invitationId)
     .where('workspaceId', '=', workspaceId)
     .where('redeemedAt', 'is', null)
+    .where(actorOwns(workspaceId, by))
     .returning('id')
     .execute()
-  return deleted.length > 0
+  if (deleted.length > 0) return 'revoked'
+  // Read after the fact, so it names why nothing changed and decides nothing.
+  return (await ownsNow(db, workspaceId, by)) ? 'unknown' : 'not-an-owner'
 }
 
 interface InvitationStoreOptions {
@@ -233,6 +247,6 @@ export function createInvitationStore(
     redeem: (invitationId, redeemedBy, now) =>
       redeem(db, configured, invitationId, redeemedBy, now),
     listPending: (workspaceId, now) => listPending(db, workspaceId, now),
-    revoke: (workspaceId, invitationId) => revoke(db, workspaceId, invitationId),
+    revoke: (workspaceId, invitationId, by) => revoke(db, workspaceId, invitationId, by),
   }
 }

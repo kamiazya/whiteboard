@@ -196,7 +196,10 @@ provider like any other, with the subject the proxy forwards.
 The session this opens authorizes `/api` for everything a person does with
 their workspaces. The keeper's administrative routes (those needing the
 `runtime:admin` scope) are not among them: they stay with bearer tokens you
-scope for them. `/mcp` still takes bearer tokens only.
+scope for them. `/mcp` still takes bearer tokens only. Installing a font
+for exports also needs the person behind the token to be an
+[administrator](#administrators): a `runtime:admin` token held by anyone
+else is refused with `403` and `not_an_administrator`.
 
 ## Who can reach a workspace
 
@@ -213,6 +216,11 @@ from there. The same is available through
 - `POST {"userId": …}` adds a user of this keeper.
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
+
+Each of these changes checks again, as it is made, that whoever asked is
+still an active owner of the workspace. An owner made a member, removed or
+deactivated while their request was in flight gets `403 not_an_owner` and
+changes nothing.
 
 Removing a member, or deactivating them, also stops a write of theirs that is
 still arriving: an update or upload whose body was in transit when they were
@@ -246,7 +254,9 @@ Owners can review and take back the links still waiting to be accepted:
   itself is never shown again.
 - `DELETE /api/workspaces/<workspace>/invitations/<id>` revokes one. It then
   works for nobody. An id from another workspace answers
-  `404 unknown_invitation`.
+  `404 unknown_invitation`. Like a change to the members, it checks again
+  that whoever asked is still an active owner, and answers `403 not_an_owner`
+  otherwise.
 
 A workspace can have at most 50 links waiting at once. Creating one more is
 refused with `409 too_many_invitations` until one is accepted, expires or is
@@ -356,8 +366,15 @@ the same things through either surface:
 | `canvas:write` | `wb_canvas_edit`, `wb_body_edit`, `wb_facet_set`, `wb_thread_edit`, `wb_viewport_set` |
 | `workspace:read` | `wb_document_list` |
 | `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
-| `versions:read` | `wb_version_list` |
+| `versions:read` | `wb_version_list`. Over HTTP it also opens a saved version, so it reads what a document said in the past |
 | `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
+
+`workspace:read` lists documents and resolves their ids. It reads nothing
+they say. Over HTTP, reading content needs `canvas:read`: a document's OKF
+projection (`GET /api/v1/workspaces/<id>/documents/<id>/okf`), search
+results, backlinks, and the tags documents carry. Linking a document's
+mentions (`POST …/linkify-mentions`) rewrites its content, so it needs
+`canvas:write`.
 
 Restoring a version anywhere but in place also writes other documents, so it
 needs `workspace:write` as well as `versions:write`: `wb_version_restore`
@@ -435,7 +452,8 @@ available through `/api/people`:
   administrator cannot dismiss themselves, so a dismissal always leaves the
   one who made it. Two administrators dismissing each other at the same
   moment cannot both succeed: the second finds it no longer administers.
-- A deactivation or a dismissal checks again, as it is made, that whoever
+- Every one of these changes — deactivating, reactivating, deleting,
+  appointing and dismissing — checks again, as it is made, that whoever
   asked for it is still an active administrator. One dismissed or
   deactivated while their request was in flight gets
   `403 not_an_administrator` and changes nothing.

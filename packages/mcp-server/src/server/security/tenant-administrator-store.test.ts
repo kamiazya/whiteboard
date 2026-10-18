@@ -14,6 +14,7 @@ import {
   createTenantAdministratorStore,
   type TenantAdministratorStore,
 } from './tenant-administrator-store.js'
+import { createUserDeactivation } from './user-deactivation.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -62,10 +63,41 @@ describe('createTenantAdministratorStore', () => {
   it('is idempotent, keeping the first appointment', async () => {
     const ada = await user('ada')
     const bob = await user('bob')
+    await admins.appoint(ada.id, null)
     await admins.appoint(bob.id, null)
-    await admins.appoint(bob.id, ada.id)
-    expect(await admins.list()).toHaveLength(1)
-    expect((await admins.list())[0]?.appointedBy).toBeNull()
+    expect(await admins.appoint(bob.id, ada.id)).toBe('appointed')
+    const bobs = (await admins.list()).filter((a) => a.profileId === bob.id)
+    expect(bobs).toHaveLength(1)
+    expect(bobs[0]?.appointedBy).toBeNull()
+  })
+
+  describe('appointing on an administrator’s behalf', () => {
+    it('refuses an actor dismissed after their request was authorized', async () => {
+      const [ada, bob, cy] = [await user('ada'), await user('bob'), await user('cy')]
+      await admins.appoint(ada.id, null)
+      await admins.appoint(bob.id, null)
+      expect(await admins.dismissKeepingAnAdministrator(ada.id, bob.id)).toBe('dismissed')
+      expect(await admins.appoint(cy.id, ada.id)).toBe('not-an-administrator')
+      expect(await admins.isAppointed(cy.id)).toBe(false)
+    })
+
+    it('refuses an actor deactivated after their request was authorized', async () => {
+      const [ada, bob, cy] = [await user('ada'), await user('bob'), await user('cy')]
+      await admins.appoint(ada.id, null)
+      await admins.appoint(bob.id, null)
+      await createUserDeactivation(handle.db).deactivate(ada.id, 1_000)
+      expect(await admins.appoint(cy.id, ada.id)).toBe('not-an-administrator')
+      expect(await admins.isAppointed(cy.id)).toBe(false)
+    })
+
+    it('counts an actor the configuration names as administering', async () => {
+      const configured = createTenantAdministratorStore(handle.db, {
+        configuredAdministrators: [passkeyBinding('https://a.example', 'cy')],
+      })
+      const [bob, cy] = [await user('bob'), await user('cy')]
+      expect(await configured.appoint(bob.id, cy.id)).toBe('appointed')
+      expect(await admins.isAppointed(bob.id)).toBe(true)
+    })
   })
 
   it('dismisses, and answers whether there was anyone to dismiss', async () => {

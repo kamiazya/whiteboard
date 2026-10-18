@@ -146,8 +146,11 @@ export interface PeopleAdministration {
       >
   >
   /** `changed` is false when they were not deactivated. */
-  reactivate(userId: string): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user'>>
-  appoint(userId: string, by: By): Promise<Done | Refused<'unknown_user'>>
+  reactivate(
+    userId: string,
+    by: By,
+  ): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user' | 'not_an_administrator'>>
+  appoint(userId: string, by: By): Promise<Done | Refused<'unknown_user' | 'not_an_administrator'>>
   dismiss(
     userId: string,
     by: By,
@@ -196,15 +199,20 @@ export function createPeopleAdministration(deps: PeopleAdministrationDeps): Peop
       )
     },
 
-    async reactivate(userId) {
+    async reactivate(userId, by) {
       if (!(await isUser(userId))) return unknown
-      return { kind: 'done', changed: await deps.deactivation.reactivate(userId) }
+      if (by === null) {
+        return { kind: 'done', changed: await deps.deactivation.reactivate(userId) }
+      }
+      const outcome = await deps.deactivation.reactivateAsAdministrator(userId, by)
+      if (outcome === 'not-an-administrator') return NOT_AN_ADMINISTRATOR
+      return { kind: 'done', changed: outcome === 'reactivated' }
     },
 
     async appoint(userId, by) {
       if (!(await isUser(userId))) return unknown
-      await deps.appointments.appoint(userId, by)
-      return { kind: 'done' }
+      const outcome = await deps.appointments.appoint(userId, by)
+      return outcome === 'not-an-administrator' ? NOT_AN_ADMINISTRATOR : { kind: 'done' }
     },
 
     async dismiss(userId, by) {
@@ -223,25 +231,33 @@ export function createPeopleAdministration(deps: PeopleAdministrationDeps): Peop
 type WorkspaceRole = WorkspaceMember['role']
 
 /**
- * What may be done to one workspace's people, once the caller is known to be
- * allowed to do it. WHETHER a caller may — an owner of this workspace, or the
- * operator at the machine — is the keeper's authority and stays with the
- * surface, so `not_an_owner` is not a refusal here. The rest are the rules about the people themselves, written
- * once for the HTTP route and the operator's command line.
+ * What may be done to one workspace's people. WHETHER a caller may — an owner
+ * of this workspace, or the operator at the machine — is the keeper's
+ * authority and the surface asks it first; each change then names who is
+ * acting (`by`, null for the operator) and is refused `not_an_owner` when that
+ * owner stopped owning the workspace between the two. The rest are the rules
+ * about the people themselves, written once for the HTTP route and the
+ * operator's command line.
  */
 export interface WorkspacePeopleAdministration {
   /** Admits a user as a member; a workspace's first member is its owner. */
-  add(workspaceId: string, userId: string): Promise<Done | Refused<'unknown_user'>>
+  add(
+    workspaceId: string,
+    userId: string,
+    by: By,
+  ): Promise<Done | Refused<'unknown_user' | 'not_an_owner'>>
   /** The product never leaves a workspace without an owner (ADR-0049). */
   changeRole(
     workspaceId: string,
     userId: string,
     role: WorkspaceRole,
-  ): Promise<Done | Refused<'not_a_member' | 'last_owner'>>
+    by: By,
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner'>>
   remove(
     workspaceId: string,
     userId: string,
-  ): Promise<Done | Refused<'not_a_member' | 'last_owner'>>
+    by: By,
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner'>>
   /**
    * The operator admits a person, and when no active owner is left makes them
    * the owner: a member could not manage the people of the workspace this was
@@ -250,38 +266,52 @@ export interface WorkspacePeopleAdministration {
   grant(workspaceId: string, userId: string): Promise<Done | Refused<'unknown_user'>>
 }
 
+const WORKSPACE_REFUSALS = {
+  'not-a-member': 'not_a_member',
+  'last-owner': 'last_owner',
+  'not-an-owner': 'not_an_owner',
+} as const
+
 export function createWorkspacePeopleAdministration(deps: {
   readonly members: Pick<MemberProfileStore, 'addMember'>
   readonly roles: WorkspaceRoles
 }): WorkspacePeopleAdministration {
   const { members, roles } = deps
-  const refusedChange = (why: 'not-a-member' | 'last-owner') =>
-    ({
-      kind: 'refused',
-      reason: why === 'not-a-member' ? 'not_a_member' : 'last_owner',
-    }) as const
-  const add: WorkspacePeopleAdministration['add'] = async (workspaceId, userId) => {
-    if (!(await roles.isUser(userId))) return { kind: 'refused', reason: 'unknown_user' }
-    await members.addMember(workspaceId, userId)
-    return { kind: 'done' }
-  }
+  const answer = (change: Awaited<ReturnType<WorkspaceRoles['setRole']>>) =>
+    change === 'ok'
+      ? ({ kind: 'done' } as const)
+      : ({ kind: 'refused', reason: WORKSPACE_REFUSALS[change] } as const)
 
   return {
-    add,
-
-    async changeRole(workspaceId, userId, role) {
-      const changed = await roles.setRole(workspaceId, userId, role)
-      return changed === 'ok' ? { kind: 'done' } : refusedChange(changed)
+    async add(workspaceId, userId, by) {
+      if (!(await roles.isUser(userId))) return { kind: 'refused', reason: 'unknown_user' }
+      if (by === null) {
+        await members.addMember(workspaceId, userId)
+        return { kind: 'done' }
+      }
+      const added = await roles.addAsOwner(workspaceId, userId, by)
+      return added === 'ok' ? { kind: 'done' } : { kind: 'refused', reason: 'not_an_owner' }
     },
 
-    async remove(workspaceId, userId) {
-      const removed = await roles.remove(workspaceId, userId)
-      return removed === 'ok' ? { kind: 'done' } : refusedChange(removed)
+    async changeRole(workspaceId, userId, role, by) {
+      return answer(
+        by === null
+          ? await roles.setRole(workspaceId, userId, role)
+          : await roles.setRoleAsOwner(workspaceId, userId, role, by),
+      )
+    },
+
+    async remove(workspaceId, userId, by) {
+      return answer(
+        by === null
+          ? await roles.remove(workspaceId, userId)
+          : await roles.removeAsOwner(workspaceId, userId, by),
+      )
     },
 
     async grant(workspaceId, userId) {
-      const added = await add(workspaceId, userId)
-      if (added.kind === 'refused') return added
+      if (!(await roles.isUser(userId))) return { kind: 'refused', reason: 'unknown_user' }
+      await members.addMember(workspaceId, userId)
       const owned = (await roles.list(workspaceId)).some(
         (member) => member.role === 'owner' && !member.deactivated,
       )
@@ -299,9 +329,14 @@ export function createWorkspacePeopleAdministration(deps: {
 export async function deletePerson(
   deletion: UserDeletion,
   userId: string,
-): Promise<Done | Refused<'unknown_user' | 'not_deactivated'> | SoleOwner> {
-  const outcome = await deletion.delete(userId)
+  by: By,
+): Promise<
+  Done | Refused<'unknown_user' | 'not_deactivated' | 'not_an_administrator'> | SoleOwner
+> {
+  const outcome = await deletion.delete(userId, by)
   switch (outcome.kind) {
+    case 'not-an-administrator':
+      return NOT_AN_ADMINISTRATOR
     case 'deleted':
       return { kind: 'done' }
     case 'unknown-user':

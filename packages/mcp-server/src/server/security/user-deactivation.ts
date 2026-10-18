@@ -28,7 +28,15 @@ export interface UserDeactivation {
   ): Promise<KeptAdministrator>
   /** False when there is no such user or they are not deactivated. */
   reactivate(profileId: string): Promise<boolean>
+  /**
+   * `reactivate` on behalf of the administrator `by`, refused when `by` no
+   * longer administers the tenant — what an administrator's request goes
+   * through. The operator reactivates through `reactivate`.
+   */
+  reactivateAsAdministrator(profileId: string, by: string): Promise<Reactivation>
 }
+
+type Reactivation = 'reactivated' | 'unchanged' | 'not-an-administrator'
 
 interface UserDeactivationOptions {
   /** The administrators the sign-in configuration names (ADR-0049 decision 2). */
@@ -130,6 +138,24 @@ export function actorAdministers(configured: readonly AuthenticatorBinding[], ac
   )
 }
 
+/**
+ * `actorAdministers` as a read, for a write the guard cannot ride in — an
+ * insert, which the tenant scope does not take from a select, or a change of
+ * many rows. Deciding a write, it is called inside the transaction making it:
+ * a transaction here takes the write lock as it begins (`BEGIN IMMEDIATE`,
+ * busy-retry.ts), so nothing commits between this and the change.
+ */
+export async function administersNow(
+  trx: TenantScoped,
+  configured: readonly AuthenticatorBinding[],
+  actorId: string,
+): Promise<boolean> {
+  const row = await trx
+    .selectNoFrom(actorAdministers(configured, actorId).as('administers'))
+    .executeTakeFirst()
+  return Boolean(row?.administers)
+}
+
 // The guard the deactivating UPDATE carries: the row may change unless it is
 // an administrator's and no other active one remains. One statement, as
 // workspace-roles.ts's keepsAnOwner, so two administrators deactivating each
@@ -179,6 +205,21 @@ function deactivateRow(
   })
 }
 
+async function reactivateRow(
+  db: TenantScoped,
+  actor: { readonly configured: readonly AuthenticatorBinding[]; readonly by: string } | null,
+  profileId: string,
+): Promise<boolean> {
+  let update = db
+    .updateTable('memberProfiles')
+    .set({ deactivatedAt: null })
+    .where('id', '=', profileId)
+    .where('deactivatedAt', 'is not', null)
+  if (actor !== null) update = update.where(actorAdministers(actor.configured, actor.by))
+  const cleared = await update.returning('id').execute()
+  return cleared.length > 0
+}
+
 export function createUserDeactivation(
   db: TenantScoped,
   options: UserDeactivationOptions = {},
@@ -201,15 +242,12 @@ export function createUserDeactivation(
       return row.last ? 'last-administrator' : 'not-an-administrator'
     },
 
-    async reactivate(profileId) {
-      const cleared = await db
-        .updateTable('memberProfiles')
-        .set({ deactivatedAt: null })
-        .where('id', '=', profileId)
-        .where('deactivatedAt', 'is not', null)
-        .returning('id')
-        .execute()
-      return cleared.length > 0
+    reactivate: (profileId) => reactivateRow(db, null, profileId),
+
+    async reactivateAsAdministrator(profileId, by) {
+      if (await reactivateRow(db, { configured, by }, profileId)) return 'reactivated'
+      // Read after the fact, so it names why nothing changed and decides nothing.
+      return (await administersNow(db, configured, by)) ? 'unchanged' : 'not-an-administrator'
     },
   }
 }

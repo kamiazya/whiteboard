@@ -138,14 +138,16 @@ async function readWriteBody(
 const quoted = (keys: readonly string[]): string => keys.map((key) => `"${key}"`).join(', ')
 
 function readsQuery(allowed: readonly string[]): MiddlewareHandler {
-  return async (c, next) => {
+  return (c, next) => {
     const unknown = Object.keys(c.req.queries()).filter((key) => !allowed.includes(key))
     if (unknown.length === 0) return next()
     const read =
       allowed.length === 0 ? 'this route reads no query string' : `it reads ${allowed.join(', ')}`
-    return c.json(
-      errorBody('invalid_request', `unknown query parameter ${quoted(unknown)}; ${read}`),
-      400,
+    return Promise.resolve(
+      c.json(
+        errorBody('invalid_request', `unknown query parameter ${quoted(unknown)}; ${read}`),
+        400,
+      ),
     )
   }
 }

@@ -170,7 +170,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   // (fail closed), never silently to a default-allow.
   // Pinned separately from the walk above: the walk proves every mounted
   // route HAS a decision, not that the decision is the right one.
-  it('v1 document routes carry the same workspace scopes as their path-addressed twins', () => {
+  it('v1 placement routes carry the same workspace scopes as their path-addressed twins', () => {
     const read = { kind: 'scoped', scopes: ['workspace:read'] }
     const write = { kind: 'scoped', scopes: ['workspace:write'] }
     const doc = '/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -179,15 +179,31 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('POST', '/api/v1/workspaces/default/documents')).toEqual(write)
     expect(resolveApiRouteScope('GET', doc)).toEqual(read)
     expect(resolveApiRouteScope('DELETE', doc)).toEqual(write)
-    expect(resolveApiRouteScope('GET', `${doc}/backlinks`)).toEqual(read)
-    expect(resolveApiRouteScope('GET', `${doc}/okf`)).toEqual(read)
-    expect(resolveApiRouteScope('POST', `${doc}/linkify-mentions`)).toEqual(write)
-    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/search')).toEqual(read)
-    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/document-tags')).toEqual(read)
 
     // The same document reached by path gets the same answer — the point of
     // giving v1 the workspace scopes rather than scopes of its own.
     expect(resolveApiRouteScope('GET', '/api/workspaces/default/documents')).toEqual(read)
+  })
+
+  // What a document SAYS is canvas:read's on every other surface — the
+  // snapshot route, wb_document_get, wb_document_search — so a grant that may
+  // only list documents must not read their content here either.
+  it('v1 routes answering with document content need the canvas scopes', () => {
+    const read = { kind: 'scoped', scopes: ['canvas:read'] }
+    const write = { kind: 'scoped', scopes: ['canvas:write'] }
+    const doc = '/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+    expect(resolveApiRouteScope('GET', `${doc}/okf`)).toEqual(read)
+    expect(resolveApiRouteScope('GET', `${doc}/backlinks`)).toEqual(read)
+    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/search')).toEqual(read)
+    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/document-tags')).toEqual(read)
+    expect(resolveApiRouteScope('POST', `${doc}/linkify-mentions`)).toEqual(write)
+    // A document whose id is spelled like one of those tails is still a
+    // placement route.
+    expect(resolveApiRouteScope('DELETE', '/api/v1/workspaces/default/documents/search')).toEqual({
+      kind: 'scoped',
+      scopes: ['workspace:write'],
+    })
   })
 
   it('the removed reconnect routes now resolve to null, not a stale decision', () => {
@@ -373,6 +389,13 @@ const SCOPE_DECISIONS = [
     scoped('runtime:admin'),
   ],
   ['workspace replica-tier', 'PUT', '/api/workspaces/ws1/replica-tier', scoped('runtime:admin')],
+  ['v1 document content', 'GET', '/api/v1/workspaces/ws1/search', scoped('canvas:read')],
+  [
+    'v1 document content',
+    'POST',
+    '/api/v1/workspaces/ws1/documents/d1/linkify-mentions',
+    scoped('canvas:write'),
+  ],
   ['workspaces (rest)', 'GET', '/api/workspaces/ws1', scoped('workspace:read')],
   ['workspaces (rest)', 'GET', '/api/workspaces/ws1/trash', scoped('workspace:read')],
   ['workspaces (rest)', 'PATCH', '/api/workspaces/ws1', scoped('workspace:write')],
@@ -474,6 +497,7 @@ const CLAIMED_BY = {
   'workspace replica-key': ['POST', '/api/workspaces/ws1/replica-key'],
   'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
+  'v1 document content': ['GET', '/api/v1/workspaces/ws1/documents/d1/okf'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
   'tenant people': ['PUT', '/api/people/u1/administrator'],
   'runtime (rest)': ['GET', '/api/runtime/status'],
@@ -519,6 +543,7 @@ const GATED = [
   'versions/prune-sandwiched',
   'files/purge-dangling',
   'documents/optimize-all',
+  'v1 document content',
   'workspaces (rest)',
 ]
 

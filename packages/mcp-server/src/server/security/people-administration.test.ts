@@ -197,8 +197,14 @@ describe('deactivating a person', () => {
 
   it('reactivates a user, and refuses one this keeper does not have', async () => {
     await people.deactivate(ids.bob as string, null, NOW)
-    expect(await people.reactivate(ids.bob as string)).toEqual({ kind: 'done', changed: true })
-    expect(await people.reactivate('nobody')).toEqual({ kind: 'refused', reason: 'unknown_user' })
+    expect(await people.reactivate(ids.bob as string, ids.ada as string)).toEqual({
+      kind: 'done',
+      changed: true,
+    })
+    expect(await people.reactivate('nobody', ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'unknown_user',
+    })
   })
 })
 
@@ -296,6 +302,35 @@ describe('administrators acting on each other at once', () => {
     expect(await members.isDeactivated(binding('bob'))).toBe(false)
   })
 
+  it('refuses an appointment by someone dismissed since they were authorized', async () => {
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await people.appoint(ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await appointments.isAppointed(ids.cy as string)).toBe(false)
+  })
+
+  it('refuses a reactivation by someone dismissed since they were authorized', async () => {
+    await people.deactivate(ids.cy as string, null, NOW)
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await people.reactivate(ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await members.isDeactivated(binding('cy'))).toBe(true)
+  })
+
+  it('refuses a deletion by someone dismissed since they were authorized', async () => {
+    await people.deactivate(ids.cy as string, null, NOW)
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await deletePerson(deletion, ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect((await members.listUsers()).map((u) => u.id)).toContain(ids.cy)
+  })
+
   it('lets the operator dismiss the last administrator', async () => {
     expect(await people.dismiss(ids.bob as string, null)).toEqual({ kind: 'done' })
     expect(await people.dismiss(ids.ada as string, null)).toEqual({ kind: 'done' })
@@ -304,17 +339,19 @@ describe('administrators acting on each other at once', () => {
 
 describe('deleting a person', () => {
   it('refuses a user who is still active, then deletes them once deactivated', async () => {
-    expect(await deletePerson(deletion, ids.bob as string)).toEqual({
+    expect(await deletePerson(deletion, ids.bob as string, ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'not_deactivated',
     })
     await people.deactivate(ids.bob as string, null, NOW)
-    expect(await deletePerson(deletion, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await deletePerson(deletion, ids.bob as string, ids.ada as string)).toEqual({
+      kind: 'done',
+    })
     expect((await members.listUsers()).map((u) => u.id)).not.toContain(ids.bob)
   })
 
   it('refuses someone who is not a user here', async () => {
-    expect(await deletePerson(deletion, 'nobody')).toEqual({
+    expect(await deletePerson(deletion, 'nobody', ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'unknown_user',
     })
@@ -324,7 +361,7 @@ describe('deleting a person', () => {
     const soleOwner: UserDeletion = {
       delete: async () => ({ kind: 'sole-owner', workspaceIds: ['ws-a', 'ws-b'] }),
     }
-    expect(await deletePerson(soleOwner, ids.bob as string)).toEqual({
+    expect(await deletePerson(soleOwner, ids.bob as string, ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'sole_owner',
       workspaceIds: ['ws-a', 'ws-b'],
@@ -361,14 +398,14 @@ describe('a workspace’s people', () => {
 
   describe('adding', () => {
     it('admits a user, as the workspace’s first member the owner and afterwards a member', async () => {
-      expect(await workspacePeople.add(WS, ids.ada as string)).toEqual({ kind: 'done' })
-      expect(await workspacePeople.add(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await workspacePeople.add(WS, ids.ada as string, null)).toEqual({ kind: 'done' })
+      expect(await workspacePeople.add(WS, ids.bob as string, null)).toEqual({ kind: 'done' })
       expect(await roleOf('ada')).toBe('owner')
       expect(await roleOf('bob')).toBe('member')
     })
 
     it('refuses someone who is not a user here, and admits nobody', async () => {
-      expect(await workspacePeople.add(WS, 'nobody')).toEqual({
+      expect(await workspacePeople.add(WS, 'nobody', null)).toEqual({
         kind: 'refused',
         reason: 'unknown_user',
       })
@@ -378,29 +415,37 @@ describe('a workspace’s people', () => {
 
   describe('changing a role', () => {
     beforeEach(async () => {
-      await workspacePeople.add(WS, ids.ada as string)
-      await workspacePeople.add(WS, ids.bob as string)
+      await workspacePeople.add(WS, ids.ada as string, null)
+      await workspacePeople.add(WS, ids.bob as string, null)
     })
 
     it('makes a member an owner, and an owner a member while another owner remains', async () => {
-      expect(await workspacePeople.changeRole(WS, ids.bob as string, 'owner')).toEqual({
+      expect(
+        await workspacePeople.changeRole(WS, ids.bob as string, 'owner', ids.ada as string),
+      ).toEqual({
         kind: 'done',
       })
-      expect(await workspacePeople.changeRole(WS, ids.ada as string, 'member')).toEqual({
+      expect(
+        await workspacePeople.changeRole(WS, ids.ada as string, 'member', ids.ada as string),
+      ).toEqual({
         kind: 'done',
       })
       expect([await roleOf('ada'), await roleOf('bob')]).toEqual(['member', 'owner'])
     })
 
     it('refuses someone who is not a member of this workspace', async () => {
-      expect(await workspacePeople.changeRole(WS, ids.cy as string, 'owner')).toEqual({
+      expect(
+        await workspacePeople.changeRole(WS, ids.cy as string, 'owner', ids.ada as string),
+      ).toEqual({
         kind: 'refused',
         reason: 'not_a_member',
       })
     })
 
     it('refuses to demote the last owner', async () => {
-      expect(await workspacePeople.changeRole(WS, ids.ada as string, 'member')).toEqual({
+      expect(
+        await workspacePeople.changeRole(WS, ids.ada as string, 'member', ids.ada as string),
+      ).toEqual({
         kind: 'refused',
         reason: 'last_owner',
       })
@@ -410,28 +455,66 @@ describe('a workspace’s people', () => {
 
   describe('removing', () => {
     beforeEach(async () => {
-      await workspacePeople.add(WS, ids.ada as string)
-      await workspacePeople.add(WS, ids.bob as string)
+      await workspacePeople.add(WS, ids.ada as string, null)
+      await workspacePeople.add(WS, ids.bob as string, null)
     })
 
     it('removes a member', async () => {
-      expect(await workspacePeople.remove(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await workspacePeople.remove(WS, ids.bob as string, ids.ada as string)).toEqual({
+        kind: 'done',
+      })
       expect(await roleOf('bob')).toBeUndefined()
     })
 
     it('refuses someone who is not a member of this workspace', async () => {
-      expect(await workspacePeople.remove(WS, ids.cy as string)).toEqual({
+      expect(await workspacePeople.remove(WS, ids.cy as string, ids.ada as string)).toEqual({
         kind: 'refused',
         reason: 'not_a_member',
       })
     })
 
     it('refuses to remove the last owner', async () => {
-      expect(await workspacePeople.remove(WS, ids.ada as string)).toEqual({
+      expect(await workspacePeople.remove(WS, ids.ada as string, ids.ada as string)).toEqual({
         kind: 'refused',
         reason: 'last_owner',
       })
       expect(await roleOf('ada')).toBe('owner')
+    })
+  })
+
+  // The route asks whether the caller owns the workspace before the change
+  // runs; an owner demoted, removed or deactivated in between must not land it.
+  describe('an owner who stopped owning since they were authorized', () => {
+    const notAnOwner = { kind: 'refused', reason: 'not_an_owner' }
+    beforeEach(async () => {
+      await workspacePeople.add(WS, ids.ada as string, null)
+      await workspacePeople.add(WS, ids.bob as string, ids.ada as string)
+      await workspacePeople.changeRole(WS, ids.bob as string, 'owner', ids.ada as string)
+      await workspacePeople.changeRole(WS, ids.ada as string, 'member', ids.bob as string)
+    })
+
+    it('cannot make anyone an owner', async () => {
+      expect(
+        await workspacePeople.changeRole(WS, ids.ada as string, 'owner', ids.ada as string),
+      ).toEqual(notAnOwner)
+      expect(await roleOf('ada')).toBe('member')
+    })
+
+    it('cannot remove anyone', async () => {
+      expect(await workspacePeople.remove(WS, ids.bob as string, ids.ada as string)).toEqual(
+        notAnOwner,
+      )
+      expect(await roleOf('bob')).toBe('owner')
+    })
+
+    it('cannot add anyone', async () => {
+      expect(await workspacePeople.add(WS, ids.cy as string, ids.ada as string)).toEqual(notAnOwner)
+      expect(await roleOf('cy')).toBeUndefined()
+    })
+
+    it('counts a deactivated owner as owning nothing', async () => {
+      await people.deactivate(ids.bob as string, null, NOW)
+      expect(await workspacePeople.add(WS, ids.cy as string, ids.bob as string)).toEqual(notAnOwner)
     })
   })
 
@@ -440,13 +523,13 @@ describe('a workspace’s people', () => {
   // workspace the grant was run to recover.
   describe('granting as the operator', () => {
     it('makes the person a plain member while an active owner remains', async () => {
-      await workspacePeople.add(WS, ids.ada as string)
+      await workspacePeople.add(WS, ids.ada as string, null)
       expect(await workspacePeople.grant(WS, ids.bob as string)).toEqual({ kind: 'done' })
       expect(await roleOf('bob')).toBe('member')
     })
 
     it('makes the person the owner when every owner is deactivated', async () => {
-      await workspacePeople.add(WS, ids.ada as string)
+      await workspacePeople.add(WS, ids.ada as string, null)
       await people.deactivate(ids.ada as string, null, NOW)
       expect(await workspacePeople.grant(WS, ids.bob as string)).toEqual({ kind: 'done' })
       expect(await roleOf('bob')).toBe('owner')
