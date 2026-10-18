@@ -28,8 +28,9 @@ import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
 import type { UserDeletion } from './user-deletion.js'
-import { membershipRefusal, OPERATOR_ISSUED_KINDS } from './workspace-access.js'
+import { membershipRefusal } from './workspace-access.js'
 import type { WorkspaceRoles } from './workspace-roles.js'
+import { membershipRecheck } from './write-admission.js'
 
 const log = getLogger('membership-gate')
 
@@ -225,21 +226,15 @@ async function whileStillAdmitted(
   next: Next,
 ): Promise<void> {
   if (READS.has(c.req.method.toUpperCase())) return next()
-  if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return next()
-  if (grant.person === undefined) return next()
-  const workspaceId = await gatedWorkspaceOf(c)
-  if (workspaceId === null) return next()
-  const userId = (await members.profileForBinding(grant.person))?.id
-  if (userId === undefined) return next()
-  const admit = async (writing: string) => {
-    if (writing !== workspaceId) return
-    if (await members.holdsAccess(workspaceId, userId)) return
+  const workspaceOf = () => gatedWorkspaceOf(c)
+  const admit = await membershipRecheck(grant, members, workspaceOf, (workspaceId) => {
     log.warning(
       { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: 'not_a_member' },
       'write refused: membership ended while the request was in flight',
     )
-    throw new HTTPException(403, { res: c.json(membershipRefusal('not_a_member'), 403) })
-  }
+    return new HTTPException(403, { res: c.json(membershipRefusal('not_a_member'), 403) })
+  })
+  if (admit === null) return next()
   await runWithWriteAdmission(admit, next)
 }
 
