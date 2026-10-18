@@ -104,6 +104,9 @@ const SHAPES = [
   // Each unmatched closer walks back over every event of the run.
   { name: 'emphasis closers after escapes', body: `${'\\*'.repeat(16_000)}${'a* '.repeat(256)}` },
   { name: 'label ends after escapes', body: `${'\\*'.repeat(16_000)}${'a] '.repeat(256)}` },
+  // Every word may start a GFM email autolink, which first walks back for an
+  // open label start, and an open one stops no walk short of itself.
+  { name: 'words after an open label', body: `[${'a '.repeat(1_500)}` },
   // A balanced label and a formed link leave no start for those closers.
   {
     name: 'label ends after escapes and closed labels',
