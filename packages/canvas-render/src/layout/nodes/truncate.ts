@@ -139,6 +139,9 @@ export function fitToWidth(
   const units = cutUnits(text)
   const ends: number[] = [0]
   let exhausted = false
+  // Stopping at `count` is laziness, not correctness: segmenting the whole
+  // text up front yields the same ends, so only the work differs — and the
+  // segmenter is not something a measurer can count.
   const endOf = (count: number): number | undefined => {
     while (!exhausted && ends.length <= count) {
       const next = units.next()

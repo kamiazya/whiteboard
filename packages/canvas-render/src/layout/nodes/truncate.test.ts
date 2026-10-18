@@ -80,6 +80,20 @@ describe('fitToWidth: text that overflows', () => {
     // prefix that measures exactly `maxWidth` is dropped for no reason.
     expect(fit('abcdef', 20)).toEqual({ text: 'ab', truncated: true })
   })
+
+  it('measures the whole text once, however far the search probes', () => {
+    // The opening check already measured the whole text and found it too
+    // wide, so a probe that reaches it is answered without a second look.
+    // The cut is the same either way; what this pins is the price.
+    const measured: string[] = []
+    const recording: MeasureText = (text, f) => {
+      measured.push(text)
+      return measure(text, f)
+    }
+
+    expect(fitToWidth('abcdef', font, recording, 55)).toEqual({ text: 'abcde', truncated: true })
+    expect(measured.filter((text) => text === 'abcdef')).toHaveLength(1)
+  })
 })
 
 describe('fitToWidth: never empty', () => {

@@ -341,6 +341,13 @@ export const KNOWN_EQUIVALENT = {
     'EqualityOperator: code === 0x000d -> code !== 0x000d': 1,
     'EqualityOperator: i < text.length -> i <= text.length': 1,
     "ObjectLiteral: { granularity: 'grapheme' } -> {}": 1,
+    'ConditionalExpression: ends.length <= count -> true': 1,
+  },
+  // Its upper bound once every prefix fits is any count past `lo`; the
+  // bisection never runs from there. Verified by applying the edit and
+  // running canvas-render-node, which stays green.
+  'src/layout/nodes/longest-fit.ts': {
+    'ArithmeticOperator: limit + 1 -> limit - 1': 1,
   },
   // A placed bubble sits a whole offset to one side of its anchor on each
   // axis, so the anchor is never on a centre line and `<=` cannot differ from

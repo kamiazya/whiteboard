@@ -43,6 +43,9 @@ function gallopUp(fits: (n: number) => boolean, from: number, limit: number): [n
     if (!fits(probe)) return [lo, probe]
     lo = probe
   }
+  // Every prefix up to `limit` fits. Any upper bound at most one past `lo`
+  // ends the bisection with `lo` unchanged, so `limit + 1` names the
+  // first count that cannot exist rather than steering the search.
   return [lo, limit + 1]
 }
 
