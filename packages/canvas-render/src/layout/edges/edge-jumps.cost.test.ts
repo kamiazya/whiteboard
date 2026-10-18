@@ -10,7 +10,9 @@ import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it, vi } from 'vitest'
 import { computeEdgeJumps } from './edge-jumps.js'
 
-const narrowTests = vi.hoisted(() => ({ count: 0 }))
+// `budget` makes a runaway narrow phase throw rather than grind through
+// billions of pairs: the work is synchronous, so no timeout can stop it.
+const narrowTests = vi.hoisted(() => ({ count: 0, budget: Number.POSITIVE_INFINITY }))
 
 vi.mock('./segment-intersection.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./segment-intersection.js')>()
@@ -18,6 +20,9 @@ vi.mock('./segment-intersection.js', async (importOriginal) => {
     ...actual,
     segmentIntersection: (...args: Parameters<typeof actual.segmentIntersection>) => {
       narrowTests.count++
+      if (narrowTests.count > narrowTests.budget) {
+        throw new Error(`narrow-phase budget of ${narrowTests.budget} exceeded`)
+      }
       return actual.segmentIntersection(...args)
     },
   }
@@ -73,24 +78,32 @@ function staircase(id: string, ox: number, oy: number): ResolvedEdgeNode {
   return routed(id, path)
 }
 
+const BOARD_CELLS = 1000
+
+/**
+ * 1000 staircases of 64 bends, each in its own 2000px cell, and one short
+ * later edge per cell crossing its staircase's first step: 2000 edges,
+ * 66_000 segments, exactly one real crossing per cell.
+ */
+function staircaseBoard(): ResolvedEdgeNode[] {
+  const edges: ResolvedEdgeNode[] = []
+  for (let i = 0; i < BOARD_CELLS; i++) {
+    const ox = (i % 40) * 2000
+    const oy = Math.floor(i / 40) * 2000
+    edges.push(staircase(`s${i}`, ox, oy))
+    edges.push(
+      routed(`c${i}`, [
+        { x: ox + STEP_PX / 2, y: oy - 30 },
+        { x: ox + STEP_PX / 2, y: oy + 30 },
+      ]),
+    )
+  }
+  return edges
+}
+
 describe('computeEdgeJumps cost', () => {
   it('tests a bounded number of segment pairs per segment when edges keep apart', () => {
-    // 1000 staircases of 64 bends, each in its own 2000px cell, and one short
-    // later edge per cell crossing its staircase's first step: 2000 edges,
-    // 66_000 segments, exactly one real crossing per cell.
-    const cells = 1000
-    const edges: ResolvedEdgeNode[] = []
-    for (let i = 0; i < cells; i++) {
-      const ox = (i % 40) * 2000
-      const oy = Math.floor(i / 40) * 2000
-      edges.push(staircase(`s${i}`, ox, oy))
-      edges.push(
-        routed(`c${i}`, [
-          { x: ox + STEP_PX / 2, y: oy - 30 },
-          { x: ox + STEP_PX / 2, y: oy + 30 },
-        ]),
-      )
-    }
+    const edges = staircaseBoard()
     const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
 
     narrowTests.count = 0
@@ -98,10 +111,10 @@ describe('computeEdgeJumps cost', () => {
 
     // The subject is present: every crosser still hops its staircase, and
     // nothing else hops at all.
-    expect(jumps.size).toBe(cells)
+    expect(jumps.size).toBe(BOARD_CELLS)
     expect(jumps.get('c0')).toEqual([{ segment: 0, x: STEP_PX / 2, y: 0 }])
     expect(jumps.get('c999')).toEqual([{ segment: 0, x: 39 * 2000 + STEP_PX / 2, y: 24 * 2000 }])
-    expect(narrowTests.count).toBeGreaterThanOrEqual(cells)
+    expect(narrowTests.count).toBeGreaterThanOrEqual(BOARD_CELLS)
     // All pairs is about segments² / 2 — 2.2e9 here; 3_268 per segment at a
     // tenth of this size. Measured 1_950 in all behind the grid.
     expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
@@ -109,6 +122,47 @@ describe('computeEdgeJumps cost', () => {
     // Each segment reads its cells twice, to find candidates and to enter
     // itself. Measured 4.17 per segment.
     expect(visits / segments).toBeLessThanOrEqual(8)
+  })
+
+  it.each([
+    {
+      name: 'a zero-length line',
+      far: [
+        { x: -(2 ** 60), y: -(2 ** 60) },
+        { x: -(2 ** 60), y: -(2 ** 60) },
+      ],
+    },
+    {
+      name: 'a short line',
+      far: [
+        { x: -(2 ** 60), y: -(2 ** 60) },
+        { x: -(2 ** 60) + 256, y: -(2 ** 60) },
+      ],
+    },
+    {
+      name: 'a short line past 1e300',
+      far: [
+        { x: -1e300, y: 1e300 },
+        { x: -1e300 + 1e290, y: 1e300 },
+      ],
+    },
+  ])('keeps the same bounded pair count beside $name far away', ({ far }) => {
+    // One outlier must not change what the board's own segments cost: the
+    // board is the fixture above, untouched.
+    const edges = [routed('far', far), ...staircaseBoard()]
+    const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
+
+    narrowTests.count = 0
+    narrowTests.budget = segments
+    try {
+      const { jumps, visits } = jumpsWithinCellBudget(edges, 64 * segments)
+      expect(jumps.size).toBe(BOARD_CELLS)
+      expect(jumps.get('c999')).toEqual([{ segment: 0, x: 39 * 2000 + STEP_PX / 2, y: 24 * 2000 }])
+      expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
+      expect(visits / segments).toBeLessThanOrEqual(8)
+    } finally {
+      narrowTests.budget = Number.POSITIVE_INFINITY
+    }
   })
 
   it('caps the hops one segment draws', () => {
