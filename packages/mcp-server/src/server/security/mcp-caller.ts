@@ -167,27 +167,39 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       ...tool,
       execute: (input: never) => {
         const caller = callers.getStore()
-        if (caller === undefined) {
-          const scopes = scopedCalls.getStore()
-          const narrow = scopes === undefined ? null : scopeRefusal(scopes, tool.name, input)
-          return narrow === null ? tool.execute(input) : Promise.reject(narrow)
-        }
-        const insufficient = scopeRefusal(caller.grant.scopes, tool.name, input)
-        if (insufficient !== null) return Promise.reject(insufficient)
-        const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
-        if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
-        if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
-          return tool.execute(input)
-        }
-        return Promise.reject(
-          new McpCallRefusalError(
-            `workspace_required: ${tool.name} must name the workspace it acts on`,
-          ),
-        )
+        return caller === undefined
+          ? ownersCall(tool, input)
+          : callerCall(caller, index, tool, input)
       },
     }
   }
   return wrapped as T
+}
+
+// No caller: the local daemon or stdio, whose owner reaches every workspace.
+// A narrow credential there is still held to the tool's scope.
+function ownersCall(tool: WorkspaceScopedTool, input: never): Promise<unknown> {
+  const scopes = scopedCalls.getStore()
+  const narrow = scopes === undefined ? null : scopeRefusal(scopes, tool.name, input)
+  return narrow === null ? tool.execute(input) : Promise.reject(narrow)
+}
+
+function callerCall(
+  caller: McpCaller,
+  index: GateIndex,
+  tool: WorkspaceScopedTool,
+  input: never,
+): Promise<unknown> {
+  const insufficient = scopeRefusal(caller.grant.scopes, tool.name, input)
+  if (insufficient !== null) return Promise.reject(insufficient)
+  const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
+  if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
+  if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
+    return tool.execute(input)
+  }
+  return Promise.reject(
+    new McpCallRefusalError(`workspace_required: ${tool.name} must name the workspace it acts on`),
+  )
 }
 
 async function gatedCall(
