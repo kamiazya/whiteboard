@@ -407,4 +407,31 @@ describe('wb_canvas_edit — node.add within a group', () => {
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
   })
+
+  for (const [axis, at] of [
+    ['y', { x: 0, y: 1e20 }],
+    ['x', { x: 1e20, y: 0 }],
+  ] as const) {
+    test(`refuses to place inside a group at ${axis} = 1e20, naming the way out`, async () => {
+      // Past about 2^60 adding a height and the gutter no longer moves a
+      // coordinate, so rows cannot be stacked and the group cannot grow to
+      // hold them: what the caller can change is the node's x/y or the group.
+      const store = new FakeDocumentStore()
+      await seedCanvas(store, { nodes: [], edges: [] })
+      const tool = createCanvasEditTool(makeDeps(store))
+
+      const attempt = tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          { op: 'node.add', node: { id: 'far', type: 'group', ...at, width: 400, height: 400 } },
+          { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'far' },
+        ],
+      })
+
+      await expect(attempt).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 1 })
+      await expect(attempt).rejects.toThrow(/explicit x\/y.*move the group/)
+    })
+  }
 })

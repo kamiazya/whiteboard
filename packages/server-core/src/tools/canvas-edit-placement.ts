@@ -190,6 +190,26 @@ export function placeWithin(
 }
 
 /**
+ * Why nothing can be placed inside `box`, or `undefined` when it can. Far
+ * enough from the origin (past about 2^60), adding a node's size and the
+ * gutter to a coordinate no longer changes it: rows would land on one
+ * another and the group could not grow to hold them. The caller can fix
+ * that and placement cannot, so it is refused with what to change.
+ */
+export function unplaceableWithin(
+  box: { id: string } & Rect,
+  sizes: readonly { width: number; height: number }[],
+): string | undefined {
+  const collapses = sizes.some(
+    (size) =>
+      box.x + size.width + PLACEMENT_GUTTER_PX === box.x ||
+      box.y + size.height + PLACEMENT_GUTTER_PX === box.y,
+  )
+  if (!collapses) return undefined
+  return `group "${box.id}" at (${box.x}, ${box.y}) is too far from the origin to place nodes inside it: at that magnitude adding a node's size does not move a coordinate. Give the node explicit x/y, or move the group nearer the origin`
+}
+
+/**
  * Where a slot search starts: a row's `y`, the `x` to try first, and — when
  * resuming partway along a row — the lowest bottom seen in it so far, which
  * is where the row after it starts.
@@ -204,9 +224,12 @@ interface RowCursor {
  * The first free slot for ONE box, scanning rows top to bottom from `from`.
  *
  * Each row is walked past whatever crowds the candidate, and when the row is
- * full the next starts under the LOWEST of what blocked it. Every hit sits at
- * or below `y` with the gutter, so the walk strictly advances and ends once
- * `y` is under everything taken. A row's first slot is tried even for a node
+ * full the next starts under the LOWEST of what blocked it. A candidate is
+ * crowded only when it starts before its blocker's far edge plus the gutter,
+ * which is where the next try starts, so each step past a blocker advances
+ * and the walk ends once `y` is under everything taken. That holds only while
+ * adding a size and the gutter moves a coordinate, which `unplaceableWithin`
+ * is the caller's check for. A row's first slot is tried even for a node
  * wider than the box, which overflows rather than never landing.
  *
  * Separated from `placeWithin` because that is the only thing the outer loop
