@@ -206,7 +206,12 @@ This needs no administrator rights: it writes the host's manifest at user
 level, naming only the whiteboard extension as allowed to start it, plus a
 small launcher that records which Node, which `whiteboard` install and which
 data directory the host relays to. Pass `--data-dir=<path>` if your daemon
-uses a data directory other than the default. Run it again after moving or
+uses a data directory other than the default. Run before the first
+`daemon run`, it names the same `~/.whiteboard` the daemon will create. The
+launcher is written only into a data directory that is yours and that other
+users cannot write — `install` makes it owner-only, and refuses one another
+user owns, one that is world-writable, a symlink, or an existing launcher
+that is a symlink or someone else's. Run it again after moving or
 reinstalling `whiteboard`, including when a new release replaces the copy it
 ran from.
 

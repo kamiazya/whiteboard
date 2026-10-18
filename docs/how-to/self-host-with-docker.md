@@ -737,6 +737,13 @@ docker exec whiteboard-server node dist/cli/index.js server stop --json
 `docker stop` sends SIGTERM to the container's PID 1 (the server process) and
 waits for it to exit cleanly. The server handles SIGTERM gracefully.
 
+A data directory you name — `--data-dir` or `WHITEBOARD_DATA_DIR`, as the
+image sets it — is used exactly as you set it up. Outside a container with
+neither, `server run`, `status` and `stop` use the default data directory and
+hold it to the local daemon's rule: it must be yours and not writable by other
+users, and a `server-mode.json` there that is not your own file is never acted
+on — `server stop` answers `server-record-unreadable` and signals nothing.
+
 ## Backup and restore
 
 The `whiteboard server backup` and `whiteboard server restore` CLI commands
@@ -809,6 +816,14 @@ reach the shared database skips the pass rather than assuming it is alone.
 
   `restore` still requires the target to be stopped and empty: it is putting
   a whole data directory back, not reading one.
+- **A backup is readable by its owner alone.** Every directory a pass
+  creates is `0700` and every file it writes — the database snapshot, the
+  copied tree, the blob mirror and its manifest — is `0600`, so a backup
+  directory under a path other users can traverse does not hand them its
+  documents. A `WHITEBOARD_BACKUP_DIR` that already exists keeps the mode you
+  gave it (a mounted volume's is the platform's to set), while the mirror's
+  `blobs/` and `files/` inside it are closed on every pass. Restore as the
+  same user that took the backup.
 - **A backup never carries a key or a live credential.** A backup directory
   is the opposite of owner-only — it is copied to another disk, shipped to
   support, kept for months — so three files are excluded, along with the
