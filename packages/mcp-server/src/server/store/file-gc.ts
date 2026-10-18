@@ -19,15 +19,15 @@ import { catchUpWorkspaceDoc, openWorkspaceDocIfStored } from './document-store.
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
-import type { VersionStore } from './version-store.js'
+import type { VersionCheckouts, VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Garbage-collect files in a workspace's files directory that no document
 // uses. Used means referenced by a live document, a trashed one (a restore
 // brings it back under the same id) or a saved version of either. The
 // version store is required: a pass without it would delete what a version
-// restore brings back, and walking it costs one Loro fork+checkout per
-// version.
+// restore brings back, and walking it costs one copy of the workspace
+// record per pass and one Loro checkout per distinct saved point.
 //
 // A scan that cannot read something it must judge (a version, a trash entry,
 // a workspace node this build does not understand) refuses to purge rather
@@ -197,9 +197,9 @@ export function incompleteFileGcScanErrorBody(
  * version store.
  *
  * **The `yieldToLoop()` between units is load-bearing, not tidiness.** This
- * is the expensive half of a purge — a fork and checkout of the workspace
- * record per version of every document — and every one of those is a
- * synchronous WASM call. The `await`s around them look like they let the
+ * is the expensive half of a purge — a checkout of the workspace record per
+ * saved point of every document — and every one of those is a synchronous
+ * WASM call. The `await`s around them look like they let the
  * daemon breathe and do not: the record is answered from the cached
  * workspace document and `versionStore.load` goes through a native binding,
  * so nothing in the chain ever reaches the timer phase, and the whole scan
@@ -256,9 +256,15 @@ function versionReads(
   workspaceId: string,
   versionStore: GcVersionReader,
 ): NonNullable<FileReferenceReads['versions']> {
+  // One copy of the record for the whole pass, opened on the first version:
+  // a copy per version costs the workspace once per version walked.
+  let checkouts: Promise<VersionCheckouts> | null = null
   return {
     list: (holder) => versionStore.listIdsByDocument(workspaceId, holder.documentId),
-    load: (_holder, versionId) => versionStore.load(workspaceId, versionId),
+    load: async (_holder, versionId) => {
+      checkouts ??= versionStore.openCheckouts(workspaceId)
+      return (await checkouts).load(versionId)
+    },
   }
 }
 
@@ -291,7 +297,7 @@ function logUnjudged(workspaceId: string, target: UnjudgedFileHolder): void {
  * caller (and a test double) supplies what the scan uses, and a new method on
  * `VersionStore` does not reach a fake that cannot know it.
  */
-export type GcVersionReader = Pick<VersionStore, 'listIdsByDocument' | 'load'>
+export type GcVersionReader = Pick<VersionStore, 'listIdsByDocument' | 'openCheckouts'>
 
 export interface PurgeFilesOptions {
   versionStore: GcVersionReader
@@ -384,8 +390,8 @@ function resolveGraceMs(options: PurgeFilesOptions): number {
 }
 
 /**
- * The fence between the reference scan and the unlinks. Collecting forks and
- * checks out every version of every document, so it is the longest window in
+ * The fence between the reference scan and the unlinks. Collecting checks out
+ * every version of every document, so it is the longest window in
  * a purge and the one another instance is most likely to write into. A record
  * that moved means the referenced set was computed against a state that no
  * longer exists, so the pass stands down rather than acting on it. Purging is
@@ -461,7 +467,7 @@ export async function purgeDanglingFiles(
     // deadlock against the lock this pass is running inside.
     const before = await catchUpWorkspaceDoc(workspaceId, scope)
     // List the candidate files BEFORE the reference scan: collecting
-    // references forks + checks out every version of every document,
+    // references checks out every version of every document,
     // which is far too expensive to pay for a workspace that has no files
     // directory (or an empty one) — the common case for every workspace
     // the periodic sweeper visits that never had an upload.

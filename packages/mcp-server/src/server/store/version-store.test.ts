@@ -25,6 +25,10 @@ vi.mock('../config.js', () => ({
 
 const { FileVersionStore } = await import('./version-store.js')
 const { saveDocument } = await import('./document-store.js')
+const { getWorkspaceDoc, _clearWorkspaceDocCacheForTests } = await import(
+  './workspace-doc-cache.js'
+)
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 
 // Version save refuses a path with no document, so tests seed each path they
 // checkpoint — the shape production always has (auto-version fires after
@@ -313,6 +317,26 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(countElements(live)).toBe(liveCountBefore)
     appendElement(live, 'x3')
     expect(countElements(live)).toBe(liveCountBefore + 1)
+  })
+
+  it('points a version at persisted ops even while the cached record is ahead of the store', async () => {
+    const live = new LoroDoc()
+    appendElement(live, 'kept')
+    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
+    // An op in the cached record nothing has persisted: what a writer inside
+    // the workspace barrier holds between its edit and its save.
+    const cached = await getWorkspaceDoc('sess-1')
+    cached.getMap('unpersisted').set('op', 1)
+    cached.commit()
+
+    const entry = await store.save('sess-1', 'canvas-a', live, { auto: false })
+
+    // A restart: only what the store holds is left to check the version out on.
+    _clearWorkspaceDocCacheForTests()
+    clearDocCacheForTests()
+    const past = await store.load('sess-1', entry.id)
+    expect(past).not.toBeNull()
+    expect(countElements(past as LoroDoc)).toBe(1)
   })
 
   it('returns null for an unknown version id', async () => {

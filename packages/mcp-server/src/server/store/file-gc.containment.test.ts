@@ -167,9 +167,11 @@ describe('file-GC containment gate: a files dir re-pointed during the reference 
           }
           return []
         },
-        load: async () => {
-          throw new Error('no versions were listed')
-        },
+        openCheckouts: async () => ({
+          load: async () => {
+            throw new Error('no versions were listed')
+          },
+        }),
       }
 
       await expect(purgeDanglingFiles('ws_swap', { versionStore })).rejects.toMatchObject(

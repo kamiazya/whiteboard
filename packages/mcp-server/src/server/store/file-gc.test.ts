@@ -283,9 +283,11 @@ describe('purgeDanglingFiles', () => {
 
     const fakeStore = {
       listIdsByDocument: async () => ['v-broken'],
-      load: async () => {
-        throw new Error('frontier rows missing')
-      },
+      openCheckouts: async () => ({
+        load: async () => {
+          throw new Error('frontier rows missing')
+        },
+      }),
     }
 
     await expect(purgeDanglingFiles('ws_brk', { versionStore: fakeStore })).rejects.toBeInstanceOf(
@@ -464,7 +466,7 @@ describe('purgeDanglingFiles', () => {
 
     const fakeStore = {
       listIdsByDocument: async () => ['v-missing'],
-      load: async () => null,
+      openCheckouts: async () => ({ load: async () => null }),
     }
 
     await expect(
@@ -718,7 +720,7 @@ it('stands down when another instance writes while the pass is deciding', async 
       }
       return []
     },
-    load: async () => null,
+    openCheckouts: async () => ({ load: async () => null }),
   }
 
   const result = await purgeDanglingFiles(workspaceId, {

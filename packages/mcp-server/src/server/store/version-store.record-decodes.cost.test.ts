@@ -62,11 +62,16 @@ function countRecordDecodes() {
   const fork = vi.spyOn(LoroDoc.prototype, 'fork')
   const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
   return {
+    /** Stored snapshot reads of the workspace record. */
+    get storedReads(): number {
+      return stored.mock.calls.filter(([input]) => input.docRef.kind === 'workspace-tree').length
+    },
+    /** In-memory copies of a decoded record. */
+    get copies(): number {
+      return fromSnapshot.mock.calls.length + fork.mock.calls.length
+    },
     get count(): number {
-      const storedReads = stored.mock.calls.filter(
-        ([input]) => input.docRef.kind === 'workspace-tree',
-      ).length
-      return storedReads + fromSnapshot.mock.calls.length + fork.mock.calls.length
+      return this.storedReads + this.copies
     },
     get checkouts(): number {
       return checkout.mock.calls.length
@@ -113,10 +118,8 @@ async function seedHistory(
   return paths
 }
 
-// `it.fails` until the history plane reads one decoded record: today a
-// checkpoint, a list and a version walked each decode it again.
 describe('whole-record decodes on the history plane', () => {
-  it.fails('a batch of automatic checkpoints decodes the record at most once', async () => {
+  it('a batch of automatic checkpoints decodes the record at most once', async () => {
     const store = new FileVersionStore()
     const paths: string[] = []
     for (let d = 0; d < DOCUMENTS; d++) {
@@ -135,7 +138,7 @@ describe('whole-record decodes on the history plane', () => {
     expect(counted).toBeLessThanOrEqual(1)
   })
 
-  it.fails('listing and previewing versions decodes the record O(1) per GET', async () => {
+  it('listing and previewing versions decodes the record O(1) per GET', async () => {
     const store = new FileVersionStore()
     const [path] = await seedHistory('ws_read', store)
     const ids = (await store.list('ws_read', path as string)).map((v) => v.id)
@@ -151,7 +154,7 @@ describe('whole-record decodes on the history plane', () => {
     expect(decodes.count, 'one preview').toBeLessThanOrEqual(1)
   })
 
-  it.fails('a file-GC pass decodes the record once, not once per version', async () => {
+  it('a file-GC pass copies the record once, not once per version', async () => {
     const store = new FileVersionStore()
     await seedHistory('ws_gc', store)
     const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_gc')
@@ -166,12 +169,16 @@ describe('whole-record decodes on the history plane', () => {
 
     // The pass reached the unlink, so the scan it counts really ran.
     expect(result).toMatchObject({ purgedCount: 1 })
-    expect(decodes.count).toBeLessThanOrEqual(1)
+    // One copy to check versions out on. The two stored reads are the pass
+    // judging against the RECORD, before the scan and in the fence after it
+    // (`catchUpWorkspaceDoc`) — per pass, whatever the history holds.
+    expect(decodes.copies).toBeLessThanOrEqual(1)
+    expect(decodes.storedReads).toBeLessThanOrEqual(2)
     // Each distinct point is checked out once at most.
     expect(decodes.checkouts).toBeLessThanOrEqual(DOCUMENTS * VERSIONS_EACH)
   })
 
-  it.fails('a GC pass checks out a point many versions share only once', async () => {
+  it('a GC pass checks out a point many versions share only once', async () => {
     const store = new FileVersionStore()
     for (let d = 0; d < DOCUMENTS; d++) {
       await saveDocument('ws_same', `page-${d}`, makeSpatialDoc(canvasReferencing(`d${d}`, 3)))

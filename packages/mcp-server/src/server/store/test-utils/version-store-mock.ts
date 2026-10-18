@@ -18,6 +18,7 @@ export function versionStoreMock(overrides: Partial<VersionStoreMock> = {}): Ver
   return {
     save: vi.fn(),
     load: vi.fn(),
+    openCheckouts: vi.fn(),
     loadWorkspaceAt: vi.fn(),
     list: vi.fn(),
     adopt: vi.fn().mockResolvedValue([]),
