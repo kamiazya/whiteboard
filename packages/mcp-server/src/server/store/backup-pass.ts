@@ -8,8 +8,8 @@ import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
 import { mirrorBlobsIntoBackup } from './backup-blob-mirror.js'
-import { BACKUP_DIR_MODE, restrictTreeToOwner } from './backup-modes.js'
 import { withBackupMarker } from './backup-in-progress.js'
+import { BACKUP_DIR_MODE, restrictTreeToOwner } from './backup-modes.js'
 import { DB_FILENAME, databaseIsInsideDataDir, dataDirHasDatabaseFile } from './db/location.js'
 import { readDatabaseLocationRecord } from './db/location-record.js'
 import { snapshotDatabaseInto } from './db/snapshot.js'
@@ -118,6 +118,18 @@ async function stagedStep(
     onError?.(err)
     return false
   }
+}
+
+/**
+ * A fresh staging dir, clearing whatever an abandoned pass left there.
+ * Owner-only from its first byte, so nothing assembled in it is readable by
+ * anyone else while the pass runs; a backup root this creates is too.
+ */
+async function createStaging(outputDir: string, staging: string): Promise<void> {
+  await rm(staging, { recursive: true, force: true }).catch(() => {})
+  await mkdir(dirname(outputDir), { recursive: true, mode: BACKUP_DIR_MODE })
+  await mkdir(staging, { mode: BACKUP_DIR_MODE })
+  await chmod(staging, BACKUP_DIR_MODE)
 }
 
 /**
@@ -257,18 +269,8 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // leader lease admits one pass at a time, and `backupDataDir` refuses a
     // destination that is not empty, so a leftover would otherwise wedge
     // every future attempt.
-    await rm(staging, { recursive: true, force: true }).catch(() => {})
-
     const failed = { kind: 'error', message: 'backup failed' } as const
-
-    // Owner-only from its first byte, so nothing assembled in it is readable
-    // by anyone else while the pass runs; a backup root this creates is too.
-    const prepared = await stagedStep(staging, async () => {
-      await mkdir(dirname(outputDir), { recursive: true, mode: BACKUP_DIR_MODE })
-      await mkdir(staging, { mode: BACKUP_DIR_MODE })
-      await chmod(staging, BACKUP_DIR_MODE)
-    })
-    if (!prepared) return failed
+    if (!(await stagedStep(staging, () => createStaging(outputDir, staging)))) return failed
 
     const copied = await stagedStep(staging, () =>
       doBackup(dataDir, staging, {

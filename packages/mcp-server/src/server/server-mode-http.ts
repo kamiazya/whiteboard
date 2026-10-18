@@ -8,12 +8,12 @@
 import { randomUUID } from 'node:crypto'
 import { serve } from '@hono/node-server'
 import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
+import type { DataDirTrust } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
-import type { DataDirTrust } from '../shared/data-dir-secure.js'
 import { isDataDirWritable } from './data-dir-writable.js'
 import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
@@ -42,7 +42,7 @@ import { syncStreamStats } from './sync-streams.js'
 
 export interface StartServerModeHttpOptions {
   /** See `DataDirTrust`: `operator` unless the dir is a default nobody named. */
-  dataDirTrust?: DataDirTrust
+  dataDirTrust: DataDirTrust
   host: string
   port: number
   publicBaseUrl: string
@@ -82,13 +82,7 @@ export async function startServerModeHttp(
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
   const dataDir = getDataDir()
-  const {
-    serverDeps: bootedDeps,
-    dataLayout,
-    scope,
-  } = await bootSelfHostDeps(dataDir, {
-    dataDirTrust: options.dataDirTrust ?? 'operator',
-  })
+  const { serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(dataDir, options)
   const shared = createSharedWorkers(instanceId, scope, options)
   const close = createRootShutdown({
     stopBackgroundWork: () => backgroundWork.stopAll(),

@@ -54,6 +54,7 @@ describe('server mode — the live audience an agent reaches', () => {
   it('delivers wb_viewport_set to a ready sync stream on this instance', async () => {
     const baseUrl = PUBLIC_URL
     running = await startServerModeHttp({
+      dataDirTrust: 'operator',
       host: 'board.example',
       port: 443,
       publicBaseUrl: baseUrl,

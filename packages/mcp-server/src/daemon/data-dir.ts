@@ -36,8 +36,9 @@ export function resolveDefaultDataDir(
 export function serverModeDataDir(
   named: string | undefined,
   env: Record<string, string | undefined>,
+  namedTrust: DataDirTrust = 'operator',
 ): { dataDir: string; dataDirTrust: DataDirTrust } {
-  if (named !== undefined) return { dataDir: resolve(named), dataDirTrust: 'operator' }
+  if (named !== undefined) return { dataDir: resolve(named), dataDirTrust: namedTrust }
   if (env.WHITEBOARD_DATA_DIR)
     return { dataDir: resolve(env.WHITEBOARD_DATA_DIR), dataDirTrust: 'operator' }
   return { dataDir: resolveDefaultDataDir(env), dataDirTrust: 'owner' }

@@ -46,6 +46,7 @@ import { startServerModeHttp } from './server-mode-http.js'
 
 function makeOptions() {
   return {
+    dataDirTrust: 'operator' as const,
     host: '127.0.0.1',
     port: 9001,
     publicBaseUrl: 'http://127.0.0.1:9001',

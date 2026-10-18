@@ -254,10 +254,11 @@ function stopOutcome(
 }
 
 export async function runServerStop(options: RunServerStopOptions): Promise<RunServerStopOutcome> {
-  const { dataDir, dataDirTrust } =
-    options.dataDir === undefined
-      ? serverModeDataDir(undefined, process.env)
-      : { dataDir: options.dataDir, dataDirTrust: options.dataDirTrust ?? 'operator' }
+  const { dataDir, dataDirTrust } = serverModeDataDir(
+    options.dataDir,
+    process.env,
+    options.dataDirTrust,
+  )
   const readRecord = () => readServerModeRecord(dataDir, dataDirTrust, options.uid)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
   const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity

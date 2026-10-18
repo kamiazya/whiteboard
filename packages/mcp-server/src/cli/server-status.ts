@@ -39,14 +39,11 @@ export interface RunServerStatusOutcome {
 export async function runServerStatus(
   options: RunServerStatusOptions,
 ): Promise<RunServerStatusOutcome> {
-  const { dataDir, dataDirTrust } =
-    options.dataDir === undefined
-      ? serverModeDataDir(undefined, process.env)
-      : { dataDir: options.dataDir, dataDirTrust: options.dataDirTrust ?? 'operator' }
+  const where = serverModeDataDir(options.dataDir, process.env, options.dataDirTrust)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
   const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity
 
-  const readResult = readServerModeRecord(dataDir, dataDirTrust)
+  const readResult = readServerModeRecord(where.dataDir, where.dataDirTrust)
 
   if (readResult.kind === 'missing') {
     return {

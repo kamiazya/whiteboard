@@ -24,7 +24,6 @@ import { isSafePathSegment, isSafeRelativePosixPath } from '../../shared/path-co
 import { sha256Hex } from '../../shared/sha256.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
-import { BACKUP_DIR_MODE, BACKUP_FILE_MODE } from './backup-modes.js'
 import {
   BLOBS_DIRNAME,
   blobShardDir,
@@ -36,6 +35,7 @@ import {
   parseBlobShard,
 } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import { BACKUP_DIR_MODE, BACKUP_FILE_MODE } from './backup-modes.js'
 
 const log = getLogger('backup-blob-mirror')
 
