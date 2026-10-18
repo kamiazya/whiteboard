@@ -94,6 +94,23 @@ describe('fitToWidth: text that overflows', () => {
     expect(fitToWidth('abcdef', font, recording, 55)).toEqual({ text: 'abcde', truncated: true })
     expect(measured.filter((text) => text === 'abcdef')).toHaveLength(1)
   })
+
+  it('answers a probe past the last grapheme without measuring the whole text', () => {
+    // Three astral code points are three units but six UTF-16 units, so the
+    // search may probe a count no unit reaches.
+    const measured: string[] = []
+    const recording: MeasureText = (text, f) => {
+      measured.push(text)
+      return measure(text, f)
+    }
+    const text = '\u{1F600}\u{1F600}\u{1F600}'
+
+    expect(fitToWidth(text, font, recording, 45)).toEqual({
+      text: '\u{1F600}\u{1F600}',
+      truncated: true,
+    })
+    expect(measured.filter((probe) => probe === text)).toHaveLength(1)
+  })
 })
 
 describe('fitToWidth: never empty', () => {
