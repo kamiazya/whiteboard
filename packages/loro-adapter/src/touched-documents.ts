@@ -82,6 +82,34 @@ export function documentsTouchedSince(workspace: LoroDoc, since: VersionVector):
   return touched
 }
 
+// The node-map keys that say WHICH document a node is and where it sits; a
+// write to any other key (content, display name, edit stamps) leaves the
+// workspace holding the same documents at the same paths.
+const PLACEMENT_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'kind'])
+
+/**
+ * Whether the operations after `since` change which documents the workspace
+ * holds or where: a node created, deleted or moved in the tree, or a node's
+ * identity, segment or kind rewritten. Everything else an import may carry —
+ * content, display names, edit stamps, pins — answers false.
+ *
+ * What a keeper asks of an update from a caller entitled to edit content but
+ * not to add, remove or move documents.
+ */
+export function placementChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
+  const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
+  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
+  return changes
+    .flatMap((change) => change.ops)
+    .some((op) => {
+      if (op.container === tree) return true
+      const content = op.content as { readonly key?: unknown }
+      if (typeof content.key !== 'string' || !PLACEMENT_KEYS.has(content.key)) return false
+      const path = workspace.getPathToContainer(op.container)
+      return path?.length === 2 && path[0] === WORKSPACE_TREE_KEY
+    })
+}
+
 /**
  * Stamps `updatedAt` on every touched document whose content was written,
  * and commits — the edit clock a listing reads, moved by an import the way

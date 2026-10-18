@@ -353,6 +353,10 @@ the same things through either surface:
 | `versions:write` | `wb_version_save`, `wb_version_restore` |
 
 A call without the scope fails with `insufficient_scope` and changes nothing.
+The HTTP API draws the same line. A live-sync update with only
+`canvas:write` may edit documents' content. If it would add, delete or move
+a document, or it is addressed to a path no document holds, it is refused
+with `403` and changes nothing. That needs `workspace:write` as well.
 A token scoped `mcp:call canvas:read` can read documents but cannot edit or
 delete them. To give an agent everything, ask your identity provider for
 `mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write`.

@@ -138,6 +138,7 @@ describe('auto-version corruption handling', () => {
     const app = createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
+      mayPlaceDocuments: () => true,
       autoVersionQuietMs: 0,
       versionStore,
     })
@@ -210,6 +211,7 @@ describe('an unchanged document', () => {
     const first = createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
+      mayPlaceDocuments: () => true,
       autoVersionQuietMs: 0,
       versionStore: store,
     })
@@ -225,6 +227,7 @@ describe('an unchanged document', () => {
     const second = createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
+      mayPlaceDocuments: () => true,
       autoVersionQuietMs: 0,
       versionStore: store,
     })

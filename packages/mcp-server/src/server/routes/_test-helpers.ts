@@ -124,13 +124,21 @@ export function testStoreScope(dataDir: string = getDataDir()): StoreScope {
  * composition path by omitting one.
  */
 export function testDocumentRouterOptions(
-  options: Omit<DocumentRouterOptions, 'scope' | 'versionStore'> & {
+  options: Omit<DocumentRouterOptions, 'scope' | 'versionStore' | 'mayPlaceDocuments'> & {
     scope?: StoreScope
     versionStore?: VersionStore
+    mayPlaceDocuments?: DocumentRouterOptions['mayPlaceDocuments']
   },
 ): DocumentRouterOptions {
   const scope = options.scope ?? testStoreScope()
-  return { ...options, scope, versionStore: options.versionStore ?? new FileVersionStore(scope) }
+  return {
+    // A router test mounts no auth middleware, so there is no grant to ask:
+    // it stands for a caller holding every scope, as the local daemon's token does.
+    mayPlaceDocuments: () => true,
+    ...options,
+    scope,
+    versionStore: options.versionStore ?? new FileVersionStore(scope),
+  }
 }
 
 /**

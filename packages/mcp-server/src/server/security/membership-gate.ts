@@ -12,6 +12,7 @@ import {
   rememberCallerNamespace,
   workspaceIdFromHandle,
 } from '../workspace-handle.js'
+import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
@@ -129,6 +130,15 @@ export async function rememberCaller(
 /** The grant the middleware resolved for this request, if it reached one. */
 export function callerGrant(c: Context): ResolvedGrant | undefined {
   return grantOf(c)
+}
+
+/**
+ * Whether this request's grant holds every one of `scopes` — for a route the
+ * gate admitted on a narrower scope, deciding a part of the request that
+ * needs more. A request whose middleware resolved no grant holds none.
+ */
+export function callerHolds(c: Context, scopes: readonly AuthScope[]): boolean {
+  return hasRequiredScopes(grantOf(c)?.scopes ?? [], scopes)
 }
 
 /** The person the middleware authenticated this request as, if any. */

@@ -48,7 +48,11 @@ afterEach(() => {
 describe('live-doc router', () => {
   it('returns a Hono instance', () => {
     const triggerAutoVersion = vi.fn()
-    const app = createLiveDocRouter({ serverDeps, triggerAutoVersion })
+    const app = createLiveDocRouter({
+      serverDeps,
+      triggerAutoVersion,
+      mayPlaceDocuments: () => true,
+    })
     expect(app).toBeInstanceOf(Hono)
   })
 })

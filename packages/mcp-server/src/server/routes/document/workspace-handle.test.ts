@@ -116,7 +116,11 @@ describe('daemon routes address a workspace by its segment', () => {
 
   it('resolves the handle inside the /api/w/... workspace-document surface', async () => {
     await seeded()
-    const app = createWorkspaceDocumentRouter({ serverDeps, triggerAutoVersion: async () => null })
+    const app = createWorkspaceDocumentRouter({
+      serverDeps,
+      triggerAutoVersion: async () => null,
+      mayPlaceDocuments: () => true,
+    })
 
     const res = await app.request(`/api/w/${SEGMENT}/workspace-document/snapshot`)
 

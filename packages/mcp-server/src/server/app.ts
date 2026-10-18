@@ -46,6 +46,7 @@ import {
   type CallerName,
   callerDisplayName,
   callerGrant,
+  callerHolds,
   callerUserId,
   creatorAsFirstMember,
   type FirstMember,
@@ -507,6 +508,7 @@ export function createApp(options: AppOptions) {
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
       serverDeps: options.serverDeps,
+      mayPlaceDocuments: (c) => callerHolds(c, ['workspace:write']),
       scope,
       versionStore,
       exportPaths,

@@ -1,9 +1,11 @@
 import {
   documentsTouchedSince,
+  placementChangedSince,
   seedNamesFromTitles,
   stampEditedDocuments,
   type TouchedDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { LoroDoc, VersionVector } from 'loro-crdt'
 import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -24,6 +26,15 @@ export interface ApplyWorkspaceDocumentUpdateInput {
    * every promoted document read "edited just now".
    */
   readonly origin?: 'edit' | 'transfer'
+  /**
+   * Whether the caller may add, remove or move documents — the adapter's
+   * decision, from the caller's grant. `false` refuses an update that changes
+   * the workspace's placement (`placementChangedSince`) and keeps nothing of
+   * it; content edits go through either way. Absent means true: the check
+   * reads the update's operations a second time, which a caller holding
+   * every scope has no reason to pay for.
+   */
+  readonly mayPlaceDocuments?: boolean
 }
 
 /** A document whose content an applied update wrote. */
@@ -32,6 +43,24 @@ type EditedDocument = Pick<TouchedDocument, 'documentId' | 'path'>
 type ApplyWorkspaceDocumentUpdateResult =
   | { readonly kind: 'applied'; readonly edited: readonly EditedDocument[] }
   | { readonly kind: 'malformed-update' }
+  | { readonly kind: 'placement-refused' }
+
+/**
+ * Whether the update just imported into `doc` adds, removes or moves a
+ * document — and if so, drops the cached record unsaved: the import already
+ * landed in it, and dropping it is what leaves nothing of the refused update.
+ */
+function refusePlacement(
+  doc: LoroDoc,
+  since: VersionVector,
+  target: Parameters<typeof runEvictingOnEngineTrap>[0],
+): boolean {
+  const placed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
+    placementChangedSince(doc, since),
+  )
+  if (placed) target.evict()
+  return placed
+}
 
 /**
  * Applies a client's workspace-granularity Loro update and persists it — the
@@ -97,6 +126,9 @@ export async function applyWorkspaceDocumentUpdate(
         err,
       })
       return { kind: 'malformed-update' }
+    }
+    if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
+      return { kind: 'placement-refused' }
     }
     // Before the save, so the name and the stamp ride the same write and its
     // fan-out hands them back to the replica that made the edit.

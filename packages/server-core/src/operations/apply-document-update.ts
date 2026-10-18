@@ -7,6 +7,24 @@ export interface ApplyDocumentUpdateInput {
   readonly path: string
   /** A Loro update (delta or full) as the client exported it. */
   readonly update: Uint8Array
+  /**
+   * Whether the caller may create documents — the adapter's decision, from
+   * the caller's grant. `false` refuses the lazy-create of an unknown path
+   * (`DocumentCreationRefusedError`) while an edit to a document that exists
+   * goes through. Absent means true.
+   */
+  readonly mayCreateDocument?: boolean
+}
+
+/**
+ * An update addressed a path no document holds, from a caller who may edit
+ * documents but not create them. Nothing was read or written.
+ */
+export class DocumentCreationRefusedError extends Error {
+  constructor(readonly path: string) {
+    super(`No document at "${path}", and this caller may not create one`)
+    this.name = 'DocumentCreationRefusedError'
+  }
 }
 
 /**
@@ -44,6 +62,11 @@ export async function applyDocumentUpdate(
   const live = deps.liveDocuments
   const { workspaceId, path, update } = input
   return live.withWriteLock(workspaceId, async () => {
+    // Inside the hold, so a delete cannot land between the check and the
+    // save and turn this edit into the create it was refused.
+    if (input.mayCreateDocument === false && !(await live.exists(workspaceId, path))) {
+      throw new DocumentCreationRefusedError(path)
+    }
     const doc = await live.get(workspaceId, path)
     importWithinSyncLimits(
       doc,

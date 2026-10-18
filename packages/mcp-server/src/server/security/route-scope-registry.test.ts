@@ -200,10 +200,12 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
   })
 
-  it('promotion needs both the canvas write and the versions write', () => {
+  it('promotion needs the canvas, workspace and versions writes', () => {
+    // It merges a whole record in, so it creates documents as well as writing
+    // their content and checkpoints.
     expect(resolveApiRouteScope('POST', '/api/w/ws-1/workspace-document/promote')).toEqual({
       kind: 'scoped',
-      scopes: ['canvas:write', 'versions:write'],
+      scopes: ['canvas:write', 'workspace:write', 'versions:write'],
     })
   })
 
@@ -304,7 +306,7 @@ const SCOPE_DECISIONS = [
     'workspace-document/promote',
     'POST',
     '/api/w/ws1/workspace-document/promote',
-    scoped('canvas:write', 'versions:write'),
+    scoped('canvas:write', 'workspace:write', 'versions:write'),
   ],
   [
     'workspace-document sync',
