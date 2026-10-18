@@ -3,6 +3,7 @@ import {
   versionLabelSchema,
   WORKSPACE_ID_PATTERN,
 } from '@kamiazya/whiteboard-model'
+import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 
 /**
@@ -131,6 +132,30 @@ export const promotedVersionRequestSchema = z
   })
   .strict()
 export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
+
+/**
+ * The most saved versions one promotion carries. Each is judged on the
+ * serving loop before anything merges — a checkout of the incoming record, a
+ * projection of the document it names, the sync surface's size judgement —
+ * and a row is a few hundred bytes, so the body ceiling alone admits rows by
+ * the hundred thousand.
+ *
+ * Sized from what a browser keeper can hold: it keeps at most 50 automatic
+ * checkpoints per document (`@kamiazya/whiteboard-history`'s
+ * `MAX_AUTO_PER_DOCUMENT`) across at most `WORKSPACE_MAX_DOCUMENTS` (2000)
+ * documents, which is 100,000, and a fifth again for the manual saves and
+ * restore points that cap does not take — 10 per document at the ceiling.
+ * mcp-server's promote route test holds the figure to that product, since
+ * this package cannot import the history package.
+ */
+export const PROMOTE_MAX_VERSIONS = 120_000
+
+/**
+ * The most trashed documents one promotion carries the bytes of: the most
+ * documents a workspace holds. A browser past it leaves the rest behind and
+ * names them, as it does a trashed document too large for the body.
+ */
+export const PROMOTE_MAX_TRASH = WORKSPACE_MAX_DOCUMENTS
 
 /**
  * The evidence a person was present when a row was written (ADR-0039).

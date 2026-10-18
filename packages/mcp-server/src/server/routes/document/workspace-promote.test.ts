@@ -8,7 +8,12 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promoteWorkspaceResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
+  promoteWorkspaceResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
@@ -29,6 +34,7 @@ import {
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -211,6 +217,44 @@ it('refuses a record past the document cap with 413 under its own code, and keep
   expect(body.message).toContain(String(PROMOTE_DOCUMENT_CAP))
   expect(await documents()).toHaveLength(0)
   expect(await new FileVersionStore().list('session1', 'd0')).toHaveLength(0)
+})
+
+it('refuses more saved versions than one move carries with 413 under its own code, and keeps none of it', async () => {
+  const { promote, documents } = harness()
+  const row = { id: 'v', documentId: ROADMAP_ID, createdAt: 1, auto: true, frontiers: 'AA' }
+  const res = await promote({
+    snapshot: b64u(browserSnapshot()),
+    versions: Array.from({ length: PROMOTE_MAX_VERSIONS + 1 }, () => row),
+  })
+  expect(res.status).toBe(413)
+  const body = (await res.json()) as { error: string; message: string }
+  // Not `invalid_body`, which a sender reads as an older keeper refusing the planes.
+  expect(body.error).toBe('promote_too_many_carried')
+  expect(body.message).toContain(`${PROMOTE_MAX_VERSIONS} saved versions`)
+  expect(await documents()).toHaveLength(0)
+})
+
+it('refuses more trashed documents than one move carries with the same code', async () => {
+  const { promote, documents } = harness()
+  const res = await promote({
+    snapshot: b64u(browserSnapshot()),
+    trash: Array.from({ length: PROMOTE_MAX_TRASH + 1 }, () => ({
+      documentId: SKETCH_ID,
+      bytes: 'AA',
+    })),
+  })
+  expect(res.status).toBe(413)
+  expect(((await res.json()) as { error: string }).error).toBe('promote_too_many_carried')
+  expect(await documents()).toHaveLength(0)
+})
+
+it('carries every automatic checkpoint a browser at the document ceiling can hold', () => {
+  // server-core states the version cap without the history package it is
+  // sized from; this is where both are in reach.
+  expect(PROMOTE_MAX_VERSIONS).toBeGreaterThanOrEqual(
+    MAX_AUTO_PER_DOCUMENT * WORKSPACE_MAX_DOCUMENTS,
+  )
+  expect(PROMOTE_MAX_TRASH).toBe(WORKSPACE_MAX_DOCUMENTS)
 })
 
 it('answers 404 for a workspace the daemon never registered', async () => {

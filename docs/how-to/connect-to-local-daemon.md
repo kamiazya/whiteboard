@@ -284,6 +284,12 @@ empty the Trash of what you no longer need to let the rest go. Anything
 this browser cannot read stays behind too. The result names each one when
 the move finishes, and the browser copy is kept so nothing is lost.
 
+One move also carries at most 2000 trashed documents and 120,000 saved
+versions. Past either, the browser leaves the rest behind and names them (for
+saved versions, the oldest automatic checkpoints go first), and keeps its
+copy. A daemon sent more refuses the whole move with
+`promote_too_many_carried` and keeps none of it.
+
 One move carries at most 2000 documents, the most a browser keeps on a
 desktop. The daemon refuses a larger workspace whole, with the error
 `promote_too_many_documents`, and keeps none of it. The same 2000 is the most

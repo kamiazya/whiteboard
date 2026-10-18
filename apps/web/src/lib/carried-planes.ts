@@ -14,6 +14,8 @@
  * Loaded lazily by every caller, like the modules above: it reaches loro.
  */
 import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
   PROMOTE_REQUEST_LIMIT_BYTES,
   type PromotedTrashBytes,
   type PromotedVersion,
@@ -141,23 +143,59 @@ export interface FittedPlanes {
 }
 
 /**
+ * The versions one move carries when there are more than the keeper takes:
+ * the newest, manual saves before automatic checkpoints — an automatic one is
+ * what the keeper's own retention would let go first. Kept in the order they
+ * were read.
+ */
+function versionsWithinCap(
+  versions: readonly PromotedVersion[],
+  cap: number,
+): { readonly kept: PromotedVersion[]; readonly dropped: number } {
+  if (versions.length <= cap) return { kept: [...versions], dropped: 0 }
+  const keep = new Set(
+    [...versions]
+      .sort((a, b) => Number(a.auto) - Number(b.auto) || b.createdAt - a.createdAt)
+      .slice(0, cap),
+  )
+  return { kept: versions.filter((version) => keep.has(version)), dropped: versions.length - cap }
+}
+
+/**
  * The planes that fit beside `snapshot` inside the ceiling the keeper refuses
- * past. The record and the version rows are small beside a document's
- * evacuated bytes, so trash entries are what gives way: each that does not
+ * past, and inside the most trash entries and versions one move carries. The
+ * record and the version rows are small beside a document's evacuated bytes,
+ * so trash entries are what gives way to the byte ceiling: each that does not
  * fit is left behind and named, and the move goes ahead with the rest.
  */
 export function fitCarriedPlanes(
   snapshot: string,
   planes: Pick<CarriedPlanes, 'trash' | 'versions' | 'trashPaths'>,
   limitBytes: number = PROMOTE_REQUEST_LIMIT_BYTES,
+  caps: { readonly trash: number; readonly versions: number } = {
+    trash: PROMOTE_MAX_TRASH,
+    versions: PROMOTE_MAX_VERSIONS,
+  },
 ): FittedPlanes {
   const encoder = new TextEncoder()
-  const versions = [...planes.versions]
+  const { kept: versions, dropped } = versionsWithinCap(planes.versions, caps.versions)
   const base: PromoteWorkspaceRequest = { snapshot, trash: [], versions }
   let size = encoder.encode(JSON.stringify(base)).byteLength
   const trash: PromotedTrashBytes[] = []
-  const leftBehind: string[] = []
+  const leftBehind: string[] =
+    dropped === 0
+      ? []
+      : [
+          `${countOf(dropped, 'older saved version', 'older saved versions')}: one move carries at most ${caps.versions}`,
+        ]
   for (const carried of planes.trash) {
+    if (trash.length >= caps.trash) {
+      const path = planes.trashPaths.get(carried.documentId) ?? carried.documentId
+      leftBehind.push(
+        `the trashed document "${path}": one move carries at most ${caps.trash} trashed documents`,
+      )
+      continue
+    }
     // The item plus the comma that joins it to the one before.
     const itemSize = encoder.encode(JSON.stringify(carried)).byteLength + 1
     if (size + itemSize > limitBytes) {
