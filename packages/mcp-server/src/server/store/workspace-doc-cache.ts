@@ -60,7 +60,7 @@ const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>
  * NOT be safe is dropping ops that were never saved, and every writer mutates
  * the record under the workspace write lock, so a record whose lock is held
  * or awaited is never chosen; the cache runs over the bound instead until it
- * is released.
+ * is released, and the next access, hit or miss, trims it back.
  *
  * Dropping a record also drops what it was following: no `followRecord` runs
  * for it until it is reopened, so a write another process makes meanwhile is
@@ -87,6 +87,10 @@ function cachedRecord(key: string): LoroDoc | undefined {
   // Reinserted so Map order is recency order, oldest first.
   workspaceDocCache.delete(key)
   workspaceDocCache.set(key, entry)
+  // A record kept past the bound because its lock was in use is trimmed by
+  // whichever access comes next, so the cache returns to the bound once
+  // the lock is released rather than staying over it until another miss.
+  trimToBound(key)
   return entry.doc
 }
 
@@ -115,10 +119,15 @@ function rememberDropped(key: string, doc: LoroDoc): void {
 function keepRecord(key: string, workspaceId: string, doc: LoroDoc): void {
   workspaceDocCache.delete(key)
   workspaceDocCache.set(key, { workspaceId, doc })
+  trimToBound(key)
+}
+
+/** Drops least recently used records over the bound, never `keep` nor a locked one. */
+function trimToBound(keep: string): void {
   let excess = workspaceDocCache.size - WORKSPACE_DOC_CACHE_MAX_ENTRIES
   for (const [candidate, entry] of workspaceDocCache) {
     if (excess <= 0) break
-    if (candidate === key || workspaceWriteLockInUse(entry.workspaceId)) continue
+    if (candidate === keep || workspaceWriteLockInUse(entry.workspaceId)) continue
     workspaceDocCache.delete(candidate)
     rememberDropped(candidate, entry.doc)
     excess -= 1

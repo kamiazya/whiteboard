@@ -230,3 +230,39 @@ describe('a dropped workspace record and what was derived from it', () => {
     }
   })
 })
+
+describe('the bound after a write lock releases', () => {
+  it('trims back to the bound on the next access once locks release', async () => {
+    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    let release!: () => void
+    const released = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held: LoroDoc[] = []
+    const entered: Promise<void>[] = []
+    const holders: Promise<void>[] = []
+    for (let i = 0; i < N; i += 1) {
+      entered.push(
+        new Promise<void>((resolveEntered) => {
+          holders.push(
+            withWorkspaceWriteLock(ws(i), async () => {
+              held[i] = await getWorkspaceDoc(ws(i))
+              resolveEntered()
+              await released
+            }),
+          )
+        }),
+      )
+    }
+    await Promise.all(entered)
+    // Every resident record is locked, so this one runs the cache over the bound.
+    const extra = await getWorkspaceDoc(ws(N))
+    release()
+    await Promise.all(holders)
+    await vi.waitFor(() => expect(workspaceWriteLockInUse(ws(0))).toBe(false))
+
+    expect(await getWorkspaceDoc(ws(N))).toBe(extra)
+
+    expect(await openWorkspaceDocIfStored(ws(0))).not.toBe(held[0])
+  })
+})
