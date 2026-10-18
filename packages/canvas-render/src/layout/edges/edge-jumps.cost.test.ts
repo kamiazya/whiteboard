@@ -75,8 +75,9 @@ describe('computeEdgeJumps cost', () => {
     expect(jumps.get('c0')).toEqual([{ segment: 0, x: STEP_PX / 2, y: 0 }])
     expect(jumps.get('c999')).toEqual([{ segment: 0, x: 39 * 2000 + STEP_PX / 2, y: 24 * 2000 }])
     expect(narrowTests.count).toBeGreaterThanOrEqual(cells)
-    // All pairs is about segments² / 2 — 2.2e9 here.
-    expect(narrowTests.count / segments).toBeLessThanOrEqual(2)
+    // All pairs is about segments² / 2 — 2.2e9 here; 3_268 per segment at a
+    // tenth of this size. Measured 1_950 in all behind the grid.
+    expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
   })
 
   it('caps the hops one segment draws', () => {
