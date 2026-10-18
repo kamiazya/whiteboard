@@ -62,9 +62,18 @@ const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>
  * or awaited is never chosen; the cache runs over the bound instead until it
  * is released.
  *
- * Per-document projections in `doc-cache.ts` are left alone: each is a copy
- * cut from the record, not a view into it, so it neither keeps the dropped
- * record alive nor goes stale when it is reopened from the same stored bytes.
+ * Dropping a record also drops what it was following: no `followRecord` runs
+ * for it until it is reopened, so a write another process makes meanwhile is
+ * seen by nobody here. Two things derived from the record would then be
+ * wrong, and `openFollowed` settles both when it reopens one. The per-document
+ * projections in `doc-cache.ts` were cut from the OLD record, so a hit would
+ * serve the content from before that write and the next save of it would
+ * write that content back over it — they are evicted on every open that
+ * misses, which covers an explicit eviction as well as this bound. And the
+ * subscribers were told only what the old instance held, while a reopened
+ * instance already level with the record gives `followRecord` nothing to
+ * announce — so the version a record was dropped at is kept
+ * (`droppedVersions`) and its gain is announced on reopen.
  * `followedTo` is keyed by the instance and leaves with it.
  *
  * ponytail: a bound by count, not bytes. A byte-weighted bound needs a size
@@ -81,6 +90,28 @@ function cachedRecord(key: string): LoroDoc | undefined {
   return entry.doc
 }
 
+/**
+ * The encoded version each record was dropped at by the bound, so a reopen
+ * can announce what arrived while nothing here followed it. Only the bound
+ * records one: an explicit eviction drops a record that may hold ops storage
+ * refused, and a version taken from it would announce nothing that is true.
+ *
+ * ponytail: bounded by count, oldest forgotten first; a workspace forgotten
+ * here and written by another process before its reopen reaches its
+ * subscribers when they next resubscribe rather than at once.
+ */
+const droppedVersions = new Map<string, Uint8Array>()
+const DROPPED_VERSIONS_MAX_ENTRIES = 1024
+
+function rememberDropped(key: string, doc: LoroDoc): void {
+  droppedVersions.delete(key)
+  droppedVersions.set(key, doc.version().encode())
+  for (const oldest of droppedVersions.keys()) {
+    if (droppedVersions.size <= DROPPED_VERSIONS_MAX_ENTRIES) break
+    droppedVersions.delete(oldest)
+  }
+}
+
 function keepRecord(key: string, workspaceId: string, doc: LoroDoc): void {
   workspaceDocCache.delete(key)
   workspaceDocCache.set(key, { workspaceId, doc })
@@ -89,6 +120,7 @@ function keepRecord(key: string, workspaceId: string, doc: LoroDoc): void {
     if (excess <= 0) break
     if (candidate === key || workspaceWriteLockInUse(entry.workspaceId)) continue
     workspaceDocCache.delete(candidate)
+    rememberDropped(candidate, entry.doc)
     excess -= 1
   }
 }
@@ -132,6 +164,7 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 /** Test-only: drops every cached live workspace document, simulating a restart. */
 export function _clearWorkspaceDocCacheForTests(): void {
   workspaceDocCache.clear()
+  droppedVersions.clear()
 }
 
 /**
@@ -246,7 +279,14 @@ async function openFollowed(
   const doc = await open(docs).catch((err) => rethrowOpenFailure(workspaceId, err))
   if (doc === null) return null
   followedTo.set(doc, cursor)
-  keepRecord(workspaceDocCacheKey(scope, workspaceId), workspaceId, doc)
+  const key = workspaceDocCacheKey(scope, workspaceId)
+  keepRecord(key, workspaceId, doc)
+  evictWorkspaceDocs(workspaceId, scope)
+  const dropped = droppedVersions.get(key)
+  if (dropped !== undefined) {
+    droppedVersions.delete(key)
+    announceGain(workspaceId, doc, VersionVector.decode(dropped))
+  }
   return doc
 }
 

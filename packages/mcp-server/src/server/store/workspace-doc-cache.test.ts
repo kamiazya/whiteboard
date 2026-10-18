@@ -10,7 +10,16 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { LoroDoc } from 'loro-crdt'
+import {
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
+  writeSpatialCanvas,
+  writeWorkspaceDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -31,6 +40,9 @@ const {
   WORKSPACE_DOC_CACHE_MAX_ENTRIES,
 } = await import('./workspace-doc-cache.js')
 const { clearDocCacheForTests } = await import('./doc-cache.js')
+const { getDoc, saveDocument, onWorkspaceDocUpdated } = await import('./document-store.js')
+const { getDb } = await import('./db/index.js')
+const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { withWorkspaceWriteLock, workspaceWriteLockInUse, _resetWorkspaceLocksForTests } =
   await import('./workspace-lock.js')
@@ -146,5 +158,75 @@ describe('the workspace-record cache bound', () => {
     await getWorkspaceDoc(ws(N + 1))
 
     expect(await openWorkspaceDocIfStored(ws(0))).not.toBe(held)
+  })
+})
+
+function canvasDoc(text: string): LoroDoc {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, {
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
+    edges: [],
+  })
+  return doc
+}
+
+function textOf(doc: LoroDoc): string | null {
+  const node = readSpatialCanvas(doc).nodes[0]
+  return node === undefined ? null : (nodeText(node) ?? null)
+}
+
+/** A second process over the same data dir: a store this module's cache never sees. */
+function foreignDocs(): Promise<DocumentStoreWorkspaceDocs> {
+  return getDb(tempDir).then((db) => new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)))
+}
+
+async function foreignEdit(workspaceId: string, path: string, text: string): Promise<void> {
+  const docs = await foreignDocs()
+  const record = await docs.open(workspaceId)
+  if (record === null) throw new Error(`no record for ${workspaceId}`)
+  const entry = resolveWorkspaceDocument(record, path)
+  if (entry === null) throw new Error(`no document at ${path}`)
+  writeWorkspaceDocumentContent(record, entry.documentId, canvasDoc(text))
+  record.commit()
+  await docs.save(workspaceId, record)
+}
+
+async function storedText(workspaceId: string, path: string): Promise<string | null> {
+  _clearWorkspaceDocCacheForTests()
+  clearDocCacheForTests()
+  return textOf(await getDoc(workspaceId, path))
+}
+
+describe('a dropped workspace record and what was derived from it', () => {
+  it('serves a foreign edit made while the record was out of the cache', async () => {
+    await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
+    expect(textOf(await getDoc(ws(0), 'd'))).toBe('before')
+
+    await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+    await foreignEdit(ws(0), 'd', 'after')
+
+    const served = await getDoc(ws(0), 'd')
+    expect(textOf(served)).toBe('after')
+    await saveDocument(ws(0), 'd', served, { overwrite: true })
+    expect(await storedText(ws(0), 'd')).toBe('after')
+  })
+
+  it('announces a foreign edit made while the record was out of the cache', async () => {
+    await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
+    const replica = new LoroDoc()
+    replica.import((await getWorkspaceDoc(ws(0))).export({ mode: 'snapshot' }))
+    const off = onWorkspaceDocUpdated((workspaceId, update) => {
+      if (workspaceId === ws(0)) replica.import(update)
+    })
+    try {
+      await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+      await foreignEdit(ws(0), 'd', 'after')
+
+      const reopened = await getWorkspaceDoc(ws(0))
+
+      expect(replica.version().compare(reopened.version())).toBe(0)
+    } finally {
+      off()
+    }
   })
 })
