@@ -27,7 +27,7 @@ export {
   rewriteCanvasReferences,
   rewriteReferenceTargets,
 } from './references/rewrite.js'
-export { type ReferenceMatch, scanReferences } from './references/scan.js'
+export { findNextReference, type ReferenceMatch, scanReferences } from './references/scan.js'
 export {
   createUniqueNameResolver,
   type UniqueNameEntry,

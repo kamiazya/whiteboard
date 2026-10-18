@@ -2,16 +2,21 @@ import { documentReferenceMarkup } from '@kamiazya/whiteboard-codec'
 import {
   type DocumentContainers,
   MARKDOWN_BODY_KEY,
+  NODES_KEY,
   readSpatialCanvas,
   reconcileSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
+  growsPast,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
   nodeText,
   spatialCanvasSchema,
   withNodeText,
 } from '@kamiazya/whiteboard-model'
 import { unlinkedNameSpans } from './reference-aggregate.js'
+import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 /** The document a mention names, as a listing knows it. */
 export interface LinkifyTarget {
@@ -53,6 +58,10 @@ export function linkMarkupFor(target: LinkifyTarget): string {
  * only the rewritten nodes are touched: lines, tags, facets and comments are
  * not this operation's to change, and a record the reader skipped (a newer
  * client's) is not this operation's to delete.
+ *
+ * Each link is longer than the name it replaces, so linking can carry a body
+ * or a node past the ceiling every other write to it is held to: that throws
+ * `ReferenceRewriteTooLargeError` before anything is written.
  */
 export function linkifyMentionsIn(
   doc: DocumentContainers,
@@ -62,7 +71,12 @@ export function linkifyMentionsIn(
   const markup = linkMarkupFor(target)
   if (kind === 'markdown') {
     const text = doc.getText(MARKDOWN_BODY_KEY)
-    const spans = unlinkedNameSpans(text.toString(), target.name)
+    const body = text.toString()
+    const spans = unlinkedNameSpans(body, target.name)
+    const grown = body.length + spans.length * (markup.length - target.name.length)
+    if (growsPast(MARKDOWN_MAX_CHARS, body.length, grown)) {
+      throw new ReferenceRewriteTooLargeError({ shape: 'body', chars: grown, container: text.id })
+    }
     for (const span of [...spans].reverse()) {
       text.delete(span.index, span.length)
       text.insert(span.index, markup)
@@ -77,6 +91,14 @@ export function linkifyMentionsIn(
     const text = nodeText(node)
     if (text === undefined) return node
     const result = rewriteMentions(text, target.name, markup)
+    if (growsPast(NODE_TEXT_MAX_CHARS, text.length, result.text.length)) {
+      throw new ReferenceRewriteTooLargeError({
+        shape: 'node-text',
+        chars: result.text.length,
+        nodeId: node.id,
+        container: doc.getMap(NODES_KEY).id,
+      })
+    }
     linked += result.count
     return result.count === 0 ? node : withNodeText(node, result.text)
   })

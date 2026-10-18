@@ -22,7 +22,9 @@
  * One candidate failing to load or save must not abort the rest: the rename
  * itself has already happened, so every reference this pass CAN repair is
  * one fewer silently broken link. The ids it could not repair are reported
- * to the caller, who owns deciding whether that is worth a log line.
+ * to the caller, who owns deciding whether that is worth a log line. That
+ * includes a document the longer path would carry past a text ceiling: the
+ * rewrite refuses it whole, before writing, and it keeps the old path.
  */
 import { type DocumentMove, planReferenceRewrite } from '@kamiazya/whiteboard-codec'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
@@ -56,7 +58,10 @@ export interface FollowRenameInput {
 export interface FollowRenameResult {
   /** Documents whose content was rewritten and saved, in listing order. */
   readonly updatedDocumentIds: readonly string[]
-  /** Candidates that failed to load or save; the rename itself stands. */
+  /**
+   * Candidates that failed to load or save, or whose rewrite would leave a
+   * body or node past its text ceiling; the rename itself stands.
+   */
   readonly failedDocumentIds: readonly string[]
 }
 

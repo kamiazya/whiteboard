@@ -1,4 +1,4 @@
-import { createUniqueNameResolver, scanReferences } from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver, findNextReference } from '@kamiazya/whiteboard-codec'
 import {
   compareCodeUnit,
   documentIdSchema,
@@ -35,19 +35,44 @@ import { z } from 'zod'
  * content facts, not as a feed into this class.
  */
 
-const rawReferenceSchema = z
-  .object({
-    /**
-     * The token as written: a document id, or a name/path to resolve at
-     * query time. For `embed-node` it is always the embedded documentId;
-     * for `file-node` it is the file value, matched against paths only.
-     */
-    target: z.string().min(1),
-    via: z.enum(['wikilink', 'embed-node', 'file-node']),
-    context: z.string(),
-  })
-  .strict()
+// The token as written: a document id, or a name/path to resolve at query
+// time. For `embed-node` it is always the embedded documentId; for
+// `file-node` it is the file value, matched against paths only.
+const referenceTargetSchema = z.string().min(1)
+
+const rawReferenceSchema = z.union([
+  /**
+   * A `[[...]]` in prose carries WHERE it was written — the text it was found
+   * in (a string the facts already hold, so shared rather than copied) and
+   * its span — and its excerpt is cut when a backlink is answered, through
+   * `referenceContext`. Cutting it at extraction held a ~125-character copy
+   * per reference: a body dense with links cost ~23x its own size in cached
+   * heap, against ~7x held this way.
+   */
+  z
+    .object({
+      target: referenceTargetSchema,
+      via: z.literal('wikilink'),
+      text: z.string(),
+      index: z.number().int().nonnegative(),
+      length: z.number().int().positive(),
+    })
+    .strict(),
+  /** A node's own reference, quoted by a fixed phrase. */
+  z
+    .object({
+      target: referenceTargetSchema,
+      via: z.enum(['embed-node', 'file-node']),
+      context: z.string(),
+    })
+    .strict(),
+])
 export type RawReference = z.infer<typeof rawReferenceSchema>
+
+/** The excerpt a backlink shows for `ref`. */
+function referenceContext(ref: RawReference): string {
+  return ref.via === 'wikilink' ? snippetAround(ref.text, ref.index, ref.length) : ref.context
+}
 
 const documentReferenceFactsSchema = z
   .object({
@@ -103,7 +128,9 @@ export class ReferenceAggregate {
       if (sourceId === documentId) continue
       const contexts: string[] = []
       for (const ref of facts.refs) {
-        if (resolvesTo(ref, documentId, target.path, resolve)) contexts.push(ref.context)
+        if (resolvesTo(ref, documentId, target.path, resolve)) {
+          contexts.push(referenceContext(ref))
+        }
       }
       if (contexts.length === 0) continue
       backlinks.push({
@@ -136,17 +163,31 @@ export function unlinkedNameSpans(
   text: string,
   name: string,
 ): readonly { index: number; length: number }[] {
-  const refs = scanReferences(text).map(
-    (match) => [match.index, match.index + match.full.length] as const,
-  )
-  const spans: { index: number; length: number }[] = []
+  return [...unlinkedNameSpansIn(text, name)]
+}
+
+/**
+ * The spans of `unlinkedNameSpans`, one at a time, so a caller that needs a
+ * few stops the walk there. References are disjoint and come in order, so
+ * the only one that can cover an occurrence is the first that ends after
+ * it: one forward pass over both, with each reference scanned only once an
+ * occurrence has reached it.
+ */
+function* unlinkedNameSpansIn(
+  text: string,
+  name: string,
+): Generator<{ index: number; length: number }> {
+  let ref = findNextReference(text, 0)
   let cursor = 0
   for (;;) {
     const at = text.indexOf(name, cursor)
-    if (at === -1) return spans
+    if (at === -1) return
     cursor = at + name.length
-    if (refs.some(([from, to]) => at >= from && at < to)) continue
-    spans.push({ index: at, length: name.length })
+    while (ref !== undefined && ref.index + ref.full.length <= at) {
+      ref = findNextReference(text, ref.index + ref.full.length)
+    }
+    if (ref !== undefined && at >= ref.index) continue
+    yield { index: at, length: name.length }
   }
 }
 
@@ -156,7 +197,7 @@ const MENTION_CONTEXTS = 3
 /** A snippet around every unlinked occurrence of `name`, across `texts`. */
 function* unlinkedContexts(texts: readonly string[], name: string): Iterable<string> {
   for (const text of texts) {
-    for (const span of unlinkedNameSpans(text, name)) {
+    for (const span of unlinkedNameSpansIn(text, name)) {
       yield snippetAround(text, span.index, span.length)
     }
   }

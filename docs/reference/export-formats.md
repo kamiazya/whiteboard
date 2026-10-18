@@ -100,6 +100,20 @@ not:
   holds yet, `POST /api/v1/workspaces/{id}/documents`, a duplicate, a restore
   from the trash, and a version restored to a new path. `wb_workspace_edit`'s
   `document.create` refuses at that op, with the same message.
+- **Rewriting references** is held to the same ceilings, the 262,144
+  characters of a body and the 8,192 of a text node. Each link is longer than
+  the name it replaces, and a moved document's new path can be longer than
+  its old one, so either rewrite can grow a text. Link mentions (the
+  Connections panel's Link, `POST /api/v1/workspaces/{id}/documents/{documentId}/linkify-mentions`)
+  that would carry the body or a node past its ceiling write nothing: the
+  route answers `413` with `{"error":"markdown_too_large"}` or
+  `{"error":"node_text_too_large"}`, and the mention stays listed. When a move
+  follows references, a document the new path would carry past a ceiling is
+  left as written, with its references still naming the old path, in the
+  browser and on the daemon alike. The daemon reports it among the documents
+  the move could not rewrite: in `wb_workspace_edit`'s
+  `follow.failedDocumentIds`, or its log for the rename route. The move
+  itself stands.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 
