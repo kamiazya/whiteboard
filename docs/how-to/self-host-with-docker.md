@@ -196,7 +196,10 @@ provider like any other, with the subject the proxy forwards.
 The session this opens authorizes `/api` for everything a person does with
 their workspaces. The keeper's administrative routes (those needing the
 `runtime:admin` scope) are not among them: they stay with bearer tokens you
-scope for them. `/mcp` still takes bearer tokens only.
+scope for them. `/mcp` still takes bearer tokens only. Installing a font
+for exports also needs the person behind the token to be an
+[administrator](#administrators): a `runtime:admin` token held by anyone
+else is refused with `403` and `not_an_administrator`.
 
 ## Who can reach a workspace
 

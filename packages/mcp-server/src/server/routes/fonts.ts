@@ -6,7 +6,7 @@ import {
   type ListFontsResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { FontInstallError, installFont } from '../export/install-font.js'
 import { installedFontFiles } from '../export/installed-fonts.js'
 
@@ -53,9 +53,20 @@ export interface FontsRouterDeps {
   readonly fontsDir: string
   /** Injected so a route test never reaches the network. */
   readonly install?: typeof installFont
+  /**
+   * Whether this request's caller may install. Server mode answers its
+   * administrators alone: the scope says what a credential may do, and an
+   * identity provider can grant `runtime:admin` to anyone it signs in, while
+   * an install changes every workspace's exports. Absent: the scope is the bar.
+   */
+  readonly mayInstall?: (c: Context) => Promise<boolean>
 }
 
-export function createFontsRouter({ fontsDir, install = installFont }: FontsRouterDeps) {
+export function createFontsRouter({
+  fontsDir,
+  install = installFont,
+  mayInstall,
+}: FontsRouterDeps) {
   const app = new Hono()
 
   app.get('/api/fonts', async (c) => {
@@ -93,6 +104,15 @@ export function createFontsRouter({ fontsDir, install = installFont }: FontsRout
   })
 
   app.post('/api/fonts/:id/install', async (c) => {
+    if (mayInstall !== undefined && !(await mayInstall(c))) {
+      return c.json(
+        {
+          error: 'not_an_administrator',
+          message: 'only an administrator of this server can install a font',
+        } satisfies ApiErrorBody,
+        403,
+      )
+    }
     try {
       const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
       return c.json({ id, family, bytes } satisfies InstallFontResponse)

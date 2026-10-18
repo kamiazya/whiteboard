@@ -540,7 +540,15 @@ export function createApp(options: AppOptions) {
   app.route('/', createFilesRouter({ versionStore, scope }))
   const { liveDocuments } = options.serverDeps
   app.route('/', createExportRouter({ liveDocuments, scope, exportPaths }))
-  app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
+  app.route(
+    '/',
+    createFontsRouter({
+      fontsDir: scope.layout.fontsDir,
+      ...(options.authMode === 'server-mode'
+        ? { mayInstall: administersTenant(options.people.administration.check) }
+        : {}),
+    }),
+  )
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
   app.route('/', createStatusRouter())

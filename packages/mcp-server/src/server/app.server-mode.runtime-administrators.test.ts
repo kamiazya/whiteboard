@@ -131,6 +131,38 @@ describe('server mode runtime routes answer administrators only', () => {
     expect((await get('/api/fonts', bob)).status).toBe(200)
   })
 
+  // Installing a font changes what every workspace's export renders and makes
+  // the server fetch, so on a shared server the scope alone is not the bar:
+  // an identity provider may hand runtime:admin to anybody it signs in.
+  // An id the catalogue lacks keeps both requests off the network: past the
+  // gate it answers 404 unknown-font.
+  it('refuses a member bearer holding runtime:admin a font install', async () => {
+    await members.ensureProfile({
+      binding: { authenticator: ISSUER, subject: 'carol' },
+      displayName: 'carol',
+    })
+    const res = await app.request(`${PUBLIC_URL}/api/fonts/no-such-font/install`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer carol' },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'not_an_administrator' })
+  })
+
+  it('lets an administrator bearer reach the font install', async () => {
+    await members.ensureProfile({
+      binding: { authenticator: ISSUER, subject: 'ada' },
+      displayName: 'ada',
+    })
+    await appointed('ada')
+    const res = await app.request(`${PUBLIC_URL}/api/fonts/no-such-font/install`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ada' },
+    })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: 'unknown-font' })
+  })
+
   it('keeps ping public', async () => {
     expect((await app.request(`${PUBLIC_URL}/api/runtime/ping`)).status).toBe(200)
   })
