@@ -1,4 +1,8 @@
-import { CANVAS_MAX_EDGES, CANVAS_MAX_NODES, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  CANVAS_MAX_EDGES_AND_LINES,
+  CANVAS_MAX_NODES,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * How many NESTED documents one render may lay out, across every embed kind:
@@ -30,14 +34,14 @@ export const NESTED_LAYOUT_BUDGET = 128
  * the board it lays out: 128 file nodes naming one maximal board laid that
  * board out 128 times, about seven seconds each on the daemon's measurer
  * (`mcp-server/scripts/measure/nested-embed-cost.mjs`). One maximal board's
- * worth — `CANVAS_MAX_NODES + CANVAS_MAX_EDGES` — caps the nested work at
+ * worth — `CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LINES` — caps the nested work at
  * about one more top-level render, whatever the fan-out, while any board a
- * canvas may hold still fits as a single miniature unless it also carries
- * lines. An embed whose canvas would overdraw it degrades exactly as one
+ * canvas may hold — lines included, since they share the edge ceiling —
+ * still fits as a single miniature. An embed whose canvas would overdraw it degrades exactly as one
  * past the count does, and spends nothing, so a smaller embed after it may
  * still draw.
  */
-export const NESTED_ELEMENT_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES
+export const NESTED_ELEMENT_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LINES
 
 /**
  * The budget's running account for ONE top-level render. A counter rather

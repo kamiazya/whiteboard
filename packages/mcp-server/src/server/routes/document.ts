@@ -1,5 +1,5 @@
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
-import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type {
   CallerName,

@@ -242,7 +242,7 @@ describe('judgeStateWithinTextLimits', () => {
 
   it('admits a state at the limit', () => {
     const doc = new LoroDoc()
-    writeSpatialCanvas(doc, canvasOf(CANVAS_MAX_NODES, CANVAS_MAX_EDGES))
+    writeSpatialCanvas(doc, canvasOf(CANVAS_MAX_NODES, CANVAS_MAX_EDGES_AND_LINES))
     doc.commit()
     expect(judgeStateWithinTextLimits(doc)).toBeNull()
   })
