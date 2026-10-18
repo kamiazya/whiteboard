@@ -86,7 +86,7 @@ const SHAPES: Shape[] = [
     name: 'a long table',
     unit: () => '|x|y|\n',
     wrap: (u) => `|a|b|\n|-|-|\n${u}`,
-    scaling: 'superlinear',
+    scaling: 'linear',
   },
 ]
 
