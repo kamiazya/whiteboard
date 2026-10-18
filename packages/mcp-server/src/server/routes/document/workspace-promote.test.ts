@@ -487,6 +487,50 @@ it('refuses a carried version naming a body past the markdown limit with 413, an
   expect(await documents()).toEqual([])
 })
 
+it.each([
+  ['a person', { kind: 'human', displayName: 'Mallory' }],
+  ['an agent', { kind: 'ai', displayName: 'Mallory', agentId: 'mallory-agent' }],
+  ['nobody', undefined],
+] as const)('names the calling member on a carried version stating %s, and dates none after the move', async (_case, stated) => {
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+      callerName: async () => 'Ada',
+    }),
+  )
+  const record = browserRecordWithTrashAndVersion()
+  const [version] = record.versions
+  const future = Date.now() + 365 * 24 * 60 * 60 * 1000
+  const res = await app.request('/api/w/session1/workspace-document/promote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...record,
+      versions: [{ ...version, createdAt: future, ...(stated && { operator: stated }) }],
+    }),
+  })
+  expect(res.status).toBe(200)
+  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
+    (entry) => entry.id === DRAFTED_VERSION_ID,
+  )
+  expect(carried?.operator).toEqual({ kind: 'human', displayName: 'Ada' })
+  expect(Date.parse(carried?.createdAt ?? '')).toBeLessThanOrEqual(Date.now())
+})
+
+it('keeps the operator and date a carried version states on the local daemon', async () => {
+  const { promote } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const [version] = record.versions
+  const operator = { kind: 'human', displayName: 'Yuki' } as const
+  expect((await promote({ ...record, versions: [{ ...version, operator }] })).status).toBe(200)
+  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
+    (entry) => entry.id === DRAFTED_VERSION_ID,
+  )
+  expect(carried?.operator).toEqual(operator)
+  expect(carried?.createdAt).toBe(new Date(1_000).toISOString())
+})
+
 it('answers a restore of a saved state past a sync limit with 413 in the sync refusal code, writing nothing', async () => {
   const { app } = harness()
   const oversized = new LoroDoc()
