@@ -82,7 +82,7 @@ const { people } = await openServerModePeople({ dataDir, publicBaseUrl: PUBLIC_U
 // Fake deterministic auth strategy — no real OAuth/JWKS involved.
 // Returns 401 when Authorization header is absent, 403 when the required
 // scope is not in the granted set, ok otherwise.
-function makeScopeStrategy(grantedScopes) {
+function makeScopeStrategy(grantedScopes, person) {
   const granted = new Set(grantedScopes)
   return {
     async authorize(input) {
@@ -96,6 +96,7 @@ function makeScopeStrategy(grantedScopes) {
       }
       return {
         ok: true,
+        ...(person === undefined ? {} : { person }),
         context: {
           kind: 'oauth-resource-server',
           subject: 'smoke-sub',
@@ -310,7 +311,13 @@ try {
       fail('4: expected 403 on /api/runtime/status for a non-administrator', {
         status: refused.status,
       })
-    const app = makeApp(['runtime:read'], { people: administeredBySmokeCaller(people) })
+    const app = makeApp(['runtime:read'], {
+      people: administeredBySmokeCaller(people),
+      authStrategy: makeScopeStrategy(['runtime:read'], {
+        authenticator: 'oidc:smoke',
+        subject: 'smoke-sub',
+      }),
+    })
     const res = await req(app, 'GET', '/api/runtime/status', { bearer: SMOKE_TOKEN })
     if (res.status !== 200) fail('4: expected 200 on /api/runtime/status', { status: res.status })
     const body = await res.text()
