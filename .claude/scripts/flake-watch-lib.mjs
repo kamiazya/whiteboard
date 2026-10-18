@@ -366,8 +366,12 @@ export function formatReport(
 
 const FAILED_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure'])
 
-/** The `release.yml` jobs whose failure strands an artifact rather than failing a check. */
-export const PUBLISH_JOBS = ['publish-mcp', 'docker-publish-sign']
+/**
+ * The `release.yml` jobs whose failure strands an artifact rather than failing a check.
+ * The build jobs count too: when one fails, its publish job is skipped, and a
+ * skipped job is no evidence either way.
+ */
+export const PUBLISH_JOBS = ['build-mcp', 'publish-mcp', 'build-docker', 'docker-publish-sign']
 
 /**
  * Whether a `release` run is worth fetching the jobs of.

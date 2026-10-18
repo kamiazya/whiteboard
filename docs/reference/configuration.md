@@ -119,7 +119,20 @@ order in the current directory:
 
 If nothing is found in the current directory, `~/.whiteboard/config.yaml`
 is consulted as a per-machine fallback — so a `dataDir` in it redirects every
-command run from a directory with no file of its own. Only declarative JSON/YAML/rc formats
+command run from a directory with no file of its own.
+
+**A config file in the current directory may not set `dataDir` or `token`.**
+The current directory is wherever you, or an MCP client, started the command —
+for `whiteboard mcp` that is usually whatever repository is open, which may be
+one you cloned and never read. A file there choosing where your data lives or
+which token guards the daemon would let that repository's author take it over.
+So a current-directory file that sets either key stops the command with exit
+code 1 and a message naming the file and the key; it may still set `logLevel`
+and `openBrowser`. Put `dataDir` and `token` in `~/.whiteboard/config.yaml`,
+the only file that may set them (there is no flag that names a config file).
+When the current directory IS your home directory, that file is found there
+and keeps its trust. Only one file is ever read: a current-directory file,
+even one setting only `logLevel`, means the home file is not consulted. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately
 NOT searched, so a config file can never execute code at daemon startup.
 
@@ -209,7 +222,10 @@ configurable:
 
 On `/mcp` the refusal is the same `429` and `Retry-After: 1`, with a JSON-RPC
 error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`) rather
-than `too_many_requests`. A caller whose grant names no user on this instance
+than `too_many_requests`. A call answered as an event stream (one that sends
+progress or log messages before its result) counts until that stream ends,
+not merely until it opens; a `subscriptions/listen` stream does not count.
+A caller whose grant names no user on this instance
 (a token for no person, or a person with no user here) is counted with every
 other such caller as one user, so together they hold at most the per-user
 limit.

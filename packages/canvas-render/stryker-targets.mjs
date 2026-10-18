@@ -58,6 +58,9 @@ export const MUTATED = [
   // sees of the digest while the report kept looking the same.
   'src/quality/rect.ts',
   'src/layout/nodes/truncate.ts',
+  // The prefix search `truncate.ts` and the line breaker share, split out of
+  // the cut loop it replaced. In the lane because the file it left was.
+  'src/layout/nodes/longest-fit.ts',
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
   // where that file's mutation residue moved once its scoreboard existed,
@@ -151,6 +154,10 @@ export const MINUTES = {
   'src/scene-digest.ts': 6.8,
   'src/quality/rect.ts': 7.7,
   'src/layout/nodes/truncate.ts': 1.8,
+  // Measured locally (2026-10-17, one 4-runner run, not a CI leg): 43
+  // mutants, 27 killed and 16 timed out — a search loop mutated to never
+  // end costs a whole timeout, which is most of this figure.
+  'src/layout/nodes/longest-fit.ts': 11.8,
   'src/tidy.ts': 11.3,
   'src/tidy-units.ts': 4.2,
   'src/tidy-axis.ts': 0.5,
@@ -318,8 +325,7 @@ export const KNOWN_EQUIVALENT = {
   // the segmenter path — the correct one everywhere — at the price of walking
   // text that did not need it. The invariant is on `mayCluster`, backed by a
   // sweep of the domain the cheap path serves; only a bench can see them.
-  // `firstUnit` is a separate algebraic case, stated at its declaration, and
-  // naming `granularity` is equivalent to leaving it to the default.
+  // Naming `granularity` is equivalent to leaving it to the default.
   //
   // NOT recorded here, deliberately: `StringLiteral: 'grapheme' -> ""`, which
   // the lane also reports on this file. That one is KILLED — it throws
@@ -332,10 +338,16 @@ export const KNOWN_EQUIVALENT = {
     'BooleanLiteral: false -> true': 1,
     'ConditionalExpression: !mayCluster(text) -> false': 1,
     'ConditionalExpression: code >= 0x0300 || code === 0x000d -> true': 1,
-    "ConditionalExpression: firstUnit === '' -> true": 1,
     'EqualityOperator: code === 0x000d -> code !== 0x000d': 1,
     'EqualityOperator: i < text.length -> i <= text.length': 1,
     "ObjectLiteral: { granularity: 'grapheme' } -> {}": 1,
+    'ConditionalExpression: ends.length <= count -> true': 1,
+  },
+  // Its upper bound once every prefix fits is any count past `lo`; the
+  // bisection never runs from there. Verified by applying the edit and
+  // running canvas-render-node, which stays green.
+  'src/layout/nodes/longest-fit.ts': {
+    'ArithmeticOperator: limit + 1 -> limit - 1': 1,
   },
   // A placed bubble sits a whole offset to one side of its anchor on each
   // axis, so the anchor is never on a centre line and `<=` cannot differ from

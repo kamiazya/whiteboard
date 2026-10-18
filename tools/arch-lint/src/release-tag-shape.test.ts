@@ -33,8 +33,12 @@ function accepts(run: string, tag: string): boolean {
 }
 
 describe('release.yml — the tag shape check matches the whole tag', () => {
-  it('finds the check in both publishing jobs', () => {
-    expect(tagSteps.length).toBe(2)
+  it('finds the check in every job that checks out or pushes the tag', () => {
+    expect(tagSteps.map(({ job }) => job)).toEqual([
+      'build-mcp',
+      'build-docker',
+      'docker-publish-sign',
+    ])
   })
 
   for (const tag of ['mcp-server-v0.0.9', 'mcp-server-v12.3.45']) {

@@ -18,12 +18,17 @@
 // config directory) and the explicit `~/.whiteboard/config.yaml` fallback.
 // An ancestor of cwd — e.g. the root of an untrusted cloned repo — must
 // never be able to plant a config that injects `token` into a nested
-// project's daemon.
+// project's daemon. The cwd itself is no more trusted than its ancestors (an
+// MCP client starts the stdio server in whatever repo is open), so a config
+// found there may tune logLevel/openBrowser but is refused if it sets
+// `dataDir` or `token`; only the home-directory config may set those.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
 
+import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { cosmiconfigSync, defaultLoadersSync, type LoadersSync } from 'cosmiconfig'
 import { z } from 'zod'
 import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
@@ -147,6 +152,35 @@ function validateLoadedConfig(rawConfig: unknown, filepath: string): WhiteboardC
   return parseKnownConfig(known, filepath)
 }
 
+// The keys a file in the working directory may not set. The working directory
+// is wherever an MCP client started us — often a repo somebody else wrote — so
+// a file there choosing where our data lives, or which token guards the
+// daemon, would hand that repo's author the daemon. There is no flag naming a
+// config file explicitly, so the home-directory config is the one place these
+// are honoured.
+const HOME_ONLY_KEYS = ['dataDir', 'token'] as const satisfies readonly KnownKey[]
+
+function refuseWorkingDirectoryKeys(config: WhiteboardConfigFile, filepath: string): void {
+  const key = HOME_ONLY_KEYS.find((k) => config[k] !== undefined)
+  if (key === undefined) return
+  throw new Error(
+    `Refusing whiteboard config at ${filepath}: key "${key}" is honoured only in ~/${HOME_CONFIG_FILE_RELATIVE_PATH}, not in a config found in the working directory.`,
+  )
+}
+
+// A working directory that IS the home directory finds the home config through
+// the cwd search places; that file is the user's own and keeps its trust.
+// Compared by file identity, so a symlinked home still matches.
+function isHomeConfig(filepath: string, homeDir: string): boolean {
+  try {
+    const found = statSync(filepath)
+    const home = statSync(join(homeDir, HOME_CONFIG_FILE_RELATIVE_PATH))
+    return found.dev === home.dev && found.ino === home.ino
+  } catch {
+    return false
+  }
+}
+
 // Loads a whiteboard config file from `cwd` itself (no ancestor walk-up).
 // Falls back to `~/.whiteboard/config.yaml` when nothing is found there.
 // Returns null when no file exists anywhere — daemon behavior must stay
@@ -168,12 +202,14 @@ export function loadConfigFile(
     loaders: SAFE_LOADERS,
   })
 
+  const homeDir = options.homeDir ?? homedir()
   const found = explorer.search(cwd)
   if (found && !found.isEmpty) {
-    return { filepath: found.filepath, config: validateLoadedConfig(found.config, found.filepath) }
+    const config = validateLoadedConfig(found.config, found.filepath)
+    if (!isHomeConfig(found.filepath, homeDir)) refuseWorkingDirectoryKeys(config, found.filepath)
+    return { filepath: found.filepath, config }
   }
 
-  const homeDir = options.homeDir ?? homedir()
   const homeConfigExplorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [HOME_CONFIG_FILE_RELATIVE_PATH],
     searchStrategy: 'none',

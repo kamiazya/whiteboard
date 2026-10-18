@@ -5,8 +5,9 @@
 Consolidation complete. No public release has been cut from this path yet.
 
 - `release.yml`: single production path — release-please + npm OIDC provenance
-  (`publish-mcp` job) + Docker build/push/SBOM/cosign keyless sign
-  (`docker-publish-sign` job).
+  (`build-mcp` gates and packs, `publish-mcp` publishes) + Docker
+  build/push/SBOM/cosign keyless sign (`build-docker` gates and builds,
+  `docker-publish-sign` pushes and signs).
 - `ci.yml`: non-destructive publish dry-run verification (the npm dry-run as
   steps of `verify`, and the `dry-run-docker` job; no OIDC/push/sign).
 - `publish-production.yml` and `publish-dry-run.yml` deleted.
@@ -57,7 +58,7 @@ No custom checksum tooling is required for either artifact in the current slice.
   exists only in CI.
 - **Docker image**: SLSA provenance attached as an OCI attestation by
   `docker/build-push-action` (`provenance: true`) in `release.yml`'s
-  `docker-publish-sign` job.
+  `build-docker` job, and pushed with the image by `docker-publish-sign`.
 
 ## SBOM policy
 
@@ -66,7 +67,7 @@ No custom checksum tooling is required for either artifact in the current slice.
   (`npm-sbom-<run id>`, kept 90 days). It is not attached to the GitHub
   Release.
 - **Docker image**: an SBOM attestation attached by `docker/build-push-action`
-  (`sbom: true`) in the `docker-publish-sign` job.
+  (`sbom: true`) in the `build-docker` job.
 
 ## Signing policy
 
@@ -123,12 +124,17 @@ publish or signing gate:
 - `release.yml` — the consolidated production path for release-please output and
   guarded manual `force_publish_tag` reruns. Both paths validate
   `mcp-server-v<semver>` before checkout and require protected environments.
-- `publish-mcp` job — runs `pnpm publish-gate` (the publishability tier), then
-  `npm publish --access public --provenance` under `production-npm`.
-- `docker-publish-sign` job — runs `pnpm publish-gate`, `pnpm smoke:docker` and
-  `pnpm smoke:docker-backup-restore`, then buildx
-  `push: true` with `sbom: true` / `provenance: true`, followed by cosign
-  keyless signing under `production-docker`.
+- `build-mcp` job — runs `pnpm publish-gate` (the publishability tier) and
+  packs the tarball with `contents: read` only; `publish-mcp` checks it
+  against `build-mcp`'s sha256 and runs
+  `npm publish --access public --provenance` under `production-npm`, checking
+  out nothing.
+- `build-docker` job — runs `pnpm publish-gate`, `pnpm smoke:docker` and
+  `pnpm smoke:docker-backup-restore`, then buildx into an OCI archive with
+  `sbom: true` / `provenance: true`, with `contents: read` only;
+  `docker-publish-sign` checks the archive's sha256, pushes it with
+  `skopeo copy --all --preserve-digests` and cosign-signs that digest under
+  `production-docker`, checking out nothing.
 - Static drift tests: `publish-production-policy.test.ts` — verifies
   job-scoped `id-token: write`, protected environments, release/manual tag
   guards, Docker preflight, root permission minimization, and safe

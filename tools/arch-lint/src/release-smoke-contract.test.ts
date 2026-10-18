@@ -59,10 +59,12 @@ describe('release smoke contract', () => {
     expect(publishIndex).toBeGreaterThan(publishGateStepIndex)
   })
 
-  it('does not run smoke:codex-config in the publish-mcp job (verify-covered node correctness smoke, not a publishability check)', () => {
-    const publishMcpStart = releaseWorkflow.indexOf('\n  publish-mcp:')
-    const publishMcpEnd = releaseWorkflow.indexOf('\n  docker-publish-sign:')
-    const publishMcpSection = releaseWorkflow.slice(publishMcpStart, publishMcpEnd)
-    expect(publishMcpSection).not.toContain('smoke:codex-config')
+  it('does not run smoke:codex-config in the build-mcp job (verify-covered node correctness smoke, not a publishability check)', () => {
+    const buildMcpStart = releaseWorkflow.indexOf('\n  build-mcp:')
+    const buildMcpEnd = releaseWorkflow.indexOf('\n  build-docker:')
+    expect(buildMcpStart).toBeGreaterThan(-1)
+    const buildMcpSection = releaseWorkflow.slice(buildMcpStart, buildMcpEnd)
+    expect(buildMcpSection).toContain('pnpm publish-gate')
+    expect(buildMcpSection).not.toContain('smoke:codex-config')
   })
 })

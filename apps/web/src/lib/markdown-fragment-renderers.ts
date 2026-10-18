@@ -41,11 +41,57 @@ type MathJaxConvert = (value: string) => string
  * `bbox` (any `name: value` in its option becomes an inline style) and
  * `unicode` (its optional font argument becomes a `font-family` style, cached
  * per code point across documents). `require` and `autoload` load packages at
- * typeset time, `html` included under their default allow lists; neither is
- * in `AllPackages` today, and naming them keeps it that way across an
- * upgrade. `fragmentIsEmbeddable` is the output-side guard for URLs alone.
+ * typeset time, `html` included under their default allow lists, and
+ * `setoptions` lets document text change TeX options; none is in
+ * `AllPackages` today, and naming them keeps it that way across an upgrade.
+ * `fragmentIsEmbeddable` is the output-side guard for URLs alone.
  */
-const REFUSED_TEX_PACKAGES = new Set(['html', 'bbox', 'unicode', 'require', 'autoload'])
+const REFUSED_TEX_PACKAGES = new Set([
+  'html',
+  'bbox',
+  'unicode',
+  'require',
+  'autoload',
+  'setoptions',
+])
+
+/**
+ * What the base package's `\\mmlToken{kind}[attrs]{text}` may not write.
+ * Its allow list admits these beside a token's own MathML attributes, and
+ * the SVG output writes them out — the html package's `\\cssId`, `\\class`,
+ * `\\style` and `\\href`, and `\\unicode`'s font, by another door, reachable
+ * through any macro that expands to it.
+ */
+const AUTHOR_MARKUP_ATTRIBUTES = ['id', 'class', 'style', 'href', 'fontfamily']
+
+/**
+ * MathJax's own marker for the attributes `\\mmlToken` copied from document
+ * text, read and removed by its `cleanAttributes` post-filter — so this one
+ * runs before it and drops the refused ones from exactly those nodes, leaving
+ * what MathJax sets itself (an `\\eqref`'s local link and class) alone.
+ */
+const AUTHOR_ATTRIBUTES_MARKER = 'mjx-keep-attrs'
+
+type TexAttributes = {
+  get(name: string): unknown
+  getAllAttributes(): Record<string, unknown>
+}
+type TexPostFilterArgument = {
+  data: { root: { walkTree(visit: (node: { attributes?: TexAttributes }) => void): void } }
+}
+
+function dropAuthorMarkup({ data }: TexPostFilterArgument): void {
+  data.root.walkTree((node) => {
+    const attributes = node.attributes
+    const named = attributes?.get(AUTHOR_ATTRIBUTES_MARKER)
+    if (attributes === undefined || typeof named !== 'string') return
+    const authored = new Set(named.split(' '))
+    const all = attributes.getAllAttributes()
+    for (const name of AUTHOR_MARKUP_ATTRIBUTES) {
+      if (authored.has(name)) delete all[name]
+    }
+  })
+}
 
 let mathjaxSingleton: Promise<MathJaxConvert | undefined> | undefined
 
@@ -69,6 +115,9 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     const adaptor = liteAdaptor()
     RegisterHTMLHandler(adaptor)
     const tex = new TeX({ packages: AllPackages.filter((name) => !REFUSED_TEX_PACKAGES.has(name)) })
+    // Ahead of MathJax's own `cleanAttributes` (priority -2), which consumes
+    // the marker this reads.
+    tex.postFilters.add(dropAuthorMarkup, -10)
     // fontCache 'local' keeps each fragment self-contained: 'global' would
     // put shared glyph <defs> outside the fragment, which cannot survive
     // being embedded into the preview's larger SVG document.
@@ -124,6 +173,14 @@ const ANIMATION_ELEMENT =
   /<(?:[\w.-]+:)?(?:animate|animateMotion|animateTransform|animateColor|set)[\s/>]/i
 /** Any `url(` whose target is not a fragment-local `#id` (CSS or attribute). */
 const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
+/**
+ * CSS that `NON_LOCAL_URL` cannot read: an escape (`u\72l(` is `url(`) and
+ * `@import`, which loads a sheet without spelling `url(` at all. Neither
+ * engine writes an escape into a style attribute or an `@import` anywhere.
+ */
+const UNREADABLE_CSS = /\\|@import/i
+const STYLE_ELEMENT_OPEN = /<(?:[\w.-]+:)?style\b/gi
+const STYLE_ELEMENT_CLOSE = /<\/(?:[\w.-]+:)?style\b/i
 const FORM_ATTRIBUTE = /^(?:form)?action$/i
 const WHITESPACE = /\s/
 const TAG_NAME_END = /[\s/>]/
@@ -170,6 +227,7 @@ const LINK_ATTRIBUTE = /^(?:src|(?:[\w.-]+:)?href)$/i
  */
 function isRefusedAttribute(name: string, value: string): boolean {
   if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name)) return true
+  if (/^style$/i.test(name) && UNREADABLE_CSS.test(value)) return true
   return LINK_ATTRIBUTE.test(name) && !value.startsWith('#')
 }
 
@@ -217,6 +275,16 @@ function hasRefusedAttribute(svg: string): boolean {
   return false
 }
 
+/** Whether a `<style>` element's text holds CSS `NON_LOCAL_URL` cannot read. */
+function hasUnreadableStyleElement(svg: string): boolean {
+  for (const open of svg.matchAll(STYLE_ELEMENT_OPEN)) {
+    const rest = svg.slice(open.index)
+    const close = rest.search(STYLE_ELEMENT_CLOSE)
+    if (/@import/i.test(close < 0 ? rest : rest.slice(0, close))) return true
+  }
+  return false
+}
+
 /**
  * Whether an engine's SVG may be embedded verbatim: every reference is
  * local, nothing in it runs script, submits a form or animates, and it holds
@@ -232,6 +300,7 @@ export function fragmentIsEmbeddable(svg: string): boolean {
     !HTML_ISLAND_ELEMENT.test(svg) &&
     !ANIMATION_ELEMENT.test(svg) &&
     !NON_LOCAL_URL.test(svg) &&
+    !hasUnreadableStyleElement(svg) &&
     !hasRefusedAttribute(svg)
   )
 }
@@ -283,7 +352,13 @@ async function loadMermaid(): Promise<MermaidApi | undefined> {
       // `secure` replaces mermaid's list, so its defaults are repeated here;
       // `themeCSS` would otherwise let document text inject CSS into a
       // fragment embedded verbatim, and `dompurifyConfig` loosen the label
-      // sanitiser that 'strict' relies on.
+      // sanitiser that 'strict' relies on. `fontFamily` is CSS too — mermaid
+      // only balances its braces, so `x{} .a{…}` writes a rule — and a key
+      // here is refused at any depth of the directive, `themeVariables`'
+      // own `fontFamily` included. The rest of `themeVariables` stays a
+      // directive's to set: mermaid admits only letters, digits, spaces and
+      // `#%(),.;` in its values, and any `url(` they spell is refused by
+      // `fragmentIsEmbeddable`.
       secure: [
         'secure',
         'securityLevel',
@@ -293,6 +368,7 @@ async function loadMermaid(): Promise<MermaidApi | undefined> {
         'maxEdges',
         'dompurifyConfig',
         'themeCSS',
+        'fontFamily',
         'htmlLabels',
       ],
       theme: 'neutral',

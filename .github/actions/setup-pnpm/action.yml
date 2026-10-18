@@ -8,7 +8,7 @@ inputs:
   node-version:
     description: >-
       Node version to install. Overrides node-version-file when set — used by
-      the publish-mcp release job, which checks out an old tag whose tree may
+      the build-mcp release job, which checks out an old tag whose tree may
       predate .node-version and must pin Node inline instead.
     required: false
     default: ''

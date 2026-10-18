@@ -11,7 +11,7 @@ import { definePluginUi, EmojiText } from '@kamiazya/whiteboard-facet-ui'
 import { createElement, type ReactNode } from 'react'
 import type { VisualSymbolFacet } from './data.js'
 import type { LucideIconElement } from './icons/icons.js'
-import { LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
+import { iconGeometry, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
  * Draws a vendored icon by name, from the SAME geometry the canvas renders,
@@ -28,7 +28,7 @@ function BuiltInIcon({ name }: { readonly name: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {(LUCIDE_ICONS[name] ?? []).map((element, index) => {
+      {(iconGeometry(name) ?? []).map((element, index) => {
         const { tag, ...attrs } = element
         // The vendored geometry is a fixed, never-reordered list, so the
         // index is a stable identity here.
@@ -76,7 +76,7 @@ export function canDrawSymbol(symbol: VisualSymbolFacet): boolean {
 }
 
 function geometryOf(symbol: VisualSymbolFacet): ReadonlyArray<LucideIconElement> | undefined {
-  return symbol.kind === 'icon' ? LUCIDE_ICONS[symbol.name] : undefined
+  return symbol.kind === 'icon' ? iconGeometry(symbol.name) : undefined
 }
 
 export const visualUi = definePluginUi({

@@ -31,7 +31,7 @@ interface Compose {
 }
 
 interface Workflow {
-  jobs: Record<string, { steps?: { uses?: string; with?: { tags?: string } }[] }>
+  jobs: Record<string, { steps?: { env?: { IMAGE_REPO?: string } }[] }>
 }
 
 /** `owner/name` of this repository, which `${{ github.repository }}` resolves to. */
@@ -45,15 +45,18 @@ function repositorySlug(): string {
 
 function defined(): { container: string; localImage: string; publishedRepos: Set<string> } {
   const service = (parseYaml(read('docker-compose.server.yml')) as Compose).services.whiteboard
+  // The repository the publish job pushes to and signs in, read from every
+  // step that names one, so a push and a signature naming different
+  // repositories both surface.
   const steps = (parseYaml(read('.github/workflows/release.yml')) as Workflow).jobs[
     'docker-publish-sign'
   ]?.steps
-  const tags = steps?.find((step) => step.uses?.startsWith('docker/build-push-action@'))?.with?.tags
   const publishedRepos = new Set(
-    (tags ?? '')
-      .replace(/\$\{\{\s*github\.repository\s*\}\}/g, repositorySlug())
-      .split(',')
-      .map((tag) => tag.trim().split(':')[0] ?? ''),
+    (steps ?? []).flatMap((step) =>
+      step.env?.IMAGE_REPO === undefined
+        ? []
+        : [step.env.IMAGE_REPO.replace(/\$\{\{\s*github\.repository\s*\}\}/g, repositorySlug())],
+    ),
   )
   return {
     container: service?.container_name ?? '',

@@ -327,21 +327,26 @@ back is placed into the page as markup. Document text decides what goes into
 that SVG, so it is held to what SVG text can do:
 
 - Mermaid runs at its `strict` security level with HTML labels off, and a
-  diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS or
-  loosen the label sanitiser. A label is drawn as SVG text, so HTML written in
-  one shows as its source.
+  diagram's own `%%{init}%%` directive cannot turn them back on, inject CSS
+  (`themeCSS`), choose a font (`fontFamily`, at any depth of the directive) or
+  loosen the label sanitiser. It can still pick a theme and its colours. A
+  label is drawn as SVG text, so HTML written in one shows as its source.
 - MathJax runs without its `html`, `bbox` and `unicode` extensions, and
   without `require`, which could load one back. So `\href`, `\class`,
   `\cssId`, `\style`, `\bbox` and `\unicode` are not commands: math cannot
   carry a link, or put an id, a class, an inline style or a font of its
   choosing into the page. Written in a math block, they show as unknown
-  commands.
+  commands. `\mmlToken` still sets a token's own MathML attributes, but the
+  `id`, `class`, `style`, `href` and `fontfamily` it would also accept are
+  dropped before the math is drawn.
 - Whatever either engine returns is checked before it is used: a fragment
   carrying an HTML island (`<foreignObject>`), a form, a script, an
   animation element (`<animate>`, `<set>` and the rest, which could rewrite a
   link after the check has read it), an event handler, an `action` or
-  `formaction` attribute, or any `href`, `src` or `url(…)` that points outside
-  the fragment, quoted or not, is refused, and the block keeps its source.
+  `formaction` attribute, any `href`, `src` or `url(…)` that points outside
+  the fragment, quoted or not, or CSS that check cannot read — a backslash
+  escape in a `style` attribute, or an `@import` — is refused, and the block
+  keeps its source.
   This matters beyond the app: an exported SVG opened on its own has no
   content security policy behind it.
 - The hosted app's policy carries `form-action 'none'`: nothing in the app
@@ -501,6 +506,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
   checkpointed one at a time, not all at once.
+- **A canvas holds a bounded number of nodes and edges.** Every render,
+  export and tidy lays the whole board out again on the serving loop, so one
+  board holds at most 2000 nodes and 2000 edges, however the change arrives:
+  `wb_canvas_edit` refuses the op that would pass either, and a sync update
+  or a move is refused whole (`too_many_nodes_or_edges`). One batch tidies at most
+  once, so a single call cannot repeat a whole-board layout once per op. What
+  is still NOT bounded is how long the largest permitted board takes to lay
+  out — several seconds on a typical machine — and that work blocks the loop
+  while it runs. All of it is in
+  [Export formats](../reference/export-formats.md).
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set

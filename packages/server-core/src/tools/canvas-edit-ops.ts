@@ -6,6 +6,10 @@
 import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
 import {
   annotationIdInputSchema,
+  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES,
+  CANVAS_MAX_NODES,
+  CANVAS_NODES_LIMIT_PHRASE,
   canvasCommentDraftSchema,
   canvasEdgeSchema,
   canvasLineSchema,
@@ -488,7 +492,11 @@ const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object({
       op: z.literal('tidy'),
-      scope: z.array(nodeIdSchema).min(1).optional(),
+      scope: z
+        .array(nodeIdSchema)
+        .min(1)
+        .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
+        .optional(),
       within: nodeIdSchema.optional().describe('Instead of scope: every node inside this group.'),
     })
     .strict()
@@ -546,11 +554,13 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       within: nodeIdSchema,
       nodes: z
         .array(nodeIdSchema)
+        .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
         .describe(
           'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in — unless the group was added in this batch with no position, which is placed around them where they sit. Create a new member with node.add and within.',
         ),
       edges: z
         .array(nodeIdSchema)
+        .max(CANVAS_MAX_EDGES, `more edges than ${CANVAS_EDGES_LIMIT_PHRASE}`)
         .optional()
         .describe('Edges to keep among the members; omitted keeps every edge whose ends survive.'),
     })

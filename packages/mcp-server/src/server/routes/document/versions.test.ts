@@ -300,6 +300,55 @@ describe('versions API', () => {
     })
   })
 
+  // Where the keeper knows who the caller is (server mode's member), the
+  // row names that person: any member could otherwise save a version under
+  // another member's name, and an unnamed save would carry the server's OS
+  // account instead of anyone who used it.
+  it('names the calling member, not a stated operator, where the keeper knows the caller', async () => {
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        daemonActor: TEST_DAEMON_ACTOR,
+        callerName: async () => 'Ada',
+      }),
+    )
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operator: { kind: 'ai', displayName: 'Eve', agentId: 'agent-9', workspaceId: 'other' },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { version: { operator?: Record<string, unknown> } }
+    expect(body.version.operator).toEqual({
+      kind: 'human',
+      displayName: 'Ada',
+      actor: TEST_DAEMON_ACTOR,
+    })
+  })
+
+  it('names nobody, rather than the OS account, for a caller the keeper holds no profile for', async () => {
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        callerName: async () => null,
+      }),
+    )
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'unnamed' }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { version: { operator?: Record<string, unknown> } }
+    expect(body.version.operator).toEqual({ kind: 'human' })
+  })
+
   it('POST /update auto-version persists system/auto-save operator', async () => {
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()

@@ -3,8 +3,8 @@
 // Drift guards:
 //   - permission model (id-token job-scoped), protected environments
 //   - npm provenance path, Docker keyless signing path
-//   - tag validation before checkout (both publish jobs)
-//   - SBOM generation / upload before npm publish
+//   - tag validation before checkout (both build jobs)
+//   - SBOM generation / upload in the build job npm publish waits on
 //   - standalone publish-production.yml and publish-dry-run.yml must not exist
 // PBT: validateProductionJobPolicy() catches structural violations.
 
@@ -124,6 +124,10 @@ describe('release.yml publish-mcp job policy (npm)', () => {
     expect(section, 'npm publish command must include --provenance flag').toContain('--provenance')
   })
 
+  it('job runs no lifecycle script of the package it publishes', () => {
+    expect(npmSection()).toMatch(/npm publish "\$TARBALL"[^\n]*--ignore-scripts/)
+  })
+
   it('job does not reference NODE_AUTH_TOKEN as a secret', () => {
     expect(npmSection()).not.toMatch(/NODE_AUTH_TOKEN:\s*\$\{\{.*secrets\./)
   })
@@ -133,11 +137,15 @@ describe('release.yml publish-mcp job policy (npm)', () => {
   })
 })
 
-// ── release.yml publish-mcp tag validation ────────────────────────────────────
+// ── release.yml build-mcp tag validation ──────────────────────────────────────
 
-describe('release.yml publish-mcp tag validation', () => {
-  const npmSection = () =>
-    jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
+const buildMcpSection = () =>
+  jobSection(readWorkflow(RELEASE_WORKFLOW), 'build-mcp', 'build-docker')
+const buildDockerSection = () =>
+  jobSection(readWorkflow(RELEASE_WORKFLOW), 'build-docker', 'publish-mcp')
+
+describe('release.yml build-mcp tag validation', () => {
+  const npmSection = buildMcpSection
 
   it('tag validation step binds input via TAG env var (prevents shell injection)', () => {
     const section = npmSection()
@@ -159,33 +167,24 @@ describe('release.yml publish-mcp tag validation', () => {
   })
 })
 
-// ── release.yml publish-mcp SBOM policy ──────────────────────────────────────
+// ── release.yml build-mcp SBOM policy ────────────────────────────────────────
 
-describe('release.yml publish-mcp SBOM policy', () => {
-  const npmSection = () =>
-    jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
+describe('release.yml build-mcp SBOM policy', () => {
+  const npmSection = buildMcpSection
 
-  it('SBOM generation is invoked via the publish-gate runner before npm publish', () => {
-    const section = npmSection()
+  it('SBOM generation is invoked via the publish-gate runner in the job npm publish waits on', () => {
     // generate:sbom:npm runs as a publish-tier gate inside `pnpm publish-gate`, not inline in the job.
-    const publishGateIdx = section.indexOf('pnpm publish-gate')
-    const publishIdx = section.indexOf('npm publish "$TARBALL"')
+    expect(npmSection(), 'pnpm publish-gate must be referenced in build-mcp').toContain(
+      'pnpm publish-gate',
+    )
     expect(
-      publishGateIdx,
-      'pnpm publish-gate must be referenced in npm job',
-    ).toBeGreaterThanOrEqual(0)
-    expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
-    expect(
-      publishGateIdx,
-      'pnpm publish-gate (containing generate:sbom:npm) must precede npm publish',
-    ).toBeLessThan(publishIdx)
+      jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign'),
+      'publish-mcp must need build-mcp, so it runs only once the gate passed',
+    ).toMatch(/needs:.*\bbuild-mcp\b/)
   })
 
-  it('upload-artifact step appears before npm publish', () => {
-    const section = npmSection()
-    const uploadIdx = section.indexOf('upload-artifact')
-    const publishIdx = section.indexOf('npm publish "$TARBALL"')
-    expect(uploadIdx, 'SBOM upload must precede npm publish').toBeLessThan(publishIdx)
+  it('upload-artifact step uploads the SBOM', () => {
+    expect(npmSection()).toContain('_artifacts/npm-sbom.cdx.json')
   })
 
   it('upload step has if-no-files-found: error', () => {
@@ -201,22 +200,21 @@ describe('release.yml publish-mcp SBOM policy', () => {
   })
 })
 
-// ── release.yml publish-mcp publish-gate collapse ─────────────────────────────
+// ── release.yml build-mcp publish-gate collapse ───────────────────────────────
 //
 // The publish gate is scoped to publishability only: the full browser/jsdom
 // `pnpm test` matrix must not re-run here, and every check the publish-gate
 // runner already carries (typecheck, build, tarball/packaged smokes) must not
 // also appear as a duplicate standalone step in the job.
 
-describe('release.yml publish-mcp job runs the publish-gate runner exactly once, with no duplicate standalone steps', () => {
-  const npmSection = () =>
-    jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
+describe('release.yml build-mcp job runs the publish-gate runner exactly once, with no duplicate standalone steps', () => {
+  const npmSection = buildMcpSection
 
   it('does not contain a standalone `pnpm test` step (full browser/jsdom matrix)', () => {
     const section = npmSection()
     const lines = section.split('\n').map((l) => l.trim())
     const standaloneTest = lines.filter((l) => /^run:\s*pnpm test\s*$/.test(l))
-    expect(standaloneTest, 'publish-mcp must not run the full `pnpm test` matrix').toEqual([])
+    expect(standaloneTest, 'build-mcp must not run the full `pnpm test` matrix').toEqual([])
   })
 
   it('does not call check:release-candidate (which internally chains `pnpm test`)', () => {
@@ -234,7 +232,7 @@ describe('release.yml publish-mcp job runs the publish-gate runner exactly once,
     'pnpm build',
     'pnpm smoke:packaged',
     'pnpm smoke:tarball',
-  ])('does not run "%s" as a standalone step of the npm publish job', (command) => {
+  ])('does not run "%s" as a standalone step of the npm build job', (command) => {
     const section = npmSection()
     const lines = section.split('\n').map((l) => l.trim())
     const standalone = lines.filter((l) => l === `run: ${command}`)
@@ -242,15 +240,15 @@ describe('release.yml publish-mcp job runs the publish-gate runner exactly once,
   })
 })
 
-// ── release.yml docker-publish-sign job ──────────────────────────────────────
+// ── release.yml build-docker and docker-publish-sign jobs ────────────────────
 
 // The image's gate is scoped like the npm one: publishability plus what only a
 // container can show. The full `pnpm test` matrix already ran on this SHA in
 // verify CI, and re-running it on one runner at the tag turned every
 // load-dependent test into a way to block the image — the 0.0.20 image failed
 // three attempts that way, on three different tests, with npm already out.
-describe('release.yml docker-publish-sign gates on publishability, not the full test matrix', () => {
-  const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
+describe('release.yml build-docker gates on publishability, not the full test matrix', () => {
+  const dockerSection = buildDockerSection
 
   it('does not call check:release-candidate (which internally chains `pnpm test`)', () => {
     expect(dockerSection()).not.toContain('check:release-candidate')
@@ -298,16 +296,20 @@ describe('release.yml docker-publish-sign job policy', () => {
     expect(dockerSection()).toContain('environment: production-docker')
   })
 
-  it('job uses sbom: true (OCI SBOM attestation)', () => {
-    expect(dockerSection()).toContain('sbom: true')
+  it('build-docker uses sbom: true (OCI SBOM attestation)', () => {
+    expect(buildDockerSection()).toContain('sbom: true')
   })
 
-  it('job uses provenance: true (OCI provenance attestation)', () => {
-    expect(dockerSection()).toContain('provenance: true')
+  it('build-docker uses provenance: true (OCI provenance attestation)', () => {
+    expect(buildDockerSection()).toContain('provenance: true')
   })
 
-  it('job references docker/build-push-action', () => {
-    expect(dockerSection()).toContain('docker/build-push-action')
+  it('build-docker references docker/build-push-action', () => {
+    expect(buildDockerSection()).toContain('docker/build-push-action')
+  })
+
+  it('job needs build-docker, so it pushes only an image that passed the gate', () => {
+    expect(dockerSection()).toMatch(/needs:.*\bbuild-docker\b/)
   })
 
   it('job uses cosign sign (keyless signing)', () => {
@@ -321,8 +323,8 @@ describe('release.yml docker-publish-sign job policy', () => {
   })
 })
 
-describe('release.yml docker-publish-sign tag validation', () => {
-  const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
+describe('release.yml build-docker tag validation', () => {
+  const dockerSection = buildDockerSection
 
   it('tag validation checks mcp-server-v<semver> shape before checkout', () => {
     const section = dockerSection()

@@ -316,9 +316,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // 108 with `layout/nodes/embed-budget.ts`, the nested-layout budget every
     // embed spends from. Outside the lane: a counter whose budget test pins
     // both the bound and that the excess still draws.
+    //
+    // 109 and 23 with `layout/nodes/longest-fit.ts`, the prefix search lifted
+    // out of `truncate.ts`'s cut loop; in the lane because that file is.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 22,
-      production: 108,
+      mutated: 23,
+      production: 109,
     })
   })
 

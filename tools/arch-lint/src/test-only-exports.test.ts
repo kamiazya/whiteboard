@@ -189,7 +189,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
   'packages/search/src/full-text.ts#tokenize',
-  'packages/search/src/full-text.ts#tokenizeForIndex',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewInputSchema',
   'packages/server-core/src/tools/document-set.ts#documentSetInputSchema',
   'packages/server-core/src/tools/facet-set.ts#DocumentHasNoFrontmatterError',
@@ -350,6 +349,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the published type of nodeEmbedSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
   'packages/model/src/trust.ts#trustTier':
     'the OKF §5.3 tier rule, kept ahead of its first surface; ADR-0039 and package-model.md name it as a model contract its tests spec',
+  'packages/search/src/full-text.ts#tokenizeForIndex':
+    'the index-side tokenizer without DOCUMENT_TERMS_MAX — what full-text.index-size.test.ts measures that ceiling against, and what search-quality.test.ts reads to explain a miss',
   'packages/server-core/src/search/search-corpus.ts#CORPUS_DOCUMENTS':
     'the judged corpus kept beside the search it measures; the ranking tests are its reader',
   'packages/server-core/src/search/search-corpus.ts#JUDGED_QUERIES':
@@ -357,7 +358,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 155
+const DEBT_CEILING = 154
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

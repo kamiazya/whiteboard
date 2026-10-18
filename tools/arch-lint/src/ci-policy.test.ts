@@ -101,6 +101,114 @@ describe('release.yml — permissions are granted per job, never at the root', (
   })
 })
 
+interface ReleaseCredentialStep {
+  name?: string
+  uses?: string
+  run?: string
+  with?: Record<string, unknown>
+}
+interface ReleaseCredentialJob {
+  needs?: string | string[]
+  permissions?: Record<string, string>
+  outputs?: Record<string, string>
+  steps?: ReleaseCredentialStep[]
+}
+
+function releaseJobs(): Record<string, ReleaseCredentialJob> {
+  const text = readFileSync(join(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
+  return (parseYaml(text) as { jobs: Record<string, ReleaseCredentialJob> }).jobs
+}
+
+describe('release.yml — a job holding a publish credential runs no repository or dependency code', () => {
+  // `id-token: write` lets any process in the job mint the OIDC token npm's
+  // Trusted Publishing and cosign's keyless signing accept; `packages: write`
+  // puts a GHCR push token in the job. A step that installs dependencies or
+  // runs the repo's own scripts hands either to every lifecycle script and
+  // test in the tree, so building and gating happen in a job with
+  // `contents: read` and the privileged job only receives the artifact.
+  const PRIVILEGED = (job: ReleaseCredentialJob) =>
+    job.permissions?.['id-token'] === 'write' || job.permissions?.packages === 'write'
+  // pnpm and npx run the workspace's scripts or a fetched package; node runs a
+  // repo file; npm's install/ci/run/exec/pack verbs run lifecycle scripts. A
+  // shell or Python handed a file, an executable named by a relative path and
+  // a docker build each run what the tree or the artifact says to.
+  const RUNS_CODE = [
+    /\bpnpm\b/,
+    /\bnpx\b/,
+    /\bcorepack\b/,
+    /\bnode\s/,
+    /\bnpm\s+(install|i|ci|run|run-script|exec|test|pack|rebuild)\b/,
+    /\b(?:bash|sh)\s+(?:-\S+\s+)*[^\s;&|-]/,
+    /\bpython3?\b/,
+    /(?:^|[\s;&|(])\.{1,2}\/\S/m,
+    /\bdocker\s+(?:build|buildx\s+build)\b/,
+  ]
+
+  const privileged = Object.entries(releaseJobs()).filter(([, job]) => PRIVILEGED(job))
+
+  it('finds the publishing jobs', () => {
+    expect(privileged.map(([id]) => id)).toEqual(
+      expect.arrayContaining(['publish-mcp', 'docker-publish-sign']),
+    )
+  })
+
+  it.each(privileged)('%s checks out nothing and runs no repo or dependency code', (_id, job) => {
+    const offending = (job.steps ?? []).flatMap((step) => {
+      const label = step.name ?? step.uses ?? step.run ?? '?'
+      const uses = step.uses ?? ''
+      if (uses.startsWith('actions/checkout@')) return [`${label}: checks out the repository`]
+      if (uses.startsWith('./')) return [`${label}: runs a repository action`]
+      const run = step.run ?? ''
+      return RUNS_CODE.filter((pattern) => pattern.test(run)).map(
+        (pattern) => `${label}: runs ${pattern}`,
+      )
+    })
+    expect(offending).toEqual([])
+  })
+
+  it.each(privileged)('%s verifies the artifact it receives against its build job', (_id, job) => {
+    const needs = [job.needs ?? []].flat()
+    const builders = needs.filter((id) =>
+      Object.keys(releaseJobs()[id]?.outputs ?? {}).some((key) => key.endsWith('sha256')),
+    )
+    expect(builders, 'a needed job publishing a sha256 output').toHaveLength(1)
+    const runs = (job.steps ?? []).map((step) => step.run ?? '')
+    expect(runs.some((run) => /sha256sum\s+(-c|--check)\b/.test(run))).toBe(true)
+  })
+})
+
+describe('release.yml — a checkout keeps the job token only where the job pushes with it', () => {
+  // actions/checkout writes the token into .git/config unless told not to, and
+  // every later step — the install, the build, the smokes — can read it there.
+  const PUSHES_WITH_TOKEN: Record<string, string> = {
+    'advance-stable':
+      'fast-forwards the stable branch with `git push origin`, which uses the token',
+  }
+  const jobs = releaseJobs()
+  const checkouts = Object.entries(jobs).flatMap(([id, job]) =>
+    (job.steps ?? [])
+      .filter((step) => (step.uses ?? '').startsWith('actions/checkout@'))
+      .map((step) => ({ id, step })),
+  )
+
+  it('finds the checkouts', () => {
+    expect(checkouts.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('every checkout outside the ledger sets persist-credentials: false', () => {
+    const keeping = checkouts
+      .filter(({ id }) => PUSHES_WITH_TOKEN[id] === undefined)
+      .filter(({ step }) => step.with?.['persist-credentials'] !== false)
+      .map(({ id }) => id)
+    expect(keeping).toEqual([])
+  })
+
+  it.each(Object.keys(PUSHES_WITH_TOKEN))('ledgered %s still pushes', (id) => {
+    const runs = (jobs[id]?.steps ?? []).map((step) => step.run ?? '')
+    expect(runs.some((run) => /\bgit push\b/.test(run))).toBe(true)
+  })
+})
+
 describe('workflows — runner images are pinned, never floating', () => {
   // `ubuntu-latest` is a label GitHub re-points at a new image on its own
   // schedule, and jobs here depend on what the current image ships (Chrome at
@@ -547,6 +655,29 @@ describe('release.yml — either publish half can be retried alone', () => {
     return Boolean(new Function(`return (${js})`)())
   }
 
+  // Each half is a build job and the publish job that needs it; both gate on
+  // the same expression, so a half either runs whole or not at all.
+  const HALVES = {
+    npm: ['build-mcp', 'publish-mcp'],
+    docker: ['build-docker', 'docker-publish-sign'],
+  } as const
+
+  function halvesRun(
+    jobs: ReleaseWorkflow['jobs'],
+    event: Dispatch,
+  ): Record<keyof typeof HALVES, boolean> {
+    const run = (half: keyof typeof HALVES): boolean => {
+      const [build, publish] = HALVES[half].map((id) => {
+        const expression = jobs[id]?.if
+        if (expression === undefined) throw new Error(`${id} has no if:`)
+        return jobRuns(expression, event)
+      })
+      if (build !== publish) throw new Error(`${half}: build and publish jobs disagree`)
+      return Boolean(publish)
+    }
+    return { npm: run('npm'), docker: run('docker') }
+  }
+
   const TAG = 'mcp-server-v0.0.20'
 
   it('declares both retry switches as booleans that default to on', async () => {
@@ -561,24 +692,21 @@ describe('release.yml — either publish half can be retried alone', () => {
     const { jobs } = await releaseWorkflow()
     const event: Dispatch = { releaseCreated: '', tag: TAG, publishNpm: true, publishDocker: false }
 
-    expect(jobRuns(jobs['publish-mcp']?.if ?? '', event)).toBe(true)
-    expect(jobRuns(jobs['docker-publish-sign']?.if ?? '', event)).toBe(false)
+    expect(halvesRun(jobs, event)).toEqual({ npm: true, docker: false })
   })
 
   it('runs only the image half when a dispatch switches npm off', async () => {
     const { jobs } = await releaseWorkflow()
     const event: Dispatch = { releaseCreated: '', tag: TAG, publishNpm: false, publishDocker: true }
 
-    expect(jobRuns(jobs['publish-mcp']?.if ?? '', event)).toBe(false)
-    expect(jobRuns(jobs['docker-publish-sign']?.if ?? '', event)).toBe(true)
+    expect(halvesRun(jobs, event)).toEqual({ npm: false, docker: true })
   })
 
   it('runs neither half on a dispatch that names no tag', async () => {
     const { jobs } = await releaseWorkflow()
     const event: Dispatch = { releaseCreated: '', tag: '', publishNpm: true, publishDocker: true }
 
-    expect(jobRuns(jobs['publish-mcp']?.if ?? '', event)).toBe(false)
-    expect(jobRuns(jobs['docker-publish-sign']?.if ?? '', event)).toBe(false)
+    expect(halvesRun(jobs, event)).toEqual({ npm: false, docker: false })
   })
 
   // A push carries no inputs at all, so the switches read as null there and a
@@ -592,8 +720,7 @@ describe('release.yml — either publish half can be retried alone', () => {
       publishDocker: null,
     }
 
-    expect(jobRuns(jobs['publish-mcp']?.if ?? '', event)).toBe(true)
-    expect(jobRuns(jobs['docker-publish-sign']?.if ?? '', event)).toBe(true)
+    expect(halvesRun(jobs, event)).toEqual({ npm: true, docker: true })
   })
 })
 

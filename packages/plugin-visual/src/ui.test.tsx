@@ -121,3 +121,17 @@ describe('canDrawSymbol', () => {
     expect(canDrawSymbol({ kind: 'icon', name: 'no-such-icon' })).toBe(false)
   })
 })
+
+describe('a symbol naming an inherited property', () => {
+  it.each([
+    'constructor',
+    'toString',
+    '__proto__',
+    'hasOwnProperty',
+  ])('draws nothing for %s, without throwing', (name) => {
+    const symbol = { kind: 'icon', name } as const
+    expect(canDrawSymbol(symbol)).toBe(false)
+    const { container } = render(<SymbolMark symbol={symbol} />)
+    expect(container.innerHTML).toBe('')
+  })
+})

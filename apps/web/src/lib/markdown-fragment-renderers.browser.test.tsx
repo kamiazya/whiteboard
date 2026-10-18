@@ -76,6 +76,27 @@ describe('renderDiagramFragment (real mermaid)', () => {
     expect(fragment?.svg).not.toContain(marker)
   })
 
+  // A directive's `fontFamily` is written into the diagram's stylesheet with
+  // only its braces balanced, so it names a font of the document's choosing
+  // and can carry whole rules — `themeCSS` by another key.
+  it.each([
+    ['fontFamily', '{"fontFamily": "wbfontmarker"}'],
+    ['fontFamily carrying a rule', '{"fontFamily": "x{} .wbfontmarker{fill:red}"}'],
+    ['themeVariables fontFamily', '{"themeVariables": {"fontFamily": "wbfontmarker"}}'],
+  ])('ignores a %s an init directive tries to set', async (_name, init) => {
+    const fragment = await renderDiagramFragment('mermaid', `%%{init: ${init}}%%\ngraph TD; A-->B`)
+    expect(fragment?.svg).toContain('<svg')
+    expect(fragment?.svg).not.toContain('wbfontmarker')
+  })
+
+  it("keeps an init directive's theme colours", async () => {
+    const fragment = await renderDiagramFragment(
+      'mermaid',
+      '%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#123456"}}}%%\ngraph TD; A-->B',
+    )
+    expect(fragment?.svg).toContain('#123456')
+  })
+
   it('ignores a dompurifyConfig an init directive tries to loosen', async () => {
     const fragment = await renderDiagramFragment(
       'mermaid',
