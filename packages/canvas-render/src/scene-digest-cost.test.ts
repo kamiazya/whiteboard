@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { sceneDigest } from './scene-digest.js'
 
 /** `n` identical boxes at the origin: one proximity cluster, every pair overlapping. */
-function stacked(n: number): Scene {
+function stacked(n: number, size = 10): Scene {
   return {
     nodes: Array.from({ length: n }, () => ({
       kind: 'thematicBreak' as const,
-      bbox: { x: 0, y: 0, w: 10, h: 10 },
+      bbox: { x: 0, y: 0, w: size, h: size },
     })),
   }
 }
@@ -43,5 +43,31 @@ describe('sceneDigest cost', () => {
     // Was 980_498 — about 200 steps per pair, cubic in n — before path
     // compression and union by rank. Now a small constant per pair.
     expect(reads).toBeLessThanOrEqual(10 * pairs)
+  })
+
+  it('fills the free-region grid in time linear in entries plus cells', () => {
+    // Boxes stacked over all but the last row and column of a 10000px
+    // square, and one box in the far corner: a 500 x 500 grid, the cell
+    // budget's limit, with every stacked entry covering nearly every cell.
+    // Filling cell by cell is entries x cells.
+    const entries = 2000
+    const cells = (10_000 / 20) ** 2
+    const board = (n: number): Scene => ({
+      nodes: [
+        ...stacked(n, 9980).nodes,
+        { kind: 'thematicBreak' as const, bbox: { x: 9980, y: 9980, w: 20, h: 20 } },
+      ],
+    })
+    sceneDigest(board(10)) // warm the JIT on the same path
+    const started = performance.now()
+    const digest = sceneDigest(board(entries - 1))
+    const elapsed = performance.now() - started
+
+    // The subject is present: the grid was built (over budget it answers no
+    // regions), and it found the one free column and the one free row.
+    expect(digest.freeRegions).toHaveLength(500)
+    // Was 1_695ms for 2000 entries — 0.0067ms per entry-or-cell — filling
+    // every covered cell of every entry.
+    expect(elapsed / (entries + cells)).toBeLessThan(0.002)
   })
 })
