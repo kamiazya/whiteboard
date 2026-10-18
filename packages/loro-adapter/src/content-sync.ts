@@ -202,6 +202,9 @@ export function syncRootContainer(
   return false
 }
 
+/** The container kinds a document root can be opened as. */
+type RootContainerKind = 'map' | 'text' | 'list'
+
 /**
  * Empty a bridge container the source never attached — "content equals the
  * source" includes what the source does not have. Answers whether anything
@@ -210,7 +213,7 @@ export function syncRootContainer(
 export function clearRootContainer(
   roots: RootContainers,
   key: string,
-  kind: 'map' | 'text' | 'list',
+  kind: RootContainerKind,
 ): boolean {
   if (kind === 'map') {
     const map = roots.map(key)

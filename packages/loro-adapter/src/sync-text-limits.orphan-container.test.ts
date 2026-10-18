@@ -161,6 +161,6 @@ describe('writes into a container whose creation is not in their causal past', (
     ;(nodeData(writer).get('nodes') as LoroMap).set('n1', { id: 'n1' })
     writer.commit()
 
-    expect(importWithinTextLimits(doc, writer.export({ mode: 'update', from })).breach).toBe(null)
+    expect(importWithinTextLimits(doc, writer.export({ mode: 'update', from })).breach).toBeNull()
   })
 })

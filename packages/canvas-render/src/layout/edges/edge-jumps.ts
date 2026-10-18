@@ -265,7 +265,8 @@ class SegmentGrid {
     }
     // Checked per segment, so no segment is searched in part.
     if (this.examined > MAX_PAIRS_PER_SCENE) return undefined
-    return found.sort((p, q) => p - q).map((index) => this.segments[index] as IndexedSegment)
+    found.sort((p, q) => p - q)
+    return found.map((index) => this.segments[index] as IndexedSegment)
   }
 
   add(seg: IndexedSegment, reached: Reached): void {

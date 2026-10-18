@@ -27,8 +27,7 @@ import {
   documentKindSchema,
   isSelfOrDescendant,
 } from '@kamiazya/whiteboard-model'
-import type { LoroTreeNode, TreeID } from 'loro-crdt'
-import { LoroDoc, type LoroMap, LoroMovableList } from 'loro-crdt'
+import { LoroDoc, type LoroMap, LoroMovableList, type LoroTreeNode, type TreeID } from 'loro-crdt'
 import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'

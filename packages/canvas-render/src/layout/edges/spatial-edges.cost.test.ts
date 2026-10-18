@@ -94,7 +94,7 @@ describe('side-choice search cost per layout', () => {
     // the search both built its pair scores and tried trials.
     const drawn = scene.filter((n) => n.kind === 'edge')
     expect(drawn).toHaveLength(50)
-    for (const edge of drawn) expect(edge.path.length).toBe(BENDS + 2)
+    for (const edge of drawn) expect(edge.path).toHaveLength(BENDS + 2)
     expect(work.builds).toBeGreaterThan(0)
     expect(work.trialTests).toBeGreaterThan(0)
     // Unbounded, this board makes 4.1e8 narrow-phase tests in one layout,

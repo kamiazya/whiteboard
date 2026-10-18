@@ -80,7 +80,7 @@ describe('a content key left holding the wrong kind', () => {
         base,
         updateFrom(base, (data) => data.setContainer('nodes', new LoroMap())),
       ),
-    ).toBe(null)
+    ).toBeNull()
   })
 
   it('a wrong value put right in the same update is let through', () => {
@@ -90,7 +90,7 @@ describe('a content key left holding the wrong kind', () => {
       data.setContainer('nodes', new LoroMap())
     })
 
-    expect(judged(base, update)).toBe(null)
+    expect(judged(base, update)).toBeNull()
   })
 
   it('a key outside the content keys is not this judgement', () => {
@@ -101,7 +101,7 @@ describe('a content key left holding the wrong kind', () => {
         base,
         updateFrom(base, (data) => data.set('currentBranch', 'main')),
       ),
-    ).toBe(null)
+    ).toBeNull()
   })
 
   it('a carried record holding one is refused when judged as a state', () => {

@@ -49,7 +49,7 @@ function accountOf(context: TokenizeContext): Account {
 /** Neither whitespace nor punctuation, by micromark's own classification. */
 function isWordCharacter(code: Code): boolean {
   if (code === null || code < 0) return false
-  const character = String.fromCharCode(code)
+  const character = String.fromCodePoint(code)
   return !/\s/u.test(character) && !/[\p{P}\p{S}]/u.test(character)
 }
 
@@ -68,8 +68,8 @@ function isInert(marker: Code, before: Code, after: Code): boolean {
  * takes the delimiter itself, as plain data, for the rest of the run.
  */
 const tokenizeDelimiterBudget: Tokenizer = function (effects, ok, nok) {
-  const context = this
-  const before = context.previous
+  const account = accountOf(this)
+  const before = this.previous
   let marker: Code = null
   let size = 0
   return start
@@ -87,7 +87,6 @@ const tokenizeDelimiterBudget: Tokenizer = function (effects, ok, nok) {
       size += 1
       return inside
     }
-    const account = accountOf(context)
     if (!account.exhausted) {
       if (isInert(marker, before, code)) return nok(code)
       if (account.spent + size <= DELIMITER_BUDGET) {
