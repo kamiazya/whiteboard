@@ -12,13 +12,16 @@
 import {
   contentDigestOfDocument,
   countSpatialNodes,
+  judgeStateWithinTextLimits,
   projectWorkspaceDocument,
   readTrashEntries,
+  readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
 import type { PromotedTrashBytes, PromotedVersion } from '../versions/version-entry.js'
+import { textBreachRefusal } from './sync-write-refusals.js'
 
 /** One trash entry's evacuated bytes, decoded. */
 export type CarriedTrashBytes = Readonly<
@@ -76,6 +79,12 @@ async function judgeTrash(
  * copies the whole workspace, a checkout moves the one it has. The count and
  * digest come from that state, so a row cannot describe content it does not
  * point at.
+ *
+ * The merge judges the record's head only, and a restore writes a version's
+ * state back as it stands, so each state is also judged here as the sync
+ * surface would judge it written whole: a version past a limit is refused,
+ * thrown as the same `TextBreachRefusalError` the merge raises, naming the
+ * document.
  */
 function judgeVersions(
   incoming: LoroDoc,
@@ -97,6 +106,13 @@ function judgeVersions(
       return {
         reason: `Version "${version.id}" names a document the record did not hold at that point.`,
       }
+    }
+    const breach = judgeStateWithinTextLimits(content)
+    if (breach !== null) {
+      const at = readWorkspaceDocuments(past).find(
+        (entry) => entry.documentId === version.documentId,
+      )
+      throw textBreachRefusal(breach, at === undefined ? undefined : { path: at.path })
     }
     rows.push({
       ...version,

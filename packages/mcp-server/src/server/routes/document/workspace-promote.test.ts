@@ -15,13 +15,19 @@ import {
   documentContainers,
   exportWorkspaceSubtree,
   readMarkdownBody,
+  readSpatialCanvas,
   recordTrashEntry,
   resolveWorkspaceDocumentById,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
+  writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  CANVAS_MAX_NODES,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -444,4 +450,70 @@ it('confirms every carried version on a re-run after the daemon took a checkpoin
 
   const second = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...second.versionsKept].sort()).toEqual(ids)
+})
+
+it('refuses a carried version naming a body past the markdown limit with 413, and merges nothing', async () => {
+  const { promote, documents } = harness()
+  const doc = new LoroDoc()
+  doc.setPeerId(2n)
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'notes/roadmap',
+    documentId: ROADMAP_ID,
+    kind: 'markdown',
+  })
+  const body = documentContainers(doc, ROADMAP_ID)
+  const half = Math.ceil((MARKDOWN_MAX_CHARS + 1) / 2)
+  // Grown in two prepended pieces, so no single insert is past the one-write bound.
+  writeMarkdownBody(body, 'a'.repeat(half))
+  writeMarkdownBody(body, 'b'.repeat(half) + 'a'.repeat(half))
+  const oversized = encodeFrontiers(doc.oplogFrontiers())
+  writeMarkdownBody(body, '# short again')
+  const res = await promote({
+    snapshot: b64u(new Uint8Array(doc.export({ mode: 'snapshot' }))),
+    versions: [
+      {
+        id: DRAFTED_VERSION_ID,
+        documentId: ROADMAP_ID,
+        createdAt: 1_000,
+        auto: false,
+        frontiers: b64u(oversized),
+      },
+    ],
+  })
+  expect(res.status).toBe(413)
+  const answered = (await res.json()) as { error: string; message: string }
+  expect(answered.error).toBe('markdown_too_large')
+  expect(answered.message).toMatch(/^The document at "notes\/roadmap" /)
+  expect(await documents()).toEqual([])
+})
+
+it('answers a restore of a saved state past a sync limit with 413 in the sync refusal code, writing nothing', async () => {
+  const { app } = harness()
+  const oversized = new LoroDoc()
+  writeSpatialCanvas(oversized, {
+    nodes: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) =>
+      textNode({ id: `n${i}`, text: 'n', x: 0, y: 0, width: 1, height: 1 }),
+    ),
+    edges: [],
+  })
+  // Stored past the sync judge, as a carried version once was.
+  await serverDeps.liveDocuments.save('session1', 'canvas-a', oversized, { kind: 'spatial' })
+  const version = await serverDeps.versions.save('session1', 'canvas-a', oversized, {
+    auto: false,
+  })
+  const live = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  writeSpatialCanvas(live, {
+    nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],
+    edges: [],
+  })
+  await serverDeps.liveDocuments.save('session1', 'canvas-a', live, { overwrite: true })
+
+  const res = await app.request(
+    `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/restore`,
+    { method: 'POST' },
+  )
+  expect(res.status).toBe(413)
+  expect(await res.json()).toMatchObject({ error: 'too_many_nodes_or_edges' })
+  const after = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  expect(readSpatialCanvas(after).nodes.map((node) => node.id)).toEqual(['kept'])
 })

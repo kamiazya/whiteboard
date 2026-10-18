@@ -468,6 +468,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   path outside the path grammar, give it a name past the length limit, or
   bring back a body or node text past its limit is refused and changes
   nothing, in the browser and on the daemon alike.
+- **A saved version is held to the bounds of any other write.** A move into
+  the daemon carries the browser's saved versions, each naming a past state
+  of the record, and a sync write is judged only on the state it leaves. So
+  the daemon judges each carried version's state too, and refuses the move
+  whole — in the same error a sync write gets (`markdown_too_large`,
+  `too_many_nodes_or_edges`, …) — when one holds a body, node text, label or
+  board past its limit. A restore judges the state it is about to write the
+  same way, in every mode, and refuses with that error before writing
+  anything.
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.

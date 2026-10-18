@@ -66,6 +66,7 @@ export {
 export { countSpatialNodes } from './spatial-node-count.js'
 export {
   importWithinTextLimits,
+  judgeStateWithinTextLimits,
   SYNC_TEXT_BREACH_CODES,
   type SyncTextBreach,
   type SyncTextJudgement,

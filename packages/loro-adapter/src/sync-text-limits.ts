@@ -18,15 +18,15 @@ import {
   TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
-import type {
-  ContainerID,
-  JsonSchema,
+import {
+  type ContainerID,
+  type JsonSchema,
   LoroDoc,
-  LoroMap,
-  LoroText,
-  MapOp,
-  TextOp,
-  VersionVector,
+  type LoroMap,
+  type LoroText,
+  type MapOp,
+  type TextOp,
+  type VersionVector,
 } from 'loro-crdt'
 import { heldBefore, longNameBreach, type NameSuspect, nameSuspectsOf } from './container-names.js'
 import {
@@ -583,6 +583,23 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
           canvasBreach(doc, writes.setInto, entriesBefore))
       : { shape: 'container-name', ...longName },
   )
+}
+
+/**
+ * The verdict `importWithinTextLimits` gives the state `doc` is in, as though
+ * that state were written into an empty document — for a state no sync write
+ * produced, such as a saved version checked out of a carried record, which
+ * the judge never saw as a head. One judgement rather than a second set of
+ * bounds, so a version cannot be refused or admitted by a rule the sync
+ * surface does not apply. Every bound is judged against nothing before, and
+ * no run is, as for any write into an empty document.
+ *
+ * `forkAt` so a checked-out `doc` is judged at the state it shows, not at its
+ * oplog's head. `doc` is left as it was.
+ */
+export function judgeStateWithinTextLimits(doc: LoroDoc): SyncTextBreach | null {
+  const state = doc.forkAt(doc.frontiers()).export({ mode: 'snapshot' })
+  return importWithinTextLimits(new LoroDoc(), state).breach
 }
 
 /**

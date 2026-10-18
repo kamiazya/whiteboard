@@ -16,6 +16,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -26,6 +27,7 @@ import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { judgeCarried } from './promote-carried.js'
 import { promoteWorkspace } from './promote-workspace.js'
+import { TextBreachRefusalError } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -255,6 +257,88 @@ describe('promoteWorkspace, carried planes', () => {
     expect(result.kind).toBe('unmatched-carried')
     expect(target.saves()).toBe(0)
     expect(target.deps.blobStore.held.size).toBe(0)
+    expect(target.deps.versions.adopted.size).toBe(0)
+  })
+})
+
+/**
+ * A record whose HEAD every sync write would take, with one version naming a
+ * past state no sync write could have stored: grown in pieces each under the
+ * one-write bound, and shrunk again before the record was sent.
+ */
+function recordWithOversizedPast(grow: (doc: LoroDoc) => void, shrink: (doc: LoroDoc) => void) {
+  const doc = new LoroDoc()
+  doc.setPeerId(2n)
+  grow(doc)
+  const oversized = encodeFrontiers(doc.oplogFrontiers())
+  shrink(doc)
+  return {
+    snapshot: doc.export({ mode: 'snapshot' }),
+    trash: [],
+    versions: [
+      { id: 'past-limit', documentId: ROADMAP_ID, createdAt: 1, auto: false, frontiers: oversized },
+    ],
+  }
+}
+
+const half = Math.ceil((MARKDOWN_MAX_CHARS + 1) / 2)
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 1, height: 1 })
+
+describe('promoteWorkspace, a carried version past a sync limit', () => {
+  it.each([
+    [
+      'a body past the markdown limit',
+      'markdown_too_large',
+      () =>
+        recordWithOversizedPast(
+          (doc) => {
+            createWorkspaceDocumentAtPath(doc, {
+              path: 'roadmap',
+              documentId: ROADMAP_ID,
+              kind: 'markdown',
+            })
+            const body = documentContainers(doc, ROADMAP_ID)
+            // Prepended, so no single insert is past the one-write bound.
+            writeMarkdownBody(body, 'a'.repeat(half))
+            writeMarkdownBody(body, 'b'.repeat(half) + 'a'.repeat(half))
+          },
+          (doc) => writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# short again'),
+        ),
+    ],
+    [
+      'a board past the node limit',
+      'too_many_nodes_or_edges',
+      () =>
+        recordWithOversizedPast(
+          (doc) => {
+            createWorkspaceDocumentAtPath(doc, {
+              path: 'roadmap',
+              documentId: ROADMAP_ID,
+              kind: 'spatial',
+            })
+            const nodes = Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => box(`n${i}`))
+            writeSpatialCanvas(documentContainers(doc, ROADMAP_ID), { nodes, edges: [] })
+            doc.commit()
+          },
+          (doc) => {
+            writeSpatialCanvas(documentContainers(doc, ROADMAP_ID), {
+              nodes: [box('kept')],
+              edges: [],
+            })
+            doc.commit()
+          },
+        ),
+    ],
+  ])('refuses %s with the sync refusal, and merges nothing', async (_case, code, build) => {
+    const target = daemon()
+    const refused = await promoteWorkspace(target.deps, {
+      workspaceId: WS,
+      operator,
+      ...build(),
+    }).catch((err: unknown) => err)
+    expect(refused).toBeInstanceOf(TextBreachRefusalError)
+    expect(refused).toMatchObject({ code, status: 413 })
+    expect(target.saves()).toBe(0)
     expect(target.deps.versions.adopted.size).toBe(0)
   })
 })

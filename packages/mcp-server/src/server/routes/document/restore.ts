@@ -8,12 +8,14 @@ import {
   type RestoreProgress,
   restoreVersion,
   type ServerDeps,
+  syncWriteAnswer,
   type VersionHistory,
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
 import { readJsonBody } from '../read-json-body.js'
 import {
+  type ErrorAnswer,
   handleCorruptStoredData,
   invalidBodyRefusal,
   refusedBy,
@@ -113,6 +115,14 @@ function restoreAnswer(
   }
 }
 
+/** A saved state past a sync limit, refused in the code and status a sync write gets. */
+const pastSyncLimit: ErrorAnswer = (err) => {
+  const refusal = syncWriteAnswer(err)
+  return refusal === undefined
+    ? null
+    : { status: refusal.status, body: errorBody(refusal.code, (err as Error).message) }
+}
+
 export function createRestoreRouter(options: RestoreRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
@@ -133,27 +143,24 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
       })
       if ('refusal' in asked) return asked.refusal
-      const { targetPath } = asked.data
-      const overwrite = asked.data.overwrite === true
-      const subtree = asked.data.subtree === true
+      const { targetPath, overwrite, subtree } = asked.data
       try {
-        const deps = options.serverDeps
         const result = await restoreVersion(
-          { versions: versionStore, liveDocuments: deps.liveDocuments },
+          { versions: versionStore, liveDocuments: options.serverDeps.liveDocuments },
           {
             workspaceId,
             path,
             versionId: id,
             ...(targetPath === undefined ? {} : { targetPath }),
-            overwrite,
-            subtree,
+            overwrite: overwrite === true,
+            subtree: subtree === true,
           },
           options.progress,
         )
         const answer = restoreAnswer(result, { targetPath })
         return c.json(answer.body, answer.status)
       } catch (err) {
-        const issue = handleCorruptStoredData(err) ?? tooManyDocuments(err)
+        const issue = handleCorruptStoredData(err) ?? tooManyDocuments(err) ?? pastSyncLimit(err)
         if (issue) return c.json(issue.body, issue.status)
         throw err
       }
