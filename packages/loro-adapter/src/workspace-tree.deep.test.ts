@@ -13,6 +13,7 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   exportWorkspaceSubtree,
   importWorkspaceSubtree,
+  pruneEmptyFolders,
   readWorkspaceDocuments,
   unreadableWorkspaceNodes,
   WORKSPACE_TREE_KEY,
@@ -132,6 +133,48 @@ describe('the workspace tree walk', () => {
     },
     PROPERTY_TIMEOUT_MS,
   )
+
+  fcTest.prop([fc.array(specArbitrary, { minLength: 1, maxLength: 24 })], withDefaults())(
+    'prunes exactly the folders with no document or unreadable node below them',
+    (drawn) => {
+      const doc = new LoroDoc()
+      const specs = buildTree(doc, drawn)
+      // A folder survives when something below it is not a folder; a node
+      // below an unreadable one is never reached, so it is never pruned.
+      const survivors = new Set<string>()
+      const keep = (node: LoroTreeNode, reached: boolean): boolean => {
+        const spec = specs.get(node.id) as Spec
+        const below = (node.children() ?? []).map((child) =>
+          keep(child, reached && spec.kind !== 'unreadable'),
+        )
+        const kept = !reached || spec.kind !== 'folder' || below.some(Boolean)
+        if (kept) survivors.add(node.id)
+        return kept
+      }
+      for (const root of treeOf(doc).roots()) keep(root, true)
+
+      pruneEmptyFolders(doc)
+
+      const live = new Set<string>()
+      const visit = (node: LoroTreeNode): void => {
+        live.add(node.id)
+        for (const child of node.children() ?? []) visit(child)
+      }
+      for (const root of treeOf(doc).roots()) visit(root)
+      expect(live).toEqual(survivors)
+    },
+    PROPERTY_TIMEOUT_MS,
+  )
+
+  it('prunes a thousand empty folders in one pass', () => {
+    const doc = new LoroDoc()
+    for (let i = 0; i < 1000; i++) treeOf(doc).createNode().data.set('segment', `f${i}`)
+    doc.commit()
+
+    pruneEmptyFolders(doc)
+
+    expect(treeOf(doc).roots()).toEqual([])
+  })
 
   it(
     'lists a document at the bottom of a folder chain deeper than the recursive walk reached',

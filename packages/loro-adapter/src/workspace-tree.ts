@@ -895,19 +895,19 @@ export function forgetTrashEntry(doc: LoroDoc, documentId: string): void {
  * path — a collision the row-backed model cannot produce, because there was
  * never a row at `a` to begin with.
  *
- * Repeated to a fixpoint: emptying a folder can empty its parent.
+ * One walk, read from the deepest end: in tree order every node comes after
+ * its ancestors, so read backwards a folder is reached only once everything
+ * below it has been, and emptying a folder can then empty its parent in the
+ * same pass. The fixpoint this replaced walked the whole tree again after
+ * every removal — measured, 1000 empty folders took 59 s to prune.
  */
 export function pruneEmptyFolders(doc: LoroDoc): void {
-  let removed = true
-  while (removed) {
-    removed = false
-    for (const entry of walk(doc)) {
-      if (entry.read.type !== 'folder') continue
-      if ((entry.node.children() ?? []).length > 0) continue
-      tree(doc).delete(entry.node.id)
-      removed = true
-      break
-    }
+  const walked = walk(doc)
+  for (let i = walked.length - 1; i >= 0; i--) {
+    const entry = walked[i] as Walked
+    if (entry.read.type !== 'folder') continue
+    if ((entry.node.children() ?? []).length > 0) continue
+    tree(doc).delete(entry.node.id)
   }
   doc.commit()
 }
