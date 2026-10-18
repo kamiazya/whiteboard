@@ -88,17 +88,42 @@ const HANDED_OVER_TAIL_LENGTH = 8
 /**
  * `<segment>-<tail>`, the tail the last characters of the workspace id —
  * the random half of a ULID. Deterministic, so a second hand-over finds the
- * tail already there and leaves the segment as it is rather than growing it.
+ * tail already there — collision suffix and all — and leaves the segment as
+ * it is rather than growing it.
  */
 function handedOverSegment(segment: string, workspaceId: string): string {
   const tail = workspaceId
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
     .slice(-HANDED_OVER_TAIL_LENGTH)
-  if (tail === '' || segment.endsWith(`-${tail}`)) return segment
+  // The tail may be followed by the `-<n>` `firstFreeSegment` added when the
+  // tailed segment was taken in a namespace it passed through.
+  // Both forms are asked: an all-digit tail reads as a suffix itself.
+  const tailed = (text: string) => text.endsWith(`-${tail}`)
+  if (tail === '' || tailed(segment) || tailed(withoutCollisionSuffix(segment))) return segment
   const room = WORKSPACE_SEGMENT_MAX_LENGTH - tail.length - 1
-  const head = segment.slice(0, room).replace(/-+$/, '')
+  const head = withoutTrailingDashes(segment.slice(0, room))
   return head === '' ? tail : `${head}-${tail}`
+}
+
+// Both trims scan back from the end once. An end-anchored regex retries from
+// every `-` in the string, which is quadratic in a segment of dashes or digits.
+
+/** `segment` less one trailing `-<digits>`, or `segment` itself when it has none. */
+function withoutCollisionSuffix(segment: string): string {
+  let i = segment.length
+  while (i > 0 && isDigit(segment.charCodeAt(i - 1))) i--
+  return i < segment.length && i > 0 && segment[i - 1] === '-' ? segment.slice(0, i - 1) : segment
+}
+
+function withoutTrailingDashes(text: string): string {
+  let i = text.length
+  while (i > 0 && text[i - 1] === '-') i--
+  return text.slice(0, i)
+}
+
+function isDigit(code: number): boolean {
+  return code >= 48 && code <= 57
 }
 
 /** Takes a workspace held in `me` into its oldest owner's namespace, once it has one. */
