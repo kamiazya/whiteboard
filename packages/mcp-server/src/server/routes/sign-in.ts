@@ -116,6 +116,20 @@ function invitationFromAnotherSite(c: Context): boolean {
   return site !== undefined && !OWN_FETCH_SITES.has(site)
 }
 
+// Where a begin carrying `invitation` goes instead of the provider, if not there.
+function invitationTurnedAway(
+  c: Context,
+  deps: SignInRoutesDeps,
+  invitation: string | undefined,
+): Response | null {
+  if (invitation === undefined) return null
+  if (!isInvitationTokenShaped(invitation)) return refusedTo(c, 'invitation_unusable')
+  if (invitationFromAnotherSite(c)) {
+    return c.redirect(invitePageUrl(deps.publicBaseUrl, invitation), 302)
+  }
+  return null
+}
+
 const cookieOptions = { secure: true, httpOnly: true, sameSite: 'Lax', path: '/' } as const
 
 interface Routing {
@@ -129,12 +143,8 @@ interface Routing {
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
   const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
-  if (invitation !== undefined && !isInvitationTokenShaped(invitation)) {
-    return refusedTo(c, 'invitation_unusable')
-  }
-  if (invitation !== undefined && invitationFromAnotherSite(c)) {
-    return c.redirect(invitePageUrl(deps.publicBaseUrl, invitation), 302)
-  }
+  const turnedAway = invitationTurnedAway(c, deps, invitation)
+  if (turnedAway !== null) return turnedAway
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
     returnTo: safeReturnPath(returnTo, deps.publicBaseUrl),
