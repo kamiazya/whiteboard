@@ -135,6 +135,17 @@ not:
   `follow.failedDocumentIds`, or its log for the rename route. The move
   itself stands.
 
+### How deeply markdown may nest
+
+Markdown nests one level per marker: each `>` opens a blockquote, each `- `
+on a line opens a list, each `*` an emphasis. Rendering (`wb_scene_render`,
+the web preview, a text node drawn on a canvas) reads at most **64 levels**
+of that nesting, counting the paragraph that holds the words. Anything deeper
+is drawn as the plain text it contains, with its markers gone: `>` repeated
+100 times before `x` draws 63 nested quotes around a paragraph holding `x`.
+A body that nests thousands of levels deep, deeper than the markdown parser
+itself can follow, is drawn as one paragraph of its own source text. The stored body is never changed; only what is drawn from it is.
+
 ## How large a text node, a label, a comment, a tag and a document name may be
 
 A text node's text — the `text` of a `wb_canvas_edit` `node.add` or

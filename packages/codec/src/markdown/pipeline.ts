@@ -41,9 +41,32 @@ const stringifier = unified()
  * nodes, so a body round-trips with its references readable.
  */
 export function parseMarkdownBody(body: string): MdastRoot {
-  const tree = parser.parse(body)
-  const converted = fromRemarkRoot(tree as never)
+  const tree = parseOrOverflow(body)
+  const converted =
+    tree === undefined
+      ? {
+          type: 'root',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: body }] }],
+        }
+      : fromRemarkRoot(tree as never)
   return mdastRootSchema.parse(converted)
+}
+
+/**
+ * remark's own tokenizer recurses once per nesting level, so a body that
+ * nests thousands deep overflows the stack before the converter's depth
+ * bound can apply. Such a body reads as one paragraph of its own text —
+ * its markup is not something a reader could follow anyway — and is
+ * reported as `undefined` here. Any other failure is not this one, and
+ * propagates.
+ */
+function parseOrOverflow(body: string): ReturnType<typeof parser.parse> | undefined {
+  try {
+    return parser.parse(body)
+  } catch (err) {
+    if (err instanceof RangeError) return undefined
+    throw err
+  }
 }
 
 /**
@@ -57,9 +80,10 @@ export function parseMarkdownBody(body: string): MdastRoot {
  * body remark cannot position defaults each block to its index order.
  */
 export function parseMarkdownBlockLines(body: string): number[] {
-  const tree = parser.parse(body) as {
-    children?: { position?: { start?: { line?: number } } }[]
-  }
+  const tree = parseOrOverflow(body) as
+    | { children?: { position?: { start?: { line?: number } } }[] }
+    | undefined
+  if (tree === undefined) return [1]
   return (tree.children ?? []).map((child, index) => child.position?.start?.line ?? index + 1)
 }
 
