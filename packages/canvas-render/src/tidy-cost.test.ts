@@ -35,7 +35,8 @@ describe('tidyNodes cost', () => {
     // The subject is present: the stack really was pulled apart, so the
     // count below measures separation work rather than an early exit.
     expect(moves).toHaveLength(n - 1)
-    // Measured 1_393_998 — cubic in n (182k at 100, 9.2M at 400).
-    expect(overlapChecks.count).toBeLessThanOrEqual(1_393_998)
+    // Was 1_393_998 — cubic in n (182k at 100, 9.2M at 400) — while each
+    // hop re-scanned every placed box. Measured 60_698 after.
+    expect(overlapChecks.count).toBeLessThanOrEqual(3 * n * n)
   })
 })

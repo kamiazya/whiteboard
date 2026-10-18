@@ -274,9 +274,7 @@ export const KNOWN_EQUIVALENT = {
   // with a string (both of `anchorsToYieldTo`'s arrays) is read only by
   // `onSomeAnchor`, where the string minus a number is NaN and matches
   // nothing. `at >= target` -> `>` differs only at `at === target`, where the
-  // shift is zero and `shift` returns early. The hop loop's `guard` never
-  // trips: each hop lands past the collider in one direction, so no rect is
-  // hit twice and the loop ends within `occupied.length` hops. Every `shift`
+  // shift is zero and `shift` returns early. Every `shift`
   // is gated on `unit.movable`, so an immobile unit's delta is zero and
   // `applyUnitDeltas` skipping it — or skipping a zero delta — adds nothing.
   // And the output's finiteness check repeats `settleOnce`'s, which already
@@ -288,7 +286,6 @@ export const KNOWN_EQUIVALENT = {
   // frame of negative size each tell apart.
   'src/tidy.ts': {
     'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
-    'ConditionalExpression: guard-- > 0 -> true': 1,
     'EqualityOperator: at >= target -> at > target': 1,
     'ConditionalExpression: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> false': 1,
     'ConditionalExpression: unit.dx === 0 && unit.dy === 0 -> false': 1,

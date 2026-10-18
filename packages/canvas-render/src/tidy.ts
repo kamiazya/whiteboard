@@ -223,8 +223,17 @@ const penetration = (ax: Axis, unit: Rect, hit: Rect): number =>
 
 /**
  * Hop `unit` clear of everything in `occupied`, one obstacle at a time, in
- * `dir` along `ax`. Monotone in one direction, so it terminates after at
- * most one hop per obstacle — the guard is a belt on that argument.
+ * `dir` along `ax`, landing on the first clear grid spot past where it
+ * starts.
+ *
+ * One pass over the obstacles in the order the hop meets them (nearest
+ * leading edge first) is enough, and is what keeps a stack of identical
+ * boxes quadratic rather than cubic. The hop is monotone and never changes
+ * the cross axis, so an obstacle hopped past, or already behind, stays
+ * clear; and the first one that is still AHEAD, out of reach, puts every
+ * later one out of reach too, since their leading edges are farther still.
+ * Re-scanning the whole set after every hop finds the same spot — every
+ * grid point skipped on the way collides with the obstacle being cleared.
  */
 function hopClear(unit: Unit, ax: Axis, dir: 1 | -1, occupied: readonly Rect[], from: number) {
   // Hops land ON the grid, rounding AWAY from the collider so the clearance
@@ -234,16 +243,17 @@ function hopClear(unit: Unit, ax: Axis, dir: 1 | -1, occupied: readonly Rect[], 
     from +
     (dir === 1 ? Math.ceil((v - from) / TIDY_GRID_PX) : Math.floor((v - from) / TIDY_GRID_PX)) *
       TIDY_GRID_PX
-  let guard = occupied.length + 1
-  let hit = occupied.find((r) => overlapsWithMargin(unit.bbox, r))
-  while (hit !== undefined && guard-- > 0) {
+  const inHopOrder = [...occupied].sort((a, b) =>
+    dir === 1 ? ax.near(a) - ax.near(b) : ax.at(b, 1) - ax.at(a, 1),
+  )
+  for (const hit of inHopOrder) {
+    if (!overlapsWithMargin(unit.bbox, hit)) continue
     const next = snapAway(
       dir === 1
         ? ax.at(hit, 1) + TIDY_MARGIN_PX
         : ax.near(hit) - TIDY_MARGIN_PX - ax.size(unit.bbox),
     )
     ax.shift(unit, next - ax.near(unit.bbox))
-    hit = occupied.find((r) => overlapsWithMargin(unit.bbox, r))
   }
 }
 
