@@ -211,6 +211,44 @@ describe('computeEdgeJumps cost', () => {
     }
   })
 
+  it.fails('charges filing into coarser levels to the per-scene budget', () => {
+    // Eight edges whose 512 segments each sit at a level of their own,
+    // 4^1 through 4^511 px, every one spanning the origin; before them, 1992
+    // small staircases that never cross, each of which is then filed at
+    // every one of those levels. Filing is work the pair budget must see:
+    // measured 3_545_854 cell visits beside 50 staircases, 13_356_498 beside
+    // 200, and the worker killed out of memory after 183s at 1992.
+    const levels: ResolvedEdgeNode[] = Array.from({ length: 8 }, (_, e) =>
+      routed(
+        `l${e}`,
+        Array.from({ length: 65 }, (_, j) => {
+          const k = e * 64 + j
+          const s = (-1) ** k * 4 ** Math.min(k, 510)
+          return { x: s, y: s }
+        }),
+      ),
+    )
+    const stairs = Array.from({ length: 1992 }, (_, i) =>
+      staircase(`s${i}`, (i % 45) * 700, Math.floor(i / 45) * 700),
+    )
+    const cross = [
+      routed('h', [
+        { x: -1e6, y: 1e6 },
+        { x: -1e6 + 200, y: 1e6 },
+      ]),
+      routed('v', [
+        { x: -1e6 + 100, y: 1e6 - 100 },
+        { x: -1e6 + 100, y: 1e6 + 100 },
+      ]),
+    ]
+    const edges = [...cross, ...stairs, ...levels]
+    const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
+
+    const { jumps } = jumpsWithinCellBudget(edges, 64 * segments)
+    // The hop found before the budget ran out stays.
+    expect(jumps.get('v')).toEqual([{ segment: 0, x: -1e6 + 100, y: 1e6 }])
+  })
+
   it('caps the hops one segment draws', () => {
     // One long later edge across 1000 earlier verticals 20px apart: every
     // crossing has room for its own arc, so only the cap bounds the count.
