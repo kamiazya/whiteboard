@@ -1,6 +1,8 @@
 import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
   PROMOTE_REQUEST_LIMIT_BYTES,
   type PromoteWorkspaceRequest,
   type PromoteWorkspaceResponse,
@@ -17,6 +19,7 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
+import type { ZodError } from 'zod'
 import { getLogger } from '../../log.js'
 import type { CallerName } from '../../security/membership-gate.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
@@ -97,16 +100,42 @@ function answerWriteRefusal(c: Context, err: unknown): Response {
   return c.json(errorBody(answer.code, (err as Error).message), answer.status)
 }
 
+/** The carried plane a body holds more rows of than the contract's cap, if any. */
+function overfullPlane(
+  error: ZodError,
+): { plane: 'trash' | 'versions'; limit: number } | undefined {
+  for (const issue of error.issues) {
+    if (issue.code !== 'too_big' || issue.path.length !== 1) continue
+    const [plane] = issue.path
+    if (plane === 'versions') return { plane, limit: PROMOTE_MAX_VERSIONS }
+    if (plane === 'trash') return { plane, limit: PROMOTE_MAX_TRASH }
+  }
+  return undefined
+}
+
+/** The refusal for a move carrying more trash entries or versions than one move carries. */
+function tooManyCarriedBody(plane: 'trash' | 'versions', limit: number) {
+  const what = plane === 'versions' ? 'saved versions' : 'trashed documents'
+  return errorBody(
+    'promote_too_many_carried',
+    `One move carries at most ${limit} ${what}; send the rest in a later move or leave them behind.`,
+  )
+}
+
 // The contract's ceiling, which the sender fits its body to — derived there
 // from the same file ceiling CONTENT_BODY_LIMIT_BYTES is.
 const PROMOTE_BODY: ReadJsonBodyOptions = {
   voice: 'code',
   maxBytes: PROMOTE_REQUEST_LIMIT_BYTES,
-  refuseShape: () =>
-    errorBody(
+  refuseShape: (error) => {
+    const overfull = overfullPlane(error)
+    if (overfull !== undefined) return tooManyCarriedBody(overfull.plane, overfull.limit)
+    return errorBody(
       'invalid_body',
       'snapshot must be base64url, and trash and versions the carried planes',
-    ),
+    )
+  },
+  refuseStatus: (error) => (overfullPlane(error) === undefined ? 400 : 413),
 }
 
 /** The planes carried beside the record, their base64url decoded. */
@@ -188,13 +217,23 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     } catch (err) {
       return answerWriteRefusal(c, err)
     }
-    if (result.kind === 'malformed-snapshot') {
+    return answerPromoted(c, result)
+  }
+}
+
+/** A promotion's outcome, as the route answers it. */
+function answerPromoted(
+  c: Context,
+  result: Awaited<ReturnType<typeof promoteWorkspace>>,
+): Response {
+  switch (result.kind) {
+    case 'malformed-snapshot':
       return c.json(errorBody('malformed_snapshot', 'Malformed workspace record snapshot'), 400)
-    }
-    if (result.kind === 'unmatched-carried') {
+    case 'unmatched-carried':
       return c.json(errorBody('unmatched_carried', result.reason), 400)
-    }
-    if (result.kind === 'too-many-documents') {
+    case 'too-many-carried':
+      return c.json(tooManyCarriedBody(result.plane, result.limit), 413)
+    case 'too-many-documents':
       // The message names the count, the limit and the way out, for whoever reads it.
       return c.json(
         errorBody(
@@ -204,15 +243,16 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
         ),
         413,
       )
+    case 'promoted': {
+      const response: PromoteWorkspaceResponse = {
+        ok: true,
+        recorded: [...result.recorded],
+        shadowed: [...result.shadowed],
+        trashStored: [...result.trashStored],
+        versionsKept: [...result.versionsKept],
+      }
+      return c.json(response)
     }
-    const response: PromoteWorkspaceResponse = {
-      ok: true,
-      recorded: [...result.recorded],
-      shadowed: [...result.shadowed],
-      trashStored: [...result.trashStored],
-      versionsKept: [...result.versionsKept],
-    }
-    return c.json(response)
   }
 }
 

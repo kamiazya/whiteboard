@@ -111,16 +111,21 @@ export function writeThreadMessage(
  * Closes or reopens a thread. One key, last-writer-wins, which is all a
  * status needs: two peers resolving concurrently agree, and neither touches
  * the messages beneath.
+ *
+ * Answers whether it wrote: a thread this replica does not hold in the
+ * threads plane — a legacy comment no writer has migrated — has no status to
+ * set, and a caller counting open threads must not count it as changed.
  */
 export function setCommentThreadStatus(
   doc: DocumentContainers,
   threadId: string,
   status: CommentThreadStatus,
-): void {
+): boolean {
   const container = threadContainer(doc, threadId)
-  if (container === undefined) return
+  if (container === undefined) return false
   container.set(STATUS_FIELD, status)
   doc.commit()
+  return true
 }
 
 /**

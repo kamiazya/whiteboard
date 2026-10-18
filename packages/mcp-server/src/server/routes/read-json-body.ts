@@ -23,6 +23,12 @@ export interface ReadJsonBodyOptions {
   /** The route's own sentence for JSON that does not fit the schema. */
   refuseShape: (error: z.ZodError) => ApiErrorBody
   /**
+   * The status that sentence is answered with; 400 when absent. A schema
+   * that bounds how MANY of something a body may carry answers 413 past it,
+   * which a caller reads as "send less" rather than "send it differently".
+   */
+  refuseStatus?: (error: z.ZodError) => 400 | 413
+  /**
    * An EMPTY body reads as `{}` — the schema's defaults — instead of as a
    * refusal. A body that is present is still held to being JSON.
    */
@@ -60,6 +66,9 @@ export async function readJsonBody<S extends z.ZodType>(
     }
   }
   const parsed = schema.safeParse(json)
-  if (!parsed.success) return { refusal: c.json(options.refuseShape(parsed.error), 400) }
+  if (!parsed.success) {
+    const status = options.refuseStatus?.(parsed.error) ?? 400
+    return { refusal: c.json(options.refuseShape(parsed.error), status) }
+  }
   return { data: parsed.data }
 }

@@ -70,6 +70,45 @@ describe('fitCarriedPlanes', () => {
     expect(fitted.trash.length + fitted.leftBehind.length).toBe(3)
   })
 
+  it('leaves the trash entries past the count one move carries behind, naming each', () => {
+    const fitted = fitCarriedPlanes(
+      'snap',
+      planes([entry('a', 10), entry('b', 10), entry('c', 10)]),
+      undefined,
+      { trash: 2, versions: 10 },
+    )
+    expect(fitted.trash.map((each) => each.documentId)).toEqual(['a', 'b'])
+    expect(fitted.leftBehind).toEqual([
+      'the trashed document "notes/c": one move carries at most 2 trashed documents',
+    ])
+  })
+
+  it('past the version count, keeps manual saves and the newest checkpoints, in reading order', () => {
+    const version = (id: string, createdAt: number, auto: boolean) => ({
+      id,
+      documentId: 'doc',
+      createdAt,
+      auto,
+      frontiers: 'AA',
+    })
+    const versions = [
+      version('old-auto', 1, true),
+      version('old-manual', 2, false),
+      version('new-auto', 3, true),
+      version('newest-auto', 4, true),
+    ]
+    const fitted = fitCarriedPlanes('snap', { ...planes([]), versions }, undefined, {
+      trash: 10,
+      versions: 3,
+    })
+    expect(fitted.versions.map((each) => each.id)).toEqual([
+      'old-manual',
+      'new-auto',
+      'newest-auto',
+    ])
+    expect(fitted.leftBehind).toEqual(['1 older saved version: one move carries at most 3'])
+  })
+
   it('carries everything and leaves nothing when it all fits', () => {
     const fitted = fitCarriedPlanes('snap', planes([entry('a', 10)]))
     expect(fitted).toEqual({ trash: [entry('a', 10)], versions: [], leftBehind: [] })

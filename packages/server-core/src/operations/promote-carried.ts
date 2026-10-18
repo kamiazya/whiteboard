@@ -20,7 +20,12 @@ import {
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
-import type { PromotedTrashBytes, PromotedVersion } from '../versions/version-entry.js'
+import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
+  type PromotedTrashBytes,
+  type PromotedVersion,
+} from '../versions/version-entry.js'
 import { textBreachRefusal } from './sync-write-refusals.js'
 
 /** One trash entry's evacuated bytes, decoded. */
@@ -35,6 +40,13 @@ export type CarriedVersion = Readonly<
 
 export type CarriedJudgement =
   | { readonly kind: 'refused'; readonly reason: string }
+  /** More rows of one plane than a promotion carries; none of them was judged. */
+  | {
+      readonly kind: 'too-many'
+      readonly plane: 'trash' | 'versions'
+      readonly carried: number
+      readonly limit: number
+    }
   | {
       readonly kind: 'admitted'
       readonly trash: readonly CarriedTrashBytes[]
@@ -74,6 +86,73 @@ async function judgeTrash(
   return null
 }
 
+/** One spelling per point: a frontier's ids in a fixed order, whatever order its bytes listed them in. */
+function pointKey(frontiers: ReturnType<typeof decodeFrontiers>): string {
+  return frontiers
+    .map(({ peer, counter }) => `${peer}:${counter}`)
+    .sort()
+    .join(',')
+}
+
+/** What judging one document at one point answers, which every row naming both shares. */
+type PointJudgement = Pick<AdoptedVersion, 'elementCount' | 'contentDigest'>
+
+/** The frontier a row names, or `undefined` for bytes that are not one. */
+function decodedPoint(frontiers: Uint8Array): ReturnType<typeof decodeFrontiers> | undefined {
+  try {
+    return decodeFrontiers(frontiers)
+  } catch {
+    return undefined
+  }
+}
+
+/** One fork of the incoming record, moved only when asked for a point it is not already at. */
+function pastReader(incoming: LoroDoc) {
+  const past = incoming.fork()
+  let at: string | undefined
+  return {
+    past,
+    /** Whether the record holds `point`; the fork is at it when it does. */
+    moveTo(point: string, frontiers: ReturnType<typeof decodeFrontiers>): boolean {
+      if (at === point) return true
+      try {
+        past.checkout(frontiers)
+      } catch {
+        return false
+      }
+      at = point
+      return true
+    },
+  }
+}
+
+/**
+ * The document a row names, judged as the sync surface would judge it
+ * written whole at the point `past` is checked out at: a state past a limit
+ * is thrown as the same `TextBreachRefusalError` the merge raises, naming
+ * the document.
+ */
+function judgeDocumentAt(
+  past: LoroDoc,
+  version: Pick<CarriedVersion, 'id' | 'documentId'>,
+): PointJudgement | { readonly reason: string } {
+  const content = projectWorkspaceDocument(past, version.documentId)
+  if (content === null) {
+    return {
+      reason: `Version "${version.id}" names a document the record did not hold at that point.`,
+    }
+  }
+  const breach = judgeStateWithinTextLimits(content)
+  if (breach !== null) {
+    const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)
+    throw textBreachRefusal(breach, at === undefined ? undefined : { path: at.path })
+  }
+  return {
+    elementCount: countSpatialNodes(content),
+    contentDigest: contentDigestOfDocument(content),
+  }
+}
+
 /**
  * Each frontier checked out of ONE fork of the incoming record — a fork
  * copies the whole workspace, a checkout moves the one it has. The count and
@@ -82,44 +161,37 @@ async function judgeTrash(
  *
  * The merge judges the record's head only, and a restore writes a version's
  * state back as it stands, so each state is also judged here as the sync
- * surface would judge it written whole: a version past a limit is refused,
- * thrown as the same `TextBreachRefusalError` the merge raises, naming the
- * document.
+ * surface would judge it written whole (`judgeDocumentAt`).
+ *
+ * A document at a point is judged once, however many rows name it, and the
+ * fork moves only when a row names another point: rows repeating one point
+ * cost a lookup each rather than a projection.
  */
 function judgeVersions(
   incoming: LoroDoc,
   versions: readonly CarriedVersion[],
 ): { readonly reason: string } | { readonly rows: AdoptedVersion[] } {
   if (versions.length === 0) return { rows: [] }
-  const past = incoming.fork()
+  const reader = pastReader(incoming)
+  const judged = new Map<string, PointJudgement>()
   const rows: AdoptedVersion[] = []
+  const unheld = (id: string) => ({
+    reason: `Version "${id}" names a point the record does not hold.`,
+  })
   for (const { frontiers, ...version } of versions) {
-    let decoded: ReturnType<typeof decodeFrontiers>
-    try {
-      decoded = decodeFrontiers(frontiers)
-      past.checkout(decoded)
-    } catch {
-      return { reason: `Version "${version.id}" names a point the record does not hold.` }
+    const decoded = decodedPoint(frontiers)
+    if (decoded === undefined) return unheld(version.id)
+    const point = pointKey(decoded)
+    const key = `${point}\u0000${version.documentId}`
+    let judgement = judged.get(key)
+    if (judgement === undefined) {
+      if (!reader.moveTo(point, decoded)) return unheld(version.id)
+      const answer = judgeDocumentAt(reader.past, version)
+      if ('reason' in answer) return answer
+      judgement = answer
+      judged.set(key, judgement)
     }
-    const content = projectWorkspaceDocument(past, version.documentId)
-    if (content === null) {
-      return {
-        reason: `Version "${version.id}" names a document the record did not hold at that point.`,
-      }
-    }
-    const breach = judgeStateWithinTextLimits(content)
-    if (breach !== null) {
-      const at = readWorkspaceDocuments(past).find(
-        (entry) => entry.documentId === version.documentId,
-      )
-      throw textBreachRefusal(breach, at === undefined ? undefined : { path: at.path })
-    }
-    rows.push({
-      ...version,
-      frontiers: decoded,
-      elementCount: countSpatialNodes(content),
-      contentDigest: contentDigestOfDocument(content),
-    })
+    rows.push({ ...version, frontiers: decoded, ...judgement })
   }
   return { rows }
 }
@@ -131,6 +203,23 @@ export async function judgeCarried(
     readonly versions: readonly CarriedVersion[]
   },
 ): Promise<CarriedJudgement> {
+  // Counted before any row is judged, so past either cap nothing is.
+  if (carried.versions.length > PROMOTE_MAX_VERSIONS) {
+    return {
+      kind: 'too-many',
+      plane: 'versions',
+      carried: carried.versions.length,
+      limit: PROMOTE_MAX_VERSIONS,
+    }
+  }
+  if (carried.trash.length > PROMOTE_MAX_TRASH) {
+    return {
+      kind: 'too-many',
+      plane: 'trash',
+      carried: carried.trash.length,
+      limit: PROMOTE_MAX_TRASH,
+    }
+  }
   const trashRefusal = await judgeTrash(incoming, carried.trash)
   if (trashRefusal !== null) return { kind: 'refused', reason: trashRefusal }
   const versions = judgeVersions(incoming, carried.versions)

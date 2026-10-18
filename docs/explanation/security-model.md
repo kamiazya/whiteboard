@@ -536,10 +536,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   card. The budget holds for
   `wb_scene_render`, export and the web app's preview alike.
 - **A move into the daemon is bounded.** Moving a browser workspace to the
-  daemon is one request of at most 24 MiB carrying at most 2000 documents.
-  The daemon counts the documents before it merges anything, and refuses a
-  larger record whole (`promote_too_many_documents`). So one request cannot
-  make the daemon write an unbounded number of saved versions.
+  daemon is one request of at most 24 MiB carrying at most 2000 documents,
+  2000 trashed documents and 120,000 saved versions. The daemon counts all
+  three before it judges or merges anything, and refuses a larger move whole
+  (`promote_too_many_documents`, `promote_too_many_carried`). Each saved
+  version is checked against the record before the merge, and rows naming
+  the same document at the same point are checked once, so repeating one row
+  costs almost nothing. So one request cannot make the daemon write, or
+  check, an unbounded number of saved versions.
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is

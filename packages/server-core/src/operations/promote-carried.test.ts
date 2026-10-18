@@ -19,12 +19,13 @@ import {
 import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import { PROMOTE_MAX_TRASH, PROMOTE_MAX_VERSIONS } from '../versions/version-entry.js'
 import { judgeCarried } from './promote-carried.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import { TextBreachRefusalError } from './sync-write-refusals.js'
@@ -340,5 +341,131 @@ describe('promoteWorkspace, a carried version past a sync limit', () => {
     expect(refused).toMatchObject({ code, status: 413 })
     expect(target.saves()).toBe(0)
     expect(target.deps.versions.adopted.size).toBe(0)
+  })
+})
+
+/**
+ * The judgement's cost, counted in checkouts of the incoming record: each is
+ * a move of the whole fork, followed by a projection and a size judgement of
+ * the document it names, on the serving loop.
+ */
+describe('judgeCarried, what judging the carried versions costs', () => {
+  it('refuses one version past the cap before checking any out', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: PROMOTE_MAX_VERSIONS + 1 }, (_, i) => ({
+      ...version,
+      id: `row-${i}`,
+    }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      expect(judged).toEqual({
+        kind: 'too-many',
+        plane: 'versions',
+        carried: PROMOTE_MAX_VERSIONS + 1,
+        limit: PROMOTE_MAX_VERSIONS,
+      })
+      expect(checkout).not.toHaveBeenCalled()
+    } finally {
+      checkout.mockRestore()
+    }
+  })
+
+  it('refuses one trashed document past the cap before hashing any', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [carried] = record.trash
+    if (carried === undefined) throw new Error('no trash')
+    const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
+    try {
+      const judged = await judgeCarried(incoming, {
+        trash: Array.from({ length: PROMOTE_MAX_TRASH + 1 }, () => carried),
+        versions: [],
+      })
+      expect(judged).toEqual({
+        kind: 'too-many',
+        plane: 'trash',
+        carried: PROMOTE_MAX_TRASH + 1,
+        limit: PROMOTE_MAX_TRASH,
+      })
+      expect(digest).not.toHaveBeenCalled()
+    } finally {
+      digest.mockRestore()
+    }
+  })
+
+  it('answers every row naming one point from one judgement of it', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
+    const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+    if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
+    expect(new Set(judged.versions.map((row) => row.contentDigest)).size).toBe(1)
+    expect(judged.versions.map((row) => row.id)).toEqual(rows.map((row) => row.id))
+  })
+
+  it('counts the checkouts 1000 rows naming one frontier cost', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    // The size judgement forks the projected document once per judgement.
+    const forkAt = vi.spyOn(LoroDoc.prototype, 'forkAt')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      expect(judged.kind).toBe('admitted')
+      expect(checkout).toHaveBeenCalledTimes(1)
+      expect(forkAt).toHaveBeenCalledTimes(1)
+    } finally {
+      checkout.mockRestore()
+      forkAt.mockRestore()
+    }
+  })
+
+  it('checks out a point once, and judges each document at it for itself', async () => {
+    const doc = new LoroDoc()
+    doc.setPeerId(2n)
+    for (const [path, documentId] of [
+      ['roadmap', ROADMAP_ID],
+      ['board', BOARD_ID],
+    ] as const) {
+      createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
+      writeMarkdownBody(documentContainers(doc, documentId), `# ${path}`)
+    }
+    doc.commit()
+    const point = encodeFrontiers(doc.oplogFrontiers())
+    writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# later')
+    doc.commit()
+    const incoming = new LoroDoc()
+    incoming.import(doc.export({ mode: 'snapshot' }))
+    const rows = [ROADMAP_ID, BOARD_ID].map((documentId) => ({
+      id: `v-${documentId}`,
+      documentId,
+      createdAt: 1,
+      auto: true,
+      frontiers: point,
+    }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
+      expect(checkout).toHaveBeenCalledTimes(1)
+      // Each row is judged for its own document, not answered from the other's.
+      const [roadmap, board] = judged.versions
+      expect(roadmap?.contentDigest).not.toBe(board?.contentDigest)
+    } finally {
+      checkout.mockRestore()
+    }
   })
 })

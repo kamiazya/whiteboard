@@ -13,14 +13,16 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  commentMessageSchema,
   DOCUMENT_MAX_OPEN_CHANGES,
   DOCUMENT_MAX_OPEN_THREADS,
+  OPS_PER_CALL_MAX,
   type ProposedChange,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -111,6 +113,20 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
     ).rejects.toThrow(pastThreads)
   })
 
+  test('resolving a legacy comment frees no room, since it has no status to set', async () => {
+    // A comment no writer has migrated into the threads plane: read as an
+    // open thread, and left open by a resolve, which finds no thread to write.
+    const legacy = (doc: LoroDoc) =>
+      doc.getMap('comments').set('legacy', { id: 'legacy', x: 0, y: 0, text: 'still here?' })
+    const deps = await seeded('markdown', threads(DOCUMENT_MAX_OPEN_THREADS - 1), legacy)
+    await expect(
+      createThreadEditTool(deps).execute({
+        ...target,
+        ops: [{ op: 'thread.resolve', threadId: 'legacy' }, openThread],
+      }),
+    ).rejects.toThrow(pastThreads)
+  })
+
   test('resolving one in the same batch makes room for another', async () => {
     const deps = await seeded('markdown', threads(DOCUMENT_MAX_OPEN_THREADS))
     const result = await createThreadEditTool(deps).execute({
@@ -120,6 +136,40 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
     expect(result.threads.filter((thread) => thread.status === 'open')).toHaveLength(
       DOCUMENT_MAX_OPEN_THREADS,
     )
+  })
+})
+
+/**
+ * What holding the ceiling costs one call, counted in message parses: the
+ * full read of the annotation layer parses every message of every thread,
+ * resolved ones included, and neither count is bounded.
+ */
+describe("wb_thread_edit's ceiling check, what it costs", () => {
+  test('reads the layer three times for 200 resolve and reopen ops, not once per op', async () => {
+    const deps = await seeded('markdown', (doc) => {
+      for (let t = 0; t < 50; t += 1) {
+        writeCommentThread(doc, {
+          id: `t${t}`,
+          anchor: { kind: 'document' },
+          status: t % 2 === 0 ? 'open' : 'resolved',
+          messages: Array.from({ length: 20 }, (_, m) => ({ id: `t${t}-m${m}`, body: 'why?' })),
+        })
+      }
+    })
+    const ops = Array.from({ length: OPS_PER_CALL_MAX }, (_, i) => ({
+      op: 'thread.resolve' as const,
+      threadId: `t${i % 50}`,
+      resolved: i % 4 < 2,
+    }))
+    const parses = vi.spyOn(commentMessageSchema, 'safeParse')
+    try {
+      const result = await createThreadEditTool(deps).execute({ ...target, ops })
+      expect(result.threads).toHaveLength(50)
+      // A fixed number of whole reads of 1000 messages, whatever the op count.
+      expect(parses).toHaveBeenCalledTimes(3_000)
+    } finally {
+      parses.mockRestore()
+    }
   })
 })
 
