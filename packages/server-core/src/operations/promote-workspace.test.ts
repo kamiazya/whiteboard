@@ -454,6 +454,22 @@ describe('promoteWorkspace', () => {
           edges: [],
         }),
     },
+    'thread-anchor': {
+      at: 'sketch',
+      // Resolved, so the open-thread ceiling does not see it: the anchor bound must.
+      write: (board: Board) =>
+        writeCommentThread(board, {
+          id: 't1',
+          anchor: {
+            kind: 'spatial',
+            nodeIds: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`),
+            x: 0,
+            y: 0,
+          },
+          status: 'resolved',
+          messages: [{ id: 'm1', body: 'hello' }],
+        }),
+    },
     'open-threads': {
       at: 'notes/roadmap',
       write: (doc: Board) => {

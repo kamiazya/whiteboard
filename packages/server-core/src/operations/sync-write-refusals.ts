@@ -4,6 +4,7 @@
 // a refusal added here reaches each surface with the same code and status.
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  ANCHOR_NODES_LIMIT_PHRASE,
   CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
@@ -270,6 +271,24 @@ class CanvasTooLargeError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A comment thread whose node-set anchor names more nodes than
+ * `CANVAS_MAX_NODES` — every layout looks each one up, resolved threads
+ * included. An anchor stored past it still takes an edit that does not grow it.
+ */
+class CommentAnchorTooLargeError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['thread-anchor']
+
+  constructor(
+    readonly breach: BreachOf<'thread-anchor'>,
+    readonly at?: RefusedIn,
+  ) {
+    const thread = `comment thread ${JSON.stringify(breach.threadId)} anchored to ${breach.count} nodes`
+    super(valueRefusalMessage(at, `leave ${thread}`, `holds ${thread}`, ANCHOR_NODES_LIMIT_PHRASE))
+    this.name = 'CommentAnchorTooLargeError'
+  }
+}
+
 function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
   return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
 }
@@ -379,6 +398,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new ContainerNameTooLongError(breach, at)
     case 'canvas-size':
       return new CanvasTooLargeError(breach, at)
+    case 'thread-anchor':
+      return new CommentAnchorTooLargeError(breach, at)
     case 'open-threads':
       return new TooManyOpenThreadsError(breach, at)
     case 'open-changes':

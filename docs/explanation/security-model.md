@@ -633,7 +633,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   across all of its proposals (`too_many_open_threads`,
   `too_many_open_changes`). Resolved threads are not counted, since the
   daemon never draws them; a reader who asks the web app to show resolved
-  comments lays all of them out in their own browser. What
+  comments lays all of them out in their own browser. What every render
+  does read of every thread, resolved ones included, is a node-set anchor,
+  so one anchor names at most 2000 nodes (`comment_anchor_too_large`). What
   is still NOT bounded is how long the largest permitted board takes to lay
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in

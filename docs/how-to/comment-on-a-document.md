@@ -69,6 +69,9 @@ resolved; opening or reopening one past it is refused, with a notice saying
 why, and nothing is saved. See
 [Export formats](../reference/export-formats.md#how-many-open-comment-threads-and-proposed-changes-one-document-may-hold).
 
+A comment on several nodes at once names at most **2,000** of them, the most
+one canvas holds.
+
 ## Read and answer comments from an agent
 
 An agent reaches the same conversations through MCP, on either document

@@ -371,6 +371,17 @@ storing nothing; a browser-kept workspace refuses it the same way it refuses a
 board past its size, with a notice. A document stored past a limit before it
 existed still reads, and still takes any change that opens nothing.
 
+A comment anchored to several nodes at once names at most **2,000** of them —
+a whole canvas's worth. Every render looks each named node up, resolved
+threads included, so this is held whether the thread is open or not.
+`wb_thread_edit` refuses a `thread.add` naming more ("a node set names more
+nodes than the 2000-node limit for one comment anchor, a whole canvas's
+worth"), and the daemon's sync routes refuse an update that would leave an
+anchor naming more with `413` and `{"error":"comment_anchor_too_large"}`,
+storing nothing. A thread stored with a larger set before this limit existed
+is left out when the document is read; the document and its other threads
+read as before.
+
 ## How many ops one call may carry
 
 One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit`,

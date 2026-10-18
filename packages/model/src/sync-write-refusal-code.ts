@@ -14,6 +14,7 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'node_location_too_large',
   'label_too_large',
   'comment_too_large',
+  'comment_anchor_too_large',
   'tags_too_large',
   'container_name_too_long',
   'too_many_nodes_or_edges',

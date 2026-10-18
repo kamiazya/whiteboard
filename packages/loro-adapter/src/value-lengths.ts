@@ -59,3 +59,13 @@ export function longestTag(value: unknown): number {
   }
   return longest
 }
+
+/**
+ * How many nodes a thread's stored anchor names as a node set, 0 when it
+ * names none: the count every layout pays one lookup each for.
+ */
+export function anchorNodeIdCount(value: unknown): number {
+  if (typeof value !== 'object' || value === null) return 0
+  const held = (value as { nodeIds?: unknown }).nodeIds
+  return Array.isArray(held) ? held.length : 0
+}

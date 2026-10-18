@@ -123,6 +123,9 @@ export const textAnchorInputSchema = textAnchorOver(textQuoteSelector(quoteConte
 
 export type TextAnchor = z.infer<typeof textAnchorSchema>
 
+/** The node-set bound as every refusal of it ends: a board's worth of nodes. */
+export const ANCHOR_NODES_LIMIT_PHRASE = `the ${CANVAS_MAX_NODES}-node limit for one comment anchor, a whole canvas's worth`
+
 const spatialAnchorSchema = z
   .object({
     kind: z.literal('spatial'),
@@ -137,10 +140,7 @@ const spatialAnchorSchema = z
     nodeIds: z
       .array(nodeIdSchema)
       .min(2, 'a node set names at least two nodes')
-      .max(
-        CANVAS_MAX_NODES,
-        `a node set names at most ${CANVAS_MAX_NODES} nodes, the most one canvas may hold`,
-      )
+      .max(CANVAS_MAX_NODES, `a node set names more nodes than ${ANCHOR_NODES_LIMIT_PHRASE}`)
       .optional(),
     // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
     // fractional anchor taken from a zoomed viewport survives the session

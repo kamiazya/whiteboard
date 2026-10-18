@@ -129,6 +129,8 @@ export const KEEPER_LIMIT_REASON = {
     'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
   too_many_nodes_or_edges:
     'It would give this canvas more nodes, or more edges and lines, than one canvas may hold. Remove some first, or split the board across canvases.',
+  comment_anchor_too_large:
+    'It would anchor a comment to more nodes than one canvas may hold. Comment on fewer nodes at once.',
   too_many_open_threads:
     'It would leave more comment threads open on this document than one document may hold. Resolve some first.',
   too_many_open_changes:
