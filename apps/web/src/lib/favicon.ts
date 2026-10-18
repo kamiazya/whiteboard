@@ -29,7 +29,7 @@ export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
-import { LUCIDE_ICONS } from '@kamiazya/whiteboard-plugin-visual'
+import { iconGeometry } from '@kamiazya/whiteboard-plugin-visual'
 import type { ConnectionState, SessionHealth } from './connection-state.js'
 import type { ReplicaSaveHealth } from './replica-save-queue.js'
 import { fitLargestRects } from './spatial/minimap.js'
@@ -225,7 +225,7 @@ function drawSymbol(ctx: CanvasRenderingContext2D, symbol: VisualSymbolFacet): b
     ctx.restore()
     return true
   }
-  const elements = LUCIDE_ICONS[symbol.name]
+  const elements = iconGeometry(symbol.name)
   // Path2D is what draws the vendored `d` strings; a 2D context without it
   // is old enough that the squiggle is the better answer.
   if (elements === undefined || typeof Path2D !== 'function') return false

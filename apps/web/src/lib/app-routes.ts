@@ -70,7 +70,8 @@ function documentTail(tail: string): string | null {
   // Judged after the join: `%2F` decodes to a separator, so `a%2F..` is the
   // path `a/..` even though no single URL segment spelled `..`.
   const path = decoded.join('/')
-  if (path.split('/').some((segment) => segment === '' || isDotSegment(segment))) return null
+  const segments = path.split('/')
+  if (segments.includes('') || segments.some(isDotSegment)) return null
   return path
 }
 

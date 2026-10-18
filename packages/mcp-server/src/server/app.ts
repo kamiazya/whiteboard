@@ -205,7 +205,17 @@ function mountMcpMiddleware(
 // A JSON-RPC body may be as large as `/mcp`'s 4 MiB ceiling, and is read
 // whole before any tool runs, so it is held to the same content slots as
 // `/api`'s content-sized bodies (`content-slots.ts`): taken after the caller is
-// known and before the body limit reads, held until the handler answers.
+// known and before the body limit reads, held until the call is answered.
+//
+// "Answered" is not "the handler returned": a modern-era call that sends
+// anything before its result (an in-call log record, progress) is answered
+// as an event stream handed back while the tool still runs, so the slot
+// rides that stream and is released when it ends, errors or is cancelled.
+// A `subscriptions/listen` stream is the exception — it carries no call, is
+// open for as long as the client likes, and holding a slot for it would let
+// a few listeners lock every content-sized request out. The SDK refuses a
+// request whose `Mcp-Method` header disagrees with its body, so the header
+// names what the stream is.
 function mcpContentSlot(): MiddlewareHandler {
   return async (c, next) => {
     if (c.req.method.toUpperCase() !== 'POST') return next()
@@ -213,12 +223,57 @@ function mcpContentSlot(): MiddlewareHandler {
       refused.json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null }, 429),
     )
     if (slot instanceof Response) return slot
+    let riding = false
     try {
       await next()
+      const body = c.res.body
+      if (body !== null && isEventStream(c.res) && !isListenRequest(c)) {
+        c.res = new Response(releasedWhenDone(body, slot), c.res)
+        riding = true
+      }
     } finally {
-      slot()
+      if (!riding) slot()
     }
   }
+}
+
+function isEventStream(response: Response): boolean {
+  return response.headers.get('content-type')?.toLowerCase().includes('text/event-stream') === true
+}
+
+function isListenRequest(c: Context): boolean {
+  return c.req.header('mcp-method') === 'subscriptions/listen'
+}
+
+/** `body`, calling `release` once it has been read to its end, has failed, or was cancelled. */
+function releasedWhenDone(
+  body: ReadableStream<Uint8Array>,
+  release: () => void,
+): ReadableStream<Uint8Array> {
+  const reader = body.getReader()
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            release()
+            controller.close()
+            return
+          }
+          controller.enqueue(value)
+        } catch (error) {
+          release()
+          controller.error(error)
+        }
+      },
+      async cancel(reason) {
+        release()
+        await reader.cancel(reason)
+      },
+    },
+    { highWaterMark: 0 },
+  )
 }
 
 // The people store a composition keeps, where it keeps one: what lets a

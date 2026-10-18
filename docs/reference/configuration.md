@@ -222,7 +222,10 @@ configurable:
 
 On `/mcp` the refusal is the same `429` and `Retry-After: 1`, with a JSON-RPC
 error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`) rather
-than `too_many_requests`. A caller whose grant names no user on this instance
+than `too_many_requests`. A call answered as an event stream (one that sends
+progress or log messages before its result) counts until that stream ends,
+not merely until it opens; a `subscriptions/listen` stream does not count.
+A caller whose grant names no user on this instance
 (a token for no person, or a person with no user here) is counted with every
 other such caller as one user, so together they hold at most the per-user
 limit.
