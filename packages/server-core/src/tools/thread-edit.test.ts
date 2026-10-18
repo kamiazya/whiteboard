@@ -239,6 +239,31 @@ describe('wb_thread_edit within ONE batch', () => {
     ])
   })
 
+  test('two replies to one thread in one batch are two messages, not one overwritten', async () => {
+    // Reply ids are minted from what the batch has written so far, not from
+    // a re-read of the document, so each reply has to be counted as it lands.
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store)
+    const deps = makeDeps(store)
+
+    await createThreadEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'thread.add', threadId: 'th-2', anchor: { kind: 'document' }, body: 'first' },
+        { op: 'message.add', threadId: 'th-2', body: 'second' },
+        { op: 'message.add', threadId: 'th-2', body: 'third' },
+      ],
+    })
+
+    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)[0]?.messages.map((m) => [m.id, m.body])).toEqual([
+      ['th-2-m1', 'first'],
+      ['th-2-m2', 'second'],
+      ['th-2-m3', 'third'],
+    ])
+  })
+
   test('a reply is minted ABOVE the messages already there, never into a gap', async () => {
     // Minted from the COUNT rather than by scanning up from 1, because a
     // peer's reply that merged in leaves the two disagreeing — and an id

@@ -11,6 +11,8 @@ import {
   annotationAnchorInputSchema,
   annotationIdInputSchema,
   annotationIdSchema,
+  type CommentThread,
+  type CommentThreadStatus,
   commentMessageInputSchema,
   commentThreadSchema,
   documentIdSchema,
@@ -202,11 +204,40 @@ interface ThreadEditContext {
   readonly content: DocumentContent
   /** The thread ids this document holds, grown as the batch opens more. */
   readonly held: Set<string>
+  /**
+   * Each held thread's status and message ids, read once at load and kept
+   * current by the ops, so no op re-reads the whole layer — every message of
+   * every thread, resolved ones included, neither of which is bounded.
+   */
+  readonly tally: ThreadTally
   /** The threads the batch opened, replied to, resolved or reopened. */
   readonly touched: Set<string>
   /** One timestamp for the whole batch, so a batch reads as one act. */
   readonly now: string
   readonly index: number
+}
+
+/** What the ceiling and the reply ids are judged from, as the batch leaves it. */
+interface ThreadTally {
+  readonly status: Map<string, CommentThreadStatus>
+  readonly messageIds: Map<string, Set<string>>
+  open: number
+}
+
+function tallyOf(threads: readonly CommentThread[]): ThreadTally {
+  return {
+    status: new Map(threads.map((thread) => [thread.id, thread.status])),
+    messageIds: new Map(
+      threads.map((thread) => [thread.id, new Set(thread.messages.map((message) => message.id))]),
+    ),
+    open: threads.filter((thread) => thread.status === 'open').length,
+  }
+}
+
+function setTalliedStatus(tally: ThreadTally, threadId: string, next: CommentThreadStatus): void {
+  if (tally.status.get(threadId) === 'open') tally.open -= 1
+  if (next === 'open') tally.open += 1
+  tally.status.set(threadId, next)
 }
 
 type ThreadOp = ThreadEditInput['ops'][number]
@@ -254,6 +285,8 @@ const THREAD_EDIT_HANDLERS: {
       ],
     })
     held.add(id)
+    setTalliedStatus(ctx.tally, id, 'open')
+    ctx.tally.messageIds.set(id, new Set([`${id}-m1`]))
     ctx.touched.add(id)
   },
 
@@ -273,12 +306,13 @@ const THREAD_EDIT_HANDLERS: {
     // its message count: a peer's reply that merged in leaves the
     // count and the highest suffix disagreeing, and reusing an id is
     // an overwrite of someone else's message rather than a reply.
-    const existing = readAnnotations(doc).find((thread) => thread.id === op.threadId)
-    const taken = new Set(existing?.messages.map((message) => message.id) ?? [])
+    const taken = ctx.tally.messageIds.get(op.threadId) ?? new Set<string>()
     let suffix = taken.size + 1
     while (taken.has(`${op.threadId}-m${suffix}`)) suffix += 1
+    const id = `${op.threadId}-m${suffix}`
+    ctx.tally.messageIds.set(op.threadId, new Set([...taken, id]))
     writeThreadMessage(doc, op.threadId, {
-      id: `${op.threadId}-m${suffix}`,
+      id,
       body: op.body,
       createdAt: now,
       ...(op.author === undefined ? {} : { author: op.author }),
@@ -291,7 +325,9 @@ const THREAD_EDIT_HANDLERS: {
     if (!held.has(op.threadId)) {
       throw new ThreadEditError(index, op.op, `thread "${op.threadId}" is not on this document`)
     }
-    setCommentThreadStatus(doc, op.threadId, op.resolved === false ? 'open' : 'resolved')
+    const next = op.resolved === false ? 'open' : 'resolved'
+    if (setCommentThreadStatus(doc, op.threadId, next))
+      setTalliedStatus(ctx.tally, op.threadId, next)
     ctx.touched.add(op.threadId)
   },
 }
@@ -352,16 +388,17 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
     documentId: input.documentId,
   })
   const content = readDocumentContent(doc, indexed?.kind)
-  const held = new Set(readAnnotations(doc).map((thread) => thread.id))
+  const atLoad = readAnnotations(doc)
+  const held = new Set(atLoad.map((thread) => thread.id))
+  const tally = tallyOf(atLoad)
+  const openAtLoad = tally.open
   const now = new Date().toISOString()
   const touched = new Set<string>()
-  const openNow = () => readAnnotations(doc).filter((thread) => thread.status === 'open').length
-  const openAtLoad = openNow()
   for (const [index, op] of input.ops.entries()) {
-    applyThreadOp({ doc, content, held, touched, now, index }, op)
+    applyThreadOp({ doc, content, held, tally, touched, now, index }, op)
     // A reply opens nothing, so only the two ops that can are counted.
     if (op.op === 'message.add') continue
-    const refusal = openThreadsRefusal(openAtLoad, openNow())
+    const refusal = openThreadsRefusal(openAtLoad, tally.open)
     if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
   }
 

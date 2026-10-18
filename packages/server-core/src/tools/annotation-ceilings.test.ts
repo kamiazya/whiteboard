@@ -113,6 +113,20 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
     ).rejects.toThrow(pastThreads)
   })
 
+  test('resolving a legacy comment frees no room, since it has no status to set', async () => {
+    // A comment no writer has migrated into the threads plane: read as an
+    // open thread, and left open by a resolve, which finds no thread to write.
+    const legacy = (doc: LoroDoc) =>
+      doc.getMap('comments').set('legacy', { id: 'legacy', x: 0, y: 0, text: 'still here?' })
+    const deps = await seeded('markdown', threads(DOCUMENT_MAX_OPEN_THREADS - 1), legacy)
+    await expect(
+      createThreadEditTool(deps).execute({
+        ...target,
+        ops: [{ op: 'thread.resolve', threadId: 'legacy' }, openThread],
+      }),
+    ).rejects.toThrow(pastThreads)
+  })
+
   test('resolving one in the same batch makes room for another', async () => {
     const deps = await seeded('markdown', threads(DOCUMENT_MAX_OPEN_THREADS))
     const result = await createThreadEditTool(deps).execute({
@@ -131,7 +145,7 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
  * resolved ones included, and neither count is bounded.
  */
 describe("wb_thread_edit's ceiling check, what it costs", () => {
-  test('counts the message parses 200 resolve and reopen ops cost on 50 threads of 20 messages', async () => {
+  test('reads the layer three times for 200 resolve and reopen ops, not once per op', async () => {
     const deps = await seeded('markdown', (doc) => {
       for (let t = 0; t < 50; t += 1) {
         writeCommentThread(doc, {
@@ -151,7 +165,8 @@ describe("wb_thread_edit's ceiling check, what it costs", () => {
     try {
       const result = await createThreadEditTool(deps).execute({ ...target, ops })
       expect(result.threads).toHaveLength(50)
-      expect(parses).toHaveBeenCalledTimes(204_000)
+      // A fixed number of whole reads of 1000 messages, whatever the op count.
+      expect(parses).toHaveBeenCalledTimes(3_000)
     } finally {
       parses.mockRestore()
     }
