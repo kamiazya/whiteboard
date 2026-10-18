@@ -425,7 +425,14 @@ available through `/api/people`:
   See [Deleting a user](#deleting-a-user).
 - `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
   an administrator. Only appointments can be dismissed here; someone named in
-  the configuration stays an administrator until the list changes.
+  the configuration stays an administrator until the list changes. An
+  administrator cannot dismiss themselves, so a dismissal always leaves the
+  one who made it. Two administrators dismissing each other at the same
+  moment cannot both succeed: the second finds it no longer administers.
+- A deactivation or a dismissal checks again, as it is made, that whoever
+  asked for it is still an active administrator. One dismissed or
+  deactivated while their request was in flight gets
+  `403 not_an_administrator` and changes nothing.
 - `POST /api/invitations` creates an invitation link to the server alone.
   Accepting it makes a user and nothing more. It works only while whoever
   created it is still an active administrator. A dismissed or deactivated

@@ -222,6 +222,68 @@ describe('appointing and dismissing administrators', () => {
   })
 })
 
+// Authorization is judged before the change is made, so two administrators
+// acting on each other at once both pass it; the change itself must hold the
+// rule that someone is left to administer, and that the actor still does.
+describe('administrators acting on each other at once', () => {
+  beforeEach(async () => {
+    await appointments.appoint(ids.bob as string, null)
+  })
+
+  async function activeAdministrators(): Promise<string[]> {
+    const appointed = (await appointments.list()).map((a) => a.profileId)
+    const active: string[] = []
+    for (const id of appointed) {
+      const user = (await members.listUsers()).find((u) => u.id === id)
+      if (user !== undefined && !user.deactivated) active.push(id)
+    }
+    return active
+  }
+
+  it('leaves an administrator when two dismiss each other', async () => {
+    const outcomes = await Promise.all([
+      people.dismiss(ids.bob as string, ids.ada as string),
+      people.dismiss(ids.ada as string, ids.bob as string),
+    ])
+    expect(outcomes.filter((o) => o.kind === 'done')).toHaveLength(1)
+    expect(await activeAdministrators()).toHaveLength(1)
+  })
+
+  it('leaves an administrator when one deactivates the other who dismisses them', async () => {
+    const outcomes = await Promise.all([
+      people.deactivate(ids.bob as string, ids.ada as string, NOW),
+      people.dismiss(ids.ada as string, ids.bob as string),
+    ])
+    expect(outcomes.filter((o) => o.kind === 'done')).toHaveLength(1)
+    expect(await activeAdministrators()).toHaveLength(1)
+  })
+
+  it('refuses a dismissal by someone dismissed since they were authorized', async () => {
+    await appointments.appoint(ids.cy as string, null)
+    expect(await people.dismiss(ids.ada as string, ids.cy as string)).toEqual({ kind: 'done' })
+    expect(await people.dismiss(ids.bob as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await appointments.isAppointed(ids.bob as string)).toBe(true)
+  })
+
+  it('refuses a deactivation by someone dismissed since they were authorized', async () => {
+    await appointments.appoint(ids.cy as string, null)
+    expect(await people.dismiss(ids.ada as string, ids.cy as string)).toEqual({ kind: 'done' })
+    expect(await people.deactivate(ids.bob as string, ids.ada as string, NOW)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await members.isDeactivated(binding('bob'))).toBe(false)
+  })
+
+  it('lets the operator dismiss the last administrator', async () => {
+    expect(await people.dismiss(ids.bob as string, null)).toEqual({ kind: 'done' })
+    expect(await people.dismiss(ids.ada as string, null)).toEqual({ kind: 'done' })
+  })
+})
+
 describe('deleting a person', () => {
   it('refuses a user who is still active, then deletes them once deactivated', async () => {
     expect(await deletePerson(deletion, ids.bob as string)).toEqual({
