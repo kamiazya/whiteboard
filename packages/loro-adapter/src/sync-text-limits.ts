@@ -38,7 +38,9 @@ import {
   NODES_KEY,
   THREADS_KEY,
 } from './containers.js'
+import { containerKind } from './content-sync.js'
 import { isEngineTrap } from './engine-trap.js'
+import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { isNodeMetaContainer } from './node-meta-containers.js'
 import {
   annotationBreach,
@@ -73,6 +75,13 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
  * more than before.
  * Lengths are UTF-16 units, the length every limit counts.
+ *
+ * Two are about what the update leaves standing rather than how much: a
+ * document node's content key left holding anything but a container of the
+ * kind `CONTENT_CONTAINER_KEYS` declares (`content-root`), which every reader
+ * and writer of that document opens; and a write into a container whose
+ * creation is not in the write's own causal past (`unattached-container`),
+ * which has no path for any bound above to find it by.
  *
  * The board's size is judged here with its text because it is the same
  * judgement on the same bytes, owed by the same keepers: what an update
@@ -137,6 +146,18 @@ export type SyncTextBreach =
     }
   | OpenAnnotationsBreach<'open-threads'>
   | OpenAnnotationsBreach<'open-changes'>
+  | {
+      readonly shape: 'content-root'
+      /** The content key, holding a scalar, another kind of container, or nothing. */
+      readonly key: string
+      /** The node's own map, so a caller can name the document. */
+      readonly container: ContainerID
+    }
+  | {
+      readonly shape: 'unattached-container'
+      /** The container written into. */
+      readonly container: ContainerID
+    }
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -155,6 +176,10 @@ export const SYNC_TEXT_BREACH_CODES = {
   'canvas-size': 'too_many_nodes_or_edges',
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
+  'content-root': 'invalid_document_root',
+  // The write builds on a creation it does not depend on: sent after the
+  // change that creates the container, it is an ordinary write.
+  'unattached-container': 'causal_gap',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -320,7 +345,54 @@ interface UpdateWrites {
   setInto: Set<ContainerID>
   /** Every map the update set or deleted a key in — the only maps whose size it changed. */
   mapsWritten: Set<ContainerID>
+  /**
+   * The content keys the update set or deleted in any map, by that map —
+   * which of them is a tree node's own is asked once the state is up, since
+   * a node the update itself creates has no path before.
+   */
+  contentKeys: Map<ContainerID, Set<string>>
+  /** The first container the update wrote into without its creation in that write's causal past. */
+  unattached: ContainerID | null
   touchesNodeMeta: boolean
+}
+
+/** The Loro kind each content key's container is declared as. */
+const CONTENT_KIND: ReadonlyMap<string, string> = new Map(
+  CONTENT_CONTAINER_KEYS.map(({ key, kind }) => [key, kind === 'map' ? 'Map' : 'Text']),
+)
+
+/** A container id's creating op, or `null` for a root, which no op creates. */
+function creatorOf(container: ContainerID): { peer: string; counter: number } | null {
+  const match = /^cid:(\d+)@(\d+):/.exec(container)
+  return match === null ? null : { peer: match[2] as string, counter: Number(match[1]) }
+}
+
+/**
+ * Whether every op of `change` writes into a container whose creating op is
+ * in the change's causal past. A client can only write into a container it
+ * holds, so a change from any real peer always passes; one that does not was
+ * written against a container the receiver may not hold either, which Loro
+ * takes in with no parent — no path, so no bound finds it, and asking for its
+ * path traps the engine. The causal past is the change's own earlier ops and
+ * what its deps reach; `pastOf` caches the latter per change.
+ */
+function unattachedIn(doc: LoroDoc, change: JsonSchema['changes'][number]): ContainerID | null {
+  const at = change.id.indexOf('@')
+  const peer = change.id.slice(at + 1)
+  let past: VersionVector | undefined
+  for (const op of change.ops) {
+    const creator = creatorOf(op.container)
+    if (creator === null) continue
+    if (creator.peer === peer && creator.counter < op.counter) continue
+    past ??= doc.frontiersToVV(
+      change.deps.map((dep) => {
+        const sep = dep.indexOf('@')
+        return { peer: dep.slice(sep + 1) as `${number}`, counter: Number(dep.slice(0, sep)) }
+      }),
+    )
+    if ((past.get(creator.peer as `${number}`) ?? 0) <= creator.counter) return op.container
+  }
+  return null
 }
 
 /**
@@ -362,7 +434,14 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
     names: [],
     setInto: new Set(),
     mapsWritten: new Set(),
+    contentKeys: new Map(),
+    unattached: null,
     touchesNodeMeta: false,
+  }
+  for (const change of json.changes) {
+    // Before any path is asked for: one of an unattached container traps.
+    writes.unattached = unattachedIn(doc, change)
+    if (writes.unattached !== null) return writes
   }
   for (const change of json.changes) {
     const peer = change.id.slice(change.id.indexOf('@') + 1)
@@ -380,6 +459,10 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
 function readMapWrite(writes: UpdateWrites, op: Op): void {
   const content = op.content as MapOp
   writes.mapsWritten.add(op.container)
+  if (CONTENT_KIND.has(content.key)) {
+    const keys = writes.contentKeys.get(op.container) ?? new Set<string>()
+    writes.contentKeys.set(op.container, keys.add(content.key))
+  }
   if (content.type !== 'insert') return
   writes.setInto.add(op.container)
   BOUNDED_VALUES.forEach((bound, index) => {
@@ -419,6 +502,34 @@ function isContentContainer(doc: LoroDoc, container: ContainerID, key: string): 
   const path = doc.getPathToContainer(container)
   if (path?.at(-1) !== key) return false
   return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
+}
+
+/** Whether `container` is a workspace-tree node's own map, where a document's content keys sit. */
+function isNodeMap(doc: LoroDoc, container: ContainerID): boolean {
+  const path = doc.getPathToContainer(container)
+  return path?.length === 2 && path[0] === WORKSPACE_TREE_KEY
+}
+
+/**
+ * A node map the update left holding, at a content key it wrote, anything
+ * but a container of the declared kind — read from the state, so a value
+ * the same update put right, or a concurrent write that won the key, passes.
+ */
+function contentRootBreach(
+  doc: LoroDoc,
+  written: ReadonlyMap<ContainerID, ReadonlySet<string>>,
+): SyncTextBreach | null {
+  for (const [container, keys] of written) {
+    if (!isNodeMap(doc, container)) continue
+    const map = doc.getContainerById(container) as LoroMap | undefined
+    if (map === undefined) continue
+    for (const key of keys) {
+      if (containerKind(map.get(key)) !== CONTENT_KIND.get(key)) {
+        return { shape: 'content-root', key, container }
+      }
+    }
+  }
+  return null
 }
 
 /** The bounded text of the value a map holds at `key` in the doc's current state; 0 when there is none. */
@@ -603,6 +714,9 @@ function judgeImported(
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
   })
+  if (writes.unattached !== null) {
+    return judged({ shape: 'unattached-container', container: writes.unattached })
+  }
   const { units, container } = writes.longestRun
   if (replays && units > MARKDOWN_MAX_CHARS && container !== null) {
     return judged({ shape: 'run', chars: units, container })
@@ -624,7 +738,8 @@ function judgeImported(
   const longName = longNameBreach(doc, writes.names, namedBefore)
   return judged(
     longName === null
-      ? (bodyBreach(doc, writes.net) ??
+      ? (contentRootBreach(doc, writes.contentKeys) ??
+          bodyBreach(doc, writes.net) ??
           valueBreach(doc, writes.longValues, before) ??
           canvasBreach(doc, writes.setInto, entriesBefore) ??
           annotationBreach(doc, writes.mapsWritten, annotationsBefore))
@@ -736,6 +851,13 @@ function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: b
  * open-thread or open-change bound, since an update adds no more map entries
  * (nor sets more statuses) than it has bytes — is therefore answered without
  * being applied.
+ *
+ * What an update leaves standing (`content-root`, `unattached-container`) is
+ * read off its operations, so an update that short skips it too. That is
+ * the one judgement the two keepers do not share: the browser keeper's only
+ * writer is the page's own session, which no well-formed edit can make
+ * produce either, while the daemon reads every operation of what it takes —
+ * a promoted record's whole history included.
  *
  * Neither the longest body, the largest board nor the most open annotations is walked for each update:
  * every document would be read on every keystroke, in a workspace of

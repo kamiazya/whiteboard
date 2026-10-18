@@ -25,7 +25,7 @@ import {
   TAG_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroMap, type LoroTreeNode } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
@@ -356,6 +356,14 @@ describe('promoteWorkspace', () => {
    * without a case here fails to compile.
    */
   type Board = ReturnType<typeof documentContainers>
+  const nodeDataOf = (record: LoroDoc, documentId: string): LoroTreeNode['data'] => {
+    const node = record
+      .getTree('tree')
+      .getNodes()
+      .find((candidate) => candidate.data.get('documentId') === documentId)
+    if (node === undefined) throw new Error(`no node holds ${documentId}`)
+    return node.data
+  }
   const breachCases = {
     run: {
       at: 'notes/roadmap',
@@ -471,15 +479,67 @@ describe('promoteWorkspace', () => {
           })),
         }),
     },
+    'content-root': {
+      at: 'sketch',
+      status: 400,
+      onRecord: (record: LoroDoc, documentId: string) =>
+        nodeDataOf(record, documentId).set('nodes', 1),
+    },
+    'unattached-container': {
+      at: 'sketch',
+      status: 409,
+      onRecord: (record: LoroDoc, documentId: string) => {
+        // Q writes into the map P's first op will create, before P has created it.
+        const P = '777'
+        const orphan = new LoroDoc()
+        orphan.setPeerId(888n)
+        // A string, since the typed form has no spelling for uncompressed peer ids.
+        orphan.importJsonUpdates(
+          JSON.stringify({
+            schema_version: 1,
+            start_version: {},
+            peers: null,
+            changes: [
+              {
+                id: '0@888',
+                timestamp: 0,
+                deps: [],
+                lamport: 0,
+                msg: null,
+                ops: [
+                  {
+                    container: `cid:0@${P}:Map`,
+                    content: { type: 'insert', key: 'n1', value: { id: 'n1' } },
+                    counter: 0,
+                  },
+                ],
+              },
+            ],
+          }),
+        )
+        record.commit()
+        const attacher = record.fork()
+        attacher.setPeerId(BigInt(P))
+        nodeDataOf(attacher, documentId).setContainer('nodes', new LoroMap())
+        attacher.commit()
+        record.import(orphan.export({ mode: 'update' }))
+        record.import(attacher.export({ mode: 'update', from: record.oplogVersion() }))
+      },
+    },
   } satisfies Record<
     keyof typeof SYNC_TEXT_BREACH_CODES,
-    { at: string; write: (doc: Board) => void }
+    {
+      at: string
+      status?: number
+      write?: (doc: Board) => void
+      onRecord?: (record: LoroDoc, documentId: string) => void
+    }
   >
 
   it.each(
     Object.keys(SYNC_TEXT_BREACH_CODES) as (keyof typeof SYNC_TEXT_BREACH_CODES)[],
   )('refuses a record whose document holds a %s breach, naming the document', async (shape) => {
-    const { at, write } = breachCases[shape]
+    const { at } = breachCases[shape]
     const fake = fakes()
     const record = new LoroDoc()
     record.setPeerId(2n)
@@ -493,7 +553,14 @@ describe('promoteWorkspace', () => {
       documentId: SKETCH_ID,
       kind: 'spatial',
     })
-    write(documentContainers(record, at === 'sketch' ? SKETCH_ID : ROADMAP_ID))
+    const documentId = at === 'sketch' ? SKETCH_ID : ROADMAP_ID
+    const breachCase: {
+      status?: number
+      write?: (doc: Board) => void
+      onRecord?: (record: LoroDoc, documentId: string) => void
+    } = breachCases[shape]
+    breachCase.write?.(documentContainers(record, documentId))
+    breachCase.onRecord?.(record, documentId)
     record.commit()
     const refusal = await promoteWorkspace(
       {
@@ -504,7 +571,10 @@ describe('promoteWorkspace', () => {
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
     ).catch((err: unknown) => err)
-    expect(syncWriteAnswer(refusal)).toEqual({ code: SYNC_TEXT_BREACH_CODES[shape], status: 413 })
+    expect(syncWriteAnswer(refusal)).toEqual({
+      code: SYNC_TEXT_BREACH_CODES[shape],
+      status: breachCase.status ?? 413,
+    })
     expect(refusal).toMatchObject({ breach: { shape }, at: { path: at } })
     expect((refusal as Error).message).toMatch(new RegExp(`^The document at "${at}" `))
     expect(fake.saves()).toBe(0)

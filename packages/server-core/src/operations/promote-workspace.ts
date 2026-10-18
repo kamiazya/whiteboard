@@ -61,14 +61,15 @@ export type PromoteWorkspaceResult =
 /**
  * The promoted document `container` lives under, or `undefined` when it is not
  * inside one — a body, a canvas's node or edge map, or a thread's messages
- * each sit below their document's workspace-tree node.
+ * each sit below their document's workspace-tree node, and a content key
+ * holding the wrong kind is named by the node's own map.
  */
 function promotedDocumentAt(
   incoming: LoroDoc,
   container: ContainerID,
 ): { readonly path: string } | undefined {
   const path = incoming.getPathToContainer(container)
-  if (path === undefined || path.length < 3 || path[0] !== WORKSPACE_TREE_KEY) return undefined
+  if (path === undefined || path.length < 2 || path[0] !== WORKSPACE_TREE_KEY) return undefined
   const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
   const documentId = node?.data.get('documentId')
   return readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)

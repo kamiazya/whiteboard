@@ -90,7 +90,8 @@ function bodyRefusalMessage({ shape, chars }: BreachOf<'run' | 'body'>, at?: Ref
 export abstract class TextBreachRefusalError extends SyncWriteRefusalError {
   abstract readonly breach: SyncTextBreach
   abstract readonly at?: RefusedIn
-  readonly status = 413
+  // A bound on how much is 413; one on what an update leaves standing is not.
+  readonly status: 400 | 409 | 413 = 413
 }
 
 /**
@@ -311,6 +312,56 @@ class TooManyOpenChangesError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A document node's content key left holding a scalar, another kind of
+ * container, or nothing — what every reader and writer of the document opens
+ * as the container the bridge declares. The same answer the per-document
+ * route gives a root a node cannot hold (`RootNoDocumentHoldsError`).
+ */
+class ContentRootKindError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['content-root']
+  override readonly status = 400
+
+  constructor(
+    readonly breach: BreachOf<'content-root'>,
+    readonly at?: RefusedIn,
+  ) {
+    const what =
+      at === undefined
+        ? 'This update would leave a document'
+        : `The document at ${JSON.stringify(at.path)} is`
+    super(
+      `${what} holding something other than its own content container at ${JSON.stringify(breach.key)}, which leaves that document unreadable`,
+    )
+    this.name = 'ContentRootKindError'
+  }
+}
+
+/**
+ * A write into a container whose creating change the write does not build
+ * on. Loro takes it in with no parent, where no bound can find it, and a
+ * later attach carries all of it into a document on every replica that
+ * replays the history; 409 like any change sent before what it builds on.
+ */
+class UnattachedContainerError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['unattached-container']
+  override readonly status = 409
+
+  constructor(
+    readonly breach: BreachOf<'unattached-container'>,
+    readonly at?: RefusedIn,
+  ) {
+    const what =
+      at === undefined
+        ? 'This update writes'
+        : `The document at ${JSON.stringify(at.path)} holds in its history writes`
+    super(
+      `${what} into a container (${breach.container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container`,
+    )
+    this.name = 'UnattachedContainerError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -332,6 +383,10 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new TooManyOpenThreadsError(breach, at)
     case 'open-changes':
       return new TooManyOpenChangesError(breach, at)
+    case 'content-root':
+      return new ContentRootKindError(breach, at)
+    case 'unattached-container':
+      return new UnattachedContainerError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)
