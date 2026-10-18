@@ -1,5 +1,5 @@
 diff --git a/dev/lib/initialize/document.js b/dev/lib/initialize/document.js
-index bca159ead63c2ccb5910d09076ef63b94c307e90..e3186548e1c8e1a70c621b7e9fb3573007ccc680 100644
+index bca159ead63c2ccb5910d09076ef63b94c307e90..fd9701afbc048e2dc5525006a06fcdc02be7a66b 100644
 --- a/dev/lib/initialize/document.js
 +++ b/dev/lib/initialize/document.js
 @@ -29,6 +29,9 @@ export const document = {tokenize: initializeDocument}
@@ -7,7 +7,7 @@ index bca159ead63c2ccb5910d09076ef63b94c307e90..e3186548e1c8e1a70c621b7e9fb35730
  const containerConstruct = {tokenize: tokenizeContainer}
  
 +// Patched (whiteboard): see `checkNewContainers`.
-+const maxContainerDepth = 100
++const maxContainerDepth = 32
 +
  /**
   * @this {TokenizeContext}
@@ -63,8 +63,60 @@ index bca159ead63c2ccb5910d09076ef63b94c307e90..e3186548e1c8e1a70c621b7e9fb35730
            return
          }
        }
+diff --git a/dev/lib/initialize/text.js b/dev/lib/initialize/text.js
+index 7192e70a0972e808d779999e57153bf3ed7bfc3a..aea2a327fb5fe5159f8b12c621af73593b1397ca 100644
+--- a/dev/lib/initialize/text.js
++++ b/dev/lib/initialize/text.js
+@@ -113,30 +113,25 @@ function createResolver(extraResolver) {
+ 
+   /** @type {Resolver} */
+   function resolveAllText(events, context) {
+-    let index = -1
+-    /** @type {number | undefined} */
+-    let enter
+-
+-    // A rather boring computation (to merge adjacent `data` events) which
+-    // improves mm performance by 29%.
+-    while (++index <= events.length) {
+-      if (enter === undefined) {
+-        if (events[index] && events[index][1].type === types.data) {
+-          enter = index
+-          index++
+-        }
+-      } else if (!events[index] || events[index][1].type !== types.data) {
+-        // Don’t do anything if there is one data token.
+-        if (index !== enter + 2) {
+-          events[enter][1].end = events[index - 1][1].end
+-          events.splice(enter + 2, index - enter - 2)
+-          index = enter + 2
+-        }
+-
+-        enter = undefined
++    // Patched (whiteboard): merge adjacent `data` events in one compacting
++    // pass. Splicing each group out of the whole array made a run of many
++    // small groups (text between code spans, say) quadratic in its length.
++    let read = 0
++    let write = 0
++    while (read < events.length) {
++      if (events[read][1].type !== types.data) {
++        events[write++] = events[read++]
++        continue
+       }
++      let end = read + 2
++      while (end < events.length && events[end][1].type === types.data) end++
++      // Don’t do anything if there is one data token.
++      if (end !== read + 2) events[read][1].end = events[end - 1][1].end
++      events[write++] = events[read]
++      events[write++] = events[read + 1]
++      read = end
+     }
+-
++    events.length = write
+     return extraResolver ? extraResolver(events, context) : events
+   }
+ }
 diff --git a/lib/initialize/document.js b/lib/initialize/document.js
-index 75e47495681f63306f98a1146f15b9ff4682a063..95ff6c1dd47e1bce9425393e57cb66d84cfa6ad4 100644
+index 75e47495681f63306f98a1146f15b9ff4682a063..d4f29b3fad6486017b92bd597edc309b87fc3740 100644
 --- a/lib/initialize/document.js
 +++ b/lib/initialize/document.js
 @@ -30,6 +30,9 @@ const containerConstruct = {
@@ -72,7 +124,7 @@ index 75e47495681f63306f98a1146f15b9ff4682a063..95ff6c1dd47e1bce9425393e57cb66d8
  };
  
 +// Patched (whiteboard): see `checkNewContainers`.
-+const maxContainerDepth = 100;
++const maxContainerDepth = 32;
 +
  /**
   * @this {TokenizeContext}
@@ -128,3 +180,53 @@ index 75e47495681f63306f98a1146f15b9ff4682a063..95ff6c1dd47e1bce9425393e57cb66d8
            return;
          }
        }
+diff --git a/lib/initialize/text.js b/lib/initialize/text.js
+index b9383cb721b95c68bd0e684da6cbf441ed82b8eb..e053d3205e4cfdceac31768a25bdf5219fa1fbc3 100644
+--- a/lib/initialize/text.js
++++ b/lib/initialize/text.js
+@@ -104,28 +104,25 @@ function createResolver(extraResolver) {
+ 
+   /** @type {Resolver} */
+   function resolveAllText(events, context) {
+-    let index = -1;
+-    /** @type {number | undefined} */
+-    let enter;
+-
+-    // A rather boring computation (to merge adjacent `data` events) which
+-    // improves mm performance by 29%.
+-    while (++index <= events.length) {
+-      if (enter === undefined) {
+-        if (events[index] && events[index][1].type === "data") {
+-          enter = index;
+-          index++;
+-        }
+-      } else if (!events[index] || events[index][1].type !== "data") {
+-        // Don’t do anything if there is one data token.
+-        if (index !== enter + 2) {
+-          events[enter][1].end = events[index - 1][1].end;
+-          events.splice(enter + 2, index - enter - 2);
+-          index = enter + 2;
+-        }
+-        enter = undefined;
++    // Patched (whiteboard): merge adjacent `data` events in one compacting
++    // pass. Splicing each group out of the whole array made a run of many
++    // small groups (text between code spans, say) quadratic in its length.
++    let read = 0;
++    let write = 0;
++    while (read < events.length) {
++      if (events[read][1].type !== "data") {
++        events[write++] = events[read++];
++        continue;
+       }
++      let end = read + 2;
++      while (end < events.length && events[end][1].type === "data") end++;
++      // Don’t do anything if there is one data token.
++      if (end !== read + 2) events[read][1].end = events[end - 1][1].end;
++      events[write++] = events[read];
++      events[write++] = events[read + 1];
++      read = end;
+     }
++    events.length = write;
+     return extraResolver ? extraResolver(events, context) : events;
+   }
+ }

@@ -8,10 +8,13 @@ import { parseMarkdownBody } from './pipeline.js'
  * A ratio, not a duration, so the verdict does not depend on how fast or
  * loaded the machine is — only on the shape of the cost curve.
  *
- * `scaling` is the verdict this tree gives today. Every shape that reads
- * `superlinear` is a body far inside MARKDOWN_MAX_CHARS whose parse grows
- * with the square (or worse) of its size, and therefore one stored body that
- * holds the event loop of whoever renders it.
+ * `scaling` is the verdict this tree gives, and every shape here once read
+ * `superlinear`: a body far inside MARKDOWN_MAX_CHARS whose parse grew with
+ * the square of its size, so one stored body could hold the event loop of
+ * whoever rendered it for minutes. Each is bounded now, in codec's delimiter
+ * budget or in the patched parser packages (pnpm-workspace.yaml's
+ * patchedDependencies); a shape found superlinear again is recorded as
+ * `superlinear` here until it is fixed, rather than left out.
  */
 type Shape = {
   name: string
@@ -48,22 +51,36 @@ const SHAPES: Shape[] = [
     unit: () => '*',
     wrap: (u) => `${u}x${u}`,
     small: 2_000,
-    scaling: 'superlinear',
+    scaling: 'linear',
   },
   {
     name: 'a long underscore run pair',
     unit: () => '_',
     wrap: (u) => `${u}x${u}`,
     small: 2_000,
-    scaling: 'superlinear',
+    scaling: 'linear',
   },
   // Emphasis: closers with no opener each walk back over the whole paragraph.
-  { name: 'unmatched emphasis closers', unit: () => 'a* ', scaling: 'superlinear' },
-  { name: 'mixed emphasis openers and closers', unit: () => '*a_ ', scaling: 'superlinear' },
-  { name: 'unmatched strikethrough closers', unit: () => 'a~ ', scaling: 'superlinear' },
+  { name: 'unmatched emphasis closers', unit: () => 'a* ', scaling: 'linear' },
+  { name: 'mixed emphasis openers and closers', unit: () => '*a_ ', scaling: 'linear' },
+  { name: 'unmatched strikethrough closers', unit: () => 'a~ ', scaling: 'linear' },
   // Labels: each `]` walks back over the paragraph looking for its `[`.
-  { name: 'unmatched label ends', unit: () => 'a] ', scaling: 'superlinear' },
-  { name: 'balanced brackets', unit: () => '[a]', scaling: 'superlinear' },
+  { name: 'unmatched label ends', unit: () => 'a] ', scaling: 'linear' },
+  { name: 'balanced brackets', unit: () => '[a]', scaling: 'linear' },
+  // Adjacent text merges once per group of data tokens, splicing the whole run.
+  { name: 'text between code spans', unit: () => 'a&b`c`', scaling: 'linear' },
+  // GFM literal autolinks: a regex retried at every position of a long word.
+  { name: 'a long dotted word', unit: () => 'a.', scaling: 'linear' },
+  { name: 'www inside a long word', unit: () => 'awww.', scaling: 'linear' },
+  { name: 'www with a refused domain', unit: () => 'www._', scaling: 'linear' },
+  // ...and a trailing-punctuation check re-run at every marker of a run.
+  {
+    name: 'trailing punctuation in a URL',
+    unit: () => '!',
+    wrap: (u) => `www.a.com/${u}x`,
+    scaling: 'linear',
+  },
+  { name: 'dots in a www domain', unit: () => '.', wrap: (u) => `www.a${u}b`, scaling: 'linear' },
   // Containers opened on one line nest as deep as the line is long.
   {
     name: 'one-line nested lists',

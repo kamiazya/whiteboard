@@ -146,14 +146,34 @@ Markdown nests one level per marker: each `>` opens a blockquote, each `- `
 on a line opens a list, each `*` an emphasis. Rendering (`wb_scene_render`,
 the web preview, a text node drawn on a canvas) reads at most **64 levels**
 of that nesting, counting the paragraph that holds the words. Anything deeper
-is drawn as the plain text it contains, with its markers gone: `>` repeated
-100 times before `x` draws 63 nested quotes around a paragraph holding `x`.
-The parser itself opens at most **100** nested quotes and lists: a `>` or a
-list marker past the hundredth is ordinary text, so `>` repeated 150 times
-before `x` draws its 63 quotes around fifty `>` characters and `x`. A body
-that still nests deeper than the parser can follow is drawn as one paragraph
-of its own source text. The stored body is never changed; only what is drawn
-from it is.
+is drawn as the plain text it contains, with its markers gone: `*` repeated
+300 times on each side of `x` draws 62 nested bold spans around `x`. The
+parser itself opens at most **32** nested quotes and lists: a `>` or a list
+marker past the thirty-second is ordinary text, so `>` repeated 50 times
+before `x` draws 32 nested quotes around a paragraph holding eighteen `>`
+characters and `x`. A body that still nests deeper than the parser can follow
+is drawn as one paragraph of its own source text. The stored body is never
+changed; only what is drawn from it is.
+
+### Markdown that would take too long to read
+
+A few markdown shapes cost the parser time that grows with the square of
+their length, so a body far inside the size limit could hold rendering for
+minutes. Each is bounded, and only a body built to hit the bound reads
+differently:
+
+- **Emphasis, strikethrough and link ends.** One paragraph, heading or table
+  cell hands at most **1,024** `*`, `_`, `~` and `]` characters to emphasis,
+  strikethrough and link resolution; the rest of it shows them as the
+  characters they are. That is 256 bold phrases in one paragraph. An `_`
+  inside a word, as in `snake_case`, never counts.
+- **Literal links.** A bare `www.` or `http://` address links at most
+  **2,048** characters of path; past that the link ends and the rest is text.
+  Of more than 256 punctuation marks closing an address, all but the last 256
+  are part of the link.
+
+A blank line between paragraphs gives each its own allowance, so splitting
+the text is enough to have all of it read.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 

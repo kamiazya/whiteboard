@@ -47,17 +47,25 @@ describe('parseMarkdownBody nesting depth', () => {
   })
 
   it('keeps nesting up to the bound and flattens what lies past it to text', () => {
-    const root = parseMarkdownBody(`${'>'.repeat(100)} x`)
-    expect(blockquoteChain(root)).toBe(63)
+    // 150 nested strong spans: past the converter's 64 levels (root, the
+    // paragraph, 62 strong) the rest is flattened to the text it holds.
+    const root = parseMarkdownBody(`${'*'.repeat(300)}x${'*'.repeat(300)}`)
+    let strong = 0
+    let node: Walked | undefined = root.children[0] as Walked | undefined
+    while (node?.children?.[0] !== undefined) {
+      if (node.type === 'strong') strong += 1
+      node = node.children[0]
+    }
+    expect(strong).toBe(62)
     expect(leafText(root)).toBe('x')
   })
 
-  it('opens no container past the hundredth level and reads its marker as text', () => {
-    // The parser itself stops nesting at 100 containers (a patched micromark;
-    // see parse-cost.test.ts), so the fifty markers past that are paragraph
-    // text — which the converter's own flattening then carries through.
-    const root = parseMarkdownBody(`${'>'.repeat(150)} x`)
-    expect(leafText(root)).toBe(`${'>'.repeat(50)} x`)
+  it('opens no container past the thirty-second level and reads its marker as text', () => {
+    // The parser itself stops nesting at 32 containers (a patched micromark;
+    // see parse-cost.test.ts), so the markers past that are paragraph text.
+    const root = parseMarkdownBody(`${'>'.repeat(50)} x`)
+    expect(blockquoteChain(root)).toBe(32)
+    expect(leafText(root)).toBe(`${'>'.repeat(18)} x`)
   })
 
   it.each([

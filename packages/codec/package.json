@@ -33,6 +33,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "micromark-util-types": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
