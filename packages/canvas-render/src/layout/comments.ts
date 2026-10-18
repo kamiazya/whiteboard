@@ -96,7 +96,12 @@ export function regionsOf(
   threads: readonly CommentThread[],
   canvas: SpatialCanvas,
 ): ReadonlyMap<string, RegionChrome> {
-  const nodeById = (id: string) => canvas.nodes.find((node) => node.id === id)
+  // Indexed once: every thread runs here, resolved ones included, and a scan
+  // of the board per anchor id would charge nodes × ids to every layout.
+  // First wins on a repeated id, as a scan would answer.
+  const byId = new Map<string, SpatialCanvas['nodes'][number]>()
+  for (const node of canvas.nodes) if (!byId.has(node.id)) byId.set(node.id, node)
+  const nodeById = (id: string) => byId.get(id)
   const out = new Map<string, RegionChrome>()
   for (const thread of threads) {
     if (thread.anchor.kind !== 'spatial') continue
