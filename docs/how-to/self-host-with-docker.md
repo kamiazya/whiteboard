@@ -364,7 +364,10 @@ A workspace moved in from a local daemon has no owner's address yet, so the
 address `--workspace` takes is its id, or its segment as the daemon showed it.
 Granting its first owner moves it to that person's address,
 `/w/<their handle>/<segment>`. If they already have a workspace with that
-segment, the moved one gets a numbered suffix (`plans-2`).
+segment, the moved one gets a numbered suffix (`plans-2`). A workspace that
+already has other people in it, such as one left without an owner, gets the
+identifier tail described above instead, because one of those people may
+have chosen its short name.
 
 The same command recovers a workspace whose owners are all deactivated.
 When the workspace has no active owner, the person it names becomes an

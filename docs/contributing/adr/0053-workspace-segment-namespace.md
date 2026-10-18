@@ -516,7 +516,12 @@ starts from a failing test at its nearest layer.
      admits nobody, and `me` — which no server-mode user can hold — leaves it
      reachable by its id alone until an operator grants it a member. That
      grant takes it into its first owner's namespace, suffixing a segment
-     the owner already holds there (`homeWithItsOwner`). A
+     the owner already holds there (`homeWithItsOwner`). A workspace parked
+     in `me` that still has other people in it, such as one whose owners
+     went, takes answer 4's id tail on that move, because one of those
+     people may have chosen its segment. A workspace nobody else is in, such
+     as a restored single-person keeper's, keeps its segment: nobody but its
+     new holder reads what that name reaches. A
      workspace with members but no owner is refused, as above. Until slice 3
      the server-mode listing omitted the segment of a workspace held in
      another namespace, since the web app would otherwise have addressed it
