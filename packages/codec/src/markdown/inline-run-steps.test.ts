@@ -86,8 +86,14 @@ function ascendingOpeners(marker: string, count: number): string {
   return openers
 }
 
-/** Accesses per character a run may cost. Ordinary prose costs about five. */
-const STEPS_PER_CHARACTER_CEILING = 64
+/**
+ * Accesses per character a run may cost. Ordinary prose costs about five.
+ * A walk reads each event it passes two or three times (emphasis reads an
+ * event twice a step; a label end's walk and GFM footnotes' walk at the same
+ * `]`, three between them), so the delimiter budget's cap on walked events
+ * allows about a hundred at the 32 KB these shapes are.
+ */
+const STEPS_PER_CHARACTER_CEILING = 128
 
 const SHAPES = [
   { name: 'plain words', body: 'word and more words '.repeat(800) },
@@ -98,6 +104,11 @@ const SHAPES = [
   // Each unmatched closer walks back over every event of the run.
   { name: 'emphasis closers after escapes', body: `${'\\*'.repeat(16_000)}${'a* '.repeat(256)}` },
   { name: 'label ends after escapes', body: `${'\\*'.repeat(16_000)}${'a] '.repeat(256)}` },
+  // A balanced label and a formed link leave no start for those closers.
+  {
+    name: 'label ends after escapes and closed labels',
+    body: `${'\\*'.repeat(16_000)}[b] [a](u)${'a] '.repeat(256)}`,
+  },
 ]
 
 describe('inline run event accesses', () => {
