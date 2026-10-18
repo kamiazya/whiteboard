@@ -120,14 +120,21 @@ describe('a workspace-document sync update that writes folders', () => {
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'invalid_path', status: 400 })
   })
 
-  it('a folder chain as deep as the path bound allows is applied', async () => {
-    const store = seed()
+  // A chain at the depth bound is the record's deepest legal shape, and it is
+  // attached and walked whole: 0.6 s on a quiet machine, 11.5 s under CI's
+  // stress lane. The same ceiling the folder-count cases take.
+  it(
+    'a folder chain as deep as the path bound allows is applied',
+    async () => {
+      const store = seed()
 
-    await expect(
-      send(store, (doc) => folderChain(doc, PAST_THE_PATH_BOUND - 1)),
-    ).resolves.toMatchObject({ kind: 'applied' })
-    expect(storedFolders(store)).toBe(PAST_THE_PATH_BOUND - 1)
-  })
+      await expect(
+        send(store, (doc) => folderChain(doc, PAST_THE_PATH_BOUND - 1)),
+      ).resolves.toMatchObject({ kind: 'applied' })
+      expect(storedFolders(store)).toBe(PAST_THE_PATH_BOUND - 1)
+    },
+    CEILING_TIMEOUT_MS,
+  )
 
   it(
     'folders past the ceiling are refused, and nothing is kept',

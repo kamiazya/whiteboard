@@ -96,9 +96,14 @@ function annotationMaps(doc: LoroDoc, map: LoroMap, bound: AnnotationBound): [st
  * change added or decided). A thread's messages open nothing, so a reply is
  * not counted. `undefined` too for a container the doc's current state does
  * not hold, which while detached is one the update itself creates: its
- * parent's write is what the update did to that document.
+ * parent's write is what the update did to that document. `null` for a
+ * document `counted` already holds.
  */
-function annotationWrite(doc: LoroDoc, container: ContainerID): AnnotationWrite | undefined {
+function annotationWrite(
+  doc: LoroDoc,
+  container: ContainerID,
+  counted: ReadonlySet<string>,
+): AnnotationWrite | null | undefined {
   let path: ReturnType<LoroDoc['getPathToContainer']>
   try {
     path = doc.getPathToContainer(container)
@@ -118,11 +123,16 @@ function annotationWrite(doc: LoroDoc, container: ContainerID): AnnotationWrite 
     map = map.parent() as LoroMap | undefined
   }
   if (map === undefined) return undefined
+  const owner = `${path.slice(0, base).join('/')} ${bound.shape}`
+  // Counting walks every thread or change the document holds, and an update
+  // writes one container per thread it touches, so a document already
+  // counted is not counted again: once per document, not once per write.
+  if (counted.has(owner)) return null
   const open = annotationMaps(doc, map, bound).reduce(
     (sum, [mapKey, held]) => sum + bound.count(mapKey, held),
     0,
   )
-  return { bound, owner: `${path.slice(0, base).join('/')} ${bound.shape}`, map, open }
+  return { bound, owner, map, open }
 }
 
 /** Each annotation bound's open count, by owner, for every document `written` reaches. */
@@ -131,9 +141,12 @@ export function annotationCounts(
   written: ReadonlySet<ContainerID>,
 ): Map<string, AnnotationWrite> {
   const counts = new Map<string, AnnotationWrite>()
+  const counted = new Set<string>()
   for (const container of written) {
-    const write = annotationWrite(doc, container)
-    if (write !== undefined && !counts.has(write.owner)) counts.set(write.owner, write)
+    const write = annotationWrite(doc, container, counted)
+    if (write === undefined || write === null) continue
+    counted.add(write.owner)
+    counts.set(write.owner, write)
   }
   return counts
 }
