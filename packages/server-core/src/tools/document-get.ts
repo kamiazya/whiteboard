@@ -26,7 +26,8 @@ import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 const MAX_DOCUMENTS = 20
 
 /**
- * The most `content` one call answers with, summed over its documents. Four
+ * The most one call answers with, summed over its documents: each one's
+ * `content` plus its serialised `threads` and `proposals`. Four
  * maximal markdown bodies: MAX_DOCUMENTS alone let twenty maximal boards
  * through in one response. The first document is always answered, however
  * large, so any document stays readable — by asking for it alone.
@@ -149,12 +150,13 @@ export function createDocumentGetTool(deps: ServerDeps) {
           failed.push(read)
           continue
         }
-        if (documents.length > 0 && contentChars + read.content.length > MAX_CONTENT_CHARS) {
+        const charged = chargedChars(read)
+        if (documents.length > 0 && contentChars + charged > MAX_CONTENT_CHARS) {
           overBudget = true
           failed.push({ documentId, reason: readAloneReason(documentId) })
           continue
         }
-        contentChars += read.content.length
+        contentChars += charged
         documents.push(read)
       }
       return { documents, failed }
@@ -196,8 +198,22 @@ async function readOrFail(
   }
 }
 
+/**
+ * What one read costs the budget: its content, and its annotation layer as
+ * serialised. Resolved threads and decided proposals are uncapped in count,
+ * so charging the content alone let twenty small documents answer with an
+ * unbounded comment history between them.
+ */
+function chargedChars(read: ReadDocument): number {
+  return (
+    read.content.length +
+    (read.threads === undefined ? 0 : JSON.stringify(read.threads).length) +
+    (read.proposals === undefined ? 0 : JSON.stringify(read.proposals).length)
+  )
+}
+
 function readAloneReason(documentId: string): string {
-  return `Not read: this call's answer reached its ${MAX_CONTENT_CHARS}-character content budget before ${documentId}. Read it alone, or in a smaller batch.`
+  return `Not read: this call's answer reached its ${MAX_CONTENT_CHARS}-character budget (content and comments) before ${documentId}. Read it alone, or in a smaller batch.`
 }
 
 async function readOne(

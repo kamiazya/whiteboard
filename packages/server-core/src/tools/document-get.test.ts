@@ -3,7 +3,7 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { COMMENT_MESSAGE_MAX_CHARS, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -483,6 +483,47 @@ describe('wb_document_get carries the annotation layer', () => {
       status: 'open',
       anchor: { kind: 'document' },
     })
+  })
+
+  it('charges the annotation layer against the content budget, not only the content', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const message = 'm'.repeat(COMMENT_MESSAGE_MAX_CHARS)
+    // A resolved thread no longer counts toward the open-thread cap, so the
+    // annotation layer is what grows; content stays tiny throughout.
+    const ids: string[] = []
+    for (let i = 0; i < 20; i += 1) {
+      const { documentId } = await wbDocumentCreate(deps, {
+        workspaceId: 'ws',
+        path: `noted-${i}`,
+        kind: 'markdown',
+      })
+      await createThreadEditTool(deps).execute({
+        workspaceId: 'ws',
+        documentId,
+        ops: [
+          { op: 'thread.add', threadId: 'th-big', anchor: { kind: 'document' }, body: message },
+          ...Array.from({ length: 20 }, () => ({
+            op: 'message.add' as const,
+            threadId: 'th-big',
+            body: message,
+          })),
+          { op: 'thread.resolve', threadId: 'th-big' },
+        ],
+      })
+      ids.push(documentId)
+    }
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: ids,
+    })
+
+    const answered = JSON.stringify(result.documents).length
+    expect(answered).toBeGreaterThan(MARKDOWN_MAX_CHARS)
+    expect(answered).toBeLessThan(4 * MARKDOWN_MAX_CHARS + 2 * COMMENT_MESSAGE_MAX_CHARS * 21)
+    expect(result.failed.length).toBeGreaterThan(0)
+    for (const entry of result.failed) expect(entry.reason).toMatch(/alone/)
   })
 
   it('a document nobody commented on carries no threads key at all', async () => {
