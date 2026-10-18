@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { recordTrashEntry } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { storeScope } from './store-scope.js'
@@ -89,4 +89,23 @@ it('keeps the blob, and says why, when another workspace record will not open', 
   } finally {
     logs.restore()
   }
+})
+
+describe('cost of one answer', () => {
+  const OTHERS = 8
+
+  async function storeOthers(): Promise<void> {
+    await storeRecordNaming('ws-a', REF)
+    for (let i = 0; i < OTHERS; i += 1) await storeRecordNaming(`ws-other-${i}`, OTHER_REF)
+  }
+
+  it('decodes every other workspace record on a repeated purge', async () => {
+    await storeOthers()
+    const ask = trashBlobNamedElsewhere(storeScope(dir))
+    await ask({ workspaceId: 'ws-a', ref: REF })
+    const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+
+    expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
+    expect(open).toHaveBeenCalledTimes(OTHERS)
+  })
 })
