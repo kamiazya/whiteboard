@@ -1,6 +1,6 @@
 import {
   documentsTouchedSince,
-  placementChangedSince,
+  organisationChangedSince,
   seedNamesFromTitles,
   stampEditedDocuments,
   type TouchedDocument,
@@ -27,10 +27,11 @@ export interface ApplyWorkspaceDocumentUpdateInput {
    */
   readonly origin?: 'edit' | 'transfer'
   /**
-   * Whether the caller may add, remove or move documents — the adapter's
-   * decision, from the caller's grant. `false` refuses an update that changes
-   * the workspace's placement (`placementChangedSince`) and keeps nothing of
-   * it; content edits go through either way. Absent means true: the check
+   * Whether the caller may add, remove or move documents, and touch the
+   * trash and the pins — the adapter's decision, from the caller's grant.
+   * `false` refuses an update that changes how the workspace is organised
+   * (`organisationChangedSince`) and keeps nothing of it; content edits go
+   * through either way. Absent means true: the check
    * reads the update's operations a second time, which a caller holding
    * every scope has no reason to pay for.
    */
@@ -46,9 +47,10 @@ type ApplyWorkspaceDocumentUpdateResult =
   | { readonly kind: 'placement-refused' }
 
 /**
- * Whether the update just imported into `doc` adds, removes or moves a
- * document — and if so, drops the cached record unsaved: the import already
- * landed in it, and dropping it is what leaves nothing of the refused update.
+ * Whether the update just imported into `doc` changes how the workspace is
+ * organised (`organisationChangedSince`) — and if so, drops the cached record
+ * unsaved: the import already landed in it, and dropping it is what leaves
+ * nothing of the refused update.
  */
 function refusePlacement(
   doc: LoroDoc,
@@ -56,7 +58,7 @@ function refusePlacement(
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
 ): boolean {
   const placed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
-    placementChangedSince(doc, since),
+    organisationChangedSince(doc, since),
   )
   if (placed) target.evict()
   return placed

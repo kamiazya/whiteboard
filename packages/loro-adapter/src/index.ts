@@ -80,7 +80,7 @@ export {
 } from './thread-marks.js'
 export {
   documentsTouchedSince,
-  placementChangedSince,
+  organisationChangedSince,
   stampEditedDocuments,
   type TouchedDocument,
 } from './touched-documents.js'

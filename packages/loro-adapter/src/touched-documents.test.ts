@@ -10,7 +10,7 @@ import { writeDocumentKind } from './document-envelope.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   documentsTouchedSince,
-  placementChangedSince,
+  organisationChangedSince,
   stampEditedDocuments,
 } from './touched-documents.js'
 import {
@@ -19,8 +19,10 @@ import {
   documentContainers,
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
+  recordTrashEntry,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  setWorkspaceLastCompactedAt,
   setWorkspacePinned,
   updateWorkspaceDocumentMeta,
 } from './workspace-tree.js'
@@ -175,8 +177,8 @@ describe('stampEditedDocuments', () => {
 type Edit = (replica: LoroDoc) => void
 
 // What a replica sends while only editing what documents SAY: their content,
-// their display name, their edit stamps, the pin list. The envelope's own
-// `kind` shares a key with the node's, one container further down.
+// their display name, their edit stamps. The envelope's own `kind` shares a
+// key with the node's, one container further down.
 const CONTENT_EDITS: Readonly<Record<string, Edit>> = {
   typeNote: type(NOTE, 'hello'),
   envelopeKind: (replica) => writeDocumentKind(documentContainers(replica, OTHER), 'markdown'),
@@ -185,13 +187,13 @@ const CONTENT_EDITS: Readonly<Record<string, Edit>> = {
   stampOther: (replica) => {
     updateWorkspaceDocumentMeta(replica, OTHER, { updatedAt: 9_000 })
   },
-  pinNote: (replica) => setWorkspacePinned(replica, NOTE, true),
 }
 
-// What changes which documents the workspace holds, or where. Each touches
-// only `MOVABLE` or a new document, so any of them can sit anywhere among the
-// content edits above.
-const PLACEMENT_EDITS: Readonly<Record<string, Edit>> = {
+// What changes how the workspace is organised: which documents it holds or
+// where, its trash, its pins. Each touches only `MOVABLE`, a new document or
+// the workspace's own meta, so any of them can sit anywhere among the content
+// edits above.
+const ORGANISATION_EDITS: Readonly<Record<string, Edit>> = {
   create: (replica) => {
     createWorkspaceDocumentAtPath(replica, { path: 'fresh', documentId: FRESH, kind: 'markdown' })
   },
@@ -218,21 +220,33 @@ const PLACEMENT_EDITS: Readonly<Record<string, Edit>> = {
   rekind: (replica) => {
     updateWorkspaceDocumentMeta(replica, MOVABLE, { kind: 'spatial' })
   },
+  pin: (replica) => setWorkspacePinned(replica, NOTE, true),
+  trash: (replica) =>
+    recordTrashEntry(replica, {
+      documentId: FRESH,
+      path: 'gone',
+      deletedAt: 1,
+      blob: { algorithm: 'sha-256', digestHex: '0'.repeat(64) },
+    }),
+  compactionStamp: (replica) => setWorkspaceLastCompactedAt(replica, 1),
+  strayRoot: (replica) => {
+    replica.getMap('stray').set('k', 'v')
+  },
 }
 
-describe('placementChangedSince', () => {
+describe('organisationChangedSince', () => {
   it('answers false for an import that only edits content', () => {
     const workspace = keeper()
     const since = imported(workspace, type(NOTE, 'hello'))
 
-    expect(placementChangedSince(workspace, since)).toBe(false)
+    expect(organisationChangedSince(workspace, since)).toBe(false)
   })
 
-  it.each(Object.keys(PLACEMENT_EDITS))('answers true for an import that does %s', (name) => {
+  it.each(Object.keys(ORGANISATION_EDITS))('answers true for an import that does %s', (name) => {
     const workspace = keeper()
-    const since = imported(workspace, PLACEMENT_EDITS[name] as Edit)
+    const since = imported(workspace, ORGANISATION_EDITS[name] as Edit)
 
-    expect(placementChangedSince(workspace, since)).toBe(true)
+    expect(organisationChangedSince(workspace, since)).toBe(true)
   })
 
   it('answers false for an import it already held, whatever that import did', () => {
@@ -246,7 +260,7 @@ describe('placementChangedSince', () => {
     const since = workspace.oplogVersion()
     workspace.import(update)
 
-    expect(placementChangedSince(workspace, since)).toBe(false)
+    expect(organisationChangedSince(workspace, since)).toBe(false)
   })
 
   fcTest.prop(
@@ -255,21 +269,24 @@ describe('placementChangedSince', () => {
       fc.option(
         fc.record({
           at: fc.nat(),
-          edit: fc.constantFrom(...Object.keys(PLACEMENT_EDITS)),
+          edit: fc.constantFrom(...Object.keys(ORGANISATION_EDITS)),
         }),
       ),
     ],
     withDefaults({ numRuns: 60 }),
-  )('answers true exactly when some edit in the import changes placement', (content, placed) => {
-    const edits = content.map((name) => CONTENT_EDITS[name] as Edit)
-    if (placed !== null) {
-      edits.splice(placed.at % (edits.length + 1), 0, PLACEMENT_EDITS[placed.edit] as Edit)
-    }
-    const workspace = keeper()
-    const since = imported(workspace, (replica) => {
-      for (const edit of edits) edit(replica)
-    })
+  )(
+    'answers true exactly when some edit in the import changes the organisation',
+    (content, placed) => {
+      const edits = content.map((name) => CONTENT_EDITS[name] as Edit)
+      if (placed !== null) {
+        edits.splice(placed.at % (edits.length + 1), 0, ORGANISATION_EDITS[placed.edit] as Edit)
+      }
+      const workspace = keeper()
+      const since = imported(workspace, (replica) => {
+        for (const edit of edits) edit(replica)
+      })
 
-    expect(placementChangedSince(workspace, since)).toBe(placed !== null)
-  })
+      expect(organisationChangedSince(workspace, since)).toBe(placed !== null)
+    },
+  )
 })

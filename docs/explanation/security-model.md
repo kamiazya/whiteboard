@@ -451,10 +451,17 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
 - **Adding, removing or moving a document needs `workspace:write` on every
-  surface.** `canvas:write` edits what documents say. A live-sync update is
-  read before it is applied: one that would add, delete or move a document,
-  or that addresses a path no document holds, is refused with `403` unless
-  the grant also holds `workspace:write`, and nothing of it is kept. Moving
+  surface, and so do the trash and the pins.** `canvas:write` edits what
+  documents say. A live-sync update is read before it is applied: one that
+  would add, delete or move a document, purge, restore or rewrite a trash
+  entry, change which documents are pinned, or write anything else in the
+  workspace record outside its documents, or that addresses a path no
+  document holds, is refused with `403` unless the grant also holds
+  `workspace:write`, and nothing of it is kept. A document's own update
+  cannot reach its place in the workspace either: one that adds a part named
+  after the document's id, segment, kind, name or timestamps, or a part of
+  the wrong kind under a name the document already uses, is refused with
+  `400 {"error":"invalid_document_root"}`. Moving
   a whole workspace in needs `canvas:write`, `workspace:write` and
   `versions:write`.
 - **A version grant restores in place, and writes no other document.**
