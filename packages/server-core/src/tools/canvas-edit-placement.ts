@@ -274,9 +274,16 @@ const ROW_BUCKET_PX = 512
  */
 const MAX_BUCKETS_PER_RECT = 32
 
+/**
+ * The buckets `[top, bottom]` reaches, or `undefined` for the tall list. A
+ * position is any finite number, and past 2^53 a bucket index no longer
+ * changes when incremented, so a walk over such a span would never end: an
+ * index that is not a safe integer goes to the tall list too.
+ */
 function bucketSpan(top: number, bottom: number): { first: number; last: number } | undefined {
   const first = Math.floor(top / ROW_BUCKET_PX)
   const last = Math.floor(bottom / ROW_BUCKET_PX)
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return undefined
   return last - first > MAX_BUCKETS_PER_RECT ? undefined : { first, last }
 }
 
