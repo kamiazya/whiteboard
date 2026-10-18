@@ -5,7 +5,7 @@
  * Each walk is held to the recursive form it replaced on small inputs, where
  * that form still answers, and to a depth that form could not reach.
  */
-import { LoroDoc, LoroMap, type LoroTree, type LoroTreeNode } from 'loro-crdt'
+import { LoroDoc, LoroMap, type LoroTreeNode } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { stableStringify } from './content-digest.js'
 import { jsonEqual } from './content-sync.js'
@@ -52,7 +52,7 @@ function writeSpec(node: LoroTreeNode, spec: Spec): void {
   if (spec.kind === 'unreadable') node.data.set('note', 'x')
 }
 
-const treeOf = (doc: LoroDoc): LoroTree => doc.getTree(WORKSPACE_TREE_KEY)
+const treeOf = (doc: LoroDoc) => doc.getTree(WORKSPACE_TREE_KEY)
 
 /** The recursive walk this package used to take, over what the test wrote. */
 function recursiveWalk(doc: LoroDoc, specs: ReadonlyMap<string, Spec>) {

@@ -105,19 +105,7 @@ export async function applyWorkspaceDocumentUpdate(
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
-    // Idempotent, so a failure that a nested step already answered by
-    // dropping the record is not dropped and logged twice.
-    let dropped = false
-    const target = {
-      subject: `the workspace record of ${workspaceId}`,
-      fields: { workspaceId },
-      evict() {
-        if (dropped) return
-        dropped = true
-        deps.workspaceDocuments.evict(workspaceId)
-        deps.workspaceDocuments.evictProjections(workspaceId)
-      },
-    }
+    const target = droppableRecord(deps, workspaceId)
     const since = doc.oplogVersion()
     try {
       importWithinSyncLimits(doc, update, target, { workspaceRecord: true })
@@ -135,29 +123,60 @@ export async function applyWorkspaceDocumentUpdate(
     // From here the cached record holds the update, so a throw anywhere
     // before the save completes drops it unsaved: kept, it would ride the
     // next ordinary save by anyone, unrefused.
-    let touched: readonly TouchedDocument[]
     try {
-      if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
-        return { kind: 'placement-refused' }
-      }
-      // Before the save, so the name and the stamp ride the same write and its
-      // fan-out hands them back to the replica that made the edit.
-      touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
-        const found = documentsTouchedSince(doc, since)
-        seedNamesFromTitles(doc, found)
-        if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
-        return found
-      })
-      // Fan-out to subscribers happens inside save.
-      await deps.workspaceDocuments.save(workspaceId, doc)
+      return await keepImported(deps, input, doc, since, target)
     } catch (err) {
       target.evict()
       throw err
     }
-    deps.workspaceDocuments.evictProjections(workspaceId)
-    const edited = touched
-      .filter((each) => each.contentWritten)
-      .map(({ documentId, path }) => ({ documentId, path }))
-    return { kind: 'applied', edited }
   })
+}
+
+/**
+ * The cached record as a refusal drops it. Idempotent, so a failure a nested
+ * step already answered by dropping the record is not dropped twice.
+ */
+function droppableRecord(
+  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  workspaceId: string,
+): Parameters<typeof runEvictingOnEngineTrap>[0] {
+  let dropped = false
+  return {
+    subject: `the workspace record of ${workspaceId}`,
+    fields: { workspaceId },
+    evict() {
+      if (dropped) return
+      dropped = true
+      deps.workspaceDocuments.evict(workspaceId)
+      deps.workspaceDocuments.evictProjections(workspaceId)
+    },
+  }
+}
+
+/** The placement check, the naming and stamping, and the save, over a record holding the update. */
+async function keepImported(
+  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  input: ApplyWorkspaceDocumentUpdateInput,
+  doc: LoroDoc,
+  since: VersionVector,
+  target: Parameters<typeof runEvictingOnEngineTrap>[0],
+): Promise<ApplyWorkspaceDocumentUpdateResult> {
+  if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
+    return { kind: 'placement-refused' }
+  }
+  // Before the save, so the name and the stamp ride the same write and its
+  // fan-out hands them back to the replica that made the edit.
+  const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
+    const found = documentsTouchedSince(doc, since)
+    seedNamesFromTitles(doc, found)
+    if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
+    return found
+  })
+  // Fan-out to subscribers happens inside save.
+  await deps.workspaceDocuments.save(input.workspaceId, doc)
+  deps.workspaceDocuments.evictProjections(input.workspaceId)
+  const edited = touched
+    .filter((each) => each.contentWritten)
+    .map(({ documentId, path }) => ({ documentId, path }))
+  return { kind: 'applied', edited }
 }
