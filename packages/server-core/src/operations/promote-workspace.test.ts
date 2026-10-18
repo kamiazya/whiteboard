@@ -33,6 +33,7 @@ import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import {
   OffGrammarPathError,
@@ -548,6 +549,25 @@ describe('promoteWorkspace', () => {
     )
     expect(result.kind).toBe('promoted')
     expect(fake.versions.saves).toHaveLength(WORKSPACE_MAX_DOCUMENTS - 1)
+  })
+
+  it('lands a record into a document whose history is full, skipping only its version', async () => {
+    const fake = fakes()
+    fake.versions.save = async () => {
+      throw new TooManyVersionsError(200)
+    }
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: recordOf(2), operator },
+    )
+    expect(result.kind).toBe('promoted')
+    expect(result.kind === 'promoted' ? result.recorded : null).toEqual([])
+    expect(fake.saves()).toBeGreaterThan(0)
   })
 
   it('refuses a record within the ceiling whose merge would take the workspace past it', {
