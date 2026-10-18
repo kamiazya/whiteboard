@@ -31,3 +31,19 @@ describe('documentIdOfHref', () => {
     }
   })
 })
+
+// The resolver behind a wiki link or embed answers a string, and the brand
+// is a promise the result needs no sanitising: only the id grammar keeps it.
+describe('documentHref and embedHref brand a document id and nothing else', () => {
+  it.each([
+    ['a script URL', 'javascript:alert(1)'],
+    ['a protocol-relative URL', '//evil.example/x'],
+    ['a scheme URL', 'https://evil.example/x'],
+    ['a lower-cased id', ID.toLowerCase()],
+    ['an id with a path after it', `${ID}/x`],
+    ['an empty string', ''],
+  ])('answers # for %s', (_shape, notAnId) => {
+    expect(documentHref(notAnId)).toBe('#')
+    expect(embedHref(notAnId)).toBe('#')
+  })
+})

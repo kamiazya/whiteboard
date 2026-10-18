@@ -15,11 +15,20 @@ import { type SafeHref, trustedHref } from './format.js'
  * no document id.
  */
 export function documentHref(documentId: string): SafeHref {
-  return trustedHref(documentId)
+  return isDocumentId(documentId) ? trustedHref(documentId) : trustedHref('#')
 }
 
 export function embedHref(documentId: string): SafeHref {
-  return trustedHref(`#${documentId}`)
+  return isDocumentId(documentId) ? trustedHref(`#${documentId}`) : trustedHref('#')
+}
+
+/**
+ * The id arrives from whatever resolver the host supplied, so the brand is
+ * earned here rather than assumed: a value outside the id grammar could be
+ * any URL, and is drawn as the inert `#`.
+ */
+function isDocumentId(candidate: string): boolean {
+  return documentIdSchema.safeParse(candidate).success
 }
 
 /**
@@ -30,5 +39,5 @@ export function embedHref(documentId: string): SafeHref {
 export function documentIdOfHref(href: string | null | undefined): string | undefined {
   if (href == null) return undefined
   const candidate = href.startsWith('#') ? href.slice(1) : href
-  return documentIdSchema.safeParse(candidate).success ? candidate : undefined
+  return isDocumentId(candidate) ? candidate : undefined
 }
