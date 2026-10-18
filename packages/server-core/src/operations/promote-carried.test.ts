@@ -19,7 +19,7 @@ import {
 import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
@@ -340,5 +340,29 @@ describe('promoteWorkspace, a carried version past a sync limit', () => {
     expect(refused).toMatchObject({ code, status: 413 })
     expect(target.saves()).toBe(0)
     expect(target.deps.versions.adopted.size).toBe(0)
+  })
+})
+
+/**
+ * The judgement's cost, counted in checkouts of the incoming record: each is
+ * a move of the whole fork, followed by a projection and a size judgement of
+ * the document it names, on the serving loop.
+ */
+describe('judgeCarried, what judging the carried versions costs', () => {
+  it('counts the checkouts 1000 rows naming one frontier cost', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      expect(judged.kind).toBe('admitted')
+      expect(checkout).toHaveBeenCalledTimes(1000)
+    } finally {
+      checkout.mockRestore()
+    }
   })
 })
