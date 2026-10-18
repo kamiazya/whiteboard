@@ -89,7 +89,13 @@ const webp: Reader = (b) => {
   return undefined
 }
 
-const SVG_LENGTH = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/
+// Matched against a value already trimmed and capped: a pattern that skips
+// whitespace on both sides of an optional group backtracks quadratically over
+// a long run of it, and the value is a document's own free text.
+const SVG_LENGTH = /^(\d+(?:\.\d+)?)(?:px)?$/
+// Longer than any length or viewBox a real image declares; past it the value
+// is unsizeable, and the image is dropped like any other this reader cannot size.
+const MAX_SIZE_ATTRIBUTE = 64
 const XML_SPACE = /[ \t\r\n]/
 const ATTRIBUTE_NAME = /[^ \t\r\n=/>"'<]+/y
 
@@ -172,6 +178,16 @@ const svgRootAttributes = (text: string): ReadonlyMap<string, string> | undefine
   }
 }
 
+/** A root sizing attribute, or `undefined` when it is longer than any real one. */
+const sizeAttribute = (root: ReadonlyMap<string, string>, name: string): string | undefined => {
+  const value = root.get(name)
+  return value === undefined || value.length > MAX_SIZE_ATTRIBUTE ? undefined : value.trim()
+}
+
+/** A `width`/`height` in user units, or `undefined` when it is not one. */
+const userUnits = (value: string | undefined): string | undefined =>
+  value === undefined ? undefined : SVG_LENGTH.exec(value)?.[1]
+
 /**
  * `width`/`height` in user units, else — only when neither is given — the
  * `viewBox`'s. An explicit length this reader cannot convert (a percentage,
@@ -181,19 +197,14 @@ const svgRootAttributes = (text: string): ReadonlyMap<string, string> | undefine
 const svg: Reader = (b) => {
   const root = svgRootAttributes(new TextDecoder().decode(b))
   if (root === undefined) return undefined
-  const givenWidth = root.get('width')
-  const givenHeight = root.get('height')
-  if (givenWidth !== undefined || givenHeight !== undefined) {
-    const width = SVG_LENGTH.exec(givenWidth ?? '')?.[1]
-    const height = SVG_LENGTH.exec(givenHeight ?? '')?.[1]
+  if (root.has('width') || root.has('height')) {
+    const width = userUnits(sizeAttribute(root, 'width'))
+    const height = userUnits(sizeAttribute(root, 'height'))
     return width === undefined || height === undefined
       ? undefined
       : area(Math.ceil(Number(width)), Math.ceil(Number(height)))
   }
-  const box = (root.get('viewBox') ?? '')
-    .trim()
-    .split(/[\s,]+/)
-    .map(Number)
+  const box = (sizeAttribute(root, 'viewBox') ?? '').split(/[\s,]+/).map(Number)
   return box.length === 4 ? area(Math.ceil(box[2] ?? 0), Math.ceil(box[3] ?? 0)) : undefined
 }
 
