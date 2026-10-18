@@ -314,13 +314,15 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/fonts/:id/install → reaches the route with runtime:admin', async () => {
+    // The scope tier passes; what refuses is the administrator check behind
+    // it (app.server-mode.runtime-administrators.test.ts), named in the body.
+    it('POST /api/fonts/:id/install → past the scope tier with runtime:admin', async () => {
       const app = createApp(makeServerModeOptions(['runtime:admin']))
       const res = await app.request('/api/fonts/inter/install', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
-      expect(res.status).not.toBe(403)
+      expect(await res.json()).toMatchObject({ error: 'not_an_administrator' })
     })
   })
 
