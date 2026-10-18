@@ -180,6 +180,36 @@ describe('completeSignIn — a person already here', () => {
   })
 })
 
+// The deactivation check runs before the session is opened, so a
+// deactivation landing in between must not leave a session behind it — one
+// that reactivating would bring back, since reactivating ends nothing.
+describe('completeSignIn — a deactivation racing the sign-in', () => {
+  it('opens no session when the user is deactivated after the check', async () => {
+    const binding = { authenticator: providerAuthenticator(provider()), subject: 'ada-1' }
+    const user = await deps.members.ensureProfile({ binding, displayName: 'Ada' })
+    const deactivation = createUserDeactivation(handle.db)
+    const racing: CompleteSignInDeps = {
+      ...deps,
+      // The last step before the session opens: deactivate there.
+      atomically: async (fn) => {
+        const out = await deps.atomically(fn)
+        await deactivation.deactivate(user.id, T0)
+        return out
+      },
+    }
+    const done = await completeSignIn(racing, { provider: provider(), claims: ada, now: T0 })
+    expect(done).toEqual({ ok: false, reason: 'deactivated' })
+
+    await deactivation.reactivate(user.id)
+    const sessions = await handle.rawDb
+      .selectFrom('signInSessions')
+      .select('tokenHash')
+      .where('subject', '=', 'ada-1')
+      .execute()
+    expect(sessions).toEqual([])
+  })
+})
+
 describe('completeSignIn — somebody new', () => {
   it('refuses an uninvited person on an invitation-only provider, and creates no account', async () => {
     const done = await completeSignIn(deps, { provider: provider(), claims: ada, now: T0 })

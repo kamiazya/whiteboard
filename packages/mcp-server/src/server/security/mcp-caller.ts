@@ -15,7 +15,7 @@ import {
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
-import { hasRequiredScopes } from './auth-strategy.js'
+import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import { MCP_TOOL_INPUT_SCOPES, MCP_TOOL_SCOPES } from './mcp-tool-scopes.js'
 import type { MemberProfileStore } from './member-profile-store.js'
@@ -75,6 +75,23 @@ export function runAsMcpCaller<T>(caller: McpCaller, fn: () => Promise<T>): Prom
   return callers.run(caller, fn)
 }
 
+/**
+ * The scopes a narrow credential on the local daemon's `/mcp` holds (a
+ * macaroon), for the tool calls its request carries. There is no person and
+ * no membership there, so this is not an `McpCaller`: it holds the call to
+ * the tool's scope and to nothing else, and leaves the owner's error text and
+ * log forwarding as they are. The daemon token is never carried here — it
+ * holds every scope.
+ */
+const scopedCalls = new AsyncLocalStorage<readonly AuthScope[]>()
+
+export function runWithMcpScopes<T>(
+  scopes: readonly AuthScope[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  return scopedCalls.run(scopes, fn)
+}
+
 interface WorkspaceScopedTool {
   readonly name: string
   execute(input: never): Promise<unknown>
@@ -112,11 +129,15 @@ function refused(denial: MembershipDenial): Error {
  * refused, so an unmapped tool fails closed. The scopes are not quoted, as no
  * other auth refusal quotes them.
  */
-function scopeRefusal(caller: McpCaller, toolName: string, input: unknown): Error | null {
+function scopeRefusal(
+  scopes: readonly AuthScope[],
+  toolName: string,
+  input: unknown,
+): Error | null {
   const required = MCP_TOOL_SCOPES[toolName]
   const asked = (input ?? {}) as Readonly<Record<string, unknown>>
   const more = MCP_TOOL_INPUT_SCOPES[toolName]?.(asked) ?? []
-  if (required !== undefined && hasRequiredScopes(caller.grant.scopes, [...required, ...more])) {
+  if (required !== undefined && hasRequiredScopes(scopes, [...required, ...more])) {
     return null
   }
   return new McpCallRefusalError(
@@ -146,23 +167,39 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       ...tool,
       execute: (input: never) => {
         const caller = callers.getStore()
-        if (caller === undefined) return tool.execute(input)
-        const insufficient = scopeRefusal(caller, tool.name, input)
-        if (insufficient !== null) return Promise.reject(insufficient)
-        const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
-        if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
-        if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
-          return tool.execute(input)
-        }
-        return Promise.reject(
-          new McpCallRefusalError(
-            `workspace_required: ${tool.name} must name the workspace it acts on`,
-          ),
-        )
+        return caller === undefined
+          ? ownersCall(tool, input)
+          : callerCall(caller, index, tool, input)
       },
     }
   }
   return wrapped as T
+}
+
+// No caller: the local daemon or stdio, whose owner reaches every workspace.
+// A narrow credential there is still held to the tool's scope.
+function ownersCall(tool: WorkspaceScopedTool, input: never): Promise<unknown> {
+  const scopes = scopedCalls.getStore()
+  const narrow = scopes === undefined ? null : scopeRefusal(scopes, tool.name, input)
+  return narrow === null ? tool.execute(input) : Promise.reject(narrow)
+}
+
+function callerCall(
+  caller: McpCaller,
+  index: GateIndex,
+  tool: WorkspaceScopedTool,
+  input: never,
+): Promise<unknown> {
+  const insufficient = scopeRefusal(caller.grant.scopes, tool.name, input)
+  if (insufficient !== null) return Promise.reject(insufficient)
+  const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
+  if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
+  if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
+    return tool.execute(input)
+  }
+  return Promise.reject(
+    new McpCallRefusalError(`workspace_required: ${tool.name} must name the workspace it acts on`),
+  )
 }
 
 async function gatedCall(

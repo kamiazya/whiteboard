@@ -10,10 +10,25 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 // with many versions because the collect pass is O(versions × frontiers).
 //
 // We serialize the offending writers + GC by chaining their critical
-// sections onto a per-workspace Promise queue. The lock is in-process
-// only — fine because the daemon is single-process and every blob
-// read / write goes through this server. If the daemon is ever forked
-// this needs to become a file lock.
+// sections onto a per-workspace Promise queue.
+//
+// The lock is IN-PROCESS: everything it guarantees holds within one
+// instance and no further. The local daemon and stdio are one process each
+// (they share a data dir with each other, not this lock — the stored
+// record's frontier is what keeps them coherent, workspace-doc-cache.ts).
+// Server mode may run several instances over one record
+// (docs/how-to/self-host-with-docker.md, "Running several instances"), and
+// there another instance's write never takes this lock. Per instance it
+// gives:
+//   - file-GC against a write: across instances that window is covered by
+//     the sweep's grace period instead (ADR-0020, and the `file-gc-sweeper`
+//     declaration in shared-background-work.ts);
+//   - one writer at a time judging a workspace's ceilings against the
+//     record it holds: writes through different instances are judged
+//     without each other, so concurrent batches can each add the headroom
+//     left (the same doc names the overshoot);
+//   - the write-admission check below running right before the write.
+// Edits themselves need no lock across instances: they are CRDT merges.
 
 const queues = new Map<string, Promise<void>>()
 
@@ -31,6 +46,38 @@ const queues = new Map<string, Promise<void>>()
 // unrelated sync-update handler's saveDocument firing at the same time), which
 // must still queue normally rather than run concurrently.
 const heldByThisChain = new AsyncLocalStorage<ReadonlySet<string>>()
+
+/**
+ * What a writer must still pass when it enters the lock, for the request it
+ * serves: rejects to refuse the write. A request is admitted before its body
+ * is read, and the body may take as long to arrive as the transport allows;
+ * every write to a workspace's content enters this lock, so this is the one
+ * place a check can run after the body and right before the change.
+ */
+type WriteAdmission = (workspaceId: string) => Promise<void>
+
+const admissionOfThisChain = new AsyncLocalStorage<WriteAdmission>()
+
+/**
+ * Runs `fn` with `admit` asked on each write lock it enters (not re-entries),
+ * until `fn` settles. Work `fn` schedules for later inherits this chain, and
+ * once `fn` has answered what it writes was already accepted, so it is not
+ * asked again.
+ */
+export async function runWithWriteAdmission<T>(
+  admit: WriteAdmission,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let open = true
+  try {
+    return await admissionOfThisChain.run(
+      (workspaceId) => (open ? admit(workspaceId) : Promise.resolve()),
+      fn,
+    )
+  } finally {
+    open = false
+  }
+}
 
 export async function withWorkspaceWriteLock<T>(
   workspaceId: string,
@@ -63,6 +110,7 @@ export async function withWorkspaceWriteLock<T>(
     // surfaced to that caller.
   }
   try {
+    await admissionOfThisChain.getStore()?.(workspaceId)
     const nextHeld = new Set(alreadyHeld ?? [])
     nextHeld.add(workspaceId)
     return await heldByThisChain.run(nextHeld, fn)

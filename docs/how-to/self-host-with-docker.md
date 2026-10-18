@@ -214,6 +214,11 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
+Removing a member, or deactivating them, also stops a write of theirs that is
+still arriving: an update or upload whose body was in transit when they were
+removed is refused with `403 not_a_member` and changes nothing. Their open
+live-sync streams end as well.
+
 A version a member saves, the checkpoint left when a workspace is moved
 in from a browser, and each saved version that move carries show that
 member's profile name in the History panel. The server takes the name from
@@ -425,7 +430,14 @@ available through `/api/people`:
   See [Deleting a user](#deleting-a-user).
 - `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
   an administrator. Only appointments can be dismissed here; someone named in
-  the configuration stays an administrator until the list changes.
+  the configuration stays an administrator until the list changes. An
+  administrator cannot dismiss themselves, so a dismissal always leaves the
+  one who made it. Two administrators dismissing each other at the same
+  moment cannot both succeed: the second finds it no longer administers.
+- A deactivation or a dismissal checks again, as it is made, that whoever
+  asked for it is still an active administrator. One dismissed or
+  deactivated while their request was in flight gets
+  `403 not_an_administrator` and changes nothing.
 - `POST /api/invitations` creates an invitation link to the server alone.
   Accepting it makes a user and nothing more. It works only while whoever
   created it is still an active administrator. A dismissed or deactivated
@@ -451,6 +463,8 @@ the change again.
 
 - The time is the ID token's `auth_time`. A provider that does not send it
   leaves every session unable to administer, and the refusal is the same.
+  So does an `auth_time` more than 60 seconds ahead of the server's clock:
+  keep the server's clock in sync with the provider's.
 - A provider behind a reverse proxy (`kind: trusted-header`) cannot be asked
   to sign someone in again, so its administrators cannot make changes from
   the web app.
@@ -470,7 +484,8 @@ from the machine that holds the data directory:
 whiteboard server deactivate-user --json --user=<user id or display name> [--reactivate]
 ```
 
-Their sessions end at once. After that, a sign-in is refused with
+Their sessions end at once, including one a sign-in still in progress was
+about to open. After that, a sign-in is refused with
 `deactivated`, and any request with a session or bearer token gets `403`
 with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
@@ -616,6 +631,17 @@ make that visible to the people using them:
    A browser reopens its stream whenever it drops, so if an instance goes
    away its browsers reconnect wherever the load balancer sends them next. MCP
    clients need no affinity: `/mcp` keeps no per-connection state.
+
+**The size ceilings are judged per instance.** A workspace's 2000 documents,
+a canvas's 2000 nodes and 2000 edges and lines, and a document's 500 open
+comment threads and 1000 open proposed changes are each checked by the
+instance a write arrives at, against the record as that instance holds it,
+one write at a time. Writes arriving at different instances at the same
+moment are checked without seeing each other, so each can add whatever room
+was left: k such writes can take the record past a ceiling by up to k − 1
+times that room. Nothing is lost or corrupted. Once a record is past a
+ceiling, every write that would grow it further is refused, until it is
+back under. A single instance never overshoots.
 
 ## Persistent data volume
 

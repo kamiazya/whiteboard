@@ -67,6 +67,12 @@ export async function membershipRefusalFor(
   return c.json(membershipRefusal(access), 403)
 }
 
+/** The workspace a gated route addresses, or null for a route with none to gate. */
+export async function gatedWorkspaceOf(c: Context): Promise<string | null> {
+  const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
+  return gated.kind === 'handle' ? workspaceIdFromHandle(c, gated.handle) : null
+}
+
 /**
  * The membership check for handlers that decide it themselves, bound to the
  * grant this request's middleware already resolved. A request that never

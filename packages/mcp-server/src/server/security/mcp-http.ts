@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
+import { runWithMcpScopes } from './mcp-caller.js'
 
 function mcpHttpError(status: number, message: string, headers?: Headers): Response {
   return Response.json(
@@ -21,6 +22,7 @@ export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): Midd
     if (!decision.ok) {
       return mcpHttpError(decision.status, decision.message, decision.headers)
     }
+    if (decision.scopes !== undefined) return runWithMcpScopes(decision.scopes, next)
     return next()
   }
 }

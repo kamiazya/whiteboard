@@ -17,6 +17,7 @@ import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/
 import type { AdministratorCheck } from './administrator-check.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { MemberProfileStore } from './member-profile-store.js'
+import { DEFAULT_CLOCK_SKEW_SECONDS } from './oauth-jwt-validator.js'
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
 import type { UserDeletion } from './user-deletion.js'
@@ -40,6 +41,14 @@ type SoleOwner = Refused<'sole_owner'> & { readonly workspaceIds: readonly strin
  * administrator's action. Listing people is not an action and is not gated.
  */
 export const ADMINISTRATION_WINDOW_MS = 15 * 60 * 1000
+
+/**
+ * How far ahead of this server's clock a sign-in time may be: the drift a
+ * token's own time claims are allowed (`oauth-jwt-validator.ts`). A time
+ * further ahead is not a sign-in that happened, and would otherwise sit
+ * inside the window for as long as it stays in the future.
+ */
+export const ADMINISTRATION_CLOCK_SKEW_MS = DEFAULT_CLOCK_SKEW_SECONDS * 1000
 
 interface Person {
   readonly userId: string
@@ -68,7 +77,10 @@ export interface PeopleAdministrationWiring {
   readonly members: Pick<MemberProfileStore, 'listUsers' | 'profileForBinding'>
   readonly administration: {
     readonly check: AdministratorCheck
-    readonly appointments: Pick<TenantAdministratorStore, 'appoint' | 'dismiss'>
+    readonly appointments: Pick<
+      TenantAdministratorStore,
+      'appoint' | 'dismiss' | 'dismissKeepingAnAdministrator'
+    >
     readonly deactivation: UserDeactivation
     readonly deletion: UserDeletion
   }
@@ -93,7 +105,11 @@ export function createAdministrationAccess(deps: {
       // A bearer has no browser to send back to the provider, so it never may.
       if (grant?.kind !== 'signed-in') return { kind: 'refused', reason: 'sign_in_required' }
       const at = grant.authenticatedAt ?? null
-      if (at === null || now - at > ADMINISTRATION_WINDOW_MS) {
+      if (
+        at === null ||
+        now - at > ADMINISTRATION_WINDOW_MS ||
+        at - now > ADMINISTRATION_CLOCK_SKEW_MS
+      ) {
         return { kind: 'refused', reason: 'reauthentication_required' }
       }
       return { kind: 'authorized', userId }
@@ -125,19 +141,43 @@ export interface PeopleAdministration {
     now: number,
   ): Promise<
     | Done<{ readonly changed: boolean }>
-    | Refused<'unknown_user' | 'cannot_deactivate_self' | 'last_administrator'>
+    | Refused<
+        'unknown_user' | 'cannot_deactivate_self' | 'last_administrator' | 'not_an_administrator'
+      >
   >
   /** `changed` is false when they were not deactivated. */
   reactivate(userId: string): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user'>>
   appoint(userId: string, by: By): Promise<Done | Refused<'unknown_user'>>
-  dismiss(userId: string, by: By): Promise<Done | Refused<'unknown_user' | 'cannot_dismiss_self'>>
+  dismiss(
+    userId: string,
+    by: By,
+  ): Promise<Done | Refused<'unknown_user' | 'cannot_dismiss_self' | 'not_an_administrator'>>
 }
 
-export function createPeopleAdministration(deps: {
+interface PeopleAdministrationDeps {
   readonly members: Pick<MemberProfileStore, 'listUsers'>
-  readonly appointments: Pick<TenantAdministratorStore, 'appoint' | 'dismiss'>
+  readonly appointments: Pick<
+    TenantAdministratorStore,
+    'appoint' | 'dismiss' | 'dismissKeepingAnAdministrator'
+  >
   readonly deactivation: UserDeactivation
-}): PeopleAdministration {
+}
+
+// The request was authorized before the change; by the time the change ran
+// the actor had been dismissed or deactivated.
+const NOT_AN_ADMINISTRATOR = { kind: 'refused', reason: 'not_an_administrator' } as const
+
+function answerDeactivation(
+  outcome: Awaited<ReturnType<UserDeactivation['deactivateKeepingAnAdministrator']>>,
+) {
+  if (outcome === 'last-administrator') {
+    return { kind: 'refused', reason: 'last_administrator' } as const
+  }
+  if (outcome === 'not-an-administrator') return NOT_AN_ADMINISTRATOR
+  return { kind: 'done', changed: outcome === 'deactivated' } as const
+}
+
+export function createPeopleAdministration(deps: PeopleAdministrationDeps): PeopleAdministration {
   const isUser = async (userId: string) =>
     (await deps.members.listUsers()).some((user) => user.id === userId)
   const unknown = { kind: 'refused', reason: 'unknown_user' } as const
@@ -151,9 +191,9 @@ export function createPeopleAdministration(deps: {
       if (by === null) {
         return { kind: 'done', changed: await deps.deactivation.deactivate(userId, now) }
       }
-      const outcome = await deps.deactivation.deactivateKeepingAnAdministrator(userId, now)
-      if (outcome === 'last-administrator') return { kind: 'refused', reason: 'last_administrator' }
-      return { kind: 'done', changed: outcome === 'deactivated' }
+      return answerDeactivation(
+        await deps.deactivation.deactivateKeepingAnAdministrator(userId, now, by),
+      )
     },
 
     async reactivate(userId) {
@@ -170,8 +210,12 @@ export function createPeopleAdministration(deps: {
     async dismiss(userId, by) {
       if (!(await isUser(userId))) return unknown
       if (userId === by) return { kind: 'refused', reason: 'cannot_dismiss_self' }
-      await deps.appointments.dismiss(userId)
-      return { kind: 'done' }
+      if (by === null) {
+        await deps.appointments.dismiss(userId)
+        return { kind: 'done' }
+      }
+      const outcome = await deps.appointments.dismissKeepingAnAdministrator(userId, by)
+      return outcome === 'not-an-administrator' ? NOT_AN_ADMINISTRATOR : { kind: 'done' }
     },
   }
 }

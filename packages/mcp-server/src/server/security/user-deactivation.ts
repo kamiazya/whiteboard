@@ -4,22 +4,28 @@
  * a deactivated user, and every gate asks it — and ends the sessions they
  * hold, so reactivating means signing in again rather than resuming one.
  */
-import type { ExpressionBuilder } from 'kysely'
+import { type ExpressionBuilder, expressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 
-type KeptAdministrator = 'deactivated' | 'unchanged' | 'last-administrator'
+type KeptAdministrator = 'deactivated' | 'unchanged' | 'last-administrator' | 'not-an-administrator'
 
 export interface UserDeactivation {
   /** False when there is no such user or they are already deactivated. */
   deactivate(profileId: string, now: number): Promise<boolean>
   /**
-   * `deactivate`, refusing the tenant's last active administrator — what an
-   * administrator's request goes through. The operator at the machine can
-   * appoint another from the command line, so it is not held to this.
+   * `deactivate` on behalf of the administrator `by`, refusing the tenant's
+   * last active administrator, and refusing outright when `by` no longer
+   * administers it — what an administrator's request goes through. The
+   * operator at the machine can appoint another from the command line, so it
+   * is not held to this.
    */
-  deactivateKeepingAnAdministrator(profileId: string, now: number): Promise<KeptAdministrator>
+  deactivateKeepingAnAdministrator(
+    profileId: string,
+    now: number,
+    by: string,
+  ): Promise<KeptAdministrator>
   /** False when there is no such user or they are not deactivated. */
   reactivate(profileId: string): Promise<boolean>
 }
@@ -89,6 +95,41 @@ function anotherActiveAdministrator(eb: Target, configured: readonly Authenticat
   return eb.or([appointed, named])
 }
 
+/**
+ * Whether `actorId` administers this tenant at the moment the statement
+ * carrying this runs: an active user, appointed or named by the
+ * configuration. A request is authorized before its change is made, so a
+ * change guarded by this cannot land for someone dismissed or deactivated in
+ * between.
+ */
+export function actorAdministers(configured: readonly AuthenticatorBinding[], actorId: string) {
+  const eb = expressionBuilder<DatabaseSchema, never>()
+  return eb.exists(
+    eb
+      .selectFrom('memberProfiles as actor')
+      .select('actor.id')
+      .where('actor.id', '=', actorId)
+      .where('actor.deactivatedAt', 'is', null)
+      .where((a) => {
+        const appointed = a.exists(
+          a
+            .selectFrom('tenantAdministrators as actorAppointment')
+            .select('actorAppointment.profileId')
+            .whereRef('actorAppointment.profileId', '=', 'actor.id'),
+        )
+        if (configured.length === 0) return appointed
+        const named = a.exists(
+          a
+            .selectFrom('accountBindings')
+            .select('accountBindings.accountId')
+            .whereRef('accountBindings.accountId', '=', 'actor.accountId')
+            .where((b) => namedBinding(b, configured)),
+        )
+        return a.or([appointed, named])
+      }),
+  )
+}
+
 // The guard the deactivating UPDATE carries: the row may change unless it is
 // an administrator's and no other active one remains. One statement, as
 // workspace-roles.ts's keepsAnOwner, so two administrators deactivating each
@@ -102,7 +143,7 @@ function keepsAnAdministrator(configured: readonly AuthenticatorBinding[]) {
 // leaves another active administrator (those configured included).
 function deactivateRow(
   db: TenantScoped,
-  keepFor: readonly AuthenticatorBinding[] | null,
+  keepFor: { readonly configured: readonly AuthenticatorBinding[]; readonly by: string } | null,
   profileId: string,
   now: number,
 ): Promise<boolean> {
@@ -112,7 +153,12 @@ function deactivateRow(
       .set({ deactivatedAt: now })
       .where('id', '=', profileId)
       .where('deactivatedAt', 'is', null)
-    if (keepFor !== null) update = update.where(keepsAnAdministrator(keepFor))
+    if (keepFor !== null) {
+      const { configured, by } = keepFor
+      update = update
+        .where(keepsAnAdministrator(configured))
+        .where(actorAdministers(configured, by))
+    }
     const user = await update.returning('accountId').executeTakeFirst()
     if (user === undefined) return false
     // A session names a binding, not a user, so each of the account's
@@ -138,20 +184,21 @@ export function createUserDeactivation(
   options: UserDeactivationOptions = {},
 ): UserDeactivation {
   const configured = options.configuredAdministrators ?? []
-  const deactivateWhere = (profileId: string, now: number, keepAnAdministrator: boolean) =>
-    deactivateRow(db, keepAnAdministrator ? configured : null, profileId, now)
   return {
-    deactivate: (profileId, now) => deactivateWhere(profileId, now, false),
+    deactivate: (profileId, now) => deactivateRow(db, null, profileId, now),
 
-    async deactivateKeepingAnAdministrator(profileId, now) {
-      if (await deactivateWhere(profileId, now, true)) return 'deactivated'
-      // Why nothing changed: already deactivated (or nobody), or the last one.
+    async deactivateKeepingAnAdministrator(profileId, now, by) {
+      if (await deactivateRow(db, { configured, by }, profileId, now)) return 'deactivated'
+      // Why nothing changed, read after the fact, so it names the outcome
+      // and decides nothing: already deactivated (or nobody), the last
+      // administrator, or an actor who no longer administers.
       const row = await db
         .selectFrom('memberProfiles')
-        .select('deactivatedAt')
+        .select((eb) => ['deactivatedAt', eb.not(keepsAnAdministrator(configured)(eb)).as('last')])
         .where('id', '=', profileId)
         .executeTakeFirst()
-      return row === undefined || row.deactivatedAt !== null ? 'unchanged' : 'last-administrator'
+      if (row === undefined || row.deactivatedAt !== null) return 'unchanged'
+      return row.last ? 'last-administrator' : 'not-an-administrator'
     },
 
     async reactivate(profileId) {
