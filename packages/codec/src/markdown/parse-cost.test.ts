@@ -70,17 +70,17 @@ const SHAPES: Shape[] = [
     unit: () => '- ',
     wrap: (u) => `${u}x`,
     small: 1_000,
-    scaling: 'superlinear',
+    scaling: 'linear',
   },
   {
     name: 'one-line nested quotes and lists',
     unit: () => '> - ',
     wrap: (u) => `${u}x`,
     small: 2_000,
-    scaling: 'superlinear',
+    scaling: 'linear',
   },
   // Lazy continuation: every lazy line rescans the paragraph it continues.
-  { name: 'lazy blockquote continuation', unit: () => '> a\nb\n', scaling: 'superlinear' },
+  { name: 'lazy blockquote continuation', unit: () => '> a\nb\n', scaling: 'linear' },
   // A long table is ordinary content, not an attack.
   {
     name: 'a long table',

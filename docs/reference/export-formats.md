@@ -148,8 +148,12 @@ the web preview, a text node drawn on a canvas) reads at most **64 levels**
 of that nesting, counting the paragraph that holds the words. Anything deeper
 is drawn as the plain text it contains, with its markers gone: `>` repeated
 100 times before `x` draws 63 nested quotes around a paragraph holding `x`.
-A body that nests thousands of levels deep, deeper than the markdown parser
-itself can follow, is drawn as one paragraph of its own source text. The stored body is never changed; only what is drawn from it is.
+The parser itself opens at most **100** nested quotes and lists: a `>` or a
+list marker past the hundredth is ordinary text, so `>` repeated 150 times
+before `x` draws its 63 quotes around fifty `>` characters and `x`. A body
+that still nests deeper than the parser can follow is drawn as one paragraph
+of its own source text. The stored body is never changed; only what is drawn
+from it is.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 

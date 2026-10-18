@@ -52,6 +52,14 @@ describe('parseMarkdownBody nesting depth', () => {
     expect(leafText(root)).toBe('x')
   })
 
+  it('opens no container past the hundredth level and reads its marker as text', () => {
+    // The parser itself stops nesting at 100 containers (a patched micromark;
+    // see parse-cost.test.ts), so the fifty markers past that are paragraph
+    // text — which the converter's own flattening then carries through.
+    const root = parseMarkdownBody(`${'>'.repeat(150)} x`)
+    expect(leafText(root)).toBe(`${'>'.repeat(50)} x`)
+  })
+
   it.each([
     ['blockquotes past the schema parse', `${'>'.repeat(1_000)} tail`],
     ['blockquotes past the converter', `${'>'.repeat(3_000)} tail`],

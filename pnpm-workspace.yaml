@@ -273,3 +273,11 @@ patchedDependencies:
   # 10.0.0 still joins with a space. Measured 2026-09-16; see
   # package-canvas-render.md's mutation section.
   '@stryker-mutator/vitest-runner@9.6.1': patches/@stryker-mutator__vitest-runner@9.6.1.patch
+  # Two bounds on the document tokenizer, both in lib/ and dev/ (vitest loads
+  # dev/, a production bundle lib/). No container nests past 100 levels: each
+  # level opened on one line rescanned the rest of it, so `- ` repeated 4,000
+  # times took 8s. And a lazy continuation line remembers the open token that
+  # made the previous one lazy instead of rescanning the flow, which made
+  # `> a\nb\n` repeated quadratic (3s at 32 KB). micromark 4.0.3 fixes
+  # neither. Measured by packages/codec/src/markdown/parse-cost.test.ts.
+  micromark@4.0.2: patches/micromark@4.0.2.patch

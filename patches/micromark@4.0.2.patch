@@ -1,0 +1,130 @@
+diff --git a/dev/lib/initialize/document.js b/dev/lib/initialize/document.js
+index bca159ead63c2ccb5910d09076ef63b94c307e90..e3186548e1c8e1a70c621b7e9fb3573007ccc680 100644
+--- a/dev/lib/initialize/document.js
++++ b/dev/lib/initialize/document.js
+@@ -29,6 +29,9 @@ export const document = {tokenize: initializeDocument}
+ /** @type {Construct} */
+ const containerConstruct = {tokenize: tokenizeContainer}
+ 
++// Patched (whiteboard): see `checkNewContainers`.
++const maxContainerDepth = 100
++
+ /**
+  * @this {TokenizeContext}
+  *   Self.
+@@ -177,6 +180,14 @@ function initializeDocument(effects) {
+       )
+     }
+ 
++    // Patched (whiteboard): no container nests deeper than
++    // `maxContainerDepth`. Every level opened on one line rescans the rest of
++    // that line and later costs a walk over the levels below it, so unbounded
++    // depth makes one line quadratic; past the bound a marker reads as text.
++    if (continued >= maxContainerDepth) {
++      return thereIsNoNewContainer(code)
++    }
++
+     // Check if there is a new container.
+     self.containerState = {}
+     return effects.check(
+@@ -202,6 +213,11 @@ function initializeDocument(effects) {
+ 
+   /** @type {State} */
+   function documentContinued(code) {
++    // Patched (whiteboard): see `checkNewContainers`.
++    if (continued >= maxContainerDepth) {
++      return flowStart(code)
++    }
++
+     // Try new containers.
+     self.containerState = {}
+     return effects.attempt(
+@@ -320,6 +336,15 @@ function initializeDocument(effects) {
+     // whether the lazy line started a new flow block.
+     // If it did, we exit the current containers between the two flow blocks.
+     if (self.parser.lazy[token.start.line]) {
++      // Patched (whiteboard): remember the open token found for the previous
++      // lazy line of this flow. While it is still at the same index and still
++      // straddles, the scan below would return too, so it is skipped — without
++      // this a paragraph continued lazily line after line rescans itself once
++      // per line, quadratic in its length.
++      const straddle = childFlow._wbLazyStraddle
++      if (straddle && childFlow.events[straddle[0]] && childFlow.events[straddle[0]][1] === straddle[1] && straddle[1].start.offset < lineStartOffset && (!straddle[1].end || straddle[1].end.offset > lineStartOffset)) {
++        return
++      }
+       let index = childFlow.events.length
+ 
+       while (index--) {
+@@ -333,6 +358,7 @@ function initializeDocument(effects) {
+         ) {
+           // Exit: there’s still something open, which means it’s a lazy line
+           // part of something.
++          childFlow._wbLazyStraddle = [index, childFlow.events[index][1]]
+           return
+         }
+       }
+diff --git a/lib/initialize/document.js b/lib/initialize/document.js
+index 75e47495681f63306f98a1146f15b9ff4682a063..95ff6c1dd47e1bce9425393e57cb66d84cfa6ad4 100644
+--- a/lib/initialize/document.js
++++ b/lib/initialize/document.js
+@@ -30,6 +30,9 @@ const containerConstruct = {
+   tokenize: tokenizeContainer
+ };
+ 
++// Patched (whiteboard): see `checkNewContainers`.
++const maxContainerDepth = 100;
++
+ /**
+  * @this {TokenizeContext}
+  *   Self.
+@@ -149,6 +152,14 @@ function initializeDocument(effects) {
+       self.interrupt = Boolean(childFlow.currentConstruct && !childFlow._gfmTableDynamicInterruptHack);
+     }
+ 
++    // Patched (whiteboard): no container nests deeper than
++    // `maxContainerDepth`. Every level opened on one line rescans the rest of
++    // that line and later costs a walk over the levels below it, so unbounded
++    // depth makes one line quadratic; past the bound a marker reads as text.
++    if (continued >= maxContainerDepth) {
++      return thereIsNoNewContainer(code);
++    }
++
+     // Check if there is a new container.
+     self.containerState = {};
+     return effects.check(containerConstruct, thereIsANewContainer, thereIsNoNewContainer)(code);
+@@ -170,6 +181,11 @@ function initializeDocument(effects) {
+ 
+   /** @type {State} */
+   function documentContinued(code) {
++    // Patched (whiteboard): see `checkNewContainers`.
++    if (continued >= maxContainerDepth) {
++      return flowStart(code);
++    }
++
+     // Try new containers.
+     self.containerState = {};
+     return effects.attempt(containerConstruct, containerContinue, flowStart)(code);
+@@ -271,6 +287,15 @@ function initializeDocument(effects) {
+     // whether the lazy line started a new flow block.
+     // If it did, we exit the current containers between the two flow blocks.
+     if (self.parser.lazy[token.start.line]) {
++      // Patched (whiteboard): remember the open token found for the previous
++      // lazy line of this flow. While it is still at the same index and still
++      // straddles, the scan below would return too, so it is skipped — without
++      // this a paragraph continued lazily line after line rescans itself once
++      // per line, quadratic in its length.
++      const straddle = childFlow._wbLazyStraddle;
++      if (straddle && childFlow.events[straddle[0]] && childFlow.events[straddle[0]][1] === straddle[1] && straddle[1].start.offset < lineStartOffset && (!straddle[1].end || straddle[1].end.offset > lineStartOffset)) {
++        return;
++      }
+       let index = childFlow.events.length;
+       while (index--) {
+         if (
+@@ -282,6 +307,7 @@ function initializeDocument(effects) {
+         childFlow.events[index][1].end.offset > lineStartOffset)) {
+           // Exit: there’s still something open, which means it’s a lazy line
+           // part of something.
++          childFlow._wbLazyStraddle = [index, childFlow.events[index][1]];
+           return;
+         }
+       }
