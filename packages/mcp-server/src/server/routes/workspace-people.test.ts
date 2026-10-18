@@ -217,6 +217,17 @@ describe('workspace people', () => {
     ])
     expect(await members.membershipRole('ws-1', ids.ada as string)).toBe('member')
     expect(await members.membershipRole('ws-1', ids.eve as string)).toBeNull()
+    const { invitation } = await invitations.createLink({
+      invitedBy: ids.bob as string,
+      workspaceId: 'ws-1',
+      now: Date.now(),
+      ttlMs: 60_000,
+    })
+    expect(await refused(await asAda('DELETE', `/invitations/${invitation.id}`))).toEqual([
+      403,
+      'not_an_owner',
+    ])
+    expect(await invitations.listPending('ws-1', Date.now())).toHaveLength(1)
   })
 
   it('lets an owner create an invitation link into the workspace, and nobody else', async () => {

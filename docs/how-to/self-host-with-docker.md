@@ -251,7 +251,9 @@ Owners can review and take back the links still waiting to be accepted:
   itself is never shown again.
 - `DELETE /api/workspaces/<workspace>/invitations/<id>` revokes one. It then
   works for nobody. An id from another workspace answers
-  `404 unknown_invitation`.
+  `404 unknown_invitation`. Like a change to the members, it checks again
+  that whoever asked is still an active owner, and answers `403 not_an_owner`
+  otherwise.
 
 A workspace can have at most 50 links waiting at once. Creating one more is
 refused with `409 too_many_invitations` until one is accepted, expires or is

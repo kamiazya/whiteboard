@@ -12,6 +12,7 @@ import { createInvitationStore, type InvitationStore } from './invitation-store.
 import { isInvitationTokenShaped } from './invitation-token.js'
 import { createMemberProfileStore } from './member-profile-store.js'
 import { createTenantAdministratorStore } from './tenant-administrator-store.js'
+import { createWorkspaceRoles } from './workspace-roles.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -107,9 +108,27 @@ describe('invitation links', () => {
     const open = await store.createLink(link)
     expect(await store.redeem(spent.invitation.id, 'p-bob', T0 + 1)).toBe(true)
     expect((await store.listPending('ws-1', T0 + 2)).map((i) => i.id)).toEqual([open.invitation.id])
-    expect(await store.revoke('ws-1', spent.invitation.id)).toBe(false)
+    expect(await store.revoke('ws-1', spent.invitation.id, ada)).toBe('unknown')
     expect(await store.openLink(spent.token, T0 + 2)).toEqual({ ok: false, reason: 'redeemed' })
     expect(await store.listPending('ws-1', T0 + HOUR)).toEqual([])
+  })
+
+  it('revokes for an owner, and refuses one demoted since they were authorized', async () => {
+    const members = createMemberProfileStore(handle.db)
+    const bob = await members.ensureProfile({
+      binding: { authenticator: 'oidc:https://idp.test', subject: 'bob' },
+      displayName: 'Bob',
+    })
+    await members.addMember('ws-1', bob.id)
+    const roles = createWorkspaceRoles(handle.db)
+    expect(await roles.setRole('ws-1', bob.id, 'owner')).toBe('ok')
+    const link = { invitedBy: ada, workspaceId: 'ws-1', now: T0, ttlMs: HOUR }
+    const first = await store.createLink(link)
+    const second = await store.createLink(link)
+    expect(await store.revoke('ws-1', first.invitation.id, bob.id)).toBe('revoked')
+    expect(await roles.setRole('ws-1', bob.id, 'member')).toBe('ok')
+    expect(await store.revoke('ws-1', second.invitation.id, bob.id)).toBe('not-an-owner')
+    expect(await store.openLink(second.token, T0 + 1)).toMatchObject({ ok: true })
   })
 
   it('refuses a token it never issued', async () => {

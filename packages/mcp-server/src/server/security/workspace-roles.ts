@@ -73,7 +73,7 @@ function keepsAnOwner(workspaceId: string, profileId: string) {
 // Whether `actorId` is an active owner of the workspace at the moment the
 // statement carrying this runs — what the route's pre-check asked
 // (`callerOwns`), asked again where it cannot go stale.
-function actorOwns(workspaceId: string, actorId: string) {
+export function actorOwns(workspaceId: string, actorId: string) {
   const eb = expressionBuilder<DatabaseSchema, never>()
   return eb.exists(
     eb
@@ -87,7 +87,7 @@ function actorOwns(workspaceId: string, actorId: string) {
   )
 }
 
-async function ownsNow(trx: TenantScoped, workspaceId: string, actorId: string) {
+export async function ownsNow(trx: TenantScoped, workspaceId: string, actorId: string) {
   const row = await trx.selectNoFrom(actorOwns(workspaceId, actorId).as('owns')).executeTakeFirst()
   return Boolean(row?.owns)
 }

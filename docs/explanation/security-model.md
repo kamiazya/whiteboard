@@ -492,10 +492,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   authorized when it arrives, and its change lands later. Every change an
   administrator makes to a tenant's people — deactivating, reactivating,
   deleting, appointing and dismissing — and every change an owner makes to a
-  workspace's people — adding, changing a role, removing — asks again, as it
-  is made, whether the actor still holds that role. One dismissed, demoted,
-  removed or deactivated in between is refused and changes nothing. An
-  invitation link is checked the same way when it is accepted.
+  workspace's people — adding, changing a role, removing, taking back an
+  invitation link — asks again, as it is made, whether the actor still holds
+  that role. One dismissed, demoted, removed or deactivated in between is
+  refused and changes nothing. An invitation link is checked the same way
+  when it is accepted.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either

@@ -137,10 +137,12 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
   })
 
   app.delete('/api/workspaces/:workspace/invitations/:invitationId', async (c) => {
-    const workspaceId = await ownedBy(c, keeper)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
-    const revoked = await store.revoke(workspaceId, c.req.param('invitationId'))
-    if (!revoked) return refuse(c, 'unknown_invitation')
+    const owner = await actingOwner(c, keeper)
+    if (owner === null) return refuse(c, 'not_an_owner')
+    const { workspaceId, by } = owner
+    const revoked = await store.revoke(workspaceId, c.req.param('invitationId'), by)
+    if (revoked === 'not-an-owner') return refuse(c, 'not_an_owner')
+    if (revoked === 'unknown') return refuse(c, 'unknown_invitation')
     log.notice({ workspaceId, invitationId: c.req.param('invitationId') }, 'invitation revoked')
     return c.json(revokeInvitationResponseSchema.parse({ revoked: true }), 200)
   })
