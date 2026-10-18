@@ -18,7 +18,7 @@
 import { resolve } from 'node:path'
 import { describeThrown } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { resolveDefaultDataDir, serverModeDataDir } from '../daemon/data-dir.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/config-file.js'
 import { getLogger } from '../server/log.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
@@ -508,9 +508,8 @@ async function dispatchServerStatus(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStatus } = await import('./server-status.js')
-  const { result, exitCode } = await runServerStatus({ dataDir })
+  const { result, exitCode } = await runServerStatus(serverModeDataDir(parsed.dataDir, process.env))
   writeJsonObject(serverStatusResultSchema, result)
   return exitCode
 }
@@ -521,9 +520,8 @@ async function dispatchServerStop(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStop } = await import('./server-stop.js')
-  const { result, exitCode } = await runServerStop({ dataDir })
+  const { result, exitCode } = await runServerStop(serverModeDataDir(parsed.dataDir, process.env))
   writeJsonObject(serverStopResultSchema, result)
   return exitCode
 }

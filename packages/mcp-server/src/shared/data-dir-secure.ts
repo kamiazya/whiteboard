@@ -1,12 +1,15 @@
 import {
   accessSync,
   chmodSync,
+  closeSync,
   constants as fsConstants,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
+  readFileSync,
   statSync,
 } from 'node:fs'
-import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { isErrnoCode, isMissingFileError } from './errno.js'
@@ -213,16 +216,24 @@ export function refuseForeignRecordFile(
  * A symlink is never followed (a planted one could point at a file this user
  * does own), and the directory is judged again once the file is open in it.
  */
+export type OwnedFileRead =
+  | { kind: 'text'; text: string }
+  | { kind: 'missing' }
+  | { kind: 'not-owned'; message: string }
+
 export async function readFileOwnedByUser(
   path: string,
   uid = process.getuid?.(),
-): Promise<
-  { kind: 'text'; text: string } | { kind: 'missing' } | { kind: 'not-owned'; message: string }
-> {
-  let handle: Awaited<ReturnType<typeof open>>
+): Promise<OwnedFileRead> {
+  return readFileOwnedByUserSync(path, uid)
+}
+
+/** `readFileOwnedByUser` for a caller that reads synchronously; one judgement. */
+export function readFileOwnedByUserSync(path: string, uid = process.getuid?.()): OwnedFileRead {
+  let fd: number
   try {
     // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
-    handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+    fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
   } catch (err) {
     if (isMissingFileError(err)) return { kind: 'missing' }
     if (isErrnoCode(err, 'ELOOP'))
@@ -235,11 +246,11 @@ export async function readFileOwnedByUser(
     } catch (err) {
       return { kind: 'not-owned', message: (err as Error).message }
     }
-    const refusal = refuseForeignRecordFile(await handle.stat(), path, uid)
+    const refusal = refuseForeignRecordFile(fstatSync(fd), path, uid)
     if (refusal !== undefined) return refusal
-    return { kind: 'text', text: await handle.readFile('utf-8') }
+    return { kind: 'text', text: readFileSync(fd, 'utf-8') }
   } finally {
-    await handle.close()
+    closeSync(fd)
   }
 }
 

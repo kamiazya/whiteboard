@@ -8,9 +8,8 @@
 // Non-leak contract: failure results never contain raw env var values, URLs,
 // credentials, hostnames, or tokens — only codes and field names reach callers.
 
-import { resolve } from 'node:path'
 import type { z } from 'zod'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { serverModeDataDir } from '../daemon/data-dir.js'
 import { getLogger } from '../server/log.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
@@ -114,10 +113,8 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
   // list: a silent fallback looks identical to never having configured it.
   // The first issue is reported as the field, and the rest ride along in the
   // code, so one restart teaches the operator about every bad variable.
-  const startupIssues = collectStartupEnvIssues(
-    resolve(parsed.config.dataDir ?? resolveDefaultDataDir(env)),
-    env,
-  )
+  const { dataDir, dataDirTrust } = serverModeDataDir(parsed.config.dataDir, env)
+  const startupIssues = collectStartupEnvIssues(dataDir, env)
   const firstIssue = startupIssues[0]
   if (firstIssue !== undefined) {
     return {
@@ -171,6 +168,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
   let running: ServerModeRunning
   try {
     running = await startFn({
+      dataDirTrust,
       host: parsed.config.host,
       port: parsed.config.port,
       publicBaseUrl: exposure.publicBaseUrl,

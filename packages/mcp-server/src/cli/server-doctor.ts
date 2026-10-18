@@ -13,7 +13,7 @@
 
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { serverModeDataDir } from '../daemon/data-dir.js'
 import { parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
 import { resolveServerModeExposure } from '../server/security/server-mode-exposure.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
@@ -520,8 +520,8 @@ export async function runServerDoctor(
   }
   const config = configResult.config
 
-  const dataDir = config.dataDir ?? resolveDefaultDataDir(env)
-  const recordResult = readServerModeRecord(dataDir)
+  const { dataDir, dataDirTrust } = serverModeDataDir(config.dataDir, env)
+  const recordResult = readServerModeRecord(dataDir, dataDirTrust)
   const record = recordResult.kind === 'ok' ? recordResult.record : null
 
   // In declared order, because each of these calls out: reordering them

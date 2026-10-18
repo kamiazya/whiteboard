@@ -8,13 +8,14 @@
 // Non-leak contract: filesystem paths, JWKS URIs, tokens, and stack
 // frames never appear in the result object or in stderr.
 
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { serverModeDataDir } from '../daemon/data-dir.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   type ServerStatusResult,
   serverStatusResultSchema,
 } from '../shared/api-contracts/server-status.js'
+import type { DataDirTrust } from '../shared/data-dir-secure.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
@@ -22,6 +23,8 @@ export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
 
 export interface RunServerStatusOptions {
   dataDir?: string
+  /** Whose judgement `dataDir` gets; a named dir is the operator's by default. */
+  dataDirTrust?: DataDirTrust
   isPidAlive?: (pid: number) => boolean
   /** Injection seam: confirm the running process is the managed server.
    *  Default: HTTP GET /api/runtime/ping, compare the returned instanceId to record.instanceId. */
@@ -36,11 +39,14 @@ export interface RunServerStatusOutcome {
 export async function runServerStatus(
   options: RunServerStatusOptions,
 ): Promise<RunServerStatusOutcome> {
-  const dataDir = options.dataDir ?? resolveDefaultDataDir(process.env)
+  const { dataDir, dataDirTrust } =
+    options.dataDir === undefined
+      ? serverModeDataDir(undefined, process.env)
+      : { dataDir: options.dataDir, dataDirTrust: options.dataDirTrust ?? 'operator' }
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
   const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity
 
-  const readResult = readServerModeRecord(dataDir)
+  const readResult = readServerModeRecord(dataDir, dataDirTrust)
 
   if (readResult.kind === 'missing') {
     return {

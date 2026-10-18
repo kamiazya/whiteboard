@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 
 vi.mock('../server/security/server-mode-record.js', () => ({
@@ -340,5 +343,65 @@ describe('runServerStop clears the record it acted on', () => {
     expect(exitCode).toBe(0)
     expect(result.ok).toBe(true)
     expect(result.action).toBe('not-running')
+  })
+})
+
+// A dir nobody named is this user's own, and a record there that is not —
+// planted in a temp-dir fallback another local user prepared — names a pid
+// this command would otherwise signal.
+describe('runServerStop over a dir nobody named', () => {
+  let scratch: string
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), 'wb-server-stop-'))
+    writeFileSync(join(scratch, 'server-mode.json'), JSON.stringify(VALID_RECORD))
+  })
+  afterEach(() => rmSync(scratch, { recursive: true, force: true }))
+
+  const readForReal = async () => {
+    const actual = await vi.importActual<typeof import('../server/security/server-mode-record.js')>(
+      '../server/security/server-mode-record.js',
+    )
+    mockRead.mockImplementationOnce(actual.readServerModeRecord)
+  }
+
+  it('refuses a record another user owns, and signals nothing', async () => {
+    await readForReal()
+    const killFn = vi.fn()
+    const removeRecord = vi.fn(async () => {})
+    const { result, exitCode } = await runServerStop({
+      dataDir: scratch,
+      dataDirTrust: 'owner',
+      uid: (process.getuid?.() ?? 0) + 1,
+      isPidAlive: alivePid,
+      verifyIdentity: identityOk,
+      killFn,
+      sleep: noOp,
+      stopTimeoutMs: 0,
+      removeRecord,
+    })
+    expect(exitCode).toBe(2)
+    expect(result.reason).toBe('server-record-unreadable')
+    expect(killFn).not.toHaveBeenCalled()
+    expect(removeRecord).not.toHaveBeenCalled()
+  })
+
+  it('stops the server its own record names', async () => {
+    await readForReal()
+    const killFn = vi.fn()
+    let alive = true
+    const { result } = await runServerStop({
+      dataDir: scratch,
+      dataDirTrust: 'owner',
+      isPidAlive: () => alive,
+      verifyIdentity: identityOk,
+      killFn: (pid, signal) => {
+        killFn(pid, signal)
+        alive = false
+      },
+      sleep: noOp,
+      removeRecord: noOp,
+    })
+    expect(result.action).toBe('stopped')
+    expect(killFn).toHaveBeenCalledWith(VALID_RECORD.pid, 'SIGTERM')
   })
 })

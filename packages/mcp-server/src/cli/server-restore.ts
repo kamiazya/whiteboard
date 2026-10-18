@@ -35,7 +35,8 @@ export async function runServerRestore(
     args,
     env = process.env,
     isPidAlive = defaultIsPidAlive,
-    doReadRecord = readServerModeRecord,
+    // The target is always one the operator named.
+    doReadRecord = (dir: string) => readServerModeRecord(dir, 'operator'),
     doRestore = restoreServerModeDataDir,
   } = options
 

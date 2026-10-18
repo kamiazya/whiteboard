@@ -13,6 +13,7 @@ import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
+import type { DataDirTrust } from '../shared/data-dir-secure.js'
 import { isDataDirWritable } from './data-dir-writable.js'
 import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
@@ -40,6 +41,8 @@ import type { createWorkspaceTail } from './store/workspace-tail.js'
 import { syncStreamStats } from './sync-streams.js'
 
 export interface StartServerModeHttpOptions {
+  /** See `DataDirTrust`: `operator` unless the dir is a default nobody named. */
+  dataDirTrust?: DataDirTrust
   host: string
   port: number
   publicBaseUrl: string
@@ -70,9 +73,6 @@ export interface ServerModeRunning {
   close: () => Promise<void>
 }
 
-/** Server mode's data dir is the operator's to name; see `DataDirTrust`. */
-const OPERATOR = { dataDirTrust: 'operator' } as const
-
 export async function startServerModeHttp(
   options: StartServerModeHttpOptions,
 ): Promise<ServerModeRunning> {
@@ -82,7 +82,13 @@ export async function startServerModeHttp(
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
   const dataDir = getDataDir()
-  const { serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(dataDir, OPERATOR)
+  const {
+    serverDeps: bootedDeps,
+    dataLayout,
+    scope,
+  } = await bootSelfHostDeps(dataDir, {
+    dataDirTrust: options.dataDirTrust ?? 'operator',
+  })
   const shared = createSharedWorkers(instanceId, scope, options)
   const close = createRootShutdown({
     stopBackgroundWork: () => backgroundWork.stopAll(),
