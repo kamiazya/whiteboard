@@ -44,7 +44,8 @@ export const sceneDigestSchema = z.object({
   clusters: z.array(z.array(z.string())),
   freeRegions: z.array(bboxSchema),
   /**
-   * Whether a guard below dropped a derivation rather than computing it.
+   * Whether a guard below dropped a derivation, or cut one short, rather than
+   * computing it whole.
    *
    * Named `partial` rather than `truncated` because the payload this rides
    * in already spends that word on transport cutting — the snapshot's caps
@@ -83,6 +84,15 @@ const FREE_REGION_MAX_CELLS = 250_000
  * mirroring FREE_REGION_MAX_CELLS's guard for the grid allocation above.
  */
 const PAIRWISE_MAX_ENTRIES = 2_000
+/**
+ * Upper bound on the overlap pairs reported. The entry cap above bounds the
+ * SCAN, not its output: 2000 boxes stacked at one spot are 2000 entries and
+ * nearly two million pairs, every one of which would be sorted and shipped
+ * in the snapshot. Past this many the scan stops and the digest is
+ * `partial`; a reader told a thousand overlaps already knows the board needs
+ * tidying.
+ */
+const OVERLAP_MAX_PAIRS = 1_000
 
 interface DigestEntry {
   readonly id: string
@@ -111,17 +121,29 @@ function gapBetween(a: BoundingBox, b: BoundingBox): number {
   return Math.sqrt(dx * dx + dy * dy)
 }
 
-function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
-  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
+/**
+ * The first `OVERLAP_MAX_PAIRS` overlapping pairs in entry order, and whether
+ * the scan stopped short of the rest.
+ */
+function computeOverlaps(entries: readonly DigestEntry[]): {
+  readonly pairs: [string, string][]
+  readonly capped: boolean
+} {
+  if (entries.length > PAIRWISE_MAX_ENTRIES) return { pairs: [], capped: false }
   const pairs: [string, string][] = []
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       if (overlapArea(entries[i].bbox, entries[j].bbox) > 0) {
+        if (pairs.length === OVERLAP_MAX_PAIRS) return { pairs: sortPairs(pairs), capped: true }
         const [a, b] = [entries[i].id, entries[j].id].sort(compareCodeUnit)
         pairs.push([a, b])
       }
     }
   }
+  return { pairs: sortPairs(pairs), capped: false }
+}
+
+function sortPairs(pairs: [string, string][]): [string, string][] {
   return pairs.sort(([a1, b1], [a2, b2]) =>
     a1 === a2 ? compareCodeUnit(b1, b2) : compareCodeUnit(a1, a2),
   )
@@ -146,21 +168,44 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
   )
 }
 
-/** Single-linkage union-find clustering by proximity gap. */
+/**
+ * Single-linkage union-find clustering by proximity gap.
+ *
+ * Path compression and union by rank are what keep this near-linear per
+ * pair. Without them a stack of boxes in one spot builds a chain as long as
+ * the stack on the first sweep, and every later union walks it — cubic in
+ * the entry count. The grouping is unchanged by either: which id ends up a
+ * root never reaches the output, which is sorted below.
+ */
 function computeClusters(entries: readonly DigestEntry[]): string[][] {
   if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const parent = new Map<string, string>(entries.map((e) => [e.id, e.id]))
+  const rank = new Map<string, number>(entries.map((e) => [e.id, 0]))
   function find(id: string): string {
-    let current = id
-    while (parent.get(current) !== current) {
-      current = parent.get(current) as string
+    let root = id
+    while (parent.get(root) !== root) {
+      root = parent.get(root) as string
     }
-    return current
+    let current = id
+    while (current !== root) {
+      const next = parent.get(current) as string
+      parent.set(current, root)
+      current = next
+    }
+    return root
   }
   function union(a: string, b: string): void {
     const rootA = find(a)
     const rootB = find(b)
-    if (rootA !== rootB) parent.set(rootA, rootB)
+    if (rootA === rootB) return
+    const rankA = rank.get(rootA) as number
+    const rankB = rank.get(rootB) as number
+    if (rankA < rankB) parent.set(rootA, rootB)
+    else if (rankA > rankB) parent.set(rootB, rootA)
+    else {
+      parent.set(rootB, rootA)
+      rank.set(rootA, rankA + 1)
+    }
   }
 
   for (let i = 0; i < entries.length; i++) {
@@ -339,6 +384,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
   }))
 
   const freeRegions = computeFreeRegions(entries)
+  const overlaps = computeOverlaps(entries)
   return {
     nodes: entries.map((e) => ({
       id: e.id,
@@ -347,7 +393,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
       ...(e.truncated ? { truncated: true as const } : {}),
       ...(e.overflows ? { overflows: true as const } : {}),
     })),
-    overlaps: computeOverlaps(entries),
+    overlaps: overlaps.pairs,
     containment: computeContainment(entries),
     clusters: computeClusters(entries),
     freeRegions,
@@ -356,6 +402,8 @@ export function sceneDigest(scene: Scene): SceneDigest {
     // one observable effect: no free regions on a scene that HAS nodes, which
     // a real layout never produces (a board of boxes always leaves gaps).
     partial:
-      entries.length > PAIRWISE_MAX_ENTRIES || (entries.length > 0 && freeRegions.length === 0),
+      entries.length > PAIRWISE_MAX_ENTRIES ||
+      overlaps.capped ||
+      (entries.length > 0 && freeRegions.length === 0),
   }
 }

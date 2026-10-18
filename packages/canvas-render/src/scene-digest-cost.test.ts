@@ -40,7 +40,8 @@ describe('sceneDigest cost', () => {
     // map at least twice. A count under that means the steps are no longer
     // being counted, not that they got cheap.
     expect(reads).toBeGreaterThanOrEqual(2 * pairs)
-    // Measured 980_498 — about 200 steps per pair, cubic in n.
-    expect(reads).toBeLessThanOrEqual(980_498)
+    // Was 980_498 — about 200 steps per pair, cubic in n — before path
+    // compression and union by rank. Now a small constant per pair.
+    expect(reads).toBeLessThanOrEqual(10 * pairs)
   })
 })
