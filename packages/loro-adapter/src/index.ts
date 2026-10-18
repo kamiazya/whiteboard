@@ -131,3 +131,4 @@ export {
   workspaceNodeMetaSchema,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
+export { descendsFromWorkspaceTree } from './workspace-tree-descent.js'

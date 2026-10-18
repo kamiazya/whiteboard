@@ -1,6 +1,7 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  MARKDOWN_BODY_KEY,
   readMarkdownBody,
   resolveWorkspaceDocumentById,
   SYNC_TEXT_BREACH_CODES,
@@ -25,7 +26,7 @@ import {
   TAG_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc, LoroMap, type LoroTreeNode } from 'loro-crdt'
+import { LoroDoc, LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
@@ -628,6 +629,37 @@ describe('promoteWorkspace', () => {
     ).catch((err: unknown) => err)
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'causal_gap', status: 409 })
     expect(refusal).toMatchObject({ breach: { shape: 'unattached-container' } })
+    expect(refusal).not.toHaveProperty('at.path')
+    expect(fake.saves()).toBe(0)
+  })
+
+  // A List root also named `tree` puts a `body` at `['tree', 0, 'body']`, a
+  // document body's path by name — and `0` is no tree node's id.
+  it('refuses an oversized body under a root named like the tree without naming a document', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'sketch',
+      documentId: SKETCH_ID,
+      kind: 'spatial',
+    })
+    record
+      .getList(WORKSPACE_TREE_KEY)
+      .insertContainer(0, new LoroMap())
+      .setContainer(MARKDOWN_BODY_KEY, new LoroText())
+      .insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1))
+    record.commit()
+    const refusal = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
+    ).catch((err: unknown) => err)
+    expect(syncWriteAnswer(refusal)).toMatchObject({ status: 413 })
     expect(refusal).not.toHaveProperty('at.path')
     expect(fake.saves()).toBe(0)
   })

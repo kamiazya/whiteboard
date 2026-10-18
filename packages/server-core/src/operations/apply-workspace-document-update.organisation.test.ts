@@ -108,6 +108,22 @@ describe('a workspace-document update from a caller who may not place documents'
     expect(await applyWithoutPlacing(store, update)).toEqual({ kind: 'placement-refused' })
   })
 
+  // A root that shares the tree's name reads `['tree', …]` by path, the same
+  // first segment a document's content has.
+  it.each([
+    ['map', (replica: LoroDoc) => replica.getMap('tree').set('x', 1)],
+    ['text', (replica: LoroDoc) => replica.getText('tree').insert(0, 'x')],
+    ['list', (replica: LoroDoc) => replica.getList('tree').insert(0, 'x')],
+    ['counter', (replica: LoroDoc) => replica.getCounter('tree').increment(1)],
+  ] as const)('cannot write a %s root named like the tree', async (_kind, edit) => {
+    const store = new StoredDoc(seed())
+    const update = updateFrom(store, edit)
+
+    expect(await applyWithoutPlacing(store, update)).toEqual({ kind: 'placement-refused' })
+
+    expect(store.saves).toBe(0)
+  })
+
   it('still edits what a document says', async () => {
     const store = new StoredDoc(seed())
     const update = updateFrom(store, (replica) =>

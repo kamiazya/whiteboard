@@ -1,4 +1,5 @@
 import {
+  descendsFromWorkspaceTree,
   holdsContainerCreation,
   readWorkspaceDocuments,
   WORKSPACE_TREE_KEY,
@@ -72,8 +73,11 @@ function promotedDocumentAt(
   incoming: LoroDoc,
   container: ContainerID,
 ): { readonly path: string } | undefined {
+  // A root of another kind also named `tree` shares the tree's path, and the
+  // segment after it is then no node id: looking one up panics the engine.
+  if (!descendsFromWorkspaceTree(incoming, container)) return undefined
   const path = incoming.getPathToContainer(container)
-  if (path === undefined || path.length < 2 || path[0] !== WORKSPACE_TREE_KEY) return undefined
+  if (path === undefined || path.length < 2) return undefined
   const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
   const documentId = node?.data.get('documentId')
   return readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
