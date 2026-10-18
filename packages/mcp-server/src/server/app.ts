@@ -510,6 +510,8 @@ export function createApp(options: AppOptions) {
       scope,
       versionStore,
       exportPaths,
+      // Either mode's auth middleware remembers the grant it resolved.
+      callerScopes: (c) => callerGrant(c)?.scopes,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),

@@ -352,7 +352,15 @@ the same things through either surface:
 | `workspace:read` | `wb_document_list` |
 | `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
 | `versions:read` | `wb_version_list` |
-| `versions:write` | `wb_version_save`, `wb_version_restore` |
+| `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
+
+Restoring a version anywhere but in place also writes other documents, so it
+needs `workspace:write` as well as `versions:write`: `wb_version_restore`
+with a `targetPath` (a new document, or one it replaces with `overwrite`) or
+with `subtree: true` (which reverts, brings back and deletes the document's
+descendants). The HTTP restore route asks the same, answering `403` with
+`insufficient_scope`; there a `targetPath` equal to the document's own path is
+the in-place restore. A browser session holds both scopes.
 
 A call without the scope fails with `insufficient_scope` and changes nothing.
 A token scoped `mcp:call canvas:read` can read documents but cannot edit or

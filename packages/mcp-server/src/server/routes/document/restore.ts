@@ -11,7 +11,10 @@ import {
   syncWriteAnswer,
   type VersionHistory,
 } from '@kamiazya/whiteboard-server-core'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { type AuthScope, hasRequiredScopes } from '../../security/auth-strategy.js'
+import { restoreScopes } from '../../security/route-scope-registry.js'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
 import { readJsonBody } from '../read-json-body.js'
 import {
@@ -30,7 +33,16 @@ export interface RestoreRouterOptions {
   // How a restore announces itself to connected clients. Absent means nobody
   // is told, which is the right answer for a router with no live audience.
   progress?: RestoreProgress
+  /**
+   * The scopes of the grant the auth middleware resolved for this request.
+   * Absent, or answering undefined, for a router mounted without that
+   * middleware, which gates nothing.
+   */
+  callerScopes?: CallerScopes
 }
+
+/** The scopes the request's grant holds, where an auth middleware resolved one. */
+export type CallerScopes = (c: Context) => readonly AuthScope[] | undefined
 
 // POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 //
@@ -115,6 +127,22 @@ function restoreAnswer(
   }
 }
 
+/**
+ * The registry scoped this route by its path, before the body said which
+ * restore it is; one that writes other documents needs more (`restoreScopes`).
+ */
+function scopeRefusal(
+  granted: readonly AuthScope[] | undefined,
+  asked: { readonly targetPath?: string; readonly subtree?: boolean },
+  path: string,
+): ApiErrorBody | null {
+  if (granted === undefined || hasRequiredScopes(granted, restoreScopes(asked, path))) return null
+  return errorBody(
+    'insufficient_scope',
+    "This credential's scopes do not reach a restore into another document or a subtree.",
+  )
+}
+
 /** A saved state past a sync limit, refused in the code and status a sync write gets. */
 const pastSyncLimit: ErrorAnswer = (err) => {
   const refusal = syncWriteAnswer(err)
@@ -143,6 +171,8 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
       })
       if ('refusal' in asked) return asked.refusal
+      const outOfScope = scopeRefusal(options.callerScopes?.(c), asked.data, path)
+      if (outOfScope) return c.json(outOfScope, 403)
       const { targetPath, overwrite, subtree } = asked.data
       try {
         const result = await restoreVersion(

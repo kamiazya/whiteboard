@@ -393,6 +393,30 @@ export type GatedWorkspaceHandle =
   | { readonly kind: 'undecodable' }
 
 /**
+ * What a restore needs beyond the `versions:write` its route and tool are
+ * registered under. In place it rewrites the one document whose history it
+ * reads, which is a history operation. Into another path it creates or
+ * replaces that document, and as a subtree it reverts, resurrects and deletes
+ * descendants — document writes, so they need `workspace:write`, the scope
+ * creating, replacing and deleting documents takes everywhere else.
+ *
+ * The body names the mode, and a route's scope is decided from its path and
+ * verb before any body is read, so each surface asks this once the request
+ * is parsed. `path` is the document's, where the surface knows it: a target
+ * equal to it is the in-place restore. A surface that does not know it treats
+ * any target as another document.
+ */
+export function restoreScopes(
+  asked: { readonly targetPath?: unknown; readonly subtree?: unknown },
+  path?: string,
+): readonly AuthScope[] {
+  const elsewhere = typeof asked.targetPath === 'string' && asked.targetPath !== path
+  return elsewhere || asked.subtree === true
+    ? ['versions:write', 'workspace:write']
+    : ['versions:write']
+}
+
+/**
  * The workspace HANDLE this request's route reaches, for the membership
  * gate — the FIRST claiming rule's extractor, same first-match-wins order
  * as `resolveApiRouteScope`.

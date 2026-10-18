@@ -450,6 +450,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `mcp:call`, and a tool call also needs the scope the same operation needs
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **A version grant restores in place, and writes no other document.**
+  `versions:write` restores a document to one of its own saved versions. A
+  restore into another path, or of a whole subtree, creates, replaces or
+  deletes other documents, so it also needs `workspace:write` — over HTTP
+  and through `wb_version_restore` alike — and is refused with
+  `insufficient_scope`, writing nothing, without it.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
