@@ -37,6 +37,7 @@ const {
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
+  evictWorkspaceDocCache,
   WORKSPACE_DOC_CACHE_MAX_ENTRIES,
 } = await import('./workspace-doc-cache.js')
 const { clearDocCacheForTests } = await import('./doc-cache.js')
@@ -225,6 +226,26 @@ describe('a dropped workspace record and what was derived from it', () => {
       const reopened = await getWorkspaceDoc(ws(0))
 
       expect(replica.version().compare(reopened.version())).toBe(0)
+    } finally {
+      off()
+    }
+  })
+
+  // An explicit eviction may drop ops storage refused, so a version
+  // remembered from an earlier drop must not be announced from either.
+  it('announces nothing on reopen once an explicit eviction followed the drop', async () => {
+    await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
+    await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+    evictWorkspaceDocCache(ws(0))
+    const announced: string[] = []
+    const off = onWorkspaceDocUpdated((workspaceId) => {
+      if (workspaceId === ws(0)) announced.push(workspaceId)
+    })
+    try {
+      await foreignEdit(ws(0), 'd', 'after')
+      await getWorkspaceDoc(ws(0))
+
+      expect(announced).toEqual([])
     } finally {
       off()
     }

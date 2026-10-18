@@ -186,7 +186,9 @@ export function evictWorkspaceDocCache(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): void {
-  workspaceDocCache.delete(workspaceDocCacheKey(scope, workspaceId))
+  const key = workspaceDocCacheKey(scope, workspaceId)
+  workspaceDocCache.delete(key)
+  droppedVersions.delete(key)
 }
 
 /**
