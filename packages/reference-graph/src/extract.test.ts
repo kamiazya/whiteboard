@@ -10,7 +10,7 @@ import { snippetAround } from '@kamiazya/whiteboard-search'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { extractContentFacts, splitBearerTags, tagBearersOf } from './extract.js'
-import { referenceContext } from './reference-aggregate.js'
+import { backlinksIn } from './reference-aggregate.js'
 
 function docWith(kind: 'spatial' | 'markdown' | undefined): LoroDoc {
   const doc = new LoroDoc()
@@ -170,8 +170,15 @@ describe('a wikilink excerpt in cached facts', () => {
 
   it('reads back as the excerpt the backlink always carried', () => {
     const index = body.indexOf('[[target-doc]]')
-    expect(facts.refs.map(referenceContext)).toEqual([
-      snippetAround(body, index, '[[target-doc]]'.length),
+    const source = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const target = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const entries = [
+      { documentId: source, path: 'source', kind: 'markdown' as const },
+      { documentId: target, path: 'target-doc', kind: 'markdown' as const },
+    ]
+    const { backlinks } = backlinksIn(entries as never, new Map([[source, facts]]), target)
+    expect(backlinks.map((backlink) => backlink.contexts)).toEqual([
+      [snippetAround(body, index, '[[target-doc]]'.length)],
     ])
   })
 })

@@ -35,11 +35,9 @@ import { z } from 'zod'
  * content facts, not as a feed into this class.
  */
 
-/**
- * The token as written: a document id, or a name/path to resolve at query
- * time. For `embed-node` it is always the embedded documentId; for
- * `file-node` it is the file value, matched against paths only.
- */
+// The token as written: a document id, or a name/path to resolve at query
+// time. For `embed-node` it is always the embedded documentId; for
+// `file-node` it is the file value, matched against paths only.
 const referenceTargetSchema = z.string().min(1)
 
 const rawReferenceSchema = z.union([
@@ -72,7 +70,7 @@ const rawReferenceSchema = z.union([
 export type RawReference = z.infer<typeof rawReferenceSchema>
 
 /** The excerpt a backlink shows for `ref`. */
-export function referenceContext(ref: RawReference): string {
+function referenceContext(ref: RawReference): string {
   return ref.via === 'wikilink' ? snippetAround(ref.text, ref.index, ref.length) : ref.context
 }
 
