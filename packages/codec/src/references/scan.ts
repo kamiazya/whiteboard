@@ -52,6 +52,13 @@ function closeReference(
   return { resumeAt: j + 1 }
 }
 
+/** The first `]` or `|` at or after `from`, or the end of `value`. */
+function endOfTarget(value: string, from: number): number {
+  let i = from
+  while (i < value.length && value[i] !== ']' && value[i] !== '|') i++
+  return i
+}
+
 /**
  * Finds the next `[[...]]`/`![[...]]` occurrence at or after `cursor`, scanning
  * with `indexOf` instead of a regex. A quantified-class regex equivalent to
@@ -59,11 +66,19 @@ function closeReference(
  * super-linear on adversarial input: every `[[` that never finds a closing
  * `]]` forces a fresh forward scan to the end of the string, so a string of
  * N repeated `[[` costs O(N^2). This scan instead advances `cursor`
- * monotonically past everything it has already inspected, so each character
- * is visited a bounded number of times and the whole pass is O(n).
+ * monotonically past everything it has already inspected, and remembers
+ * where a target's walk stopped for the openers that share it, so each
+ * character is visited a bounded number of times and the whole pass is O(n)
+ * — counted, per shape and over random input, in `scan.cost.test.ts`.
  */
 export function findNextReference(value: string, cursor: number): ReferenceMatch | undefined {
   let pos = cursor
+  // Where the last walk for a target's end stopped. The walk crossed no `]`
+  // or `|`, so every opener before that stop ends its target at the same
+  // place: an opener whose target is empty (`[[#`) resumes two characters
+  // on, and re-walking from there to the stop would make a run of them
+  // quadratic.
+  let targetEnd = -1
   while (pos < value.length) {
     const openIndex = value.indexOf('[[', pos)
     if (openIndex === -1) return undefined
@@ -72,15 +87,16 @@ export function findNextReference(value: string, cursor: number): ReferenceMatch
     const matchStart = hasBang ? openIndex - 1 : openIndex
     const contentStart = openIndex + 2
 
-    let i = contentStart
-    while (i < value.length && value[i] !== ']' && value[i] !== '|') i++
+    if (targetEnd < contentStart) targetEnd = endOfTarget(value, contentStart)
+    const i = targetEnd
     if (i >= value.length) return undefined // no `]`/`|` left anywhere -> no possible match remains
 
-    const { target, fragment } = splitFragment(value.slice(contentStart, i))
-    if (target.length === 0) {
+    // An empty document half, judged without copying the content out.
+    if (i === contentStart || value[contentStart] === '#') {
       pos = contentStart
       continue
     }
+    const { target, fragment } = splitFragment(value.slice(contentStart, i))
 
     const close = closeReference(value, i)
     if ('resumeAt' in close) {
