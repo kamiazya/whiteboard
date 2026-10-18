@@ -176,6 +176,16 @@ describe('mutation.yml timeouts', () => {
   })
 })
 
+describe('mutation.yml report merges', () => {
+  // download-artifact gives each artifact its own directory only when more
+  // than one matches the pattern; a lone leg is extracted into `path` itself,
+  // so a `shards/*/` glob reads a single-leg PR run as "no leg reported".
+  it('read the legs at any depth, not one directory per leg', () => {
+    expect(WORKFLOW).toContain('find shards -name mutation.json')
+    expect(WORKFLOW).not.toMatch(/shards\/\*\//)
+  })
+})
+
 type Step = { id?: string; run?: string; env?: Record<string, string> }
 type Job = {
   'timeout-minutes'?: number
