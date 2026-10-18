@@ -179,3 +179,35 @@ describe('wb_canvas_edit bounds what one batch patches', () => {
     )
   })
 })
+
+describe('wb_canvas_edit bounds the work of placing inside groups', () => {
+  // A staircase of 1px members, each 1px right of and 1px taller than the
+  // last, and an arriving node so wide the group is 1px short of room for it
+  // after the last of them: every row steps past every member still
+  // standing, and every op restarts the search.
+  const STAIRS = CANVAS_MAX_NODES - 100
+  const WIDE = 1_000_000
+  const stairs = Array.from({ length: STAIRS }, (_, i) =>
+    textNode({ id: `s${i}`, x: 40 + i, y: 40, width: 1, height: 1 + i, text: '' }),
+  )
+  const group = groupNode({
+    id: 'g',
+    x: 0,
+    y: 0,
+    width: 80 + STAIRS + WIDE - 1,
+    height: STAIRS + 100,
+    label: 'g',
+  })
+  const addWide = (i: number) => ({
+    op: 'node.add',
+    within: 'g',
+    node: { id: `w${i}`, type: 'text', text: 'w', width: WIDE },
+  })
+
+  test('a batch repeating the staircase walk is refused, asking for explicit x/y', async () => {
+    const ops = Array.from({ length: 20 }, (_, i) => addWide(i))
+    await expect(editOn([group, ...stairs], 0, ops)).rejects.toThrow(
+      /ops\[\d\] \(node\.add\) could not be applied: .*"g".*explicit x\/y/,
+    )
+  })
+})

@@ -30,7 +30,9 @@ import type { geometryEntrySchema, Target } from './canvas-edit-ops.js'
 import {
   overlaps,
   PLACEMENT_GUTTER_PX,
+  PLACEMENT_WORK_PER_BATCH,
   PlacementCursor,
+  PlacementMeter,
   placeWithin,
   prevailingWidth,
   type Rect,
@@ -175,6 +177,12 @@ export class CanvasEditSession {
    * members on every op. One canvas's worth is what a batch may place.
    */
   placedInside = 0
+  /**
+   * What this batch's placements inside groups may cost between them. The
+   * count of nodes above does not bound it: one node can cost a walk past
+   * every member of the group in every row, and each op walks again.
+   */
+  private readonly placementMeter = new PlacementMeter(PLACEMENT_WORK_PER_BATCH)
   /**
    * How many nodes this batch's `node.patch` ops have targeted between them.
    * A selector expands to every node it reaches, and a patch that changes
@@ -325,7 +333,19 @@ export class CanvasEditSession {
     const bounds = this.nodeAt(group.id) ?? group
     const unplaceable = unplaceableWithin(bounds, sizes)
     if (unplaceable !== undefined) fail(index, opName, unplaceable)
-    const placements = placeWithin(bounds, sizes, this.nodes.filter(this.enclosedBy(bounds)))
+    const placements = placeWithin(
+      bounds,
+      sizes,
+      this.nodes.filter(this.enclosedBy(bounds)),
+      this.placementMeter,
+    )
+    if (placements === undefined) {
+      fail(
+        index,
+        opName,
+        `placing inside "${bounds.id}" took more work than a batch may spend finding room in groups; give the node explicit x/y, or place the rest in another call`,
+      )
+    }
     this.growToHold(
       index,
       opName,

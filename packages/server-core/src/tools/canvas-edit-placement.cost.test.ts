@@ -11,7 +11,12 @@
  * asks of it.
  */
 import { describe, expect, it } from 'vitest'
-import { PLACEMENT_GUTTER_PX, placeWithin } from './canvas-edit-placement.js'
+import {
+  PLACEMENT_GUTTER_PX,
+  PLACEMENT_WORK_PER_BATCH,
+  PlacementMeter,
+  placeWithin,
+} from './canvas-edit-placement.js'
 
 interface Rect {
   x: number
@@ -179,5 +184,39 @@ describe('placeWithin cost against a staircase', () => {
     // Under the whole staircase, at the row's start: the box had room nowhere above.
     expect(placed).toEqual([{ x: PLACEMENT_GUTTER_PX, y: STAIRS + 2 * PLACEMENT_GUTTER_PX }])
     expect(held.reads()).toBeLessThanOrEqual(STAIR_READ_CEILING)
+  })
+})
+
+describe('placeWithin work budget', () => {
+  // The costliest ordinary batch measured: a column of one-pixel members as
+  // tall as a canvas allows, and the most ops a batch may carry, each adding
+  // one node and so walking every row of the column again.
+  const COLUMN = 1800
+  const OPS = 200
+
+  it('admits a batch of node.add ops into the tallest column a canvas holds', () => {
+    const box = { x: 0, y: 0, width: 1 + 2 * PLACEMENT_GUTTER_PX, height: 1000 }
+    const held: Rect[] = Array.from({ length: COLUMN }, (_, i) => ({
+      x: PLACEMENT_GUTTER_PX,
+      y: PLACEMENT_GUTTER_PX + i * (1 + PLACEMENT_GUTTER_PX),
+      width: 1,
+      height: 1,
+    }))
+    const meter = new PlacementMeter(PLACEMENT_WORK_PER_BATCH)
+    for (let op = 0; op < OPS; op++) {
+      const placed = placeWithin(box, [{ width: 1, height: 1 }], held, meter)
+      expect(placed, `op ${op}`).toBeDefined()
+      held.push({ ...(placed?.[0] as { x: number; y: number }), width: 1, height: 1 })
+    }
+    // A ceiling, not a delay: measured 1.0s alone and 3.5s beside the rest of the project.
+  }, 20_000)
+
+  it('stops a staircase walk once the meter runs out', () => {
+    const lastStep = PLACEMENT_GUTTER_PX + STAIRS + PLACEMENT_GUTTER_PX
+    const box = { x: 0, y: 0, width: lastStep + WIDE - 1, height: 1000 }
+    const held = countingStairs(STAIRS).rects
+    expect(placeWithin(box, [{ width: WIDE, height: 1 }], held, new PlacementMeter(1000))).toBe(
+      undefined,
+    )
   })
 })

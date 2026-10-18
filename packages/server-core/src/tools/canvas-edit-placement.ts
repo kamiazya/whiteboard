@@ -157,6 +157,9 @@ export function overlaps(a: Rect, b: Rect): boolean {
  * smaller node does not go back for a gap an earlier one skipped, which is
  * density, and density is not promised here.
  *
+ * Given a `meter`, every row read and walk step is spent from it, and the
+ * answer is `undefined` once it runs out — see `PlacementMeter`.
+ *
  * ponytail: a node wider than the box overflows it rather than being shrunk
  * (the caller grows the box). Pack properly if regions turn out to be used
  * for dense layouts.
@@ -165,13 +168,26 @@ export function placeWithin(
   box: Rect,
   sizes: readonly { width: number; height: number }[],
   occupied: readonly Rect[],
-): { x: number; y: number }[] {
+): { x: number; y: number }[]
+export function placeWithin(
+  box: Rect,
+  sizes: readonly { width: number; height: number }[],
+  occupied: readonly Rect[],
+  meter: PlacementMeter,
+): { x: number; y: number }[] | undefined
+export function placeWithin(
+  box: Rect,
+  sizes: readonly { width: number; height: number }[],
+  occupied: readonly Rect[],
+  meter = new PlacementMeter(Number.POSITIVE_INFINITY),
+): { x: number; y: number }[] | undefined {
   const taken = new TakenRows()
   for (const rect of occupied) taken.add(rect)
   const out: { x: number; y: number }[] = []
   let from: RowCursor = { y: box.y + PLACEMENT_GUTTER_PX, x: box.x + PLACEMENT_GUTTER_PX }
   for (const size of sizes) {
-    const slot = freeSlotFor(box, size, taken, from)
+    const slot = freeSlotFor(box, size, taken, from, meter)
+    if (slot === undefined) return undefined
     out.push({ x: slot.at.x, y: slot.at.y })
     taken.add(slot.at)
     from = slot.resume
@@ -211,6 +227,38 @@ function stepsFrom(edge: number, extent: number): boolean {
 }
 
 /**
+ * Bucket entries read plus walk steps taken, across one batch's placements
+ * in groups. Measured, the costliest ordinary batch found — 200 node.add ops
+ * into a column of 1,800 one-pixel members — spends about 5.9M, and a
+ * staircase of narrow members spends 1M to 4M on ONE op, so the limit admits
+ * that batch with room to spare and stops the staircase within a few ops.
+ */
+export const PLACEMENT_WORK_PER_BATCH = 10_000_000
+
+/**
+ * The work placement may do inside groups, in bucket entries read and walk
+ * steps taken, shared by every placement of one batch.
+ *
+ * Neither count has a structural bound short of quadratic per placement: a
+ * row's walk steps past its blockers one at a time because which one it
+ * clears decides where the next row starts, and a staircase of narrow
+ * members makes every row step past all of them. Each op restarts the
+ * search, so a batch of such ops multiplies it. A meter turns that into a
+ * refusal the caller can act on — give the node explicit x/y.
+ */
+export class PlacementMeter {
+  private spent = 0
+
+  constructor(private readonly limit: number) {}
+
+  /** Records `units` of work; false once the total has passed the limit. */
+  spend(units: number): boolean {
+    this.spent += units
+    return this.spent <= this.limit
+  }
+}
+
+/**
  * Where a slot search starts: a row's `y`, the `x` to try first, and — when
  * resuming partway along a row — the lowest bottom seen in it so far, which
  * is where the row after it starts.
@@ -243,12 +291,13 @@ function freeSlotFor(
   size: { width: number; height: number },
   taken: TakenRows,
   from: RowCursor,
-): { at: Rect; resume: RowCursor } {
+  meter: PlacementMeter,
+): { at: Rect; resume: RowCursor } | undefined {
   const right = box.x + box.width
   let row = from
   for (;;) {
-    const walked = walkRow(size, taken, row, right)
-    if ('at' in walked) return walked
+    const walked = walkRow(size, taken, row, right, meter)
+    if (walked === undefined || 'at' in walked) return walked
     row = {
       y: walked.nextRow ?? row.y + size.height + PLACEMENT_GUTTER_PX,
       x: box.x + PLACEMENT_GUTTER_PX,
@@ -265,22 +314,26 @@ function walkRow(
   taken: TakenRows,
   row: RowCursor,
   right: number,
-): { at: Rect; resume: RowCursor } | { nextRow: number | undefined } {
+  meter: PlacementMeter,
+): { at: Rect; resume: RowCursor } | { nextRow: number | undefined } | undefined {
   const { y } = row
   let x = row.x
   let nextRow = row.midRow?.nextRow
   let rowStart = row.midRow === undefined
   const sweep = taken.row(y, size)
+  if (!meter.spend(sweep.read)) return undefined
   while (rowStart || x + size.width <= right) {
+    if (!meter.spend(1)) return undefined
     rowStart = false
-    const candidate = { x, y, ...size }
     const hit = sweep.firstCrowding(x)
-    const lowest = hit ?? candidate
-    const below = lowest.y + lowest.height + PLACEMENT_GUTTER_PX
+    const below =
+      hit === undefined
+        ? y + size.height + PLACEMENT_GUTTER_PX
+        : hit.y + hit.height + PLACEMENT_GUTTER_PX
     nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
     if (hit === undefined) {
       return {
-        at: candidate,
+        at: { x, y, ...size },
         resume: { y, x: x + size.width + PLACEMENT_GUTTER_PX, midRow: { nextRow } },
       }
     }
@@ -381,7 +434,8 @@ class TakenRows {
           ]
         : [this.tall.inOrder(this.rects), ...this.spanned(span)]
     const members = sources.map(inRow).reduce((a, b) => mergeByLeft(a, b, this.rects), [])
-    return new RowSweep(members, this.rects, size.width)
+    const read = sources.reduce((sum, source) => sum + source.length, 0)
+    return new RowSweep(members, this.rects, size.width, read)
   }
 
   private spanned(span: { first: number; last: number }): (readonly number[])[] {
@@ -479,6 +533,8 @@ class RowSweep {
     private readonly byLeft: readonly number[],
     private readonly rects: readonly Rect[],
     private readonly width: number,
+    /** How many bucket entries building this row read. */
+    readonly read: number,
   ) {}
 
   /** `x` must not decrease between calls. */
