@@ -35,19 +35,46 @@ import { z } from 'zod'
  * content facts, not as a feed into this class.
  */
 
-const rawReferenceSchema = z
-  .object({
-    /**
-     * The token as written: a document id, or a name/path to resolve at
-     * query time. For `embed-node` it is always the embedded documentId;
-     * for `file-node` it is the file value, matched against paths only.
-     */
-    target: z.string().min(1),
-    via: z.enum(['wikilink', 'embed-node', 'file-node']),
-    context: z.string(),
-  })
-  .strict()
+/**
+ * The token as written: a document id, or a name/path to resolve at query
+ * time. For `embed-node` it is always the embedded documentId; for
+ * `file-node` it is the file value, matched against paths only.
+ */
+const referenceTargetSchema = z.string().min(1)
+
+const rawReferenceSchema = z.union([
+  /**
+   * A `[[...]]` in prose carries WHERE it was written — the text it was found
+   * in (a string the facts already hold, so shared rather than copied) and
+   * its span — and its excerpt is cut when a backlink is answered, through
+   * `referenceContext`. Cutting it at extraction held a ~125-character copy
+   * per reference: a body dense with links cost ~23x its own size in cached
+   * heap, against ~7x held this way.
+   */
+  z
+    .object({
+      target: referenceTargetSchema,
+      via: z.literal('wikilink'),
+      text: z.string(),
+      index: z.number().int().nonnegative(),
+      length: z.number().int().positive(),
+    })
+    .strict(),
+  /** A node's own reference, quoted by a fixed phrase. */
+  z
+    .object({
+      target: referenceTargetSchema,
+      via: z.enum(['embed-node', 'file-node']),
+      context: z.string(),
+    })
+    .strict(),
+])
 export type RawReference = z.infer<typeof rawReferenceSchema>
+
+/** The excerpt a backlink shows for `ref`. */
+export function referenceContext(ref: RawReference): string {
+  return ref.via === 'wikilink' ? snippetAround(ref.text, ref.index, ref.length) : ref.context
+}
 
 const documentReferenceFactsSchema = z
   .object({
@@ -103,7 +130,9 @@ export class ReferenceAggregate {
       if (sourceId === documentId) continue
       const contexts: string[] = []
       for (const ref of facts.refs) {
-        if (resolvesTo(ref, documentId, target.path, resolve)) contexts.push(ref.context)
+        if (resolvesTo(ref, documentId, target.path, resolve)) {
+          contexts.push(referenceContext(ref))
+        }
       }
       if (contexts.length === 0) continue
       backlinks.push({
