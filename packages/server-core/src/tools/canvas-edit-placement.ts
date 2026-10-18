@@ -220,33 +220,48 @@ function freeSlotFor(
   taken: TakenRows,
   from: RowCursor,
 ): { at: Rect; resume: RowCursor } {
-  const left = box.x + PLACEMENT_GUTTER_PX
   const right = box.x + box.width
-  let y = from.y
-  let x = from.x
-  let nextRow = from.midRow?.nextRow
-  let rowStart = from.midRow === undefined
+  let row = from
   for (;;) {
-    for (;;) {
-      if (!rowStart && x + size.width > right) break
-      rowStart = false
-      const candidate = { x, y, ...size }
-      const hit = taken.firstCrowding(candidate)
-      const below = (hit ?? candidate).y + (hit ?? candidate).height + PLACEMENT_GUTTER_PX
-      nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
-      if (hit === undefined) {
-        return {
-          at: candidate,
-          resume: { y, x: x + size.width + PLACEMENT_GUTTER_PX, midRow: { nextRow } },
-        }
-      }
-      x = hit.x + hit.width + PLACEMENT_GUTTER_PX
+    const walked = walkRow(size, taken, row, right)
+    if ('at' in walked) return walked
+    row = {
+      y: walked.nextRow ?? row.y + size.height + PLACEMENT_GUTTER_PX,
+      x: box.x + PLACEMENT_GUTTER_PX,
     }
-    y = nextRow ?? y + size.height + PLACEMENT_GUTTER_PX
-    x = left
-    nextRow = undefined
-    rowStart = true
   }
+}
+
+/**
+ * One row's walk, from `row` to the box's right edge: the slot it found, or
+ * where the row after it starts.
+ */
+function walkRow(
+  size: { width: number; height: number },
+  taken: TakenRows,
+  row: RowCursor,
+  right: number,
+): { at: Rect; resume: RowCursor } | { nextRow: number | undefined } {
+  const { y } = row
+  let x = row.x
+  let nextRow = row.midRow?.nextRow
+  let rowStart = row.midRow === undefined
+  while (rowStart || x + size.width <= right) {
+    rowStart = false
+    const candidate = { x, y, ...size }
+    const hit = taken.firstCrowding(candidate)
+    const lowest = hit ?? candidate
+    const below = lowest.y + lowest.height + PLACEMENT_GUTTER_PX
+    nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
+    if (hit === undefined) {
+      return {
+        at: candidate,
+        resume: { y, x: x + size.width + PLACEMENT_GUTTER_PX, midRow: { nextRow } },
+      }
+    }
+    x = hit.x + hit.width + PLACEMENT_GUTTER_PX
+  }
+  return { nextRow }
 }
 
 /** Height of one bucket of `TakenRows`, in canvas pixels. */
