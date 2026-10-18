@@ -135,16 +135,6 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
-/** Two boxes closer than the gutter count as touching, so packing keeps it. */
-function crowds(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width + PLACEMENT_GUTTER_PX &&
-    b.x < a.x + a.width + PLACEMENT_GUTTER_PX &&
-    a.y < b.y + b.height + PLACEMENT_GUTTER_PX &&
-    b.y < a.y + a.height + PLACEMENT_GUTTER_PX
-  )
-}
-
 /**
  * Lays coordinate-less nodes out INSIDE a box, in rows from its top-left,
  * around what the box already holds.
@@ -280,10 +270,11 @@ function walkRow(
   let x = row.x
   let nextRow = row.midRow?.nextRow
   let rowStart = row.midRow === undefined
+  const sweep = taken.row(y, size)
   while (rowStart || x + size.width <= right) {
     rowStart = false
     const candidate = { x, y, ...size }
-    const hit = taken.firstCrowding(candidate)
+    const hit = sweep.firstCrowding(x)
     const lowest = hit ?? candidate
     const below = lowest.y + lowest.height + PLACEMENT_GUTTER_PX
     nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
@@ -326,11 +317,17 @@ function bucketSpan(top: number, bottom: number): { first: number; last: number 
  * test reads its neighbours instead of everything in the box. A rect sits in
  * every bucket its gutter-widened vertical extent touches, which is every
  * bucket a candidate it crowds can start a query from.
+ *
+ * Each bucket is kept in left-edge order, so a row's walk merges the few
+ * buckets it reads instead of sorting their contents once per row.
  */
 class TakenRows {
   private readonly rects: Rect[] = []
-  private readonly buckets = new Map<number, number[]>()
-  private readonly tall: number[] = []
+  private readonly buckets = new Map<number, Bucket>()
+  private readonly tall = new Bucket()
+  /** Per rect, the last row that read it: a rect in two buckets is read once. */
+  private readonly readInRow: number[] = []
+  private rowsRead = 0
 
   add(rect: Rect): void {
     const index = this.rects.length
@@ -340,36 +337,197 @@ class TakenRows {
       rect.y + rect.height + PLACEMENT_GUTTER_PX,
     )
     if (span === undefined) {
-      this.tall.push(index)
+      this.tall.add(index, this.rects)
       return
     }
     for (let bucket = span.first; bucket <= span.last; bucket++) {
-      const row = this.buckets.get(bucket)
-      if (row === undefined) this.buckets.set(bucket, [index])
-      else row.push(index)
+      let row = this.buckets.get(bucket)
+      if (row === undefined) {
+        row = new Bucket()
+        this.buckets.set(bucket, row)
+      }
+      row.add(index, this.rects)
     }
   }
 
   /**
-   * The EARLIEST-taken rect crowding `candidate` — the one a scan of every
-   * taken rect in order would have found, so which blocker the walk steps
-   * past does not depend on how the rects are bucketed.
+   * The rects crowding a candidate of `size` anywhere in the row at `y`, as a
+   * sweep along it. Two boxes closer than the gutter on both axes count as
+   * touching, so packing keeps it.
    */
-  firstCrowding(candidate: Rect): Rect | undefined {
-    let first = Number.POSITIVE_INFINITY
-    const consider = (index: number) => {
-      if (index < first && crowds(candidate, this.rects[index] as Rect)) first = index
+  row(y: number, size: { width: number; height: number }): RowSweep {
+    this.rowsRead += 1
+    const stamp = this.rowsRead
+    const inRow = (indices: readonly number[]): number[] =>
+      indices.filter((index) => {
+        if (this.readInRow[index] === stamp) return false
+        this.readInRow[index] = stamp
+        const rect = this.rects[index] as Rect
+        // The vertical half of crowding, which does not depend on where
+        // along the row the candidate stands.
+        return (
+          y < rect.y + rect.height + PLACEMENT_GUTTER_PX &&
+          rect.y < y + size.height + PLACEMENT_GUTTER_PX
+        )
+      })
+    const span = bucketSpan(y, y + size.height)
+    const sources =
+      span === undefined
+        ? [
+            byLeft(
+              this.rects.map((_, index) => index),
+              this.rects,
+            ),
+          ]
+        : [this.tall.inOrder(this.rects), ...this.spanned(span)]
+    const members = sources.map(inRow).reduce((a, b) => mergeByLeft(a, b, this.rects), [])
+    return new RowSweep(members, this.rects, size.width)
+  }
+
+  private spanned(span: { first: number; last: number }): (readonly number[])[] {
+    const out: (readonly number[])[] = []
+    for (let bucket = span.first; bucket <= span.last; bucket++) {
+      const row = this.buckets.get(bucket)
+      if (row !== undefined) out.push(row.inOrder(this.rects))
     }
-    for (const index of this.tall) consider(index)
-    const span = bucketSpan(candidate.y, candidate.y + candidate.height)
-    if (span === undefined) {
-      for (let index = 0; index < this.rects.length; index++) consider(index)
+    return out
+  }
+}
+
+/** Indices sorted by their rect's left edge. */
+function byLeft(indices: number[], rects: readonly Rect[]): number[] {
+  return indices.sort((a, b) => (rects[a] as Rect).x - (rects[b] as Rect).x)
+}
+
+function mergeByLeft(a: readonly number[], b: readonly number[], rects: readonly Rect[]): number[] {
+  if (a.length === 0) return [...b]
+  if (b.length === 0) return [...a]
+  const out: number[] = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    const left = a[i] as number
+    const right = b[j] as number
+    if ((rects[left] as Rect).x <= (rects[right] as Rect).x) {
+      out.push(left)
+      i += 1
     } else {
-      for (let bucket = span.first; bucket <= span.last; bucket++) {
-        for (const index of this.buckets.get(bucket) ?? []) consider(index)
-      }
+      out.push(right)
+      j += 1
     }
-    return this.rects[first]
+  }
+  for (; i < a.length; i++) out.push(a[i] as number)
+  for (; j < b.length; j++) out.push(b[j] as number)
+  return out
+}
+
+/**
+ * One bucket's rect indices. Filled unsorted while a box's held rects are
+ * loaded and sorted once when first read; a rect placed after that is
+ * inserted where its left edge goes.
+ */
+class Bucket {
+  private indices: number[] = []
+  private sorted = true
+
+  add(index: number, rects: readonly Rect[]): void {
+    if (!this.sorted || this.indices.length === 0) {
+      this.indices.push(index)
+      this.sorted = this.indices.length === 1
+      return
+    }
+    const x = (rects[index] as Rect).x
+    let low = 0
+    let high = this.indices.length
+    while (low < high) {
+      const mid = (low + high) >> 1
+      if ((rects[this.indices[mid] as number] as Rect).x <= x) low = mid + 1
+      else high = mid
+    }
+    this.indices.splice(low, 0, index)
+  }
+
+  inOrder(rects: readonly Rect[]): readonly number[] {
+    if (!this.sorted) {
+      this.indices = byLeft(this.indices, rects)
+      this.sorted = true
+    }
+    return this.indices
+  }
+}
+
+/**
+ * One row's crowding rects, answering for a candidate that only moves right.
+ *
+ * It answers the EARLIEST-taken rect crowding the candidate — the one a scan
+ * of every taken rect in order would find — because which blocker a step
+ * clears decides which bottoms the row's `nextRow` is the minimum of, and so
+ * where the next row starts. Any other blocker lands nodes elsewhere.
+ *
+ * A rect starts crowding once the candidate's far edge plus the gutter passes
+ * its left edge, and stops once the candidate starts past its right edge plus
+ * the gutter. Both thresholds only move one way as `x` grows, so rects enter
+ * in left-edge order and, once out, never return: each enters and leaves a
+ * heap keyed by when it was taken at most once, and a row costs O(n log n) in
+ * the rects it holds however many steps its walk takes.
+ */
+class RowSweep {
+  private entered = 0
+  private readonly active: number[] = []
+
+  constructor(
+    private readonly byLeft: readonly number[],
+    private readonly rects: readonly Rect[],
+    private readonly width: number,
+  ) {}
+
+  /** `x` must not decrease between calls. */
+  firstCrowding(x: number): Rect | undefined {
+    for (;;) {
+      const next = this.byLeft[this.entered]
+      if (next === undefined) break
+      if (!((this.rects[next] as Rect).x < x + this.width + PLACEMENT_GUTTER_PX)) break
+      this.push(next)
+      this.entered += 1
+    }
+    for (;;) {
+      const top = this.active[0]
+      if (top === undefined) return undefined
+      const rect = this.rects[top] as Rect
+      if (x < rect.x + rect.width + PLACEMENT_GUTTER_PX) return rect
+      this.pop()
+    }
+  }
+
+  private push(index: number): void {
+    const heap = this.active
+    let at = heap.length
+    heap.push(index)
+    while (at > 0) {
+      const parent = (at - 1) >> 1
+      if ((heap[parent] as number) <= index) break
+      heap[at] = heap[parent] as number
+      at = parent
+    }
+    heap[at] = index
+  }
+
+  private pop(): void {
+    const heap = this.active
+    const last = heap.pop() as number
+    if (heap.length === 0) return
+    let at = 0
+    for (;;) {
+      const left = 2 * at + 1
+      if (left >= heap.length) break
+      const right = left + 1
+      const child =
+        right < heap.length && (heap[right] as number) < (heap[left] as number) ? right : left
+      if ((heap[child] as number) >= last) break
+      heap[at] = heap[child] as number
+      at = child
+    }
+    heap[at] = last
   }
 }
 
