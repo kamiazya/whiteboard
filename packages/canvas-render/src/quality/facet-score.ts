@@ -256,12 +256,46 @@ const channelsApart = (a: Treatment, b: Treatment): number =>
   (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1)
 
 /**
- * A partition is a map from a box's id to the class it is in. Only one with
- * two or more non-empty classes says anything, so a single-class map is
- * dropped: a board where every box is in one frame declares no distinction
- * BY that frame, whatever else the frame is doing.
+ * A partition of a population: the class of every element that is NOT in
+ * the default class, grouped by class, and how many elements the default
+ * class holds. Only one with two or more classes says anything, so a
+ * single-class partition is dropped: a board where every box is in one
+ * frame declares no distinction BY that frame, whatever else the frame is
+ * doing.
+ *
+ * SPARSE, because a scoped-tag key is carried by the few elements that name
+ * it and a board may hold many distinct keys. Listing every element per
+ * partition made scoring keys × elements, which a few heavily tagged boxes
+ * on a large board turn into an exhausted heap. The default class's members
+ * are therefore never listed: whatever needs them reads the population's
+ * totals less what the listed classes hold (`restValues`), so the cost of a
+ * partition is the elements it lists.
  */
-type Partition = ReadonlyMap<string, string>
+interface Partition {
+  readonly classes: ReadonlyMap<string, readonly string[]>
+  readonly rest: number
+}
+
+const classCount = (p: Partition): number => p.classes.size + (p.rest > 0 ? 1 : 0)
+
+/**
+ * Groups the elements whose class is not `defaultClass`; every other member
+ * of a population of `population` elements is the default class.
+ */
+function partitionOf(
+  population: number,
+  placed: Iterable<readonly [id: string, cls: string]>,
+  defaultClass: string,
+): Partition {
+  const classes = new Map<string, string[]>()
+  let listed = 0
+  for (const [id, cls] of placed) {
+    if (cls === defaultClass) continue
+    appendTo(classes, cls, id)
+    listed++
+  }
+  return { classes, rest: population - listed }
+}
 
 /**
  * A partition and the NAME of the distinction it states — `frame`, `kind`,
@@ -272,35 +306,34 @@ type Partition = ReadonlyMap<string, string>
  * stencil's colour won read identically as `carried`, and they want opposite
  * repairs (ADR-0036's recorded blind spot).
  */
-interface NamedPartition {
+interface NamedPartition extends Partition {
   readonly name: string
-  readonly partition: Partition
 }
 
 function declaredPartitions(
   canvas: SpatialCanvas,
   boxes: readonly SpatialNode[],
+  byTag: readonly NamedPartition[],
 ): NamedPartition[] {
   const out: NamedPartition[] = []
   const frames = canvas.nodes.filter((n) => isFrame(n))
   if (frames.length > 0) {
-    const byFrame = new Map<string, string>()
-    for (const box of boxes) {
+    const inFrame = boxes.map((box) => {
       const frame = frames.find((f) => contains(rectOf(f), rectOf(box)))
-      byFrame.set(box.id, frame?.id ?? '')
-    }
-    out.push({ name: 'frame', partition: byFrame })
+      return [box.id, frame?.id ?? ''] as const
+    })
+    out.push({ name: 'frame', ...partitionOf(boxes.length, inFrame, '') })
   }
   // A box showing a resource nothing claims partitions as '': one class, the
   // way an undressed box below is, rather than each such box its own.
-  const byKind = new Map<string, string>(boxes.map((b) => [b.id, nodeKind(b) ?? '']))
-  out.push({ name: 'kind', partition: byKind })
+  const byKind = boxes.map((b) => [b.id, nodeKind(b) ?? ''] as const)
+  out.push({ name: 'kind', ...partitionOf(boxes.length, byKind, '') })
   // A box wearing no stencil is its own class (''), exactly as a box in no
   // frame is: "undressed" is a thing the board says about it, not an absence
   // to be excluded — dropping those boxes would let a half-dressed board
   // read as fully carried.
-  const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
-  out.push({ name: 'stencil', partition: byStencil })
+  const byStencil = boxes.map((b) => [b.id, resolveNodeStencil(b) ?? ''] as const)
+  out.push({ name: 'stencil', ...partitionOf(boxes.length, byStencil, '') })
   // A scoped-tag key is an axis BY CONSTRUCTION, on ADR-0036 §1's own
   // criterion: `health:failing` says what a box IS on a named dimension,
   // which is exactly what a stencil says and why `stencil` is known here by
@@ -308,18 +341,30 @@ function declaredPartitions(
   // the reading `semantic.class/v0` had before ADR-0040 retired it. The
   // `multi` half is reported by `scoreFacets`, since a key one box carries
   // twice partitions nothing.
-  out.push(...tagPartitions(boxes, (b) => b.tags).partitions)
-  // A declared key no box carries puts every box in one class, which the
-  // filter below drops — so it is skipped before a pass over every box
-  // rather than after, or a long stored declaration costs axes × boxes on
-  // every layout.
-  const carried = new Set(boxes.flatMap((b) => Object.keys(b.facets ?? {})))
-  for (const key of declaredAxisKeys(canvas).filter((k) => carried.has(k))) {
+  out.push(...byTag)
+  out.push(...axisPartitions(canvas, boxes))
+  return out.filter((p) => classCount(p) >= 2)
+}
+
+/**
+ * One partition per declared axis, over the boxes that carry its facet; a
+ * box without it is the default class. A declared key no box carries is
+ * skipped outright, so a long stored declaration costs nothing per box.
+ */
+function axisPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]): NamedPartition[] {
+  const carriers = new Map<string, SpatialNode[]>()
+  for (const box of boxes) {
+    for (const key of Object.keys(box.facets ?? {})) appendTo(carriers, key, box)
+  }
+  const unmarked = facetPayloadKey(undefined)
+  return declaredAxisKeys(canvas).flatMap((key) => {
+    const carrying = carriers.get(key)
+    if (carrying === undefined) return []
+    const placed = carrying.map((b) => [b.id, facetPayloadKeyOf(b, key)] as const)
     // Named by the facet KEY, which is what the canvas itself wrote — so a
     // reading points at the declaration rather than at a position in a list.
-    out.push({ name: key, partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])) })
-  }
-  return out.filter((p) => new Set(p.partition.values()).size >= 2)
+    return [{ name: key, ...partitionOf(boxes.length, placed, unmarked) }]
+  })
 }
 
 /**
@@ -413,21 +458,13 @@ function tagPartitions<T extends { readonly id: string }>(
       multi.push({ key, count })
       continue
     }
-    partitions.push({
-      name: key,
-      partition: new Map(elements.map((e) => [e.id, perElement.get(e.id)?.[0] ?? ''])),
-    })
+    const placed = [...perElement].map(([id, [value = '']]) => [id, value] as const)
+    partitions.push({ name: key, ...partitionOf(elements.length, placed, '') })
   }
   return { partitions, multi }
 }
 
 const BUILT_IN_PARTITIONS: ReadonlySet<string> = new Set(['frame', 'kind', 'stencil'])
-
-const classesOf = (partition: Partition): Map<string, string[]> => {
-  const classes = new Map<string, string[]>()
-  for (const [id, cls] of partition) appendTo(classes, cls, id)
-  return classes
-}
 
 /**
  * Appends into the list a grouping holds, which this module owns, rather
@@ -439,6 +476,50 @@ function appendTo<K, V>(groups: Map<K, V[]>, key: K, value: V): void {
   const held = groups.get(key)
   if (held === undefined) groups.set(key, [value])
   else held.push(value)
+}
+
+function bump(counts: Map<string, number>, key: string, by = 1): void {
+  counts.set(key, (counts.get(key) ?? 0) + by)
+}
+
+/** How many elements of a population show each value. */
+function tally(ids: readonly string[], readValue: (id: string) => string): Map<string, number> {
+  const totals = new Map<string, number>()
+  for (const id of ids) bump(totals, readValue(id))
+  return totals
+}
+
+/**
+ * The distinct values a partition's DEFAULT class shows, without listing
+ * its members: a value is there exactly when the population shows it more
+ * often than the listed classes do. `size` is 0 when there is no default
+ * class, since then every value is exhausted by the listed ones.
+ */
+function restValues(
+  p: Partition,
+  readValue: (id: string) => string,
+  totals: ReadonlyMap<string, number>,
+): { readonly size: number; readonly has: (value: string) => boolean } {
+  const listed = new Map<string, number>()
+  for (const members of p.classes.values()) for (const id of members) bump(listed, readValue(id))
+  let exhausted = 0
+  for (const [value, n] of listed) if (n === totals.get(value)) exhausted++
+  return {
+    size: totals.size - exhausted,
+    has: (value) => (totals.get(value) ?? 0) > (listed.get(value) ?? 0),
+  }
+}
+
+/** Whether every class of `p` — the default one included — shows one value. */
+function constantWithinClasses(
+  p: Partition,
+  readValue: (id: string) => string,
+  totals: ReadonlyMap<string, number>,
+): boolean {
+  for (const members of p.classes.values()) {
+    if (new Set(members.map(readValue)).size !== 1) return false
+  }
+  return restValues(p, readValue, totals).size <= 1
 }
 
 /**
@@ -458,9 +539,10 @@ function channelUse(
   ids: readonly string[],
   partitions: readonly NamedPartition[],
 ): ChannelReading {
+  const totals = tally(ids, channelOf)
   // One value everywhere is not a distinction, and checking it first is what
   // makes the second condition above implicit.
-  if (new Set(ids.map(channelOf)).size <= 1) {
+  if (totals.size <= 1) {
     return { use: 'unused', carriedBy: [] }
   }
   // EVERY partition it is constant within, not the first. A channel can
@@ -469,13 +551,7 @@ function channelUse(
   // agree — and naming one of them arbitrarily would be the same
   // over-claiming this field exists to end.
   const carriedBy = partitions
-    .filter(({ partition }) => {
-      const perClass = new Map<string, Set<string>>()
-      for (const [id, cls] of partition) {
-        perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(channelOf(id)))
-      }
-      return [...perClass.values()].every((seen) => seen.size === 1)
-    })
+    .filter((p) => constantWithinClasses(p, channelOf, totals))
     .map(({ name }) => name)
   return carriedBy.length > 0 ? { use: 'carried', carriedBy } : { use: 'contested', carriedBy: [] }
 }
@@ -484,36 +560,87 @@ function channelUse(
  * `deficit`: a declared construct whose members wear only the default.
  * `redundancy`: one whose members wear more than one treatment.
  */
-function classCoverage(allClasses: readonly (readonly string[])[], key: (id: string) => string) {
+function classCoverage(
+  partitions: readonly Partition[],
+  key: (id: string) => string,
+  totals: ReadonlyMap<string, number>,
+) {
   let deficit = 0
   let redundancy = 0
-  for (const members of allClasses) {
-    const keys = new Set(members.map(key))
-    if (keys.size === 1 && keys.has(DEFAULT_KEY)) deficit++
-    if (keys.size >= 2) redundancy++
+  const judge = (size: number, hasDefault: boolean) => {
+    if (size === 1 && hasDefault) deficit++
+    if (size >= 2) redundancy++
+  }
+  for (const p of partitions) {
+    for (const members of p.classes.values()) {
+      const keys = new Set(members.map(key))
+      judge(keys.size, keys.has(DEFAULT_KEY))
+    }
+    const rest = restValues(p, key, totals)
+    judge(rest.size, rest.has(DEFAULT_KEY))
   }
   return { deficit, redundancy }
 }
 
-/**
- * Who wears each SPENT treatment. The default is not a symbol a reader was
- * given — it is the absence of one — so it can be neither overloaded nor
- * in excess; a construct wearing only it is `deficit`, above.
- */
-function wearersOf(
-  boxes: readonly SpatialNode[],
-  key: (id: string) => string,
-): Map<string, Set<string>> {
-  const wearers = new Map<string, Set<string>>()
-  for (const box of boxes) {
-    const k = key(box.id)
-    if (k === DEFAULT_KEY) continue
-    wearers.set(k, (wearers.get(k) ?? new Set<string>()).add(box.id))
+type TreatmentReading = 'carries' | 'overload' | 'excess' | 'undeclared'
+
+/** How many of each spent treatment's wearers each listed class holds. */
+function heldPerClass(p: Partition, key: (id: string) => string): Map<string, Map<string, number>> {
+  const held = new Map<string, Map<string, number>>()
+  for (const [cls, members] of p.classes) {
+    for (const id of members) {
+      const k = key(id)
+      if (k === DEFAULT_KEY) continue
+      const perClass = held.get(k) ?? new Map<string, number>()
+      held.set(k, perClass)
+      bump(perClass, cls)
+    }
   }
-  return wearers
+  return held
 }
 
-type TreatmentReading = 'carries' | 'overload' | 'excess' | 'undeclared'
+/**
+ * Whether a treatment's wearers SPAN two or more of a partition's classes,
+ * and whether they are WHOLE classes and nothing else. `perClass` is what
+ * the listed classes hold; the rest of its `wearers` are in the default
+ * class, by count.
+ */
+function readHeld(p: Partition, perClass: ReadonlyMap<string, number>, wearers: number) {
+  let listed = 0
+  let wholeListed = true
+  for (const [cls, n] of perClass) {
+    listed += n
+    wholeListed &&= n === p.classes.get(cls)?.length
+  }
+  const inRest = wearers - listed
+  return {
+    spans: perClass.size + (inRest > 0 ? 1 : 0) >= 2,
+    whole: wholeListed && (inRest === 0 || inRest === p.rest),
+  }
+}
+
+/**
+ * Per spent treatment: how many partitions its wearers span, and whether
+ * some partition holds them as whole classes. A treatment no partition
+ * lists a wearer of sits wholly in each one's default class, so it spans
+ * none of them.
+ */
+function spanReadings(
+  wearers: ReadonlyMap<string, number>,
+  partitions: readonly Partition[],
+  key: (id: string) => string,
+) {
+  const spanned = new Map<string, number>()
+  const whole = new Set<string>()
+  for (const p of partitions) {
+    for (const [k, perClass] of heldPerClass(p, key)) {
+      const reading = readHeld(p, perClass, wearers.get(k) ?? 0)
+      if (reading.spans) bump(spanned, k)
+      if (reading.whole) whole.add(k)
+    }
+  }
+  return { spanned, whole }
+}
 
 /**
  * The three cases are exclusive, which is what keeps a planted defect in
@@ -523,36 +650,21 @@ type TreatmentReading = 'carries' | 'overload' | 'excess' | 'undeclared'
  * which is excess. Written as a partition of the cases rather than as two
  * independent tests, because the first version tested them independently
  * and charged the same board both.
+ *
+ * A treatment no partition lists a wearer of sits wholly in each one's
+ * default class, so it is inside some class whenever any partition exists.
+ * Overload and excess are therefore only asked of a treatment every
+ * partition spans, so every partition has said whether it is whole.
+ *
+ * `wearers` counts the boxes wearing each SPENT treatment. The default is
+ * not a symbol a reader was given — it is the absence of one — so it can be
+ * neither overloaded nor in excess; a construct wearing only it is
+ * `deficit`, above.
  */
-function readTreatment(
-  worn: ReadonlySet<string>,
-  partitions: readonly NamedPartition[],
-  allClasses: readonly (readonly string[])[],
-): TreatmentReading {
-  // With nothing declared there is no class to be inside, to span, or to
-  // cut, so the three-way split below has no question to answer and used
-  // to answer `excess` for want of an alternative. `partitions` and
-  // `allClasses` are empty together — a partition reaching this point has
-  // at least two classes, since `declaredPartitions` filters the rest.
-  if (partitions.length === 0) return 'undeclared'
-  const insideSomeClass = allClasses.some((members) => {
-    const set = new Set(members)
-    return [...worn].every((id) => set.has(id))
-  })
-  if (insideSomeClass) return 'carries'
-  const isWholeClasses = partitions.some((p) =>
-    [...classesOf(p.partition).values()].every((members) => {
-      const held = members.filter((id) => worn.has(id)).length
-      return held === 0 || held === members.length
-    }),
-  )
-  return isWholeClasses ? 'overload' : 'excess'
-}
-
 function treatmentMisuse(
-  wearers: ReadonlyMap<string, ReadonlySet<string>>,
-  partitions: readonly NamedPartition[],
-  allClasses: readonly (readonly string[])[],
+  wearers: ReadonlyMap<string, number>,
+  partitions: readonly Partition[],
+  key: (id: string) => string,
 ) {
   const counts: Record<TreatmentReading, number> = {
     carries: 0,
@@ -560,7 +672,19 @@ function treatmentMisuse(
     excess: 0,
     undeclared: 0,
   }
-  for (const worn of wearers.values()) counts[readTreatment(worn, partitions, allClasses)]++
+  // With nothing declared there is no class to be inside, to span, or to
+  // cut, so the three-way split has no question to answer and used to
+  // answer `excess` for want of an alternative.
+  if (partitions.length === 0) {
+    counts.undeclared = wearers.size
+    return counts
+  }
+  const { spanned, whole } = spanReadings(wearers, partitions, key)
+  for (const k of wearers.keys()) {
+    if ((spanned.get(k) ?? 0) < partitions.length) counts.carries++
+    else if (whole.has(k)) counts.overload++
+    else counts.excess++
+  }
   return counts
 }
 
@@ -579,24 +703,22 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   const boxes = canvas.nodes.filter((n) => !isFrame(n))
   const treatment = new Map(boxes.map((b) => [b.id, treatmentOf(b)]))
   const key = (id: string) => keyOf(treatment.get(id) ?? DEFAULT_TREATMENT)
+  const ids = boxes.map((b) => b.id)
+  const keyTotals = tally(ids, key)
 
-  const partitions = declaredPartitions(canvas, boxes)
-  const allClasses = partitions.flatMap((p) => [...classesOf(p.partition).values()])
+  const boxTags = tagPartitions(boxes, (b) => b.tags)
+  const partitions = declaredPartitions(canvas, boxes, boxTags.partitions)
 
-  const { deficit, redundancy } = classCoverage(allClasses, key)
-  const { overload, excess, undeclared } = treatmentMisuse(
-    wearersOf(boxes, key),
-    partitions,
-    allClasses,
-  )
+  const { deficit, redundancy } = classCoverage(partitions, key, keyTotals)
+  const wearers = new Map([...keyTotals].filter(([k]) => k !== DEFAULT_KEY))
+  const { overload, excess, undeclared } = treatmentMisuse(wearers, partitions, key)
 
-  const inUse = [...new Set(boxes.map((b) => key(b.id)))].map((k) => {
+  const inUse = [...keyTotals.keys()].map((k) => {
     const [colour = '', shape = ''] = k.split('|')
     return { colour, shape }
   })
   const distance = nearestTreatmentDistance(inUse)
 
-  const ids = boxes.map((b) => b.id)
   const of = (read: (t: Treatment) => string) => (id: string) =>
     read(treatment.get(id) ?? DEFAULT_TREATMENT)
   const channels = {
@@ -620,19 +742,19 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     colour: channelUse(
       (id) => edgeColour.get(id) ?? '',
       canvas.edges.map((e) => e.id),
-      edgeTags.partitions.filter((p) => new Set(p.partition.values()).size >= 2),
+      edgeTags.partitions.filter((p) => classCount(p) >= 2),
     ),
     multi: edgeTags.multi,
   } as const
 
   return {
     channels,
-    multi: tagPartitions(boxes, (b) => b.tags).multi,
+    multi: boxTags.multi,
     edges,
     contested: [...Object.values(channels), edges.colour].filter((r) => r.use === 'contested')
       .length,
     partitions: partitions.length,
-    constructs: allClasses.length,
+    constructs: partitions.reduce((sum, p) => sum + classCount(p), 0),
     deficit,
     overload,
     excess,

@@ -263,27 +263,55 @@ function freeRegionGrid(entries: readonly DigestEntry[]): {
   return cols * rows > FREE_REGION_MAX_CELLS ? null : { minX, minY, cols, rows }
 }
 
-/** Which cells any entry covers. */
+/**
+ * Which cells any entry covers.
+ *
+ * Each entry marks only the four corners of its cell rectangle in a 2D
+ * difference array, and one prefix-sum pass turns the marks into coverage
+ * counts: entries + cells, where filling every covered cell of every entry
+ * was entries x cells.
+ */
 function occupiedCells(
   entries: readonly DigestEntry[],
   grid: NonNullable<ReturnType<typeof freeRegionGrid>>,
 ): boolean[][] {
   const { minX, minY, cols, rows } = grid
-  const occupied: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false))
+  const stride = cols + 1
+  const diff = new Int32Array((rows + 1) * stride)
   for (const entry of entries) {
-    const c0 = Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX)
     // The right/bottom edges are exclusive, so a box ending exactly on a
     // grid line must not occupy the next cell: ceil(...) - 1 agrees with
     // floor(...) except exactly at a grid boundary, where it correctly
     // stops one cell earlier.
-    const c1 = Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1
-    const r0 = Math.floor((entry.bbox.y - minY) / FREE_REGION_GRID_PX)
-    const r1 = Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1
-    for (let r = Math.max(r0, 0); r <= Math.min(r1, rows - 1); r++) {
-      for (let c = Math.max(c0, 0); c <= Math.min(c1, cols - 1); c++) {
-        occupied[r][c] = true
-      }
+    const c0 = Math.max(Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX), 0)
+    const c1 = Math.min(
+      Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1,
+      cols - 1,
+    )
+    const r0 = Math.max(Math.floor((entry.bbox.y - minY) / FREE_REGION_GRID_PX), 0)
+    const r1 = Math.min(
+      Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1,
+      rows - 1,
+    )
+    // An empty span (a zero-size box on a grid line) covers nothing. Its four
+    // marks would cancel anyway; the test keeps a NaN bound from indexing.
+    if (!(c0 <= c1 && r0 <= r1)) continue
+    diff[r0 * stride + c0] += 1
+    diff[r0 * stride + c1 + 1] -= 1
+    diff[(r1 + 1) * stride + c0] -= 1
+    diff[(r1 + 1) * stride + c1 + 1] += 1
+  }
+  const occupied: boolean[][] = []
+  const above = new Int32Array(cols)
+  for (let r = 0; r < rows; r++) {
+    const row = Array<boolean>(cols)
+    let run = 0
+    for (let c = 0; c < cols; c++) {
+      run += diff[r * stride + c] as number
+      above[c] = (above[c] as number) + run
+      row[c] = (above[c] as number) > 0
     }
+    occupied.push(row)
   }
   return occupied
 }

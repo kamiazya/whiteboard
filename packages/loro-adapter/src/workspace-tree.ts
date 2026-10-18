@@ -172,12 +172,15 @@ function jsonOf(value: unknown): unknown {
  * that looks its node up, however little of the record it touches. Only the
  * meta keys' values are read; any other key is present with a placeholder,
  * because neither schema reads one: the document schema strips it and the
- * strict folder schema refuses it whatever it holds.
+ * strict folder schema refuses it whatever it holds. A meta key held as a
+ * CONTAINER leaves the node unreadable, whatever it projects to — why is
+ * `isNodeMetaContainer`, the same rule for a judge reading operations.
  */
 function readMeta(node: LoroTreeNode): Read | null {
   const data = node.data
   const raw: Record<string, unknown> = {}
-  for (const key of data.keys()) raw[key] = NODE_META_KEYS.has(key) ? jsonOf(data.get(key)) : null
+  for (const key of data.keys()) raw[key] = NODE_META_KEYS.has(key) ? data.get(key) : null
+  if (Object.values(raw).some((value) => containerKind(value) !== null)) return null
   const asDocument = workspaceNodeMetaSchema.safeParse(raw)
   if (asDocument.success) return { type: 'document', meta: asDocument.data }
   const asFolder = workspaceFolderMetaSchema.safeParse(raw)
@@ -583,12 +586,6 @@ function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
   return nodesAlong(doc, path).get(path) ?? null
 }
 
-/** A node's own segment as a walk would read it, or `undefined` when it has none. */
-function segmentOf(node: LoroTreeNode): string | undefined {
-  const segment = jsonOf(node.data.get('segment'))
-  return typeof segment === 'string' ? segment : undefined
-}
-
 /**
  * The first node in tree order at `path` and at each path on the way to it,
  * keyed by path — what `walk` would answer for those paths, found by stepping
@@ -608,8 +605,9 @@ function nodesAlong(doc: LoroDoc, path: string): Map<string, Walked> {
   const pushToward = (children: readonly LoroTreeNode[], prefix: string): void => {
     for (let i = children.length - 1; i >= 0; i--) {
       const child = children[i] as LoroTreeNode
-      const segment = segmentOf(child)
-      if (segment === undefined) continue
+      // Read as a walk reads it: a segment held as a container is none.
+      const segment = child.data.get('segment')
+      if (typeof segment !== 'string') continue
       const at = prefix === '' ? segment : `${prefix}/${segment}`
       if (isSelfOrDescendant(path, at)) stack.push({ node: child, path: at })
     }

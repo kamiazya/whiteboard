@@ -359,6 +359,14 @@ covers OKF v0.2's provenance and lifecycle families — `sources`,
 `runtime`, `parameters`, `computation`, `executor` and `attester`, none of
 which this server interprets.
 
+**YAML anchors and aliases are refused.** A frontmatter that marks a value
+with `&name` or repeats one with `*name` (a `<<:` merge key included) is not
+stored: a `document.set` or `document.create` op and `POST
+/api/v1/workspaces/{id}/documents` answer "YAML anchors and aliases are not
+allowed in OKF frontmatter". OKF gives them no meaning, and an
+alias makes a few bytes stand for a value of any size. Write the value out
+each time it is needed; this server writes a repeated value out in full too.
+
 ## Who wrote a document
 
 `wb_workspace_edit` takes an optional `actor` for the whole batch, and records

@@ -27,7 +27,60 @@ function msToScore(nodes: readonly SpatialNode[]): number {
   return elapsed
 }
 
+/**
+ * How many Map and Set entries scoring builds, counted by wrapping the two
+ * prototypes' writers for the duration of one call. Counted rather than
+ * timed: the cost that matters here is memory, and a count is the same on
+ * every machine. Past `ceiling` it throws, so a regression fails in
+ * milliseconds instead of exhausting the heap the way the cost it guards
+ * against does.
+ */
+function entriesBuiltScoring(canvas: SpatialCanvas, ceiling: number) {
+  const mapSet = Map.prototype.set
+  const setAdd = Set.prototype.add
+  let entries = 0
+  const count = () => {
+    entries++
+    if (entries > ceiling) throw new Error(`scoring built more than ${ceiling} Map/Set entries`)
+  }
+  Map.prototype.set = function <K, V>(this: Map<K, V>, key: K, value: V) {
+    count()
+    return mapSet.call(this, key, value) as Map<K, V>
+  }
+  Set.prototype.add = function <T>(this: Set<T>, value: T) {
+    count()
+    return setAdd.call(this, value) as Set<T>
+  }
+  try {
+    const score = scoreFacets(canvas)
+    return { score, entries }
+  } finally {
+    Map.prototype.set = mapSet
+    Set.prototype.add = setAdd
+  }
+}
+
 describe('facet scoring cost', () => {
+  it('builds Map and Set entries linear in the tags a board carries, not keys times boxes', () => {
+    // Each scoped-tag key used to partition EVERY box with a dense map, so
+    // a few heavily tagged boxes on a large board cost keys × boxes — about
+    // 8e7 entries per pass here, and an aborted process at a few times this.
+    const boxes = 2000
+    const tagged = 40
+    const keysEach = 1024
+    const nodes = Array.from({ length: boxes }, (_, i) =>
+      box(`n${i}`, i < tagged ? Array.from({ length: keysEach }, (_, k) => `k${i}x${k}:v`) : []),
+    )
+    const totalTags = tagged * keysEach
+    const { score, entries } = entriesBuiltScoring(
+      { nodes, edges: [] } as SpatialCanvas,
+      64 * totalTags,
+    )
+    // The subject is present: every key was read as a partition.
+    expect(score.partitions).toBe(totalTags)
+    expect(entries / totalTags).toBeLessThan(16)
+  })
+
   it('scores one node carrying many values of one key in time linear in them', () => {
     const values = 20_000
     const tags = Array.from({ length: values }, (_, i) => `k:v${i}`)

@@ -3,7 +3,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc, type LoroMap, type LoroText, type LoroTreeNode } from 'loro-crdt'
+import { LoroDoc, type LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { NODES_KEY } from './containers.js'
 import { writeSpatialNode } from './loro-bridge.js'
@@ -247,6 +247,27 @@ describe('importWithinTextLimits', () => {
     const client = base.fork()
     const from = client.oplogVersion()
     nodeHolding(client, (data) => data.get('documentId') === DOC_ID).data.set(key, value)
+    client.commit()
+
+    expect(
+      importWithinTextLimits(base.fork(), client.export({ mode: 'update', from })).touchesNodeMeta,
+    ).toBe(true)
+  })
+
+  it.each([
+    'name',
+    'segment',
+  ])('counts an edit inside %s held as a container as touching node meta', (key) => {
+    const base = record({ [DOC_ID]: 'body' })
+    nodeHolding(base, (data) => data.get('documentId') === DOC_ID)
+      .data.setContainer(key, new LoroText())
+      .insert(0, 'held')
+    base.commit()
+    const client = base.fork()
+    const from = client.oplogVersion()
+    const held = nodeHolding(client, (data) => data.get(key) instanceof LoroText).data.get(key)
+    if (!(held instanceof LoroText)) throw new Error(`no ${key} container`)
+    held.delete(0, held.length)
     client.commit()
 
     expect(
