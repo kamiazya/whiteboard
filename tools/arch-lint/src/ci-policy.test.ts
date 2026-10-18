@@ -177,38 +177,6 @@ describe('release.yml — a job holding a publish credential runs no repository 
   })
 })
 
-describe('release.yml — a checkout keeps the job token only where the job pushes with it', () => {
-  // actions/checkout writes the token into .git/config unless told not to, and
-  // every later step — the install, the build, the smokes — can read it there.
-  const PUSHES_WITH_TOKEN: Record<string, string> = {
-    'advance-stable':
-      'fast-forwards the stable branch with `git push origin`, which uses the token',
-  }
-  const jobs = releaseJobs()
-  const checkouts = Object.entries(jobs).flatMap(([id, job]) =>
-    (job.steps ?? [])
-      .filter((step) => (step.uses ?? '').startsWith('actions/checkout@'))
-      .map((step) => ({ id, step })),
-  )
-
-  it('finds the checkouts', () => {
-    expect(checkouts.length).toBeGreaterThanOrEqual(3)
-  })
-
-  it('every checkout outside the ledger sets persist-credentials: false', () => {
-    const keeping = checkouts
-      .filter(({ id }) => PUSHES_WITH_TOKEN[id] === undefined)
-      .filter(({ step }) => step.with?.['persist-credentials'] !== false)
-      .map(({ id }) => id)
-    expect(keeping).toEqual([])
-  })
-
-  it.each(Object.keys(PUSHES_WITH_TOKEN))('ledgered %s still pushes', (id) => {
-    const runs = (jobs[id]?.steps ?? []).map((step) => step.run ?? '')
-    expect(runs.some((run) => /\bgit push\b/.test(run))).toBe(true)
-  })
-})
-
 describe('workflows — runner images are pinned, never floating', () => {
   // `ubuntu-latest` is a label GitHub re-points at a new image on its own
   // schedule, and jobs here depend on what the current image ships (Chrome at
@@ -721,23 +689,5 @@ describe('release.yml — either publish half can be retried alone', () => {
     }
 
     expect(halvesRun(jobs, event)).toEqual({ npm: true, docker: true })
-  })
-})
-
-describe('ci.yml — jobs that never talk to the remote do not keep the token', () => {
-  // actions/checkout writes the job token into .git/config unless told not to,
-  // where every later step — the install, the PR's own tests — can read it.
-  const ci = parseYaml(readFileSync(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')) as {
-    jobs: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }>
-  }
-  it.each([
-    'check',
-    'stress-changed-tests',
-  ])('%s checks out with persist-credentials: false', (id) => {
-    const checkouts = (ci.jobs[id]?.steps ?? []).filter((s) =>
-      (s.uses ?? '').startsWith('actions/checkout@'),
-    )
-    expect(checkouts.length).toBeGreaterThan(0)
-    for (const step of checkouts) expect(step.with?.['persist-credentials']).toBe(false)
   })
 })

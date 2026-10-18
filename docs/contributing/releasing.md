@@ -77,9 +77,10 @@ requested.
    | `build-docker` | `mcp-server` was released, or a forced re-publish with `publish_docker` | runs the publish gate and container smokes and builds the image into an OCI archive, with read-only permissions |
    | `publish-mcp` | `build-mcp` succeeded | npm publish of the tarball `build-mcp` packed |
    | `docker-publish-sign` | `build-docker` succeeded | image push and cosign signature of the archive `build-docker` built |
-   | `deploy-web` | any component was released | Cloudflare Pages production deploy of `apps/web`; skips its deploy step while the Cloudflare secrets are absent |
+   | `build-web` | any component was released | installs and builds `apps/web` and archives `dist/`, with read-only permissions and no secret |
+   | `deploy-web` | `build-web` succeeded | Cloudflare Pages production deploy of the site `build-web` archived; skips its deploy step while the Cloudflare secrets are absent |
 
-   Apart from each publish job waiting on its build job, the jobs after `release-please` are
+   Apart from each publish or deploy job waiting on its build job, the jobs after `release-please` are
    independent of one another: one failing does not stop the others, so a failed
    `advance-stable` leaves the npm package, the image and the web deploy published.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
@@ -240,14 +241,38 @@ Plugin consumers stay on the previous `stable` until it is resolved. To recover:
 3. Re-run the failed job (`gh run rerun <run-id> --failed`): it re-reads the same tag and
    pushes again.
 
-### `deploy-web` job (hosted app)
+### `build-web` and `deploy-web` jobs (hosted app)
 
-Builds `apps/web` and runs `wrangler pages deploy dist --project-name=kamiazya-whiteboard`
-against production, through `cloudflare/wrangler-action`. The deploy step skips itself
-when the Cloudflare secrets are not configured in `production-web`. The other deploy
-paths for the same project are in [cloudflare-pages.md](deployment/cloudflare-pages.md).
+The hosted app is split the way the publish halves are, because a secret bound to one
+step is no boundary inside one job: the install and build run dependency code, which
+could rewrite the wrangler a later step runs with the token.
 
-Permissions: `contents: read`. Environment: `production-web`.
+`build-web` checks out the release commit with `persist-credentials: false`, installs
+dependencies, builds `apps/web`, archives `dist/` as `site.tar`, and reports its sha256 as
+the job output `site_sha256`. It has `contents: read` and no secret.
+
+`deploy-web` holds the Cloudflare secrets and runs no repository or dependency code:
+
+1. A sparse checkout of `.github/deploy` alone, with `persist-credentials: false`.
+2. `npm ci --ignore-scripts` there, which installs the wrangler pinned in that directory's
+   `package-lock.json` (integrity-checked, no lifecycle scripts). This tooling lives outside
+   the pnpm workspace on purpose, so the install pulls in nothing else.
+3. Downloads `site.tar`, checks it with `sha256sum -c` against `build-web`'s `site_sha256`,
+   and unpacks it.
+4. Runs `wrangler pages deploy … --project-name=kamiazya-whiteboard` against production,
+   through `cloudflare/wrangler-action` with `wranglerVersion` set to the same pinned
+   version, so the action uses the installed wrangler and runs no install of its own. The
+   deploy step skips itself when the Cloudflare secrets are not configured in
+   `production-web`.
+
+`tools/arch-lint/src/workflow-credentials.test.ts` holds every job in every workflow that
+references a deploy or publish secret to this shape. To move wrangler, bump the exact version
+in `.github/deploy/package.json` and regenerate its lockfile (`npm install --ignore-scripts`
+in that directory); the deploy jobs read `wranglerVersion` from the lockfile, so no workflow
+changes. The other deploy paths for the same project are in
+[cloudflare-pages.md](deployment/cloudflare-pages.md).
+
+Permissions: `contents: read` for both. Environment: `production-web` (`deploy-web` only).
 
 ---
 

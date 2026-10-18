@@ -12,7 +12,8 @@
 #   3. A maintainer reviews and merges it
 #   4. After merge, `build-mcp` and `build-docker` gate and build the artifacts
 #      when the target package reports release_created=true, and `publish-mcp`
-#      and `docker-publish-sign` publish what they built
+#      and `docker-publish-sign` publish what they built; when any release was
+#      created, `build-web` builds apps/web and `deploy-web` deploys that build
 #
 # “Please release” means “merge the Release PR created by release-please.”
 
@@ -477,23 +478,20 @@ jobs:
           IMAGE_REPO: ghcr.io/${{ github.repository }}
         run: cosign sign --yes $IMAGE_REPO@$DIGEST
 
-  deploy-web:
+  # The web deploy is split the same way as the publish halves: `build-web`
+  # installs and builds apps/web — dependency code — with `contents: read` and
+  # no secret, and `deploy-web` holds the Cloudflare token. A secret scoped to
+  # one step is no boundary inside one job: a build that ran earlier in the job
+  # could rewrite the wrangler the deploy step then runs with the token.
+  build-web:
     needs: release-please
-    runs-on: ubuntu-24.04
-    # Deploy apps/web to Cloudflare Pages when a project release is created.
     # Skipped when no release happened (e.g. mid-cycle pushes).
-    # The Deploy step skips itself when Cloudflare secrets are not yet configured.
-    # Secrets are scoped to the production-web environment (tag-protected in repo settings).
-    # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the production-web environment.
     if: needs.release-please.outputs.releases_created == 'true'
-    environment:
-      name: production-web
-      # Surfaces the live production URL in the Environments UI.
-      url: https://kamiazya-whiteboard.pages.dev
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
-    # No job-level Cloudflare env: the token reaches the deploy step alone,
-    # never the install and build that run dependency code before it.
+    outputs:
+      site_sha256: ${{ steps.archive.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -506,6 +504,74 @@ jobs:
 
       - name: Build apps/web
         run: pnpm --filter @kamiazya/whiteboard-web build
+
+      - name: Archive the built site
+        id: archive
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/web-site"
+          tar -C apps/web/dist -cf "$RUNNER_TEMP/web-site/site.tar" .
+          echo "sha256=$(sha256sum "$RUNNER_TEMP/web-site/site.tar" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the site for deploy-web
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/web-site/site.tar
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy-web:
+    needs: [release-please, build-web]
+    runs-on: ubuntu-24.04
+    # Deploy apps/web to Cloudflare Pages when a project release is created.
+    # The Deploy step skips itself when Cloudflare secrets are not yet configured.
+    # Secrets are scoped to the production-web environment (tag-protected in repo settings).
+    # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the production-web environment.
+    if: needs.release-please.outputs.releases_created == 'true'
+    environment:
+      name: production-web
+      # Surfaces the live production URL in the Environments UI.
+      url: https://kamiazya-whiteboard.pages.dev
+    permissions:
+      contents: read
+    # Runs no repository or dependency code: it checks out the deploy tooling
+    # alone, installs that lockfile's wrangler with lifecycle scripts off,
+    # verifies the site build-web archived, and deploys it. workflow-credentials.test.ts
+    # holds every Cloudflare deploy job to this shape.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/deploy
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Install the pinned wrangler (lockfile, no lifecycle scripts)
+        id: tooling
+        working-directory: .github/deploy
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          echo "wrangler=$(jq -r '.packages["node_modules/wrangler"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Download the site build-web archived
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: web-site-${{ github.run_id }}
+          path: artifacts/web-site
+
+      - name: Verify the site against build-web's digest, then unpack it
+        env:
+          SITE_SHA256: ${{ needs.build-web.outputs.site_sha256 }}
+        run: |
+          set -euo pipefail
+          cd artifacts/web-site
+          echo "$SITE_SHA256  site.tar" | sha256sum -c -
+          mkdir dist
+          tar -xf site.tar -C dist --no-same-owner
 
       - name: Check for the Cloudflare secrets
         id: cf
@@ -521,9 +587,10 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web
-          # pnpm is required: the npm fallback (`npm i wrangler@4`) cannot parse the
-          # catalog: protocol in apps/web/package.json. wrangler ships as a devDependency
-          # of apps/web so the action finds it preinstalled and skips installation.
-          packageManager: pnpm
-          command: pages deploy dist --project-name=kamiazya-whiteboard
+          # The wrangler installed above. An exact wranglerVersion equal to it
+          # is what makes the action use it instead of running its own install,
+          # so it is read from the same lockfile.
+          workingDirectory: .github/deploy
+          packageManager: npm
+          wranglerVersion: ${{ steps.tooling.outputs.wrangler }}
+          command: pages deploy ../../artifacts/web-site/dist --project-name=kamiazya-whiteboard
