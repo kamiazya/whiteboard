@@ -123,3 +123,34 @@ export function readProposals(doc: DocumentContainers): Proposal[] {
 function byId(a: { readonly id: string }, b: { readonly id: string }): number {
   return compareCodeUnit(a.id, b.id)
 }
+
+/**
+ * How many changes across every proposal in `proposalsMap` are open, read off
+ * each change's status alone rather than through the schema `readProposals`
+ * parses with.
+ *
+ * ponytail: reads every change the document ever held, decided ones
+ * included, since a verdict is a field of the change value; a count kept
+ * beside the changes would make it constant, at the price of a second place
+ * for the truth to live.
+ */
+export function openProposedChangeCount(proposalsMap: LoroMap): number {
+  let open = 0
+  for (const proposalId of proposalsMap.keys()) {
+    const stored = proposalsMap.get(proposalId)
+    if (!(stored instanceof LoroMap)) continue
+    const changes = changesOf(stored)
+    if (changes === undefined) continue
+    for (const changeId of changes.keys()) {
+      const value = changes.get(changeId)
+      if (
+        value !== null &&
+        typeof value === 'object' &&
+        (value as Record<string, unknown>)[STATUS_FIELD] === 'open'
+      ) {
+        open += 1
+      }
+    }
+  }
+  return open
+}

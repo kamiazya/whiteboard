@@ -15,6 +15,8 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
+  OPEN_CHANGES_LIMIT_PHRASE,
+  OPEN_THREADS_LIMIT_PHRASE,
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
@@ -265,6 +267,48 @@ class CanvasTooLargeError extends TextBreachRefusalError {
   }
 }
 
+function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
+  return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
+}
+
+/**
+ * A document left holding more open comment threads than
+ * `DOCUMENT_MAX_OPEN_THREADS` — the overlay each render lays out again. A
+ * document stored past it still takes an edit that opens nothing.
+ */
+class TooManyOpenThreadsError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-threads']
+
+  constructor(
+    readonly breach: BreachOf<'open-threads'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(at, `${breach.count} open comment threads`, OPEN_THREADS_LIMIT_PHRASE),
+    )
+    this.name = 'TooManyOpenThreadsError'
+  }
+}
+
+/** The same for open proposed changes, past `DOCUMENT_MAX_OPEN_CHANGES`. */
+class TooManyOpenChangesError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-changes']
+
+  constructor(
+    readonly breach: BreachOf<'open-changes'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(
+        at,
+        `${breach.count} open proposed changes`,
+        OPEN_CHANGES_LIMIT_PHRASE,
+      ),
+    )
+    this.name = 'TooManyOpenChangesError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -282,6 +326,10 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new ContainerNameTooLongError(breach, at)
     case 'canvas-size':
       return new CanvasTooLargeError(breach, at)
+    case 'open-threads':
+      return new TooManyOpenThreadsError(breach, at)
+    case 'open-changes':
+      return new TooManyOpenChangesError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)

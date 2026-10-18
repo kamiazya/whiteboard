@@ -40,6 +40,13 @@ import {
 } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { liftStoredNode } from './legacy-lifts.js'
+import {
+  annotationBreach,
+  annotationCounts,
+  mostOpenAnnotations,
+  type OpenAnnotationsBreach,
+  SMALLEST_ANNOTATION_BOUND,
+} from './sync-annotation-limits.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
@@ -54,7 +61,10 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * `TAG_MAX_CHARS` (`tags`), or a container it brought in named past
  * `CONTAINER_NAME_MAX_CHARS` (`container-name`), or a board it grew past
  * `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES` edges and lines
- * together (`canvas-size`).
+ * together (`canvas-size`), or a document it left holding more than
+ * `DOCUMENT_MAX_OPEN_THREADS` open comment threads (`open-threads`) or
+ * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
+ * more than before.
  * Lengths are UTF-16 units, the length every limit counts.
  *
  * The board's size is judged here with its text because it is the same
@@ -118,6 +128,8 @@ export type SyncTextBreach =
       /** The map holding them, so a caller can name the document. */
       readonly container: ContainerID
     }
+  | OpenAnnotationsBreach<'open-threads'>
+  | OpenAnnotationsBreach<'open-changes'>
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -134,6 +146,8 @@ export const SYNC_TEXT_BREACH_CODES = {
   tags: 'tags_too_large',
   'container-name': 'container_name_too_long',
   'canvas-size': 'too_many_nodes_or_edges',
+  'open-threads': 'too_many_open_threads',
+  'open-changes': 'too_many_open_changes',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -618,13 +632,15 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
       replays ? entriesIn(doc, container) : 0,
     ]),
   )
+  const annotationsBefore = replays ? annotationCounts(doc, writes.mapsWritten) : new Map()
   if (replays) doc.attach()
   const longName = longNameBreach(doc, writes.names, namedBefore)
   return judged(
     longName === null
       ? (bodyBreach(doc, writes.net) ??
           valueBreach(doc, writes.longValues, before) ??
-          canvasBreach(doc, writes.setInto, entriesBefore))
+          canvasBreach(doc, writes.setInto, entriesBefore) ??
+          annotationBreach(doc, writes.mapsWritten, annotationsBefore))
       : { shape: 'container-name', ...longName },
   )
 }
@@ -712,10 +728,12 @@ function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: b
  * `sync-text-limits.tags.test.ts` pin that encoding). An update short
  * enough that no limit can be reached — no longer than the smallest bound,
  * a label's, and not enough to take the longest body past its own, nor the
- * largest board past a node or edge-and-line bound, since an update adds no more map
- * entries than it has bytes — is therefore answered without being applied.
+ * largest board past a node or edge-and-line bound, nor any document past an
+ * open-thread or open-change bound, since an update adds no more map entries
+ * (nor sets more statuses) than it has bytes — is therefore answered without
+ * being applied.
  *
- * Neither the longest body nor the largest board is walked for each update:
+ * Neither the longest body, the largest board nor the most open annotations is walked for each update:
  * every document would be read on every keystroke, in a workspace of
  * hundreds of notes. Each is walked once and then held as a bound
  * (`heldBound`), raised by the byte length of whatever `record` gained since
@@ -739,12 +757,20 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
   let copy: LoroDoc | null = null
   const longestBodyAtMost = heldBound(record, longestBody)
   const largestBoardAtMost = heldBound(record, largestBoard)
+  const mostOpenAtMost = heldBound(record, mostOpenAnnotations)
   return (update) => {
     const most = update.byteLength
     if (most <= SMALLEST_VALUE_BOUND) {
       const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
       const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
-      if ((bodyFits(false) || bodyFits(true)) && (boardFits(false) || boardFits(true))) return null
+      const openFits = (walk: boolean) => mostOpenAtMost(walk) + most <= SMALLEST_ANNOTATION_BOUND
+      if (
+        (bodyFits(false) || bodyFits(true)) &&
+        (boardFits(false) || boardFits(true)) &&
+        (openFits(false) || openFits(true))
+      ) {
+        return null
+      }
     }
     if (copy === null) copy = record.fork()
     else copy.import(record.export({ mode: 'update', from: copy.oplogVersion() }))

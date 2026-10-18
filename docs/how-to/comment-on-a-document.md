@@ -63,6 +63,12 @@ it across replies.
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
 
+A document holds at most **500 open threads** at once. Resolved ones do not
+count, so a document at the limit takes a new comment as soon as one is
+resolved; opening or reopening one past it is refused, with a notice saying
+why, and nothing is saved. See
+[Export formats](../reference/export-formats.md#how-many-open-comment-threads-and-proposed-changes-one-document-may-hold).
+
 ## Read and answer comments from an agent
 
 An agent reaches the same conversations through MCP, on either document

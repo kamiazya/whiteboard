@@ -187,3 +187,18 @@ export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number 
   }
   return migrated
 }
+
+/**
+ * How many threads in `threadsMap` are open, read off each thread's status
+ * alone rather than through the schema `readCommentThreads` parses with, so
+ * a sync judgement pays one field per thread. A thread without an `open`
+ * status is not drawn as one, and is not counted.
+ */
+export function openThreadCount(threadsMap: LoroMap): number {
+  let open = 0
+  for (const threadId of threadsMap.keys()) {
+    const stored = threadsMap.get(threadId)
+    if (stored instanceof LoroMap && stored.get(STATUS_FIELD) === 'open') open += 1
+  }
+  return open
+}

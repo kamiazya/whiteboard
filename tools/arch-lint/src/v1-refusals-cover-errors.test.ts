@@ -114,10 +114,16 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and bounds every id it is handed before a write',
   CanvasTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and creates a spatial document empty, and wb_canvas_edit refuses the same growth as a CanvasEditError',
+  TooManyOpenThreadsError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit / wb_canvas_edit refuse the same growth as their own op errors',
+  TooManyOpenChangesError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no proposal',
+  OpenChangesCeilingError:
+    'raised by canvas-propose / body-edit proposals, tool-only; /api/v1 writes no proposal',
   SyncWriteRefusalError:
     'the abstract base of the sync write refusals below and of TooManyDocumentsError; raised only as one of them, never bare',
   TextBreachRefusalError:
-    'the abstract base of the eight sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
+    'the abstract base of the ten sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:

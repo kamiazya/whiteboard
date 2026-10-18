@@ -512,7 +512,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   routed like an edge and costs the same), however the change arrives:
   `wb_canvas_edit` refuses the op that would pass either, and a sync update
   or a move is refused whole (`too_many_nodes_or_edges`). One batch tidies at most
-  once, so a single call cannot repeat a whole-board layout once per op. What
+  once, so a single call cannot repeat a whole-board layout once per op.
+  The overlay on top of the board is bounded the same way: a document holds
+  at most 500 open comment threads and 1000 open proposed changes, counted
+  across all of its proposals (`too_many_open_threads`,
+  `too_many_open_changes`). Resolved threads are not counted, since the
+  daemon never draws them; a reader who asks the web app to show resolved
+  comments lays all of them out in their own browser. What
   is still NOT bounded is how long the largest permitted board takes to lay
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in

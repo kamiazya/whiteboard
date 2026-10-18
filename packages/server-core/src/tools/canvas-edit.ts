@@ -1,5 +1,6 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
+  readAnnotations,
   readDocumentKind,
   setEdgeLock,
   setNodeLock,
@@ -10,6 +11,7 @@ import {
   CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
+  type CanvasComment,
   compareCodeUnit,
   type ExtensionFacets,
   growsPast,
@@ -41,6 +43,7 @@ import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { registryForFacetWrites } from './facet-write.js'
+import { openThreadsRefusal } from './open-annotation-ceilings.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -394,8 +397,12 @@ function editedCanvas(canvas: SpatialCanvas, s: CanvasEditSession): SpatialCanva
   }
 }
 
+const openComments = (comments: readonly CanvasComment[]): number =>
+  comments.filter((comment) => comment.resolved !== true).length
+
 /**
- * Refuses the op that takes the board past a per-canvas ceiling, judged
+ * Refuses the op that takes the board past a per-canvas ceiling, or the
+ * document past its open-thread ceiling, judged
  * against the board as loaded: a canvas stored past one still takes a batch
  * that ends no larger than it began, so removing is how it shrinks.
  */
@@ -404,7 +411,14 @@ function refuseCanvasGrowth(
   s: CanvasEditSession,
   index: number,
   op: string,
+  openThreadsAtLoad: number,
 ): void {
+  // Every comment is a thread, but not every thread is a comment (a note-set
+  // or a document-level one is not), so the batch's comments move the
+  // document's open-thread count by what they themselves opened.
+  const opened = openComments(s.comments) - openComments(canvas.comments ?? [])
+  const threads = openThreadsRefusal(openThreadsAtLoad, openThreadsAtLoad + opened)
+  if (threads !== undefined) fail(index, op, threads)
   if (growsPast(CANVAS_MAX_NODES, canvas.nodes.length, s.nodes.length)) {
     fail(
       index,
@@ -443,9 +457,10 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   // an inline switch would simply fall through and report a batch applied
   // having ignored the op.
   const ctx: CanvasEditContext = { s, facetRegistry }
+  const openThreadsAtLoad = readAnnotations(doc).filter((thread) => thread.status === 'open').length
   input.ops.forEach((op, index) => {
     applyCanvasOp(ctx, op, index)
-    refuseCanvasGrowth(canvas, s, index, op.op)
+    refuseCanvasGrowth(canvas, s, index, op.op, openThreadsAtLoad)
   })
 
   const candidate = editedCanvas(canvas, s)
