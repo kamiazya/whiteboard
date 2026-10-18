@@ -103,8 +103,8 @@ export function refuseNewFolders(held: number, adding: number): void {
   }
 }
 
-/** What `refuseNewFoldersAt` reads of a workspace record's nodes. */
-interface PlacedNode {
+/** What the folder count reads of a workspace record's nodes. */
+export interface PlacedNode {
   readonly type: string
   readonly path: string
 }
@@ -114,7 +114,7 @@ interface PlacedNode {
  * ancestor no node holds yet, since an existing node of either kind is reused
  * as the parent.
  */
-function foldersMissingFor(nodes: readonly PlacedNode[], path: string): number {
+export function foldersMissingFor(nodes: readonly PlacedNode[], path: string): number {
   const held = new Set(nodes.map((node) => node.path))
   const segments = path.split('/')
   let missing = 0
@@ -130,8 +130,10 @@ function foldersMissingFor(nodes: readonly PlacedNode[], path: string): number {
  * missing folders as it places a document.
  */
 export function refuseNewFoldersAt(nodes: readonly PlacedNode[], path: string): void {
-  refuseNewFolders(
-    nodes.filter((node) => node.type === 'folder').length,
-    foldersMissingFor(nodes, path),
-  )
+  refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, path))
+}
+
+/** How many folders a workspace record's `nodes` hold. */
+export function foldersIn(nodes: readonly PlacedNode[]): number {
+  return nodes.filter((node) => node.type === 'folder').length
 }

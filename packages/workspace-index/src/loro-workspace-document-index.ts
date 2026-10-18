@@ -75,11 +75,14 @@ import {
   DocumentPathContestedError,
   DocumentPathTakenError,
   duplicateDocumentInputSchema,
+  foldersIn,
+  foldersMissingFor,
   KeyedSerializer,
   moveDocumentInputSchema,
   NoRoomForCopyError,
   refuseNewDocuments,
   refuseNewFolders,
+  refuseNewFoldersAt,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -87,7 +90,7 @@ import {
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
-import { moveCollision, type WorkspaceNodes } from './move-collision.js'
+import { moveCollision } from './move-collision.js'
 import { restorableTrashDocuments } from './restore-judgement.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
@@ -344,7 +347,7 @@ export class LoroWorkspaceDocumentIndex
       // live one, so a refused create must leave nothing in it.
       const nodes = readWorkspaceNodes(doc)
       refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
-      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.path))
+      refuseNewFoldersAt(nodes, input.path)
       const created = createWorkspaceDocumentAtPath(doc, {
         path: input.path,
         documentId: generateDocumentId(),
@@ -454,7 +457,7 @@ export class LoroWorkspaceDocumentIndex
       }
       const taken = moveCollision(nodes, moving, input.from, input.to)
       if (taken !== undefined) throw new DocumentPathTakenError(input.workspaceId, taken)
-      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.to))
+      refuseNewFoldersAt(nodes, input.to)
       // ONE tree move. The descendants come with it because their paths are
       // their ancestors' — there is no per-row rewrite to order, so the
       // depth-ordering a row-backed store needs does not arise.
@@ -555,23 +558,6 @@ export class LoroWorkspaceDocumentIndex
       await this.docs.save(input.workspaceId, doc)
     })
   }
-}
-
-const foldersIn = (nodes: WorkspaceNodes) => nodes.filter((node) => node.type === 'folder').length
-
-/**
- * How many folders placing something at `path` would create: one for each
- * ancestor no node holds yet, since an existing node of either kind is
- * reused as the parent (`ensureFolderPath`).
- */
-function foldersMissingFor(nodes: WorkspaceNodes, path: string): number {
-  const held = new Set(nodes.map((node) => node.path))
-  const segments = path.split('/')
-  let missing = 0
-  for (let depth = 1; depth < segments.length; depth++) {
-    if (!held.has(segments.slice(0, depth).join('/'))) missing += 1
-  }
-  return missing
 }
 
 /** Whether a purge or restore of `entry` must leave its bytes for another trash row. */
