@@ -67,7 +67,8 @@ export function serializeOkf(doc: OkfMarkdownDocument): string {
 
   // Only the newline yaml appends: `trimEnd()` also strips Unicode spaces,
   // and a last value ending in one (U+2000, U+00A0) would lose it and parse
-  // back as null.
-  const yamlText = stringify(frontmatter).replace(/\r?\n$/, '')
+  // back as null. A value held under two keys is written twice rather than
+  // as an anchor and alias, which `parseOkf` refuses.
+  const yamlText = stringify(frontmatter, { aliasDuplicateObjects: false }).replace(/\r?\n$/, '')
   return `---\n${yamlText}\n---\n${doc.body}`
 }

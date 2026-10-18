@@ -25,6 +25,18 @@ describe('serializeOkf', () => {
     expect(facetsBlock.indexOf('mu.m/v1')).toBeLessThan(facetsBlock.indexOf('zeta.z/v1'))
   })
 
+  it('writes a value shared between two keys as two copies, which parseOkf reads back', () => {
+    const shared = { b: [1, 2] }
+    const text = serializeOkf({
+      frontmatter: { type: 'note', facetsRaw: { x: shared, y: shared } },
+      body: '',
+    })
+    expect(text).not.toMatch(/[&*]a1/)
+    const result = parseOkf(text)
+    if (!result.ok) throw new Error(result.error.message)
+    expect(result.value.frontmatter.facetsRaw).toEqual({ x: shared, y: shared })
+  })
+
   it('round-trips a minimal document through parseOkf', () => {
     const text = serializeOkf({ frontmatter: { type: 'note', title: 'Hi' }, body: 'body text' })
     const result = parseOkf(text)

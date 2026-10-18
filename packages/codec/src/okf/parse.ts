@@ -1,5 +1,5 @@
 import { normalizeOkfVerified, RESERVED_ROOT_KEYS } from '@kamiazya/whiteboard-model'
-import { parseDocument, visit } from 'yaml'
+import { isAlias, isCollection, isScalar, parseDocument, visit } from 'yaml'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import { type OkfMarkdownDocument, okfMarkdownFrontmatterSchema } from './schema.js'
 
@@ -44,6 +44,25 @@ function writtenInteger(source: string, parsed: number): bigint | undefined {
 }
 
 /**
+ * Throws on a YAML anchor or alias. OKF gives them no meaning, and an alias
+ * resolves to the SAME value as its anchor: a hundred aliases of one large
+ * list read as a hundred copies everywhere downstream walks, stores and
+ * re-serialises the frontmatter, for the bytes of one.
+ */
+function refuseAnchor(node: unknown): void {
+  if (isAlias(node)) {
+    throw new Error(
+      `YAML anchors and aliases are not allowed in OKF frontmatter (found *${node.source})`,
+    )
+  }
+  if ((isScalar(node) || isCollection(node)) && node.anchor !== undefined) {
+    throw new Error(
+      `YAML anchors and aliases are not allowed in OKF frontmatter (found &${node.anchor})`,
+    )
+  }
+}
+
+/**
  * YAML to a JS value, except that an integer written past 2^53 comes back as
  * the bigint it was written as instead of the neighbouring double it rounds
  * to. The rounded number cannot be told from an exact one afterwards, so it
@@ -51,21 +70,20 @@ function writtenInteger(source: string, parsed: number): bigint | undefined {
  * what `yamlSafeValueSchema` already refuses, which turns the loss into the
  * write-time refusal naming the key.
  *
- * Errors throw as `yaml`'s `parse` throws them. Its warnings (an unresolved
+ * Errors throw as `yaml`'s `parse` throws them, and so does an anchor or alias. Its warnings (an unresolved
  * tag) are not forwarded: the value is already what the document says.
  */
 function parseYamlKeepingWrittenIntegers(text: string): unknown {
   const doc = parseDocument(text)
   const [firstError] = doc.errors
   if (firstError !== undefined) throw firstError
-  visit(doc, {
-    Scalar(_key, node) {
-      if (typeof node.value !== 'number') return
-      if (!Number.isInteger(node.value) || Number.isSafeInteger(node.value)) return
-      const written =
-        typeof node.source === 'string' ? writtenInteger(node.source, node.value) : undefined
-      if (written !== undefined) node.value = written
-    },
+  visit(doc, (_key, node) => {
+    refuseAnchor(node)
+    if (!isScalar(node) || typeof node.value !== 'number') return
+    if (!Number.isInteger(node.value) || Number.isSafeInteger(node.value)) return
+    const written =
+      typeof node.source === 'string' ? writtenInteger(node.source, node.value) : undefined
+    if (written !== undefined) node.value = written
   })
   return doc.toJS()
 }
