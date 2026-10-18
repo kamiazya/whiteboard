@@ -177,12 +177,17 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // whole workspace document. Same tier as the per-document equivalents —
   // a workspace-granularity update is still a document mutation, just scoped
   // wider, and the snapshot answers the same content canvas:read grants.
-  // Promotion merges the record AND writes explicit checkpoints for it
-  // (ADR-0039), so it needs what both of those need.
+  // An update that adds, removes or moves a document needs workspace:write as
+  // well, which is judged of the update itself rather than here: the gate sees
+  // a path, and only the operations say what kind of change they make
+  // (`DocumentRouterOptions.mayPlaceDocuments`). The per-document update's
+  // lazy create below is judged the same way.
+  // Promotion merges a whole record in — documents, content AND explicit
+  // checkpoints (ADR-0039) — so it needs what each of those needs.
   {
     name: 'workspace-document/promote',
     claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/promote$/, 'POST'),
-    decide: always('canvas:write', 'versions:write'),
+    decide: always('canvas:write', 'workspace:write', 'versions:write'),
     workspace: wHandle,
   },
   {

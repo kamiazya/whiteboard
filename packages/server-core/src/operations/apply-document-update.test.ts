@@ -6,7 +6,7 @@ import { DocumentEngineTrapError } from '../document-io.js'
 import { setLogSink } from '../log.js'
 import type { LiveDocuments } from '../server-deps.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
+import { applyDocumentUpdate, DocumentCreationRefusedError } from './apply-document-update.js'
 
 const WS = 'ws-1'
 const PATH = 'canvas-a'
@@ -50,6 +50,10 @@ function fakeLive(initial?: LoroDoc) {
       calls.push({ method: 'get', lockDepth })
       if (stored === null) stored = new LoroDoc()
       return stored
+    },
+    async exists(_workspaceId, _path) {
+      calls.push({ method: 'exists', lockDepth })
+      return stored !== null
     },
     async save(_workspaceId, _path, doc, options) {
       calls.push({ method: 'save', lockDepth, overwrite: options?.overwrite ?? false })
@@ -128,6 +132,30 @@ describe('applyDocumentUpdate', () => {
     )
     expect(readSpatialCanvas(returned).nodes.map((n) => n.id)).toEqual(['n1'])
     expect(fake.savedDoc()).toBe(returned)
+  })
+
+  it('refuses to lazy-create for a caller who may not create documents, reading and saving nothing', async () => {
+    const fake = fakeLive()
+    const failure = await applyDocumentUpdate(
+      { liveDocuments: fake.live },
+      { workspaceId: WS, path: PATH, update: updateBytes(['n1']), mayCreateDocument: false },
+    ).catch((err: unknown) => err)
+
+    expect(failure).toBeInstanceOf(DocumentCreationRefusedError)
+    expect(fake.calls).toEqual([{ method: 'exists', lockDepth: 1 }])
+    expect(fake.savedDoc()).toBeNull()
+  })
+
+  it('applies an edit to a document that exists for a caller who may not create documents', async () => {
+    const existing = new LoroDoc()
+    const fake = fakeLive(existing)
+    const returned = await applyDocumentUpdate(
+      { liveDocuments: fake.live },
+      { workspaceId: WS, path: PATH, update: updateBytes(['n1']), mayCreateDocument: false },
+    )
+
+    expect(returned).toBe(existing)
+    expect(fake.savedDoc()).toBe(existing)
   })
 
   it('evicts the live doc when the save fails, then rethrows', async () => {

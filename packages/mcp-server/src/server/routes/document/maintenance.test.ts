@@ -82,6 +82,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
       scope: testStoreScope(),
       serverDeps,
       versionStore: createVersionStoreMock(),
+      mayPlaceDocuments: () => true,
     })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
@@ -109,7 +110,12 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps, versionStore })
+    const app = createDocumentRouter({
+      scope: testStoreScope(),
+      serverDeps,
+      versionStore,
+      mayPlaceDocuments: () => true,
+    })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
@@ -142,6 +148,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       scope: testStoreScope(),
       serverDeps,
       versionStore: createVersionStoreMock(),
+      mayPlaceDocuments: () => true,
     })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
@@ -167,7 +174,12 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
         deletedIds: path === 'canvas-a' ? ['x', 'y'] : ['z'],
       }))
 
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps, versionStore })
+    const app = createDocumentRouter({
+      scope: testStoreScope(),
+      serverDeps,
+      versionStore,
+      mayPlaceDocuments: () => true,
+    })
     const res = await app.request('/api/workspaces/session1/versions/prune-sandwiched', {
       method: 'POST',
     })

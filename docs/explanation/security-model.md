@@ -450,6 +450,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `mcp:call`, and a tool call also needs the scope the same operation needs
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **Adding, removing or moving a document needs `workspace:write` on every
+  surface.** `canvas:write` edits what documents say. A live-sync update is
+  read before it is applied: one that would add, delete or move a document,
+  or that addresses a path no document holds, is refused with `403` unless
+  the grant also holds `workspace:write`, and nothing of it is kept. Moving
+  a whole workspace in needs `canvas:write`, `workspace:write` and
+  `versions:write`.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either

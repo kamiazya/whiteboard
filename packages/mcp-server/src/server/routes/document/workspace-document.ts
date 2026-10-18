@@ -34,6 +34,9 @@ export interface WorkspaceDocumentRouterOptions {
   daemonActor?: string
   /** Who the caller is, where the keeper knows — see `VersionsRouterOptions.callerName`. */
   callerName?: CallerName
+  /** See `DocumentRouterOptions.mayPlaceDocuments`: an update that adds,
+   *  removes or moves a document needs it; one that only edits content does not. */
+  mayPlaceDocuments: (c: Context) => boolean
 }
 
 // The workspace-granularity sync surface (order 7 of the workspace-document
@@ -210,6 +213,41 @@ async function signalEdited(
   }
 }
 
+// POST /api/w/:workspaceId/workspace-document/update
+function updateHandler(options: WorkspaceDocumentRouterOptions) {
+  return async (c: Context): Promise<Response> => {
+    const admitted = await admittedWorkspace(c, options.serverDeps)
+    if ('refusal' in admitted) return admitted.refusal
+    const { workspaceId, deps } = admitted
+    const bytes = new Uint8Array(await c.req.arrayBuffer())
+
+    let result: Awaited<ReturnType<typeof applyWorkspaceDocumentUpdate>>
+    try {
+      result = await applyWorkspaceDocumentUpdate(deps, {
+        workspaceId,
+        update: bytes,
+        mayPlaceDocuments: options.mayPlaceDocuments(c),
+      })
+    } catch (err) {
+      return answerWriteRefusal(c, err)
+    }
+    if (result.kind === 'malformed-update') {
+      return c.json(errorBody('invalid_body', 'Malformed workspace-document update'), 400)
+    }
+    if (result.kind === 'placement-refused') {
+      return c.json(
+        errorBody('auth.forbidden', 'Adding, removing or moving a document needs workspace:write'),
+        403,
+      )
+    }
+
+    void signalEdited(options, deps, workspaceId, result.edited)
+
+    const response: UpdateDocumentResponse = { ok: true }
+    return c.json(response)
+  }
+}
+
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
 
@@ -225,27 +263,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   app.post(
     '/api/w/:workspaceId/workspace-document/update',
     limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
-    async (c) => {
-      const admitted = await admittedWorkspace(c, options.serverDeps)
-      if ('refusal' in admitted) return admitted.refusal
-      const { workspaceId, deps } = admitted
-      const bytes = new Uint8Array(await c.req.arrayBuffer())
-
-      let result: Awaited<ReturnType<typeof applyWorkspaceDocumentUpdate>>
-      try {
-        result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
-      } catch (err) {
-        return answerWriteRefusal(c, err)
-      }
-      if (result.kind === 'malformed-update') {
-        return c.json(errorBody('invalid_body', 'Malformed workspace-document update'), 400)
-      }
-
-      void signalEdited(options, deps, workspaceId, result.edited)
-
-      const response: UpdateDocumentResponse = { ok: true }
-      return c.json(response)
-    },
+    updateHandler(options),
   )
 
   app.post(

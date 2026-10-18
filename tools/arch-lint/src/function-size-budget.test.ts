@@ -536,7 +536,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/observability/tracing.ts#initTracing': 85,
   // Threads the membership admit to the workspaces router (ADR-0041).
   'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 73,
-  'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 60,
   // The per-document compact route is gone, and optimize-all is one fold of the
   // workspace record rather than a loop over documents.
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 54,
