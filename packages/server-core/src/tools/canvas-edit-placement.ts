@@ -201,12 +201,23 @@ export function unplaceableWithin(
   sizes: readonly { width: number; height: number }[],
 ): string | undefined {
   const collapses = sizes.some(
-    (size) =>
-      box.x + size.width + PLACEMENT_GUTTER_PX === box.x ||
-      box.y + size.height + PLACEMENT_GUTTER_PX === box.y,
+    (size) => !stepsFrom(box.x, size.width) || !stepsFrom(box.y, size.height),
   )
   if (!collapses) return undefined
   return `group "${box.id}" at (${box.x}, ${box.y}) is too far from the origin to place nodes inside it: at that magnitude adding a node's size does not move a coordinate. Give the node explicit x/y, or move the group nearer the origin`
+}
+
+/**
+ * Whether a walk along one axis of a box at `edge` advances: the first slot
+ * starts a gutter in, and each step adds an extent and then a gutter, the
+ * order `walkRow` computes it in. The start is not the edge — rounded, it can
+ * sit on a coarser grid than the edge does — so both the step from it and the
+ * step after are asked.
+ */
+function stepsFrom(edge: number, extent: number): boolean {
+  const start = edge + PLACEMENT_GUTTER_PX
+  const next = start + extent + PLACEMENT_GUTTER_PX
+  return next !== start && next + extent + PLACEMENT_GUTTER_PX !== next
 }
 
 /**

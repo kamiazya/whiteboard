@@ -6,7 +6,12 @@
  */
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { PlacementCursor, prevailingWidth } from './canvas-edit-placement.js'
+import {
+  PlacementCursor,
+  placeWithin,
+  prevailingWidth,
+  unplaceableWithin,
+} from './canvas-edit-placement.js'
 
 const box = (id: string, x: number, y: number, width: number, height: number) =>
   textNode({ id, x, y, width, height, text: id })
@@ -50,5 +55,31 @@ describe('prevailingWidth', () => {
     expect(prevailingWidth([w('a', 200), w('b', 300)])).toBe(300)
     expect(prevailingWidth([w('a', 300), w('b', 200)])).toBe(300)
     expect(prevailingWidth([w('a', 300), w('b', 200), w('c', 200), w('d', 300)])).toBe(300)
+  })
+})
+
+describe('unplaceableWithin', () => {
+  // Just under 2^59 the box's own edge still moves by a size and a gutter,
+  // but the first slot starts a gutter in, rounded up to 2^59, where adding
+  // 50 and then 40 rounds back to the same coordinate.
+  const FAR = 2 ** 59 - 64
+  const sizes = Array.from({ length: 3 }, () => ({ width: 50, height: 50 }))
+
+  for (const [axis, box] of [
+    ['y', { x: 0, y: FAR, width: 60, height: 400 }],
+    ['x', { x: FAR, y: 0, width: 1e6, height: 400 }],
+  ] as const) {
+    it(`refuses a box whose first slot does not advance along ${axis}`, () => {
+      const placed = placeWithin(box, sizes, [])
+      // The premise: placed anyway, nodes land on one another.
+      expect(new Set(placed.map((p) => `${p.x},${p.y}`)).size).toBeLessThan(placed.length)
+      expect(unplaceableWithin({ id: 'g', ...box }, sizes)).toMatch(/^group "g" at /)
+    })
+  }
+
+  it('places a box near the origin', () => {
+    expect(
+      unplaceableWithin({ id: 'g', x: 0, y: 0, width: 60, height: 400 }, sizes),
+    ).toBeUndefined()
   })
 })
