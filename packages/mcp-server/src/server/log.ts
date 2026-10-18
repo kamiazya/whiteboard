@@ -190,6 +190,13 @@ const REDACTED_PATHS = [
   'privateJwk',
   'rootKey',
   'd',
+  'clientSecretValue',
+  'sessionToken',
+  'codeVerifier',
+  'nonce',
+  'browserBinding',
+  'invitationToken',
+  'workspaceKey',
   '*.token',
   '*.daemonToken',
   '*.bootstrapToken',
@@ -202,6 +209,13 @@ const REDACTED_PATHS = [
   '*.privateJwk',
   '*.rootKey',
   '*.d',
+  '*.clientSecretValue',
+  '*.sessionToken',
+  '*.codeVerifier',
+  '*.nonce',
+  '*.browserBinding',
+  '*.invitationToken',
+  '*.workspaceKey',
 ]
 
 const root: Logger = pino(

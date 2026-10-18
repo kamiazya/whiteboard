@@ -116,8 +116,9 @@ export interface WorkspacesRouterOptions {
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
   /** The membership gate GET /api/workspaces filters the listing
    *  through, rather than refusing the whole request — a name is a leak to a
-   *  non-member the way its content is. Absent means no filtering (server-
-   *  mode, and any composition that has not wired members). */
+   *  non-member the way its content is. Server mode always wires it; absent
+   *  — the local daemon, whose one person is in everything — means no
+   *  filtering. */
   admit?: WorkspaceAdmit
   /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
    *  on the local daemon, where an unclaimed workspace is open by design. */
