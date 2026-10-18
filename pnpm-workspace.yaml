@@ -291,6 +291,10 @@ patchedDependencies:
   # domain, path and trailing-punctuation reads are bounded (256 / 2,048 /
   # 256 characters), and the tree transform's two regexes refuse up front
   # what its callbacks would refuse after matching, with the same bounds.
+  # Its tokenizer also walks back, at every word that may start an email
+  # link, for a label start still open, and remembered only a walk that found
+  # none: one unclosed `[` before 64 KB of words took 18.7 s. A walk that
+  # finds one now marks where it ended too (codec's inline-run-steps.test.ts).
   micromark-extension-gfm-autolink-literal@2.1.0: patches/micromark-extension-gfm-autolink-literal@2.1.0.patch
   mdast-util-gfm-autolink-literal@2.0.1: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
   # The same pass then looked every text node and its ancestors up among

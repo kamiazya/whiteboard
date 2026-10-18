@@ -1,5 +1,5 @@
 diff --git a/dev/lib/syntax.js b/dev/lib/syntax.js
-index 904e27200ae4980183beda525d33feef70c2e7f7..33f9ce610c7dbcf09628c7f275b94cd7d3a7909e 100644
+index 904e27200ae4980183beda525d33feef70c2e7f7..4bd822bf3937f1260ca7001c33fb19632b87d9e1 100644
 --- a/dev/lib/syntax.js
 +++ b/dev/lib/syntax.js
 @@ -12,6 +12,15 @@ import {
@@ -66,8 +66,63 @@ index 904e27200ae4980183beda525d33feef70c2e7f7..33f9ce610c7dbcf09628c7f275b94cd7
      // Regular trailing punctuation.
      if (
        code === codes.exclamationMark ||
+@@ -953,6 +968,8 @@ function gfmAtext(code) {
+ function previousUnbalanced(events) {
+   let index = events.length
+   let result = false
++  /** @type {{index: number, token: Event[1]} | undefined} */
++  let found
+ 
+   while (index--) {
+     const token = events[index][1]
+@@ -962,6 +979,7 @@ function previousUnbalanced(events) {
+       !token._balanced
+     ) {
+       result = true
++      found = {index, token}
+       break
+     }
+ 
+@@ -971,12 +989,33 @@ function previousUnbalanced(events) {
+       result = false
+       break
+     }
++
++    // Patched (whiteboard): and if it was marked as having one, which is
++    // still where it was and still open, we can exit too. Only the negative
++    // answer was remembered, so one open `[` made every later word of the
++    // run walk back to it: quadratic in the run.
++    const before = token._gfmAutolinkLiteralUnbalanced
++
++    if (
++      before &&
++      !before.token._balanced &&
++      events[before.index] &&
++      events[before.index][1] === before.token
++    ) {
++      result = true
++      found = before
++      break
++    }
+   }
+ 
+-  if (events.length > 0 && !result) {
+-    // Mark the last token as “walked into” w/o finding
+-    // anything.
+-    events[events.length - 1][1]._gfmAutolinkLiteralWalkedInto = true
++  if (events.length > 0) {
++    if (result) {
++      events[events.length - 1][1]._gfmAutolinkLiteralUnbalanced = found
++    } else {
++      // Mark the last token as “walked into” w/o finding
++      // anything.
++      events[events.length - 1][1]._gfmAutolinkLiteralWalkedInto = true
++    }
+   }
+ 
+   return result
 diff --git a/lib/syntax.js b/lib/syntax.js
-index dffbaf15146b34d3b3f634286629ccb148866f4c..86766df5b77eee621e790fafd909471452df8f9b 100644
+index dffbaf15146b34d3b3f634286629ccb148866f4c..4ce9423a76baec865c348ffa09c4c01ebc83ec12 100644
 --- a/lib/syntax.js
 +++ b/lib/syntax.js
 @@ -3,6 +3,15 @@
@@ -134,3 +189,62 @@ index dffbaf15146b34d3b3f634286629ccb148866f4c..86766df5b77eee621e790fafd9094714
      // Regular trailing punctuation.
      if (code === 33 || code === 34 || code === 39 || code === 41 || code === 42 || code === 44 || code === 46 || code === 58 || code === 59 || code === 63 || code === 95 || code === 126) {
        effects.consume(code);
+@@ -831,10 +846,18 @@ function gfmAtext(code) {
+ function previousUnbalanced(events) {
+   let index = events.length;
+   let result = false;
++  /** @type {{index: number, token: Event[1]} | undefined} */
++  let found;
++
+   while (index--) {
+     const token = events[index][1];
+-    if ((token.type === 'labelLink' || token.type === 'labelImage') && !token._balanced) {
++
++    if (
++      (token.type === 'labelLink' || token.type === 'labelImage') &&
++      !token._balanced
++    ) {
+       result = true;
++      found = {index, token};
+       break;
+     }
+ 
+@@ -844,11 +867,34 @@ function previousUnbalanced(events) {
+       result = false;
+       break;
+     }
++
++    // Patched (whiteboard): and if it was marked as having one, which is
++    // still where it was and still open, we can exit too. Only the negative
++    // answer was remembered, so one open `[` made every later word of the
++    // run walk back to it: quadratic in the run.
++    const before = token._gfmAutolinkLiteralUnbalanced;
++
++    if (
++      before &&
++      !before.token._balanced &&
++      events[before.index] &&
++      events[before.index][1] === before.token
++    ) {
++      result = true;
++      found = before;
++      break;
++    }
+   }
+-  if (events.length > 0 && !result) {
+-    // Mark the last token as “walked into” w/o finding
+-    // anything.
+-    events[events.length - 1][1]._gfmAutolinkLiteralWalkedInto = true;
++
++  if (events.length > 0) {
++    if (result) {
++      events[events.length - 1][1]._gfmAutolinkLiteralUnbalanced = found;
++    } else {
++      // Mark the last token as “walked into” w/o finding
++      // anything.
++      events[events.length - 1][1]._gfmAutolinkLiteralWalkedInto = true;
++    }
+   }
++
+   return result;
+ }
