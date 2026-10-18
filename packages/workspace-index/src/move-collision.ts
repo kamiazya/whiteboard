@@ -1,7 +1,7 @@
-import type { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
+import type { WorkspaceNode } from '@kamiazya/whiteboard-loro-adapter'
 import { rebasePath } from '@kamiazya/whiteboard-model'
 
-export type WorkspaceNodes = ReturnType<typeof readWorkspaceNodes>
+export type WorkspaceNodes = WorkspaceNode[]
 
 interface Below {
   /** Nodes strictly below this path. */

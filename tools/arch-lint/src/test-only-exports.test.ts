@@ -239,6 +239,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/loro-adapter/src/content-digest.ts#stableStringify':
     "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
+  'packages/loro-adapter/src/workspace-tree.ts#ensureFolderPath':
+    "production reaches it through createWorkspaceDocumentAtPath, the subtree import and the restore; exported so a property can hold which folders it reuses and creates to an oracle over the raw tree, which the placed document's path alone cannot show",
   'packages/loro-adapter/src/content-sync.ts#jsonEqual':
     'production reaches it through the content sync; exported so a property can hold the explicit-stack comparison to the recursive one it replaced, at depths no recursion survives',
   'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_LAYOUT_BUDGET':

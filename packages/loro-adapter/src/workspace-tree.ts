@@ -22,7 +22,11 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentIdSchema, documentKindSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentKindSchema,
+  isSelfOrDescendant,
+} from '@kamiazya/whiteboard-model'
 import type { LoroTreeNode, TreeID } from 'loro-crdt'
 import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { z } from 'zod'
@@ -607,7 +611,7 @@ function nodesAlong(doc: LoroDoc, path: string): Map<string, Walked> {
       const segment = segmentOf(child)
       if (segment === undefined) continue
       const at = prefix === '' ? segment : `${prefix}/${segment}`
-      if (at === path || path.startsWith(`${at}/`)) stack.push({ node: child, path: at })
+      if (isSelfOrDescendant(path, at)) stack.push({ node: child, path: at })
     }
   }
   pushToward(tree(doc).roots(), '')
