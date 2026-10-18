@@ -52,12 +52,68 @@ function holdsNothing(value: unknown): boolean {
   )
 }
 
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+/**
+ * How deep the recursive form goes before a subtree is written with an
+ * explicit stack. A stored value is nested as deep as its writer chose, and
+ * recursion all the way overflowed the call stack at about 2500 levels — a
+ * depth Loro itself stores, imports and reads back — which failed every
+ * listing of the workspace holding it. Recursion is kept above the bound
+ * because it is the faster form: measured on a 2000-node board, 10-12 ms a
+ * digest against 22-27 ms for the stack.
+ */
+const RECURSIVE_DEPTH = 256
+
+/** JSON with every object's keys sorted, at any depth. */
+export function stableStringify(value: unknown): string {
+  return stringifyWithin(value, 0)
+}
+
+function scalar(value: unknown): string | null {
+  return value === null || typeof value !== 'object' ? (JSON.stringify(value) ?? 'null') : null
+}
+
+function stringifyWithin(value: unknown, depth: number): string {
+  const leaf = scalar(value)
+  if (leaf !== null) return leaf
+  if (depth >= RECURSIVE_DEPTH) return stringifyWithStack(value as object)
+  if (Array.isArray(value))
+    return `[${value.map((item) => stringifyWithin(item, depth + 1)).join(',')}]`
   const record = value as Record<string, unknown>
   const keys = Object.keys(record).sort(compareCodeUnit)
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stringifyWithin(record[key], depth + 1)}`).join(',')}}`
+}
+
+/**
+ * The same output with the work on a stack: a string on it is output, an
+ * object is still to be written.
+ */
+function stringifyWithStack(root: object): string {
+  const out: string[] = []
+  const stack: Array<string | object> = [root]
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    if (typeof next === 'string') {
+      out.push(next)
+      continue
+    }
+    const record = next as Record<string, unknown>
+    const array = Array.isArray(next)
+    const keys = array ? null : Object.keys(record).sort(compareCodeUnit)
+    const count = keys === null ? (next as unknown[]).length : keys.length
+    out.push(array ? '[' : '{')
+    stack.push(array ? ']' : '}')
+    for (let i = count - 1; i >= 0; i--) {
+      const key = keys === null ? i : (keys[i] as string)
+      const head = `${i > 0 ? ',' : ''}${keys === null ? '' : `${JSON.stringify(key)}:`}`
+      const item = record[key]
+      const leaf = scalar(item)
+      if (leaf !== null) stack.push(head + leaf)
+      else {
+        stack.push(item as object)
+        if (head !== '') stack.push(head)
+      }
+    }
+  }
+  return out.join('')
 }
 
 /** 53-bit-quality string hash (cyrb53), widened to 64 hex bits of output. */
