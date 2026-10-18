@@ -39,6 +39,7 @@ import {
   THREADS_KEY,
 } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
+import { isNodeMetaContainer } from './node-meta-containers.js'
 import {
   annotationBreach,
   annotationCounts,
@@ -323,19 +324,20 @@ interface UpdateWrites {
 }
 
 /**
- * Whether `op` writes a workspace-tree node's OWN map — the map the node meta
- * schemas read every key of, so a write of any key there can move, rename or
- * hide a node. Decided by where the map sits rather than by which key is
- * written: a page edit writes the content containers below that map and
- * never the map itself, so it pays nothing for the check this answer gates.
+ * Whether `op` writes a workspace-tree node's meta: the node's OWN map — the
+ * map the node meta schemas read every key of, so a write of any key there
+ * can move, rename or hide a node — or anything inside a container held at a
+ * meta key, which a reader refuses but which an edit could otherwise reach
+ * from below the map. Decided by where the container sits rather than by
+ * which key is written: a page edit writes the content containers below that
+ * map and never the map itself, so it pays one path lookup per container and
+ * none of the placement walk this answer gates.
  */
 function touchesMeta(doc: LoroDoc, op: Op, nodeMaps: Map<ContainerID, boolean>): boolean {
   if (op.container === `cid:root-${WORKSPACE_TREE_KEY}:Tree`) return true
-  if (!op.container.endsWith(':Map')) return false
   let known = nodeMaps.get(op.container)
   if (known === undefined) {
-    const path = doc.getPathToContainer(op.container)
-    known = path?.length === 2 && path[0] === WORKSPACE_TREE_KEY
+    known = isNodeMetaContainer(doc.getPathToContainer(op.container), op.container)
     nodeMaps.set(op.container, known)
   }
   return known

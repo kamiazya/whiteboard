@@ -3,6 +3,7 @@
 // everything a keeper does per edited document — naming it after its heading,
 // stamping when it was edited, checkpointing it — needs to know.
 import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
+import { isNodeMetaContainer } from './node-meta-containers.js'
 import { WORKSPACE_TREE_KEY, workspaceNodeMetaSchema } from './workspace-tree.js'
 
 /** A document an import wrote to. */
@@ -104,26 +105,28 @@ const PLACEMENT_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'k
  */
 export function organisationChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
-  const underTree = new Map<ContainerID, boolean | undefined>()
-  const isUnderTree = (container: ContainerID) => {
-    if (!underTree.has(container)) {
-      const path = workspace.getPathToContainer(container)
-      underTree.set(container, path === undefined ? undefined : path[0] === WORKSPACE_TREE_KEY)
-    }
-    return underTree.get(container)
+  const paths = new Map<ContainerID, readonly (string | number)[] | undefined>()
+  const pathTo = (container: ContainerID) => {
+    if (!paths.has(container)) paths.set(container, workspace.getPathToContainer(container))
+    return paths.get(container)
   }
   const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
   return changes
     .flatMap((change) => change.ops)
     .some((op) => {
       if (op.container === tree) return true
-      const under = isUnderTree(op.container)
+      const path = pathTo(op.container)
       // No path at all is a container under a node a delete took: judged as
       // the tree's, by the placement keys below, as it always was.
-      if (under === false) return true
+      if (path !== undefined && path[0] !== WORKSPACE_TREE_KEY) return true
+      // Inside a container held at a meta key: a reader refuses the node, and
+      // an edit there could rename or re-place it from below the node's map.
+      if (path !== undefined && path.length > 2 && isNodeMetaContainer(path, op.container)) {
+        return true
+      }
       const content = op.content as { readonly key?: unknown }
       if (typeof content.key !== 'string' || !PLACEMENT_KEYS.has(content.key)) return false
-      return workspace.getPathToContainer(op.container)?.length === 2
+      return path?.length === 2
     })
 }
 

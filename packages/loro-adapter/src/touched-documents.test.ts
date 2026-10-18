@@ -3,7 +3,7 @@
  * operations, and the edit stamp a keeper puts on the ones whose CONTENT it
  * changed. Driven through a replica's update, the shape every keeper takes.
  */
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { writeDocumentKind } from './document-envelope.js'
@@ -245,6 +245,33 @@ describe('organisationChangedSince', () => {
   it.each(Object.keys(ORGANISATION_EDITS))('answers true for an import that does %s', (name) => {
     const workspace = keeper()
     const since = imported(workspace, ORGANISATION_EDITS[name] as Edit)
+
+    expect(organisationChangedSince(workspace, since)).toBe(true)
+  })
+
+  // An edit inside a container held at a meta key sits one level below the
+  // node's map, where content edits sit — and can still rename or re-place it.
+  it.each([
+    ['segment', 'weekly'],
+    ['name', 'Weekly'],
+    ['documentId', NOTE],
+  ])('answers true for an edit inside %s held as a container', (key, text) => {
+    const workspace = keeper()
+    const node = workspace
+      .getTree('tree')
+      .getNodes()
+      .find((each) => each.data.get('documentId') === NOTE)
+    node?.data.setContainer(key, new LoroText()).insert(0, text)
+    workspace.commit()
+    const since = imported(workspace, (replica) => {
+      const held = replica
+        .getTree('tree')
+        .getNodes()
+        .map((each) => each.data.get(key))
+        .find((value) => value instanceof LoroText)
+      if (!(held instanceof LoroText)) throw new Error(`no ${key} container`)
+      held.insert(held.length, '/..')
+    })
 
     expect(organisationChangedSince(workspace, since)).toBe(true)
   })
