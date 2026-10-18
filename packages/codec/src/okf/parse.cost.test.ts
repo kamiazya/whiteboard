@@ -12,13 +12,17 @@ const nested = (depth: number): string =>
   `---\ntype: note\nx: ${'{a: '.repeat(depth)}1${'}'.repeat(depth)}\n---\nbody\n`
 
 describe('parseOkf cost', () => {
-  it.fails('accepts no frontmatter that serialises to many times its size', () => {
+  it('accepts no frontmatter that serialises to many times its size', () => {
     // Measured: 2_529 chars in, 252_029 out at depth 500, a hundredfold;
     // yaml accepted up to 811 levels in the test worker, where serializeOkf
     // itself then overflowed the stack.
     const text = nested(500)
     const parsed = parseOkf(text)
-    if (!parsed.ok) return
-    expect(serializeOkf(parsed.value).length).toBeLessThanOrEqual(20 * text.length)
+    if (parsed.ok) {
+      expect(serializeOkf(parsed.value).length).toBeLessThanOrEqual(20 * text.length)
+      return
+    }
+    // Refused for its depth, not for anything else about it.
+    expect(parsed.error.message).toMatch(/at most 32 levels/)
   })
 })

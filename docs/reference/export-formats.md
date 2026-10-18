@@ -440,6 +440,14 @@ allowed in OKF frontmatter". OKF gives them no meaning, and an
 alias makes a few bytes stand for a value of any size. Write the value out
 each time it is needed; this server writes a repeated value out in full too.
 
+**Frontmatter nests at most 32 levels.** The root mapping is one level, and
+every mapping or list inside it one more. A deeper frontmatter is not stored:
+the same write paths answer "OKF frontmatter may nest at most 32 levels of
+mappings and lists". Each level is written two spaces further in, so a value
+nested hundreds deep exports as hundreds of times its size. A document stored
+with deeper frontmatter before this limit still reads and exports in full; it
+is re-importing that export which is refused.
+
 ## Who wrote a document
 
 `wb_workspace_edit` takes an optional `actor` for the whole batch, and records
