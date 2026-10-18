@@ -46,6 +46,8 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would leave this workspace holding more documents than one workspace may. Move some documents to another workspace first.',
   too_many_folders:
     'It would leave this workspace holding more folders than one workspace may. Move documents into fewer folders, or to another workspace, first.',
+  causal_gap:
+    'It built on changes the keeper has not received yet. It will be sent again; if this stays, reload the page.',
 }
 
 export function writeRefusalReason(refused: SyncWriteRefusal): string {

@@ -410,11 +410,32 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
   }
 }
 
+/**
+ * A sync write refused because its changes build on a change this keeper
+ * does not hold. Loro parks such changes outside the oplog, where no bound is
+ * judged, and applies them as soon as a later import supplies what they
+ * build on — so the instance holding them is dropped and nothing is kept.
+ * 409 rather than a 4xx a client gives up on: sending again once the keeper
+ * holds the change lands, which is the ordinary end of a keeper briefly
+ * behind its own record.
+ */
+export class CausalGapError extends SyncWriteRefusalError {
+  readonly code = 'causal_gap'
+  readonly status = 409
+
+  constructor() {
+    super(
+      'This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first',
+    )
+    this.name = 'CausalGapError'
+  }
+}
+
 /** What a surface answers a sync write's throw with, or `undefined` for one it does not answer. */
 export function syncWriteAnswer(err: unknown):
   | {
       readonly code: SyncWriteRefusalCode | typeof DOCUMENT_ENGINE_TRAP_CODE
-      readonly status: 400 | 413 | 500
+      readonly status: 400 | 409 | 413 | 500
     }
   | undefined {
   if (err instanceof SyncWriteRefusalError) return { code: err.code, status: err.status }

@@ -64,6 +64,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  CausalGapError:
+    'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
   UnjudgedImportError:
     'a judge that threw rather than answered, which is the keeper failing and not the caller; it reaches /api/v1 only through a trash restore and is answered as the 500 it is',
   NoRoomForCopyError:

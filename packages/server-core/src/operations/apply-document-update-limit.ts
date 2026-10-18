@@ -13,6 +13,7 @@ import type { Frontiers, LoroDoc } from 'loro-crdt'
 import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import {
+  CausalGapError,
   DocumentNameTooLongError,
   isSyncWriteRefusal,
   OffGrammarPathError,
@@ -173,7 +174,9 @@ function placementRefusal(
  * read rebuilds it from storage and nothing of the write survives — and so
  * does any other throw once the import has landed: a judge that fails rather
  * than answering has judged nothing, and the instance still holds the
- * update. Only bytes the engine refuses outright leave the instance kept,
+ * update. So does an update that builds on a change the instance lacks, whose
+ * parked changes no judge reads (`CausalGapError`). Only bytes the engine
+ * refuses outright leave the instance kept,
  * since the import took nothing in. Everything from the import to the
  * refusal is synchronous, so no other request sees the half-taken state.
  */
@@ -187,12 +190,14 @@ export function importWithinSyncLimits(
   const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
   let landed = false
   try {
-    const { breach, touchesNodeMeta } = runEvictingOnEngineTrap(
+    const { breach, touchesNodeMeta, pending } = runEvictingOnEngineTrap(
       trapped,
       'importing an update into',
       () => importWithinTextLimits(doc, update),
     )
     landed = true
+    // First: a parked change was judged by nothing below.
+    if (pending) refuse(target, new CausalGapError())
     if (breach !== null) refuse(target, textBreachRefusal(breach))
     if (!(options.workspaceRecord && touchesNodeMeta)) return
     const refusal = placementRefusal(doc, before, trapped)

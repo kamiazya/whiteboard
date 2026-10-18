@@ -165,6 +165,14 @@ export interface SyncTextJudgement {
    * placement checks it only then.
    */
   readonly touchesNodeMeta: boolean
+  /**
+   * Whether the import parked changes that build on a change the document
+   * does not hold. Loro keeps them outside the oplog, so the judgement never
+   * read them, and applies them as soon as a later import supplies what they
+   * build on — so a keeper refuses the update and drops the instance, the
+   * one way to be rid of them.
+   */
+  readonly pending: boolean
 }
 
 type Op = JsonSchema['changes'][number]['ops'][number]
@@ -554,15 +562,16 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   // does not bar a record from a fresh workspace.
   const replays = from.length() > 0
   if (replays) doc.detach()
+  let pending: boolean
   try {
-    doc.import(update)
+    pending = (doc.import(update).pending?.size ?? 0) > 0
   } catch (err) {
     // A refused import left the oplog as it was; a trapped instance is never touched again.
     if (replays && !isEngineTrap(err)) doc.attach()
     throw err
   }
   try {
-    return judgeImported(doc, from, replays)
+    return { ...judgeImported(doc, from, replays), pending }
   } catch (err) {
     if (isEngineTrap(err)) throw err
     throw new UnjudgedImportError(err)
@@ -581,10 +590,14 @@ export class UnjudgedImportError extends Error {
   }
 }
 
-function judgeImported(doc: LoroDoc, from: VersionVector, replays: boolean): SyncTextJudgement {
+function judgeImported(
+  doc: LoroDoc,
+  from: VersionVector,
+  replays: boolean,
+): Omit<SyncTextJudgement, 'pending'> {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
-  const judged = (breach: SyncTextBreach | null): SyncTextJudgement => ({
+  const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
   })
@@ -767,8 +780,10 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
     // Dropped before the judgement, and kept only once it passes: a breach,
     // refused bytes and an engine trap each leave the copy unusable.
     copy = null
-    const { breach } = importWithinTextLimits(judging, update)
-    if (breach === null) copy = judging
+    const { breach, pending } = importWithinTextLimits(judging, update)
+    // A copy holding parked changes would apply them when a later update
+    // fills their gap, and judge that update by them.
+    if (breach === null && !pending) copy = judging
     return breach
   }
 }

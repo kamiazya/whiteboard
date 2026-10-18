@@ -33,12 +33,15 @@ export type SyncWriteRefusal = z.infer<typeof syncWriteRefusalSchema>
  * Whether an answer to a sync write says the same bytes can never be taken.
  * A 4xx is about the request, so sending it again gets the same answer —
  * except a refused credential (401/403), which a new session clears and the
- * caller reports on its own path, and the two that ask for a retry by name
- * (408, 429). A 5xx is the keeper's own trouble, and a retry may land.
+ * caller reports on its own path, the two that ask for a retry by name
+ * (408, 429), and a 409 `causal_gap`: the keeper lacks a change the bytes
+ * build on, which it holds once it catches up with its own record or the
+ * writer sends what it has not acknowledged. A 5xx is the keeper's own
+ * trouble, and a retry may land.
  */
 export function isPermanentWriteRefusal(status: number): boolean {
   if (status < 400 || status >= 500) return false
-  return status !== 401 && status !== 403 && status !== 408 && status !== 429
+  return status !== 401 && status !== 403 && status !== 408 && status !== 409 && status !== 429
 }
 
 /** The refusal a body states, read through the sync routes' own contract. */

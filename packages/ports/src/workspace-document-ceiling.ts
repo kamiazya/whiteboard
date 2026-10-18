@@ -11,7 +11,7 @@ import type { SyncWriteRefusalCode } from '@kamiazya/whiteboard-model'
  */
 export abstract class SyncWriteRefusalError extends Error {
   abstract readonly code: SyncWriteRefusalCode
-  abstract readonly status: 400 | 413
+  abstract readonly status: 400 | 409 | 413
 }
 
 /**

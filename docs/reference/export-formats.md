@@ -108,6 +108,10 @@ not:
   `promote`, and by a create, a move or a trash restore whose new folders
   would pass it, in the browser and on the daemon alike. A workspace already
   holding more still lists, and still takes a write that adds no folder.
+  A sync `update` also refuses, with
+  `409 {"error":"causal_gap"}` and nothing stored, an update that builds on a
+  change the daemon does not hold; the web app sends it again, and it lands
+  once the daemon holds what it builds on.
 - **Rewriting references** is held to the same ceilings, the 262,144
   characters of a body and the 8,192 of a text node. Each link is longer than
   the name it replaces, and a moved document's new path can be longer than

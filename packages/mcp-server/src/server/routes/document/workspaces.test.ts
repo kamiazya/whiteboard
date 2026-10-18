@@ -538,7 +538,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
     const [updateRes, renameRes] = await Promise.all([updatePromise, renamePromise])
     expect(renameRes.status).toBe(200)
-    expect(updateRes.status).toBe(200)
+    expect(updateRes.status).toBe(409) // nothing at the old path holds what it builds on
 
     // Exactly one canvas must survive -- the update must not have silently
     // inserted a phantom duplicate back at the old path.

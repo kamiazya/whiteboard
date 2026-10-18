@@ -35,6 +35,7 @@ import type { ZodString } from 'zod'
 import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
 import {
+  CausalGapError,
   DocumentNameTooLongError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
@@ -54,6 +55,7 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
   TooManyFoldersError: () => new TooManyFoldersError(4001),
+  CausalGapError: () => new CausalGapError(),
 }
 
 /**
