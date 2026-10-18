@@ -230,10 +230,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // search, so the vocabulary went first and no module imports the file it
   // left. What remains over budget is the search's own, and the next shrink
   // is the trial scorer as a module of its own. The anchor contract's doc sits
-  // here too, on `assignEdgeAnchors`, the export a reader hovers. Raised by 16
-  // for the layout's routing budget, which every route the search makes
-  // spends from and so is threaded through each of them.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1079,
+  // here too, on `assignEdgeAnchors`, the export a reader hovers. Raised by 34
+  // for the layout's routing budget, which every search and route here spends
+  // from and so is threaded through each of them.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1097,
   // The gesture REDUCER: every pointer phase's decision for every tool and
   // every kind of element, each arm carrying the reason it is where it is.
   // What has already left: the per-kind hit-tests (`element-pick.ts`,

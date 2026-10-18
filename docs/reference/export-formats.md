@@ -313,15 +313,19 @@ and writes nothing; the same bound applies to a batch stored as a proposal. A
 `tidy` op's `scope` and a `region.set` op's `nodes` list at most 2,000 ids,
 and its `edges` at most 2,000.
 
-Within those bounds, one render also caps the work of the search that finds
-a way around boxes when no simple route is clear, because it can grow far
-faster than the board. A board built to defeat it — a box walled in behind a
-curtain of thin boxes — took minutes to render without the cap, and with it
-renders in about the time an ordinary board of its size does. The largest
-ordinary boards the project tests spend under a quarter of the allowance and
-render exactly as they would without it. A board that does exhaust it still
-draws every edge: past it, an edge no simple route reaches keeps its simple
-route even where that runs through a box.
+Within those bounds, one render also caps the work two parts of edge routing
+may do, because each can grow far faster than the board: the search that
+finds a way around boxes when no simple route is clear, and the search that
+picks which side of a box each edge leaves from and arrives at. A board built
+to defeat either — hundreds of edges through 64 bends each over one square, or
+a box walled in behind a curtain of thin boxes — took from minutes to a
+quarter of an hour to render without the cap, and with it renders in about
+the time an ordinary board of its size does. The largest ordinary boards the
+project tests spend under a quarter of either allowance and render exactly
+as they would without it. A board that does exhaust one still draws every
+edge: past it, an edge no simple route reaches keeps its simple route even
+where that runs through a box, and the side choice stops improving on the
+sides it has reached.
 
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — refuse an update that grows a board past either bound

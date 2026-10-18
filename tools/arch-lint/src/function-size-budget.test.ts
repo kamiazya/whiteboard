@@ -439,9 +439,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // invariant that would otherwise be a comment inside the loop it came from.
   // The closure is longer by those doc comments and shorter by nothing; the next
   // real shrink is lifting the score object into a module of its own, which
-  // needs its eight captured caches passed as a bundle. +1 for the routing
-  // budget its routes spend from.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 309,
+  // needs its eight captured caches passed as a bundle. Raised by 9 for the
+  // routing budget: a build or a trial pair it cannot cover leaves the
+  // configuration unpriced, and that has to be carried to the adoption test.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 317,
   // +3, threading the routing budget to both runs of a region.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 97,
   // `improveEdge` replaces the candidate loop's body and brings its

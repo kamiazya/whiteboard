@@ -75,11 +75,15 @@ type ConfigCost = readonly number[]
  * phase over every segment pair — the same function the initial sweep
  * calls, so the incremental trial path and the broad-phase build cannot
  * drift (see edge-crossing-sweep.ts) — then maps the summed triple into
- * the declared tiers.
+ * the declared tiers. Undefined, spending nothing, when `budget` cannot
+ * cover every segment pair of the two.
  */
-function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+function pairScore(a: readonly Point[], b: readonly Point[], budget: RoutingBudget) {
   const qa = quantizedSegments(a)
   const qb = quantizedSegments(b)
+  const examined = (qa.length / 8) * (qb.length / 8)
+  if (examined > budget.pairs) return undefined
+  budget.pairs -= examined
   let overlap = 0
   let illegible = 0
   let crossings = 0
@@ -144,6 +148,12 @@ function quantizedSegments(path: readonly Point[]): Int32Array {
   quantizedCache.set(path, out)
   return out
 }
+
+/**
+ * What a trial costs when the layout's budget could not price all of it:
+ * worse than any real configuration, so it is never adopted on a partial sum.
+ */
+const UNPRICED: ConfigCost = zeroPenalty().map(() => Number.POSITIVE_INFINITY)
 
 /**
  * Hard edge-count gate for the improvement pass. The initial matrix build
@@ -366,12 +376,17 @@ function createConfigScore(
   // Sweep-and-prune instead of the O(E^2) double loop: identical scores
   // by construction (same narrow phase, canonical pair order), sparse for
   // non-interacting pairs — evaluateTrial already zero-defaults absent
-  // keys.
-  for (const [key, [o, il, c]] of buildPairwiseScores(paths)) {
+  // keys. A build the layout's budget cannot cover prices nothing, and a
+  // configuration priced at zero is one the search leaves as it is.
+  const built = buildPairwiseScores(paths, budget)
+  if (built === undefined) currentCost = zeroPenalty()
+  for (const [key, [o, il, c]] of built ?? []) {
     const score: ConfigCost = pairPenalty([o, il, c])
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
+  // Set when the budget refuses one of a trial's pairs (see UNPRICED).
+  let unpriced = false
   /**
    * Re-score every touched edge against ITS OWN boxes and borders, swapping
    * the cached term for the new one in place.
@@ -421,7 +436,9 @@ function createConfigScore(
       }
       return
     }
-    const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
+    const next = pairScore(trialPaths[lo]!, trialPaths[hi]!, budget)
+    unpriced ||= next === undefined
+    if (next === undefined) return
     accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
     accumulateCost(cost, next, 1)
     updates.set(key, next)
@@ -464,6 +481,7 @@ function createConfigScore(
   ): Map<number, ConfigCost> => {
     const touchedSet = new Set(touched)
     const updates = new Map<number, ConfigCost>()
+    unpriced = false
     for (const i of touched) rescorePairsOf(cost, i, touchedSet, trialPaths, trialBounds, updates)
     return updates
   }
@@ -502,7 +520,7 @@ function createConfigScore(
     const updates = applyPairCosts(cost, touched, trialPaths, trialBounds)
 
     return {
-      cost,
+      cost: unpriced ? UNPRICED : cost,
       anchors: trialAnchors,
       placement: trialPlacement,
       paths: trialPaths,
@@ -589,8 +607,8 @@ function optimizeSideChoices(
   // the comment on `routeCached` for why one layout may share one cache.
   // Omitted, this search keeps a cache of its own.
   cache?: Map<string, readonly Point[]>,
-  // The layout's account (`routing-budget.ts`), which every route this
-  // search makes spends from.
+  // The layout's account (`routing-budget.ts`). Past it no trial is adopted,
+  // so the search ends on the sides it has reached: a partial repair.
   budget: RoutingBudget = createRoutingBudget(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
