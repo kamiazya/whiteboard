@@ -592,7 +592,9 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  * On a breach `doc` holds operations it must not keep, possibly still
  * detached: the caller discards the instance. Bytes the engine refuses are
  * rethrown with `doc` as it was. An engine trap is rethrown as it came; the
- * instance it struck is unusable.
+ * instance it struck is unusable. Anything else thrown once the import has
+ * landed is rethrown as `UnjudgedImportError`, so a caller cannot read it as
+ * refused bytes and keep an instance holding operations nobody judged.
  */
 export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTextJudgement {
   const from = doc.oplogVersion()
@@ -610,6 +612,27 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
     if (replays && !isEngineTrap(err)) doc.attach()
     throw err
   }
+  try {
+    return judgeImported(doc, from, replays)
+  } catch (err) {
+    if (isEngineTrap(err)) throw err
+    throw new UnjudgedImportError(err)
+  }
+}
+
+/**
+ * An update landed in a document and its judgement threw before it could
+ * answer. The document holds the update's operations, judged or not, so it
+ * must be discarded exactly as a refused one is.
+ */
+export class UnjudgedImportError extends Error {
+  constructor(cause: unknown) {
+    super('The update was imported but could not be judged', { cause })
+    this.name = 'UnjudgedImportError'
+  }
+}
+
+function judgeImported(doc: LoroDoc, from: VersionVector, replays: boolean): SyncTextJudgement {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
   const judged = (breach: SyncTextBreach | null): SyncTextJudgement => ({

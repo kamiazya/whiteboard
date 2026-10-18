@@ -71,6 +71,7 @@ export {
   type SyncTextBreach,
   type SyncTextJudgement,
   syncTextLimitJudge,
+  UnjudgedImportError,
 } from './sync-text-limits.js'
 export {
   markThreadPassages,

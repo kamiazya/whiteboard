@@ -1,6 +1,7 @@
 import {
   importWithinTextLimits,
   readWorkspaceDocuments,
+  UnjudgedImportError,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
@@ -9,6 +10,7 @@ import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import {
   DocumentNameTooLongError,
+  isSyncWriteRefusal,
   OffGrammarPathError,
   type SyncWriteRefusalError,
   TooManyDocumentsError,
@@ -123,9 +125,12 @@ function placementRefusal(
  * or moves one (`placementRefusal`); a body edit pays nothing for them.
  *
  * Every refusal drops the cached instance instead of saving, so the next
- * read rebuilds it from storage and nothing of the write survives.
- * Everything from the import to the refusal is synchronous, so no other
- * request sees the half-taken state.
+ * read rebuilds it from storage and nothing of the write survives — and so
+ * does any other throw once the import has landed: a judge that fails rather
+ * than answering has judged nothing, and the instance still holds the
+ * update. Only bytes the engine refuses outright leave the instance kept,
+ * since the import took nothing in. Everything from the import to the
+ * refusal is synchronous, so no other request sees the half-taken state.
  */
 export function importWithinSyncLimits(
   doc: LoroDoc,
@@ -135,13 +140,27 @@ export function importWithinSyncLimits(
 ): void {
   const before = doc.oplogFrontiers()
   const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
-  const { breach, touchesNodeMeta } = runEvictingOnEngineTrap(
-    trapped,
-    'importing an update into',
-    () => importWithinTextLimits(doc, update),
-  )
-  if (breach !== null) refuse(target, textBreachRefusal(breach))
-  if (!(options.workspaceRecord && touchesNodeMeta)) return
-  const refusal = placementRefusal(doc, before, trapped)
-  if (refusal !== null) refuse(target, refusal)
+  let landed = false
+  try {
+    const { breach, touchesNodeMeta } = runEvictingOnEngineTrap(
+      trapped,
+      'importing an update into',
+      () => importWithinTextLimits(doc, update),
+    )
+    landed = true
+    if (breach !== null) refuse(target, textBreachRefusal(breach))
+    if (!(options.workspaceRecord && touchesNodeMeta)) return
+    const refusal = placementRefusal(doc, before, trapped)
+    if (refusal !== null) refuse(target, refusal)
+  } catch (err) {
+    // A refusal and an engine trap have dropped the instance already.
+    if ((landed || err instanceof UnjudgedImportError) && !isSyncWriteRefusal(err)) {
+      target.evict()
+      log.warning('sync write could not be judged; the cached copy was dropped', {
+        ...trapped.fields,
+        err,
+      })
+    }
+    throw err
+  }
 }

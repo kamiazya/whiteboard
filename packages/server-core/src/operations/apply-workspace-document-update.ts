@@ -105,10 +105,15 @@ export async function applyWorkspaceDocumentUpdate(
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
+    // Idempotent, so a failure that a nested step already answered by
+    // dropping the record is not dropped and logged twice.
+    let dropped = false
     const target = {
       subject: `the workspace record of ${workspaceId}`,
       fields: { workspaceId },
       evict() {
+        if (dropped) return
+        dropped = true
         deps.workspaceDocuments.evict(workspaceId)
         deps.workspaceDocuments.evictProjections(workspaceId)
       },
@@ -120,26 +125,35 @@ export async function applyWorkspaceDocumentUpdate(
       if (isSyncWriteRefusal(err)) {
         throw err
       }
-      log.warning('workspace-document update rejected: malformed Loro import data', {
+      log.warning('workspace-document update rejected: the import was refused or not judged', {
         workspaceId,
         updateBytes: update.byteLength,
         err,
       })
       return { kind: 'malformed-update' }
     }
-    if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
-      return { kind: 'placement-refused' }
+    // From here the cached record holds the update, so a throw anywhere
+    // before the save completes drops it unsaved: kept, it would ride the
+    // next ordinary save by anyone, unrefused.
+    let touched: readonly TouchedDocument[]
+    try {
+      if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
+        return { kind: 'placement-refused' }
+      }
+      // Before the save, so the name and the stamp ride the same write and its
+      // fan-out hands them back to the replica that made the edit.
+      touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
+        const found = documentsTouchedSince(doc, since)
+        seedNamesFromTitles(doc, found)
+        if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
+        return found
+      })
+      // Fan-out to subscribers happens inside save.
+      await deps.workspaceDocuments.save(workspaceId, doc)
+    } catch (err) {
+      target.evict()
+      throw err
     }
-    // Before the save, so the name and the stamp ride the same write and its
-    // fan-out hands them back to the replica that made the edit.
-    const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
-      const found = documentsTouchedSince(doc, since)
-      seedNamesFromTitles(doc, found)
-      if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
-      return found
-    })
-    // Fan-out to subscribers happens inside save.
-    await deps.workspaceDocuments.save(workspaceId, doc)
     deps.workspaceDocuments.evictProjections(workspaceId)
     const edited = touched
       .filter((each) => each.contentWritten)

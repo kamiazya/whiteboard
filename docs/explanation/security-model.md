@@ -454,7 +454,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   surface.** `canvas:write` edits what documents say. A live-sync update is
   read before it is applied: one that would add, delete or move a document,
   or that addresses a path no document holds, is refused with `403` unless
-  the grant also holds `workspace:write`, and nothing of it is kept. Moving
+  the grant also holds `workspace:write`, and nothing of it is kept. A
+  live-sync update is judged after it is taken into the keeper's working
+  copy, so one the keeper cannot finish judging — a check that fails rather
+  than answering, or a save that fails — is dropped with that copy unsaved,
+  exactly as a refused one is, and never rides a later save. Moving
   a whole workspace in needs `canvas:write`, `workspace:write` and
   `versions:write`.
 - **A version grant restores in place, and writes no other document.**
