@@ -299,6 +299,14 @@ stored past a bound before it existed still reads, and still takes any change
 that leaves it no larger — moving, restyling, or replacing one node with
 another — so removing nodes, edges or lines is how it shrinks.
 
+Line jumps (`lineJumps: "arc"`) draw at most **64 hops on one segment** and
+**4,096 on one board**; a crossing past either cap is drawn as a plain
+crossing, without its arc. Finding crossings has its own bound too: past
+**4,000,000 candidate pairs** examined on one board, the search stops and no
+further hops are drawn, while the hops already found are kept — so a board of
+long, nearly parallel edges that never cross cannot make a render search
+indefinitely. Edges and lines are searched in the order they are drawn.
+
 ## How many open comment threads and proposed changes one document may hold
 
 One document holds at most **500 open comment threads** and at most **1,000

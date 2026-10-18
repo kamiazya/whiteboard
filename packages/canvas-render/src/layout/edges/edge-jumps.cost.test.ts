@@ -175,20 +175,37 @@ describe('computeEdgeJumps cost', () => {
     // apart: every segment shares its coarse cells with every other edge's,
     // yet none crosses another, so no hop cap ever engages. Examining every
     // candidate pair is 481_759_000 narrow-phase tests (1m26s measured).
+    // One cross before them and one after, far from them both.
     const L = 10_000
-    const edges = Array.from({ length: 2000 }, (_, i) =>
+    const zigzags = Array.from({ length: 2000 }, (_, i) =>
       routed(
         `z${i}`,
         Array.from({ length: 66 }, (_, k) => ({ x: k * L, y: i + (k % 2) * 0.25 })),
       ),
     )
+    const cross = (id: string, y: number) => [
+      routed(`${id}h`, [
+        { x: 0, y },
+        { x: 200, y },
+      ]),
+      routed(`${id}v`, [
+        { x: 100, y: y - 100 },
+        { x: 100, y: y + 100 },
+      ]),
+    ]
+    const edges = [...cross('first', -1e6), ...zigzags, ...cross('last', -2e6)]
     narrowTests.count = 0
     narrowTests.budget = 20_000_000
     try {
-      const jumps = computeEdgeJumps(edges)
-      expect(jumps.size).toBe(0)
+      const { jumps, visits } = jumpsWithinCellBudget(edges, Number.POSITIVE_INFINITY)
+      // The hop found before the budget ran out stays; none is drawn after.
+      expect(new Map(jumps)).toEqual(new Map([['firstv', [{ segment: 0, x: 100, y: -1e6 }]]]))
+      // Measured 3_430_363, in about 0.4s.
       expect(narrowTests.count).toBeGreaterThan(1_000_000)
       expect(narrowTests.count).toBeLessThanOrEqual(4_000_000)
+      // And the segments after it are not filed either: 165_633 cell
+      // visits, against 550_020 when the rest of the board is still filed.
+      expect(visits).toBeLessThanOrEqual(200_000)
     } finally {
       narrowTests.budget = Number.POSITIVE_INFINITY
     }

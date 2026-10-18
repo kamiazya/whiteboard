@@ -24,6 +24,17 @@ interface Crossing {
  */
 const MAX_HOPS_PER_SEGMENT = 64
 const MAX_HOPS_PER_SCENE = 4096
+/**
+ * Most candidate pairs one scene examines. The hop caps bound what is
+ * drawn, not what is searched: segments that share cells and never cross
+ * draw nothing and still cost a pair each. Past this the search stops and
+ * draws no further hops, keeping those already found, so the output stays
+ * deterministic. A pair is a filed entry read, duplicates included, so the
+ * count runs a little ahead of the narrow-phase tests it bounds. Measured
+ * in those tests: 4_160 on a 66_000-segment board, 1.3 million beside
+ * twenty board-spanning diagonals, both far below it.
+ */
+const MAX_PAIRS_PER_SCENE = 4_000_000
 
 interface IndexedSegment {
   readonly a: Point
@@ -222,9 +233,14 @@ class SegmentGrid {
     return reached
   }
 
+  /** Filed entries read so far, duplicates included, against MAX_PAIRS_PER_SCENE. */
+  private examined = 0
+
   private takeFiled(cells: Map<string, number[]>, keys: readonly string[], found: number[]): void {
     for (const key of keys) {
-      for (const index of cells.get(key) ?? []) {
+      const filed = cells.get(key) ?? []
+      this.examined += filed.length
+      for (const index of filed) {
         if (this.seenStamp[index] === this.stamp) continue
         this.seenStamp[index] = this.stamp
         found.push(index)
@@ -237,8 +253,9 @@ class SegmentGrid {
    * once each and in the order they were filed. The order is fixed because
    * two crossings can tie along a segment while their points differ in the
    * last bits, and the spacing rule keeps whichever comes first.
+   * `undefined` once the scene's pair budget is spent.
    */
-  candidates(reached: Reached): IndexedSegment[] {
+  candidates(reached: Reached): IndexedSegment[] | undefined {
     this.stamp += 1
     const found: number[] = []
     for (const { level, own, keys } of reached) {
@@ -246,6 +263,8 @@ class SegmentGrid {
       // Finer segments are found at their coarser partner's own level only.
       if (own && level.finer.size > 0) this.takeFiled(level.finer, keys, found)
     }
+    // Checked per segment, so no segment is searched in part.
+    if (this.examined > MAX_PAIRS_PER_SCENE) return undefined
     return found.sort((p, q) => p - q).map((index) => this.segments[index] as IndexedSegment)
   }
 
@@ -333,9 +352,16 @@ export function computeEdgeJumps(
       const r = reached[seg]
       if (p === undefined || r === undefined || sceneBudget === 0) return
       const { a, b } = p.seg
+      const candidates = grid.candidates(r)
+      if (candidates === undefined) {
+        // The pair budget is spent: no further hops anywhere in the scene,
+        // and the remaining segments are not even filed.
+        sceneBudget = 0
+        return
+      }
       const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
       const hops = spacedHops(
-        crossingsOn(p.seg, grid.candidates(r)),
+        crossingsOn(p.seg, candidates),
         Math.hypot(b.x - a.x, b.y - a.y),
         seg,
         limit,
