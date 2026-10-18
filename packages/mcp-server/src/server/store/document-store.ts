@@ -44,6 +44,7 @@ import type { VersionStore } from './version-store.js'
 import {
   cacheBackedWorkspaceDocs,
   catchUpWorkspaceDoc,
+  evictWorkspaceDocCache,
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
@@ -192,6 +193,7 @@ function placeDocumentInTree({
   existingEntry,
   requestedKind,
   doc,
+  scope,
 }: {
   workspaceDoc: LoroDoc
   workspaceId: string
@@ -200,6 +202,7 @@ function placeDocumentInTree({
   existingEntry: ReturnType<typeof resolveWorkspaceDocument>
   requestedKind: DocumentKind | undefined
   doc: LoroDoc
+  scope: StoreScope
 }): void {
   const kindForTree = requestedKind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
   if (existingEntry === null) {
@@ -207,14 +210,24 @@ function placeDocumentInTree({
     // update's lazy create among them — so it answers to the workspace's
     // document ceiling like every other mint.
     refuseNewDocuments(readWorkspaceDocuments(workspaceDoc).length)
-    createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
-  } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
-    updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })
   }
-  if (!writeDocumentContentAndName(workspaceDoc, documentId, doc)) {
-    throw new ConflictError(
-      `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
-    )
+  try {
+    if (existingEntry === null) {
+      createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
+    } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
+      updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })
+    }
+    if (!writeDocumentContentAndName(workspaceDoc, documentId, doc)) {
+      throw new ConflictError(
+        `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
+      )
+    }
+  } catch (err) {
+    // These write into the CACHED record as they go, so a throw part-way
+    // leaves ops — a new node, the roots written so far — that the next save
+    // of any document here would persist as though this one had succeeded.
+    evictWorkspaceDocCache(workspaceId, scope)
+    throw err
   }
 }
 
@@ -292,6 +305,7 @@ export async function saveDocument(
       existingEntry,
       requestedKind: options.kind,
       doc,
+      scope,
     })
     await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     // A caller may hand this function a doc that is NOT the cached

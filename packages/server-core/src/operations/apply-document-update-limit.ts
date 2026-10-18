@@ -1,6 +1,7 @@
 import {
   importWithinTextLimits,
   readWorkspaceDocuments,
+  rootsNoDocumentNodeHolds,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
@@ -10,6 +11,7 @@ import { getLogger } from '../log.js'
 import {
   DocumentNameTooLongError,
   OffGrammarPathError,
+  RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
   TooManyDocumentsError,
   textBreachRefusal,
@@ -120,7 +122,9 @@ function placementRefusal(
  * one the browser keeper takes too; this adds what only the daemon's sync
  * surface owes: readable node meta, the path grammar and the name bound.
  * Those are checked only for an update that writes a workspace node's meta
- * or moves one (`placementRefusal`); a body edit pays nothing for them.
+ * or moves one (`placementRefusal`); a body edit pays nothing for them. A
+ * standalone document's update instead answers for the roots it adds, since
+ * its content is saved onto its node's own map (`rootsNoDocumentNodeHolds`).
  *
  * Every refusal drops the cached instance instead of saving, so the next
  * read rebuilds it from storage and nothing of the write survives.
@@ -134,6 +138,9 @@ export function importWithinSyncLimits(
   options: { readonly workspaceRecord: boolean },
 ): void {
   const before = doc.oplogFrontiers()
+  // Judged against the document as it was, so a root it already held — which
+  // no save could have written onto its node — does not refuse every edit after.
+  const heldBefore = new Set(options.workspaceRecord ? [] : rootsNoDocumentNodeHolds(doc))
   const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
   const { breach, touchesNodeMeta } = runEvictingOnEngineTrap(
     trapped,
@@ -141,7 +148,12 @@ export function importWithinSyncLimits(
     () => importWithinTextLimits(doc, update),
   )
   if (breach !== null) refuse(target, textBreachRefusal(breach))
-  if (!(options.workspaceRecord && touchesNodeMeta)) return
+  if (!options.workspaceRecord) {
+    const added = rootsNoDocumentNodeHolds(doc).filter((root) => !heldBefore.has(root))
+    if (added.length > 0) refuse(target, new RootNoDocumentHoldsError(added))
+    return
+  }
+  if (!touchesNodeMeta) return
   const refusal = placementRefusal(doc, before, trapped)
   if (refusal !== null) refuse(target, refusal)
 }

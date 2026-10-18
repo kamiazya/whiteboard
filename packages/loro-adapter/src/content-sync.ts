@@ -249,6 +249,35 @@ export function projectedKind(value: unknown): 'text' | 'list' | 'map' | null {
   return null
 }
 
+/** A stored container's kind as the JSON projection spells it (`projectedKind`). */
+export const PROJECTED_KIND_OF: Readonly<Record<string, 'text' | 'list' | 'map'>> = {
+  Text: 'text',
+  Map: 'map',
+  List: 'list',
+  MovableList: 'list',
+}
+
+/**
+ * Whether a source root may be written onto a node's `data` at `key`: never a
+ * key in `reserved` — what the node keeps for itself, where a map at
+ * `nameChosen` leaves it unreadable and a text at `name` names it at any
+ * length — and never where the node already holds something of another kind,
+ * a scalar (a retired field such as `currentBranch`) or a container the
+ * root's projection does not match. Opening a container over either throws or
+ * traps the engine part-way through a write, the roots before it written.
+ */
+export function rootFitsNode(
+  data: LoroMap,
+  key: string,
+  value: unknown,
+  reserved: ReadonlySet<string>,
+): boolean {
+  if (reserved.has(key)) return false
+  const held: unknown = data.get(key)
+  if (held === undefined) return true
+  return PROJECTED_KIND_OF[containerKind(held) ?? ''] === projectedKind(value)
+}
+
 /**
  * Root containers made FRESH at each key, replacing whatever was there.
  * `nodeRoots` opens an existing one, which is right for a diff and wrong for a

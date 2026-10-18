@@ -22,6 +22,7 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
+export { rootsNoDocumentNodeHolds } from './document-node-roots.js'
 export { isEngineTrap } from './engine-trap.js'
 export {
   DEFAULT_FILE_GRACE_MS,
@@ -79,7 +80,7 @@ export {
 } from './thread-marks.js'
 export {
   documentsTouchedSince,
-  placementChangedSince,
+  organisationChangedSince,
   stampEditedDocuments,
   type TouchedDocument,
 } from './touched-documents.js'
