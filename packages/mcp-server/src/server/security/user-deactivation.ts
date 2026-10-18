@@ -39,7 +39,7 @@ type Target = ExpressionBuilder<DatabaseSchema, 'memberProfiles'>
 
 // The configuration's administrators are bindings, not rows, so they are
 // matched through an account's bindings (administrator-check.ts).
-export function namedBinding(
+function namedBinding(
   b: ExpressionBuilder<DatabaseSchema, 'accountBindings'>,
   configured: readonly AuthenticatorBinding[],
 ) {
