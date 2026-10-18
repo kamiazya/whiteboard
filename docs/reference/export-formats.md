@@ -82,8 +82,10 @@ not:
   document, while a workspace with no documents yet takes it whole, since
   nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
-  at a path outside the path grammar or longer than 1,024 characters; a
-  document already at such a path can still be moved to a valid one. The
+  or a folder at a path outside the path grammar or longer than 1,024
+  characters — which is also what keeps a tree of folders from nesting
+  deeper than a path can name; a document already at such a path can still be
+  moved to a valid one. The
   workspace document's `update` also refuses, with
   `400 {"error":"unreadable_document_meta"}`, an update that would leave a
   readable document or folder with meta this server cannot read — a document's
@@ -99,7 +101,13 @@ not:
   and answers it the same way: a document's `update` to a path no document
   holds yet, `POST /api/v1/workspaces/{id}/documents`, a duplicate, a restore
   from the trash, and a version restored to a new path. `wb_workspace_edit`'s
-  `document.create` refuses at that op, with the same message.
+  `document.create` refuses at that op, with the same message. Folders — the
+  nodes a path's parts hang from, which hold no document themselves — have a
+  ceiling of their own, 4000, answered with
+  `413 {"error":"too_many_folders"}` by the workspace document's `update` and
+  `promote`, and by a create, a move or a trash restore whose new folders
+  would pass it, in the browser and on the daemon alike. A workspace already
+  holding more still lists, and still takes a write that adds no folder.
 - **Rewriting references** is held to the same ceilings, the 262,144
   characters of a body and the 8,192 of a text node. Each link is longer than
   the name it replaces, and a moved document's new path can be longer than

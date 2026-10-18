@@ -27,7 +27,9 @@ import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-
 export {
   SyncWriteRefusalError,
   TooManyDocumentsError,
+  TooManyFoldersError,
   WORKSPACE_MAX_DOCUMENTS,
+  WORKSPACE_MAX_FOLDERS,
 } from '@kamiazya/whiteboard-ports'
 
 /** The document a refused text belongs to, once the caller could tell. */
@@ -336,21 +338,36 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
   }
 }
 
+/** How many refused paths a refusal names, and how much of each. */
+const REFUSED_PATHS_NAMED = 3
+const REFUSED_PATH_SHOWN_CHARS = 120
+
+function shortened(path: string): string {
+  return path.length <= REFUSED_PATH_SHOWN_CHARS
+    ? path
+    : `${path.slice(0, REFUSED_PATH_SHOWN_CHARS)}… (${path.length} characters)`
+}
+
 /**
- * A sync write refused because it would put documents at paths
+ * A sync write refused because it would put documents or folders at paths
  * `documentPathSchema` refuses — off the segment grammar, or past
  * `DOCUMENT_PATH_MAX_LENGTH` — a path every listing and search of the
- * workspace then fails on. Nothing of the write was kept. The message names
- * both rules, since a path can break either.
+ * workspace then fails on, and, for a folder, the bound that keeps the tree
+ * from growing deeper than a path can name. Nothing of the write was kept.
+ * The message names both rules, since a path can break either.
  */
 export class OffGrammarPathError extends SyncWriteRefusalError {
   readonly code = 'invalid_path'
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
-    const quoted = paths.map((path) => JSON.stringify(path)).join(', ')
+    // A chain of folders past the bound refuses every path below the bound,
+    // each longer than the last, so only the first few are named, and short.
+    const named = paths.slice(0, REFUSED_PATHS_NAMED).map((path) => JSON.stringify(shortened(path)))
+    const more = paths.length - named.length
+    const quoted = more > 0 ? `${named.join(', ')} and ${more} more` : named.join(', ')
     super(
-      `This update would put documents at paths this keeper cannot store: ${quoted}. A path may be at most ${DOCUMENT_PATH_MAX_LENGTH} characters, and each segment may hold only ASCII letters, digits and interior hyphens`,
+      `This update would put documents or folders at paths this keeper cannot store: ${quoted}. A path may be at most ${DOCUMENT_PATH_MAX_LENGTH} characters, and each segment may hold only ASCII letters, digits and interior hyphens`,
     )
     this.name = 'OffGrammarPathError'
   }

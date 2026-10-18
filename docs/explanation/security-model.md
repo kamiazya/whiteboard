@@ -551,7 +551,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   a create through `/api/v1` or `wb_workspace_edit`, a document's update to a
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
-  checkpointed one at a time, not all at once.
+  checkpointed one at a time, not all at once. Folders are bounded the same
+  way, at 4000 (`too_many_folders`), since every listing walks them as it
+  walks documents, and each folder's path is held to the 1,024-character path
+  bound a document's is (`invalid_path`), which bounds how deep the tree can
+  nest. A record stored before either bound still lists.
 - **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
   board holds at most 2000 nodes and 2000 edges and lines together (a line is

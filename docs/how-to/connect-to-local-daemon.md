@@ -290,7 +290,9 @@ desktop. The daemon refuses a larger workspace whole, with the error
 a daemon workspace holds, so a move into a workspace that already holds
 documents is refused, with `too_many_documents`, when the two together would
 hold more — and at 2000 the daemon refuses any new document, however it is
-added, with the same error.
+added, with the same error. Folders have a ceiling of their own, 4000, and a
+move that would leave the workspace holding more is refused with
+`too_many_folders`.
 
 A saved version is held to the same limits as the documents themselves: a
 move whose saved versions include one with a body, node text or board past

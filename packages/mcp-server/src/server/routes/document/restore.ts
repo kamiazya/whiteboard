@@ -21,8 +21,8 @@ import {
   type ErrorAnswer,
   handleCorruptStoredData,
   invalidBodyRefusal,
+  pastWorkspaceCeiling,
   refusedBy,
-  tooManyDocuments,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -190,7 +190,8 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         const answer = restoreAnswer(result, { targetPath })
         return c.json(answer.body, answer.status)
       } catch (err) {
-        const issue = handleCorruptStoredData(err) ?? tooManyDocuments(err) ?? pastSyncLimit(err)
+        const issue =
+          handleCorruptStoredData(err) ?? pastWorkspaceCeiling(err) ?? pastSyncLimit(err)
         if (issue) return c.json(issue.body, issue.status)
         throw err
       }

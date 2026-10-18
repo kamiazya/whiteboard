@@ -37,13 +37,15 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
   ...KEEPER_LIMIT_REASON,
   document_name_too_long: 'It would give a document a name longer than a name may be.',
   invalid_path:
-    'It would put a document at a path that is too long, or that holds something other than letters, digits and hyphens.',
+    'It would put a document or a folder at a path that is too long, or that holds something other than letters, digits and hyphens.',
   container_name_too_long:
     'It would add a comment thread, a proposal or another part of a document under an id longer than one may be.',
   unreadable_document_meta:
     'It would leave documents in this workspace that could not be read, hiding them.',
   too_many_documents:
     'It would leave this workspace holding more documents than one workspace may. Move some documents to another workspace first.',
+  too_many_folders:
+    'It would leave this workspace holding more folders than one workspace may. Move documents into fewer folders, or to another workspace, first.',
 }
 
 export function writeRefusalReason(refused: SyncWriteRefusal): string {

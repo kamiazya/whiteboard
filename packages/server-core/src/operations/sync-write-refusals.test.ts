@@ -40,6 +40,7 @@ import {
   type SyncWriteRefusalError,
   syncWriteAnswer,
   TooManyDocumentsError,
+  TooManyFoldersError,
   textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './sync-write-refusals.js'
@@ -52,6 +53,7 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
+  TooManyFoldersError: () => new TooManyFoldersError(4001),
 }
 
 /**
