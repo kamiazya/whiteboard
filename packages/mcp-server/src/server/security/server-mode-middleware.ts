@@ -1,6 +1,9 @@
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler, Next } from 'hono'
 import { getCookie } from 'hono/cookie'
+import { HTTPException } from 'hono/http-exception'
+import { getLogger } from '../log.js'
+import { runWithWriteAdmission } from '../store/workspace-lock.js'
 import type { AdministratorCheck } from './administrator-check.js'
 import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import {
@@ -13,19 +16,22 @@ import type { InvitationStore } from './invitation-store.js'
 import { runAsMcpCaller } from './mcp-caller.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import {
+  gatedWorkspaceOf,
   membershipRefusalFor,
   rememberCaller,
   rememberGrant,
-  whileStillAdmitted,
 } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
-import { resolveApiRouteScope } from './route-scope-registry.js'
+import { resolveApiRouteScope, ruleClaiming } from './route-scope-registry.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store.js'
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
 import type { UserDeletion } from './user-deletion.js'
+import { membershipRefusal, OPERATOR_ISSUED_KINDS } from './workspace-access.js'
 import type { WorkspaceRoles } from './workspace-roles.js'
+
+const log = getLogger('membership-gate')
 
 function buildServerModeAuthFailResponse(decision: {
   status: 401 | 403
@@ -196,6 +202,45 @@ async function bearerBecomesUser(
   const outcome = await provisionBearerPerson(provisioning, person, bearer())
   if (outcome.ok || outcome.reason === 'no_provider') return undefined
   return { status: 403, code: outcome.reason }
+}
+
+const READS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Runs an admitted request so its writes check membership again as they are
+ * made. The gate above judged the request when it arrived, before its body;
+ * a person removed (or deactivated) while that body was still arriving must
+ * not have the write land. The check is one indexed read on each workspace
+ * write lock the request enters for the workspace it addresses, and only
+ * while the request is being answered: work it schedules for later (a
+ * checkpoint) writes what was already accepted.
+ *
+ * Only a person's grant is re-checked — an operator-issued one is admitted
+ * by kind, which no removal changes.
+ */
+async function whileStillAdmitted(
+  c: Context,
+  grant: ResolvedGrant,
+  members: MemberProfileStore,
+  next: Next,
+): Promise<void> {
+  if (READS.has(c.req.method.toUpperCase())) return next()
+  if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return next()
+  if (grant.person === undefined) return next()
+  const workspaceId = await gatedWorkspaceOf(c)
+  if (workspaceId === null) return next()
+  const userId = (await members.profileForBinding(grant.person))?.id
+  if (userId === undefined) return next()
+  const admit = async (writing: string) => {
+    if (writing !== workspaceId) return
+    if (await members.holdsAccess(workspaceId, userId)) return
+    log.warning(
+      { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: 'not_a_member' },
+      'write refused: membership ended while the request was in flight',
+    )
+    throw new HTTPException(403, { res: c.json(membershipRefusal('not_a_member'), 403) })
+  }
+  await runWithWriteAdmission(admit, next)
 }
 
 export function createServerModeApiAuthMiddleware(

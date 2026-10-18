@@ -154,20 +154,33 @@ export interface PeopleAdministration {
   ): Promise<Done | Refused<'unknown_user' | 'cannot_dismiss_self' | 'not_an_administrator'>>
 }
 
-export function createPeopleAdministration(deps: {
+interface PeopleAdministrationDeps {
   readonly members: Pick<MemberProfileStore, 'listUsers'>
   readonly appointments: Pick<
     TenantAdministratorStore,
     'appoint' | 'dismiss' | 'dismissKeepingAnAdministrator'
   >
   readonly deactivation: UserDeactivation
-}): PeopleAdministration {
+}
+
+// The request was authorized before the change; by the time the change ran
+// the actor had been dismissed or deactivated.
+const NOT_AN_ADMINISTRATOR = { kind: 'refused', reason: 'not_an_administrator' } as const
+
+function answerDeactivation(
+  outcome: Awaited<ReturnType<UserDeactivation['deactivateKeepingAnAdministrator']>>,
+) {
+  if (outcome === 'last-administrator') {
+    return { kind: 'refused', reason: 'last_administrator' } as const
+  }
+  if (outcome === 'not-an-administrator') return NOT_AN_ADMINISTRATOR
+  return { kind: 'done', changed: outcome === 'deactivated' } as const
+}
+
+export function createPeopleAdministration(deps: PeopleAdministrationDeps): PeopleAdministration {
   const isUser = async (userId: string) =>
     (await deps.members.listUsers()).some((user) => user.id === userId)
   const unknown = { kind: 'refused', reason: 'unknown_user' } as const
-  // The request was authorized before the change; by the time the change ran
-  // the actor had been dismissed or deactivated.
-  const notAnAdministrator = { kind: 'refused', reason: 'not_an_administrator' } as const
 
   return {
     async deactivate(userId, by, now) {
@@ -178,10 +191,9 @@ export function createPeopleAdministration(deps: {
       if (by === null) {
         return { kind: 'done', changed: await deps.deactivation.deactivate(userId, now) }
       }
-      const outcome = await deps.deactivation.deactivateKeepingAnAdministrator(userId, now, by)
-      if (outcome === 'last-administrator') return { kind: 'refused', reason: 'last_administrator' }
-      if (outcome === 'not-an-administrator') return notAnAdministrator
-      return { kind: 'done', changed: outcome === 'deactivated' }
+      return answerDeactivation(
+        await deps.deactivation.deactivateKeepingAnAdministrator(userId, now, by),
+      )
     },
 
     async reactivate(userId) {
@@ -203,7 +215,7 @@ export function createPeopleAdministration(deps: {
         return { kind: 'done' }
       }
       const outcome = await deps.appointments.dismissKeepingAnAdministrator(userId, by)
-      return outcome === 'not-an-administrator' ? notAnAdministrator : { kind: 'done' }
+      return outcome === 'not-an-administrator' ? NOT_AN_ADMINISTRATOR : { kind: 'done' }
     },
   }
 }
