@@ -59,8 +59,8 @@ describe('the local daemon’s /mcp holds a scoped grant to each tool’s scope'
   }
   const tools = gatedByMembership(
     {
-      edit: { name: 'wb_canvas_edit', execute: async () => 'edited' },
-      read: { name: 'wb_document_get', execute: async () => 'read' },
+      edit: { name: 'wb_canvas_edit', execute: async (_input: never) => 'edited' },
+      read: { name: 'wb_document_get', execute: async (_input: never) => 'read' },
     },
     index as never,
   )
