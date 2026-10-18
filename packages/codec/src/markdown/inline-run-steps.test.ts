@@ -4,6 +4,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { type Processor, unified } from 'unified'
 import { describe, expect, it } from 'vitest'
+import { closingRunsExtension } from './closing-runs.js'
 import { delimiterBudgetExtension } from './delimiter-budget.js'
 
 /**
@@ -68,7 +69,11 @@ function stepsPerCharacter(body: string): number {
     .use(remarkMath)
     .use(function (this: Processor) {
       const data = this.data()
-      data.micromarkExtensions = [...(data.micromarkExtensions ?? []), delimiterBudgetExtension]
+      data.micromarkExtensions = [
+        ...(data.micromarkExtensions ?? []),
+        delimiterBudgetExtension,
+        closingRunsExtension,
+      ]
     })
     .use(countingEvents(counter))
     .parse(body)

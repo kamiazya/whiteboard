@@ -5,17 +5,25 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import { type Processor, unified } from 'unified'
+import { closingRunsExtension } from './closing-runs.js'
 import { delimiterBudgetExtension } from './delimiter-budget.js'
 import { fromRemarkRoot } from './from-remark.js'
 import { referenceLiteralExtension, toRemarkRoot } from './to-remark.js'
 
-/** Last, so its construct is tried before GFM's and core's on the same characters. */
-function remarkDelimiterBudget(this: Processor): undefined {
+/**
+ * Last, so their constructs are tried before GFM's, math's and core's on the
+ * same characters.
+ */
+function remarkInlineCostBounds(this: Processor): undefined {
   const data = this.data()
-  data.micromarkExtensions = [...(data.micromarkExtensions ?? []), delimiterBudgetExtension]
+  data.micromarkExtensions = [
+    ...(data.micromarkExtensions ?? []),
+    delimiterBudgetExtension,
+    closingRunsExtension,
+  ]
 }
 
-const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkDelimiterBudget)
+const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkInlineCostBounds)
 
 /**
  * mdast-util-math registers a toMarkdown `unsafe` pattern for `$` with an
