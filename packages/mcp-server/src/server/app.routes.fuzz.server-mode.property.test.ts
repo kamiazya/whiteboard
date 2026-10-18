@@ -21,6 +21,8 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  acceptInvitationRequestSchema,
+  acceptInvitationResponseSchema,
   signInProvidersResponseSchema,
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
@@ -154,6 +156,11 @@ const RULES: Record<string, Rule> = {
   'GET /auth/providers': { answers: 'json', response: signInProvidersResponseSchema },
   'GET /auth/session': { answers: 'json', response: signInSessionResponseSchema },
   'GET /auth/sign-in/:providerId': { answers: 'redirect' },
+  'POST /auth/accept-invitation/:providerId': {
+    answers: 'json',
+    body: acceptInvitationRequestSchema,
+    response: acceptInvitationResponseSchema,
+  },
   'GET /auth/reauthenticate': { answers: 'redirect' },
   'GET /auth/callback/:providerId': { answers: 'redirect' },
   'POST /auth/sign-out': { answers: 'none' },
@@ -175,6 +182,8 @@ interface Seed {
   readonly workspaceId: string
   /** A link into that workspace still pending, so revoking one has one to revoke. */
   readonly invitationId: string
+  /** That link's token, so an accept has a real one to begin with. */
+  readonly invitationToken: string
   readonly userIds: Record<PersonName, string>
   /** A session cookie per person, as a browser sends it. */
   readonly cookies: Record<PersonName | 'oidc', string>
@@ -308,7 +317,7 @@ async function seededApp(idp: Idp): Promise<Seed> {
   const app = composedApp(handle, stores, idp)
   const seeded = await seededPeople(stores)
   const workspaceId = await seededWorkspace(app, stores, seeded)
-  const { invitation } = await stores.people.invitations.createLink({
+  const { invitation, token } = await stores.people.invitations.createLink({
     invitedBy: seeded.userIds.admin,
     workspaceId,
     now: Date.now(),
@@ -319,6 +328,7 @@ async function seededApp(idp: Idp): Promise<Seed> {
     ...seeded,
     workspaceId,
     invitationId: invitation.id,
+    invitationToken: token,
     callbacks: await seededCallbacks(app, idp),
     dispose: async () => {
       resetSyncStreamsForTests()
@@ -432,10 +442,11 @@ function harnessFor(seed: Seed): Harness {
   return {
     request: (path, init) => seed.app.request(`${PUBLIC_URL}${path}`, init),
     target: (key, pattern) => targetFor(seed, key, pattern),
-    override: (path) =>
-      path.endsWith('userId')
-        ? fc.constantFrom(...Object.values(seed.userIds), 'nowhere')
-        : undefined,
+    override: (path) => {
+      if (path.endsWith('userId')) return fc.constantFrom(...Object.values(seed.userIds), 'nowhere')
+      if (path.endsWith('invitation')) return fc.constantFrom(seed.invitationToken, 'nowhere')
+      return undefined
+    },
     dispose: seed.dispose,
   }
 }

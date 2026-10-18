@@ -16,7 +16,13 @@
 //
 // Where no start time can be read at all (no /proc), a live pid proves
 // nothing. On Unix the socket sits in a directory only its owner can enter, so
-// whatever serves it is this user's and the pid is taken as the writer. A
+// whatever serves it is this user's and the pid is taken as the writer.
+//
+// That directory is checked rather than assumed, before anything else is
+// decided and before any token is sent: the temp-dir fallback is a
+// predictable path, and once a reboot empties it another user can recreate it
+// and listen where an old record points. A socket failing the check is
+// `unconfirmed` whatever the pid says, and is never asked. A
 // Windows named pipe has no such directory: once a daemon dies without
 // removing its record, another OS user can create a pipe under the recorded
 // name. So a pipe is asked to prove it holds the record's token
@@ -39,7 +45,7 @@ import {
   type DaemonRequest,
   requestDaemon,
 } from './daemon-request.js'
-import { isNamedPipe } from './daemon-socket.js'
+import { isNamedPipe, type SocketTrust, socketTrust } from './daemon-socket.js'
 
 /**
  * - `running`: the pid is the process that wrote the record.
@@ -49,15 +55,23 @@ import { isNamedPipe } from './daemon-socket.js'
  *   nothing may signal the pid either. `servingPid` is the pid the answer
  *   named, when it was a runtime status at all: a person has to find that
  *   process to stop it, and the record cannot tell them.
+ *   `untrustedSocket` says why, instead, when the record's socket is not
+ *   one only this user could have made: whoever holds it, the record's token
+ *   is not sent there.
  * - `pid-reused`: the pid is alive, started after the record, and nothing
- *   accepts a connection on the record's socket. A socket that accepts and
+ *   accepts a connection on the record's socket — or its directory does not
+ *   exist, in which case nothing is asked at all. A socket that accepts and
  *   then stays silent past the ask's timeout is `unconfirmed`: something is
  *   serving it, and a daemon busy on a large write is the likeliest thing.
  * - `dead`: no process has the pid.
  */
 export type DaemonLiveness =
   | { readonly state: 'running' }
-  | { readonly state: 'unconfirmed'; readonly servingPid?: number }
+  | {
+      readonly state: 'unconfirmed'
+      readonly servingPid?: number
+      readonly untrustedSocket?: string
+    }
   | { readonly state: 'pid-reused' }
   | { readonly state: 'dead' }
 
@@ -74,6 +88,8 @@ export function servingPidOf(liveness: DaemonLiveness): { servingPid?: number } 
 
 export interface DaemonLivenessSeams extends ProcessIdentitySeams {
   readonly request?: (req: DaemonRequest) => Promise<DaemonAnswer>
+  /** Whether the record's socket may be sent its token; `socketTrust` by default. */
+  readonly socketTrust?: (socketPath: string) => SocketTrust
 }
 
 /**
@@ -162,17 +178,23 @@ async function confirmedPid(request: Ask, record: RecordedDaemon, socketPath: st
 
 export async function daemonLiveness(
   record: RecordedDaemon,
-  { request = requestDaemon, ...identitySeams }: DaemonLivenessSeams = {},
+  {
+    request = requestDaemon,
+    socketTrust: trustOf = socketTrust,
+    ...identitySeams
+  }: DaemonLivenessSeams = {},
 ): Promise<DaemonLiveness> {
   const writtenAtMs = record.startedAt === undefined ? Number.NaN : Date.parse(record.startedAt)
   const identity = recordedProcess(record.pid, writtenAtMs, identitySeams)
-  if (identity === 'writer') return { state: 'running' }
   if (identity === 'dead') return { state: 'dead' }
   const { socketPath } = record
+  const trust = socketPath === undefined ? undefined : trustOf(socketPath)
+  if (trust?.kind === 'refused') return { state: 'unconfirmed', untrustedSocket: trust.reason }
+  if (identity === 'writer') return { state: 'running' }
   if (identity === 'unknown') {
     if (socketPath === undefined || !isNamedPipe(socketPath)) return { state: 'running' }
     return provenPipe(request, socketPath, record.token)
   }
-  if (socketPath === undefined) return { state: 'pid-reused' }
+  if (socketPath === undefined || trust?.kind === 'absent') return { state: 'pid-reused' }
   return confirmedPid(request, record, socketPath)
 }

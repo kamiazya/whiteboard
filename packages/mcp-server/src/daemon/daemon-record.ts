@@ -80,6 +80,7 @@ export function describeOccupant(
   socket = 'its socket',
 ): string {
   if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
+  if (liveness.untrustedSocket !== undefined) return untrusted(socket, liveness.untrustedSocket)
   return liveness.servingPid === undefined
     ? holdsUnconfirmed(socket, pid)
     : `a daemon answers on ${socket} as pid ${liveness.servingPid}`
@@ -96,9 +97,18 @@ export function describeUnconfirmed(
   pid: number,
   socket: string,
 ): string {
+  if (liveness.untrustedSocket !== undefined) return untrusted(socket, liveness.untrustedSocket)
   return liveness.servingPid === undefined
     ? holdsUnconfirmed(socket, pid)
     : `a daemon answers on ${socket} as pid ${liveness.servingPid}, not as pid ${pid}`
+}
+
+/**
+ * A socket that may be another user's is never asked who holds it, so the
+ * clause names the reason rather than any pid.
+ */
+function untrusted(socket: string, reason: string): string {
+  return `${socket} may belong to another user, so it was not asked (${reason})`
 }
 
 function holdsUnconfirmed(socket: string, pid: number): string {

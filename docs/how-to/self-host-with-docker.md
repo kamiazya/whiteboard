@@ -242,11 +242,14 @@ a member of that workspace. The token is in the link's fragment, so the
 browser never sends it to a server and it does not appear in a `Referer`.
 The link is the secret, and it is shown only in that response.
 
-Accepting is a click on that page. A link from another site straight to the
-sign-in route (`/auth/sign-in/<provider>?invitation=…`) is sent to the
-`/invite` page first, so someone already signed in at the provider is never
-joined to a workspace without choosing to. A browser that does not send the
-`Sec-Fetch-Site` header is not held to this.
+Accepting is a click on that page, which sends the invitation to
+`POST /auth/accept-invitation/<provider>` from the page itself; the keeper
+refuses that request from any other origin. A link straight to the sign-in
+route (`/auth/sign-in/<provider>?invitation=…`) never accepts anything,
+wherever it is — another site, a document on this keeper, an email. It is
+sent to the `/invite` page first, so someone already signed in at the
+provider is never joined to a workspace without choosing to. The token
+travels in the request body, not in a URL your reverse proxy logs.
 
 A link speaks for the owner who created it, so it works only while they could
 still create it. If they are removed from the workspace, made a member, or

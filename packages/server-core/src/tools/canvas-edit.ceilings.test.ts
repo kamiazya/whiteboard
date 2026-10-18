@@ -3,7 +3,7 @@ import {
   CANVAS_MAX_NODES,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
@@ -137,5 +137,45 @@ describe('wb_canvas_edit holds the per-canvas node and edge ceilings', () => {
         edges: ids(CANVAS_MAX_EDGES_AND_LINES + 1),
       }).success,
     ).toBe(false)
+  })
+})
+
+describe('wb_canvas_edit bounds what one batch places inside groups', () => {
+  const MOVED = CANVAS_MAX_NODES / 2 + 100
+  const group = (id: string, x: number) =>
+    groupNode({ id, x, y: 0, width: 300, height: 300, label: id })
+  const board = () => [group('g1', -1000), group('g2', -2000), ...nodesOf(MOVED)]
+  const members = Array.from({ length: MOVED }, (_, i) => `n${i}`)
+  const into = (within: string) => ({ op: 'region.set', within, nodes: members })
+
+  test('one region.set moving every member in still applies', async () => {
+    const result = await editOn(board(), 0, [into('g1')])
+    expect(result.applied).toBe(1)
+  })
+
+  test('moving the same members on to a second group is refused by name', async () => {
+    await expect(editOn(board(), 0, [into('g1'), into('g2')])).rejects.toThrow(
+      new RegExp(
+        `ops\\[1\\] \\(region.set\\) could not be applied: .*places at most ${CANVAS_MAX_NODES} nodes inside groups`,
+      ),
+    )
+  })
+})
+
+describe('wb_canvas_edit bounds what one batch patches', () => {
+  const BOARD = CANVAS_MAX_NODES / 2 + 100
+  const patchAll = (x: number) => ({ op: 'node.patch', all: true, patch: { x } })
+
+  test('one node.patch over every node still applies', async () => {
+    const result = await editOn(nodesOf(BOARD), 0, [patchAll(7)])
+    expect(result.applied).toBe(1)
+  })
+
+  test('a second selector-wide node.patch past the bound is refused by name', async () => {
+    await expect(editOn(nodesOf(BOARD), 0, [patchAll(7), patchAll(9)])).rejects.toThrow(
+      new RegExp(
+        `ops\\[1\\] \\(node.patch\\) could not be applied: .*patches at most ${CANVAS_MAX_NODES} nodes`,
+      ),
+    )
   })
 })

@@ -1,13 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { validParse } from '../daemon/_test-daemon-record.js'
 import type { DaemonRequest } from '../daemon/daemon-request.js'
 import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
+
+// Nothing listens here; the directory is owner-only so the socket check passes
+// and every ask reaches the `request` seam.
+const socketDir = mkdtempSync(join(tmpdir(), 'wb-posture-'))
+afterAll(() => rmSync(socketDir, { recursive: true, force: true }))
 
 const record = {
   pid: 4242,
   version: '0.0.1',
   startedAt: '2026-01-01T00:00:00.000Z',
-  socketPath: '/tmp/wb.sock',
+  socketPath: join(socketDir, 'wb.sock'),
   token: 'the-daemon-token',
 }
 const running = validParse(record)

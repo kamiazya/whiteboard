@@ -4,6 +4,7 @@
  * the signed-in person's workspaces.
  */
 import {
+  authAcceptInvitationUrl,
   authSignInUrl,
   invitePageUrl,
   SIGN_IN_PAGE_PATH,
@@ -45,6 +46,8 @@ interface Keeper {
     | { workspaceId: string; displayName?: string; namespace?: string; segment?: string }[]
     | 'failing'
   signOut?: 'failing'
+  /** Where an accepted invitation sends the browser, or a keeper that fails it. */
+  accepted?: string | 'failing'
 }
 
 // A same-origin keeper answering the handful of routes the app reads.
@@ -69,6 +72,11 @@ function keeperFetch(keeper: Keeper) {
             },
       )
     }
+    if (url === authAcceptInvitationUrl('corp') && init?.method === 'POST') {
+      return keeper.accepted === 'failing' || keeper.accepted === undefined
+        ? Response.json({ error: 'internal' }, { status: 500 })
+        : Response.json({ location: keeper.accepted })
+    }
     if (url === '/auth/sign-out' && init?.method === 'POST')
       return new Response(null, { status: keeper.signOut === 'failing' ? 500 : 204 })
     if (url === '/api/workspaces') {
@@ -89,11 +97,11 @@ afterAll(() => {
   vi.unstubAllGlobals()
 })
 
-function renderAt(path: string, keeper: Keeper) {
+function renderAt(path: string, keeper: Keeper, goTo: (location: string) => void = () => {}) {
   const fetchFn = keeperFetch(keeper)
   render(
     <MemoryRouter initialEntries={[path]}>
-      <ServerModeApp fetchFn={fetchFn} />
+      <ServerModeApp fetchFn={fetchFn} goTo={goTo} />
     </MemoryRouter>,
   )
   return fetchFn
@@ -113,15 +121,63 @@ describe('server mode sign-in', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/invit/i)
   })
 
-  it('carries an invitation from the link into the sign-in', async () => {
+  // A link is a navigation, and a navigation must never be what joins
+  // someone to a workspace: Accept is this page's own POST, and the page goes
+  // where the keeper answers.
+  it('accepts an invitation by posting it, then goes where the keeper says', async () => {
+    const goTo = vi.fn()
     // The link as the keeper mints it, so the page reads the keeper's spelling.
     const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))
-    renderAt(`${invite.pathname}${invite.hash}`, { providers: [corp] })
-    expect(await screen.findByRole('heading', { name: /invited/i })).toBeTruthy()
-    const link = await screen.findByRole('link', { name: /continue with corp sso/i })
-    expect(link.getAttribute('href')).toBe(
-      authSignInUrl('corp', { returnTo: '/', invitation: 'inv-123' }),
+    const fetchFn = renderAt(
+      `${invite.pathname}${invite.hash}`,
+      {
+        providers: [corp],
+        accepted: 'https://idp.test/authorize?state=s',
+      },
+      goTo,
     )
+    expect(await screen.findByRole('heading', { name: /invited/i })).toBeTruthy()
+    const accept = await screen.findByRole('button', { name: /continue with corp sso/i })
+    expect(screen.queryByRole('link', { name: /continue with corp sso/i })).toBeNull()
+    fireEvent.click(accept)
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith('https://idp.test/authorize?state=s'))
+    const posted = fetchFn.mock.calls.find(
+      ([url]) => String(url) === authAcceptInvitationUrl('corp'),
+    )
+    expect(posted?.[1]?.method).toBe('POST')
+    expect(JSON.parse(String(posted?.[1]?.body))).toEqual({ invitation: 'inv-123', returnTo: '/' })
+  })
+
+  // Back from the provider restores this page from the back/forward cache with
+  // its state intact, so a button left disabled would be a dead end.
+  it('enables Accept again when the page is restored from the back/forward cache', async () => {
+    const goTo = vi.fn()
+    const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))
+    renderAt(
+      `${invite.pathname}${invite.hash}`,
+      { providers: [corp], accepted: 'https://idp.test/authorize?state=s' },
+      goTo,
+    )
+    const name = /continue with corp sso/i
+    fireEvent.click(await screen.findByRole('button', { name }))
+    await waitFor(() => expect(goTo).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true)
+
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(false),
+    )
+  })
+
+  it('says so when the keeper cannot take the acceptance', async () => {
+    const goTo = vi.fn()
+    const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))
+    renderAt(`${invite.pathname}${invite.hash}`, { providers: [corp], accepted: 'failing' }, goTo)
+    fireEvent.click(await screen.findByRole('button', { name: /continue with corp sso/i }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not accept/i)
+    expect(goTo).not.toHaveBeenCalled()
+    expectLoggedFailures()
   })
 
   it('says so when the server has no provider to sign in with', async () => {

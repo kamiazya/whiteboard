@@ -335,6 +335,32 @@ describe('sceneDigest', () => {
     expect(digest.clusters.length).toBeGreaterThan(0)
   })
 
+  describe('overlap pair cap', () => {
+    // 45 identical boxes overlap pairwise (990 pairs); each extra spaced-out
+    // pair of overlapping boxes adds exactly one more. The spacing leaves
+    // free regions, so `partial` can only come from the overlap cap.
+    function withOverlapPairs(count: number): Scene {
+      const stack = Array.from({ length: 45 }, () => ({ x: 0, y: 0, w: 10, h: 10 }))
+      const extra = Array.from({ length: count - 990 }, (_, i) => [
+        { x: 100 + i * 100, y: 0, w: 10, h: 10 },
+        { x: 105 + i * 100, y: 5, w: 10, h: 10 },
+      ]).flat()
+      return scene(...stack, ...extra)
+    }
+
+    it('reports every pair, not partial, at exactly the cap', () => {
+      const digest = sceneDigest(withOverlapPairs(1000))
+      expect(digest.overlaps).toHaveLength(1000)
+      expect(digest.partial).toBe(false)
+    })
+
+    it('stops at the cap and says the answer is partial one pair past it', () => {
+      const digest = sceneDigest(withOverlapPairs(1001))
+      expect(digest.overlaps).toHaveLength(1000)
+      expect(digest.partial).toBe(true)
+    })
+  })
+
   it('does not cap pairwise derivation for a small scene', () => {
     const digest = sceneDigest(scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 }))
     expect(digest.overlaps).toHaveLength(1)

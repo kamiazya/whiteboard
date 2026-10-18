@@ -630,15 +630,16 @@ describe('restoreVersion subtree mode', () => {
     },
   )
 
-  it('records the merge point on every document a subtree rollback moved', async () => {
+  it('records the merge point on every document a subtree rollback moved, and on no other', async () => {
     const live = new FakeLive()
-    const rootId = generateDocumentId()
-    const childId = generateDocumentId()
+    const [rootId, childId, sameId] = Array.from({ length: 3 }, () => generateDocumentId())
     live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
     live.seed('canvas-a/child', spatialDoc(['child-new']), 'spatial', childId)
+    live.seed('canvas-a/same', spatialDoc(['same']), 'spatial', sameId)
     const pastWorkspace = workspaceDocWith([
       { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
       { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-old'] },
+      { path: 'canvas-a/same', documentId: sameId, nodeIds: ['same'] },
     ])
     const versions = versionsWith({
       v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },

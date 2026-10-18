@@ -327,6 +327,22 @@ with "a batch tidies at most once", and nothing is written. One tidy lays out
 the whole board, so name every node to tidy in that op's `scope`, or tidy
 again in another call.
 
+A batch also places at most **2,000** nodes inside groups between all of its
+ops — every member a `region.set` moves in, and every `node.add` with `within`
+and no position. Each is packed around what its group already holds, so a
+batch moving the same members back and forth between two groups would pay
+for that packing once per op. The op that would pass the bound is refused
+with "a batch places at most 2000 nodes inside groups", and nothing is
+written; move the rest in another call.
+
+Its `node.patch` ops patch at most **2,000** nodes between them, counting
+every node an `all` or `within` selector reaches. A patch that changes text
+or size measures each node it reaches, so a batch of selector-wide patches
+would measure the whole board once per op. The op that would pass the bound
+is refused with "a batch patches at most 2000 nodes between its node.patch
+ops", and nothing is written; put the fields in one `node.patch`, or patch
+the rest in another call.
+
 ## OKF frontmatter this server does not model
 
 OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))

@@ -361,7 +361,9 @@ export interface VersionHistory {
    * Record the document at `path` as it is NOW. `auto` distinguishes a
    * scheduled checkpoint from one somebody asked for; `operator` says who,
    * and a composition root that knows its own identity may stamp it when
-   * the caller passes none.
+   * the caller passes none. A keeper refuses, with `TooManyVersionsError`,
+   * a manual save past its manual ceiling and a restore point past its
+   * restore-point ceiling.
    */
   save(
     workspaceId: string,

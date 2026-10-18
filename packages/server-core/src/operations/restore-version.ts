@@ -8,7 +8,7 @@ import {
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
+import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
 import { textBreachRefusal } from './sync-write-refusals.js'
 
@@ -163,8 +163,12 @@ async function restoreInPlace(
   ctx: RestoreContext,
 ): Promise<RestoreVersionResult> {
   const { workspaceId, path, doc, past, label, progress, versionId } = ctx
-  await reconcileAndSave(live, workspaceId, path, doc, past, { label, kind: null, progress })
-  await recordMerge(versions, workspaceId, path, doc, versionId)
+  const changed = await reconcileAndSave(live, workspaceId, path, doc, past, {
+    label,
+    kind: null,
+    progress,
+  })
+  if (changed) await recordMerge(versions, workspaceId, path, doc, versionId)
   return { kind: 'restored-in-place' }
 }
 
@@ -189,12 +193,12 @@ async function restoreOntoExisting(
   // A target that records no kind is declared by the first write that
   // reaches it, so it takes the source's — the shape the merged content
   // has — and a kind-aware consumer (editor routing) opens it correctly.
-  await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
+  const changed = await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
     label,
     kind: targetKind === null ? sourceKind : null,
     progress,
   })
-  await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
+  if (changed) await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
   return {
     kind: 'restored-to-target',
     targetPath,
@@ -337,12 +341,13 @@ async function restoreSubtree(
       }
     }
     for (const { node, pastDoc } of restoring) {
-      await restoreOneDocument(live, workspaceId, node, pastDoc, rowsById.get(node.meta.documentId))
+      const row = rowsById.get(node.meta.documentId)
+      const changed = await restoreOneDocument(live, workspaceId, node, pastDoc, row)
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through
-      // a merge.
-      await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
+      // a merge. One it did not move gains none.
+      if (changed) await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
     }
   } finally {
     await progress({ workspaceId, path, phase: 'complete' })
@@ -352,7 +357,8 @@ async function restoreSubtree(
 
 /**
  * Puts ONE past document back where the version had it: moved into place and
- * reconciled when its row survived, recreated when it did not.
+ * reconciled when its row survived, recreated when it did not. Answers
+ * whether that changed anything.
  */
 async function restoreOneDocument(
   live: LiveDocuments,
@@ -360,21 +366,37 @@ async function restoreOneDocument(
   node: { readonly path: string; readonly meta: { readonly kind?: DocumentKind } },
   pastDoc: LoroDoc,
   liveRow: { readonly path: string } | undefined,
-): Promise<void> {
+): Promise<boolean> {
   if (liveRow === undefined) {
     // Deleted since the version: recreated under the SAME documentId's row
     // lineage as far as the tree is concerned (the write-through places it
     // by path + kind).
     await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
     live.evict(workspaceId, node.path)
-    return
+    return true
   }
-  if (liveRow.path !== node.path) {
+  const moved = liveRow.path !== node.path
+  if (moved) {
     await live.rename(workspaceId, liveRow.path, node.path)
   }
   const liveDoc = await live.get(workspaceId, node.path)
+  const before = liveDoc.frontiers()
   reconcileDocContent(liveDoc, pastDoc)
   await live.save(workspaceId, node.path, liveDoc, { overwrite: true, kind: node.meta.kind })
+  return moved || !sameFrontiers(before, liveDoc.frontiers())
+}
+
+/**
+ * Whether a reconcile left the doc where it was: it writes only what differs,
+ * so a restore onto content that already matches commits nothing. Such a
+ * restore records no merge point — lineage is never retired, so one per
+ * repeat would grow the history by a row that says nothing.
+ */
+function sameFrontiers(a: Frontiers, b: Frontiers): boolean {
+  return (
+    a.length === b.length &&
+    a.every((id, i) => id.peer === b[i]?.peer && id.counter === b[i]?.counter)
+  )
 }
 
 /**
@@ -394,7 +416,8 @@ function withinSyncLimits(past: LoroDoc, path: string): void {
  * runs, so a failure here costs the history a point and costs the document
  * nothing. Letting it throw would report a restore that in fact landed,
  * which is the worse of the two lies — and rolling the restore back to keep
- * the history tidy would be worse still.
+ * the history tidy would be worse still. That is also why a keeper past its
+ * restore-point ceiling refusing the point leaves the restore usable.
  */
 async function recordMerge(
   versions: Pick<ServerDeps, 'versions'>['versions'],
@@ -413,7 +436,8 @@ async function recordMerge(
 // Reconciles `past` onto `doc` (the LIVE doc for workspaceId/targetPath),
 // then persists — shared by the in-place restore and the overwrite-an-
 // existing-document restore, because both must mutate the same document
-// instance any connected client already holds.
+// instance any connected client already holds. Answers whether the reconcile
+// moved the document.
 async function reconcileAndSave(
   live: LiveDocuments,
   workspaceId: string,
@@ -425,7 +449,7 @@ async function reconcileAndSave(
     kind: DocumentKind | null
     progress: RestoreProgress
   },
-): Promise<void> {
+): Promise<boolean> {
   const { label, kind, progress } = options
   await progress({
     workspaceId,
@@ -436,11 +460,13 @@ async function reconcileAndSave(
   try {
     try {
       withinSyncLimits(past, targetPath)
+      const before = doc.frontiers()
       reconcileDocContent(doc, past)
       await live.save(workspaceId, targetPath, doc, {
         overwrite: true,
         ...(kind !== null ? { kind } : {}),
       })
+      return !sameFrontiers(before, doc.frontiers())
     } catch (err) {
       // reconcileDocContent mutates the live doc in place before the save
       // runs, so any failure here leaves the cache ahead of durable state.

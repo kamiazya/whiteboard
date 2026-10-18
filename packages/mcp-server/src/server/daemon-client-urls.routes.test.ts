@@ -9,6 +9,10 @@ import {
   WORKSPACE_DOCUMENT_API_ACTIONS,
   type WorkspaceDocumentApiAction,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import {
+  type AcceptInvitationRequest,
+  acceptInvitationResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sha256Hex } from '../shared/sha256.js'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
@@ -430,6 +434,9 @@ describe('daemon client people URLs reach a server-mode route', () => {
 const AUTH_SAMPLES: Record<string, readonly Sample[]> = {
   authProvidersUrl: [{ label: 'providers', method: 'GET', url: daemonUrls.authProvidersUrl() }],
   authSignInUrl: [{ label: 'begin', method: 'GET', url: daemonUrls.authSignInUrl('corp') }],
+  authAcceptInvitationUrl: [
+    { label: 'accept', method: 'POST', url: daemonUrls.authAcceptInvitationUrl('corp') },
+  ],
   authSessionUrl: [{ label: 'session', method: 'GET', url: daemonUrls.authSessionUrl() }],
   authSignOutUrl: [{ label: 'sign out', method: 'POST', url: daemonUrls.authSignOutUrl() }],
   authReauthenticateUrl: [
@@ -495,15 +502,19 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
     expect(served, `${method} ${url} -> ${res.status} ${contentType}`).toBe(true)
   })
 
-  // The web app builds this link and the keeper reads it, so the query keys
-  // are checked by driving the one into the other: the attempt the keeper
-  // stores is what its callback later admits and redirects with.
-  it('a sign-in link keeps both its invitation and where to return to', async () => {
+  // The web app sends this accept and the keeper reads it, so the body is
+  // checked by driving the one into the other: the attempt the keeper stores
+  // is what its callback later admits and redirects with.
+  it('an accepted invitation keeps both its token and where to return to', async () => {
     const invitation = 'i'.repeat(43)
-    const url = daemonUrls.authSignInUrl('corp', { returnTo: '/w/x', invitation })
-    const res = await app.request(`${PUBLIC_URL}${url}`)
-    expect(res.status, res.headers.get('location') ?? '').toBe(302)
-    const state = new URL(res.headers.get('location') ?? '').searchParams.get('state') ?? ''
+    const body: AcceptInvitationRequest = { invitation, returnTo: '/w/x' }
+    const res = await app.request(`${PUBLIC_URL}${daemonUrls.authAcceptInvitationUrl('corp')}`, {
+      method: 'POST',
+      headers: { origin: PUBLIC_URL, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const { location } = acceptInvitationResponseSchema.parse(await res.json())
+    const state = new URL(location).searchParams.get('state') ?? ''
     const binding = /__Host-wb_signin=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1] ?? ''
     const attempt = await signIn.attempts.take(state, binding, Date.now())
     expect(attempt).toMatchObject({ returnTo: '/w/x', invitationTokenHash: sha256Hex(invitation) })

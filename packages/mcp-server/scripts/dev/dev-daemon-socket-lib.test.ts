@@ -165,6 +165,7 @@ describe('assessRecordedDaemon', () => {
     isAlive: () => true,
     startMs: () => recordedAt - 5_000,
     request: refused,
+    socketTrust: () => ({ kind: 'trusted' as const }),
     ...over,
   })
 
@@ -677,6 +678,8 @@ describe("the liveness verdict against the daemon's own", () => {
     let confirmedBySocket = 0
     let wedgedUnconfirmed = 0
     let wedgedOccupied = 0
+    let refusedHeld = 0
+    let absentUnasked = 0
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom(true, true, true, false),
@@ -687,7 +690,16 @@ describe("the liveness verdict against the daemon's own", () => {
         fc.option(fc.constant('/daemon.sock'), { nil: undefined, freq: 8 }),
         fc.option(fc.string({ minLength: 1, maxLength: 8 }), { nil: undefined }),
         replyArbitrary,
-        async (alive, offset, writtenAtMs, socketPath, token, reply) => {
+        // Whether the socket fails the ownership check: a socket another user
+        // may hold is held, and asked nothing, on both sides; one with no
+        // directory is asked nothing either. Rare, so the arrangements the
+        // socket's answers decide stay common.
+        fc.oneof(
+          { arbitrary: fc.constant({ kind: 'trusted' as const }), weight: 5 },
+          { arbitrary: fc.constant({ kind: 'refused' as const, reason: 'owner-only' }), weight: 1 },
+          { arbitrary: fc.constant({ kind: 'absent' as const }), weight: 1 },
+        ),
+        async (alive, offset, writtenAtMs, socketPath, token, reply, trust) => {
           const started = offset === null ? null : writtenAtMs + offset
           const record = {
             pid: RECORDED_PID,
@@ -695,7 +707,11 @@ describe("the liveness verdict against the daemon's own", () => {
             ...(socketPath === undefined ? {} : { socketPath }),
             ...(token === undefined ? {} : { token }),
           }
-          const identity = { isAlive: () => alive, startMs: () => started }
+          const identity = {
+            isAlive: () => alive,
+            startMs: () => started,
+            socketTrust: () => trust,
+          }
           // The socket answers only an ask carrying the record's token, as the
           // daemon does, so a side that dropped the token reads a 401.
           const answer = (presented: string | undefined) => {
@@ -705,9 +721,13 @@ describe("the liveness verdict against the daemon's own", () => {
             if (reply.kind === 'wedged') throw new DaemonNoAnswerError('no answer within 1500ms')
             return presented === token ? reply : { status: 401, body: {} }
           }
+          let tokenAsks = 0
           const daemonVerdict = await daemonLiveness(record, {
             ...identity,
-            request: async (req) => answer(req.record.token),
+            request: async (req) => {
+              if (req.record.token !== undefined) tokenAsks += 1
+              return answer(req.record.token)
+            },
           })
           const daemonSide = daemonVerdict.state
           const devRequest = async (
@@ -725,6 +745,7 @@ describe("the liveness verdict against the daemon's own", () => {
               return { status: 200, contentType: 'text/plain', text: 'ok' }
             }
             const presented = req.headers?.authorization?.replace(/^Bearer /, '')
+            if (presented !== undefined) tokenAsks += 1
             const { status, body } = answer(presented)
             const text =
               body === undefined ? '' : typeof body === 'string' ? body : JSON.stringify(body)
@@ -752,6 +773,11 @@ describe("the liveness verdict against the daemon's own", () => {
             wedgedOccupied += 1
           }
           if (reply.kind === 'wedged' && devSide === 'unconfirmed') wedgedUnconfirmed += 1
+          if (trust.kind === 'refused' && socketPath !== undefined && alive) refusedHeld += 1
+          if (trust.kind !== 'trusted' && socketPath !== undefined) {
+            expect(tokenAsks).toBe(0)
+            if (alive && devSide === 'pid-reused' && token !== undefined) absentUnasked += 1
+          }
           seen.add(devSide)
           if (daemonSide === 'running' && offset !== null && offset > 5_000) {
             confirmedBySocket += 1
@@ -765,5 +791,7 @@ describe("the liveness verdict against the daemon's own", () => {
     expect(confirmedBySocket).toBeGreaterThan(0)
     expect(wedgedUnconfirmed).toBeGreaterThan(0)
     expect(wedgedOccupied).toBeGreaterThan(0)
+    expect(refusedHeld).toBeGreaterThan(0)
+    expect(absentUnasked).toBeGreaterThan(0)
   })
 })

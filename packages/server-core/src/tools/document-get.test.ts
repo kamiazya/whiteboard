@@ -3,7 +3,7 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { COMMENT_MESSAGE_MAX_CHARS, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -483,6 +483,111 @@ describe('wb_document_get carries the annotation layer', () => {
       status: 'open',
       anchor: { kind: 'document' },
     })
+  })
+
+  it('charges the annotation layer against the content budget, not only the content', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const message = 'm'.repeat(COMMENT_MESSAGE_MAX_CHARS)
+    // A resolved thread no longer counts toward the open-thread cap, so the
+    // annotation layer is what grows; content stays tiny throughout.
+    const ids: string[] = []
+    for (let i = 0; i < 20; i += 1) {
+      const { documentId } = await wbDocumentCreate(deps, {
+        workspaceId: 'ws',
+        path: `noted-${i}`,
+        kind: 'markdown',
+      })
+      await createThreadEditTool(deps).execute({
+        workspaceId: 'ws',
+        documentId,
+        ops: [
+          { op: 'thread.add', threadId: 'th-big', anchor: { kind: 'document' }, body: message },
+          ...Array.from({ length: 20 }, () => ({
+            op: 'message.add' as const,
+            threadId: 'th-big',
+            body: message,
+          })),
+          { op: 'thread.resolve', threadId: 'th-big' },
+        ],
+      })
+      ids.push(documentId)
+    }
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: ids,
+    })
+
+    const answered = JSON.stringify(result.documents).length
+    expect(answered).toBeGreaterThan(MARKDOWN_MAX_CHARS)
+    expect(answered).toBeLessThan(4 * MARKDOWN_MAX_CHARS + 2 * COMMENT_MESSAGE_MAX_CHARS * 21)
+    expect(result.failed.length).toBeGreaterThan(0)
+    for (const entry of result.failed) expect(entry.reason).toMatch(/alone/)
+  })
+
+  it('bounds a lone document by trimming its annotation layer, and says it did', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const { documentId } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'long-history',
+      kind: 'markdown',
+    })
+    const message = 'm'.repeat(COMMENT_MESSAGE_MAX_CHARS)
+    // Resolved threads are uncapped in count, so one document's history alone
+    // outgrows the whole call's budget: 14 threads of 21 messages is ~1.2M chars.
+    for (let t = 0; t < 14; t += 1) {
+      await createThreadEditTool(deps).execute({
+        workspaceId: 'ws',
+        documentId,
+        ops: [
+          { op: 'thread.add', threadId: `th-${t}`, anchor: { kind: 'document' }, body: message },
+          ...Array.from({ length: 20 }, () => ({
+            op: 'message.add' as const,
+            threadId: `th-${t}`,
+            body: message,
+          })),
+          { op: 'thread.resolve', threadId: `th-${t}` },
+        ],
+      })
+    }
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [documentId],
+    })
+
+    expect(result.failed).toEqual([])
+    const [read] = result.documents
+    expect(read?.annotationsTruncated).toBe(true)
+    expect(read?.threads?.length).toBeGreaterThan(0)
+    expect(read?.threads?.length).toBeLessThan(14)
+    expect(JSON.stringify(result.documents).length).toBeLessThanOrEqual(
+      4 * MARKDOWN_MAX_CHARS + 1024,
+    )
+  })
+
+  it('a lone document within the budget keeps its whole annotation layer', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const { documentId } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'short-history',
+      kind: 'markdown',
+    })
+    await createThreadEditTool(deps).execute({
+      workspaceId: 'ws',
+      documentId,
+      ops: [{ op: 'thread.add', threadId: 'th-1', anchor: { kind: 'document' }, body: 'hi' }],
+    })
+
+    const [read] = (
+      await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentIds: [documentId] })
+    ).documents
+
+    expect(read?.threads).toHaveLength(1)
+    expect(read).not.toHaveProperty('annotationsTruncated')
   })
 
   it('a document nobody commented on carries no threads key at all', async () => {

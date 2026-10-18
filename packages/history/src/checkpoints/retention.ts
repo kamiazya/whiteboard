@@ -25,6 +25,15 @@ export const MAX_AUTO_PER_DOCUMENT = 50
  */
 export const MAX_MANUAL_PER_DOCUMENT = 4 * MAX_AUTO_PER_DOCUMENT
 
+/**
+ * The most restore merge points a document keeps. Lineage is never retired
+ * by either retention pass, so a restore repeated in a loop would otherwise
+ * grow the history — walked by file collection, listed by the history panel —
+ * without end. A CEILING, like the manual one and the same size: past it a
+ * keeper records no further merge point, and the restore itself still lands.
+ */
+export const MAX_RESTORE_POINTS_PER_DOCUMENT = 4 * MAX_AUTO_PER_DOCUMENT
+
 /** A row as lineage sees it: its id, and the version it restored, if any. */
 export interface LineageCandidate {
   readonly id: string

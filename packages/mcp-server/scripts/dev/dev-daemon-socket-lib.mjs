@@ -3,9 +3,9 @@
 // record names (ADR-0050 decision 2). The socket path hashes the data dir,
 // and each checkout has its own data dir, so a checkout can only ever reach
 // its own daemon — no port to derive, and none for two worktrees to share.
-import { readFileSync } from 'node:fs'
+import { lstatSync, readFileSync } from 'node:fs'
 import { request } from 'node:http'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 /**
  * The record's `launch` for a daemon running a build (dist/) rather than
@@ -70,6 +70,81 @@ export function isPidAlive(pid) {
 export const NO_ANSWER = 'ERR_DAEMON_NO_ANSWER'
 
 /**
+ * The `code` of `requestDaemon`'s rejection when it refused to send a token
+ * to a socket that may be another user's (`socketTrust`).
+ */
+export const UNTRUSTED_SOCKET = 'ERR_DAEMON_SOCKET_UNTRUSTED'
+
+/**
+ * `path`'s lstat, or undefined when nothing is there or a parent is no directory.
+ *
+ * @param {(path: string) => import('node:fs').Stats} lstat
+ * @param {string} path
+ */
+function statUnlessMissing(lstat, path) {
+  try {
+    return lstat(path)
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return undefined
+    throw error
+  }
+}
+
+/**
+ * Whether the socket at `path` may be sent the record's token — the daemon's
+ * own rule (`socketTrust`, src/daemon/daemon-socket.ts), restated for bare
+ * `node`; `dev-daemon-socket-trust.test.ts` and `dev-daemon-socket-lib.test.ts`
+ * hold the two to the same answers. A record outlives a daemon that did not
+ * stop cleanly, and the temp-dir fallback's directory is a predictable name
+ * another user can recreate once a reboot empties it, so the directory has to
+ * be this user's and closed before the socket in it is sent a token — checked
+ * even when the socket is missing, since a directory another user owns can be
+ * swapped for one holding their socket before the connect. A directory that
+ * does not exist is `absent`: no daemon listens there, and nothing is sent.
+ *
+ * @param {string} path
+ * @param {{ uid?: number, lstat?: (path: string) => import('node:fs').Stats }} [seams]
+ * @returns {{ kind: 'trusted' } | { kind: 'absent' } | { kind: 'refused', reason: string }}
+ */
+export function socketTrust(path, { uid = process.getuid?.(), lstat = lstatSync } = {}) {
+  if (path.startsWith('\\\\.\\pipe\\')) return { kind: 'trusted' }
+  const refused = (reason) => ({ kind: 'refused', reason })
+  let socket
+  try {
+    socket = statUnlessMissing(lstat, path)
+  } catch (error) {
+    return refused(`the socket could not be inspected (${error?.code ?? 'unknown error'})`)
+  }
+  if (socket?.isSymbolicLink()) return refused('the socket path is a symbolic link')
+  let directory
+  try {
+    directory = statUnlessMissing(lstat, dirname(path))
+  } catch (error) {
+    return refused(
+      `the socket directory could not be inspected (${error?.code ?? 'unknown error'})`,
+    )
+  }
+  if (directory === undefined) {
+    return socket === undefined
+      ? { kind: 'absent' }
+      : refused('the socket directory could not be inspected (ENOENT)')
+  }
+  if (!directory.isDirectory() || (typeof uid === 'number' && directory.uid !== uid)) {
+    return refused(
+      'the socket directory is not a directory this user owns. ' +
+        'Set XDG_RUNTIME_DIR to a directory of your own (the socket lives in its whiteboard/ subdirectory), ' +
+        'or TMPDIR when XDG_RUNTIME_DIR is unset.',
+    )
+  }
+  if ((directory.mode & 0o077) !== 0)
+    return refused('the socket directory must be owner-only (0700)')
+  if (socket?.isSocket() && typeof uid === 'number' && socket.uid !== uid) {
+    return refused('the socket is not owned by this user')
+  }
+  return { kind: 'trusted' }
+}
+
+/**
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
@@ -87,6 +162,22 @@ export function requestDaemon(
   record,
   { method = 'GET', path, headers = {}, body, timeoutMs, onChunk },
 ) {
+  const carriesToken = Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')
+  const trust = carriesToken ? socketTrust(record.socketPath) : { kind: 'trusted' }
+  // No directory is what a connect to it would have found, so it is answered
+  // the same way — without connecting to whatever is made there meanwhile.
+  if (trust.kind === 'absent') {
+    return Promise.reject(
+      Object.assign(new Error(`no socket directory for ${record.socketPath}`), { code: 'ENOENT' }),
+    )
+  }
+  if (trust.kind === 'refused') {
+    return Promise.reject(
+      Object.assign(new Error(`${record.socketPath} may belong to another user: ${trust.reason}`), {
+        code: UNTRUSTED_SOCKET,
+      }),
+    )
+  }
   return new Promise((resolveRequest, rejectRequest) => {
     // Once the socket took the connection, anything going wrong after is a
     // daemon that did not answer, not a socket nobody listens on.
@@ -286,8 +377,11 @@ const STATUS_ASK_TIMEOUT_MS = 1_500
  *   record's socket without confirming the pid — an answer naming another pid,
  *   or a connection taken and left unanswered, as a daemon wedged on its loop
  *   does. Nothing may signal it, and its record is not a leftover.
+ *   So is a socket that may be another user's (`socketTrust`),
+ *   whatever the pid says; it is never asked.
  * - `pid-reused`: the pid started after the record and the socket refuses the
- *   connection, or is not there.
+ *   connection, or is not there — and when its directory is not there either,
+ *   it is not asked.
  * - `dead`: no process has the pid.
  *
  * @param {{ pid: number, socketPath?: string, startedAt?: string, token?: string }} record
@@ -295,6 +389,7 @@ const STATUS_ASK_TIMEOUT_MS = 1_500
  *   isAlive?: (pid: number) => boolean,
  *   startMs?: (pid: number) => number | null,
  *   request?: typeof requestDaemon,
+ *   socketTrust?: (socketPath: string) => ReturnType<typeof socketTrust>,
  * }} [seams]
  * @returns {Promise<'running' | 'unconfirmed' | 'pid-reused' | 'dead'>}
  */
@@ -313,13 +408,34 @@ export async function recordedDaemonLiveness(record, seams = {}) {
  */
 async function judgeLiveness(
   record,
-  { isAlive = isPidAlive, startMs = readProcessStartMs, request = requestDaemon } = {},
+  {
+    isAlive = isPidAlive,
+    startMs = readProcessStartMs,
+    request = requestDaemon,
+    socketTrust: trustOf = socketTrust,
+  } = {},
 ) {
   const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
-  if (identity === 'daemon') return { liveness: 'running', process: identity }
   if (identity === 'dead') return { liveness: 'dead', process: identity }
   const { socketPath } = record
-  if (socketPath === undefined) return { liveness: 'pid-reused', process: identity }
+  // Checked before the pid is believed and before the token is sent, as the
+  // daemon's own verdict does: a socket another user may hold is held, and
+  // nothing is asked of it.
+  const trust = socketPath === undefined ? undefined : trustOf(socketPath)
+  if (trust?.kind === 'refused') {
+    const silence = `has a socket at ${socketPath} that may belong to another user (${trust.reason})`
+    return { liveness: 'unconfirmed', process: identity, answered: false, silence }
+  }
+  // No directory means nothing to ask, the ping included: whoever makes it
+  // before the connect decides what answers.
+  const unasked =
+    trust?.kind === 'absent'
+      ? { answered: false, silence: `has no socket directory at ${dirname(socketPath)}` }
+      : {}
+  if (identity === 'daemon') return { liveness: 'running', process: identity, ...unasked }
+  if (socketPath === undefined || trust?.kind === 'absent') {
+    return { liveness: 'pid-reused', process: identity, ...unasked }
+  }
   let answer
   try {
     answer = await request(
@@ -375,6 +491,7 @@ async function judgeLiveness(
  *   isAlive?: (pid: number) => boolean,
  *   startMs?: (pid: number) => number | null,
  *   request?: typeof requestDaemon,
+ *   socketTrust?: (socketPath: string) => ReturnType<typeof socketTrust>,
  * }} [seams]
  * @returns {Promise<{ running: boolean, answering: boolean, process: 'daemon' | 'foreign' | 'dead', liveness: 'running' | 'unconfirmed' | 'pid-reused' | 'dead', silence?: string }>}
  */

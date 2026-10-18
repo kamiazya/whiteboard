@@ -2,6 +2,7 @@ export {
   autoVersionsOverCap,
   MAX_AUTO_PER_DOCUMENT,
   MAX_MANUAL_PER_DOCUMENT,
+  MAX_RESTORE_POINTS_PER_DOCUMENT,
   restorePointOptions,
   sandwichedAutoVersionIds,
 } from './checkpoints/retention.js'

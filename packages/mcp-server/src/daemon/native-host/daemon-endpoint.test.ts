@@ -1,7 +1,8 @@
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest'
 import { endpointProof } from '../../shared/endpoint-proof.js'
 import { getDaemonRecordPath } from '../daemon-registry.js'
 import { DaemonNoAnswerError, type DaemonRequest } from '../daemon-request.js'
@@ -85,6 +86,54 @@ describe('resolveDaemonEndpoint', () => {
     const socketPath = await writeRecord(dataDir, new Date().toISOString())
     const seams = { isAlive: () => true, startMs: () => Date.now() - 60_000 }
     await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toEqual({ socketPath, token: 't' })
+  })
+
+  // After an unclean stop the record outlives its socket, and where the socket
+  // directory is a predictable /tmp path another user can recreate it and
+  // listen there: the token must not reach whatever answers.
+  describe('on a socket in a directory others can enter', () => {
+    async function squattedSocket(dir: string) {
+      const socketDir = join(dir, 'sock')
+      await mkdir(socketDir)
+      await chmod(socketDir, 0o755)
+      const socketPath = join(socketDir, 'd.sock')
+      const authorizations: (string | undefined)[] = []
+      const server = createServer((req, res) => {
+        authorizations.push(req.headers.authorization)
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ pid: process.pid }))
+      })
+      await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
+      onTestFinished(
+        () =>
+          new Promise<void>((resolve) => {
+            server.close(() => resolve())
+            server.closeAllConnections()
+          }),
+      )
+      const record = {
+        pid: process.pid,
+        version: '0.0.0',
+        startedAt: new Date().toISOString(),
+        socketPath,
+        token: 't',
+      }
+      await writeFile(getDaemonRecordPath(dir), JSON.stringify(record))
+      return { socketPath, authorizations }
+    }
+
+    it.each([
+      ['started after its record', () => Date.now() + 60_000],
+      ['whose start time cannot be read', () => null],
+    ])('refuses to relay, sending no token, for a pid %s', async (_, startMs) => {
+      dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+      const socket = await squattedSocket(dataDir)
+      await expect(
+        resolveDaemonEndpoint(dataDir, { isAlive: () => true, startMs }),
+      ).rejects.toThrow(socket.socketPath)
+      expect(socket.authorizations).toEqual([])
+    })
   })
 
   // Windows: no /proc, so a live pid says nothing about who wrote the record,

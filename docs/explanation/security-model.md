@@ -23,6 +23,22 @@ The local daemon has one person: the machine's owner
   socket itself is `0600`. On Windows it listens on a named pipe whose name
   is random per start, so another user cannot predict it and create it
   first. Only the daemon's record, `daemon.json` (owner-only), says where.
+- **Clients check the socket before they send the token.** A record can
+  outlive its daemon (a crash, a kill, a power loss), and after a reboot
+  empties the temp directory another user could recreate
+  `whiteboard-<uid>` there and listen at the recorded path. So before a
+  client sends the token to a Unix socket, it checks that the socket's
+  directory is a real directory owned by this user and owner-only (`0700`),
+  and that the socket is owned by this user and is not a symbolic link. The
+  directory is checked even when no socket is there yet, because another
+  user could swap their own directory for one holding their socket between
+  the check and the connection. If any of that fails, the client sends
+  nothing to the socket and reports that it may belong to another user, and
+  how to move the socket somewhere of your own (`XDG_RUNTIME_DIR`, or
+  `TMPDIR` when that is unset). `whiteboard daemon run` and `daemon stop`
+  then leave the record alone and signal no process, and the native host
+  relays nothing. When the directory does not exist at all, no daemon can be
+  listening there: the client sends nothing and treats the record as stale.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no
@@ -497,12 +513,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   that role. One dismissed, demoted, removed or deactivated in between is
   refused and changes nothing. An invitation link is checked the same way
   when it is accepted.
-- **An invitation is accepted on this server's own invite page.** A
-  sign-in begun with an invitation from another site — where the browser's
-  `Sec-Fetch-Site` says neither `same-origin` nor `none` — is sent to the
-  `/invite` page to be accepted there, so a link elsewhere cannot silently
-  join a person already signed in at the provider to a workspace and land
-  them in it.
+- **An invitation is accepted on this server's own invite page.**
+  Accepting is a click there, which the page sends as a `POST` that only
+  this server's own pages can make (its `Origin` must be this server's).
+  No link can accept one: a sign-in link carrying an invitation — from
+  another site, from inside a document on this server, from a mail client —
+  is sent to the `/invite` page instead. So a link cannot silently join a
+  person already signed in at the provider to a workspace and land them in
+  it.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
@@ -643,8 +661,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   the client reports that a process holds the pipe without confirming it is
   the recorded daemon. A pipe nobody serves is treated as a stale record.
   The token itself never travels until the proof succeeds. On Linux and
-  macOS nothing changes: the socket's owner-only directory already keeps
-  every other account out.
+  macOS there is no proof: clients check instead that the socket's directory
+  is still owner-only and the socket is this user's (see the trust boundary
+  above).
 
 - Server mode is shipped and used today for team/remote deployments (see
   above); it is not itself production-hardened beyond what is documented on

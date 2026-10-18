@@ -11,8 +11,10 @@ export type VersionRefusalCode = z.infer<typeof versionRefusalCodeSchema>
 
 /**
  * A manual save refused because the document already keeps `limit` manual
- * versions, the most one document keeps. Nothing was written. Automatic
- * checkpoints are not refused: retention retires the oldest of those.
+ * versions, the most one document keeps — or a restore's merge point refused
+ * past the restore-point ceiling of the same size. Nothing was written.
+ * Ordinary automatic checkpoints are not refused: retention retires the
+ * oldest of those.
  */
 export class TooManyVersionsError extends Error {
   readonly code: VersionRefusalCode = 'too_many_versions'

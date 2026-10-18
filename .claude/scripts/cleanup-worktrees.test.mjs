@@ -419,7 +419,8 @@ async function laneWithRecordedDaemon(name, { recordedAgoMs }) {
   // The real repository ignores `.dev-data/`; without that the lane reads as dirty.
   writeFileSync(join(repoDir, '.git', 'info', 'exclude'), '.dev-data/\n')
   const dataDir = join(laneDir, '.dev-data')
-  mkdirSync(dataDir)
+  // Owner-only, as with-dev-data-dir makes a real one: the socket check refuses an open directory.
+  mkdirSync(dataDir, { mode: 0o700 })
   const marker = join(dirname(repoDir), `${name}.signalled`)
   const standIn = spawn(
     process.execPath,
