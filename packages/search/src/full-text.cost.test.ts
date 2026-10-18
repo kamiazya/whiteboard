@@ -65,3 +65,48 @@ describe('fullTextSearch cost', () => {
     expect(calls).toBeLessThan(documents * textsPerDocument + 5 * 10)
   })
 })
+
+/**
+ * Every `String.prototype.indexOf` a run makes, and the characters of the
+ * strings it searched — the excerpt step's work, since it is the one step
+ * that searches document text for query tokens.
+ */
+function scanning<T>(run: () => T): { result: T; calls: number; chars: number } {
+  const original = String.prototype.indexOf
+  let calls = 0
+  let chars = 0
+  const spy = vi.spyOn(String.prototype, 'indexOf').mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    calls++
+    chars += this.length
+    return original.call(this, search, position)
+  })
+  try {
+    return { result: run(), calls, chars }
+  } finally {
+    spy.mockRestore()
+  }
+}
+
+/** The longest query a tool accepts, as distinct CJK bigrams: 1,023 tokens, none repeated. */
+const LONG_QUERY = Array.from({ length: 1024 }, (_, i) => String.fromCharCode(0x4e00 + i)).join('')
+
+describe('fullTextSearch excerpt cost', () => {
+  it('counts the text scanned to excerpt the longest query', () => {
+    // Ten answered documents, each one 16 Ki text holding the query's first
+    // bigram and none of the rest, so every other token scans it whole.
+    const filler = 'x'.repeat(16 * 1024)
+    const documents = Array.from({ length: 10 }, (_, i) => ({
+      documentId: `d${i}`,
+      path: `notes/d${i}`,
+      texts: [`${LONG_QUERY.slice(0, 2)} ${filler}`],
+    }))
+    const { result, calls, chars } = scanning(() => fullTextSearch(documents, LONG_QUERY))
+    expect(result).toHaveLength(10)
+    expect(result[0]?.contexts).toHaveLength(1)
+    expect({ calls, chars }).toEqual({ calls: 10_240, chars: 167_802_880 })
+  })
+})
