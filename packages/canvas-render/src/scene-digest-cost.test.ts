@@ -49,8 +49,10 @@ describe('sceneDigest cost', () => {
     // Boxes stacked over all but the last row and column of a 10000px
     // square, and one box in the far corner: a 500 x 500 grid, the cell
     // budget's limit, with every stacked entry covering nearly every cell.
-    // Filling cell by cell is entries x cells.
-    const entries = 2000
+    // Filling cell by cell is entries x cells. Past the pairwise entry cap,
+    // so the overlap, containment and cluster scans step aside and the time
+    // is the grid's.
+    const entries = 4000
     const cells = (10_000 / 20) ** 2
     const board = (n: number): Scene => ({
       nodes: [
@@ -66,8 +68,8 @@ describe('sceneDigest cost', () => {
     // The subject is present: the grid was built (over budget it answers no
     // regions), and it found the one free column and the one free row.
     expect(digest.freeRegions).toHaveLength(500)
-    // Was 1_695ms for 2000 entries — 0.0067ms per entry-or-cell — filling
-    // every covered cell of every entry.
-    expect(elapsed / (entries + cells)).toBeLessThan(0.002)
+    // Was 2_257ms — 0.0089ms per entry-or-cell — filling every covered cell
+    // of every entry. Measured 18.5ms, 0.00007ms, through the prefix sum.
+    expect(elapsed / (entries + cells)).toBeLessThan(0.001)
   })
 })
