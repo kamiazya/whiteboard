@@ -169,6 +169,21 @@ export function socketTrust(
 }
 
 /**
+ * Why the record's token may not be sent to `path` under `trust`, as the
+ * error a sender rejects with; undefined when it may. Asked immediately before
+ * each send, not only when the record was judged: the directory can vanish or
+ * be replaced in between. A missing directory reads as the connect would have
+ * failed (`ENOENT`), without connecting to whatever is made there meanwhile.
+ */
+export function tokenSendRefusal(path: string, trust: SocketTrust): Error | undefined {
+  if (trust.kind === 'trusted') return undefined
+  if (trust.kind === 'absent') {
+    return Object.assign(new Error(`no socket directory for ${path}`), { code: 'ENOENT' })
+  }
+  return new Error(`${path} may belong to another user, so nothing was sent: ${trust.reason}`)
+}
+
+/**
  * Clears a socket file a previous daemon left behind, and refuses when a
  * daemon is still answering on it — the startup lock should make that
  * impossible, so it is said rather than overwritten.

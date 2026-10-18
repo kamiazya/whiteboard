@@ -1,12 +1,12 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { endpointProof } from '../shared/endpoint-proof.js'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
-import { answeringDaemonSocket } from './_test-daemon-socket.js'
+import { answeringDaemonSocket, collectingDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
 import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
 import { socketTrust } from './daemon-socket.js'
@@ -171,29 +171,8 @@ describe('daemonLiveness', () => {
   })
 })
 
-/**
- * A listener that answers every request as the recorded daemon would, under
- * any credential, and keeps each Authorization header it was sent — what a
- * socket another user prepared at the recorded path would collect.
- */
-async function collectingSocket(dirMode: number) {
-  const socketPath = testSocketPath()
-  chmodSync(dirname(socketPath), dirMode)
-  const authorizations: (string | undefined)[] = []
-  const server = createServer((req, res) => {
-    authorizations.push(req.headers.authorization)
-    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ pid: PID }))
-  })
-  await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
-  onTestFinished(
-    () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve())
-        server.closeAllConnections()
-      }),
-  )
-  return { socketPath, authorizations }
-}
+/** A listener collecting Authorization headers, answering as the recorded daemon would. */
+const collectingSocket = (dirMode: number) => collectingDaemonSocket(dirMode, { pid: PID })
 
 describe('daemonLiveness against a socket this user does not hold alone', () => {
   const ANOTHER_UID = (process.getuid?.() ?? 0) + 1

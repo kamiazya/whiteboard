@@ -4,7 +4,7 @@
  * so what the page sends is not trusted to carry or choose one.
  */
 import diagnosticsChannel from 'node:diagnostics_channel'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync } from 'node:fs'
 import { type ClientRequest, createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -327,6 +327,31 @@ describe('runNativeHost', () => {
     expect(page.received).toEqual([
       { type: 'error', id: 'r5', reason: 'daemon-record-refused', message: refusal },
     ])
+    page.close()
+    await page.done
+  })
+
+  // The endpoint is checked when the record is read, and the socket again at
+  // the moment the token is attached: its directory can be replaced between.
+  it('attaches no token to a socket whose directory others can enter', async () => {
+    const authorizations: (string | undefined)[] = []
+    await startDaemon((req, res) => {
+      authorizations.push(req.headers.authorization)
+      res.end('ok')
+    })
+    chmodSync(dir, 0o755)
+    const page = connectPage()
+    page.send({ type: 'request', id: 'r7', method: 'GET', path: '/api/runtime/ping', headers: {} })
+    await page.until((m) => m.length > 0)
+    expect(page.received).toEqual([
+      {
+        type: 'error',
+        id: 'r7',
+        reason: 'daemon-record-refused',
+        message: expect.stringContaining('may belong to another user'),
+      },
+    ])
+    expect(authorizations).toEqual([])
     page.close()
     await page.done
   })

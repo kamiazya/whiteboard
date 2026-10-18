@@ -1,4 +1,6 @@
+import { chmodSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { dirname } from 'node:path'
 import {
   type RuntimeStatusResponse,
   runtimeStatusResponseSchema,
@@ -54,4 +56,28 @@ export async function answeringDaemonSocket(
       }),
   )
   return { socketPath, asked }
+}
+
+/**
+ * A listener in a directory of mode `dirMode` that answers every request with
+ * `body` under any credential, and keeps each Authorization header it was
+ * sent — what a socket another user prepared at a recorded path would collect.
+ */
+export async function collectingDaemonSocket(dirMode: number, body: unknown) {
+  const socketPath = testSocketPath()
+  chmodSync(dirname(socketPath), dirMode)
+  const authorizations: (string | undefined)[] = []
+  const server = createServer((req, res) => {
+    authorizations.push(req.headers.authorization)
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body))
+  })
+  await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
+  onTestFinished(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve())
+        server.closeAllConnections()
+      }),
+  )
+  return { socketPath, authorizations }
 }

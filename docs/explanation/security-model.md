@@ -46,7 +46,10 @@ The local daemon has one person: the machine's owner
   `daemon status` and `daemon doctor` say the socket directory does not
   exist, the native host relays nothing, and `daemon run` and `daemon stop`
   leave the record and the process alone. Stop that process yourself, then
-  start the daemon again.
+  start the daemon again. The check is repeated immediately before each
+  request that carries the token — by the CLI and by the native host for
+  every request it relays — so a directory replaced after the record was
+  read still receives nothing.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no
