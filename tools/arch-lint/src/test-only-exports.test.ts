@@ -188,7 +188,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/ports/src/tokens.ts#defineToken',
   'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
-  'packages/search/src/full-text.ts#tokenize',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewInputSchema',
   'packages/server-core/src/tools/document-set.ts#documentSetInputSchema',
   'packages/server-core/src/tools/facet-set.ts#DocumentHasNoFrontmatterError',
@@ -366,7 +365,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 154
+const DEBT_CEILING = 153
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18
