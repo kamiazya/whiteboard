@@ -95,13 +95,22 @@ export function edgeLabelPlacement(
 ): Point | undefined {
   const mid = midpointOf(path, rounded)
   if (mid === undefined) return undefined
-  const boxAt = (c: Point): Rect => ({
-    x: c.x - size.w / 2,
-    y: c.y - size.h / 2,
-    w: size.w,
-    h: size.h,
-  })
-  const clear = (c: Point) => !obstacles.some((o) => overlaps(boxAt(c), o))
+  // Every candidate centre lies within the slide reach of the midpoint on
+  // both axes, so an obstacle missing this box misses every candidate
+  // box. One pass over the board then, rather than one per candidate; the
+  // pixel of margin absorbs the rounding of a candidate's offset.
+  const margin = LABEL_SLIDE_REACH_PX + 1
+  const searched: Rect = {
+    x: mid.point.x - margin - size.w / 2,
+    y: mid.point.y - margin - size.h / 2,
+    w: size.w + 2 * margin,
+    h: size.h + 2 * margin,
+  }
+  const near = obstacles.filter((o) => overlaps(searched, o))
+  const clear = (c: Point) => {
+    const box: Rect = { x: c.x - size.w / 2, y: c.y - size.h / 2, w: size.w, h: size.h }
+    return !near.some((o) => overlaps(box, o))
+  }
   if (clear(mid.point)) return mid.point
   const length = Math.hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
   if (length === 0) return mid.point

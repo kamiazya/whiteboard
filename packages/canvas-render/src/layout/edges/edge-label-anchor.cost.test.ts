@@ -80,9 +80,10 @@ describe('edgeLabelPlacement cost', () => {
     // midpoint, and every obstacle was looked at.
     expect(at).toEqual({ x: 250, y: 200 })
     expect(reads.count).toBeGreaterThanOrEqual(n)
-    // Every one of 33 candidates scanned the whole board: 196_614 reads,
-    // about 98 per obstacle.
-    expect(reads.count / n).toBeLessThanOrEqual(100)
+    // Was 196_614 reads, about 98 per obstacle, while every one of 33
+    // candidates scanned the whole board. Now one pass over the board, then
+    // only what lies within the search's reach.
+    expect(reads.count / n).toBeLessThanOrEqual(6)
   })
 
   it('reads a bounded number of fields per label and obstacle over a whole layout', () => {
@@ -117,8 +118,8 @@ describe('edgeLabelPlacement cost', () => {
     const placed = scene.nodes.filter((s) => s.kind === 'textRun' && s.text === 'label')
     expect(placed).toHaveLength(labels)
     expect(reads.count).toBeGreaterThanOrEqual(labels * n)
-    // labels × candidates × nodes: 13_108_260 reads, about 82 per label and
-    // obstacle.
-    expect(reads.count / (labels * n)).toBeLessThanOrEqual(100)
+    // Was labels × candidates × nodes: 13_108_260 reads, about 82 per label
+    // and obstacle.
+    expect(reads.count / (labels * n)).toBeLessThanOrEqual(6)
   })
 })
