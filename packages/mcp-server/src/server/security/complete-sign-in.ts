@@ -9,7 +9,9 @@
  *   3. admit — the provider's rules, then code rules, then the route in;
  *   4. only then spend the invitation, create the user, and add them to the
  *      workspace it invites into (ADR-0049 decision 3);
- *   5. open the session.
+ *   5. open the session — in one write transaction with a check that the
+ *      user is still active, so a deactivation racing the steps above
+ *      leaves no session behind it.
  *
  * Spending comes BEFORE creating: redemption is one conditional update, so a
  * link two people race for is won by exactly one of them, and the loser is
@@ -175,7 +177,9 @@ export async function completeSignIn(
   })
   if (profile === null) return refuse('invitation_unusable')
 
+  // Null when a deactivation landed after the check above.
   const sessionToken = await openSession(deps, binding, claims, now)
+  if (sessionToken === null) return refuse('deactivated')
   return { ok: true, sessionToken, profile }
 }
 
@@ -187,8 +191,8 @@ function openSession(
   binding: AuthenticatorBinding,
   claims: VerifiedClaims,
   now: number,
-): Promise<string> {
+): Promise<string | null> {
   const at = claims.auth_time
   const authenticatedAt = typeof at === 'number' && Number.isFinite(at) ? at * 1000 : null
-  return deps.sessions.create(binding, now, deps.sessionTtlMs, authenticatedAt)
+  return deps.sessions.createForActiveUser(binding, now, deps.sessionTtlMs, authenticatedAt)
 }

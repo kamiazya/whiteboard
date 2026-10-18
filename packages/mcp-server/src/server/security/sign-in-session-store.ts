@@ -7,7 +7,11 @@
  */
 import { randomBytes } from 'node:crypto'
 import { sha256Hex } from '../../shared/sha256.js'
-import type { TenantDatabase } from '../store/db/tenant-database.js'
+import {
+  inTenantTransaction,
+  type TenantDatabase,
+  type TenantScoped,
+} from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 
 /** Host-only (`__Host-`): the browser sends it back to exactly this origin. */
@@ -27,6 +31,18 @@ export interface SignInSessionStore {
     ttlMs: number,
     authenticatedAt?: number | null,
   ): Promise<string>
+  /**
+   * `create`, only while the person is an active user here — null when they
+   * are deactivated or no user at all. The check and the insert share one
+   * write transaction, so a deactivation cannot land between them and leave
+   * a session that reactivating would resume.
+   */
+  createForActiveUser(
+    person: AuthenticatorBinding,
+    now: number,
+    ttlMs: number,
+    authenticatedAt?: number | null,
+  ): Promise<string | null>
   open(token: string, now: number): Promise<OpenSession | null>
   resolve(token: string, now: number): Promise<AuthenticatorBinding | null>
   end(token: string): Promise<boolean>
@@ -44,27 +60,50 @@ async function openSession(db: TenantDatabase, token: string, now: number) {
   return { person, authenticatedAt }
 }
 
+async function insertSession(
+  db: TenantScoped,
+  person: AuthenticatorBinding,
+  now: number,
+  ttlMs: number,
+  authenticatedAt: number | null,
+): Promise<string> {
+  // Nothing else removes an expired session, so opening one sheds them —
+  // without a background worker to declare, and bounded by the rate of
+  // sign-ins rather than by the table's age.
+  await db.deleteFrom('signInSessions').where('expiresAt', '<=', now).execute()
+  const token = randomBytes(32).toString('base64url')
+  await db
+    .insertInto('signInSessions')
+    .values({
+      tokenHash: sha256Hex(token),
+      authenticator: person.authenticator,
+      subject: person.subject,
+      createdAt: now,
+      expiresAt: now + ttlMs,
+      authenticatedAt,
+    })
+    .execute()
+  return token
+}
+
 export function createSignInSessionStore(db: TenantDatabase): SignInSessionStore {
   return {
-    async create(person, now, ttlMs, authenticatedAt = null) {
-      // Nothing else removes an expired session, so opening one sheds them —
-      // without a background worker to declare, and bounded by the rate of
-      // sign-ins rather than by the table's age.
-      await db.deleteFrom('signInSessions').where('expiresAt', '<=', now).execute()
-      const token = randomBytes(32).toString('base64url')
-      await db
-        .insertInto('signInSessions')
-        .values({
-          tokenHash: sha256Hex(token),
-          authenticator: person.authenticator,
-          subject: person.subject,
-          createdAt: now,
-          expiresAt: now + ttlMs,
-          authenticatedAt,
-        })
-        .execute()
-      return token
-    },
+    create: (person, now, ttlMs, authenticatedAt = null) =>
+      insertSession(db, person, now, ttlMs, authenticatedAt),
+
+    createForActiveUser: (person, now, ttlMs, authenticatedAt = null) =>
+      inTenantTransaction(db, async (trx) => {
+        const active = await trx
+          .selectFrom('accountBindings')
+          .innerJoin('memberProfiles', 'memberProfiles.accountId', 'accountBindings.accountId')
+          .select('memberProfiles.id')
+          .where('accountBindings.authenticator', '=', person.authenticator)
+          .where('accountBindings.subject', '=', person.subject)
+          .where('memberProfiles.deactivatedAt', 'is', null)
+          .executeTakeFirst()
+        if (active === undefined) return null
+        return insertSession(trx, person, now, ttlMs, authenticatedAt)
+      }),
 
     open: (token, now) => openSession(db, token, now),
 
