@@ -143,6 +143,22 @@ function makeApp(scopes, overrides = {}) {
   })
 }
 
+// The same people, with the smoke's caller counted as a tenant administrator,
+// for the scenario that judges what an administrator's status view carries.
+function administeredBySmokeCaller(base) {
+  const check = base.administration.check
+  return {
+    ...base,
+    administration: {
+      ...base.administration,
+      check: {
+        isAdministrator: async () => true,
+        administratorIds: () => check.administratorIds(),
+      },
+    },
+  }
+}
+
 // The scope gate is what scenarios 5a/5b judge. Past it, server mode still
 // gates MEMBERSHIP: `smoke-sub` is nobody's member, so a workspace route may
 // answer 403 `not_a_member` — that is the gate after the one under test, so
@@ -285,7 +301,16 @@ try {
 
   // --- Scenario 4: runtime status sanitization ---
   {
-    const app = makeApp(['runtime:read'])
+    // Instance status answers tenant administrators only; a caller who is not
+    // one is refused before anything is read.
+    const refused = await req(makeApp(['runtime:read']), 'GET', '/api/runtime/status', {
+      bearer: SMOKE_TOKEN,
+    })
+    if (refused.status !== 403)
+      fail('4: expected 403 on /api/runtime/status for a non-administrator', {
+        status: refused.status,
+      })
+    const app = makeApp(['runtime:read'], { people: administeredBySmokeCaller(people) })
     const res = await req(app, 'GET', '/api/runtime/status', { bearer: SMOKE_TOKEN })
     if (res.status !== 200) fail('4: expected 200 on /api/runtime/status', { status: res.status })
     const body = await res.text()
