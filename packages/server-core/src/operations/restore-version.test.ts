@@ -630,15 +630,16 @@ describe('restoreVersion subtree mode', () => {
     },
   )
 
-  it('records the merge point on every document a subtree rollback moved', async () => {
+  it('records the merge point on every document a subtree rollback moved, and on no other', async () => {
     const live = new FakeLive()
-    const rootId = generateDocumentId()
-    const childId = generateDocumentId()
+    const [rootId, childId, sameId] = Array.from({ length: 3 }, () => generateDocumentId())
     live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
     live.seed('canvas-a/child', spatialDoc(['child-new']), 'spatial', childId)
+    live.seed('canvas-a/same', spatialDoc(['same']), 'spatial', sameId)
     const pastWorkspace = workspaceDocWith([
       { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
       { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-old'] },
+      { path: 'canvas-a/same', documentId: sameId, nodeIds: ['same'] },
     ])
     const versions = versionsWith({
       v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },
@@ -646,23 +647,6 @@ describe('restoreVersion subtree mode', () => {
     await run(live, versions, { subtree: true })
     expect(versions.saved.map((s) => s.path).sort()).toEqual(['canvas-a', 'canvas-a/child'])
     expect(versions.saved.every((s) => s.options.restoredFrom === 'v1')).toBe(true)
-  })
-
-  it('records no merge point on a document of the subtree the rollback left as it was', async () => {
-    const live = new FakeLive()
-    const rootId = generateDocumentId()
-    const childId = generateDocumentId()
-    live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
-    live.seed('canvas-a/child', spatialDoc(['child-same']), 'spatial', childId)
-    const pastWorkspace = workspaceDocWith([
-      { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
-      { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-same'] },
-    ])
-    const versions = versionsWith({
-      v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },
-    })
-    await run(live, versions, { subtree: true })
-    expect(versions.saved.map((s) => s.path)).toEqual(['canvas-a'])
   })
 
   // Deletions run first, and the order is load-bearing: a document the

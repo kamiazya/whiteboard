@@ -32,7 +32,7 @@ export const MAX_MANUAL_PER_DOCUMENT = 4 * MAX_AUTO_PER_DOCUMENT
  * without end. A CEILING, like the manual one and the same size: past it a
  * keeper records no further merge point, and the restore itself still lands.
  */
-export const MAX_RESTORE_POINTS_PER_DOCUMENT = MAX_MANUAL_PER_DOCUMENT
+export const MAX_RESTORE_POINTS_PER_DOCUMENT = 4 * MAX_AUTO_PER_DOCUMENT
 
 /** A row as lineage sees it: its id, and the version it restored, if any. */
 export interface LineageCandidate {

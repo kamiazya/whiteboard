@@ -341,13 +341,8 @@ async function restoreSubtree(
       }
     }
     for (const { node, pastDoc } of restoring) {
-      const changed = await restoreOneDocument(
-        live,
-        workspaceId,
-        node,
-        pastDoc,
-        rowsById.get(node.meta.documentId),
-      )
+      const row = rowsById.get(node.meta.documentId)
+      const changed = await restoreOneDocument(live, workspaceId, node, pastDoc, row)
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through

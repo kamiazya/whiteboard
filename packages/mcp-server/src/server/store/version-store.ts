@@ -3,8 +3,6 @@ import {
   frontiersFromBase64,
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
-  MAX_MANUAL_PER_DOCUMENT,
-  MAX_RESTORE_POINTS_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
 import {
@@ -23,10 +21,10 @@ import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import type { DatabaseSchema } from './db/schema.js'
-import type { TenantDatabase } from './db/tenant-database.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
+import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -63,7 +61,6 @@ import {
   type AdoptedVersion,
   type Attestation,
   attestationSchema,
-  TooManyVersionsError,
   type VersionHistory,
 } from '@kamiazya/whiteboard-server-core'
 
@@ -766,52 +763,6 @@ function checkoutVersion(doc: LoroDoc, versionId: string, frontiers: string): vo
       `versions/${versionId}`,
       `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
     )
-  }
-}
-
-/**
- * Throws `TooManyVersionsError` when the document already keeps the most
- * manual versions one document may. Asked before the row is written, so a
- * refusal leaves nothing behind; under the workspace write barrier `save`
- * holds, so two saves racing for the last place cannot both take it.
- */
-async function refusePastManualCeiling(
-  db: TenantDatabase,
-  workspaceId: string,
-  documentId: string,
-): Promise<void> {
-  const held = await db
-    .selectFrom('versions')
-    .select((eb) => eb.fn.countAll<number>().as('n'))
-    .where('workspaceId', '=', workspaceId)
-    .where('documentId', '=', documentId)
-    .where('auto', '=', 0)
-    .executeTakeFirstOrThrow()
-  if (Number(held.n) >= MAX_MANUAL_PER_DOCUMENT) {
-    throw new TooManyVersionsError(MAX_MANUAL_PER_DOCUMENT)
-  }
-}
-
-/**
- * Throws `TooManyVersionsError` when the document already keeps the most
- * restore merge points one document may. Neither retention pass retires
- * lineage, so this ceiling is the only bound a restore loop meets; the
- * restore's caller records its point best-effort, so the content still lands.
- */
-async function refusePastRestorePointCeiling(
-  db: TenantDatabase,
-  workspaceId: string,
-  documentId: string,
-): Promise<void> {
-  const held = await db
-    .selectFrom('versions')
-    .select((eb) => eb.fn.countAll<number>().as('n'))
-    .where('workspaceId', '=', workspaceId)
-    .where('documentId', '=', documentId)
-    .where('restoredFrom', 'is not', null)
-    .executeTakeFirstOrThrow()
-  if (Number(held.n) >= MAX_RESTORE_POINTS_PER_DOCUMENT) {
-    throw new TooManyVersionsError(MAX_RESTORE_POINTS_PER_DOCUMENT)
   }
 }
 
