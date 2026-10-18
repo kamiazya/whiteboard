@@ -109,6 +109,7 @@ packageExtensionsChecksum: sha256-zefmQpf8vEPc7SN/0sawRR9byMnf0hIcDSosyOFP5TM=
 
 patchedDependencies:
   '@stryker-mutator/vitest-runner@9.6.1': 7a172555a2985b80de07fe29bb243f7442f622ae933e1caa755e1a86ea72126a
+  mdast-util-find-and-replace@3.0.2: ca6a305c4f9e811aca591fc3ff333492f41238465c856af557e42e313b37bd60
   mdast-util-gfm-autolink-literal@2.0.1: 4cba7390af84c34a3c0d241892a59419aa67a1b0e4dec1aa7ad4c502863e694c
   mdast-util-gfm-task-list-item@2.0.0: 46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47
   micromark-extension-gfm-autolink-literal@2.1.0: 82a571b1dd8382e274e753f01042a0f68376fb0bf1850c5bd8975f4cea7e4166
@@ -13493,7 +13494,7 @@ snapshots:
       mj-context-menu: 0.6.1
       speech-rule-engine: 4.1.4
 
-  mdast-util-find-and-replace@3.0.2:
+  mdast-util-find-and-replace@3.0.2(patch_hash=ca6a305c4f9e811aca591fc3ff333492f41238465c856af557e42e313b37bd60):
     dependencies:
       '@types/mdast': 4.0.4
       escape-string-regexp: 5.0.0
@@ -13522,7 +13523,7 @@ snapshots:
       '@types/mdast': 4.0.4
       ccount: 2.0.1
       devlop: 1.1.0
-      mdast-util-find-and-replace: 3.0.2
+      mdast-util-find-and-replace: 3.0.2(patch_hash=ca6a305c4f9e811aca591fc3ff333492f41238465c856af557e42e313b37bd60)
       micromark-util-character: 2.1.1
 
   mdast-util-gfm-footnote@2.1.0:

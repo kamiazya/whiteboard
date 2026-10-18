@@ -293,3 +293,9 @@ patchedDependencies:
   # what its callbacks would refuse after matching, with the same bounds.
   micromark-extension-gfm-autolink-literal@2.1.0: patches/micromark-extension-gfm-autolink-literal@2.1.0.patch
   mdast-util-gfm-autolink-literal@2.0.1: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
+  # The same pass then looked every text node and its ancestors up among
+  # their siblings from the start of the list, n²/2 reads over a paragraph of
+  # n text nodes or a body of n paragraphs (`a`c`` to 256 KB: 4s); each lookup
+  # now resumes where the last one in that list ended. codec's
+  # autolink-sibling-reads.test.ts counts the reads.
+  mdast-util-find-and-replace@3.0.2: patches/mdast-util-find-and-replace@3.0.2.patch
