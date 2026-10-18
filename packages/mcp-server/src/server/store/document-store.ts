@@ -9,6 +9,7 @@ import {
   readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceMeta,
+  readWorkspaceNodes,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
@@ -23,6 +24,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   refuseNewDocuments,
+  refuseNewFoldersAt,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
@@ -208,8 +210,10 @@ function placeDocumentInTree({
   if (existingEntry === null) {
     // A path the tree does not hold is a NEW document — the per-document
     // update's lazy create among them — so it answers to the workspace's
-    // document ceiling like every other mint.
+    // document and folder ceilings like every other mint: placing it
+    // creates every folder on its path the tree does not hold yet.
     refuseNewDocuments(readWorkspaceDocuments(workspaceDoc).length)
+    refuseNewFoldersAt(readWorkspaceNodes(workspaceDoc), path)
   }
   try {
     if (existingEntry === null) {
