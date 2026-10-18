@@ -92,6 +92,12 @@ function clusteredCanvas(nodeCount) {
       }
     }
   }
+  return { nodes, edges, lines: clusterLines(nodes, clusters, random) }
+}
+
+/** `LINES_PER_CLUSTER` lines inside each cluster, about one in seven reaching another, as the edges do. */
+function clusterLines(nodes, clusters, random) {
+  const int = (max) => Math.floor(random() * max)
   const lines = []
   for (let c = 0; c < clusters; c++) {
     const members = nodes.filter((node) => node.id.startsWith(`c${c}n`))
@@ -106,7 +112,7 @@ function clusteredCanvas(nodeCount) {
       })
     }
   }
-  return { nodes, edges, lines }
+  return lines
 }
 
 function cpuMs(run) {
