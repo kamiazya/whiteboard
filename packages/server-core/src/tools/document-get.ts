@@ -10,7 +10,7 @@ import {
 import { z } from 'zod'
 import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { DocumentSerializeError } from './errors.js'
+import { DocumentSerializeError, reportedFaultText } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
@@ -155,7 +155,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
           ) {
             throw error
           }
-          failed.push({ documentId, reason: error.message })
+          failed.push({ documentId, reason: reportedFaultText(deps, 'wb_document_get', error) })
         }
       }
       return { documents, failed }

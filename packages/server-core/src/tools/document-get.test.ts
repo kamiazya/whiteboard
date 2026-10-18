@@ -291,6 +291,36 @@ describe('wb_document_get reads a document in its own format', () => {
     expect(result.failed[0]?.reason).toContain('weird')
   })
 
+  it('quotes an unwritable document through the composition root', async () => {
+    const quoted: Array<{ tool: string; fault: unknown }> = []
+    const deps: ServerDeps = {
+      ...makeDeps(),
+      reportedFaultText: (tool, fault) => {
+        quoted.push({ tool, fault })
+        return 'quoted by the root'
+      },
+    }
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const { documentId: bad } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'unwritable',
+      kind: 'markdown',
+    })
+    const doc = await loadOrCreateDocument(deps, 'ws', bad)
+    writeCoreFacets(doc, { type: 'note', facetsRaw: { weird: Number.NaN } })
+    await saveDocumentSnapshot(deps, 'ws', bad, doc)
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [bad],
+    })
+
+    expect(result.failed).toEqual([{ documentId: bad, reason: 'quoted by the root' }])
+    expect(quoted).toMatchObject([
+      { tool: 'wb_document_get', fault: { name: 'DocumentSerializeError' } },
+    ])
+  })
+
   it('an id the workspace never held is reported as not found, not as a document that lost its kind', async () => {
     const deps = makeDeps()
     await createDoc(deps, 'markdown')

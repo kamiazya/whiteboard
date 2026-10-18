@@ -350,6 +350,45 @@ describe('wb_workspace_edit', () => {
     expect(placed?.path).toBe('archive')
   })
 
+  it('quotes a follow pass that could not run through the composition root', async () => {
+    const quoted: Array<{ tool: string; fault: unknown }> = []
+    const deps = await makeDeps()
+    const seeded = await createWorkspaceEditTool(deps).execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'design/login', kind: 'markdown' }],
+    })
+    const fault = new Error('index unavailable')
+    const index = deps.documentIndex
+    let listings = 0
+    const out = await createWorkspaceEditTool({
+      ...deps,
+      reportedFaultText: (tool, thrown) => {
+        quoted.push({ tool, fault: thrown })
+        return 'quoted by the root'
+      },
+      documentIndex: new Proxy(index, {
+        get(target, prop, receiver) {
+          if (prop === 'listDocuments') {
+            return async (input: Parameters<typeof index.listDocuments>[0]) => {
+              listings += 1
+              if (listings === 2) throw fault
+              return index.listDocuments(input)
+            }
+          }
+          const value = Reflect.get(target, prop, receiver)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      }),
+    }).execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.move', documentId: seeded.results[0]?.documentId ?? '', path: 'archive' },
+      ],
+    })
+    expect(out.results[0]).toMatchObject({ follow: { error: 'quoted by the root' } })
+    expect(quoted).toEqual([{ tool: 'wb_workspace_edit', fault }])
+  })
+
   it('bootstraps the workspace on op 0 and applies the REST of the batch inside it', async () => {
     // The threading guard. Creating is ADR-0019's mint boundary, so op 0
     // decides an id the caller never sent — and ops 1..n reach the port

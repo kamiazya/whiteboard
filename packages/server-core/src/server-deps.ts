@@ -151,6 +151,18 @@ export interface ServerDeps {
    */
   callerNamespace?: (request?: Request) => Promise<string>
   /**
+   * How a tool quotes a fault it REPORTS in a successful answer rather than
+   * throws — a follow pass that could not run, a document that could not be
+   * written out — given the tool's name and what was thrown.
+   *
+   * A thrown error reaches the composition root's own error path, which
+   * decides what the caller may read of it; a reported one never does, so
+   * without this seam it would carry storage paths and engine text to a
+   * caller the root would have withheld them from. Absent quotes the fault in
+   * full, the right answer where the caller is the keeper's owner.
+   */
+  reportedFaultText?: (tool: string, fault: unknown) => string
+  /**
    * The facet registry validating registered-facet writes (ADR-0013
    * decision 6): the bundled plugin set, composed once per root. The set is
    * fixed at build time because rendering, export and the web editor read the
