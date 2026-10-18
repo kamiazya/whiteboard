@@ -10,7 +10,7 @@ import { parseDaemonRecord } from '../daemon/daemon-record.js'
 import { loadDaemonRecord } from '../daemon/daemon-registry.js'
 import {
   assertDataDirOwnedByUser,
-  readFileOwnedByUser,
+  readFileOwnedByUserSync,
   refuseForeignRecordFile,
   resolveDataDir,
   secureDataDir,
@@ -145,14 +145,14 @@ describe('the record file itself', () => {
     await writeFile(path, '{}')
     await chmod(dir, 0o777)
     expect(statSync(dir).mode & 0o002).not.toBe(0)
-    expect(await readFileOwnedByUser(path, statSync(dir).uid)).toEqual({
+    expect(readFileOwnedByUserSync(path, statSync(dir).uid)).toEqual({
       kind: 'not-owned',
       message: expect.stringMatching(/writable by other users/),
     })
   })
 })
 
-describe('readFileOwnedByUser in a directory it cannot trust', () => {
+describe('readFileOwnedByUserSync in a directory it cannot trust', () => {
   let dir: string
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'wb-record-untrusted-'))
@@ -166,7 +166,7 @@ describe('readFileOwnedByUser in a directory it cannot trust', () => {
   // directory can vouch for. Mode-based, so it holds when the suite runs as root.
   it('refuses before opening anything, an absent record included', async () => {
     await chmod(dir, 0o777)
-    expect(await readFileOwnedByUser(join(dir, 'server-mode.json'), statSync(dir).uid)).toEqual({
+    expect(readFileOwnedByUserSync(join(dir, 'server-mode.json'), statSync(dir).uid)).toEqual({
       kind: 'not-owned',
       message: expect.stringMatching(/writable by other users/),
     })

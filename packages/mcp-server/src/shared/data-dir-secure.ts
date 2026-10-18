@@ -223,14 +223,6 @@ export type OwnedFileRead =
   | { kind: 'missing' }
   | { kind: 'not-owned'; message: string }
 
-export async function readFileOwnedByUser(
-  path: string,
-  uid = process.getuid?.(),
-): Promise<OwnedFileRead> {
-  return readFileOwnedByUserSync(path, uid)
-}
-
-/** `readFileOwnedByUser` for a caller that reads synchronously; one judgement. */
 export function readFileOwnedByUserSync(path: string, uid = process.getuid?.()): OwnedFileRead {
   // Judged before the open as well as after it: nothing in a directory this
   // user cannot trust is opened at all, since opening can itself act — a FIFO

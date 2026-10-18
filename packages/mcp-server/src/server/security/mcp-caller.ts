@@ -264,7 +264,7 @@ async function executeAdmitted(
   const admit = await membershipRecheck(
     caller.grant,
     caller.members,
-    async () => workspaceId,
+    () => Promise.resolve(workspaceId),
     () => {
       log.warning(
         { workspaceId, tool: tool.name, reason: 'not_a_member' },

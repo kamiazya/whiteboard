@@ -14,10 +14,14 @@ export const BACKUP_FILE_MODE = 0o600
 
 /** Every dir and file under `root`, and `root` itself, closed to everyone else. */
 export async function restrictTreeToOwner(root: string): Promise<void> {
-  for (const entry of await readdir(root, { withFileTypes: true, recursive: true })) {
-    const path = join(entry.parentPath, entry.name)
-    if (entry.isDirectory()) await chmod(path, BACKUP_DIR_MODE)
-    else if (entry.isFile()) await chmod(path, BACKUP_FILE_MODE)
-  }
+  const entries = await readdir(root, { withFileTypes: true, recursive: true })
+  await Promise.all(
+    entries.map((entry) => {
+      const path = join(entry.parentPath, entry.name)
+      if (entry.isDirectory()) return chmod(path, BACKUP_DIR_MODE)
+      if (entry.isFile()) return chmod(path, BACKUP_FILE_MODE)
+      return undefined
+    }),
+  )
   if ((await lstat(root)).isDirectory()) await chmod(root, BACKUP_DIR_MODE)
 }
