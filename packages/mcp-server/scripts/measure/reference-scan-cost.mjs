@@ -22,6 +22,20 @@
  * - `facts heap`: `'[[a]] '.repeat(N)` as a markdown body, held in a
  *   `ContentFactsCache`; retained JS heap after a full GC over the body's own
  *   UTF-16 bytes is the amplification.
+ *
+ * WHAT IT MEASURED, 2026-10-18, on this machine (Node 22), before and after
+ * the fixes it was written to judge:
+ *
+ *     scale   scan [[#          mentions
+ *      2000     38.5 ->  0.7     49.6 -> 0.2
+ *     16000   2389.8 ->  0.6   1048.3 -> 0.0
+ *
+ *     body chars   refs    retained, before -> after
+ *         262140  43690    11615KB (22.7x) -> 3354KB (6.6x)
+ *
+ * What is left of the heap row is one small object per reference plus the
+ * body itself; a per-document reference cap would bound it further, at the
+ * cost of rename-follow and backlinks seeing nothing past the cap.
  */
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
