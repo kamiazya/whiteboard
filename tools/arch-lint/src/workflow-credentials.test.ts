@@ -93,8 +93,17 @@ describe('workflows — a checkout keeps the job token only where the job pushes
  * under `--ignore-scripts`, so nothing in the job executes before wrangler.
  */
 describe('workflows — a job holding a deploy or publish secret runs no repository or dependency code', () => {
-  const CREDENTIAL_SECRET_RE =
-    /secrets\.(?:CLOUDFLARE_\w+|CF_API_TOKEN|RELEASE_PLEASE_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN)\b/
+  // Every repository secret is a credential: one a job is handed is something
+  // that job's code could exfiltrate. GITHUB_TOKEN is the exception, because it
+  // is the job token every job holds anyway and `permissions:` scopes it.
+  const CREDENTIAL_SECRET_RE = /secrets\.(?!GITHUB_TOKEN\b)\w+/
+  // A credential job that has to READ the whole tree, and so checks out more
+  // than the deploy tooling. Reading is not running: the job still executes no
+  // repository or dependency code, which the step findings below hold.
+  const READS_WHOLE_TREE: Record<string, string> = {
+    'sonarqube.yml:scan':
+      'the SonarQube scanner analyses every source file and maps coverage onto it; it parses them and executes none',
+  }
   const DEPLOY_TOOLING_DIR = '.github/deploy'
   // The one install a credential job may run: the deploy tooling's own
   // lockfile, integrity-checked and with every lifecycle script off.
@@ -121,15 +130,16 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     CREDENTIAL_SECRET_RE.test(JSON.stringify(job))
 
   /** Every step of a credential job that could run code the job did not pin. */
-  function findings(job: WorkflowJob): string[] {
+  function findings(job: WorkflowJob, site = ''): string[] {
     return (job.steps ?? []).flatMap((step) => {
       const label = step.name ?? step.uses ?? step.run ?? '?'
       const uses = step.uses ?? ''
       if (uses.startsWith('./')) return [`${label}: runs a repository action`]
       if (uses !== '' && !COMMIT_PINNED_RE.test(uses)) return [`${label}: action not SHA-pinned`]
       if (uses.startsWith('actions/checkout@')) {
+        if (step.with?.['persist-credentials'] !== false) return [`${label}: keeps the job token`]
         const tooling =
-          step.with?.['persist-credentials'] === false &&
+          READS_WHOLE_TREE[site] !== undefined ||
           String(step.with?.['sparse-checkout'] ?? '').trim() === DEPLOY_TOOLING_DIR
         return tooling ? [] : [`${label}: checks out more than ${DEPLOY_TOOLING_DIR}`]
       }
@@ -158,14 +168,48 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
         'release.yml:deploy-web',
         'deploy-preview.yml:deploy-latest',
         'preview-pr-deploy.yml:deploy',
+        'sonarqube.yml:scan',
       ]),
     )
   })
 
   it.each(
     credentialJobs.map(({ site, job }) => [site, job] as const),
-  )('%s runs no install, build, test or repository action', (_site, job) => {
-    expect(findings(job)).toEqual([])
+  )('%s runs no install, build, test or repository action', (site, job) => {
+    expect(findings(job, site)).toEqual([])
+  })
+
+  it.each(Object.keys(READS_WHOLE_TREE))('ledgered %s still holds a credential', (site) => {
+    expect(credentialJobs.map((s) => s.site)).toContain(site)
+  })
+
+  // The scanner runs no repository code unless its configuration names a
+  // program for it: `sonar.nodejs.executable` or `sonar.scanner.javaExePath`
+  // pointing into the checkout would run that file with the token in reach.
+  it('sonar-project.properties names no program for the scanner to run', () => {
+    const properties = readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8')
+    const keys = properties
+      .split('\n')
+      .map((line) => /^\s*([\w.-]+)\s*[=:]/.exec(line)?.[1])
+      .filter((key): key is string => key !== undefined)
+    expect(keys).toContain('sonar.projectKey')
+    expect(keys.filter((key) => /executable|exepath/i.test(key))).toEqual([])
+  })
+
+  it('flags an install planted in the SonarQube scan job', () => {
+    const scan = credentialJobs.find(({ site }) => site === 'sonarqube.yml:scan')?.job
+    expect(scan).toBeDefined()
+    const steps = scan?.steps ?? []
+    const planted: WorkflowJob = {
+      ...scan,
+      steps: [
+        ...steps.slice(0, 1),
+        { uses: './.github/actions/setup-pnpm' },
+        { run: 'pnpm install --frozen-lockfile' },
+        ...steps.slice(1),
+      ],
+    }
+    expect(findings(planted, 'sonarqube.yml:scan')).toHaveLength(2)
   })
 
   it('flags a build planted in a deploy job', () => {
