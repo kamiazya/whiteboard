@@ -38,7 +38,7 @@ import {
   copyContainerValue,
   docRoots,
   freshNodeRoots,
-  holdsOpenable,
+  holdsDeclaredContent,
   nodeRoots,
   projectedKind,
   rootFitsNode,
@@ -46,11 +46,6 @@ import {
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMovableList } from './mergeable-containers.js'
-
-/** Each content key's declared kind, for a copy that drops content kept as another. */
-const CONTENT_KIND_OF: ReadonlyMap<string, 'map' | 'text'> = new Map(
-  CONTENT_CONTAINER_KEYS.map(({ key, kind }) => [key, kind]),
-)
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -155,10 +150,7 @@ function tree(doc: LoroDoc) {
  */
 function attachContentContainers(node: LoroTreeNode): void {
   const roots = nodeRoots(node.data)
-  for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
-    if (kind === 'map') roots.map(key)
-    else roots.text(key)
-  }
+  for (const { key, kind } of CONTENT_CONTAINER_KEYS) roots[kind](key)
 }
 
 type Read =
@@ -833,7 +825,7 @@ export function writeWorkspaceDocumentContent(
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
     // A key holding another kind is left as `rootFitsNode` leaves it above.
-    if (key in projected || !holdsOpenable(node.data, key, kind)) continue
+    if (key in projected || !holdsDeclaredContent(node.data, key)) continue
     if (clearRootContainer(roots, key, kind)) changed = true
   }
   if (changed) node.data.set('updatedAt', opts.updatedAt ?? Date.now())
@@ -855,10 +847,8 @@ export const WORKSPACE_TRASH_KEY = 'trash'
 function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
   const into = freshNodeRoots(target.data)
   for (const key of source.data.keys()) {
-    // Content kept as the wrong kind is unreadable, so a copy carries none
-    // of it; a document's copy gets a fresh container there instead.
-    const declared = CONTENT_KIND_OF.get(key)
-    if (declared !== undefined && !holdsOpenable(source.data, key, declared)) continue
+    // Content held as the wrong kind is unreadable: not carried, re-attached fresh below.
+    if (!holdsDeclaredContent(source.data, key)) continue
     const value = source.data.get(key) as unknown
     const kind = containerKind(value)
     if (kind === null) target.data.set(key, value as Parameters<LoroMap['set']>[1])

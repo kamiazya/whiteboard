@@ -16,6 +16,7 @@
  */
 import { CONTAINER_NAME_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { type LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
+import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMap } from './mergeable-containers.js'
 import { spliceText } from './minimal-change.js'
 
@@ -268,9 +269,15 @@ const OPENS_AS: Readonly<Record<'text' | 'list' | 'map', readonly string[]>> = {
 }
 
 /** Whether `data` holds nothing at `key`, or a container a node opens as `kind`. */
-export function holdsOpenable(data: LoroMap, key: string, kind: 'text' | 'list' | 'map'): boolean {
+function holdsOpenable(data: LoroMap, key: string, kind: 'text' | 'list' | 'map'): boolean {
   const held: unknown = data.get(key)
   return held === undefined || OPENS_AS[kind].includes(containerKind(held) ?? '')
+}
+
+/** Whether `data` holds, at `key`, nothing or — for a content key — the container it is declared as. */
+export function holdsDeclaredContent(data: LoroMap, key: string): boolean {
+  const declared = CONTENT_CONTAINER_KEYS.find((content) => content.key === key)
+  return declared === undefined || holdsOpenable(data, key, declared.kind)
 }
 
 /** The container at `key`, made when absent; never opened over anything else (`UnreadableDocumentContentError`). */

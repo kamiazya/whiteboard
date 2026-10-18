@@ -95,7 +95,10 @@ not:
   container named after one of a document node's own keys (`documentId`,
   `segment`, `kind`, `name`, `nameChosen`, `createdAt`, `updatedAt`), or a
   content container under its own name but of another kind (a text named
-  `nodes`). The workspace document's `update` also refuses, with
+  `nodes`). The workspace document's `update` and `promote` refuse it too, for
+  an update or record that leaves a document's content container key
+  (`nodes`, `body`, `threads` and the others) holding a plain value, a
+  container of another kind, or nothing. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`
@@ -119,7 +122,9 @@ not:
   A sync `update` also refuses, with
   `409 {"error":"causal_gap"}` and nothing stored, an update that builds on a
   change the daemon does not hold; the web app sends it again, and it lands
-  once the daemon holds what it builds on.
+  once the daemon holds what it builds on. The same answer refuses an update
+  or a promoted record holding writes into a container created by a change
+  those writes do not build on.
 - **Rewriting references** is held to the same ceilings, the 262,144
   characters of a body and the 8,192 of a text node. Each link is longer than
   the name it replaces, and a moved document's new path can be longer than
