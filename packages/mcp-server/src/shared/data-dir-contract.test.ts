@@ -9,7 +9,7 @@
  * shared temp dir another local user can create first.
  */
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,6 +24,7 @@ import {
   setDataDirForTests,
   WHITEBOARD_ROOT,
 } from './data-dir-secure.js'
+import { CAN_DENY_FILE_READ } from './test-utils/can-deny-file-read.js'
 
 // The temp fallback is per user: a fixed name in the shared temp dir is one
 // another user can create first. Spelled out here rather than imported, so
@@ -136,6 +137,25 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     // The tmp-fallback branch must NOT call canWriteDir on the tmp path
     expect(mkdirCalledOnTmp).toBe(false)
   })
+
+  // `status` and `stop` probe; the root that serves creates. A home dir this
+  // user can write but not list is one the root refuses, so the probe must too,
+  // or the commands name a dir no server ever used.
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'home dir writable but unreadable: both resolvers fall back to tmp',
+    async () => {
+      const homeWhiteboard = join(tempHome, '.whiteboard')
+      await mkdir(homeWhiteboard)
+      await chmod(homeWhiteboard, 0o300)
+      try {
+        const expectedTmp = join(tempTmp, TMP_FALLBACK_NAME)
+        expect(resolveDefaultDataDir({}, dirs)).toBe(expectedTmp)
+        expect(resolveDataDir({}, dirs)).toBe(expectedTmp)
+      } finally {
+        await chmod(homeWhiteboard, 0o700)
+      }
+    },
+  )
 
   it('home-is-a-regular-file edge: both resolvers fall back to tmp', async () => {
     // When ~/.whiteboard is a file (not a directory), both resolvers must agree on tmp

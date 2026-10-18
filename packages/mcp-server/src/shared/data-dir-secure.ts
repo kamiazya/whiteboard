@@ -71,15 +71,17 @@ export function resolveDataDir(
 /**
  * The same verdict `canWriteDir` reaches, without creating anything: a home
  * candidate that is a writable dir, or that is absent under a writable
- * parent — the one `canWriteDir` would create. A command that reads the data
- * dir before any root has started must name the dir that root will create;
+ * parent — the one `canWriteDir` would create. Readable as well as writable,
+ * as `canWriteDir` demands: a dir only one of the two passes names a dir no
+ * root would serve. A command that reads the data dir before any root has
+ * started must name the dir that root will create;
  * answering the temp fallback instead points it at a path in the shared temp
  * dir that another local user can create first.
  */
 export function homeDataDirIsUsable(path: string): boolean {
   try {
     if (!statSync(path).isDirectory()) return false
-    accessSync(path, fsConstants.W_OK)
+    accessSync(path, fsConstants.R_OK | fsConstants.W_OK)
     return true
   } catch (err) {
     return isMissingFileError(err) && parentIsWritable(path)
