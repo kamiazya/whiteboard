@@ -50,6 +50,18 @@ export function restorableTrashDocuments(
   // a row can only bring back the document it is for.
   if (restored?.documentId !== input.documentId) return null
   if (unreadableWorkspaceNodes(placed).length > 0) return null
+  return placeableNodes(placed, restored.path)
+}
+
+/**
+ * The documents and the folders below `top` that `placed` holds, or `null`
+ * when any node sits at a path the grammar refuses or a document carries a
+ * name past the bound.
+ */
+function placeableNodes(
+  placed: LoroDoc,
+  top: string,
+): { readonly documents: number; readonly folders: number } | null {
   let documents = 0
   let folders = 0
   for (const node of readWorkspaceNodes(placed)) {
@@ -58,7 +70,7 @@ export function restorableTrashDocuments(
     if (node.type === 'document') {
       if ((node.meta.name?.length ?? 0) > DOCUMENT_NAME_MAX_LENGTH) return null
       documents += 1
-    } else if (isSelfOrDescendant(node.path, restored.path)) {
+    } else if (isSelfOrDescendant(node.path, top)) {
       folders += 1
     }
   }

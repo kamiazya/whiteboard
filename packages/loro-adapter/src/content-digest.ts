@@ -95,25 +95,33 @@ function stringifyWithStack(root: object): string {
       out.push(next)
       continue
     }
-    const record = next as Record<string, unknown>
     const array = Array.isArray(next)
-    const keys = array ? null : Object.keys(record).sort(compareCodeUnit)
-    const count = keys === null ? (next as unknown[]).length : keys.length
     out.push(array ? '[' : '{')
     stack.push(array ? ']' : '}')
-    for (let i = count - 1; i >= 0; i--) {
-      const key = keys === null ? i : (keys[i] as string)
-      const head = `${i > 0 ? ',' : ''}${keys === null ? '' : `${JSON.stringify(key)}:`}`
-      const item = record[key]
-      const leaf = scalar(item)
-      if (leaf !== null) stack.push(head + leaf)
-      else {
-        stack.push(item as object)
-        if (head !== '') stack.push(head)
-      }
-    }
+    pushMembers(stack, next as Record<string, unknown>, array)
   }
   return out.join('')
+}
+
+/** An array's items or an object's sorted entries, pushed so they pop in order. */
+function pushMembers(
+  stack: Array<string | object>,
+  record: Record<string, unknown>,
+  array: boolean,
+): void {
+  const keys = array ? null : Object.keys(record).sort(compareCodeUnit)
+  const count = keys === null ? (record as unknown as unknown[]).length : keys.length
+  for (let i = count - 1; i >= 0; i--) {
+    const key = keys === null ? i : (keys[i] as string)
+    const head = `${i > 0 ? ',' : ''}${keys === null ? '' : `${JSON.stringify(key)}:`}`
+    const item = record[key]
+    const leaf = scalar(item)
+    if (leaf !== null) stack.push(head + leaf)
+    else {
+      stack.push(item as object)
+      if (head !== '') stack.push(head)
+    }
+  }
 }
 
 /** 53-bit-quality string hash (cyrb53), widened to 64 hex bits of output. */
