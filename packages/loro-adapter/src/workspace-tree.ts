@@ -28,7 +28,7 @@ import {
   isSelfOrDescendant,
 } from '@kamiazya/whiteboard-model'
 import type { LoroTreeNode, TreeID } from 'loro-crdt'
-import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
+import { LoroDoc, type LoroMap, LoroMovableList } from 'loro-crdt'
 import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'
@@ -38,6 +38,7 @@ import {
   copyContainerValue,
   docRoots,
   freshNodeRoots,
+  holdsOpenable,
   nodeRoots,
   projectedKind,
   rootFitsNode,
@@ -45,6 +46,11 @@ import {
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMovableList } from './mergeable-containers.js'
+
+/** Each content key's declared kind, for a copy that drops content kept as another. */
+const CONTENT_KIND_OF: ReadonlyMap<string, 'map' | 'text'> = new Map(
+  CONTENT_CONTAINER_KEYS.map(({ key, kind }) => [key, kind]),
+)
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -148,9 +154,10 @@ function tree(doc: LoroDoc) {
  * make the folder unreadable.
  */
 function attachContentContainers(node: LoroTreeNode): void {
+  const roots = nodeRoots(node.data)
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
-    if (kind === 'map') node.data.getOrCreateContainer(key, new LoroMap())
-    else node.data.getOrCreateContainer(key, new LoroText())
+    if (kind === 'map') roots.map(key)
+    else roots.text(key)
   }
 }
 
@@ -825,7 +832,8 @@ export function writeWorkspaceDocumentContent(
     if (syncRootContainer(roots, key, value, source)) changed = true
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
-    if (key in projected) continue
+    // A key holding another kind is left as `rootFitsNode` leaves it above.
+    if (key in projected || !holdsOpenable(node.data, key, kind)) continue
     if (clearRootContainer(roots, key, kind)) changed = true
   }
   if (changed) node.data.set('updatedAt', opts.updatedAt ?? Date.now())
@@ -847,6 +855,10 @@ export const WORKSPACE_TRASH_KEY = 'trash'
 function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
   const into = freshNodeRoots(target.data)
   for (const key of source.data.keys()) {
+    // Content kept as the wrong kind is unreadable, so a copy carries none
+    // of it; a document's copy gets a fresh container there instead.
+    const declared = CONTENT_KIND_OF.get(key)
+    if (declared !== undefined && !holdsOpenable(source.data, key, declared)) continue
     const value = source.data.get(key) as unknown
     const kind = containerKind(value)
     if (kind === null) target.data.set(key, value as Parameters<LoroMap['set']>[1])
@@ -1065,8 +1077,8 @@ export function documentContainers(doc: LoroDoc, documentId: string): DocumentCo
     return current
   }
   return {
-    getMap: (key) => live().data.getOrCreateContainer(key, new LoroMap()),
-    getText: (key) => live().data.getOrCreateContainer(key, new LoroText()),
+    getMap: (key) => nodeRoots(live().data).map(key),
+    getText: (key) => nodeRoots(live().data).text(key),
     commit: () => doc.commit(),
   }
 }
