@@ -30,129 +30,230 @@ interface IndexedSegment {
   readonly b: Point
 }
 
+/** A segment as the grid files it: its bounds, and the level whose cell suits it. */
+interface Placed {
+  readonly seg: IndexedSegment
+  readonly level: number
+  readonly minX: number
+  readonly maxX: number
+  readonly minY: number
+  readonly maxY: number
+}
+
+/** Cells grow fourfold per level: level `l` has a cell of 4^l px. */
+const cellAt = (level: number): number => 2 ** (2 * level)
+/** A segment's extent is at most this many cells of its own level. */
+const EXTENT_IN_CELLS = 1
+/** Below this a cell would be subnormal and its pad would vanish. */
+const MIN_LEVEL = -30
+/** The pad around a segment's cells, as a share of the cell. */
+const PAD_IN_CELLS = 2 ** -20
 /**
- * Most cells one segment is entered in. A segment that would take more —
- * one far longer than the board's mean, or one whose coordinates leave no
- * room for a cell index — is checked against every segment instead, which
- * keeps the result exact while bounding what the grid can be made to walk.
+ * Where cell lines fall, as a share of the cell. A power-of-two cell would
+ * otherwise put its lines on round coordinates, where authored points sit,
+ * and the pad would carry every such segment into a neighbouring cell.
  */
-const MAX_CELLS_PER_SEGMENT = 1024
+const PHASE_IN_CELLS = 0.381966
 
 /**
- * The broad phase: a uniform grid of segments, with a segment entered in
- * every cell its LINE passes through rather than every cell of its bounding
- * box, so a long diagonal costs its length and not its area. Two segments
- * that meet share the cell holding the meeting point, so the narrow phase
- * sees every pair that can cross; the coverage is padded so rounding at a
- * cell boundary only adds candidates.
+ * Files a segment, or answers `undefined` for one that can take part in
+ * no crossing: a zero extent has no direction (the narrow phase rejects it
+ * as degenerate) and a non-finite one turns its arithmetic NaN.
+ */
+function place(seg: IndexedSegment): Placed | undefined {
+  const minX = Math.min(seg.a.x, seg.b.x)
+  const maxX = Math.max(seg.a.x, seg.b.x)
+  const minY = Math.min(seg.a.y, seg.b.y)
+  const maxY = Math.max(seg.a.y, seg.b.y)
+  const extent = Math.max(maxX - minX, maxY - minY)
+  if (!(extent > 0 && extent < Number.POSITIVE_INFINITY)) return undefined
+  // A nonzero extent is at least one ulp of the segment's coordinates, so
+  // its cell is too: an index stays under 2^53, and where one would round,
+  // two cells merge, which only adds candidates.
+  const need = extent / EXTENT_IN_CELLS
+  let level = Math.max(MIN_LEVEL, Math.ceil(Math.log2(need) / 2))
+  while (cellAt(level) < need) level += 1
+  while (level > MIN_LEVEL && cellAt(level - 1) >= need) level -= 1
+  return { seg, level, minX, maxX, minY, maxY }
+}
+
+/**
+ * `floor((v + delta) / cell)`, exact however large `v` is: the cell is a
+ * power of two, so `v / cell` and `base * cell` are exact, and the rest is
+ * worked in the offset from that cell's corner, where rounding is
+ * relative to the cell rather than to `v`.
+ */
+function cellIndex(v: number, delta: number, cell: number): number {
+  const base = Math.floor(v / cell)
+  return base + Math.floor((v - base * cell + cell * PHASE_IN_CELLS + delta) / cell)
+}
+
+/**
+ * The cells of `cell` px that `p`'s LINE passes through, rather than every
+ * cell of its bounding box, so a diagonal costs its length and not its
+ * area — padded, so rounding at a cell boundary only adds candidates. Each
+ * row range is worked relative to the segment's own start, which keeps its
+ * rounding relative to the segment and the cell, not to where the board
+ * sits.
+ */
+function cellsOf(p: Placed, cell: number): string[] {
+  const { a, b } = p.seg
+  const pad = cell * PAD_IN_CELLS
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const c0 = cellIndex(a.x, Math.min(0, dx) - pad, cell)
+  const c1 = cellIndex(a.x, Math.max(0, dx) + pad, cell)
+  const keys: string[] = []
+  for (let i = 0; i <= c1 - c0; i++) {
+    const cx = c0 + i
+    let lo = Math.min(0, dy)
+    let hi = Math.max(0, dy)
+    if (dx !== 0 && c1 > c0) {
+      // The part of the segment inside this column, by its x extent.
+      // Offsets from `a.x`: `cx * cell` is exact, a phase-shifted line is not.
+      const left = cx * cell - a.x - cell * PHASE_IN_CELLS
+      const xL = Math.max(Math.min(0, dx), left)
+      const xR = Math.min(Math.max(0, dx), left + cell)
+      const oL = (xL / dx) * dy
+      const oR = (xR / dx) * dy
+      lo = Math.max(lo, Math.min(oL, oR))
+      hi = Math.min(hi, Math.max(oL, oR))
+    }
+    const r0 = cellIndex(a.y, lo - pad, cell)
+    const r1 = cellIndex(a.y, hi + pad, cell)
+    for (let k = 0; k <= r1 - r0; k++) keys.push(`${cx},${r0 + k}`)
+  }
+  return keys
+}
+
+/** The bounds of every segment one level files natively. */
+interface Bounds {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
+
+/** True unless `p` lies clear of `box` by more than a sliver of `cell`. */
+function reaches(p: Placed, box: Bounds, cell: number): boolean {
+  const gap = cell * PAD_IN_CELLS
+  return !(
+    box.minX - p.maxX > gap ||
+    p.minX - box.maxX > gap ||
+    box.minY - p.maxY > gap ||
+    p.minY - box.maxY > gap
+  )
+}
+
+interface Level {
+  readonly id: number
+  readonly cell: number
+  readonly bounds: Bounds
+  /** Segments filed at this level, by cell. */
+  readonly native: Map<string, number[]>
+  /** Segments of finer levels, filed here too so this level's own find them. */
+  readonly finer: Map<string, number[]>
+}
+
+/** The levels one segment takes part in, each with its cells there. */
+type Reached = { readonly level: Level; readonly own: boolean; readonly keys: string[] }[]
+
+function file(cells: Map<string, number[]>, keys: readonly string[], index: number): void {
+  for (const key of keys) {
+    const cell = cells.get(key)
+    if (cell === undefined) cells.set(key, [index])
+    else cell.push(index)
+  }
+}
+
+/**
+ * The broad phase: a hierarchy of uniform grids. Each segment is filed at
+ * the level whose cell is about half its extent, so it touches a
+ * handful of cells whatever its length, and no cell is finer than the
+ * coordinates' own spacing where it sits — a board anywhere on the number
+ * line, beside outliers anywhere else, indexes as it would at the origin.
  *
- * The cell is the mean segment extent: the total number of cell entries is
- * then a small multiple of the segment count, whatever the board's size.
- * Cells are counted from the board's own top-left, not from 0, so a board
- * drawn far from the origin indexes as it would at the origin — coordinates
- * are unbounded, and an index taken from them directly outgrows both the
- * pad and, past 2^53, the loop counter itself.
+ * Two segments that meet share a cell holding the meeting point at the
+ * COARSER of their two levels: a segment is also filed, as `finer`, at
+ * every coarser level whose segments it can reach, and it looks for
+ * segments of coarser levels there. Levels are fixed before any segment is
+ * filed, so a coarser segment that comes later still finds a finer one
+ * that came earlier.
  */
 class SegmentGrid {
-  private readonly cells = new Map<string, number[]>()
+  /** Every level in use, finest first. */
+  private readonly levels: Level[]
   private readonly segments: IndexedSegment[] = []
   private readonly seenStamp: number[] = []
-  /** Segments in no cell, which every segment is checked against. */
-  private readonly wide: number[] = []
   private stamp = 0
 
-  constructor(
-    private readonly cellPx: number,
-    private readonly originX: number,
-    private readonly originY: number,
-  ) {}
-
-  /**
-   * The cells `seg` is entered in, or `undefined` when it is too wide for
-   * the grid: past the cell cap, or where an index is no longer an exact
-   * integer. Rounding in relative coordinates scales with how far a segment
-   * sits from the board's top-left, not from 0, so the pad is a sliver of
-   * the cell plus a few dozen ulps of that offset.
-   */
-  cellsOf(seg: IndexedSegment): string[] | undefined {
-    const s = this.cellPx
-    const ax = seg.a.x - this.originX
-    const ay = seg.a.y - this.originY
-    const bx = seg.b.x - this.originX
-    const by = seg.b.y - this.originY
-    const minX = Math.min(ax, bx)
-    const maxX = Math.max(ax, bx)
-    const minY = Math.min(ay, by)
-    const maxY = Math.max(ay, by)
-    const offset = Math.max(maxX, maxY, -minX, -minY)
-    const pad = s * 1e-6 + offset * 2 ** -46
-    const c0 = Math.floor((minX - pad) / s)
-    const c1 = Math.floor((maxX + pad) / s)
-    const rowLo = Math.floor((minY - pad) / s)
-    const rowHi = Math.floor((maxY + pad) / s)
-    if (![c0, c1, rowLo, rowHi].every(Number.isSafeInteger)) return undefined
-    // Bounds the column loop by itself, whatever each column contributes.
-    if (c1 - c0 + 1 > MAX_CELLS_PER_SEGMENT) return undefined
-    const dx = bx - ax
-    const dy = by - ay
-    const keys: string[] = []
-    // Counted loops: termination never rests on `cx + 1` differing from `cx`.
-    for (let i = 0; i <= c1 - c0; i++) {
-      const cx = c0 + i
-      let yLo = minY
-      let yHi = maxY
-      if (dx !== 0 && c1 > c0) {
-        // The part of the segment inside this column, by its x extent.
-        const xL = Math.max(minX, cx * s)
-        const xR = Math.min(maxX, (cx + 1) * s)
-        const yL = ay + ((xL - ax) / dx) * dy
-        const yR = ay + ((xR - ax) / dx) * dy
-        yLo = Math.max(minY, Math.min(yL, yR))
-        yHi = Math.min(maxY, Math.max(yL, yR))
+  constructor(all: readonly Placed[]) {
+    const byId = new Map<number, Level>()
+    for (const p of all) {
+      const level = byId.get(p.level)
+      if (level === undefined) {
+        byId.set(p.level, {
+          id: p.level,
+          cell: cellAt(p.level),
+          bounds: { minX: p.minX, maxX: p.maxX, minY: p.minY, maxY: p.maxY },
+          native: new Map(),
+          finer: new Map(),
+        })
+        continue
       }
-      const r0 = Math.floor((yLo - pad) / s)
-      const r1 = Math.floor((yHi + pad) / s)
-      if (keys.length + (r1 - r0 + 1) > MAX_CELLS_PER_SEGMENT) return undefined
-      for (let k = 0; k <= r1 - r0; k++) keys.push(`${cx},${r0 + k}`)
+      const box = level.bounds
+      box.minX = Math.min(box.minX, p.minX)
+      box.maxX = Math.max(box.maxX, p.maxX)
+      box.minY = Math.min(box.minY, p.minY)
+      box.maxY = Math.max(box.maxY, p.maxY)
     }
-    return keys
+    this.levels = [...byId.values()].sort((x, y) => x.id - y.id)
   }
 
-  private take(index: number, found: number[]): void {
-    if (this.seenStamp[index] === this.stamp) return
-    this.seenStamp[index] = this.stamp
-    found.push(index)
+  /** The levels `p` takes part in, own first, each with its cells there. */
+  reach(p: Placed): Reached {
+    const reached: Reached = []
+    for (const level of this.levels) {
+      if (level.id < p.level) continue
+      const own = level.id === p.level
+      if (!own && !reaches(p, level.bounds, level.cell)) continue
+      reached.push({ level, own, keys: cellsOf(p, level.cell) })
+    }
+    return reached
+  }
+
+  private takeFiled(cells: Map<string, number[]>, keys: readonly string[], found: number[]): void {
+    for (const key of keys) {
+      for (const index of cells.get(key) ?? []) {
+        if (this.seenStamp[index] === this.stamp) continue
+        this.seenStamp[index] = this.stamp
+        found.push(index)
+      }
+    }
   }
 
   /**
-   * Every segment entered so far that can meet `seg`, once each and in the
-   * order they were entered: those sharing one of its cells and every wide
-   * one — or, when `seg` is wide itself, all of them. The order is fixed
-   * because two crossings can tie along a segment while their points differ
-   * in the last bits, and the spacing rule keeps whichever comes first.
+   * Every segment filed so far that can meet the one `reached` describes,
+   * once each and in the order they were filed. The order is fixed because
+   * two crossings can tie along a segment while their points differ in the
+   * last bits, and the spacing rule keeps whichever comes first.
    */
-  candidates(keys: readonly string[] | undefined): IndexedSegment[] {
-    if (keys === undefined) return [...this.segments]
+  candidates(reached: Reached): IndexedSegment[] {
     this.stamp += 1
     const found: number[] = []
-    for (const key of keys) for (const index of this.cells.get(key) ?? []) this.take(index, found)
-    for (const index of this.wide) this.take(index, found)
+    for (const { level, own, keys } of reached) {
+      this.takeFiled(level.native, keys, found)
+      // Finer segments are found at their coarser partner's own level only.
+      if (own && level.finer.size > 0) this.takeFiled(level.finer, keys, found)
+    }
     return found.sort((p, q) => p - q).map((index) => this.segments[index] as IndexedSegment)
   }
 
-  add(seg: IndexedSegment, keys: readonly string[] | undefined): void {
+  add(seg: IndexedSegment, reached: Reached): void {
     const index = this.segments.length
     this.segments.push(seg)
     this.seenStamp.push(0)
-    if (keys === undefined) {
-      this.wide.push(index)
-      return
-    }
-    for (const key of keys) {
-      const cell = this.cells.get(key)
-      if (cell === undefined) this.cells.set(key, [index])
-      else cell.push(index)
-    }
+    for (const { level, own, keys } of reached) file(own ? level.native : level.finer, keys, index)
   }
 }
 
@@ -198,39 +299,17 @@ function spacedHops(
 const isFinitePoint = (p: Point): boolean => Number.isFinite(p.x) && Number.isFinite(p.y)
 
 /**
- * An edge's segments by index; a non-finite point cannot be drawn, so a
- * segment touching one neither hops nor is hopped.
+ * An edge's segments by index, filed; a non-finite point cannot be drawn,
+ * so a segment touching one neither hops nor is hopped.
  */
-function segmentsOf(edge: ResolvedEdgeNode): (IndexedSegment | undefined)[] {
-  const segments: (IndexedSegment | undefined)[] = []
+function placedSegmentsOf(edge: ResolvedEdgeNode): (Placed | undefined)[] {
+  const segments: (Placed | undefined)[] = []
   for (let seg = 0; seg < edge.path.length - 1; seg += 1) {
     const a = edge.path[seg] as Point
     const b = edge.path[seg + 1] as Point
-    segments.push(isFinitePoint(a) && isFinitePoint(b) ? { a, b } : undefined)
+    segments.push(isFinitePoint(a) && isFinitePoint(b) ? place({ a, b }) : undefined)
   }
   return segments
-}
-
-/** The grid's cell (the mean segment extent) and origin (the board's top-left). */
-function gridFrame(edges: readonly ResolvedEdgeNode[]): { cellPx: number; x: number; y: number } {
-  let total = 0
-  let count = 0
-  let x = Number.POSITIVE_INFINITY
-  let y = Number.POSITIVE_INFINITY
-  for (const edge of edges) {
-    for (let k = 0; k < edge.path.length - 1; k += 1) {
-      const a = edge.path[k] as Point
-      const b = edge.path[k + 1] as Point
-      if (!isFinitePoint(a) || !isFinitePoint(b)) continue
-      total += Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))
-      count += 1
-      x = Math.min(x, a.x, b.x)
-      y = Math.min(y, a.y, b.y)
-    }
-  }
-  // An overflowing total leaves every segment wide, which is exact.
-  const cellPx = count === 0 ? 1 : Math.max(1, total / count)
-  return count === 0 ? { cellPx, x: 0, y: 0 } : { cellPx, x, y }
 }
 
 /**
@@ -242,28 +321,33 @@ export function computeEdgeJumps(
   edges: readonly ResolvedEdgeNode[],
 ): ReadonlyMap<string, readonly EdgeJumpPoint[]> {
   const result = new Map<string, readonly EdgeJumpPoint[]>()
-  const frame = gridFrame(edges)
-  const grid = new SegmentGrid(frame.cellPx, frame.x, frame.y)
+  const placed = edges.map(placedSegmentsOf)
+  const grid = new SegmentGrid(placed.flat().filter((p): p is Placed => p !== undefined))
   let sceneBudget = MAX_HOPS_PER_SCENE
-  for (const edge of edges) {
-    if (sceneBudget === 0) break
-    const segments = segmentsOf(edge)
-    const keys = segments.map((segment) =>
-      segment === undefined ? undefined : grid.cellsOf(segment),
-    )
+  edges.forEach((edge, e) => {
+    if (sceneBudget === 0) return
+    const segments = placed[e] as (Placed | undefined)[]
+    const reached = segments.map((p) => (p === undefined ? undefined : grid.reach(p)))
     const jumps: EdgeJumpPoint[] = []
-    segments.forEach((segment, seg) => {
-      if (segment === undefined || sceneBudget === 0) return
-      const segLen = Math.hypot(segment.b.x - segment.a.x, segment.b.y - segment.a.y)
+    segments.forEach((p, seg) => {
+      const r = reached[seg]
+      if (p === undefined || r === undefined || sceneBudget === 0) return
+      const { a, b } = p.seg
       const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
-      const hops = spacedHops(crossingsOn(segment, grid.candidates(keys[seg])), segLen, seg, limit)
+      const hops = spacedHops(
+        crossingsOn(p.seg, grid.candidates(r)),
+        Math.hypot(b.x - a.x, b.y - a.y),
+        seg,
+        limit,
+      )
       sceneBudget -= hops.length
       jumps.push(...hops)
     })
     if (jumps.length > 0) result.set(edge.id, jumps)
-    segments.forEach((segment, seg) => {
-      if (segment !== undefined) grid.add(segment, keys[seg])
+    segments.forEach((p, seg) => {
+      const r = reached[seg]
+      if (p !== undefined && r !== undefined) grid.add(p.seg, r)
     })
-  }
+  })
   return result
 }

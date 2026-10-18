@@ -116,12 +116,14 @@ describe('computeEdgeJumps cost', () => {
     expect(jumps.get('c999')).toEqual([{ segment: 0, x: 39 * 2000 + STEP_PX / 2, y: 24 * 2000 }])
     expect(narrowTests.count).toBeGreaterThanOrEqual(BOARD_CELLS)
     // All pairs is about segments² / 2 — 2.2e9 here; 3_268 per segment at a
-    // tenth of this size. Measured 1_950 in all behind the grid.
+    // tenth of this size. Measured 4_160 in all behind the grid; a pair met
+    // in two shared cells and tested twice would put it past 4_500.
     expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
+    expect(narrowTests.count).toBeLessThanOrEqual(4_200)
     expect(visits).toBeGreaterThan(segments)
     // Each segment reads its cells twice, to find candidates and to enter
-    // itself. Measured 4.17 per segment.
-    expect(visits / segments).toBeLessThanOrEqual(8)
+    // itself. Measured 3.64 per segment.
+    expect(visits / segments).toBeLessThanOrEqual(4.5)
   })
 
   it.each([
@@ -148,7 +150,9 @@ describe('computeEdgeJumps cost', () => {
     },
   ])('keeps the same bounded pair count beside $name far away', ({ far }) => {
     // One outlier must not change what the board's own segments cost: the
-    // board is the fixture above, untouched.
+    // board is the fixture above, untouched. Measured the same 4_160 pairs
+    // and 3.64 visits per segment; one grid shared by the whole board spent
+    // 2_175_953_000 pairs here, the outlier having widened every segment.
     const edges = [routed('far', far), ...staircaseBoard()]
     const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
 
@@ -159,7 +163,8 @@ describe('computeEdgeJumps cost', () => {
       expect(jumps.size).toBe(BOARD_CELLS)
       expect(jumps.get('c999')).toEqual([{ segment: 0, x: 39 * 2000 + STEP_PX / 2, y: 24 * 2000 }])
       expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
-      expect(visits / segments).toBeLessThanOrEqual(8)
+      // The outlier's level is never visited by the board's own segments.
+      expect(visits / segments).toBeLessThanOrEqual(4.5)
     } finally {
       narrowTests.budget = Number.POSITIVE_INFINITY
     }
@@ -211,9 +216,9 @@ describe('computeEdgeJumps cost', () => {
   })
 
   it('still hops over a segment too long for the grid', () => {
-    // 2_000_000px against a mean extent near 1_100px is more cells than one
-    // segment may take, so the long edge is in no cell. Every later vertical
-    // must still find it, without the board falling back to all pairs.
+    // 2_000_000px against 100px verticals: the long edge is filed at a far
+    // coarser level than they are. Every later vertical must still find it
+    // there, without the board falling back to all pairs.
     const long = routed('long', [
       { x: 0, y: 0 },
       { x: 2_000_000, y: 0 },
@@ -236,8 +241,8 @@ describe('computeEdgeJumps cost', () => {
 
   describe('at coordinates far from the origin', () => {
     // A plain cross, in units of `u`, plus `zeros` zero-length edges at the
-    // board's top-left that pull the mean segment extent (the grid's cell)
-    // down. Translated by (tx, ty); every coordinate is a multiple of `u`,
+    // board's top-left, which a grid sized by the mean segment extent let
+    // pull its cell down. Translated by (tx, ty); every coordinate is a multiple of `u`,
     // chosen so it is exact at that magnitude.
     function cross(u: number, zeros: number, tx: number, ty: number): ResolvedEdgeNode[] {
       const at = (x: number, y: number) => ({ x: tx + x * u, y: ty + y * u })
@@ -254,7 +259,8 @@ describe('computeEdgeJumps cost', () => {
 
     it.each([
       { name: 'a cross translated by 1e16', u: 2, zeros: 1, tx: 1e16, ty: 1e16 },
-      // Coordinate over cell past 2^53: an index loop there cannot advance.
+      // Coordinate over a one-pixel cell past 2^53, where an index loop
+      // cannot advance.
       {
         name: 'a cross at 2^60 under a one-pixel cell',
         u: 256,
@@ -276,9 +282,9 @@ describe('computeEdgeJumps cost', () => {
     })
 
     it('still hops where one segment spans the whole double range', () => {
-      // Its extent is not finite, so neither is the mean that sizes the
-      // cell: no segment has a cell index, and all of them fall back to
-      // checking every other. The cross near 0 must still hop.
+      // Its extent is not finite, so its arithmetic is NaN against any
+      // other segment and it can take part in no crossing. The cross near 0
+      // must still hop.
       const edges = [
         routed('w', [
           { x: -1.7e308, y: 10 },

@@ -137,16 +137,22 @@ describe('computeEdgeJumps broad phase', () => {
     },
   )
 
-  it('keeps the same hop as the scan when two crossings tie along the segment', () => {
-    // e1's first segment crosses e0 twice at e0's corner (55, 0): the two
-    // hits have the same `t` but differ in their last bits, so which one
-    // survives the spacing rule rests on the order candidates arrive in.
+  // e1's first segment crosses e0 twice at e0's corner (55, 0): the two
+  // hits have the same `t` but differ in their last bits, so which one
+  // survives the spacing rule rests on the order candidates arrive in.
+  // e0's two segments sit at different grid levels, so either direction
+  // puts the coarser one first in one of the two orders the grid could use.
+  const corner = [
+    { x: 0.001620334765735976, y: 1029 },
+    { x: 55, y: 0 },
+    { x: 0, y: 23 },
+  ]
+  it.each([
+    { name: 'coarse segment first', path: corner },
+    { name: 'fine segment first', path: [...corner].reverse() },
+  ])('keeps the same hop as the scan when two crossings tie, $name', ({ path }) => {
     const edges = [
-      edge('e0', [
-        { x: 0.001620334765735976, y: 1029 },
-        { x: 55, y: 0 },
-        { x: 0, y: 23 },
-      ]),
+      edge('e0', path),
       edge('e1', [
         { x: 2651, y: 6.707523425575388e-12 },
         { x: 0, y: 0 },
@@ -155,10 +161,37 @@ describe('computeEdgeJumps broad phase', () => {
     expect(new Map(computeEdgeJumps(edges))).toEqual(oracle(edges))
   })
 
-  it('keeps the hops of a board whose origin an outlier drags 2^60 away', () => {
-    // The outlier is the board's leftmost point, so every other coordinate
-    // is 2^60 from the grid's origin and rounds to 256px there: the pad has
-    // to grow with that offset, or e2's crossing of e0 falls between cells.
+  it('keeps a crossing that lies just past a column line of the grid', () => {
+    // Found by drawing coordinates beside the grid's own cell lines: e1
+    // crosses e0 where e0's part in one column ends, so a column taken a
+    // phase off its true line files that part's rows under its neighbour.
+    const edges = [
+      edge('e0', [
+        { x: 0, y: -609.7832960000001 },
+        { x: -391.133184, y: 0 },
+      ]),
+      edge('e1', [
+        { x: -353.783296, y: -88.445824 },
+        { x: 0, y: 0 },
+      ]),
+      edge('e2', [
+        { x: -24.445824, y: 0 },
+        { x: 0, y: 0 },
+      ]),
+      edge('e3', [
+        { x: 0, y: -24.445824 },
+        { x: -24.445824, y: -24.445824 },
+      ]),
+    ]
+    const expected = oracle(edges)
+    expect(expected.size).toBeGreaterThan(0)
+    expect(new Map(computeEdgeJumps(edges))).toEqual(expected)
+  })
+
+  it('keeps the hops of a board beside an outlier 2^60 away', () => {
+    // A grid with one origin for the whole board put it at the outlier, so
+    // every other coordinate sat 2^60 from it and rounded to 256px there;
+    // e2's crossing of e0 then fell between cells.
     const edges = [
       edge('e0', [
         { x: 129, y: 917 },
