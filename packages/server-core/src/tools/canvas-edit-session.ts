@@ -175,6 +175,13 @@ export class CanvasEditSession {
    */
   placedInside = 0
   /**
+   * How many nodes this batch's `node.patch` ops have targeted between them.
+   * A selector expands to every node it reaches, and a patch that changes
+   * text measures each one, so 200 selector-wide ops would measure the
+   * board 200 times. One canvas's worth is what a batch may patch.
+   */
+  patchedNodes = 0
+  /**
    * Groups this batch put at the cursor, with the sizes they were given
    * (a default is not a choice). A caller that adds a group with no
    * position and then declares its members has said where the group
@@ -425,14 +432,43 @@ export class CanvasEditSession {
   }
 
   issues = (error: z.ZodError): string => describeIssues(error)
-  patchNode = (
+  /**
+   * Applies one patch to every id an op selected, writing the board back in
+   * ONE pass. Writing each node back by re-mapping the board also replaced
+   * the array the by-id index is keyed on, so the next lookup rebuilt it:
+   * a selector-wide patch was quadratic in the board, per op.
+   */
+  patchNodes = (
     index: number,
     opName: string,
-    id: string,
+    ids: readonly string[],
     patch: z.infer<typeof nodePatchFieldsSchema>,
   ): void => {
-    const node = this.nodeAt(id)
-    if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
+    const patching = this.patchedNodes + ids.length
+    if (patching > CANVAS_MAX_NODES) {
+      fail(
+        index,
+        opName,
+        `a batch patches at most ${CANVAS_MAX_NODES} nodes between its node.patch ops, and this op would take it to ${patching}; put the fields in one op, or patch the rest in another call`,
+      )
+    }
+    this.patchedNodes = patching
+    const updated = new Map<string, SpatialNode>()
+    for (const id of ids) {
+      const node = updated.get(id) ?? this.nodeAt(id)
+      if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
+      updated.set(id, this.patchedNode(index, opName, node, patch))
+    }
+    this.nodes = this.nodes.map((existing) => updated.get(existing.id) ?? existing)
+    for (const id of updated.keys()) this.touchedNodes.add(id)
+  }
+
+  private readonly patchedNode = (
+    index: number,
+    opName: string,
+    node: SpatialNode,
+    patch: z.infer<typeof nodePatchFieldsSchema>,
+  ): SpatialNode => {
     // A content key the TARGET has no room for. `applyNodePatch` IGNORES
     // one — it answers what the patch means, and a proposal has nobody to
     // deliver a refusal to — so the tool asks what the patch actually
@@ -472,7 +508,6 @@ export class CanvasEditSession {
     ) {
       assertTextFits(index, opName, updated, this.measure)
     }
-    this.nodes = this.nodes.map((existing) => (existing.id === id ? updated : existing))
-    this.touchedNodes.add(id)
+    return updated
   }
 }

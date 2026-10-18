@@ -19,6 +19,13 @@ import { canvasEditInputSchema } from './canvas-edit-ops.js'
 import { CanvasEditSession } from './canvas-edit-session.js'
 
 const BOARD = 2000
+/**
+ * A few walks of the board for the whole op, never one per patched node.
+ * Measured at five id reads per node (selecting, indexing — which reads an
+ * id twice — copying, writing back); patching each node by re-mapping the
+ * board read these ids 6,007,000 times.
+ */
+const ID_READ_CEILING = 6 * BOARD
 
 function countingBoard(count: number): { nodes: SpatialNode[]; idReads: () => number } {
   let idReads = 0
@@ -35,7 +42,7 @@ function countingBoard(count: number): { nodes: SpatialNode[]; idReads: () => nu
 }
 
 describe('node.patch cost', () => {
-  it('patching every node reads the board, per node patched', () => {
+  it('patching every node walks the board a constant number of times', () => {
     const board = countingBoard(BOARD)
     const session = new CanvasEditSession(
       { nodes: board.nodes, edges: [] },
@@ -50,7 +57,6 @@ describe('node.patch cost', () => {
     // node.patch reads the registry only for a stencil, which this op names none of.
     applyCanvasOp({ s: session, facetRegistry: {} as FacetRegistry }, ops[0] as never, 0)
     expect(session.nodes.every((node) => node.x === 7)).toBe(true)
-    // Pinned exactly, so a change in either direction has to say why.
-    expect(board.idReads()).toBe(6_007_000)
+    expect(board.idReads()).toBeLessThanOrEqual(ID_READ_CEILING)
   })
 })

@@ -161,3 +161,21 @@ describe('wb_canvas_edit bounds what one batch places inside groups', () => {
     )
   })
 })
+
+describe('wb_canvas_edit bounds what one batch patches', () => {
+  const BOARD = CANVAS_MAX_NODES / 2 + 100
+  const patchAll = (x: number) => ({ op: 'node.patch', all: true, patch: { x } })
+
+  test('one node.patch over every node still applies', async () => {
+    const result = await editOn(nodesOf(BOARD), 0, [patchAll(7)])
+    expect(result.applied).toBe(1)
+  })
+
+  test('a second selector-wide node.patch past the bound is refused by name', async () => {
+    await expect(editOn(nodesOf(BOARD), 0, [patchAll(7), patchAll(9)])).rejects.toThrow(
+      new RegExp(
+        `ops\\[1\\] \\(node.patch\\) could not be applied: .*patches at most ${CANVAS_MAX_NODES} nodes`,
+      ),
+    )
+  })
+})

@@ -461,13 +461,14 @@ const CANVAS_EDIT_HANDLERS: {
         fail(index, op.op, lockedDetail('node', id))
       }
     }
-    for (const id of ids) ctx.s.patchNode(index, op.op, id, op.patch)
+    ctx.s.patchNodes(index, op.op, ids, op.patch)
     // After the patch, so an explicit `color` in the same op still
     // wins: a caller naming both has said the more specific thing.
     if (op.stencil !== undefined) {
       const stencil = op.stencil
+      const selected = new Set(ids)
       ctx.s.nodes = ctx.s.nodes.map((node) =>
-        ids.includes(node.id)
+        selected.has(node.id)
           ? dressWithStencil(index, op.op, node, stencil, op.patch.color, ctx.facetRegistry)
           : node,
       )
