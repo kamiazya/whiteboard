@@ -243,15 +243,18 @@ function bringMembersIn(
       return { width: node?.width ?? 0, height: node?.height ?? 0 }
     }),
   )
+  // Written back in one pass: replacing the array once per member made a
+  // region of every node on the board quadratic in its size.
+  const moved = new Map<string, SpatialNode>()
   arriving.forEach((id, at) => {
     const placed = placements[at]
     const node = ctx.s.nodeAt(id)
     if (placed === undefined || node === undefined) return
-    const moved = { ...node, ...placed }
-    ctx.s.nodes = ctx.s.nodes.map((candidate) => (candidate.id === id ? moved : candidate))
+    moved.set(id, { ...node, ...placed })
     ctx.s.touchedNodes.add(id)
     ctx.s.geometry.set(id, { id, ...placed, width: node.width, height: node.height })
   })
+  if (moved.size > 0) ctx.s.nodes = ctx.s.nodes.map((node) => moved.get(node.id) ?? node)
 }
 
 /**
@@ -737,6 +740,14 @@ const CANVAS_EDIT_HANDLERS: {
     return
   },
   tidy: (ctx, op, index) => {
+    if (ctx.s.tidied) {
+      fail(
+        index,
+        op.op,
+        'a batch tidies at most once; name every node to tidy in one scope, or tidy again in another call',
+      )
+    }
+    ctx.s.tidied = true
     // Locks bind tidy exactly as they bind the editor: a locked node
     // is a fixed obstacle it routes around, never one it moves.
     // An id that is not on the canvas is refused by name like every other

@@ -501,6 +501,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
   checkpointed one at a time, not all at once.
+- **A canvas holds a bounded number of nodes and edges.** Every render,
+  export and tidy lays the whole board out again on the serving loop, so one
+  board holds at most 2000 nodes and 2000 edges, however the change arrives:
+  `wb_canvas_edit` refuses the op that would pass either, and a sync update
+  or a move is refused whole (`too_many_nodes_or_edges`). One batch tidies at most
+  once, so a single call cannot repeat a whole-board layout once per op. What
+  is still NOT bounded is how long the largest permitted board takes to lay
+  out — several seconds on a typical machine — and that work blocks the loop
+  while it runs. All of it is in
+  [Export formats](../reference/export-formats.md).
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set
