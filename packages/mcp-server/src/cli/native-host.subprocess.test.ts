@@ -208,6 +208,23 @@ describe('whiteboard native-host', () => {
     ).toThrow()
   }, 30_000)
 
+  // `--json` is the contract a script reads, so a refused data dir is an
+  // answer on stdout, not a stack trace on stderr.
+  it('answers a data dir others can write as a JSON refusal', () => {
+    const dataDir = join(scratch, 'shared')
+    mkdirSync(dataDir)
+    chmodSync(dataDir, 0o777)
+    const installed = installCli([
+      `--data-dir=${dataDir}`,
+      `--manifest-dir=${join(scratch, 'NativeMessagingHosts')}`,
+    ])
+    expect(installed.status, installed.stderr).toBe(1)
+    const result = nativeHostInstallOutputSchema.parse(JSON.parse(installed.stdout))
+    expect(result).toMatchObject({ ok: false, manifests: [] })
+    expect(result.reason).toContain(dataDir)
+    expect(() => readFileSync(join(dataDir, 'native-host', 'whiteboard-native-host'))).toThrow()
+  }, 30_000)
+
   it('relays a refused daemon record as a refusal naming the record', async () => {
     const dataDir = ownerOnlyDataDir()
     writeFileSync(join(dataDir, 'elsewhere.json'), '{}')

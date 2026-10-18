@@ -9,6 +9,7 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
+import type { z } from 'zod'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { resolveDaemonEndpoint } from '../daemon/native-host/daemon-endpoint.js'
 import {
@@ -161,7 +162,7 @@ async function install(rest: readonly string[]): Promise<number> {
   const entry = realpathSync(process.argv[1] ?? '')
   const transient = transientInstallWarning(entry)
   if (transient !== undefined) process.stderr.write(transient)
-  const result = await installNativeHost({
+  return await installAndAnswer({
     dataDir,
     manifestDirs,
     launcher: {
@@ -171,6 +172,21 @@ async function install(rest: readonly string[]): Promise<number> {
     },
     extensionBuild: development ? 'development' : 'production',
   })
+}
+
+async function installAndAnswer(options: Parameters<typeof installNativeHost>[0]): Promise<number> {
+  let result: Awaited<ReturnType<typeof installNativeHost>>
+  try {
+    result = await installNativeHost(options)
+  } catch (err) {
+    // A refused data dir or launcher is an answer the `--json` reader parses,
+    // not a crash: nothing was written, so there is no launcher to name.
+    return answerInstall({
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+      manifests: [],
+    })
+  }
   const ok = result.manifests.length > 0
   const reason = ok
     ? {}
@@ -178,13 +194,17 @@ async function install(rest: readonly string[]): Promise<number> {
         reason:
           'no Chromium browser or Firefox was found; pass --manifest-dir=<path> or --firefox-manifest-dir=<path>',
       }
+  return answerInstall({ ok, ...reason, ...result })
+}
+
+function answerInstall(
+  answer: Omit<z.input<typeof nativeHostInstallOutputSchema>, 'schemaVersion'>,
+): number {
   process.stdout.write(
     operatorJsonLine(nativeHostInstallOutputSchema, {
       schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
-      ok,
-      ...reason,
-      ...result,
+      ...answer,
     }),
   )
-  return ok ? 0 : 1
+  return answer.ok ? 0 : 1
 }
