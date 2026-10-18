@@ -169,18 +169,20 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
 }
 
 /**
- * Single-linkage union-find clustering by proximity gap.
+ * Union-find over ids.
  *
- * Path compression and union by rank are what keep this near-linear per
- * pair. Without them a stack of boxes in one spot builds a chain as long as
+ * Path compression and union by rank are what keep it near-linear per
+ * union. Without them a stack of boxes in one spot builds a chain as long as
  * the stack on the first sweep, and every later union walks it — cubic in
- * the entry count. The grouping is unchanged by either: which id ends up a
- * root never reaches the output, which is sorted below.
+ * the entry count. Which id ends up a root never reaches the digest, whose
+ * clusters are sorted.
  */
-function computeClusters(entries: readonly DigestEntry[]): string[][] {
-  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
-  const parent = new Map<string, string>(entries.map((e) => [e.id, e.id]))
-  const rank = new Map<string, number>(entries.map((e) => [e.id, 0]))
+function disjointSets(ids: readonly string[]): {
+  readonly find: (id: string) => string
+  readonly union: (a: string, b: string) => void
+} {
+  const parent = new Map<string, string>(ids.map((id) => [id, id]))
+  const rank = new Map<string, number>(ids.map((id) => [id, 0]))
   function find(id: string): string {
     let root = id
     while (parent.get(root) !== root) {
@@ -207,6 +209,13 @@ function computeClusters(entries: readonly DigestEntry[]): string[][] {
       rank.set(rootA, rankA + 1)
     }
   }
+  return { find, union }
+}
+
+/** Single-linkage union-find clustering by proximity gap. */
+function computeClusters(entries: readonly DigestEntry[]): string[][] {
+  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
+  const { find, union } = disjointSets(entries.map((e) => e.id))
 
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
