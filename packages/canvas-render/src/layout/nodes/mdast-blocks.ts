@@ -39,6 +39,7 @@ import { Parser } from '../../vendor/budoux/parser.js'
 import { escapeXmlText } from '../../xml-escape.js'
 import { createNestedLayoutBudget, spendNestedLayout } from './embed-budget.js'
 import { createInlineJunction, headCharacter } from './inline-junction.js'
+import { longestFittingCount } from './longest-fit.js'
 import { layoutCodeBlock } from './mdast-code-block.js'
 import {
   baselineIn,
@@ -325,16 +326,11 @@ function layoutPhrasing(
     // Everything that lands on one line is emitted as ONE run. Emitting a run
     // per break opportunity would also fit, and would multiply the SVG's
     // <text> elements by the character count of every CJK paragraph.
-    //
-    // ponytail: linear scan re-measuring the whole accumulated line each
-    // segment — exact, and O(line length) characters measured per segment.
-    // Measured on the scoreboard corpus it costs 0.06ms -> 0.75ms for 33
-    // layouts (~23us each), which is noise beside edge routing's 46-405ms per
-    // canvas, so it is not worth trading exactness for yet. If text layout
-    // ever shows up in a profile, binary-search the largest fitting prefix
-    // instead: width is monotone in prefix length, so that is O(log segments)
-    // measures per line with no loss of exactness.
+    // How many segments join a line is SEARCHED, first guessing the previous
+    // line's count: a scan re-measuring the line per segment is quadratic in
+    // its length, and a node's width bounds nothing.
     let buffered = ''
+    let lastFitting = 1
     /**
      * True once the preceding stretch has been MOVED down to the next line
      * with this segment. That only happens when nothing of this node has
@@ -363,39 +359,43 @@ function layoutPhrasing(
       if (painted !== '') pushRun(painted, extra, runStyle)
       buffered = ''
     }
-    /**
-     * Place one segment, answering whether the SAME index must be visited
-     * again — either because the line under it moved, or because the
-     * segment itself was replaced by finer pieces.
-     */
-    const placeSegment = (index: number): 'placed' | 'retry' => {
+    /** The first segment that did not fit: true once it is consumed. */
+    const placeOverflowing = (index: number): boolean => {
       const segment = segments[index] ?? ''
-      const candidate = buffered + segment
-      if (line.x + widthOf(candidate.trimEnd()) <= options.maxWidth) {
-        buffered = candidate
-        return 'placed'
-      }
       // Retried on the new line, where it either fits or falls through to
       // the ordinary break below.
-      if (clusterCameDown(segment)) return 'retry'
+      if (clusterCameDown(segment)) return false
       if (buffered !== '' || line.x > 0) {
         flush()
         junction.startLine()
         // A boundary space at the start of a line is dropped, not advanced.
         segments[index] = segment.trimStart()
-        return 'retry'
+        return false
       }
       // Alone at the start of a line and still too wide: step down one level
       // of granularity. What cannot be stepped down is irreducible and is
       // left to overflow rather than dropped.
-      if (splitFiner(segments, index, segment)) return 'retry'
-      buffered = candidate
-      return 'placed'
+      if (splitFiner(segments, index, segment)) return false
+      buffered += segment
+      return true
+    }
+    /** Place every segment from `start` that fits, answering how many were. */
+    const placeSegments = (start: number): number => {
+      const joined = (count: number) => buffered + segments.slice(start, start + count).join('')
+      const fitting = longestFittingCount(
+        (count) => line.x + widthOf(joined(count).trimEnd()) <= options.maxWidth,
+        segments.length - start,
+        lastFitting,
+      )
+      if (fitting > 0) lastFitting = fitting
+      buffered = joined(fitting)
+      const index = start + fitting
+      // The search measured `index` already, and it does not fit.
+      if (index >= segments.length || !placeOverflowing(index)) return fitting
+      return fitting + 1
     }
 
-    for (let index = 0; index < segments.length; index++) {
-      if (placeSegment(index) === 'retry') index -= 1
-    }
+    for (let index = 0; index < segments.length; ) index += placeSegments(index)
     flush()
   }
 
