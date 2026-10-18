@@ -7,7 +7,7 @@
  * recovers a workspace whose owners are all deactivated.
  */
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
-import type { ExpressionBuilder } from 'kysely'
+import { type ExpressionBuilder, expressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import {
   inTenantTransaction,
@@ -22,14 +22,31 @@ export interface WorkspaceMember {
   readonly deactivated: boolean
 }
 
-type RoleChange = 'ok' | 'not-a-member' | 'last-owner'
+/** `not-an-owner` answers only a change made on an owner's behalf. */
+type RoleChange = 'ok' | 'not-a-member' | 'last-owner' | 'not-an-owner'
 
 export interface WorkspaceRoles {
   list(workspaceId: string): Promise<WorkspaceMember[]>
   /** Whether this tenant has a user by that id — what adding one checks first. */
   isUser(profileId: string): Promise<boolean>
+  /** The operator's change, from the command line: nobody is acting. */
   setRole(workspaceId: string, profileId: string, role: WorkspaceRole): Promise<RoleChange>
   remove(workspaceId: string, profileId: string): Promise<RoleChange>
+  /**
+   * The same changes on behalf of `by`, an owner's request: refused unless
+   * `by` is still an active owner of the workspace when the change runs, so
+   * an owner demoted, removed or deactivated after the request was
+   * authorized cannot land it.
+   */
+  setRoleAsOwner(
+    workspaceId: string,
+    profileId: string,
+    role: WorkspaceRole,
+    by: string,
+  ): Promise<RoleChange>
+  removeAsOwner(workspaceId: string, profileId: string, by: string): Promise<RoleChange>
+  /** Admits a user as a plain member; an owner acting means it is not the first. */
+  addAsOwner(workspaceId: string, profileId: string, by: string): Promise<'ok' | 'not-an-owner'>
 }
 
 // The guard every write carries: the row may change unless it is an owner's
@@ -51,6 +68,28 @@ function keepsAnOwner(workspaceId: string, profileId: string) {
           .where('other.profileId', '!=', profileId),
       ),
     ])
+}
+
+// Whether `actorId` is an active owner of the workspace at the moment the
+// statement carrying this runs — what the route's pre-check asked
+// (`callerOwns`), asked again where it cannot go stale.
+function actorOwns(workspaceId: string, actorId: string) {
+  const eb = expressionBuilder<DatabaseSchema, never>()
+  return eb.exists(
+    eb
+      .selectFrom('workspaceMemberships as actorMembership')
+      .innerJoin('memberProfiles as actor', 'actor.id', 'actorMembership.profileId')
+      .select('actor.id')
+      .where('actorMembership.workspaceId', '=', workspaceId)
+      .where('actorMembership.profileId', '=', actorId)
+      .where('actorMembership.role', '=', 'owner')
+      .where('actor.deactivatedAt', 'is', null),
+  )
+}
+
+async function ownsNow(trx: TenantScoped, workspaceId: string, actorId: string) {
+  const row = await trx.selectNoFrom(actorOwns(workspaceId, actorId).as('owns')).executeTakeFirst()
+  return Boolean(row?.owns)
 }
 
 // Why a guarded write changed nothing: no such member, or its last owner.
@@ -101,6 +140,55 @@ async function rehomeFrom(trx: TenantTransaction, workspaceId: string, profileId
   await moveIntoNamespace(trx, held, await oldestOwnerNamespace(trx, workspaceId, profileId))
 }
 
+// `by` null is the operator, who is held to the last-owner rule alone.
+function setRole(
+  db: TenantScoped,
+  workspaceId: string,
+  profileId: string,
+  role: WorkspaceRole,
+  by: string | null,
+): Promise<RoleChange> {
+  return inTenantTransaction(db, async (trx) => {
+    let update = trx
+      .updateTable('workspaceMemberships')
+      .set({ role })
+      .where('workspaceId', '=', workspaceId)
+      .where('profileId', '=', profileId)
+    if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
+    if (by !== null) update = update.where(actorOwns(workspaceId, by))
+    const changed = await update.returning('profileId').execute()
+    if (changed.length === 0) {
+      if (by !== null && !(await ownsNow(trx, workspaceId, by))) return 'not-an-owner'
+      return refusal(trx, workspaceId, profileId)
+    }
+    if (role === 'member') await rehomeFrom(trx, workspaceId, profileId)
+    return 'ok'
+  })
+}
+
+function remove(
+  db: TenantScoped,
+  workspaceId: string,
+  profileId: string,
+  by: string | null,
+): Promise<RoleChange> {
+  return inTenantTransaction(db, async (trx) => {
+    let removal = trx
+      .deleteFrom('workspaceMemberships')
+      .where('workspaceId', '=', workspaceId)
+      .where('profileId', '=', profileId)
+      .where(keepsAnOwner(workspaceId, profileId))
+    if (by !== null) removal = removal.where(actorOwns(workspaceId, by))
+    const removed = await removal.returning('profileId').execute()
+    if (removed.length === 0) {
+      if (by !== null && !(await ownsNow(trx, workspaceId, by))) return 'not-an-owner'
+      return refusal(trx, workspaceId, profileId)
+    }
+    await rehomeFrom(trx, workspaceId, profileId)
+    return 'ok'
+  })
+}
+
 export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
   return {
     list: (workspaceId) => membersOf(db, workspaceId),
@@ -114,31 +202,23 @@ export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
       return row !== undefined
     },
 
-    setRole: (workspaceId, profileId, role) =>
-      inTenantTransaction(db, async (trx) => {
-        let update = trx
-          .updateTable('workspaceMemberships')
-          .set({ role })
-          .where('workspaceId', '=', workspaceId)
-          .where('profileId', '=', profileId)
-        if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
-        const changed = await update.returning('profileId').execute()
-        if (changed.length === 0) return refusal(trx, workspaceId, profileId)
-        if (role === 'member') await rehomeFrom(trx, workspaceId, profileId)
-        return 'ok'
-      }),
+    setRole: (workspaceId, profileId, role) => setRole(db, workspaceId, profileId, role, null),
+    remove: (workspaceId, profileId) => remove(db, workspaceId, profileId, null),
+    setRoleAsOwner: (workspaceId, profileId, role, by) =>
+      setRole(db, workspaceId, profileId, role, by),
+    removeAsOwner: (workspaceId, profileId, by) => remove(db, workspaceId, profileId, by),
 
-    remove: (workspaceId, profileId) =>
+    // An insert, which the tenant scope does not take from a select, so the
+    // check is a read in the same transaction; a transaction here takes the
+    // write lock as it begins (`BEGIN IMMEDIATE`, busy-retry.ts).
+    addAsOwner: (workspaceId, profileId, by) =>
       inTenantTransaction(db, async (trx) => {
-        const removed = await trx
-          .deleteFrom('workspaceMemberships')
-          .where('workspaceId', '=', workspaceId)
-          .where('profileId', '=', profileId)
-          .where(keepsAnOwner(workspaceId, profileId))
-          .returning('profileId')
+        if (!(await ownsNow(trx, workspaceId, by))) return 'not-an-owner'
+        await trx
+          .insertInto('workspaceMemberships')
+          .values({ workspaceId, profileId, createdAt: Date.now(), role: 'member' })
+          .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
           .execute()
-        if (removed.length === 0) return refusal(trx, workspaceId, profileId)
-        await rehomeFrom(trx, workspaceId, profileId)
         return 'ok'
       }),
   }

@@ -102,6 +102,55 @@ describe('createWorkspaceRoles', () => {
   })
 })
 
+// The route authorizes an owner before the change runs, so the change itself
+// re-checks, in the same transaction, that the actor still owns the workspace.
+describe('createWorkspaceRoles — on an owner’s behalf', () => {
+  async function demotedAda() {
+    const [ada, bob, cy] = [await user('ada'), await user('bob'), await user('cy')]
+    await members.addMember('ws-1', ada.id)
+    await members.addMember('ws-1', bob.id)
+    await members.addMember('ws-1', cy.id)
+    expect(await roles.setRoleAsOwner('ws-1', bob.id, 'owner', ada.id)).toBe('ok')
+    expect(await roles.setRoleAsOwner('ws-1', ada.id, 'member', bob.id)).toBe('ok')
+    return { ada, bob, cy }
+  }
+
+  it('refuses a role change by an owner demoted since', async () => {
+    const { ada, cy } = await demotedAda()
+    expect(await roles.setRoleAsOwner('ws-1', cy.id, 'owner', ada.id)).toBe('not-an-owner')
+    expect(await members.membershipRole('ws-1', cy.id)).toBe('member')
+  })
+
+  it('refuses a removal by an owner demoted since', async () => {
+    const { ada, cy } = await demotedAda()
+    expect(await roles.removeAsOwner('ws-1', cy.id, ada.id)).toBe('not-an-owner')
+    expect(await members.membershipRole('ws-1', cy.id)).toBe('member')
+  })
+
+  it('refuses an admission by an owner demoted since, and admits for one who owns', async () => {
+    const { ada, bob } = await demotedAda()
+    const dee = await user('dee')
+    expect(await roles.addAsOwner('ws-1', dee.id, ada.id)).toBe('not-an-owner')
+    expect(await members.membershipRole('ws-1', dee.id)).toBeNull()
+    expect(await roles.addAsOwner('ws-1', dee.id, bob.id)).toBe('ok')
+    expect(await members.membershipRole('ws-1', dee.id)).toBe('member')
+  })
+
+  it('refuses an owner of another workspace', async () => {
+    const { cy } = await demotedAda()
+    const eve = await user('eve')
+    await members.addMember('ws-2', eve.id)
+    expect(await roles.setRoleAsOwner('ws-1', cy.id, 'owner', eve.id)).toBe('not-an-owner')
+  })
+
+  it('still names a missing member and the last owner for an owner who acts', async () => {
+    const { bob, cy } = await demotedAda()
+    expect(await roles.removeAsOwner('ws-1', 'nobody', bob.id)).toBe('not-a-member')
+    expect(await roles.setRoleAsOwner('ws-1', bob.id, 'member', bob.id)).toBe('last-owner')
+    expect(await roles.removeAsOwner('ws-1', cy.id, bob.id)).toBe('ok')
+  })
+})
+
 // Two keepers sharing one database (a multi-instance deployment): two owners
 // demoting each other at once. Exactly one wins; the other is refused by the
 // last-owner rule rather than failing on the database's write lock.

@@ -48,6 +48,8 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let invitations: InvitationStore
 let app: Hono
+let staleApp: Hono
+let roles: ReturnType<typeof serverModePeople>['people']['roles']
 const ids: Record<string, string> = {}
 
 async function call(as: string, method: string, path: string, body?: object) {
@@ -64,7 +66,7 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: root })
   const stores = serverModePeople(handle.db, root)
   members = stores.members
-  const roles = stores.people.roles
+  roles = stores.people.roles
   invitations = stores.people.invitations
   for (const name of ['ada', 'bob', 'eve']) {
     const user = await members.ensureProfile({
@@ -76,20 +78,27 @@ beforeEach(async () => {
   await members.addMember('ws-1', ids.ada as string)
   await members.addMember('ws-1', ids.bob as string)
 
-  app = new Hono()
-  app.use(
-    '/api/*',
-    createServerModeApiAuthMiddleware(strategy, { ...stores.people, origin: 'https://wb.test' }),
-  )
   const keeper = serverModePeopleKeeper({ members, invitations, origin: 'https://wb.test' })
-  app.route(
-    '/',
-    createWorkspacePeopleRouter({
-      people: createWorkspacePeopleAdministration({ members, roles }),
-      roles,
-      keeper,
-    }),
-  )
+  const mount = (k: typeof keeper) => {
+    const mounted = new Hono()
+    mounted.use(
+      '/api/*',
+      createServerModeApiAuthMiddleware(strategy, { ...stores.people, origin: 'https://wb.test' }),
+    )
+    mounted.route(
+      '/',
+      createWorkspacePeopleRouter({
+        people: createWorkspacePeopleAdministration({ members, roles }),
+        roles,
+        keeper: k,
+      }),
+    )
+    return mounted
+  }
+  app = mount(keeper)
+  // A keeper whose ownership answer was read before the owner was demoted:
+  // what a request authorized just ahead of a demotion sees.
+  staleApp = mount({ ...keeper, canManage: async () => true })
 })
 
 afterEach(async () => {
@@ -181,6 +190,35 @@ describe('workspace people', () => {
 
   // ADR-0049 decision 3: an owner invites into the workspace by a link whose
   // token rides the fragment of the web app's invite page.
+  it('refuses a change by an owner demoted after the ownership check', async () => {
+    expect(await roles.setRole('ws-1', ids.bob as string, 'owner')).toBe('ok')
+    expect(await roles.setRole('ws-1', ids.ada as string, 'member')).toBe('ok')
+    const asAda = (method: string, path: string, body?: object) =>
+      staleApp.request(`/api/workspaces/ws-1${path}`, {
+        method,
+        headers: { authorization: 'Bearer ada', 'content-type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    const refused = async (res: Response) => [
+      res.status,
+      ((await res.json()) as { error: string }).error,
+    ]
+    expect(await refused(await asAda('PATCH', `/people/${ids.ada}`, { role: 'owner' }))).toEqual([
+      403,
+      'not_an_owner',
+    ])
+    expect(await refused(await asAda('DELETE', `/people/${ids.bob}`))).toEqual([
+      403,
+      'not_an_owner',
+    ])
+    expect(await refused(await asAda('POST', '/people', { userId: ids.eve }))).toEqual([
+      403,
+      'not_an_owner',
+    ])
+    expect(await members.membershipRole('ws-1', ids.ada as string)).toBe('member')
+    expect(await members.membershipRole('ws-1', ids.eve as string)).toBeNull()
+  })
+
   it('lets an owner create an invitation link into the workspace, and nobody else', async () => {
     expect((await call('bob', 'POST', '/invitations', {})).body).toMatchObject({
       error: 'not_an_owner',

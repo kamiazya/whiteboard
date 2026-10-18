@@ -214,6 +214,11 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
+Each of these changes checks again, as it is made, that whoever asked is
+still an active owner of the workspace. An owner made a member, removed or
+deactivated while their request was in flight gets `403 not_an_owner` and
+changes nothing.
+
 Removing a member, or deactivating them, also stops a write of theirs that is
 still arriving: an update or upload whose body was in transit when they were
 removed is refused with `403 not_a_member` and changes nothing. Their open
@@ -435,7 +440,8 @@ available through `/api/people`:
   administrator cannot dismiss themselves, so a dismissal always leaves the
   one who made it. Two administrators dismissing each other at the same
   moment cannot both succeed: the second finds it no longer administers.
-- A deactivation or a dismissal checks again, as it is made, that whoever
+- Every one of these changes — deactivating, reactivating, deleting,
+  appointing and dismissing — checks again, as it is made, that whoever
   asked for it is still an active administrator. One dismissed or
   deactivated while their request was in flight gets
   `403 not_an_administrator` and changes nothing.
