@@ -3,12 +3,10 @@
  *   - resolveDefaultDataDir (daemon/data-dir.ts): PURE PROBE, no side-effects.
  *   - resolveDataDir (shared/data-dir-secure.ts): CREATE+SECURE, mkdirSync for home candidate only.
  *
- * Steady-state invariant: once ~/.whiteboard exists and is writable, both resolvers
- * agree on the same path.
- *
- * Deliberate first-run difference: before the server has created ~/.whiteboard,
- * the probe falls back to tmp while the create-side produces ~/.whiteboard via mkdir.
- * After the server creates the dir, re-probing converges both to home.
+ * Invariant: both resolvers agree on the same path, first run included. A
+ * command run before any root has created ~/.whiteboard (`native-host
+ * install`, `server stop`) must not name the temp fallback, a path in the
+ * shared temp dir another local user can create first.
  */
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -100,22 +98,16 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     expect(probeSideCheckCalled).toBe(false)
   })
 
-  it('documented first-run divergence: probe→tmp before server creates home, then both converge after', async () => {
-    // Arrange: NO ~/.whiteboard yet (first run)
+  it('first run: both resolvers name home before it exists, and the probe creates nothing', () => {
     const homeWhiteboard = join(tempHome, '.whiteboard')
 
-    // The probe uses real filesystem check — ~/.whiteboard doesn't exist → falls to tmp
     const probeBeforeCreate = resolveDefaultDataDir({}, dirs)
-    expect(probeBeforeCreate).toBe(join(tempTmp, TMP_FALLBACK_NAME))
+    expect(probeBeforeCreate).toBe(homeWhiteboard)
+    expect(existsSync(homeWhiteboard)).toBe(false)
 
-    // The create-side resolver calls canWriteDir(homeCandidate) which does mkdirSync → home
     const createResult = resolveDataDir({}, dirs)
     expect(createResult).toBe(homeWhiteboard)
-
-    // After the server creates the dir, re-probing finds it and now agrees with create
-    const probeAfterCreate = resolveDefaultDataDir({}, dirs)
-    expect(probeAfterCreate).toBe(homeWhiteboard)
-    expect(probeAfterCreate).toBe(createResult)
+    expect(resolveDefaultDataDir({}, dirs)).toBe(createResult)
   })
 
   it('tmp-fallback side-effect scope: create falls to tmp with NO mkdir on the tmp path itself', () => {

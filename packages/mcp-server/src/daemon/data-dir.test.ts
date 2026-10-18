@@ -89,6 +89,14 @@ describe('resolveDefaultDataDir — defaultCheckWritable filesystem behavior', (
     expect(result).toBe(whiteboardDir)
   })
 
+  // `daemon run` and stdio create ~/.whiteboard on first start, so a command
+  // run before either (`native-host install`, `server stop`) must name the
+  // same dir rather than a temp-dir path another local user can create first.
+  it('returns the home candidate when ~/.whiteboard does not exist yet but home is writable', () => {
+    const result = resolveDefaultDataDir({}, { homeDir: tempHome, tmpDir: tempTmp })
+    expect(result).toBe(join(tempHome, '.whiteboard'))
+  })
+
   it('falls back to tmp when home candidate is a regular file (not a directory)', async () => {
     // config.ts::canWriteDir fails with EEXIST+ENOTDIR when ~/.whiteboard
     // is a file, so the server falls back to tmp. This resolver must agree.

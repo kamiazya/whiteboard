@@ -1,18 +1,4 @@
-import { accessSync, constants, statSync } from 'node:fs'
-import { homedir, tmpdir as osTmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { tempFallbackDataDir } from '../shared/data-dir-secure.js'
-
-function defaultCheckWritable(path: string): boolean {
-  try {
-    const st = statSync(path)
-    if (!st.isDirectory()) return false
-    accessSync(path, constants.W_OK)
-    return true
-  } catch {
-    return false
-  }
-}
+import { homeDataDirIsUsable, resolveDataDir } from '../shared/data-dir-secure.js'
 
 export interface DataDirOptions {
   checkWritable?: (path: string) => boolean
@@ -20,22 +6,18 @@ export interface DataDirOptions {
   tmpDir?: string
 }
 
+/**
+ * The data dir a command that does not start a root reads, decided exactly
+ * as `resolveDataDir` decides it for the roots that do, but without creating
+ * the home candidate.
+ */
 export function resolveDefaultDataDir(
   env: Record<string, string | undefined>,
   options?: DataDirOptions,
 ): string {
-  const envOverride = env.WHITEBOARD_DATA_DIR
-  if (envOverride !== undefined) {
-    return resolve(envOverride)
-  }
-
-  const homeDir = options?.homeDir ?? homedir()
-  const tmpDir = options?.tmpDir ?? osTmpdir()
-  const checkWritable = options?.checkWritable ?? defaultCheckWritable
-
-  const homeCandidate = join(homeDir, '.whiteboard')
-  if (checkWritable(homeCandidate)) {
-    return homeCandidate
-  }
-  return tempFallbackDataDir(tmpDir)
+  return resolveDataDir(env, {
+    homeDir: options?.homeDir,
+    tmpDir: options?.tmpDir,
+    isWritableDir: options?.checkWritable ?? homeDataDirIsUsable,
+  })
 }

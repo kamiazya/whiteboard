@@ -1,4 +1,11 @@
-import { accessSync, chmodSync, constants as fsConstants, lstatSync, mkdirSync } from 'node:fs'
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  lstatSync,
+  mkdirSync,
+  statSync,
+} from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
@@ -56,6 +63,24 @@ export function resolveDataDir(
   // In the Codex sandbox, the home directory may not be writable.
   // Fall back to tmp only when there is no explicit env override.
   return tempFallbackDataDir(options.tmpDir)
+}
+
+/**
+ * The same verdict `canWriteDir` reaches, without creating anything: a home
+ * candidate that is a writable dir, or that is absent under a writable
+ * parent — the one `canWriteDir` would create. A command that reads the data
+ * dir before any root has started must name the dir that root will create;
+ * answering the temp fallback instead points it at a path in the shared temp
+ * dir that another local user can create first.
+ */
+export function homeDataDirIsUsable(path: string): boolean {
+  try {
+    if (!statSync(path).isDirectory()) return false
+    accessSync(path, fsConstants.W_OK)
+    return true
+  } catch (err) {
+    return isMissingFileError(err) && parentIsWritable(path)
+  }
 }
 
 /**
