@@ -3,6 +3,7 @@ import {
   deriveCopyPath,
   generateDocumentId,
   isSelfOrDescendant,
+  SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'
 import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
 import type {
@@ -40,6 +41,7 @@ import {
   setDocumentNameInputSchema,
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
+  WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
 } from '../index.js'
 
@@ -118,9 +120,12 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
   }
 
   async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
-    const { workspaceId, segment, displayName } = renameWorkspaceInputSchema.parse(input)
+    const { workspaceId, heldBy, segment, displayName } = renameWorkspaceInputSchema.parse(input)
     const current = this.#workspaces.get(workspaceId)
     if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
+    if (heldBy !== undefined && (current.namespace ?? SINGLE_PERSON_NAMESPACE) !== heldBy) {
+      throw new WorkspaceNotHeldError(workspaceId, heldBy)
+    }
     if (
       segment !== undefined &&
       [...this.#workspaces.values()].some(

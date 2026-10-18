@@ -1,5 +1,5 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
-import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
+import { WorkspaceNotHeldError, WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import type { TenantDatabase } from './tenant-database.js'
 
 /**
@@ -93,7 +93,10 @@ export async function upsertWorkspaceRow(
  * refuses the UPDATE itself, so there is no window between a check and the
  * write it authorises. It is keyed on the row's own namespace, so a rename
  * collides only with segments that namespace already holds (ADR-0053) — the
- * namespace is never an input here. The workspace's OWN segment is not a conflict —
+ * namespace is never moved here. `heldBy`, when given, is the namespace the
+ * row must still be held in for the write to land, and its absence from the
+ * WHERE is the only difference between "no such workspace" (null) and
+ * `WorkspaceNotHeldError`. The workspace's OWN segment is not a conflict —
  * the row it collides with is itself, and `where id = ?` means the update
  * is the row.
  */
@@ -101,9 +104,10 @@ export async function renameWorkspaceRow(
   db: TenantDatabase,
   workspaceId: string,
   identity: WorkspaceIdentity,
+  heldBy?: string,
 ): Promise<{ namespace: string; segment: string | null; displayName: string | null } | null> {
   try {
-    const updated = await db
+    let update = db
       .updateTable('workspaces')
       .set({
         ...(identity.segment === undefined ? {} : { segment: identity.segment }),
@@ -111,9 +115,24 @@ export async function renameWorkspaceRow(
         updatedAt: Date.now(),
       })
       .where('id', '=', workspaceId)
+    // In the WHERE, so the holder is judged by the statement that writes: a
+    // hand-over committed a moment earlier makes this update match nothing,
+    // and a row it does not match is never checked against the unique index,
+    // so a refused caller learns nothing about the namespace's segments.
+    if (heldBy !== undefined) update = update.where('namespace', '=', heldBy)
+    const updated = await update
       .returning(['namespace', 'segment', 'displayName'])
       .executeTakeFirst()
-    return updated ?? null
+    if (updated !== undefined) return updated
+    if (heldBy === undefined) return null
+    // Only which refusal to name; the decision was the update's.
+    const exists = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('id', '=', workspaceId)
+      .executeTakeFirst()
+    if (exists !== undefined) throw new WorkspaceNotHeldError(workspaceId, heldBy)
+    return null
   } catch (err) {
     if (identity.segment !== undefined && isSegmentUniqueViolation(err)) {
       throw new WorkspaceSegmentTakenError(identity.segment)

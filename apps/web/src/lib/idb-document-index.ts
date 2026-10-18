@@ -22,6 +22,7 @@
  * code still looks careful.
  */
 
+import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import {
   type CreateWorkspaceInput,
   compareDocumentPaths,
@@ -36,6 +37,7 @@ import {
   storedWorkspaceEntrySchema,
   type WorkspaceEntry,
   WorkspaceNotFoundError,
+  WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
@@ -209,7 +211,7 @@ export class IdbDocumentIndex {
    * free.
    */
   async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
-    const { workspaceId, segment, displayName } = renameWorkspaceInputSchema.parse(input)
+    const { workspaceId, heldBy, segment, displayName } = renameWorkspaceInputSchema.parse(input)
     return this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(WORKSPACES_STORE)
       // Read tolerantly for the same reason a listing is: a rename is how a
@@ -218,6 +220,9 @@ export class IdbDocumentIndex {
       const rows = (await request(store.getAll())).map(readWorkspaceRow)
       const current = rows.find((row) => row.workspaceId === workspaceId)
       if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
+      if (heldBy !== undefined && (current.namespace ?? SINGLE_PERSON_NAMESPACE) !== heldBy) {
+        throw new WorkspaceNotHeldError(workspaceId, heldBy)
+      }
       if (
         segment !== undefined &&
         rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)

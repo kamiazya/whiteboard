@@ -3,7 +3,8 @@
  * within its holder's namespace, so a create, a rename and an address each
  * answer only about the CALLER's own namespace — never about which segments
  * somebody else holds. Within one namespace a collision is still a
- * collision, and any owner may meet it (decision 3).
+ * collision, and only the namespace's holder may meet it (decision 3, as
+ * corrected).
  *
  * Over the real store, not the in-memory double: a bare segment resolves
  * through the daemon's registry, which only the real store fills.
@@ -228,7 +229,21 @@ describe('server mode — inside one namespace a segment still collides', () => 
     expect((await create(ada, 'Design')).segment).toBe('design-2')
   })
 
-  it("refuses a co-owner's rename onto a segment the holder's namespace holds", async () => {
+  it("refuses the holder's rename onto a segment their namespace holds", async () => {
+    const ada = await signedIn('ada')
+    await create(ada, 'Design')
+    const plans = await create(ada, 'Plans')
+
+    const taken = await rename(ada, plans.workspaceId, { segment: 'design' })
+    const free = await rename(ada, plans.workspaceId, { segment: 'roadmap' })
+
+    expect(taken.status).toBe(409)
+    expect(free.status).toBe(200)
+  })
+
+  // Only the holder changes a segment, so a co-owner cannot probe which
+  // segments the holder's namespace holds: taken and free answer alike.
+  it("refuses a co-owner's segment change, taken or free, alike", async () => {
     const ada = await signedIn('ada')
     const bob = await signedIn('bob')
     await create(ada, 'Design')
@@ -236,20 +251,20 @@ describe('server mode — inside one namespace a segment still collides', () => 
     const bobId = await userIdOf('bob')
     await members.addMember(plans.workspaceId, bobId)
     await createWorkspaceRoles(handle.db).setRole(plans.workspaceId, bobId, 'owner')
-    // Bob holds `design` himself, which does not make Ada's `design` free.
-    await create(bob, 'Design')
 
     const taken = await rename(bob, plans.workspaceId, { segment: 'design' })
     const free = await rename(bob, plans.workspaceId, { segment: 'roadmap' })
 
-    expect(taken.status).toBe(409)
-    expect(free.status).toBe(200)
+    expect(taken.status).toBe(403)
+    expect(free.status).toBe(403)
+    expect(await taken.json()).toEqual(await free.json())
   })
 })
 
-// ADR-0053 decision 3 gives a segment change to owners. A plain member is
-// refused before the rename runs, so a taken and a free segment answer alike
-// and the address others use stays where it is.
+// ADR-0053 decision 3 gives a segment change to the owner whose namespace
+// holds the workspace. A plain member is refused before the rename runs, so a
+// taken and a free segment answer alike and the address others use stays
+// where it is.
 describe('server mode — only an owner changes a segment', () => {
   async function planWithMember() {
     const ada = await signedIn('ada')
@@ -533,6 +548,61 @@ describe("server mode — a workspace handed over keeps out of its recipient's b
     const absent = await read('nothing')
     expect(bare.status).toBe(absent.status)
     expect(await bare.text()).toBe((await absent.text()).replace('nothing', 'journal'))
+  })
+
+  // A co-owner who stays behind could otherwise rename the tailed segment
+  // back to the bare name the recipient would type for their own workspace.
+  it('refuses an owner who stays behind a rename back to the bare name', async () => {
+    const mallory = await signedIn('mallory')
+    const bob = await signedIn('bob')
+    const carol = await signedIn('carol')
+    const journal = await create(mallory, 'Journal')
+    const [bobId, carolId, malloryId] = [
+      await userIdOf('bob'),
+      await userIdOf('carol'),
+      await userIdOf('mallory'),
+    ]
+    for (const userId of [bobId, carolId]) {
+      const add = { method: 'POST', body: JSON.stringify({ userId }) }
+      expect((await people(mallory, `${journal.workspaceId}/people`, add)).status).toBe(201)
+      const promote = { method: 'PATCH', body: JSON.stringify({ role: 'owner' }) }
+      expect(
+        (await people(mallory, `${journal.workspaceId}/people/${userId}`, promote)).status,
+      ).toBe(200)
+    }
+    const demote = { method: 'PATCH', body: JSON.stringify({ role: 'member' }) }
+    expect(
+      (await people(mallory, `${journal.workspaceId}/people/${malloryId}`, demote)).status,
+    ).toBe(200)
+    const segmentOf = async () =>
+      (
+        await handle.db
+          .selectFrom('workspaces')
+          .select(['namespace', 'segment'])
+          .where('id', '=', journal.workspaceId)
+          .executeTakeFirstOrThrow()
+      ).segment
+    const tailed = await segmentOf()
+    expect(tailed).toMatch(/^journal-[0-9a-z]{8}$/)
+
+    const back = await rename(carol, journal.workspaceId, { segment: 'journal' })
+    const elsewhere = await rename(carol, journal.workspaceId, { segment: 'roadmap' })
+
+    expect(back.status).toBe(403)
+    expect(elsewhere.status).toBe(403)
+    const refusal = await back.json()
+    expect(refusal).toMatchObject({ error: 'not_an_owner' })
+    expect(await elsewhere.json()).toEqual(refusal)
+    expect(await segmentOf()).toBe(tailed)
+    const read = (address: string) =>
+      app.request(`${PUBLIC_URL}/api/workspaces/${address}/people`, { headers: bob })
+    expect((await read('journal')).status).toBe((await read('nothing')).status)
+    // A display name stays any member's to change.
+    expect((await rename(carol, journal.workspaceId, { displayName: 'Ours' })).status).toBe(200)
+    // The holder renames freely, the bare name included.
+    const own = await rename(bob, journal.workspaceId, { segment: 'journal' })
+    expect(own.status).toBe(200)
+    expect(await own.json()).toMatchObject({ namespace: 'bob', segment: 'journal' })
   })
 
   it("mints the recipient's own workspace for an agent's createWorkspace on that name", async () => {

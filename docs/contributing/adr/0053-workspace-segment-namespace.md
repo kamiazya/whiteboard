@@ -417,6 +417,19 @@ probe Alice's namespace: a rename to a segment Alice already uses answers
 that one namespace. They learn nothing about those workspaces' contents,
 display names or members, and nothing about any other namespace.
 
+**Correction (as built): only the holder changes a segment.** A co-owner who
+is not the namespace holder is refused `403 not_an_owner`, the same answer a
+plain member gets, and every member may still change `displayName`. Open
+question 3 was settled this way because the accepted leak above turned out
+not to be the only cost. Answer 4's correction tails a handed-over segment so
+it is not one of the recipient's bare names, and a co-owner who stayed behind
+could rename it straight back, planting it again. The refusal is decided by
+the write itself: the rename's `UPDATE` also requires the row's namespace to
+be the caller's (`renameWorkspaceInputSchema`'s `heldBy`), so a hand-over
+landing between the ownership check and the rename leaves nothing to rename.
+That also closes the probe described above. On a single-person keeper the
+caller and every workspace are `me`, so nothing changes there.
+
 Creating a workspace always mints it in the creator's own namespace, and
 so does MCP `createWorkspace: true`. A workspace changes namespace only
 through answer 4.
@@ -566,7 +579,8 @@ starts from a failing test at its nearest layer.
   existence is visible to signed-in users of the tenant (answer 1). It is
   invisible to an unauthenticated caller, and that has to be held by a
   test, not by care.
-- **Within one namespace a co-owner can probe it** (answer 3). Across
+- **Within one namespace a co-owner can probe it** (answer 3; closed by
+  its as-built correction, which leaves segment changes to the holder). Across
   namespaces, nobody can. Across tenants, the replaced index closes the
   latent instance.
 - **Deleting a person can now break URLs** (answer 4) as well as

@@ -68,6 +68,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
   UnjudgedImportError:
     'a judge that threw rather than answered, which is the keeper failing and not the caller; it reaches /api/v1 only through a trash restore and is answered as the 500 it is',
+  WorkspaceNotHeldError:
+    'raised only by a rename carrying heldBy, which is the daemon PATCH /api/workspaces route; /api/v1 renames no workspace',
   NoRoomForCopyError:
     'raised only by duplicating a document, which is the /api/workspaces duplicate route; /api/v1 has no duplicate',
   DocumentMoveIntoSelfError:

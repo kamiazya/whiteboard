@@ -292,8 +292,9 @@ its identifier (`journal` becomes, say, `journal-7k3qzmab`), because the new
 holder did not choose that name: kept as it was, it would answer the
 `/w/<handle>/journal` or agent `journal` they would use for a workspace of
 their own, and their writes would land in a workspace somebody else is still
-a member of. The new holder can rename it as soon as it arrives. A workspace
-the new holder already has under that short name is left alone.
+a member of. The new holder can rename it as soon as it arrives, and nobody
+else can: the other owners cannot rename it back. A workspace the new holder
+already has under that short name is left alone.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool
 call that names a workspace the caller is not a member of fails with
 `not_a_member`, whether or not that workspace exists, so the answer does not
@@ -309,12 +310,14 @@ A `createWorkspace` call whose `workspaceId` names nothing and cannot be a
 workspace segment (an id that does not exist, say) creates nothing and is
 refused with `not_a_member` too.
 
-A workspace's address, `/w/<handle>/<workspace>`, changes only for an owner:
-a member's `PATCH /api/workspaces/<workspace>` carrying `segment` is refused
-with `403 not_an_owner` before the new segment is checked, so the answer is
-the same whether it is free or taken. Any member can change the workspace's
-display name alone. The address lives under the handle of the person who
-holds it, at first its creator. If that person is removed from the
+A workspace's address, `/w/<handle>/<workspace>`, changes only for the
+owner whose handle it is under, the person who holds it. Any other member's
+`PATCH /api/workspaces/<workspace>` carrying `segment` is refused with
+`403 not_an_owner` before the new segment is checked, so the answer is the
+same whether it is free or taken. This includes the other owners, because the
+address is a name in the holder's namespace. Any member can change the
+workspace's display name alone. The address lives under the handle of the
+person who holds it, at first its creator. If that person is removed from the
 workspace or made a member, it moves to its longest-standing remaining
 owner's handle, as it does when they are deleted; links in the id form keep
 working.

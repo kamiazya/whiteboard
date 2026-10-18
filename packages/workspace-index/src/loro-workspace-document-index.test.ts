@@ -15,13 +15,14 @@ import {
   resolveWorkspaceDocument,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
   DocumentPathTakenError,
   documentEntrySchema,
   WorkspaceNotFoundError,
+  WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
@@ -39,11 +40,13 @@ import type { WorkspaceDocs } from './workspace-docs.js'
 function renameIdentity(
   identities: Map<string, WorkspaceEntry>,
   workspaceIds: readonly string[],
-  { workspaceId, segment, displayName }: RenameWorkspaceInput,
+  { workspaceId, heldBy, segment, displayName }: RenameWorkspaceInput,
 ): WorkspaceEntry {
   const rows = workspaceIds.map(
     (id) => identities.get(id) ?? ({ workspaceId: id } satisfies WorkspaceEntry),
   )
+  const held = identities.get(workspaceId)?.namespace ?? SINGLE_PERSON_NAMESPACE
+  if (heldBy !== undefined && held !== heldBy) throw new WorkspaceNotHeldError(workspaceId, heldBy)
   if (
     segment !== undefined &&
     rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)
