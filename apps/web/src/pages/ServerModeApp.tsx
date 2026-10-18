@@ -7,6 +7,7 @@
  * one, and open one in the editor (`ServerModeWorkspace`), or sign out.
  */
 import {
+  authAcceptInvitationUrl,
   authProvidersUrl,
   authSessionUrl,
   authSignInUrl,
@@ -18,6 +19,8 @@ import {
   signInRefusalOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import {
+  type AcceptInvitationRequest,
+  acceptInvitationResponseSchema,
   type SignInProvidersResponse,
   type SignInSessionResponse,
   signInProvidersResponseSchema,
@@ -43,8 +46,12 @@ import { ServerModeWorkspace } from './ServerModeWorkspace.js'
 
 type Fetch = typeof globalThis.fetch
 
+/** Leaves the app for `location`: the provider, or a page the keeper serves. */
+type GoTo = (location: string) => void
+
 interface ServerModeAppProps {
   fetchFn?: Fetch
+  goTo?: GoTo
 }
 
 const log = getAppLogger('server-mode')
@@ -133,11 +140,72 @@ function refusalMessage(search: string): string | null {
   return reason.success ? SIGN_IN_REFUSAL_COPY[reason.data] : GENERIC_SIGN_IN_REFUSAL
 }
 
-function signInHref(providerId: string, invitation: string | undefined): string {
-  return authSignInUrl(providerId, {
-    returnTo: '/',
-    ...(invitation === undefined ? {} : { invitation }),
-  })
+function signInHref(providerId: string): string {
+  return authSignInUrl(providerId, { returnTo: '/' })
+}
+
+const providerButton = buttonVariants({ variant: 'outline', className: 'w-full' })
+
+/**
+ * Where the keeper sends the browser once this invitation is accepted, or
+ * `'unavailable'`. Accepting is this POST and never a link: a link is a
+ * navigation anything can start — a page elsewhere, a link inside a document
+ * here — and the keeper sends every navigation carrying an invitation back to
+ * this page.
+ */
+async function acceptInvitation(
+  fetchFn: Fetch,
+  providerId: string,
+  invitation: string,
+): Promise<string | 'unavailable'> {
+  const route = authAcceptInvitationUrl(providerId)
+  const body: AcceptInvitationRequest = { invitation, returnTo: '/' }
+  try {
+    const res = await fetchFn(route, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) return (await readDaemonJson(route, res, acceptInvitationResponseSchema)).location
+    log.warn('could not accept the invitation', { route, status: res.status })
+  } catch (err) {
+    // Drift was already reported by the reader that built it.
+    if (!(err instanceof DaemonContractError)) {
+      log.warn('could not accept the invitation', { route, err })
+    }
+  }
+  return 'unavailable'
+}
+
+function AcceptInvitation({
+  fetchFn,
+  goTo,
+  provider,
+  invitation,
+  onUnavailable,
+}: Readonly<{
+  fetchFn: Fetch
+  goTo: GoTo
+  provider: Providers[number]
+  invitation: string
+  onUnavailable: () => void
+}>) {
+  const [busy, setBusy] = useState(false)
+  const accept = async () => {
+    setBusy(true)
+    const location = await acceptInvitation(fetchFn, provider.id, invitation)
+    if (location === 'unavailable') {
+      setBusy(false)
+      onUnavailable()
+      return
+    }
+    goTo(location)
+  }
+  return (
+    <button type="button" className={providerButton} disabled={busy} onClick={() => void accept()}>
+      Continue with {provider.displayName}
+    </button>
+  )
 }
 
 function Page({ children }: { children: React.ReactNode }) {
@@ -148,8 +216,17 @@ function Page({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: string }) {
+function SignInPage({
+  fetchFn,
+  goTo,
+  invitation,
+}: {
+  fetchFn: Fetch
+  goTo: GoTo
+  invitation?: string
+}) {
   const [providers, retry] = useProviders(fetchFn)
+  const [acceptFailed, setAcceptFailed] = useState(false)
   const refusal = refusalMessage(useLocation().search)
   return (
     <Page>
@@ -159,6 +236,11 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
       {refusal !== null && (
         <p role="alert" className="max-w-md text-center text-sm text-destructive">
           {refusal}
+        </p>
+      )}
+      {acceptFailed && (
+        <p role="alert" className="max-w-md text-center text-sm text-destructive">
+          Could not accept the invitation. Try again.
         </p>
       )}
       {providers === 'unavailable' && (
@@ -173,12 +255,19 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
         {providers !== 'unavailable' &&
           providers?.map((provider) => (
             <li key={provider.id}>
-              <a
-                href={signInHref(provider.id, invitation)}
-                className={buttonVariants({ variant: 'outline', className: 'w-full' })}
-              >
-                Continue with {provider.displayName}
-              </a>
+              {invitation === undefined ? (
+                <a href={signInHref(provider.id)} className={providerButton}>
+                  Continue with {provider.displayName}
+                </a>
+              ) : (
+                <AcceptInvitation
+                  fetchFn={fetchFn}
+                  goTo={goTo}
+                  provider={provider}
+                  invitation={invitation}
+                  onUnavailable={() => setAcceptFailed(true)}
+                />
+              )}
             </li>
           ))}
       </ul>
@@ -188,9 +277,15 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
 
 // The token rides the fragment, which the browser never sends to a server
 // or puts in a Referer.
-function InvitePage({ fetchFn }: { fetchFn: Fetch }) {
+function InvitePage({ fetchFn, goTo }: { fetchFn: Fetch; goTo: GoTo }) {
   const token = inviteTokenOf(useLocation().hash)
-  return <SignInPage fetchFn={fetchFn} {...(token === undefined ? {} : { invitation: token })} />
+  return (
+    <SignInPage
+      fetchFn={fetchFn}
+      goTo={goTo}
+      {...(token === undefined ? {} : { invitation: token })}
+    />
+  )
 }
 
 type SessionUser = Extract<SignInSessionResponse, { signedIn: true }>['user']
@@ -359,12 +454,16 @@ function SignedInOnly({
 // One function for the app's lifetime: the pages key their effects on it, so a
 // default rebuilt per render would refetch on every render.
 const sameOriginFetch: Fetch = (input, init) => globalThis.fetch(input, init)
+const assignLocation: GoTo = (location) => window.location.assign(location)
 
-export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps) {
+export function ServerModeApp({
+  fetchFn = sameOriginFetch,
+  goTo = assignLocation,
+}: ServerModeAppProps) {
   return (
     <Routes>
-      <Route path={SIGN_IN_PAGE_PATH} element={<SignInPage fetchFn={fetchFn} />} />
-      <Route path={INVITE_PAGE_PATH} element={<InvitePage fetchFn={fetchFn} />} />
+      <Route path={SIGN_IN_PAGE_PATH} element={<SignInPage fetchFn={fetchFn} goTo={goTo} />} />
+      <Route path={INVITE_PAGE_PATH} element={<InvitePage fetchFn={fetchFn} goTo={goTo} />} />
       {/* Outside SignedInOnly: sending a signed-out popup to /sign-in would
           drop the fragment that carries the handshake, so the page says what
           to do instead. */}
