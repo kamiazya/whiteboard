@@ -100,6 +100,36 @@ function collectSearchable(
   return searchable
 }
 
+/** documentId -> 1-based position, for whichever rankings exist. */
+function ranksOf(ranking: readonly string[]): Map<string, number> {
+  return new Map(ranking.map((documentId, index) => [documentId, index + 1]))
+}
+
+interface HitRanks {
+  readonly lexical?: number
+  readonly semantic?: number
+}
+
+/** One result row: the document as the listing names it, its score, excerpts and ranks. */
+function describeHit(
+  doc: SearchCandidate | undefined,
+  documentId: string,
+  score: number,
+  contexts: readonly string[],
+  ranks: HitRanks,
+) {
+  return {
+    documentId,
+    path: doc?.path ?? documentId,
+    ...(doc?.name === undefined ? {} : { name: doc.name }),
+    ...(doc?.kind === undefined ? {} : { kind: doc.kind }),
+    score,
+    contexts: [...contexts],
+    ...(ranks.lexical === undefined ? {} : { lexicalRank: ranks.lexical }),
+    ...(ranks.semantic === undefined ? {} : { semanticRank: ranks.semantic }),
+  }
+}
+
 export function createDocumentSearchTool(
   deps: ServerDeps,
   vectors: DocumentVectorCache = vectorCacheFor(deps),
@@ -123,27 +153,12 @@ export function createDocumentSearchTool(
       const termsOf = terms.termsOf(parsed.workspaceId, entries, content)
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
-      /** documentId -> 1-based position, for whichever rankings exist. */
-      const ranksOf = (ranking: readonly string[]): Map<string, number> =>
-        new Map(ranking.map((documentId, index) => [documentId, index + 1]))
       const describe = (
         documentId: string,
         score: number,
         contexts: readonly string[],
-        ranks: { lexical?: number; semantic?: number },
-      ) => {
-        const doc = byId.get(documentId)
-        return {
-          documentId,
-          path: doc?.path ?? documentId,
-          ...(doc?.name === undefined ? {} : { name: doc.name }),
-          ...(doc?.kind === undefined ? {} : { kind: doc.kind }),
-          score,
-          contexts: [...contexts],
-          ...(ranks.lexical === undefined ? {} : { lexicalRank: ranks.lexical }),
-          ...(ranks.semantic === undefined ? {} : { semanticRank: ranks.semantic }),
-        }
-      }
+        ranks: HitRanks,
+      ) => describeHit(byId.get(documentId), documentId, score, contexts, ranks)
 
       // A filter with no words: every admitted document, in path order,
       // with nothing ranked and the opening of its text for context — the
