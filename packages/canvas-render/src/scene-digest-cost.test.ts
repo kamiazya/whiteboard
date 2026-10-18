@@ -73,7 +73,7 @@ describe('sceneDigest cost', () => {
     expect(elapsed / (entries + cells)).toBeLessThan(0.001)
   })
 
-  it.fails('caps the free regions a tall, empty board reports', () => {
+  it('caps the free regions a tall, empty board reports', () => {
     // Two 20px boxes 5_000_000px apart in one column: a 1 x 250_000 grid,
     // inside the cell budget, whose every row but two is its own one-cell
     // run. Uncapped that is 249_998 regions, 8_444_383 chars of JSON,
