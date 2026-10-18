@@ -42,7 +42,11 @@ it('loads as a module shared worker and answers a subscribe', async () => {
     // A module worker that fails to LOAD does not throw at construction — it
     // fires this instead, which is why the app's try/catch cannot see it.
     worker.onerror = () => resolve({ kind: 'error-event' })
-    worker.port.onmessage = (e: MessageEvent) => resolve({ kind: 'replied', data: e.data })
+    // `ready` answers the init; the reply to the subscribe is what follows it.
+    worker.port.onmessage = (e: MessageEvent) => {
+      if ((e.data as { type?: string }).type === 'ready') return
+      resolve({ kind: 'replied', data: e.data })
+    }
     worker.port.start()
     // Pointed at a port nothing listens on: the stream fails to open and the
     // worker reports it, which is a real answer from a running worker and

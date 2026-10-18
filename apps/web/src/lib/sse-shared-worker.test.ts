@@ -283,6 +283,19 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
 // Per-test budget above `until`'s, so a genuine hang still reports as the
 // assertion that hung rather than as an opaque test timeout.
 describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
+  it('says it started before anything it says about a daemon', async () => {
+    // The tab bounds its wait on this word alone, so it must not wait on a
+    // daemon: pointed at one that refuses every request, it still comes first.
+    const port = connect()
+    const first = new Promise<unknown>((resolve) => {
+      port.addEventListener('message', (e: MessageEvent) => resolve(e.data), { once: true })
+    })
+    port.postMessage({ type: 'init', baseUrl: REFUSING_BASE })
+    port.postMessage({ type: 'subscribe', doc: nextDoc() })
+
+    expect(await first).toEqual({ type: 'ready' })
+  })
+
   it('opens one stream however many documents are subscribed', async () => {
     // The whole reason this lives in a worker: six HTTP/1.1 connections per
     // origin is the budget, and a stream per canvas would spend it on sync.

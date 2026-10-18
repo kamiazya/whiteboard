@@ -121,7 +121,7 @@ function tellEach(set: readonly DocListener[], tell: (listener: DocListener) => 
   }
 }
 
-type WorkerNews = Exclude<SseWorkerEvent, { type: 'snapshot' }>
+type WorkerNews = Exclude<SseWorkerEvent, { type: 'snapshot' | 'ready' }>
 
 /**
  * The ONE inbound channel. Every byte a tab applies has been through the
@@ -203,6 +203,7 @@ function receive(raw: unknown, { listeners, snapshotWaiters, relayed }: PortHold
   const parsed = sseWorkerEventSchema.safeParse(raw)
   if (!parsed.success) return
   const evt = parsed.data
+  if (evt.type === 'ready') return
   // Answered ahead of the listener gate below: a snapshot answers a
   // request, not a subscription, and a caller may ask for one with no
   // listener at all — gating it on one would leave that caller waiting
@@ -215,6 +216,35 @@ function receive(raw: unknown, { listeners, snapshotWaiters, relayed }: PortHold
   if (!claims) return
   remember(relayed, evt)
   deliverToListeners(claims, evt)
+}
+
+/**
+ * How long a worker may stay silent after construction before the source
+ * treats it as one that failed to load. `onerror` is not a guarantee: a
+ * script fetch that never completes, or a browser that never reports the
+ * refusal, leaves the port a hole with every read waiting on it. The worker
+ * answers `init` with `ready` before anything that can wait on the daemon, so
+ * this bounds only its start-up — never a slow read — and a false positive
+ * costs cross-tab sharing, not correctness.
+ */
+export const SHARED_WORKER_START_BOUND_MS = 15_000
+
+/**
+ * Fails the source over if the worker has said nothing once the bound passes.
+ * What this tab claimed is handed back and the port closed first, since a
+ * worker that starts late would otherwise serve a port nobody reads. Cleared
+ * by the worker's first message, and by any other failure.
+ */
+function armStartBound(
+  port: MessagePort,
+  listeners: ReadonlyMap<string, unknown>,
+  fail: () => void,
+): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    for (const doc of listeners.keys()) postWorkerRequest(port, { type: 'unsubscribe', doc })
+    port.close()
+    fail()
+  }, SHARED_WORKER_START_BOUND_MS)
 }
 
 const workerFailed = (baseUrl: string) =>
@@ -264,24 +294,25 @@ export function createSharedSseStreamSource(
   let own: SseStreamHub | null = null
 
   // A module worker that fails to LOAD does not throw above — construction
-  // succeeds and the failure arrives here instead. Without this the port is a
-  // hole: every subscribe posts into it, nothing ever answers, and the page
-  // goes quiet with nothing to say why.
-  //
-  // Verified as reachable-in-principle rather than observed: `type: 'module'`
-  // shared workers load in Chromium, WebKit and Firefox (see
-  // sse-shared-worker.browser.test.tsx), so today this fires only for a
-  // missing chunk or a CSP refusal. It stays because a source of truth behind
-  // this worker would make a silent hole much more expensive than it is now.
-  worker.onerror = () => {
+  // succeeds and the failure arrives as `onerror` instead, or as nothing at
+  // all, which the start bound answers. Without both the port is a hole:
+  // every subscribe posts into it, nothing ever answers, and the page goes
+  // quiet with nothing to say why.
+  const startBound = armStartBound(port, listeners, fail)
+  function fail(): void {
     if (own !== null) return
+    clearTimeout(startBound)
     // Set before any listener hears of the drop, so whatever it asks of this
     // source in answer — a snapshot, a fresh subscribe — reaches the page's
     // stream rather than the dead port.
     own = new SseStreamHub({ fetch, baseUrl })
     retire(baseUrl, listeners, snapshotWaiters, own)
   }
-  port.onmessage = (e: MessageEvent) => receive(e.data, { listeners, snapshotWaiters, relayed })
+  worker.onerror = fail
+  port.onmessage = (e: MessageEvent) => {
+    clearTimeout(startBound)
+    receive(e.data, { listeners, snapshotWaiters, relayed })
+  }
   port.start()
   postWorkerRequest(port, { type: 'init', baseUrl })
 
@@ -330,8 +361,10 @@ export function createSharedSseStreamSource(
       // once per document and every later tab is answered from memory. The
       // worker replies even for a document nobody has (an empty snapshot),
       // and with no bytes when its own read of the daemon failed, which
-      // rejects — so this settles rather than racing a timeout. `null` is
-      // reserved for the hub implementation's 404, which has a daemon to ask.
+      // rejects — so once the worker has started this settles rather than
+      // racing a timeout, and a worker that never starts is bounded by
+      // SHARED_WORKER_START_BOUND_MS. `null` is reserved for the hub
+      // implementation's 404, which has a daemon to ask.
       return new Promise((resolve, reject) => {
         let waiters = snapshotWaiters.get(doc)
         if (!waiters) {

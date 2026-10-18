@@ -8,7 +8,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import { createSharedSseStreamSource as create } from './sse-shared-stream-source.js'
+import {
+  createSharedSseStreamSource as create,
+  SHARED_WORKER_START_BOUND_MS,
+} from './sse-shared-stream-source.js'
 
 type ErrorHandler = ((event: { message?: string }) => void) | null
 
@@ -18,6 +21,7 @@ class FakeSharedWorker {
   readonly port = {
     postMessage: vi.fn(),
     start: vi.fn(),
+    close: vi.fn(),
     onmessage: null as ((e: MessageEvent) => void) | null,
   }
   constructor() {
@@ -227,6 +231,53 @@ describe('a shared worker that fails to load', () => {
 
     expect(postedOfType('push')).toEqual([])
     expect(daemon.requested().some((url) => url.endsWith('/update'))).toBe(true)
+  })
+})
+
+describe('a shared worker that never starts and never reports failing', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("rejects a waiting read once the bound passes, and the next is the page's", async () => {
+    vi.useFakeTimers()
+    const daemon = ownStreamDaemon()
+    const source = create(origin('silent'), daemon.fetch)
+    // Handled now, so the rejection is observed when it lands rather than reported unhandled.
+    const outcome = source?.snapshot('workspace:w').then(
+      () => 'answered',
+      (reason: unknown) => reason,
+    )
+
+    await vi.advanceTimersByTimeAsync(SHARED_WORKER_START_BOUND_MS)
+
+    expect(await outcome).toBeInstanceOf(Error)
+    await expect(source?.snapshot('workspace:w')).resolves.toEqual(new Uint8Array([9]))
+    expect(postedOfType('snapshot-request')).toHaveLength(1)
+  })
+
+  it('hands back what it claimed on the port it gives up on', async () => {
+    vi.useFakeTimers()
+    const source = create(origin('silent-claims'), unanswered)
+    source?.subscribe('workspace:w', { onUpdate: vi.fn(), onMessage: vi.fn() })
+
+    await vi.advanceTimersByTimeAsync(SHARED_WORKER_START_BOUND_MS)
+
+    expect(postedOfType('unsubscribe')).toEqual([[{ type: 'unsubscribe', doc: 'workspace:w' }]])
+    expect(FakeSharedWorker.instances[0]?.port.close).toHaveBeenCalled()
+  })
+
+  it('is not given up on once it has said it started, however long a read takes', async () => {
+    vi.useFakeTimers()
+    const source = create(origin('started'), unanswered)
+    const onConnectionChange = vi.fn()
+    source?.subscribe('workspace:w', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
+    FakeSharedWorker.instances[0]?.port.onmessage?.({ data: { type: 'ready' } } as MessageEvent)
+
+    await vi.advanceTimersByTimeAsync(SHARED_WORKER_START_BOUND_MS * 2)
+
+    expect(onConnectionChange).not.toHaveBeenCalled()
+    expect(FakeSharedWorker.instances[0]?.port.close).not.toHaveBeenCalled()
   })
 })
 
