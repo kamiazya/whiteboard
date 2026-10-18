@@ -247,3 +247,29 @@ describe('a passage highlight costs a bounded comparison per occurrence', () => 
     expect(fastestOfThree(draw)).toBeLessThan(250)
   })
 })
+
+describe('a passage highlight finds a quote in time linear in the text', () => {
+  // A whitespace-loose regex re-reads up to the whole quote at every start
+  // on a periodic text before failing, so one search costs text x quote.
+  // Measured on a shared 4-core machine: sixteen threads quoting 2000 words
+  // of an 8 Ki `a a a …` node took 1.8 s per layout at best. The ceiling is
+  // judged on the fastest of three, so one load spike cannot fail it.
+  it('lays sixteen long non-matching quotes over a periodic 8 Ki node quickly', () => {
+    const text = 'a '.repeat(NODE_TEXT_MAX_CHARS / 2).trim()
+    const runs = runsOf(text)
+    const exact = `${'a '.repeat(2000)}b`
+    const passages: NodePassage[] = Array.from({ length: 16 }, (_, index) => ({
+      threadId: `t${index}`,
+      nodeId: 'n',
+      anchor: { kind: 'text', quote: { exact }, start: 0, end: exact.length },
+      resolved: false,
+    }))
+    let fastest = Number.POSITIVE_INFINITY
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const started = performance.now()
+      expect(composePassageHighlights(passages, runs, options.measure, {}, text)).toEqual([])
+      fastest = Math.min(fastest, performance.now() - started)
+    }
+    expect(fastest).toBeLessThan(250)
+  })
+})
