@@ -365,6 +365,24 @@ async function excerptScans(marker: string, run: () => Promise<unknown>): Promis
   return scans
 }
 
+describe('fused excerpts', () => {
+  it('quotes the match for a lexical hit and the opening for a meaning-only one', async () => {
+    const deps = makeDeps()
+    const { reconnect, storage } = await seed(deps)
+    const tool = createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() })
+    const lexical = await tool.execute({ workspaceId: WS, query: 'quota' })
+    const keyword = lexical.results.find((r) => r.documentId === storage)
+    expect(keyword?.lexicalRank).toBe(1)
+    expect(keyword?.contexts).toEqual(['quota を超えると保存に失敗する'])
+
+    // `復旧` shares no token with this body, so there is no match to quote.
+    const meaning = await tool.execute({ workspaceId: WS, query: '復旧' })
+    const hit = meaning.results.find((r) => r.documentId === reconnect)
+    expect(hit?.lexicalRank).toBeUndefined()
+    expect(hit?.contexts).toEqual(['socket が切れたら reconnect する'])
+  })
+})
+
 describe('excerpt cost with an embedder', () => {
   const MARKER = 'excerptmarker'
   async function corpusOf(documents: number) {
@@ -376,7 +394,7 @@ describe('excerpt cost with an embedder', () => {
     return deps
   }
 
-  it('counts the texts excerpted for a fused three-result page', async () => {
+  it('excerpts the fused page, not every lexical hit', async () => {
     const deps = await corpusOf(30)
     const tool = createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() })
     const query = { workspaceId: WS, query: 'quota', limit: 3 }
@@ -384,11 +402,15 @@ describe('excerpt cost with an embedder', () => {
     const scans = await excerptScans(MARKER, async () => {
       const out = await tool.execute(query)
       expect(out.results).toHaveLength(3)
+      // The subject is present: every result is a marked text, so each
+      // one excerpted counts once.
+      expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
     })
-    expect(scans).toBe(30)
+    // Excerpting all 30 lexical hits before keeping 3 counts 30.
+    expect(scans).toBe(3)
   })
 
-  it('counts the texts excerpted for a three-result page when the embedder fails', async () => {
+  it('excerpts the lexical page alone when the embedder fails', async () => {
     const deps = await corpusOf(30)
     const broken: Embedder = {
       id: 'broken@v1',
@@ -401,7 +423,11 @@ describe('excerpt cost with an embedder', () => {
     const scans = await excerptScans(MARKER, async () => {
       const out = await tool.execute(query)
       expect(out.results).toHaveLength(3)
+      // The subject is present: every result is a marked text, so each
+      // one excerpted counts once.
+      expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
     })
-    expect(scans).toBe(30)
+    // Excerpting all 30 lexical hits before keeping 3 counts 30.
+    expect(scans).toBe(3)
   })
 })

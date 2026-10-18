@@ -8,7 +8,7 @@
 // as a slow run.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fullTextSearch, type SearchableDocument } from './full-text.js'
+import { EXCERPT_TOKENS_MAX, fullTextSearch, type SearchableDocument } from './full-text.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -95,7 +95,7 @@ function scanning<T>(run: () => T): { result: T; calls: number; chars: number } 
 const LONG_QUERY = Array.from({ length: 1024 }, (_, i) => String.fromCharCode(0x4e00 + i)).join('')
 
 describe('fullTextSearch excerpt cost', () => {
-  it('counts the text scanned to excerpt the longest query', () => {
+  it('scans each answered text once per excerpted token, however long the query', () => {
     // Ten answered documents, each one 16 Ki text holding the query's first
     // bigram and none of the rest, so every other token scans it whole.
     const filler = 'x'.repeat(16 * 1024)
@@ -107,6 +107,10 @@ describe('fullTextSearch excerpt cost', () => {
     const { result, calls, chars } = scanning(() => fullTextSearch(documents, LONG_QUERY))
     expect(result).toHaveLength(10)
     expect(result[0]?.contexts).toHaveLength(1)
-    expect({ calls, chars }).toEqual({ calls: 10_240, chars: 167_802_880 })
+    // One verbatim probe plus one per token excerpted, per answered text.
+    // Every one of the query's 1,023 tokens made that 10,240 calls over
+    // 167,802,880 characters.
+    expect(calls).toBe(10 * (1 + EXCERPT_TOKENS_MAX))
+    expect(chars).toBe(10 * (1 + EXCERPT_TOKENS_MAX) * (filler.length + 3))
   })
 })

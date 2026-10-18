@@ -1,6 +1,11 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { fullTextSearch, type SearchableDocument } from './full-text.js'
+import {
+  EXCERPT_TOKENS_MAX,
+  excerpterFor,
+  fullTextSearch,
+  type SearchableDocument,
+} from './full-text.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 // A five-word vocabulary keeps the corpus dense: most queries hit several
@@ -66,6 +71,52 @@ describe('fullTextSearch query normalisation', () => {
       expect(tally.verbatimAmongSeveral).toBeGreaterThan(80)
     },
   )
+})
+
+const splitTally = { excerpted: 0 }
+
+describe('fullTextSearch excerpts cut apart from ranking', () => {
+  // A caller whose page is not a prefix of the ranking (fusion) ranks with
+  // excerpts off and excerpts its page itself; that must answer what the
+  // inline path does, in order, score and excerpt alike.
+  fcTest.prop([corpus, query], withDefaults({ numRuns: 200 }))(
+    'answers the same hits and excerpts as excerpting inline',
+    (docs, q) => {
+      const inline = fullTextSearch(docs, q, { limit: docs.length })
+      const ranked = fullTextSearch(docs, q, { limit: docs.length, excerpts: false })
+      const excerpt = excerpterFor(q)
+      const byId = new Map(docs.map((doc) => [doc.documentId, doc]))
+      expect(ranked.every((hit) => hit.contexts.length === 0)).toBe(true)
+      const split = ranked.map((hit) => {
+        const doc = byId.get(hit.documentId)
+        return { ...hit, contexts: doc === undefined ? [] : excerpt(doc) }
+      })
+      if (split.some((hit) => hit.contexts.length > 0)) splitTally.excerpted++
+      expect(split).toEqual(inline)
+    },
+  )
+
+  afterAllFloor(['answers the same hits and excerpts as excerpting inline'], () => {
+    // Without an excerpt the comparison holds of empty contexts alone.
+    expect(splitTally.excerpted).toBeGreaterThan(150)
+  })
+})
+
+describe('fullTextSearch excerpt token bound', () => {
+  const words = Array.from({ length: EXCERPT_TOKENS_MAX + 1 }, (_, i) => `w${i}x`)
+
+  it('ranks on a token past the bound but quotes no excerpt for it', () => {
+    const doc = { documentId: 'a', path: 'a', texts: [`only ${words.at(-1)} here`] }
+    const [hit] = fullTextSearch([doc], words.join(' '))
+    expect(hit?.score).toBeGreaterThan(0)
+    expect(hit?.contexts).toEqual([])
+  })
+
+  it('quotes an excerpt for the last token inside the bound', () => {
+    const doc = { documentId: 'a', path: 'a', texts: [`only ${words.at(-2)} here`] }
+    const [hit] = fullTextSearch([doc], words.join(' '))
+    expect(hit?.contexts).toEqual([`only ${words.at(-2)} here`])
+  })
 })
 
 describe('fullTextSearch excerpt order', () => {
