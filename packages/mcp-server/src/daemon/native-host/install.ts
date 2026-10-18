@@ -11,7 +11,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdir, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
@@ -21,6 +21,8 @@ import {
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { z } from 'zod'
+import { secureDataDir } from '../../shared/data-dir-secure.js'
+import { isMissingFileError } from '../../shared/errno.js'
 
 /**
  * Under the data dir: the launcher on every platform, and on Windows the
@@ -141,6 +143,8 @@ interface InstallOptions {
   extensionBuild?: ExtensionBuild
   /** Sets a registry key's default value; `reg add` unless a test substitutes it. */
   register?: (key: string, value: string) => Promise<void>
+  /** Whose dirs these must be; this process's user unless a test substitutes it. */
+  uid?: number
 }
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
@@ -164,6 +168,20 @@ function regAdd(key: string, value: string): Promise<void> {
   })
 }
 
+async function refuseUntrustedLauncher(launcher: string, uid: number | undefined): Promise<void> {
+  let stat: Awaited<ReturnType<typeof lstat>>
+  try {
+    stat = await lstat(launcher)
+  } catch (err) {
+    if (isMissingFileError(err)) return
+    throw err
+  }
+  if (stat.isSymbolicLink())
+    throw new Error(`${launcher} is a symlink; refusing to write through it.`)
+  if (uid !== undefined && stat.uid !== uid)
+    throw new Error(`${launcher} is owned by uid ${stat.uid}, not this user (uid ${uid}).`)
+}
+
 /** The launcher the browser starts, in the platform's own script language. */
 async function writeLauncher(options: InstallOptions): Promise<string> {
   const windows = (options.platform ?? process.platform) === 'win32'
@@ -176,7 +194,14 @@ async function writeLauncher(options: InstallOptions): Promise<string> {
   const script = windows
     ? `@echo off\r\nset ${cmdQuote(`WHITEBOARD_DATA_DIR=${options.dataDir}`)}\r\n${command.map(cmdQuote).join(' ')} native-host run %*\r\n`
     : `#!/bin/sh\nWHITEBOARD_DATA_DIR=${shellQuote(options.dataDir)} exec ${command.map(shellQuote).join(' ')} native-host run "$@"\n`
-  await mkdir(dirname(launcher), { recursive: true, mode: 0o700 })
+  // The browser runs the launcher as this user, so a dir another local user
+  // can write — one prepared in the shared temp dir, say — would let them
+  // swap it. The data dir and the launcher's own dir get the judgement every
+  // root's data dir gets, and an existing launcher is never written through.
+  const uid = options.uid ?? process.getuid?.()
+  secureDataDir(options.dataDir, 'owner', uid)
+  secureDataDir(dirname(launcher), 'owner', uid)
+  await refuseUntrustedLauncher(launcher, uid)
   await writeFile(launcher, script)
   await chmod(launcher, 0o700)
   return launcher

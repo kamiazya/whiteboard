@@ -114,13 +114,17 @@ export type DataDirTrust = 'owner' | 'operator'
  * into it. Every self-hosting root boots through this, so the stdio entry is
  * held to what the daemon's startup lock already demands.
  */
-export function secureDataDir(dir: string, trust: DataDirTrust = 'owner'): void {
+export function secureDataDir(
+  dir: string,
+  trust: DataDirTrust = 'owner',
+  uid: number | undefined = process.getuid?.(),
+): void {
   if (trust === 'operator') {
     mkdirSync(dir, { recursive: true })
     return
   }
   mkdirSync(dir, { recursive: true, mode: POSIX_DATA_DIR_MODE })
-  assertDataDirOwnedByUser(dir)
+  assertDataDirOwnedByUser(dir, uid)
   if (platform() === 'win32') return
   try {
     chmodSync(dir, POSIX_DATA_DIR_MODE)

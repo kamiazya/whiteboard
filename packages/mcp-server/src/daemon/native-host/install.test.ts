@@ -3,7 +3,18 @@
  * level, and the browser then lets only the whiteboard extension start it.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
@@ -147,6 +158,61 @@ describe('installNativeHost', () => {
       expect(statSync(dirname(launcher)).mode & 0o777).toBe(0o700)
     },
   )
+
+  // The browser runs whatever the manifest names as this user, so a data dir
+  // another local user could write — one prepared in the shared temp dir
+  // before this user ever ran the daemon — must never receive the launcher.
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'refuses a data dir other users may write, and writes no launcher',
+    async () => {
+      const dataDir = join(scratch, 'data')
+      mkdirSync(dataDir)
+      chmodSync(dataDir, 0o777)
+      const manifestDir = join(scratch, 'chrome')
+      await expect(
+        installNativeHost({
+          dataDir,
+          manifestDirs: [{ browser: 'chrome', engine: 'chromium', dir: manifestDir }],
+          launcher: launcherFor('/opt/whiteboard/cli.js'),
+        }),
+      ).rejects.toThrow(/writable by other users/)
+      expect(existsSync(join(dataDir, 'native-host'))).toBe(false)
+      expect(existsSync(manifestDir)).toBe(false)
+    },
+  )
+
+  it('refuses a data dir another user owns, and writes no launcher', async () => {
+    const dataDir = join(scratch, 'data')
+    mkdirSync(dataDir)
+    await expect(
+      installNativeHost({
+        dataDir,
+        manifestDirs: [],
+        launcher: launcherFor('/opt/whiteboard/cli.js'),
+        uid: (process.getuid?.() ?? 0) + 1,
+      }),
+    ).rejects.toThrow(/owned by uid/)
+    expect(existsSync(join(dataDir, 'native-host'))).toBe(false)
+  })
+
+  it('refuses a launcher that is a symlink rather than writing through it', async () => {
+    const dataDir = join(scratch, 'data')
+    const target = join(scratch, 'elsewhere')
+    writeFileSync(target, 'untouched')
+    mkdirSync(join(dataDir, 'native-host'), { recursive: true })
+    symlinkSync(target, join(dataDir, 'native-host', 'whiteboard-native-host'))
+    await expect(
+      installNativeHost({
+        dataDir,
+        manifestDirs: [],
+        launcher: launcherFor('/opt/whiteboard/cli.js'),
+      }),
+    ).rejects.toThrow(/symlink/)
+    expect(readFileSync(target, 'utf8')).toBe('untouched')
+    expect(lstatSync(join(dataDir, 'native-host', 'whiteboard-native-host')).isSymbolicLink()).toBe(
+      true,
+    )
+  })
 
   // The browser starts the launcher with its own arguments and environment,
   // so the data dir it relays to is fixed at install time — through a shell
