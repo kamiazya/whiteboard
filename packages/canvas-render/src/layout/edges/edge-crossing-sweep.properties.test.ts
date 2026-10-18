@@ -197,6 +197,29 @@ describe('edge-crossing sweep — differential equality with the pairwise oracle
     },
   )
 
+  const budgetDensity = { refused: 0 }
+  fcTest.prop([rawPathsArbitrary], withDefaults())(
+    'a budget covering the sweep changes nothing, and one pair less refuses it',
+    (paths) => {
+      const measured = { pairs: 1_000_000_000 }
+      buildPairwiseScores(paths, measured)
+      const spend = 1_000_000_000 - measured.pairs
+      const exact = { pairs: spend }
+      expect(buildPairwiseScores(paths, exact)).toEqual(buildPairwiseScores(paths))
+      expect(exact.pairs).toBe(0)
+      if (spend === 0) return
+      const short = { pairs: spend - 1 }
+      expect(buildPairwiseScores(paths, short)).toBeUndefined()
+      // What it examined before refusing is spent: the account goes negative.
+      expect(short.pairs).toBeLessThan(0)
+      budgetDensity.refused++
+    },
+  )
+
+  it('the budget property reaches a sweep that examines something', () => {
+    expect(budgetDensity.refused).toBeGreaterThan(0)
+  })
+
   it('each generator actually reaches the arrangements it is responsible for', () => {
     // The two domains answer for different things, which is why the counts
     // are read separately rather than summed. The raw domain is the one

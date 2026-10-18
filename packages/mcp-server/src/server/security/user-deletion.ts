@@ -103,6 +103,7 @@ async function rehomeTheirNamespace(trx: TenantTransaction, profileId: string, h
       trx,
       workspace,
       await oldestOwnerNamespace(trx, workspace.id, profileId),
+      { handedOver: true },
     )
   }
 }

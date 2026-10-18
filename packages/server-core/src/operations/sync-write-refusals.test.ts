@@ -89,9 +89,29 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     textBreachRefusal({ shape: 'canvas-size', measure: 'nodes', count: 2_001, container: MAP }),
   'open-threads': () => textBreachRefusal({ shape: 'open-threads', count: 501, container: MAP }),
   'open-changes': () => textBreachRefusal({ shape: 'open-changes', count: 1_001, container: MAP }),
+  'content-root': () => textBreachRefusal({ shape: 'content-root', key: 'nodes', container: MAP }),
+  'unattached-container': () =>
+    textBreachRefusal({ shape: 'unattached-container', container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
+
+/**
+ * Text-breach classes answering a refusal another class already gives: the
+ * workspace record's judge finds, as an operation, what the per-document
+ * route finds as a root — a content key of the wrong kind — and a write into
+ * a container it does not build on is a change sent before what it builds on.
+ */
+const SAME_ANSWER_AS: Readonly<Record<string, string>> = {
+  ContentRootKindError: 'RootNoDocumentHoldsError',
+  UnattachedContainerError: 'CausalGapError',
+}
+
+/** Each text breach's status where it is not 413, the bound on how much. */
+const TEXT_STATUS: Partial<Record<SyncTextBreach['shape'], number>> = {
+  'content-root': 400,
+  'unattached-container': 409,
+}
 
 /** The concrete error classes the module exports, found rather than listed. */
 const declared = Object.entries(refusals)
@@ -124,6 +144,12 @@ describe('syncWriteAnswer', () => {
       codeOf.set(refusal.name, answer?.code)
     }
     // One code per class: a run and a body are one class, a body too large.
+    // A class sharing a code is one answer reached from a second surface, and
+    // says which class it answers as.
+    for (const [shared, as] of Object.entries(SAME_ANSWER_AS)) {
+      expect(codeOf.get(shared)).toBe(codeOf.get(as))
+      codeOf.delete(shared)
+    }
     expect(new Set(codeOf.values()).size).toBe(codeOf.size)
   })
 
@@ -131,7 +157,7 @@ describe('syncWriteAnswer', () => {
     for (const [shape, sample] of Object.entries(TEXT_SAMPLES)) {
       expect(syncWriteAnswer(sample())).toEqual({
         code: SYNC_TEXT_BREACH_CODES[shape as SyncTextBreach['shape']],
-        status: 413,
+        status: TEXT_STATUS[shape as SyncTextBreach['shape']] ?? 413,
       })
     }
   })

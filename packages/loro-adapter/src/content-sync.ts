@@ -16,6 +16,7 @@
  */
 import { CONTAINER_NAME_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { type LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
+import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMap } from './mergeable-containers.js'
 import { spliceText } from './minimal-change.js'
 
@@ -201,6 +202,9 @@ export function syncRootContainer(
   return false
 }
 
+/** The container kinds a document root can be opened as. */
+type RootContainerKind = 'map' | 'text' | 'list'
+
 /**
  * Empty a bridge container the source never attached — "content equals the
  * source" includes what the source does not have. Answers whether anything
@@ -209,7 +213,7 @@ export function syncRootContainer(
 export function clearRootContainer(
   roots: RootContainers,
   key: string,
-  kind: 'map' | 'text' | 'list',
+  kind: RootContainerKind,
 ): boolean {
   if (kind === 'map') {
     const map = roots.map(key)
@@ -242,10 +246,61 @@ export interface RootContainers {
   map(key: string): LoroMap
 }
 
+/**
+ * A node's content key holding something other than the container a reader
+ * opens there — a scalar, or a container of another kind. Thrown instead of
+ * opening one over it: over a scalar the engine throws a bare string, and
+ * over another kind it hands that container back, whose methods then misread
+ * it or trap the engine (measured on loro-crdt 1.13.6: clearing a body held
+ * as a map aborts with "memory access out of bounds").
+ */
+class UnreadableDocumentContentError extends Error {
+  constructor(
+    readonly key: string,
+    readonly held: string,
+  ) {
+    super(`The document's ${JSON.stringify(key)} holds ${held}, not the content kept there`)
+    this.name = 'UnreadableDocumentContentError'
+  }
+}
+
+/** The Loro kinds a key may hold for a node to open it as `kind`; a legacy list is either. */
+const OPENS_AS: Readonly<Record<'text' | 'list' | 'map', readonly string[]>> = {
+  text: ['Text'],
+  list: ['MovableList', 'List'],
+  map: ['Map'],
+}
+
+/** Whether `data` holds nothing at `key`, or a container a node opens as `kind`. */
+function holdsOpenable(data: LoroMap, key: string, kind: 'text' | 'list' | 'map'): boolean {
+  const held: unknown = data.get(key)
+  return held === undefined || OPENS_AS[kind].includes(containerKind(held) ?? '')
+}
+
+/** Whether `data` holds, at `key`, nothing or — for a content key — the container it is declared as. */
+export function holdsDeclaredContent(data: LoroMap, key: string): boolean {
+  const declared = CONTENT_CONTAINER_KEYS.find((content) => content.key === key)
+  return declared === undefined || holdsOpenable(data, key, declared.kind)
+}
+
+/** The container at `key`, made when absent; never opened over anything else (`UnreadableDocumentContentError`). */
+function openNodeContainer<C extends LoroText | LoroMovableList | LoroMap>(
+  data: LoroMap,
+  key: string,
+  kind: 'text' | 'list' | 'map',
+  fresh: () => C,
+): C {
+  if (!holdsOpenable(data, key, kind)) {
+    const held: unknown = data.get(key)
+    throw new UnreadableDocumentContentError(key, containerKind(held) ?? typeof held)
+  }
+  return data.getOrCreateContainer(key, fresh())
+}
+
 export const nodeRoots = (data: LoroMap): RootContainers => ({
-  text: (key) => data.getOrCreateContainer(key, new LoroText()),
-  list: (key) => data.getOrCreateContainer(key, new LoroMovableList()),
-  map: (key) => data.getOrCreateContainer(key, new LoroMap()),
+  text: (key) => openNodeContainer(data, key, 'text', () => new LoroText()),
+  list: (key) => openNodeContainer(data, key, 'list', () => new LoroMovableList()),
+  map: (key) => openNodeContainer(data, key, 'map', () => new LoroMap()),
 })
 
 export const docRoots = (doc: LoroDoc): RootContainers => ({

@@ -87,6 +87,22 @@ describe('wb_scene_render on a markdown document', () => {
     expect(result.height).toBeGreaterThan(0)
   })
 
+  test('renders a body nested thousands of levels deep instead of failing', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, `## Plan\n\nplan body\n\n${'>'.repeat(3_000)} DEEPTAIL\n`)
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+
+    expect(result.svg).toContain('plan body')
+    expect(result.svg).toContain('DEEPTAIL')
+  }, 30_000)
+
   test('with embedReferences, ![[path#Group]] draws that group of the board under its name', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE)

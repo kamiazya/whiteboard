@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { readProcessStartMs } from '../shared/process-identity.js'
 import { CAN_DENY_FILE_READ } from '../shared/test-utils/can-deny-file-read.js'
+import { ownedSocketPath } from './_test-daemon-record.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import type { DaemonRecordWrite } from './daemon-record-schema.js'
 import {
@@ -12,6 +13,8 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from './daemon-registry.js'
+
+const SOCKET_PATH = ownedSocketPath()
 
 // ESRCH on every platform: no pid is this large.
 const DEAD_PID = 999_999_999
@@ -33,7 +36,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 123,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 'secret',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -45,7 +48,7 @@ describe('daemon-registry', () => {
     await expect(loadDaemonRecord(dataDir, gone)).resolves.toEqual({
       record: {
         pid: 123,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 'secret',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -60,7 +63,7 @@ describe('daemon-registry', () => {
     // but a daemon still running from before the field existed left one.
     const legacy = {
       pid: 123,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
+      socketPath: SOCKET_PATH,
       token: 'secret',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
@@ -80,7 +83,7 @@ describe('daemon-registry', () => {
       await saveDaemonRecord(
         {
           pid: 123,
-          socketPath: '/run/user/1000/whiteboard/d.sock',
+          socketPath: SOCKET_PATH,
           token: 'secret',
           version: '0.1.0',
           startedAt: '2026-04-23T00:00:00.000Z',
@@ -118,7 +121,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: DEAD_PID,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: '',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -132,7 +135,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: DEAD_PID,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
       }),
@@ -145,7 +148,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: DEAD_PID,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 7,
         version: '9.0.0',
       }),
@@ -160,7 +163,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: process.pid,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 7,
         version: '9.0.0',
       }),
@@ -175,7 +178,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: process.pid,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         version: '0.1.0',
         startedAt: new Date().toISOString(),
       }),
@@ -248,7 +251,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 321,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 'abc',
         version: '0.2.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -260,7 +263,7 @@ describe('daemon-registry', () => {
     const contents = await readFile(getDaemonRecordPath(dataDir), 'utf-8')
     expect(JSON.parse(contents)).toMatchObject({
       pid: 321,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
+      socketPath: SOCKET_PATH,
     })
     await expect(readFile(`${getDaemonRecordPath(dataDir)}.tmp`, 'utf-8')).rejects.toThrow()
   })
@@ -269,7 +272,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 1,
-        socketPath: '/run/user/1000/whiteboard/d.sock',
+        socketPath: SOCKET_PATH,
         token: 't',
         version: 'v',
         startedAt: '2026-04-23T00:00:00.000Z',

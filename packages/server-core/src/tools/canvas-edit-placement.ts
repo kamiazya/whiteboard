@@ -190,6 +190,37 @@ export function placeWithin(
 }
 
 /**
+ * Why nothing can be placed inside `box`, or `undefined` when it can. Far
+ * enough from the origin (past about 2^60), adding a node's size and the
+ * gutter to a coordinate no longer changes it: rows would land on one
+ * another and the group could not grow to hold them. The caller can fix
+ * that and placement cannot, so it is refused with what to change.
+ */
+export function unplaceableWithin(
+  box: { id: string } & Rect,
+  sizes: readonly { width: number; height: number }[],
+): string | undefined {
+  const collapses = sizes.some(
+    (size) => !stepsFrom(box.x, size.width) || !stepsFrom(box.y, size.height),
+  )
+  if (!collapses) return undefined
+  return `group "${box.id}" at (${box.x}, ${box.y}) is too far from the origin to place nodes inside it: at that magnitude adding a node's size does not move a coordinate. Give the node explicit x/y, or move the group nearer the origin`
+}
+
+/**
+ * Whether a walk along one axis of a box at `edge` advances: the first slot
+ * starts a gutter in, and each step adds an extent and then a gutter, the
+ * order `walkRow` computes it in. The start is not the edge — rounded, it can
+ * sit on a coarser grid than the edge does — so both the step from it and the
+ * step after are asked.
+ */
+function stepsFrom(edge: number, extent: number): boolean {
+  const start = edge + PLACEMENT_GUTTER_PX
+  const next = start + extent + PLACEMENT_GUTTER_PX
+  return next !== start && next + extent + PLACEMENT_GUTTER_PX !== next
+}
+
+/**
  * Where a slot search starts: a row's `y`, the `x` to try first, and — when
  * resuming partway along a row — the lowest bottom seen in it so far, which
  * is where the row after it starts.
@@ -204,9 +235,12 @@ interface RowCursor {
  * The first free slot for ONE box, scanning rows top to bottom from `from`.
  *
  * Each row is walked past whatever crowds the candidate, and when the row is
- * full the next starts under the LOWEST of what blocked it. Every hit sits at
- * or below `y` with the gutter, so the walk strictly advances and ends once
- * `y` is under everything taken. A row's first slot is tried even for a node
+ * full the next starts under the LOWEST of what blocked it. A candidate is
+ * crowded only when it starts before its blocker's far edge plus the gutter,
+ * which is where the next try starts, so each step past a blocker advances
+ * and the walk ends once `y` is under everything taken. That holds only while
+ * adding a size and the gutter moves a coordinate, which `unplaceableWithin`
+ * is the caller's check for. A row's first slot is tried even for a node
  * wider than the box, which overflows rather than never landing.
  *
  * Separated from `placeWithin` because that is the only thing the outer loop
@@ -274,9 +308,16 @@ const ROW_BUCKET_PX = 512
  */
 const MAX_BUCKETS_PER_RECT = 32
 
+/**
+ * The buckets `[top, bottom]` reaches, or `undefined` for the tall list. A
+ * position is any finite number, and past 2^53 a bucket index no longer
+ * changes when incremented, so a walk over such a span would never end: an
+ * index that is not a safe integer goes to the tall list too.
+ */
 function bucketSpan(top: number, bottom: number): { first: number; last: number } | undefined {
   const first = Math.floor(top / ROW_BUCKET_PX)
   const last = Math.floor(bottom / ROW_BUCKET_PX)
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return undefined
   return last - first > MAX_BUCKETS_PER_RECT ? undefined : { first, last }
 }
 

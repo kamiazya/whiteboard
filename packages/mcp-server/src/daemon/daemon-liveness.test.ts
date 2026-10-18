@@ -1,12 +1,12 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { endpointProof } from '../shared/endpoint-proof.js'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
-import { answeringDaemonSocket } from './_test-daemon-socket.js'
+import { answeringDaemonSocket, collectingDaemonSocket } from './_test-daemon-socket.js'
 import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
 import { DaemonNoAnswerError, type DaemonRequest, requestDaemon } from './daemon-request.js'
 import { socketTrust } from './daemon-socket.js'
@@ -171,29 +171,8 @@ describe('daemonLiveness', () => {
   })
 })
 
-/**
- * A listener that answers every request as the recorded daemon would, under
- * any credential, and keeps each Authorization header it was sent — what a
- * socket another user prepared at the recorded path would collect.
- */
-async function collectingSocket(dirMode: number) {
-  const socketPath = testSocketPath()
-  chmodSync(dirname(socketPath), dirMode)
-  const authorizations: (string | undefined)[] = []
-  const server = createServer((req, res) => {
-    authorizations.push(req.headers.authorization)
-    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ pid: PID }))
-  })
-  await new Promise<void>((resolve) => server.listen(socketPath, () => resolve()))
-  onTestFinished(
-    () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve())
-        server.closeAllConnections()
-      }),
-  )
-  return { socketPath, authorizations }
-}
+/** A listener collecting Authorization headers, answering as the recorded daemon would. */
+const collectingSocket = (dirMode: number) => collectingDaemonSocket(dirMode, { pid: PID })
 
 describe('daemonLiveness against a socket this user does not hold alone', () => {
   const ANOTHER_UID = (process.getuid?.() ?? 0) + 1
@@ -236,10 +215,27 @@ describe('daemonLiveness against a socket this user does not hold alone', () => 
     expect(asked).toEqual([])
   })
 
+  it('sends nothing, and holds nothing, where the socket directory does not exist, for a pid started after its record', async () => {
+    const asked: DaemonRequest[] = []
+    const socketPath = join(silentSocketPath(), 'gone', 'd.sock')
+    const record = { pid: PID, startedAt, socketPath, token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...startedAfter,
+      request: async (req) => {
+        asked.push(req)
+        return { status: 200, body: { pid: PID } }
+      },
+    })
+    expect(asked).toEqual([])
+    expect(liveness.state).toBe('pid-reused')
+  })
+
+  // `running` is what hands a reader the record's socket and token: with no
+  // directory there, whoever creates it first decides who receives them.
   it.each([
-    ['started after its record', startedAfter],
     ['whose start time cannot be read', noStartTime],
-  ])('sends nothing, and holds nothing, where the socket directory does not exist, for a pid %s', async (_, identity) => {
+    ['started before its record', startedBefore],
+  ])('does not call running, and asks nothing, a socket with no directory, for a pid %s', async (_, identity) => {
     const asked: DaemonRequest[] = []
     const socketPath = join(silentSocketPath(), 'gone', 'd.sock')
     const record = { pid: PID, startedAt, socketPath, token: TOKEN }
@@ -251,7 +247,22 @@ describe('daemonLiveness against a socket this user does not hold alone', () => 
       },
     })
     expect(asked).toEqual([])
-    expect(liveness.state).toBe(identity === startedAfter ? 'pid-reused' : 'running')
+    expect(liveness).toEqual({
+      state: 'unconfirmed',
+      untrustedSocket: expect.stringContaining('does not exist'),
+    })
+  })
+
+  it.each([
+    ['whose start time cannot be read', noStartTime],
+    ['started before its record', startedBefore],
+  ])('holds the record of a socket the trust seam finds absent, for a pid %s', async (_, identity) => {
+    const record = { pid: PID, startedAt, socketPath: '/run/whiteboard/d.sock', token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...identity,
+      socketTrust: () => ({ kind: 'absent' }),
+    })
+    expect(liveness.state).toBe('unconfirmed')
   })
 
   it('asks, under the token, a socket in an owner-only directory of its own', async () => {

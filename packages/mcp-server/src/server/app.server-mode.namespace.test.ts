@@ -12,6 +12,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   bearerNamesItsSubject,
@@ -475,6 +476,103 @@ describe('server mode — nothing unauthenticated tells what exists from what do
         const none = await answer('POST', `${PUBLIC_URL}${path}`, body(absent))
         expect(none, `${path} with ${existing}`).toEqual(real)
       }
+    }
+  })
+})
+
+// The move above must not plant a segment somebody else chose under the bare
+// name its new holder would type: a person who adds an owner and then leaves
+// would otherwise put `journal` into that owner's namespace, where their own
+// `journal` — by URL or by an agent's `createWorkspace` — reaches it.
+describe("server mode — a workspace handed over keeps out of its recipient's bare names", () => {
+  function people(headers: Headers, path: string, init: RequestInit) {
+    return app.request(`${PUBLIC_URL}/api/workspaces/${path}`, {
+      ...init,
+      headers: { ...headers, ...json },
+    })
+  }
+
+  async function plantedJournal(leave: 'DELETE' | 'PATCH') {
+    const mallory = await signedIn('mallory')
+    await signedIn('bob')
+    const journal = await create(mallory, 'Journal')
+    const bobId = await userIdOf('bob')
+    const malloryId = await userIdOf('mallory')
+    const add = { method: 'POST', body: JSON.stringify({ userId: bobId }) }
+    expect((await people(mallory, `${journal.workspaceId}/people`, add)).status).toBe(201)
+    const promote = { method: 'PATCH', body: JSON.stringify({ role: 'owner' }) }
+    const promoted = await people(mallory, `${journal.workspaceId}/people/${bobId}`, promote)
+    expect(promoted.status).toBe(200)
+    const init =
+      leave === 'DELETE'
+        ? { method: 'DELETE' }
+        : { method: 'PATCH', body: JSON.stringify({ role: 'member' }) }
+    const left = await people(mallory, `${journal.workspaceId}/people/${malloryId}`, init)
+    expect(left.status).toBe(200)
+    return journal.workspaceId
+  }
+
+  it.each([
+    'DELETE',
+    'PATCH',
+  ] as const)("answers the recipient's bare segment with nothing after a %s", async (leave) => {
+    const workspaceId = await plantedJournal(leave)
+    const bob = { authorization: 'Bearer bob' }
+
+    const listed = await app.request(`${PUBLIC_URL}/api/workspaces`, { headers: bob })
+    const { workspaces } = (await listed.json()) as {
+      workspaces: { workspaceId: string; namespace?: string; segment?: string }[]
+    }
+    const moved = workspaces.find((w) => w.workspaceId === workspaceId)
+    expect(moved?.namespace).toBe('bob')
+    expect(moved?.segment).not.toBe('journal')
+    const read = (address: string) =>
+      app.request(`${PUBLIC_URL}/api/workspaces/${address}/people`, { headers: bob })
+    expect((await read(workspaceId)).status).toBe(200)
+    const bare = await read('journal')
+    const absent = await read('nothing')
+    expect(bare.status).toBe(absent.status)
+    expect(await bare.text()).toBe((await absent.text()).replace('nothing', 'journal'))
+  })
+
+  it("mints the recipient's own workspace for an agent's createWorkspace on that name", async () => {
+    const planted = await plantedJournal('PATCH')
+    const client = new Client({ name: 'agent-bob', version: '1.0.0' })
+    const transport = new StreamableHTTPClientTransport(new URL(`${PUBLIC_URL}/mcp`), {
+      fetch: async (input, init) => {
+        const headers = new globalThis.Headers(init?.headers)
+        headers.set('Authorization', 'Bearer bob')
+        return app.request(input instanceof URL ? input.toString() : String(input), {
+          ...init,
+          headers,
+        })
+      },
+    })
+    await client.connect(transport)
+    try {
+      const res = (await client.callTool({
+        name: 'wb_workspace_edit',
+        arguments: {
+          workspaceId: 'journal',
+          createWorkspace: true,
+          ops: [{ op: 'document.create', path: 'diary', kind: 'markdown', markdown: 'private' }],
+        },
+      })) as {
+        isError?: boolean
+        content: { text?: string }[]
+        structuredContent?: { workspaceId?: string }
+      }
+      expect(res.isError, res.content[0]?.text).toBeFalsy()
+      const minted = res.structuredContent?.workspaceId
+      expect(minted).toMatch(/^[0-9A-Z]{26}$/)
+      expect(minted).not.toBe(planted)
+
+      const roles = createWorkspaceRoles(handle.db)
+      const memberIds = (await roles.list(minted ?? '')).map((m) => m.profile.id)
+      expect(memberIds).toEqual([await userIdOf('bob')])
+      expect(memberIds).not.toContain(await userIdOf('mallory'))
+    } finally {
+      await transport.close()
     }
   })
 })

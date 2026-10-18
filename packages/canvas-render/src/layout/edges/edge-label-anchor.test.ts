@@ -93,6 +93,20 @@ describe('edgeLabelPlacement', () => {
     expect(placed).toEqual({ x: 220, y: 40 })
   })
 
+  it('is still blocked at the far end of its reach by a box only that spot touches', () => {
+    // Everything up to 120px off the line is covered; at 128px the label
+    // above clips a 1.5px sliver no nearer candidate reaches, so it goes
+    // below instead.
+    const flat = [
+      { x: -50, y: 0 },
+      { x: 50, y: 0 },
+    ]
+    const blocker = { x: -50, y: -122.5, w: 100, h: 245 }
+    const sliver = { x: -10, y: -134, w: 20, h: 1.5 }
+    expect(edgeLabelPlacement(flat, { w: 20, h: 10 }, [blocker])).toEqual({ x: 0, y: -128 })
+    expect(edgeLabelPlacement(flat, { w: 20, h: 10 }, [blocker, sliver])).toEqual({ x: 0, y: 128 })
+  })
+
   it('answers undefined for a path that draws no line, like the anchor', () => {
     expect(edgeLabelPlacement([{ x: 1, y: 1 }], label, [])).toBeUndefined()
   })

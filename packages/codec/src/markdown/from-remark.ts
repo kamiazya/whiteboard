@@ -32,10 +32,48 @@ const textOf = (node: RemarkNode, key: string): string => String(node[key] ?? ''
 const optionalOf = <T>(node: RemarkNode, key: string): T | undefined =>
   (node[key] as T | null | undefined) ?? undefined
 
-const childrenOf = <T>(node: RemarkNode, convert: (child: RemarkNode) => T): T[] =>
-  (node.children ?? []).map(convert)
+/**
+ * How deep a converted tree may nest before a container is flattened to its
+ * text. Every reader of the model tree — the schema parse, layout, the writer
+ * — recurses, and markdown nests one level per character (`>>>>…`, `- - - …`,
+ * `***…`), so a body far inside the length limit could otherwise exhaust the
+ * stack. No document a person reads nests anywhere near this deep.
+ */
+const MAX_NESTING_DEPTH = 64
 
-function toPhrasing(node: RemarkNode): MdastPhrasingContent {
+const childrenOf = <T>(
+  node: RemarkNode,
+  depth: number,
+  convert: (child: RemarkNode, depth: number) => T,
+): T[] => (node.children ?? []).map((child) => convert(child, depth + 1))
+
+/**
+ * A subtree's text in document order, walked with an explicit stack: the
+ * subtree being flattened is by definition too deep to recurse over.
+ */
+function flattenText(node: RemarkNode): string {
+  let text = ''
+  const stack: RemarkNode[] = [node]
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    if (typeof next.value === 'string') text += next.value
+    const children = next.children ?? []
+    for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i] as RemarkNode)
+  }
+  return text
+}
+
+const tooDeep = (node: RemarkNode, depth: number): boolean =>
+  depth >= MAX_NESTING_DEPTH && node.children !== undefined
+
+const phrasingAt = (node: RemarkNode, depth: number): MdastPhrasingContent =>
+  tooDeep(node, depth) ? { type: 'text', value: flattenText(node) } : toPhrasing(node, depth)
+
+const flowAt = (node: RemarkNode, depth: number): MdastFlowContent =>
+  tooDeep(node, depth)
+    ? { type: 'paragraph', children: [{ type: 'text', value: flattenText(node) }] }
+    : toFlow(node, depth)
+
+function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
   switch (node.type) {
     case 'text':
       return { type: 'text', value: textOf(node, 'value') }
@@ -48,17 +86,17 @@ function toPhrasing(node: RemarkNode): MdastPhrasingContent {
     case 'inlineMath':
       return { type: 'inlineMath', value: textOf(node, 'value') }
     case 'emphasis':
-      return { type: 'emphasis', children: childrenOf(node, toPhrasing) }
+      return { type: 'emphasis', children: childrenOf(node, depth, phrasingAt) }
     case 'strong':
-      return { type: 'strong', children: childrenOf(node, toPhrasing) }
+      return { type: 'strong', children: childrenOf(node, depth, phrasingAt) }
     case 'delete':
-      return { type: 'delete', children: childrenOf(node, toPhrasing) }
+      return { type: 'delete', children: childrenOf(node, depth, phrasingAt) }
     case 'link':
       return {
         type: 'link',
         url: textOf(node, 'url'),
         title: optionalOf<string>(node, 'title'),
-        children: childrenOf(node, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'image':
       return {
@@ -73,7 +111,7 @@ function toPhrasing(node: RemarkNode): MdastPhrasingContent {
         identifier: textOf(node, 'identifier'),
         label: optionalOf<string>(node, 'label'),
         referenceType: node.referenceType as 'shortcut' | 'collapsed' | 'full',
-        children: childrenOf(node, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'imageReference':
       return {
@@ -91,30 +129,30 @@ function toPhrasing(node: RemarkNode): MdastPhrasingContent {
   }
 }
 
-function toCellPhrasing(node: RemarkNode): MdastCellPhrasingContent {
-  const phrasing = toPhrasing(node)
+function toCellPhrasing(node: RemarkNode, depth: number): MdastCellPhrasingContent {
+  const phrasing = phrasingAt(node, depth)
   return phrasing as MdastCellPhrasingContent
 }
 
-function toFlow(node: RemarkNode): MdastFlowContent {
+function toFlow(node: RemarkNode, depth: number): MdastFlowContent {
   switch (node.type) {
     case 'paragraph':
-      return { type: 'paragraph', children: childrenOf(node, toPhrasing) }
+      return { type: 'paragraph', children: childrenOf(node, depth, phrasingAt) }
     case 'heading':
       return {
         type: 'heading',
         depth: node.depth as 1 | 2 | 3 | 4 | 5 | 6,
-        children: childrenOf(node, toPhrasing),
+        children: childrenOf(node, depth, phrasingAt),
       }
     case 'blockquote':
-      return { type: 'blockquote', children: childrenOf(node, toFlow) }
+      return { type: 'blockquote', children: childrenOf(node, depth, flowAt) }
     case 'list':
       return {
         type: 'list',
         ordered: optionalOf<boolean>(node, 'ordered'),
         start: optionalOf<number>(node, 'start'),
         spread: optionalOf<boolean>(node, 'spread'),
-        children: childrenOf(node, toListItem),
+        children: childrenOf(node, depth, toListItem),
       }
     case 'code':
       return {
@@ -139,7 +177,7 @@ function toFlow(node: RemarkNode): MdastFlowContent {
       return {
         type: 'table',
         align: node.align as ('left' | 'right' | 'center' | null)[] | undefined,
-        children: childrenOf(node, toTableRow),
+        children: childrenOf(node, depth, toTableRow),
       }
     case 'math':
       return {
@@ -152,24 +190,24 @@ function toFlow(node: RemarkNode): MdastFlowContent {
   }
 }
 
-function toListItem(node: RemarkNode): MdastListItem {
+function toListItem(node: RemarkNode, depth: number): MdastListItem {
   return {
     type: 'listItem',
     checked: node.checked as boolean | null | undefined,
     spread: optionalOf<boolean>(node, 'spread'),
-    children: childrenOf(node, toFlow),
+    children: childrenOf(node, depth, flowAt),
   }
 }
 
-function toTableRow(node: RemarkNode): MdastTableRow {
-  return { type: 'tableRow', children: childrenOf(node, toTableCell) }
+function toTableRow(node: RemarkNode, depth: number): MdastTableRow {
+  return { type: 'tableRow', children: childrenOf(node, depth, toTableCell) }
 }
 
-function toTableCell(node: RemarkNode): MdastTableCell {
-  return { type: 'tableCell', children: childrenOf(node, toCellPhrasing) }
+function toTableCell(node: RemarkNode, depth: number): MdastTableCell {
+  return { type: 'tableCell', children: childrenOf(node, depth, toCellPhrasing) }
 }
 
 /** Converts a raw remark/mdast-util Root into the model MdastRoot subset. */
 export function fromRemarkRoot(root: RemarkNode): MdastRoot {
-  return { type: 'root', children: childrenOf(root, toFlow) }
+  return { type: 'root', children: childrenOf(root, 0, flowAt) }
 }

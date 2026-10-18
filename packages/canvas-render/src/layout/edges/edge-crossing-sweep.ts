@@ -17,6 +17,7 @@
 
 import type { Point } from './edge-geometry.js'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
+import type { RoutingBudget } from './routing-budget.js'
 
 /** Matches `edge-ink.ts`'s COST_QUANTUM discipline (quarter-pixel integers). */
 const COST_QUANTUM = 4
@@ -208,25 +209,53 @@ function addPairScore(
  * preserves every genuine overlap. What the answer DOES depend
  * on is the completeness lemma above — that slack never removes a candidate —
  * and that is pinned end to end by the differential property.
+ *
+ * Undefined when the sweep would examine more segment pairs than
+ * `budget.pairs` has left — every pair the x-sweep keeps active counts,
+ * since the y-gate is itself a test. What it examined is spent either way.
+ * Omitted, the build is unbounded.
  */
 export function buildPairwiseScores(
   paths: readonly (readonly Point[])[],
-): ReadonlyMap<number, readonly [number, number, number]> {
+): ReadonlyMap<number, readonly [number, number, number]>
+export function buildPairwiseScores(
+  paths: readonly (readonly Point[])[],
+  budget: Pick<RoutingBudget, 'pairs'>,
+): ReadonlyMap<number, readonly [number, number, number]> | undefined
+export function buildPairwiseScores(
+  paths: readonly (readonly Point[])[],
+  budget?: Pick<RoutingBudget, 'pairs'>,
+): ReadonlyMap<number, readonly [number, number, number]> | undefined {
+  const allowance = budget?.pairs ?? Number.POSITIVE_INFINITY
   const segments = sweepSegments(paths)
   const scores = new Map<number, [number, number, number]>()
   const active: SweepSegment[] = []
+  let examined = 0
   for (const segment of segments) {
     evictPassed(active, segment.minX)
-    for (const other of active) {
-      if (other.edge === segment.edge) continue
-      if (other.maxY < segment.minY || other.minY > segment.maxY) continue
-      // Canonical argument order: the lower edge index's segment first,
-      // matching the oracle's pairScore(paths[i], paths[j]) with i < j.
-      const [lo, hi] = other.edge < segment.edge ? [other, segment] : [segment, other]
-      const key = lo.edge * paths.length + hi.edge
-      addPairScore(scores, key, scoreSegmentPair(lo.a, lo.b, hi.a, hi.b))
-    }
+    examined += active.length
+    if (examined > allowance) break
+    scoreAgainstActive(segment, active, paths.length, scores)
     active.push(segment)
   }
-  return scores
+  if (budget !== undefined) budget.pairs -= examined
+  return examined > allowance ? undefined : scores
+}
+
+/** Score `segment` against every active segment of another edge whose y-span meets it. */
+function scoreAgainstActive(
+  segment: SweepSegment,
+  active: readonly SweepSegment[],
+  edgeCount: number,
+  scores: Map<number, [number, number, number]>,
+): void {
+  for (const other of active) {
+    if (other.edge === segment.edge) continue
+    if (other.maxY < segment.minY || other.minY > segment.maxY) continue
+    // Canonical argument order: the lower edge index's segment first,
+    // matching the oracle's pairScore(paths[i], paths[j]) with i < j.
+    const [lo, hi] = other.edge < segment.edge ? [other, segment] : [segment, other]
+    const key = lo.edge * edgeCount + hi.edge
+    addPairScore(scores, key, scoreSegmentPair(lo.a, lo.b, hi.a, hi.b))
+  }
 }

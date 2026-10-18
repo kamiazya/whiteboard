@@ -36,7 +36,7 @@ vi.mock('../server/http-server.js', () => ({
 
 const { runDaemonRun } = await import('./daemon-run.js')
 const { answeringDaemonSocket } = await import('../daemon/_test-daemon-socket.js')
-const { loadedRecord } = await import('../daemon/_test-daemon-record.js')
+const { loadedRecord, ownedSocketPath } = await import('../daemon/_test-daemon-record.js')
 const { LOCAL_DAEMON_TAIL_INTERVAL_MS, resolveWorkspaceTailIntervalMs } = await import(
   '../server/store/workspace-tail.js'
 )
@@ -105,7 +105,7 @@ describe('runDaemonRun listens on its socket alone', () => {
 describe('runDaemonRun refuses to start over a daemon that is still running', () => {
   afterEach(() => vi.clearAllMocks())
 
-  const RECORD = { pid: 4242, socketPath: '/run/user/1000/whiteboard/other.sock' }
+  const RECORD = { pid: 4242, socketPath: ownedSocketPath('other.sock') }
 
   it('refuses, naming how to stop it, and never starts a server', async () => {
     loadDaemonRecordMock.mockImplementationOnce(loadedRecord(RECORD))

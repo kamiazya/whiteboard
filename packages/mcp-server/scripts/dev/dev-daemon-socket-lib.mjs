@@ -378,7 +378,8 @@ const STATUS_ASK_TIMEOUT_MS = 1_500
  *   or a connection taken and left unanswered, as a daemon wedged on its loop
  *   does. Nothing may signal it, and its record is not a leftover.
  *   So is a socket that may be another user's (`socketTrust`),
- *   whatever the pid says; it is never asked.
+ *   whatever the pid says, and one whose directory is missing for a pid that
+ *   may be the daemon; neither is asked.
  * - `pid-reused`: the pid started after the record and the socket refuses the
  *   connection, or is not there — and when its directory is not there either,
  *   it is not asked.
@@ -427,15 +428,15 @@ async function judgeLiveness(
     return { liveness: 'unconfirmed', process: identity, answered: false, silence }
   }
   // No directory means nothing to ask, the ping included: whoever makes it
-  // before the connect decides what answers.
-  const unasked =
-    trust?.kind === 'absent'
-      ? { answered: false, silence: `has no socket directory at ${dirname(socketPath)}` }
-      : {}
-  if (identity === 'daemon') return { liveness: 'running', process: identity, ...unasked }
-  if (socketPath === undefined || trust?.kind === 'absent') {
-    return { liveness: 'pid-reused', process: identity, ...unasked }
+  // before the connect decides what answers. So a pid that may be the daemon
+  // is held, never running — running is what hands a caller the socket.
+  if (trust?.kind === 'absent') {
+    const silence = `has no socket directory at ${dirname(socketPath)}`
+    const liveness = identity === 'daemon' ? 'unconfirmed' : 'pid-reused'
+    return { liveness, process: identity, answered: false, silence }
   }
+  if (identity === 'daemon') return { liveness: 'running', process: identity }
+  if (socketPath === undefined) return { liveness: 'pid-reused', process: identity }
   let answer
   try {
     answer = await request(

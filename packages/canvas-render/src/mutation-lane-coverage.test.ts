@@ -328,11 +328,18 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 111 with `layout/edges/segment-intersection.ts`, the line-jump narrow
     // phase lifted out of `edge-jumps.ts` so its cost test can count calls.
-    // Outside the lane, as that file is: the edge-jumps tests pin both of its
-    // rejection branches.
+    // Outside the lane, as that file is: the edge-jumps tests pin its three
+    // rejection branches — a hit outside either segment, one too close to
+    // an end for the arc, and a non-finite hit point.
+    //
+    // 112 with `layout/edges/routing-budget.ts`, the per-layout account the
+    // grid router and the side-choice search spend from. Outside the lane,
+    // as `embed-budget.ts` is: it holds two constants and a constructor, and
+    // the checks that spend it live in `grid-route.ts` and
+    // `edge-crossing-sweep.ts`, which are in it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 111,
+      production: 112,
     })
   })
 

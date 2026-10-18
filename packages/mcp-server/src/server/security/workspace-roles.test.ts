@@ -13,6 +13,7 @@ import { DB_FILENAME } from '../store/db/index.js'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import {
@@ -99,6 +100,145 @@ describe('createWorkspaceRoles', () => {
     expect(await members.membershipRole('ws-1', bob.id)).toBeNull()
     expect(await roles.remove('ws-1', bob.id)).toBe('not-a-member')
     expect(await roles.setRole('ws-1', bob.id, 'owner')).toBe('not-a-member')
+  })
+})
+
+// ADR-0053: a bare segment means the caller's own namespace, so a workspace
+// that moves into somebody's namespace without them choosing its segment must
+// not answer to a name they would type for one of their own.
+describe('createWorkspaceRoles — a workspace handed to a new holder', () => {
+  async function placed(id: string) {
+    return handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow()
+  }
+
+  async function heldAt(namespace: string, segment: string) {
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('namespace', '=', namespace)
+      .where('segment', '=', segment)
+      .executeTakeFirst()
+    return row?.id ?? null
+  }
+
+  async function journalOf(holder: { id: string; handle: string }) {
+    await upsertWorkspaceRow(handle.db, 'ws-journal', {
+      namespace: holder.handle,
+      segment: 'journal',
+    })
+    await members.addMember('ws-journal', holder.id)
+  }
+
+  it.each([
+    ['demotes', (id: string, by: string) => roles.setRoleAsOwner('ws-journal', id, 'member', by)],
+    ['removes', (id: string, by: string) => roles.removeAsOwner('ws-journal', id, by)],
+  ] as const)("keeps a holder who %s themself from planting a segment in an owner's namespace", async (_, leave) => {
+    const mallory = await user('mallory')
+    const bob = await user('bob')
+    await journalOf(mallory)
+    expect(await roles.addAsOwner('ws-journal', bob.id, mallory.id)).toBe('ok')
+    expect(await roles.setRoleAsOwner('ws-journal', bob.id, 'owner', mallory.id)).toBe('ok')
+
+    expect(await leave(mallory.id, mallory.id)).toBe('ok')
+
+    const moved = await placed('ws-journal')
+    expect(moved.namespace).toBe(bob.handle)
+    expect(moved.segment).not.toBeNull()
+    expect(await heldAt(bob.handle, 'journal')).toBeNull()
+  })
+
+  it('keeps a planted segment out through a second account of the planter', async () => {
+    const mallory = await user('mallory')
+    const alt = await user('mallory-alt')
+    const bob = await user('bob')
+    await journalOf(mallory)
+    for (const id of [alt.id, bob.id]) {
+      expect(await roles.addAsOwner('ws-journal', id, mallory.id)).toBe('ok')
+      expect(await roles.setRoleAsOwner('ws-journal', id, 'owner', mallory.id)).toBe('ok')
+    }
+    // The second account joined first, so it is the oldest remaining owner.
+    await handle.db
+      .updateTable('workspaceMemberships')
+      .set({ createdAt: 1 })
+      .where('workspaceId', '=', 'ws-journal')
+      .where('profileId', '=', alt.id)
+      .execute()
+
+    expect(await roles.setRoleAsOwner('ws-journal', mallory.id, 'member', alt.id)).toBe('ok')
+    const first = await placed('ws-journal')
+    expect(first.namespace).toBe(alt.handle)
+    expect(await roles.setRoleAsOwner('ws-journal', alt.id, 'member', bob.id)).toBe('ok')
+
+    // A second hand-over finds the id's tail already there and adds no other.
+    expect(await placed('ws-journal')).toEqual({ namespace: bob.handle, segment: first.segment })
+    expect(await heldAt(bob.handle, 'journal')).toBeNull()
+  })
+
+  it('adds no second tail after a hand-over suffixed the first one', async () => {
+    const mallory = await user('mallory')
+    const alt = await user('mallory-alt')
+    const bob = await user('bob')
+    await journalOf(mallory)
+    // The tailed segment the first hand-over wants is already taken there.
+    await upsertWorkspaceRow(handle.db, 'ws-other', {
+      namespace: alt.handle,
+      segment: 'journal-sjournal',
+    })
+    for (const id of [alt.id, bob.id]) {
+      expect(await roles.addAsOwner('ws-journal', id, mallory.id)).toBe('ok')
+      expect(await roles.setRoleAsOwner('ws-journal', id, 'owner', mallory.id)).toBe('ok')
+    }
+    await handle.db
+      .updateTable('workspaceMemberships')
+      .set({ createdAt: 1 })
+      .where('workspaceId', '=', 'ws-journal')
+      .where('profileId', '=', alt.id)
+      .execute()
+
+    expect(await roles.setRoleAsOwner('ws-journal', mallory.id, 'member', alt.id)).toBe('ok')
+    expect(await placed('ws-journal')).toEqual({
+      namespace: alt.handle,
+      segment: 'journal-sjournal-2',
+    })
+    expect(await roles.setRoleAsOwner('ws-journal', alt.id, 'member', bob.id)).toBe('ok')
+
+    expect(await placed('ws-journal')).toEqual({
+      namespace: bob.handle,
+      segment: 'journal-sjournal-2',
+    })
+  })
+
+  it('cuts a long segment for its tail without leaving a dash before it', async () => {
+    const mallory = await user('mallory')
+    const bob = await user('bob')
+    // 200 chars at most, less the tail and its dash, ends this one on a dash.
+    const long = `${'a'.repeat(190)}-bcd`
+    await upsertWorkspaceRow(handle.db, 'ws-journal', { namespace: mallory.handle, segment: long })
+    await members.addMember('ws-journal', mallory.id)
+    expect(await roles.addAsOwner('ws-journal', bob.id, mallory.id)).toBe('ok')
+    expect(await roles.setRoleAsOwner('ws-journal', bob.id, 'owner', mallory.id)).toBe('ok')
+
+    expect(await roles.removeAsOwner('ws-journal', mallory.id, mallory.id)).toBe('ok')
+
+    expect((await placed('ws-journal')).segment).toBe(`${'a'.repeat(190)}-sjournal`)
+  })
+
+  it("leaves the recipient's own segment of that name where it was", async () => {
+    const mallory = await user('mallory')
+    const bob = await user('bob')
+    await journalOf(mallory)
+    await upsertWorkspaceRow(handle.db, 'ws-bobs', { namespace: bob.handle, segment: 'journal' })
+    expect(await roles.addAsOwner('ws-journal', bob.id, mallory.id)).toBe('ok')
+    expect(await roles.setRoleAsOwner('ws-journal', bob.id, 'owner', mallory.id)).toBe('ok')
+
+    expect(await roles.removeAsOwner('ws-journal', mallory.id, mallory.id)).toBe('ok')
+
+    expect(await heldAt(bob.handle, 'journal')).toBe('ws-bobs')
+    expect((await placed('ws-journal')).segment).not.toMatch(/^journal(-\d+)?$/)
   })
 })
 

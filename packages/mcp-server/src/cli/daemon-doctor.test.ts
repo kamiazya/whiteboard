@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { validParse } from '../daemon/_test-daemon-record.js'
+import { ownedSocketPath, validParse } from '../daemon/_test-daemon-record.js'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
+
+const SOCKET_PATH = ownedSocketPath()
 
 // Tests inject isPidAlive and processStartMs, so no real process decides an
 // answer; all but the last describe inject parseRecord too.
@@ -18,7 +20,7 @@ const baseRecord = {
   pid: 12345,
   version: '1.0.0',
   startedAt: '2024-01-01T00:00:00.000Z',
-  socketPath: '/fake/daemon.sock',
+  socketPath: SOCKET_PATH,
 }
 const validRecord = { ...baseRecord, token: 'tok' }
 

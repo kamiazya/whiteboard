@@ -45,6 +45,8 @@ import {
 } from './edge-rules.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
 import { initialSideChoices, rankedSidePairs } from './edge-sides.js'
+import type { RoutingBudget } from './routing-budget.js'
+import { createRoutingBudget } from './routing-budget.js'
 
 /** An arrowhead's own length: a final segment shorter than this paints an
  * arrow with no line under it (see edge-arrows.ts's ARROW_LENGTH). */
@@ -73,11 +75,15 @@ type ConfigCost = readonly number[]
  * phase over every segment pair — the same function the initial sweep
  * calls, so the incremental trial path and the broad-phase build cannot
  * drift (see edge-crossing-sweep.ts) — then maps the summed triple into
- * the declared tiers.
+ * the declared tiers. Undefined, spending nothing, when `budget` cannot
+ * cover every segment pair of the two.
  */
-function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+function pairScore(a: readonly Point[], b: readonly Point[], budget: RoutingBudget) {
   const qa = quantizedSegments(a)
   const qb = quantizedSegments(b)
+  const examined = (qa.length / 8) * (qb.length / 8)
+  if (examined > budget.pairs) return undefined
+  budget.pairs -= examined
   let overlap = 0
   let illegible = 0
   let crossings = 0
@@ -142,6 +148,12 @@ function quantizedSegments(path: readonly Point[]): Int32Array {
   quantizedCache.set(path, out)
   return out
 }
+
+/**
+ * What a trial costs when the layout's budget could not price all of it:
+ * worse than any real configuration, so it is never adopted on a partial sum.
+ */
+const UNPRICED: ConfigCost = zeroPenalty().map(() => Number.POSITIVE_INFINITY)
 
 /**
  * Hard edge-count gate for the improvement pass. The initial matrix build
@@ -249,6 +261,7 @@ function createConfigScore(
   pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
   routeCache: Map<string, readonly Point[]> | undefined,
   byId: ReadonlyMap<string, SpatialNode>,
+  budget: RoutingBudget,
 ) {
   const othersFor = edges.map((e) => {
     const from = endNode(e.from)
@@ -299,7 +312,7 @@ function createConfigScore(
     const key = routeCacheKey(edge, a)
     const hit = cache.get(key)
     if (hit !== undefined) return hit
-    const path = routeEdge(nodes, edge, styleOf(edge), a, othersFor[i]).path
+    const path = routeEdge(nodes, edge, styleOf(edge), a, othersFor[i], budget).path
     cache.set(key, path)
     return path
   }
@@ -363,12 +376,17 @@ function createConfigScore(
   // Sweep-and-prune instead of the O(E^2) double loop: identical scores
   // by construction (same narrow phase, canonical pair order), sparse for
   // non-interacting pairs — evaluateTrial already zero-defaults absent
-  // keys.
-  for (const [key, [o, il, c]] of buildPairwiseScores(paths)) {
+  // keys. A build the layout's budget cannot cover prices nothing, and a
+  // configuration priced at zero is one the search leaves as it is.
+  const built = buildPairwiseScores(paths, budget)
+  if (built === undefined) currentCost = zeroPenalty()
+  for (const [key, [o, il, c]] of built ?? []) {
     const score: ConfigCost = pairPenalty([o, il, c])
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
+  // Set when the budget refuses one of a trial's pairs (see UNPRICED).
+  let unpriced = false
   /**
    * Re-score every touched edge against ITS OWN boxes and borders, swapping
    * the cached term for the new one in place.
@@ -418,7 +436,9 @@ function createConfigScore(
       }
       return
     }
-    const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
+    const next = pairScore(trialPaths[lo]!, trialPaths[hi]!, budget)
+    unpriced ||= next === undefined
+    if (next === undefined) return
     accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
     accumulateCost(cost, next, 1)
     updates.set(key, next)
@@ -461,6 +481,7 @@ function createConfigScore(
   ): Map<number, ConfigCost> => {
     const touchedSet = new Set(touched)
     const updates = new Map<number, ConfigCost>()
+    unpriced = false
     for (const i of touched) rescorePairsOf(cost, i, touchedSet, trialPaths, trialBounds, updates)
     return updates
   }
@@ -499,7 +520,7 @@ function createConfigScore(
     const updates = applyPairCosts(cost, touched, trialPaths, trialBounds)
 
     return {
-      cost,
+      cost: unpriced ? UNPRICED : cost,
       anchors: trialAnchors,
       placement: trialPlacement,
       paths: trialPaths,
@@ -585,10 +606,13 @@ function optimizeSideChoices(
   // Routed paths shared across every search in one `assignEdgeAnchors`; see
   // the comment on `routeCached` for why one layout may share one cache.
   // Omitted, this search keeps a cache of its own.
-  routeCache?: Map<string, readonly Point[]>,
+  cache?: Map<string, readonly Point[]>,
+  // The layout's account (`routing-budget.ts`). Past it no trial is adopted,
+  // so the search ends on the sides it has reached: a partial repair.
+  budget: RoutingBudget = createRoutingBudget(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
-  const score = createConfigScore(nodes, edges, styleOf, initial, align, pins, routeCache, byId)
+  const score = createConfigScore(nodes, edges, styleOf, initial, align, pins, cache, byId, budget)
   const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   // The realized-bends tier is deliberately ABSENT from the short-circuit
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
@@ -696,9 +720,10 @@ function bestRepairedPair(
     fromRect: Rect
     toRect: Rect
     coincides: (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string) => boolean
+    budget: RoutingBudget
   },
 ): RepairScore | undefined {
-  const { edge, nodes, repaired, align, pins, styleOf, fromRect, toRect, coincides } = ctx
+  const { edge, nodes, repaired, align, pins, styleOf, fromRect, toRect, coincides, budget } = ctx
   let best: RepairScore | undefined
   for (const pair of candidates) {
     const sided: SidePair = {
@@ -709,7 +734,8 @@ function bestRepairedPair(
     trial.set(edge.id, sided)
     const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins)
     if (coincides(trialAnchors, edge.id)) continue
-    const { path } = routeEdge(nodes, edge, styleOf(edge), trialAnchors.get(edge.id))
+    const anchors = trialAnchors.get(edge.id)
+    const { path } = routeEdge(nodes, edge, styleOf(edge), anchors, undefined, budget)
     const scored = scoreRepairedRoute(sided, path, fromRect, toRect)
     if (best === undefined || betterRepair(scored, best)) best = scored
   }
@@ -774,7 +800,8 @@ function anchorsWithoutCoincidentEnds(
   sides: ReadonlyMap<string, SidePair>,
   styleOf: EdgeStyleOf,
   align: boolean,
-  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+  pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  budget: RoutingBudget,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const coincides = (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string): boolean => {
     const a = anchors.get(id)
@@ -829,6 +856,7 @@ function anchorsWithoutCoincidentEnds(
       fromRect,
       toRect,
       coincides,
+      budget,
     })
     if (best !== undefined) repaired.set(edge.id, best.pair)
     // No candidate reaches it cleanly: keep the collided pair. routeOrthogonal
@@ -901,8 +929,9 @@ function optimizeAcrossRegions(
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
-  locked?: ReadonlySet<string>,
-  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+  locked: ReadonlySet<string> | undefined,
+  pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  budget: RoutingBudget,
 ): ReadonlyMap<string, SidePair> {
   const bothRuns = (
     regionEdges: readonly RoutableElement[],
@@ -926,6 +955,7 @@ function optimizeAcrossRegions(
       false,
       undefined,
       routeCache,
+      budget,
     )
     return optimizeSideChoices(
       nodes,
@@ -936,6 +966,7 @@ function optimizeAcrossRegions(
       true,
       pins,
       routeCache,
+      budget,
     )
   }
 
@@ -1023,9 +1054,14 @@ export function assignEdgeAnchors(
   // skips optimization wholesale (the live overlay's cached frames).
   // Sides settle again on the next committed render.
   sideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>,
+  // The layout's routing account (`routing-budget.ts`); a caller routing the
+  // edges again afterwards passes the same one.
+  budget: RoutingBudget = createRoutingBudget(),
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
+  const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) =>
+    optimizeAcrossRegions(nodes, edges, styleOf, seed, locked, sideOverrides, budget)
   if (sideOverrides !== undefined) {
     const merged = new Map(sides)
     const locked = new Set<string>()
@@ -1042,7 +1078,7 @@ export function assignEdgeAnchors(
     // the optimizer, against the locked rest — initial ranking alone can
     // disagree with what the committed render will pick, and the drop
     // then visibly re-sides an edge the preview never showed that way.
-    let liveSides: ReadonlyMap<string, SidePair> = merged
+    sides = merged
     // The live-drag path keeps the hard gate the committed path does not
     // need. Regional optimization is worth several hundred ms once, when a
     // change is committed; it is not worth it on a frame someone is dragging
@@ -1050,14 +1086,12 @@ export function assignEdgeAnchors(
     // canvas past the gate drags exactly as fast as it does today and picks
     // up its regional repair on drop.
     if (edges.length >= 1 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
-      liveSides = optimizeAcrossRegions(nodes, edges, styleOf, merged, locked, sideOverrides)
+      sides = optimize(merged, locked)
     }
-    return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, styleOf, true, sideOverrides)
+  } else if (edges.length >= 1) {
+    // A lone edge can be its own problem (a named pair routed through its
+    // own box); a clean one short-circuits after one scoring sweep.
+    sides = optimize(sides)
   }
-  // A lone edge can be its own problem (a named pair routed through its own
-  // box); a clean one short-circuits after one scoring sweep.
-  if (edges.length >= 1) {
-    sides = optimizeAcrossRegions(nodes, edges, styleOf, sides)
-  }
-  return anchorsWithoutCoincidentEnds(nodes, edges, sides, styleOf, true)
+  return anchorsWithoutCoincidentEnds(nodes, edges, sides, styleOf, true, sideOverrides, budget)
 }

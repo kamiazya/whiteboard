@@ -2,18 +2,20 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { validParse } from '../daemon/_test-daemon-record.js'
+import { ownedSocketPath, validParse } from '../daemon/_test-daemon-record.js'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import type { DaemonLiveness } from '../daemon/daemon-liveness.js'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { type DaemonStatusOptions, runDaemonStatus } from './daemon-status.js'
+
+const SOCKET_PATH = ownedSocketPath()
 
 // Tests inject isPidAlive and processStartMs, so no real process decides an
 // answer; all but the last describe inject parseRecord too.
 
 const validRecord = {
   pid: 12345,
-  socketPath: '/run/user/1000/whiteboard/d.sock',
+  socketPath: SOCKET_PATH,
   version: '1.2.3',
   startedAt: '2024-06-01T00:00:00.000Z',
   token: 'tok',
@@ -93,7 +95,7 @@ describe('runDaemonStatus: token missing', () => {
   it('includes record fields in result', async () => {
     const tokenMissingRecord = {
       pid: 42,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
+      socketPath: SOCKET_PATH,
       version: '0.1.0',
       startedAt: '2024-01-01T00:00:00.000Z',
     }

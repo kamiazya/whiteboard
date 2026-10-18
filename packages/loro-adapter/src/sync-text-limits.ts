@@ -39,6 +39,7 @@ import {
   THREADS_KEY,
 } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
+import { heldBound } from './held-bound.js'
 import { isNodeMetaContainer } from './node-meta-containers.js'
 import {
   annotationBreach,
@@ -47,6 +48,13 @@ import {
   type OpenAnnotationsBreach,
   SMALLEST_ANNOTATION_BOUND,
 } from './sync-annotation-limits.js'
+import {
+  type ContentRootBreach,
+  contentKeyWrites,
+  contentRootBreach,
+  type UnattachedContainerBreach,
+  unattachedBreach,
+} from './sync-structure-limits.js'
 import {
   fieldLength,
   longestTag,
@@ -73,6 +81,8 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
  * more than before.
  * Lengths are UTF-16 units, the length every limit counts.
+ *
+ * Two are about what it leaves standing (`sync-structure-limits.ts`).
  *
  * The board's size is judged here with its text because it is the same
  * judgement on the same bytes, owed by the same keepers: what an update
@@ -137,6 +147,8 @@ export type SyncTextBreach =
     }
   | OpenAnnotationsBreach<'open-threads'>
   | OpenAnnotationsBreach<'open-changes'>
+  | ContentRootBreach
+  | UnattachedContainerBreach
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -155,6 +167,9 @@ export const SYNC_TEXT_BREACH_CODES = {
   'canvas-size': 'too_many_nodes_or_edges',
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
+  'content-root': 'invalid_document_root',
+  // Sent built on the change that creates the container, it is an ordinary write.
+  'unattached-container': 'causal_gap',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -598,7 +613,10 @@ function judgeImported(
   replays: boolean,
 ): Omit<SyncTextJudgement, 'pending'> {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
-  const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
+  const json = doc.exportJsonUpdates(from, doc.oplogVersion(), false)
+  const unattached = unattachedBreach(doc, json)
+  if (unattached !== null) return { breach: unattached, touchesNodeMeta: true }
+  const writes = readWrites(doc, json)
   const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
@@ -624,7 +642,8 @@ function judgeImported(
   const longName = longNameBreach(doc, writes.names, namedBefore)
   return judged(
     longName === null
-      ? (bodyBreach(doc, writes.net) ??
+      ? (contentRootBreach(doc, contentKeyWrites(json)) ??
+          bodyBreach(doc, writes.net) ??
           valueBreach(doc, writes.longValues, before) ??
           canvasBreach(doc, writes.setInto, entriesBefore) ??
           annotationBreach(doc, writes.mapsWritten, annotationsBefore))
@@ -695,32 +714,6 @@ function largestBoard(doc: LoroDoc): number {
 const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
 
 /**
- * At least what `measure` answers of `record` now, without walking it on
- * every call: a walk is held as a bound and raised by the byte length of
- * whatever `record` gained since, since no gain adds more characters or map
- * entries than it has bytes. `walk` asks for a fresh reading, taken only when
- * the held one was raised rather than read.
- */
-function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: boolean) => number {
-  let held: { readonly at: VersionVector; readonly value: number; readonly read: boolean } | null =
-    null
-  return (walk) => {
-    const at = record.oplogVersion()
-    const current = held !== null && at.compare(held.at) === 0
-    if (held !== null && current && (held.read || !walk)) return held.value
-    held =
-      held === null || walk
-        ? { at, value: measure(record), read: true }
-        : {
-            at,
-            value: held.value + record.export({ mode: 'update', from: held.at }).byteLength,
-            read: false,
-          }
-    return held.value
-  }
-}
-
-/**
  * The verdict `importWithinTextLimits` gives each update offered to `record`,
  * leaving `record` as it was — for a keeper with no cached instance to
  * discard. The caller imports into `record` what the judge lets through.
@@ -736,6 +729,11 @@ function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: b
  * open-thread or open-change bound, since an update adds no more map entries
  * (nor sets more statuses) than it has bytes — is therefore answered without
  * being applied.
+ *
+ * What it leaves standing (`sync-structure-limits.ts`) needs its operations,
+ * so it is not judged here: the page's own session, this keeper's only
+ * writer, cannot produce either, and the daemon judges every operation of a
+ * promoted record's history.
  *
  * Neither the longest body, the largest board nor the most open annotations is walked for each update:
  * every document would be read on every keystroke, in a workspace of

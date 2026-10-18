@@ -37,8 +37,19 @@ The local daemon has one person: the machine's owner
   how to move the socket somewhere of your own (`XDG_RUNTIME_DIR`, or
   `TMPDIR` when that is unset). `whiteboard daemon run` and `daemon stop`
   then leave the record alone and signal no process, and the native host
-  relays nothing. When the directory does not exist at all, no daemon can be
-  listening there: the client sends nothing and treats the record as stale.
+  relays nothing. When the directory does not exist at all, the client
+  sends nothing either, since whoever creates it next decides what answers
+  there. If the recorded pid now belongs to a process that started after
+  the record, the record is treated as stale. If the pid may still be the
+  daemon (a temp-directory cleaner can remove the directory under a live
+  daemon), the daemon is reported as not confirmed rather than running:
+  `daemon status` and `daemon doctor` say the socket directory does not
+  exist, the native host relays nothing, and `daemon run` and `daemon stop`
+  leave the record and the process alone. Stop that process yourself, then
+  start the daemon again. The check is repeated immediately before each
+  request that carries the token — by the CLI and by the native host for
+  every request it relays — so a directory replaced after the record was
+  read still receives nothing.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no
@@ -477,7 +488,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   cannot reach its place in the workspace either: one that adds a part named
   after the document's id, segment, kind, name or timestamps, or a part of
   the wrong kind under a name the document already uses, is refused with
-  `400 {"error":"invalid_document_root"}`. A
+  `400 {"error":"invalid_document_root"}`, and so is a workspace update, from
+  any caller, that leaves one of a document's content parts (its nodes, body,
+  threads and the rest) holding a plain value, a part of another kind, or
+  nothing. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,
@@ -485,7 +499,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   that builds on a change the keeper does not hold: the engine would park
   those changes where no check reads them and apply them once the gap
   filled, so the update is answered `409` (`causal_gap`) and kept nowhere,
-  and the client sends it again once the keeper holds what it builds on. Moving
+  and the client sends it again once the keeper holds what it builds on. The
+  same answer meets an update that writes into a part of a document created
+  by a change the update does not build on: no check could find where such
+  writes sit until a later change attached the part. Moving
   a whole workspace in needs `canvas:write`, `workspace:write` and
   `versions:write`.
 - **A version grant restores in place, and writes no other document.**

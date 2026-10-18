@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll } from 'vitest'
 import { type DaemonLivenessSeams, daemonLiveness } from './daemon-liveness.js'
 import type { DaemonRecord, RecordedDaemon } from './daemon-record-schema.js'
 
@@ -17,4 +21,16 @@ export function loadedRecord<R extends RecordedDaemon>(record: R) {
     record,
     liveness: await daemonLiveness(record, seams as DaemonLivenessSeams | undefined),
   })
+}
+
+/**
+ * A socket path in an owner-only directory this file creates and removes
+ * after its tests: a record whose socket directory is missing is never
+ * `running`, so a fixture naming a path on no disk would read as held.
+ * Called at a test file's top level.
+ */
+export function ownedSocketPath(name = 'd.sock'): string {
+  const dir = mkdtempSync(join(tmpdir(), 'wb-rec-'))
+  afterAll(() => rmSync(dir, { recursive: true, force: true }))
+  return join(dir, name)
 }

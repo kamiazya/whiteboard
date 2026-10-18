@@ -41,6 +41,7 @@ import type { EdgeAnchorPair } from './edge-sides.js'
 import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } from './edge-sides.js'
 import { routeOnGrid } from './grid-route.js'
 import type { RouteEnds, RouteObstacles } from './route-ends.js'
+import type { RoutingBudget } from './routing-budget.js'
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
@@ -404,6 +405,7 @@ function routeOrthogonal(
     to: { side: toSide, rect: toRect, depth: toDepth },
   }: RouteEnds,
   { inflated, raw }: RouteObstacles,
+  budget: RoutingBudget | undefined,
 ): Point[] {
   let start = startAnchor
   // Boxes that touch exactly can put both anchors on the same point — two
@@ -522,7 +524,8 @@ function routeOrthogonal(
   // STUBS, not the anchors, so the perpendicular departure and arrival the
   // rest of this function guarantees survive it — the grid only decides what
   // happens in between.
-  const searched = routeOnGrid(exit, entry, [...raw, ...endpointRects], OBSTACLE_CLEARANCE_PX)
+  const around = [...raw, ...endpointRects]
+  const searched = routeOnGrid(exit, entry, around, OBSTACLE_CLEARANCE_PX, budget)
   return searched === undefined
     ? enumerated
     : bestCandidate(
@@ -720,6 +723,9 @@ export function routeEdge(
   // has them: the side-choice search routes each edge many times per
   // layout and this is the one O(nodes) list it can hand over intact.
   others?: readonly Rect[],
+  // The layout's account for grid searches (`routing-budget.ts`); omitted,
+  // this route's grid search is unbounded.
+  budget?: RoutingBudget,
 ): ResolvedEdgeNode {
   const fromRect = rectAtEnd(nodes, edge.from)
   const toRect = rectAtEnd(nodes, edge.to)
@@ -765,7 +771,7 @@ export function routeEdge(
     path:
       style === 'straight'
         ? routeStraightWithApproach(ends, obstacleSet)
-        : routeOrthogonal(ends, obstacleSet),
+        : routeOrthogonal(ends, obstacleSet, budget),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,

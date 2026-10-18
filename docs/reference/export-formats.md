@@ -95,7 +95,10 @@ not:
   container named after one of a document node's own keys (`documentId`,
   `segment`, `kind`, `name`, `nameChosen`, `createdAt`, `updatedAt`), or a
   content container under its own name but of another kind (a text named
-  `nodes`). The workspace document's `update` also refuses, with
+  `nodes`). The workspace document's `update` and `promote` refuse it too, for
+  an update or record that leaves a document's content container key
+  (`nodes`, `body`, `threads` and the others) holding a plain value, a
+  container of another kind, or nothing. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`
@@ -119,7 +122,9 @@ not:
   A sync `update` also refuses, with
   `409 {"error":"causal_gap"}` and nothing stored, an update that builds on a
   change the daemon does not hold; the web app sends it again, and it lands
-  once the daemon holds what it builds on.
+  once the daemon holds what it builds on. The same answer refuses an update
+  or a promoted record holding writes into a container created by a change
+  those writes do not build on.
 - **Rewriting references** is held to the same ceilings, the 262,144
   characters of a body and the 8,192 of a text node. Each link is longer than
   the name it replaces, and a moved document's new path can be longer than
@@ -134,6 +139,41 @@ not:
   the move could not rewrite: in `wb_workspace_edit`'s
   `follow.failedDocumentIds`, or its log for the rename route. The move
   itself stands.
+
+### How deeply markdown may nest
+
+Markdown nests one level per marker: each `>` opens a blockquote, each `- `
+on a line opens a list, each `*` an emphasis. Rendering (`wb_scene_render`,
+the web preview, a text node drawn on a canvas) reads at most **64 levels**
+of that nesting, counting the paragraph that holds the words. Anything deeper
+is drawn as the plain text it contains, with its markers gone: `*` repeated
+300 times on each side of `x` draws 62 nested bold spans around `x`. The
+parser itself opens at most **32** nested quotes and lists: a `>` or a list
+marker past the thirty-second is ordinary text, so `>` repeated 50 times
+before `x` draws 32 nested quotes around a paragraph holding eighteen `>`
+characters and `x`. A body that still nests deeper than the parser can follow
+is drawn as one paragraph of its own source text. The stored body is never
+changed; only what is drawn from it is.
+
+### Markdown that would take too long to read
+
+A few markdown shapes cost the parser time that grows with the square of
+their length, so a body far inside the size limit could hold rendering for
+minutes. Each is bounded, and only a body built to hit the bound reads
+differently:
+
+- **Emphasis, strikethrough and link ends.** One paragraph, heading or table
+  cell hands at most **1,024** `*`, `_`, `~` and `]` characters to emphasis,
+  strikethrough and link resolution; the rest of it shows them as the
+  characters they are. That is 256 bold phrases in one paragraph. An `_`
+  inside a word, as in `snake_case`, never counts.
+- **Literal links.** A bare `www.` or `http://` address links at most
+  **2,048** characters of path; past that the link ends and the rest is text.
+  Of more than 256 punctuation marks closing an address, all but the last 256
+  are part of the link.
+
+A blank line between paragraphs gives each its own allowance, so splitting
+the text is enough to have all of it read.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 
@@ -273,6 +313,20 @@ and writes nothing; the same bound applies to a batch stored as a proposal. A
 `tidy` op's `scope` and a `region.set` op's `nodes` list at most 2,000 ids,
 and its `edges` at most 2,000.
 
+Within those bounds, one render also caps the work two parts of edge routing
+may do, because each can grow far faster than the board: the search that
+finds a way around boxes when no simple route is clear, and the search that
+picks which side of a box each edge leaves from and arrives at. A board built
+to defeat either — hundreds of edges through 64 bends each over one square, or
+a box walled in behind a curtain of thin boxes — took from minutes to a
+quarter of an hour to render without the cap, and with it renders in about
+the time an ordinary board of its size does. The largest ordinary boards the
+project tests spend under a quarter of either allowance and render exactly
+as they would without it. A board that does exhaust one still draws every
+edge: past it, an edge no simple route reaches keeps its simple route even
+where that runs through a box, and the side choice stops improving on the
+sides it has reached.
+
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — refuse an update that grows a board past either bound
 with `413` and `{"error":"too_many_nodes_or_edges"}` (the code covers lines
@@ -282,6 +336,14 @@ saved, the page goes back to what is stored, and the notice says why. A board
 stored past a bound before it existed still reads, and still takes any change
 that leaves it no larger — moving, restyling, or replacing one node with
 another — so removing nodes, edges or lines is how it shrinks.
+
+Line jumps (`lineJumps: "arc"`) draw at most **64 hops on one segment** and
+**4,096 on one board**; a crossing past either cap is drawn as a plain
+crossing, without its arc. Finding crossings has its own bound too: past
+**4,000,000 candidate pairs** examined on one board, the search stops and no
+further hops are drawn, while the hops already found are kept — so a board of
+long, nearly parallel edges that never cross cannot make a render search
+indefinitely. Edges and lines are searched in the order they are drawn.
 
 ## How many open comment threads and proposed changes one document may hold
 

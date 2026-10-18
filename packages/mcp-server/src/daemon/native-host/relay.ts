@@ -19,6 +19,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
+import { socketTrust, tokenSendRefusal } from '../daemon-socket.js'
 import { encodeNativeMessage, readNativeMessages } from './native-messaging.js'
 
 export interface DaemonEndpoint {
@@ -134,13 +135,29 @@ interface RelayContext extends NativeHostOptions {
 }
 
 /**
+ * The endpoint, unless its socket may not be sent the token now. Checked per
+ * request, beside the record's own reading: the socket's directory can be
+ * replaced after the record was judged.
+ */
+function sendableTarget(endpoint: DaemonEndpoint): DaemonEndpoint | HostError {
+  const trust = socketTrust(endpoint.socketPath)
+  const refusal = tokenSendRefusal(endpoint.socketPath, trust)
+  if (refusal === undefined) return endpoint
+  const reason = trust.kind === 'refused' ? 'daemon-record-refused' : 'daemon-unreachable'
+  return { reason, message: refusal.message }
+}
+
+/**
  * The daemon to relay to, or the error the page is answered with. A refusal is
  * the record reader's sentence for the person; "no daemon" and a failed
  * connect are not, and must not arrive under the refusal's reason.
  */
 function resolveTarget(context: RelayContext): Promise<DaemonEndpoint | HostError> {
   return context.resolveDaemon().then(
-    (endpoint) => endpoint ?? { reason: 'daemon-unreachable', message: 'no daemon is running' },
+    (endpoint) =>
+      endpoint === null
+        ? { reason: 'daemon-unreachable', message: 'no daemon is running' }
+        : sendableTarget(endpoint),
     (err: unknown) => ({
       reason: 'daemon-record-refused',
       message: err instanceof Error ? err.message : 'the daemon record could not be read',

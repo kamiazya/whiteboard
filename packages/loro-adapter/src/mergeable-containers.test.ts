@@ -40,9 +40,10 @@ import { openMergeableMap, openMergeableMovableList } from './mergeable-containe
 /**
  * Files allowed to open a REGULAR child container, with why and how many.
  *
- * The count is pinned by equality on purpose: a ninth call in
- * `workspace-tree.ts` is a new lazily-created container, which is exactly
- * the decision this file exists to force someone to take.
+ * The count is pinned by equality on purpose: a second call in
+ * `content-sync.ts`, or any in `workspace-tree.ts`, is a new lazily-created
+ * container, which is exactly the decision this file exists to force someone
+ * to take.
  */
 const REGULAR_CONTAINER_SITES: Record<string, { calls: number; reason: string }> = {
   'mergeable-containers.ts': {
@@ -51,20 +52,13 @@ const REGULAR_CONTAINER_SITES: Record<string, { calls: number; reason: string }>
       'the helper itself: an occupied key keeps the behaviour it had, because ensureMergeable* throws on one',
   },
   'content-sync.ts': {
-    // The three accessors of `nodeRoots`, moved here from `workspace-tree.ts`
-    // with the rule they serve. They open a tree document's CONTENT
-    // containers, so the reason below is theirs too.
-    calls: 3,
+    // Every tree document's content container — `nodeRoots`' three
+    // accessors, `documentContainers` and the pre-attach at creation — is
+    // opened through `openNodeContainer`, the one place that checks the key
+    // holds no other kind first. The SET of containers opened is unchanged.
+    calls: 1,
     reason:
-      "`nodeRoots` opens a tree document's content containers for the diff write; those are pre-attached at creation from CONTENT_CONTAINER_KEYS, so no replica opens one first",
-  },
-  'workspace-tree.ts': {
-    // 9 -> 4: the write's five sites (text/list/map to sync, map/text to
-    // clear) became the three `nodeRoots` accessors in `content-sync.ts`. The
-    // SET of containers opened is unchanged — only the places that spell it.
-    calls: 4,
-    reason:
-      "a document's content containers, pre-attached at creation from CONTENT_CONTAINER_KEYS so no replica opens one first; mergeable costs 18.6% of the delta log here for a hazard that is already closed",
+      "a tree document's content containers, pre-attached at creation from CONTENT_CONTAINER_KEYS so no replica opens one first; mergeable costs 18.6% of the delta log here for a hazard that is already closed",
   },
 }
 

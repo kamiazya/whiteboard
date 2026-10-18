@@ -1,4 +1,8 @@
-import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  holdsContainerCreation,
+  readWorkspaceDocuments,
+  WORKSPACE_TREE_KEY,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -61,14 +65,15 @@ export type PromoteWorkspaceResult =
 /**
  * The promoted document `container` lives under, or `undefined` when it is not
  * inside one — a body, a canvas's node or edge map, or a thread's messages
- * each sit below their document's workspace-tree node.
+ * each sit below their document's workspace-tree node, and a content key
+ * holding the wrong kind is named by the node's own map.
  */
 function promotedDocumentAt(
   incoming: LoroDoc,
   container: ContainerID,
 ): { readonly path: string } | undefined {
   const path = incoming.getPathToContainer(container)
-  if (path === undefined || path.length < 3 || path[0] !== WORKSPACE_TREE_KEY) return undefined
+  if (path === undefined || path.length < 2 || path[0] !== WORKSPACE_TREE_KEY) return undefined
   const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
   const documentId = node?.data.get('documentId')
   return readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
@@ -85,6 +90,9 @@ function promotedDocumentAt(
 function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
   if (!(err instanceof TextBreachRefusalError)) return err
   const { container } = err.breach
+  // A container whose creating op the record lacks has no parent, and asking
+  // the engine for its path panics rather than answering `undefined`.
+  if (!holdsContainerCreation(incoming, container)) return err
   const entry = promotedDocumentAt(incoming, container)
   if (entry === undefined) return err
   const held = incoming.getContainerById(container)

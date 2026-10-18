@@ -51,6 +51,8 @@ catalog:
   remark-stringify: "^11.0.0"
   remark-gfm: "^4.0.1"
   remark-math: "^6.0.0"
+  # Types only: the micromark extension codec registers on that pipeline.
+  micromark-util-types: "^2.0.2"
   yaml: "^2.8.4"
   # canvas-render: UAX #14 line breaking + CSS `line-break` (Japanese kinsoku).
   # One version everywhere, because a break-opportunity difference between the
@@ -273,3 +275,27 @@ patchedDependencies:
   # 10.0.0 still joins with a space. Measured 2026-09-16; see
   # package-canvas-render.md's mutation section.
   '@stryker-mutator/vitest-runner@9.6.1': patches/@stryker-mutator__vitest-runner@9.6.1.patch
+  # The markdown parser's quadratic paths, each measured by
+  # packages/codec/src/markdown/parse-cost.test.ts and none fixed upstream as
+  # of micromark 4.0.3. Every patched package with a dev/ build is patched in
+  # lib/ and dev/ alike: vitest loads dev/, a production bundle lib/.
+  # micromark: no container nests past 32 levels (each level opened on one
+  # line rescanned the rest of it: `- ` x4,000 took 8s); a lazy continuation
+  # line remembers the open token that made the previous one lazy instead of
+  # rescanning the flow (`> a\nb\n` repeated, 3s at 32 KB); and adjacent text
+  # merges in one pass rather than a splice per group (`a&b` between code
+  # spans, quadratic).
+  micromark@4.0.2: patches/micromark@4.0.2.patch
+  # Literal autolinks retried one position later after a refusal, rescanning
+  # the rest of a long word each time (`www._` x6,400: 36s). The tokenizer's
+  # domain, path and trailing-punctuation reads are bounded (256 / 2,048 /
+  # 256 characters), and the tree transform's two regexes refuse up front
+  # what its callbacks would refuse after matching, with the same bounds.
+  micromark-extension-gfm-autolink-literal@2.1.0: patches/micromark-extension-gfm-autolink-literal@2.1.0.patch
+  mdast-util-gfm-autolink-literal@2.0.1: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
+  # The same pass then looked every text node and its ancestors up among
+  # their siblings from the start of the list, n²/2 reads over a paragraph of
+  # n text nodes or a body of n paragraphs (`a`c`` to 256 KB: 4s); each lookup
+  # now resumes where the last one in that list ended. codec's
+  # autolink-sibling-reads.test.ts counts the reads.
+  mdast-util-find-and-replace@3.0.2: patches/mdast-util-find-and-replace@3.0.2.patch

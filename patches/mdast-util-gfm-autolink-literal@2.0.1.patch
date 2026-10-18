@@ -1,0 +1,26 @@
+diff --git a/lib/index.js b/lib/index.js
+index c5ca771c24dd914e342f791716a822431ee32b3a..527c2a49e1a2da99bd4c1a87fae847d99bd8dab8 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -131,8 +131,19 @@ function transformGfmAutolinkLiterals(tree) {
+   findAndReplace(
+     tree,
+     [
+-      [/(https?:\/\/|www(?=\.))([-.\w]+)([^ \t\r\n]*)/gi, findUrl],
+-      [/(?<=^|\s|\p{P}|\p{S})([-.\w+]+)@([-\w]+(?:\.[-\w]+)+)/gu, findEmail]
++      // Patched (whiteboard): a refused match is retried one position later,
++      // so an unbounded run made every position of a long word rescan the
++      // rest of it — quadratic. The lookbehinds refuse up front what
++      // `previous` would refuse after matching, and the bounds cap how far
++      // one attempt reads: a URL's domain at 256 characters and its path at
++      // 2,048, an email's local part at 256. The URL pattern spells its case
++      // insensitivity out because `\p{…}` needs `u`, and `iu` would fold
++      // `ſ` and the Kelvin sign into `\w`.
++      [
++        /(?<=^|\s|\p{P}|\p{S})([hH][tT][tT][pP][sS]?:\/\/|[wW]{3}(?=\.))([-.\w]{1,256})([^ \t\r\n]{0,2048})/gu,
++        findUrl
++      ],
++      [/(?<=^|\s|\p{P}|\p{S})(?<!\/)([-.\w+]{1,256})@([-\w]+(?:\.[-\w]+)+)/gu, findEmail]
+     ],
+     {ignore: ['link', 'linkReference']}
+   )

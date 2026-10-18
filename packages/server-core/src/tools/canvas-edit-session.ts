@@ -34,6 +34,7 @@ import {
   placeWithin,
   prevailingWidth,
   type Rect,
+  unplaceableWithin,
 } from './canvas-edit-placement.js'
 import { publishedKind } from './published-node-kind.js'
 
@@ -322,6 +323,8 @@ export class CanvasEditSession {
     }
     this.placedInside = placing
     const bounds = this.nodeAt(group.id) ?? group
+    const unplaceable = unplaceableWithin(bounds, sizes)
+    if (unplaceable !== undefined) fail(index, opName, unplaceable)
     const placements = placeWithin(bounds, sizes, this.nodes.filter(this.enclosedBy(bounds)))
     this.growToHold(
       index,

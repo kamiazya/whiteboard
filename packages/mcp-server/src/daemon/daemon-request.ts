@@ -1,10 +1,12 @@
 // One HTTP exchange with the daemon a daemon.json names, over the owner-only
 // socket (a named pipe on Windows) the record gives — the only place a local
 // daemon answers (ADR-0050). The record's token goes as the Bearer credential
-// when it has one, exactly as the native host attaches it.
+// when it has one, exactly as the native host attaches it — and only after the
+// socket passes `socketTrust` at that moment, as the native host checks it.
 
 import { type ClientRequest, request as httpRequest, type IncomingMessage } from 'node:http'
 import type { DaemonRecord } from './daemon-record-schema.js'
+import { type SocketTrust, socketTrust, tokenSendRefusal } from './daemon-socket.js'
 
 export interface DaemonRequest {
   readonly record: Pick<DaemonRecord, 'socketPath'> & { readonly token?: string }
@@ -96,7 +98,19 @@ function boundExchange(outgoing: ClientRequest, req: DaemonRequest): () => void 
   return () => clearTimeout(deadline)
 }
 
-export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
+interface DaemonRequestSeams {
+  /** Whether the socket may be sent the token; `socketTrust` by default. */
+  readonly socketTrust?: (socketPath: string) => SocketTrust
+}
+
+export function requestDaemon(
+  req: DaemonRequest,
+  { socketTrust: trustOf = socketTrust }: DaemonRequestSeams = {},
+): Promise<DaemonAnswer> {
+  const { socketPath } = req.record
+  const refusal =
+    req.record.token === undefined ? undefined : tokenSendRefusal(socketPath, trustOf(socketPath))
+  if (refusal !== undefined) return Promise.reject(refusal)
   return new Promise((resolve, reject) => {
     let connected = false
     let disarm = () => {}

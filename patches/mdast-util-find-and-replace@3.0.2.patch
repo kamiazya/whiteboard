@@ -1,0 +1,63 @@
+diff --git a/lib/index.js b/lib/index.js
+index af84ba60dd09bee196f7271555bd5ea70e870cf6..92c8ae90bbd6a4b4809f79574b2bc8f0aa51761f 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -80,11 +80,32 @@ export function findAndReplace(tree, list, options) {
+   const ignored = convert(settings.ignore || [])
+   const pairs = toPairs(list)
+   let pairIndex = -1
++  // Patched (whiteboard): every text node looked itself and each of its
++  // ancestors up among their siblings from the start, so a paragraph of n
++  // text nodes, or a body of n paragraphs, cost n²/2 steps — `a\`c\``
++  // repeated to 256 KB took seconds. The visit runs in document order, so
++  // each lookup resumes where the last one in the same sibling list ended,
++  // and the scans over one list add up to its length.
++  /** @type {WeakMap<Array<Nodes>, number>} */
++  let resumeAt = new WeakMap()
+ 
+   while (++pairIndex < pairs.length) {
++    resumeAt = new WeakMap()
+     visitParents(tree, 'text', visitor)
+   }
+ 
++  /**
++   * @param {Array<Nodes>} siblings
++   * @param {Nodes} node
++   * @returns {number}
++   */
++  function indexAmong(siblings, node) {
++    let index = siblings.indexOf(node, resumeAt.get(siblings) ?? 0)
++    if (index === -1) index = siblings.indexOf(node)
++    resumeAt.set(siblings, index)
++    return index
++  }
++
+   /** @type {BuildVisitor<Root, 'text'>} */
+   function visitor(node, parents) {
+     let index = -1
+@@ -99,7 +120,7 @@ export function findAndReplace(tree, list, options) {
+       if (
+         ignored(
+           parent,
+-          siblings ? siblings.indexOf(parent) : undefined,
++          siblings ? indexAmong(siblings, parent) : undefined,
+           grandparent
+         )
+       ) {
+@@ -131,7 +152,7 @@ export function findAndReplace(tree, list, options) {
+     let start = 0
+     /** @type {Array<Nodes>} */
+     const siblings = parent.children
+-    const index = siblings.indexOf(node)
++    const index = indexAmong(siblings, node)
+     let change = false
+     /** @type {Array<PhrasingContent>} */
+     let nodes = []
+@@ -195,6 +216,7 @@ export function findAndReplace(tree, list, options) {
+       nodes = [node]
+     }
+ 
++    resumeAt.set(siblings, index + nodes.length)
+     return index + nodes.length
+   }
+ }
