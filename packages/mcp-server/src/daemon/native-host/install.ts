@@ -168,7 +168,11 @@ function regAdd(key: string, value: string): Promise<void> {
   })
 }
 
-async function refuseUntrustedLauncher(launcher: string, uid: number | undefined): Promise<void> {
+async function refuseUntrustedLauncher(
+  launcher: string,
+  uid: number | undefined,
+  windows: boolean,
+): Promise<void> {
   let stat: Awaited<ReturnType<typeof lstat>>
   try {
     stat = await lstat(launcher)
@@ -180,6 +184,13 @@ async function refuseUntrustedLauncher(launcher: string, uid: number | undefined
     throw new Error(`${launcher} is a symlink; refusing to write through it.`)
   if (uid !== undefined && stat.uid !== uid)
     throw new Error(`${launcher} is owned by uid ${stat.uid}, not this user (uid ${uid}).`)
+  // Writing replaces the content, not the inode, so whoever could write the
+  // file before could still write it after — and the browser runs it as this
+  // user. Windows has no such mode bits to judge.
+  if (!windows && (stat.mode & 0o022) !== 0)
+    throw new Error(
+      `${launcher} is writable by group or others (mode ${(stat.mode & 0o777).toString(8)}); refusing to write it.`,
+    )
 }
 
 /** The launcher the browser starts, in the platform's own script language. */
@@ -201,8 +212,8 @@ async function writeLauncher(options: InstallOptions): Promise<string> {
   const uid = options.uid ?? process.getuid?.()
   secureDataDir(options.dataDir, 'owner', uid)
   secureDataDir(dirname(launcher), 'owner', uid)
-  await refuseUntrustedLauncher(launcher, uid)
-  await writeFile(launcher, script)
+  await refuseUntrustedLauncher(launcher, uid, windows)
+  await writeFile(launcher, script, { mode: 0o700 })
   await chmod(launcher, 0o700)
   return launcher
 }

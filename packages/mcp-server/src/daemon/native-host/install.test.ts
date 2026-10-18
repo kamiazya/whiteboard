@@ -214,6 +214,26 @@ describe('installNativeHost', () => {
     )
   })
 
+  it.skipIf(!CHMOD_IS_OBSERVABLE || process.platform === 'win32')(
+    'refuses a launcher another user can write, and leaves it as it was',
+    async () => {
+      const dataDir = join(scratch, 'data')
+      const launcher = join(dataDir, 'native-host', 'whiteboard-native-host')
+      mkdirSync(dirname(launcher), { recursive: true, mode: 0o700 })
+      chmodSync(dataDir, 0o700)
+      writeFileSync(launcher, 'planted')
+      chmodSync(launcher, 0o766)
+      await expect(
+        installNativeHost({
+          dataDir,
+          manifestDirs: [],
+          launcher: launcherFor('/opt/whiteboard/cli.js'),
+        }),
+      ).rejects.toThrow(/writable by group or others/)
+      expect(readFileSync(launcher, 'utf8')).toBe('planted')
+    },
+  )
+
   // The browser starts the launcher with its own arguments and environment,
   // so the data dir it relays to is fixed at install time — through a shell
   // script, where a path with a space or a quote is the usual way to break.
