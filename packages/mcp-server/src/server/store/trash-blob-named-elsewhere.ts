@@ -20,7 +20,67 @@ interface NamedDigests {
   readonly digests: ReadonlySet<string>
 }
 
+/**
+ * Least recently used first (Map order), and bounded by the digests held in
+ * total rather than by records, since one record's trash can name any number
+ * of blobs. A record naming more than the whole budget is answered from its
+ * decode and never kept: holding it would evict every other record for one.
+ *
+ * 65536 digests is a few MB of strings — a tenant's every trash row many
+ * times over at ordinary sizes — and a miss costs one decode, which is what
+ * the call cost before anything was remembered.
+ */
 const namedDigestsByRecord = new Map<string, NamedDigests>()
+const DEFAULT_NAMED_DIGESTS_BUDGET = 65_536
+let namedDigestsBudget = DEFAULT_NAMED_DIGESTS_BUDGET
+let namedDigestsHeld = 0
+
+/** Test-only: shrink the budget so the bound is reachable; answers the restore. */
+export function _setNamedDigestsBudgetForTests(budget: number): () => void {
+  forgetAll()
+  namedDigestsBudget = budget
+  return () => {
+    forgetAll()
+    namedDigestsBudget = DEFAULT_NAMED_DIGESTS_BUDGET
+  }
+}
+
+/** Test-only: how many digests are remembered across every record. */
+export function _namedDigestsHeldForTests(): number {
+  return namedDigestsHeld
+}
+
+function forgetAll(): void {
+  namedDigestsByRecord.clear()
+  namedDigestsHeld = 0
+}
+
+function forget(cacheKey: string): void {
+  const known = namedDigestsByRecord.get(cacheKey)
+  if (known === undefined) return
+  namedDigestsByRecord.delete(cacheKey)
+  namedDigestsHeld -= known.digests.size
+}
+
+function recall(cacheKey: string, position: string): ReadonlySet<string> | undefined {
+  const known = namedDigestsByRecord.get(cacheKey)
+  if (known?.position !== position) return undefined
+  // Reinserted so Map order stays recency order.
+  namedDigestsByRecord.delete(cacheKey)
+  namedDigestsByRecord.set(cacheKey, known)
+  return known.digests
+}
+
+function remember(cacheKey: string, entry: NamedDigests): void {
+  forget(cacheKey)
+  if (entry.digests.size > namedDigestsBudget) return
+  for (const oldest of namedDigestsByRecord.keys()) {
+    if (namedDigestsHeld + entry.digests.size <= namedDigestsBudget) break
+    forget(oldest)
+  }
+  namedDigestsByRecord.set(cacheKey, entry)
+  namedDigestsHeld += entry.digests.size
+}
 
 function recordKey(scope: StoreScope, workspaceId: string): string {
   return `${scope.dataDir}::${scope.layout.tenantId}::${workspaceId}`
@@ -86,7 +146,7 @@ export function trashBlobNamedElsewhere(scope: StoreScope): TrashBlobNamedElsewh
       try {
         digests = await namedBy(scope, store, docs, id)
       } catch (err) {
-        namedDigestsByRecord.delete(recordKey(scope, id))
+        forget(recordKey(scope, id))
         log.warning(
           { workspaceId: id, err },
           'kept a trash blob: a workspace record would not open',
@@ -110,18 +170,18 @@ async function namedBy(
   // record filed under an older position, which the next call reads as moved.
   const position = await storedPosition(store, workspaceId)
   if (position === null) {
-    namedDigestsByRecord.delete(cacheKey)
+    forget(cacheKey)
     return null
   }
-  const known = namedDigestsByRecord.get(cacheKey)
-  if (known?.position === position) return known.digests
+  const known = recall(cacheKey, position)
+  if (known !== undefined) return known
   const record = await docs.open(workspaceId)
   if (record === null) {
-    namedDigestsByRecord.delete(cacheKey)
+    forget(cacheKey)
     return null
   }
   const digests = new Set(readTrashEntries(record).map((row) => blobRefKey(row.blob)))
-  namedDigestsByRecord.set(cacheKey, { position, digests })
+  remember(cacheKey, { position, digests })
   return digests
 }
 
@@ -130,7 +190,7 @@ function forgetUnregistered(scope: StoreScope, registered: ReadonlySet<string>):
   const prefix = recordKey(scope, '')
   for (const cacheKey of namedDigestsByRecord.keys()) {
     if (cacheKey.startsWith(prefix) && !registered.has(cacheKey.slice(prefix.length))) {
-      namedDigestsByRecord.delete(cacheKey)
+      forget(cacheKey)
     }
   }
 }

@@ -8,7 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { storeScope } from './store-scope.js'
-import { trashBlobNamedElsewhere } from './trash-blob-named-elsewhere.js'
+import {
+  _namedDigestsHeldForTests,
+  _setNamedDigestsBudgetForTests,
+  trashBlobNamedElsewhere,
+} from './trash-blob-named-elsewhere.js'
 import { _clearWorkspaceDocCacheForTests, saveWorkspaceDoc } from './workspace-doc-cache.js'
 
 const REF = { algorithm: 'sha-256', digestHex: 'a'.repeat(64) } as const
@@ -119,5 +123,74 @@ describe('cost of one answer', () => {
 
     expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(true)
     expect(open.mock.calls).toEqual([['ws-other-3']])
+  })
+})
+
+describe('the bound on what is remembered', () => {
+  async function storeRecordNamingMany(workspaceId: string, count: number): Promise<void> {
+    const doc = new LoroDoc()
+    for (let i = 0; i < count; i += 1) {
+      recordTrashEntry(doc, {
+        documentId: `01BRWAAAAAAAAAAAAAAAAAAAB${i}`,
+        path: `gone-${i}`,
+        deletedAt: 1,
+        blob: { algorithm: 'sha-256', digestHex: i.toString(16).padStart(64, 'c') },
+      })
+    }
+    doc.commit()
+    await saveWorkspaceDoc(workspaceId, doc, storeScope(dir))
+  }
+
+  it('forgets the least recently used record once the digest budget is spent', async () => {
+    const restore = _setNamedDigestsBudgetForTests(2)
+    try {
+      await storeRecordNaming('ws-a', REF)
+      for (let i = 0; i < 3; i += 1) await storeRecordNaming(`ws-other-${i}`, OTHER_REF)
+      const ask = trashBlobNamedElsewhere(storeScope(dir))
+      await ask({ workspaceId: 'ws-a', ref: REF })
+      expect(_namedDigestsHeldForTests()).toBe(2)
+      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+
+      expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
+      expect(open).toHaveBeenCalledWith('ws-other-0')
+      expect(_namedDigestsHeldForTests()).toBe(2)
+    } finally {
+      restore()
+    }
+  })
+
+  it('counts a remembered answer as a use when choosing what to forget', async () => {
+    const restore = _setNamedDigestsBudgetForTests(2)
+    try {
+      for (const id of ['ws-a', 'ws-b', 'ws-c']) await storeRecordNaming(id, OTHER_REF)
+      const ask = trashBlobNamedElsewhere(storeScope(dir))
+      await ask({ workspaceId: 'ws-c', ref: REF })
+      // ws-a answers from memory, so ws-b is the one ws-c's decode displaces.
+      await ask({ workspaceId: 'ws-b', ref: REF })
+      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+
+      await ask({ workspaceId: 'ws-c', ref: REF })
+      expect(open.mock.calls).toEqual([['ws-b']])
+    } finally {
+      restore()
+    }
+  })
+
+  it('never remembers a record naming more digests than the whole budget', async () => {
+    const restore = _setNamedDigestsBudgetForTests(2)
+    try {
+      await storeRecordNaming('ws-a', REF)
+      await storeRecordNaming('ws-small', OTHER_REF)
+      await storeRecordNamingMany('ws-wide', 3)
+      const ask = trashBlobNamedElsewhere(storeScope(dir))
+      await ask({ workspaceId: 'ws-a', ref: REF })
+      expect(_namedDigestsHeldForTests()).toBe(1)
+      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+
+      expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
+      expect(open.mock.calls).toEqual([['ws-wide']])
+    } finally {
+      restore()
+    }
   })
 })
