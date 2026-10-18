@@ -1,8 +1,8 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
+import { type DocumentTermsCache, termsCacheFor } from '../search/document-terms-cache.js'
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
@@ -40,7 +40,9 @@ export {
  *
  * Corpus served from the stamp-validated ContentFactsCache shared with
  * backlinks/mentions and tags — only documents whose frontier moved are
- * reloaded (ADR-0014's incremental mode, cache form).
+ * reloaded (ADR-0014's incremental mode, cache form) — and each document's
+ * search terms from the DocumentTermsCache over it, so only those are
+ * re-indexed either.
  *
  * With `deps.embedder` supplied it also searches by MEANING, fusing the two
  * rankings; without one it is lexical search and nothing else.
@@ -101,6 +103,7 @@ function collectSearchable(
 export function createDocumentSearchTool(
   deps: ServerDeps,
   vectors: DocumentVectorCache = vectorCacheFor(deps),
+  terms: DocumentTermsCache = termsCacheFor(vectors.facts),
 ) {
   return {
     name: 'wb_document_search' as const,
@@ -117,6 +120,7 @@ export function createDocumentSearchTool(
       const content = await vectors.facts.factsFor(parsed.workspaceId, entries)
 
       const searchable = collectSearchable(entries, content, parsed)
+      const termsOf = terms.termsOf(parsed.workspaceId, entries, content)
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
       /** documentId -> 1-based position, for whichever rankings exist. */
@@ -164,10 +168,7 @@ export function createDocumentSearchTool(
       if (embedder === undefined) {
         // The returned page IS the prefix of the full ranking here, so the
         // index is the rank.
-        const hits = fullTextSearch(searchable, query, {
-          limit: parsed.limit,
-          alsoIndex: emojiSearchText,
-        })
+        const hits = fullTextSearch(searchable, query, { limit: parsed.limit, termsOf })
         return {
           results: hits.map((hit, index) =>
             describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
@@ -177,10 +178,7 @@ export function createDocumentSearchTool(
 
       // Fusion needs the WHOLE lexical ranking, not the page the caller asked
       // for: a document the vector half also likes can climb from rank 20.
-      const lexical = fullTextSearch(searchable, query, {
-        limit: searchable.length,
-        alsoIndex: emojiSearchText,
-      })
+      const lexical = fullTextSearch(searchable, query, { limit: searchable.length, termsOf })
       const semantic = await rankSemantically(
         vectors,
         parsed.workspaceId,

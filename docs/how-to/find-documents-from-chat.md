@@ -42,6 +42,14 @@ more than 1,024 tags with the tag-count limit. The web app's search box stops
 taking characters at the same limit. A query is a few words; a longer text is a
 document to compare against, not something to search for.
 
+What one document contributes to the index is bounded too: at most 8,192
+distinct terms (words, CJK characters and character pairs), counted from its
+path and name and then through its text in order. Ordinary writing does not
+come near it — the longest document in this project's own repository has under
+3,000 — but a document that reaches it is found only by what it says up to that
+point: a word that first appears after it does not find the document. The web
+app's search box indexes the same way.
+
 ## Also search by meaning (optional)
 
 By default search matches WORDS. It will not find a document that says the
