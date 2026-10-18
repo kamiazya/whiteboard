@@ -242,6 +242,12 @@ a member of that workspace. The token is in the link's fragment, so the
 browser never sends it to a server and it does not appear in a `Referer`.
 The link is the secret, and it is shown only in that response.
 
+Accepting is a click on that page. A link from another site straight to the
+sign-in route (`/auth/sign-in/<provider>?invitation=…`) is sent to the
+`/invite` page first, so someone already signed in at the provider is never
+joined to a workspace without choosing to. A browser that does not send the
+`Sec-Fetch-Site` header is not held to this.
+
 A link speaks for the owner who created it, so it works only while they could
 still create it. If they are removed from the workspace, made a member, or
 deactivated, every link they created and nobody has accepted stops working.
