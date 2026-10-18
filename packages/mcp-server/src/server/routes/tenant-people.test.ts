@@ -47,6 +47,7 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let invitations: InvitationStore
 let app: Hono
+let staleApp: Hono
 const ids: Record<string, string> = {}
 
 let sessions: SignInSessionStore
@@ -117,6 +118,18 @@ beforeEach(async () => {
   app = new Hono()
   app.use('/api/*', createServerModeApiAuthMiddleware(strategy, people))
   app.route('/', createTenantPeopleRouter(people))
+  // An administrator check read before the actor was dismissed: what a
+  // request authorized just ahead of a dismissal sees.
+  const stale = {
+    ...people,
+    administration: {
+      ...people.administration,
+      check: { ...administrators, isAdministrator: async () => true },
+    },
+  }
+  staleApp = new Hono()
+  staleApp.use('/api/*', createServerModeApiAuthMiddleware(strategy, stale))
+  staleApp.route('/', createTenantPeopleRouter(stale))
 })
 afterEach(async () => {
   await handle.dispose()
@@ -289,6 +302,23 @@ describe('tenant people', () => {
 
   // ADR-0049 decision 3: an administrator's invitation names no workspace and
   // makes a user and nothing more.
+  it('refuses a change by an administrator dismissed after the administrator check', async () => {
+    const deactivation = createUserDeactivation(handle.db)
+    await deactivation.deactivate(ids.cy as string, 1_000)
+    app = staleApp
+    const notAdministrator = { error: 'not_an_administrator' }
+    const put = await call('bob', 'PUT', `/people/${ids.cy}/administrator`)
+    expect([put.status, put.body]).toMatchObject([403, notAdministrator])
+    const reactivate = await call('bob', 'DELETE', `/people/${ids.cy}/deactivation`)
+    expect([reactivate.status, reactivate.body]).toMatchObject([403, notAdministrator])
+    const remove = await call('bob', 'DELETE', `/people/${ids.cy}`)
+    expect([remove.status, remove.body]).toMatchObject([403, notAdministrator])
+    expect(await createTenantAdministratorStore(handle.db).isAppointed(ids.cy as string)).toBe(
+      false,
+    )
+    expect((await members.listUsers()).find((u) => u.id === ids.cy)?.deactivated).toBe(true)
+  })
+
   it('lets an administrator invite to the tenant alone', async () => {
     expect((await call('bob', 'POST', '/invitations', {})).status).toBe(403)
     const made = await call('ada', 'POST', '/invitations', {})
