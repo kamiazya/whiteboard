@@ -8,7 +8,7 @@
 // as a slow run.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fullTextSearch, type SearchableDocument } from './full-text.js'
+import { EXCERPT_TOKENS_MAX, fullTextSearch, type SearchableDocument } from './full-text.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -63,5 +63,54 @@ describe('fullTextSearch cost', () => {
     // doubles the count, where excerpting the 5 kept adds a handful.
     const textsPerDocument = 4 // path, name, two texts
     expect(calls).toBeLessThan(documents * textsPerDocument + 5 * 10)
+  })
+})
+
+/**
+ * Every `String.prototype.indexOf` a run makes, and the characters of the
+ * strings it searched — the excerpt step's work, since it is the one step
+ * that searches document text for query tokens.
+ */
+function scanning<T>(run: () => T): { result: T; calls: number; chars: number } {
+  const original = String.prototype.indexOf
+  let calls = 0
+  let chars = 0
+  const spy = vi.spyOn(String.prototype, 'indexOf').mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    calls++
+    chars += this.length
+    return original.call(this, search, position)
+  })
+  try {
+    return { result: run(), calls, chars }
+  } finally {
+    spy.mockRestore()
+  }
+}
+
+/** The longest query a tool accepts, as distinct CJK bigrams: 1,023 tokens, none repeated. */
+const LONG_QUERY = Array.from({ length: 1024 }, (_, i) => String.fromCharCode(0x4e00 + i)).join('')
+
+describe('fullTextSearch excerpt cost', () => {
+  it('scans each answered text once per excerpted token, however long the query', () => {
+    // Ten answered documents, each one 16 Ki text holding the query's first
+    // bigram and none of the rest, so every other token scans it whole.
+    const filler = 'x'.repeat(16 * 1024)
+    const documents = Array.from({ length: 10 }, (_, i) => ({
+      documentId: `d${i}`,
+      path: `notes/d${i}`,
+      texts: [`${LONG_QUERY.slice(0, 2)} ${filler}`],
+    }))
+    const { result, calls, chars } = scanning(() => fullTextSearch(documents, LONG_QUERY))
+    expect(result).toHaveLength(10)
+    expect(result[0]?.contexts).toHaveLength(1)
+    // One verbatim probe plus one per token excerpted, per answered text.
+    // Every one of the query's 1,023 tokens made that 10,240 calls over
+    // 167,802,880 characters.
+    expect(calls).toBe(10 * (1 + EXCERPT_TOKENS_MAX))
+    expect(chars).toBe(10 * (1 + EXCERPT_TOKENS_MAX) * (filler.length + 3))
   })
 })

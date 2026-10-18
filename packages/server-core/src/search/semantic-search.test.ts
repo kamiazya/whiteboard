@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -338,5 +338,96 @@ describe('semantic fusion', () => {
     const before = embedder.calls
     await tool.execute({ workspaceId: WS, query: 'quota' })
     expect(embedder.calls).toBe(before + 2)
+  })
+})
+
+/**
+ * How many texts the excerpt step searched during `run`, counted as
+ * `indexOf` calls on a text carrying `marker` — the one step that searches
+ * document text for the query, once the corpus is cached.
+ */
+async function excerptScans(marker: string, run: () => Promise<unknown>): Promise<number> {
+  const original = String.prototype.indexOf
+  let scans = 0
+  const spy = vi.spyOn(String.prototype, 'indexOf').mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    if (original.call(this, marker) !== -1) scans++
+    return original.call(this, search, position)
+  })
+  try {
+    await run()
+  } finally {
+    spy.mockRestore()
+  }
+  return scans
+}
+
+describe('fused excerpts', () => {
+  it('quotes the match for a lexical hit and the opening for a meaning-only one', async () => {
+    const deps = makeDeps()
+    const { reconnect, storage } = await seed(deps)
+    const tool = createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() })
+    const lexical = await tool.execute({ workspaceId: WS, query: 'quota' })
+    const keyword = lexical.results.find((r) => r.documentId === storage)
+    expect(keyword?.lexicalRank).toBe(1)
+    expect(keyword?.contexts).toEqual(['quota を超えると保存に失敗する'])
+
+    // `復旧` shares no token with this body, so there is no match to quote.
+    const meaning = await tool.execute({ workspaceId: WS, query: '復旧' })
+    const hit = meaning.results.find((r) => r.documentId === reconnect)
+    expect(hit?.lexicalRank).toBeUndefined()
+    expect(hit?.contexts).toEqual(['socket が切れたら reconnect する'])
+  })
+})
+
+describe('excerpt cost with an embedder', () => {
+  const MARKER = 'excerptmarker'
+  async function corpusOf(documents: number) {
+    const deps = makeDeps()
+    const { write } = await seed(deps)
+    for (let i = 0; i < documents; i++) {
+      await write(`bulk-${i}`, `bulk ${i}`, `quota ${MARKER} ${i}`)
+    }
+    return deps
+  }
+
+  it('excerpts the fused page, not every lexical hit', async () => {
+    const deps = await corpusOf(30)
+    const tool = createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() })
+    const query = { workspaceId: WS, query: 'quota', limit: 3 }
+    await tool.execute(query)
+    const scans = await excerptScans(MARKER, async () => {
+      const out = await tool.execute(query)
+      expect(out.results).toHaveLength(3)
+      // The subject is present: every result is a marked text, so each
+      // one excerpted counts once.
+      expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
+    })
+    // Excerpting all 30 lexical hits before keeping 3 counts 30.
+    expect(scans).toBe(3)
+  })
+
+  it('excerpts the lexical page alone when the embedder fails', async () => {
+    const deps = await corpusOf(30)
+    const broken: Embedder = {
+      id: 'broken@v1',
+      dimensions: 3,
+      embed: () => Promise.reject(new Error('model unavailable')),
+    }
+    const tool = createDocumentSearchTool({ ...deps, embedder: broken })
+    const query = { workspaceId: WS, query: 'quota', limit: 3 }
+    await tool.execute(query)
+    const scans = await excerptScans(MARKER, async () => {
+      const out = await tool.execute(query)
+      expect(out.results).toHaveLength(3)
+      // The subject is present: every result is a marked text, so each
+      // one excerpted counts once.
+      expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
+    })
+    // Excerpting all 30 lexical hits before keeping 3 counts 30.
+    expect(scans).toBe(3)
   })
 })

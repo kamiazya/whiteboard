@@ -1,7 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
-import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
+import { excerpterFor, fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
 import { type DocumentTermsCache, termsCacheFor } from '../search/document-terms-cache.js'
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
@@ -178,7 +178,18 @@ export function createDocumentSearchTool(
 
       // Fusion needs the WHOLE lexical ranking, not the page the caller asked
       // for: a document the vector half also likes can climb from rank 20.
-      const lexical = fullTextSearch(searchable, query, { limit: searchable.length, termsOf })
+      // Excerpts are not part of it, so they are cut for the returned page
+      // alone below, rather than for every document that scored.
+      const lexical = fullTextSearch(searchable, query, {
+        limit: searchable.length,
+        excerpts: false,
+        termsOf,
+      })
+      const excerptsOf = excerpterFor(query)
+      const excerpt = (documentId: string): string[] => {
+        const doc = byId.get(documentId)
+        return doc === undefined ? [] : excerptsOf(doc)
+      }
       const semantic = await rankSemantically(
         vectors,
         parsed.workspaceId,
@@ -191,13 +202,12 @@ export function createDocumentSearchTool(
           results: lexical
             .slice(0, parsed.limit)
             .map((hit, index) =>
-              describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
+              describe(hit.documentId, hit.score, excerpt(hit.documentId), { lexical: index + 1 }),
             ),
         }
       }
 
       const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
-      const contexts = new Map(lexical.map((hit) => [hit.documentId, hit.contexts]))
       // Ranks come from the COMPLETE rankings, not from the page returned:
       // "3rd of 45" and "3rd of 5" are different facts, and only the former
       // survives a change of `limit`.
@@ -234,7 +244,7 @@ export function createDocumentSearchTool(
             describe(
               documentId,
               fused.get(documentId) ?? 0,
-              contexts.get(documentId) ?? openingOf(byId.get(documentId)),
+              lexicalRanks.has(documentId) ? excerpt(documentId) : openingOf(byId.get(documentId)),
               { lexical: lexicalRanks.get(documentId), semantic: semanticRanks.get(documentId) },
             ),
           ),

@@ -131,7 +131,7 @@ const B = 0.75
  * second place that decides it.
  *
  * Indexing only. A snippet quotes what the document actually says, so
- * derived text must never reach `contextsFor` — a hit on a word the reader
+ * derived text must never reach `excerpterFor` — a hit on a word the reader
  * cannot see in their own note is confusing enough without the excerpt
  * inventing it.
  */
@@ -199,6 +199,12 @@ interface TokenBag extends DocumentTerms {
 
 interface SearchOptions {
   readonly limit?: number
+  /**
+   * False answers every hit with no contexts, for a caller whose returned
+   * page is not a prefix of this ranking (fusion) and so excerpts only that
+   * page itself, through `excerpterFor`.
+   */
+  readonly excerpts?: boolean
   readonly alsoIndex?: AlsoIndex
   /**
    * Where each document's terms come from, for a caller that holds them
@@ -216,7 +222,12 @@ interface SearchOptions {
 export function fullTextSearch(
   documents: readonly SearchableDocument[],
   query: string,
-  { limit = 10, alsoIndex, termsOf = (doc) => documentTerms(doc, alsoIndex) }: SearchOptions = {},
+  {
+    limit = 10,
+    excerpts = true,
+    alsoIndex,
+    termsOf = (doc) => documentTerms(doc, alsoIndex),
+  }: SearchOptions = {},
 ): SearchHit[] {
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
@@ -246,12 +257,26 @@ export function fullTextSearch(
   // Excerpts only for what is answered: they cost a scan of every text per
   // query token, and ranking never reads them.
   scored.sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
+  const contextsFor = excerpts ? excerpterFor(query) : () => []
   return scored.slice(0, limit).map(({ doc, score }) => ({
     documentId: doc.documentId,
     score,
-    contexts: contextsFor(doc, query),
+    contexts: contextsFor(doc),
   }))
 }
+
+/**
+ * The most distinct query tokens an excerpt looks for, in query order.
+ *
+ * Each one is a scan of every answered text, so an unbounded query is a
+ * multiplier on up to MARKDOWN_MAX_CHARS per text: the longest accepted query
+ * holds 1,023 distinct CJK bigrams. 64 is over three times the tokens of the
+ * longest query in either judged search corpus (a 20-character Japanese
+ * phrase, 19 bigrams), so an ordinary query is excerpted exactly as before;
+ * ranking always reads every token, so only which excerpt is quoted can
+ * differ, and only for a query past this.
+ */
+export const EXCERPT_TOKENS_MAX = 64
 
 interface Match {
   readonly index: number
@@ -288,16 +313,18 @@ function firstMatch(lower: string, needle: string, tokens: readonly string[]): M
  * whole query could sit fourth and never be shown.
  *
  * A query that only matches token-wise centres on the first matching token.
+ * Built once per query, so its tokens are cut up once rather than per hit.
  */
-function contextsFor(doc: SearchableDocument, query: string): string[] {
+export function excerpterFor(query: string): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
   const needle = query.trim().toLowerCase()
-  const tokens = [...new Set(tokenize(query))]
-  return doc.texts
-    .flatMap((text, order) => {
-      const match = firstMatch(text.toLowerCase(), needle, tokens)
-      return match === undefined ? [] : [{ text, match, order }]
-    })
-    .sort((a, b) => b.match.score - a.match.score || a.order - b.order)
-    .slice(0, 3)
-    .map(({ text, match }) => snippetAround(text, match.index, match.length))
+  const tokens = [...new Set(tokenize(query))].slice(0, EXCERPT_TOKENS_MAX)
+  return (doc) =>
+    doc.texts
+      .flatMap((text, order) => {
+        const match = firstMatch(text.toLowerCase(), needle, tokens)
+        return match === undefined ? [] : [{ text, match, order }]
+      })
+      .sort((a, b) => b.match.score - a.match.score || a.order - b.order)
+      .slice(0, 3)
+      .map(({ text, match }) => snippetAround(text, match.index, match.length))
 }
