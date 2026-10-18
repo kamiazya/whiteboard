@@ -176,7 +176,8 @@ const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
 /**
  * CSS that `NON_LOCAL_URL` cannot read: an escape (`u\72l(` is `url(`) and
  * `@import`, which loads a sheet without spelling `url(` at all. Neither
- * engine writes an escape into a style attribute or an `@import` anywhere.
+ * engine writes an escape into CSS — a style attribute or a `<style>`
+ * element — or an `@import` anywhere.
  */
 const UNREADABLE_CSS = /\\|@import/i
 const STYLE_ELEMENT_OPEN = /<(?:[\w.-]+:)?style\b/gi
@@ -280,7 +281,7 @@ function hasUnreadableStyleElement(svg: string): boolean {
   for (const open of svg.matchAll(STYLE_ELEMENT_OPEN)) {
     const rest = svg.slice(open.index)
     const close = rest.search(STYLE_ELEMENT_CLOSE)
-    if (/@import/i.test(close < 0 ? rest : rest.slice(0, close))) return true
+    if (UNREADABLE_CSS.test(close < 0 ? rest : rest.slice(0, close))) return true
   }
   return false
 }
