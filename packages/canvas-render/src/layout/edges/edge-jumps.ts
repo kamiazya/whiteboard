@@ -28,20 +28,15 @@ const MAX_HOPS_PER_SCENE = 4096
 interface IndexedSegment {
   readonly a: Point
   readonly b: Point
-  readonly minX: number
-  readonly maxX: number
-  readonly minY: number
-  readonly maxY: number
 }
 
-const indexed = (a: Point, b: Point): IndexedSegment => ({
-  a,
-  b,
-  minX: Math.min(a.x, b.x),
-  maxX: Math.max(a.x, b.x),
-  minY: Math.min(a.y, b.y),
-  maxY: Math.max(a.y, b.y),
-})
+/**
+ * Most cells one segment is entered in. A segment that would take more —
+ * one far longer than the board's mean, or one whose coordinates leave no
+ * room for a cell index — is checked against every segment instead, which
+ * keeps the result exact while bounding what the grid can be made to walk.
+ */
+const MAX_CELLS_PER_SEGMENT = 1024
 
 /**
  * The broad phase: a uniform grid of segments, with a segment entered in
@@ -53,70 +48,111 @@ const indexed = (a: Point, b: Point): IndexedSegment => ({
  *
  * The cell is the mean segment extent: the total number of cell entries is
  * then a small multiple of the segment count, whatever the board's size.
+ * Cells are counted from the board's own top-left, not from 0, so a board
+ * drawn far from the origin indexes as it would at the origin — coordinates
+ * are unbounded, and an index taken from them directly outgrows both the
+ * pad and, past 2^53, the loop counter itself.
  */
 class SegmentGrid {
   private readonly cells = new Map<string, number[]>()
   private readonly segments: IndexedSegment[] = []
   private readonly seenStamp: number[] = []
+  /** Segments in no cell, which every segment is checked against. */
+  private readonly wide: number[] = []
   private stamp = 0
 
-  constructor(private readonly cellPx: number) {}
+  constructor(
+    private readonly cellPx: number,
+    private readonly originX: number,
+    private readonly originY: number,
+  ) {}
 
-  private forEachCell(seg: IndexedSegment, visit: (key: string) => void): void {
+  /**
+   * The cells `seg` is entered in, or `undefined` when it is too wide for
+   * the grid: past the cell cap, or where an index is no longer an exact
+   * integer. Rounding in relative coordinates scales with how far a segment
+   * sits from the board's top-left, not from 0, so the pad is a sliver of
+   * the cell plus a few dozen ulps of that offset.
+   */
+  cellsOf(seg: IndexedSegment): string[] | undefined {
     const s = this.cellPx
-    // Rounding grows with the coordinates' magnitude, not with the cell.
-    const magnitude = Math.max(
-      Math.abs(seg.minX),
-      Math.abs(seg.maxX),
-      Math.abs(seg.minY),
-      Math.abs(seg.maxY),
-    )
-    const pad = s * 1e-6 + magnitude * 1e-9
-    const dx = seg.b.x - seg.a.x
-    const dy = seg.b.y - seg.a.y
-    const c0 = Math.floor((seg.minX - pad) / s)
-    const c1 = Math.floor((seg.maxX + pad) / s)
-    for (let cx = c0; cx <= c1; cx++) {
-      let yLo = seg.minY
-      let yHi = seg.maxY
+    const ax = seg.a.x - this.originX
+    const ay = seg.a.y - this.originY
+    const bx = seg.b.x - this.originX
+    const by = seg.b.y - this.originY
+    const minX = Math.min(ax, bx)
+    const maxX = Math.max(ax, bx)
+    const minY = Math.min(ay, by)
+    const maxY = Math.max(ay, by)
+    const offset = Math.max(maxX, maxY, -minX, -minY)
+    const pad = s * 1e-6 + offset * 2 ** -46
+    const c0 = Math.floor((minX - pad) / s)
+    const c1 = Math.floor((maxX + pad) / s)
+    const rowLo = Math.floor((minY - pad) / s)
+    const rowHi = Math.floor((maxY + pad) / s)
+    if (![c0, c1, rowLo, rowHi].every(Number.isSafeInteger)) return undefined
+    // Bounds the column loop by itself, whatever each column contributes.
+    if (c1 - c0 + 1 > MAX_CELLS_PER_SEGMENT) return undefined
+    const dx = bx - ax
+    const dy = by - ay
+    const keys: string[] = []
+    // Counted loops: termination never rests on `cx + 1` differing from `cx`.
+    for (let i = 0; i <= c1 - c0; i++) {
+      const cx = c0 + i
+      let yLo = minY
+      let yHi = maxY
       if (dx !== 0 && c1 > c0) {
         // The part of the segment inside this column, by its x extent.
-        const xL = Math.max(seg.minX, cx * s)
-        const xR = Math.min(seg.maxX, (cx + 1) * s)
-        const yL = seg.a.y + ((xL - seg.a.x) / dx) * dy
-        const yR = seg.a.y + ((xR - seg.a.x) / dx) * dy
-        yLo = Math.max(seg.minY, Math.min(yL, yR))
-        yHi = Math.min(seg.maxY, Math.max(yL, yR))
+        const xL = Math.max(minX, cx * s)
+        const xR = Math.min(maxX, (cx + 1) * s)
+        const yL = ay + ((xL - ax) / dx) * dy
+        const yR = ay + ((xR - ax) / dx) * dy
+        yLo = Math.max(minY, Math.min(yL, yR))
+        yHi = Math.min(maxY, Math.max(yL, yR))
       }
       const r0 = Math.floor((yLo - pad) / s)
       const r1 = Math.floor((yHi + pad) / s)
-      for (let cy = r0; cy <= r1; cy++) visit(`${cx},${cy}`)
+      if (keys.length + (r1 - r0 + 1) > MAX_CELLS_PER_SEGMENT) return undefined
+      for (let k = 0; k <= r1 - r0; k++) keys.push(`${cx},${r0 + k}`)
     }
+    return keys
   }
 
-  /** Every segment entered so far that shares a cell with `seg`, once each. */
-  candidates(seg: IndexedSegment): IndexedSegment[] {
+  private take(index: number, found: number[]): void {
+    if (this.seenStamp[index] === this.stamp) return
+    this.seenStamp[index] = this.stamp
+    found.push(index)
+  }
+
+  /**
+   * Every segment entered so far that can meet `seg`, once each and in the
+   * order they were entered: those sharing one of its cells and every wide
+   * one — or, when `seg` is wide itself, all of them. The order is fixed
+   * because two crossings can tie along a segment while their points differ
+   * in the last bits, and the spacing rule keeps whichever comes first.
+   */
+  candidates(keys: readonly string[] | undefined): IndexedSegment[] {
+    if (keys === undefined) return [...this.segments]
     this.stamp += 1
-    const found: IndexedSegment[] = []
-    this.forEachCell(seg, (key) => {
-      for (const index of this.cells.get(key) ?? []) {
-        if (this.seenStamp[index] === this.stamp) continue
-        this.seenStamp[index] = this.stamp
-        found.push(this.segments[index] as IndexedSegment)
-      }
-    })
-    return found
+    const found: number[] = []
+    for (const key of keys) for (const index of this.cells.get(key) ?? []) this.take(index, found)
+    for (const index of this.wide) this.take(index, found)
+    return found.sort((p, q) => p - q).map((index) => this.segments[index] as IndexedSegment)
   }
 
-  add(seg: IndexedSegment): void {
+  add(seg: IndexedSegment, keys: readonly string[] | undefined): void {
     const index = this.segments.length
     this.segments.push(seg)
     this.seenStamp.push(0)
-    this.forEachCell(seg, (key) => {
+    if (keys === undefined) {
+      this.wide.push(index)
+      return
+    }
+    for (const key of keys) {
       const cell = this.cells.get(key)
       if (cell === undefined) this.cells.set(key, [index])
       else cell.push(index)
-    })
+    }
   }
 }
 
@@ -170,14 +206,17 @@ function segmentsOf(edge: ResolvedEdgeNode): (IndexedSegment | undefined)[] {
   for (let seg = 0; seg < edge.path.length - 1; seg += 1) {
     const a = edge.path[seg] as Point
     const b = edge.path[seg + 1] as Point
-    segments.push(isFinitePoint(a) && isFinitePoint(b) ? indexed(a, b) : undefined)
+    segments.push(isFinitePoint(a) && isFinitePoint(b) ? { a, b } : undefined)
   }
   return segments
 }
 
-function meanSegmentExtent(edges: readonly ResolvedEdgeNode[]): number {
+/** The grid's cell (the mean segment extent) and origin (the board's top-left). */
+function gridFrame(edges: readonly ResolvedEdgeNode[]): { cellPx: number; x: number; y: number } {
   let total = 0
   let count = 0
+  let x = Number.POSITIVE_INFINITY
+  let y = Number.POSITIVE_INFINITY
   for (const edge of edges) {
     for (let k = 0; k < edge.path.length - 1; k += 1) {
       const a = edge.path[k] as Point
@@ -185,9 +224,13 @@ function meanSegmentExtent(edges: readonly ResolvedEdgeNode[]): number {
       if (!isFinitePoint(a) || !isFinitePoint(b)) continue
       total += Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))
       count += 1
+      x = Math.min(x, a.x, b.x)
+      y = Math.min(y, a.y, b.y)
     }
   }
-  return count === 0 ? 1 : Math.max(1, total / count)
+  // An overflowing total leaves every segment wide, which is exact.
+  const cellPx = count === 0 ? 1 : Math.max(1, total / count)
+  return count === 0 ? { cellPx, x: 0, y: 0 } : { cellPx, x, y }
 }
 
 /**
@@ -199,22 +242,28 @@ export function computeEdgeJumps(
   edges: readonly ResolvedEdgeNode[],
 ): ReadonlyMap<string, readonly EdgeJumpPoint[]> {
   const result = new Map<string, readonly EdgeJumpPoint[]>()
-  const grid = new SegmentGrid(meanSegmentExtent(edges))
+  const frame = gridFrame(edges)
+  const grid = new SegmentGrid(frame.cellPx, frame.x, frame.y)
   let sceneBudget = MAX_HOPS_PER_SCENE
   for (const edge of edges) {
     if (sceneBudget === 0) break
     const segments = segmentsOf(edge)
+    const keys = segments.map((segment) =>
+      segment === undefined ? undefined : grid.cellsOf(segment),
+    )
     const jumps: EdgeJumpPoint[] = []
     segments.forEach((segment, seg) => {
       if (segment === undefined || sceneBudget === 0) return
       const segLen = Math.hypot(segment.b.x - segment.a.x, segment.b.y - segment.a.y)
       const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
-      const hops = spacedHops(crossingsOn(segment, grid.candidates(segment)), segLen, seg, limit)
+      const hops = spacedHops(crossingsOn(segment, grid.candidates(keys[seg])), segLen, seg, limit)
       sceneBudget -= hops.length
       jumps.push(...hops)
     })
     if (jumps.length > 0) result.set(edge.id, jumps)
-    for (const segment of segments) if (segment !== undefined) grid.add(segment)
+    segments.forEach((segment, seg) => {
+      if (segment !== undefined) grid.add(segment, keys[seg])
+    })
   }
   return result
 }

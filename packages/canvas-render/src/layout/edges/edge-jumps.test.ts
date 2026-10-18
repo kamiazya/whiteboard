@@ -219,3 +219,21 @@ describe('computeEdgeJumps order and paint order', () => {
     expect(jumps.get('last')).toEqual([{ segment: 0, x: 50, y: 0 }])
   })
 })
+
+describe('computeEdgeJumps at the edge of the double range', () => {
+  it('draws no hop over a segment whose extent overflows', () => {
+    // Its direction is infinite, so the intersection's arithmetic turns NaN
+    // (0 × Infinity) — a hop there would write NaN into the path.
+    const jumps = computeEdgeJumps([
+      routed('w', [
+        { x: -1.7e308, y: 10 },
+        { x: 1.7e308, y: 10 },
+      ]),
+      routed('h', [
+        { x: 0, y: 0 },
+        { x: 200, y: 0 },
+      ]),
+    ])
+    expect(jumps.size).toBe(0)
+  })
+})

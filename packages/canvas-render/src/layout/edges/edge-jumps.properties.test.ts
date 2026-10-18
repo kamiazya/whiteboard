@@ -6,7 +6,7 @@
 
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { computeEdgeJumps, EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import { segmentIntersection } from './segment-intersection.js'
@@ -54,8 +54,46 @@ const coordinate = fc.oneof(
   fc.integer({ min: 0, max: 4000 }),
 )
 const pointArb = fc.record({ x: coordinate, y: coordinate })
+// Coordinates are unbounded finite numbers, so a board may sit anywhere:
+// translated far from 0 (where a cell index taken from the coordinate
+// itself outgrows its pad), or with one edge far from the rest (where the
+// board's span dwarfs its cell). Rounding at those magnitudes is shared by
+// the oracle, which reads the same translated points.
+const far = fc.constantFrom(1e9, 1e16, -1e16, 2 ** 60, -(2 ** 60), 3e150, -1e300)
+const translationArb = fc.oneof(
+  { weight: 3, arbitrary: fc.constant({ x: 0, y: 0 }) },
+  { weight: 1, arbitrary: fc.record({ x: far, y: far }) },
+)
+const outlierArb = fc.oneof(
+  { weight: 3, arbitrary: fc.constant(null) },
+  { weight: 1, arbitrary: fc.record({ x: far, y: far }) },
+)
+// An edge from inside the board out to a far point, at any place in
+// document order: it crosses the board while too far-reaching for the grid,
+// so the board's own segments must still find it, and it them.
+const spokeArb = fc.oneof(
+  { weight: 2, arbitrary: fc.constant(null) },
+  {
+    weight: 1,
+    arbitrary: fc.record({ from: pointArb, to: fc.record({ x: far, y: far }), at: fc.nat() }),
+  },
+)
 const edgesArb = fc
-  .array(fc.array(pointArb, { minLength: 2, maxLength: 8 }), { minLength: 2, maxLength: 10 })
+  .tuple(
+    fc.array(fc.array(pointArb, { minLength: 2, maxLength: 8 }), { minLength: 2, maxLength: 10 }),
+    translationArb,
+    outlierArb,
+    spokeArb,
+  )
+  .map(([drawn, shift, outlier, spoke]) => {
+    const moved = drawn.map((path) => path.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })))
+    const withOutlier =
+      outlier === null ? moved : [...moved, [outlier, { x: outlier.x + 100, y: outlier.y + 100 }]]
+    if (spoke === null) return withOutlier
+    const at = spoke.at % (withOutlier.length + 1)
+    const from = { x: spoke.from.x + shift.x, y: spoke.from.y + shift.y }
+    return [...withOutlier.slice(0, at), [from, spoke.to], ...withOutlier.slice(at)]
+  })
   .map((paths) =>
     paths.map(
       (path, i): ResolvedEdgeNode => ({
@@ -70,7 +108,19 @@ const edgesArb = fc
     ),
   )
 
-const reach = { boards: 0, withHops: 0 }
+const edge = (id: string, path: Point[]): ResolvedEdgeNode => ({
+  kind: 'edge',
+  id,
+  path,
+  fromSide: 'right',
+  toSide: 'left',
+  fromEnd: 'none',
+  toEnd: 'arrow',
+})
+
+const reach = { boards: 0, withHops: 0, farBoards: 0, farWithHops: 0 }
+const isFar = (edges: readonly ResolvedEdgeNode[]) =>
+  edges.some((e) => e.path.some((p) => Math.abs(p.x) > 1e8 || Math.abs(p.y) > 1e8))
 
 describe('computeEdgeJumps broad phase', () => {
   fcTest.prop([edgesArb], withDefaults({ numRuns: 400 }))(
@@ -79,12 +129,68 @@ describe('computeEdgeJumps broad phase', () => {
       reach.boards++
       const expected = oracle(edges)
       if (expected.size > 0) reach.withHops++
+      if (isFar(edges)) {
+        reach.farBoards++
+        if (expected.size > 0) reach.farWithHops++
+      }
       expect(new Map(computeEdgeJumps(edges))).toEqual(expected)
     },
   )
 
+  it('keeps the same hop as the scan when two crossings tie along the segment', () => {
+    // e1's first segment crosses e0 twice at e0's corner (55, 0): the two
+    // hits have the same `t` but differ in their last bits, so which one
+    // survives the spacing rule rests on the order candidates arrive in.
+    const edges = [
+      edge('e0', [
+        { x: 0.001620334765735976, y: 1029 },
+        { x: 55, y: 0 },
+        { x: 0, y: 23 },
+      ]),
+      edge('e1', [
+        { x: 2651, y: 6.707523425575388e-12 },
+        { x: 0, y: 0 },
+      ]),
+    ]
+    expect(new Map(computeEdgeJumps(edges))).toEqual(oracle(edges))
+  })
+
+  it('keeps the hops of a board whose origin an outlier drags 2^60 away', () => {
+    // The outlier is the board's leftmost point, so every other coordinate
+    // is 2^60 from the grid's origin and rounds to 256px there: the pad has
+    // to grow with that offset, or e2's crossing of e0 falls between cells.
+    const edges = [
+      edge('e0', [
+        { x: 129, y: 917 },
+        { x: 2084, y: 0 },
+        { x: 0, y: 203 },
+        { x: 0, y: 0 },
+      ]),
+      edge('e1', [
+        { x: 0, y: 0 },
+        { x: 2347, y: 0 },
+      ]),
+      edge('e2', [
+        { x: 67, y: 0 },
+        { x: 244, y: 2617 },
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ]),
+      edge('e3', [
+        { x: -(2 ** 60), y: 1e9 },
+        { x: -(2 ** 60) + 100, y: 1e9 + 100 },
+      ]),
+    ]
+    const expected = oracle(edges)
+    expect(expected.get('e2')).toHaveLength(3)
+    expect(new Map(computeEdgeJumps(edges))).toEqual(expected)
+  })
+
   afterAllFloor(['hops exactly where the all-pairs scan does'], () => {
     // The generator reaches boards that hop, so equality is not vacuous.
     expect(reach.withHops / reach.boards).toBeGreaterThan(0.8)
+    // And a share of the boards that hop sit far from 0.
+    expect(reach.farBoards / reach.boards).toBeGreaterThan(0.25)
+    expect(reach.farWithHops / reach.farBoards).toBeGreaterThan(0.5)
   })
 })

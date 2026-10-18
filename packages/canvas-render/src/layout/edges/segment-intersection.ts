@@ -24,6 +24,9 @@ export function segmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point):
   const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
   if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return undefined
   const point = { x: a1.x + t * dax, y: a1.y + t * day }
+  // An extent that overflows turns the arithmetic NaN (0 × ∞), which passes
+  // every comparison above; a hop there would write NaN into the path.
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined
   const lenA = Math.hypot(dax, day)
   // Too close to either end of the jumping segment to fit the arc.
   if (t * lenA < END_CLEARANCE_PX || (1 - t) * lenA < END_CLEARANCE_PX) return undefined

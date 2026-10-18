@@ -155,4 +155,117 @@ describe('computeEdgeJumps cost', () => {
     expect(jumps.get('h0')).toHaveLength(50)
     expect(jumps.get('h199')).toBeUndefined()
   })
+
+  it('still hops over a segment too long for the grid', () => {
+    // 2_000_000px against a mean extent near 1_100px is more cells than one
+    // segment may take, so the long edge is in no cell. Every later vertical
+    // must still find it, without the board falling back to all pairs.
+    const long = routed('long', [
+      { x: 0, y: 0 },
+      { x: 2_000_000, y: 0 },
+    ])
+    const verticals = Array.from({ length: 2000 }, (_, i) =>
+      routed(`v${i}`, [
+        { x: i * 1000 + 500, y: -50 },
+        { x: i * 1000 + 500, y: 50 },
+      ]),
+    )
+    const edges = [long, ...verticals]
+    narrowTests.count = 0
+    const { jumps, visits } = jumpsWithinCellBudget(edges, 8 * edges.length)
+
+    expect(jumps.size).toBe(2000)
+    expect(jumps.get('v1999')).toEqual([{ segment: 0, x: 1_999_500, y: 0 }])
+    expect(visits).toBeGreaterThan(0)
+    expect(narrowTests.count / edges.length).toBeLessThanOrEqual(2)
+  })
+
+  describe('at coordinates far from the origin', () => {
+    // A plain cross, in units of `u`, plus `zeros` zero-length edges at the
+    // board's top-left that pull the mean segment extent (the grid's cell)
+    // down. Translated by (tx, ty); every coordinate is a multiple of `u`,
+    // chosen so it is exact at that magnitude.
+    function cross(u: number, zeros: number, tx: number, ty: number): ResolvedEdgeNode[] {
+      const at = (x: number, y: number) => ({ x: tx + x * u, y: ty + y * u })
+      return [
+        routed('h', [at(0, 50), at(100, 50)]),
+        ...Array.from({ length: zeros }, (_, i) => routed(`z${i}`, [at(0, 0), at(0, 0)])),
+        routed('v', [at(50, 0), at(50, 100)]),
+      ]
+    }
+    const shifted = (jumps: ReturnType<typeof computeEdgeJumps>, tx: number, ty: number) =>
+      new Map(
+        [...jumps].map(([id, hops]) => [id, hops.map((h) => ({ ...h, x: h.x - tx, y: h.y - ty }))]),
+      )
+
+    it.each([
+      { name: 'a cross translated by 1e16', u: 2, zeros: 1, tx: 1e16, ty: 1e16 },
+      // Coordinate over cell past 2^53: an index loop there cannot advance.
+      {
+        name: 'a cross at 2^60 under a one-pixel cell',
+        u: 256,
+        zeros: 4000,
+        tx: 2 ** 60,
+        ty: 2 ** 60,
+      },
+      // Far out yet clear of overflow: the narrow phase squares an extent.
+      { name: 'a cross at 2^500', u: 2 ** 448, zeros: 1, tx: 2 ** 500, ty: -(2 ** 500) },
+    ])('hops as at the origin for $name', ({ u, zeros, tx, ty }) => {
+      const edges = cross(u, zeros, tx, ty)
+      const segments = edges.length
+      const { jumps, visits } = jumpsWithinCellBudget(edges, 8 * segments)
+
+      const atOrigin = computeEdgeJumps(cross(u, zeros, 0, 0))
+      expect(atOrigin.get('v')).toEqual([{ segment: 0, x: 50 * u, y: 50 * u }])
+      expect(shifted(jumps, tx, ty)).toEqual(new Map(atOrigin))
+      expect(visits).toBeGreaterThan(0)
+    })
+
+    it('still hops where one segment spans the whole double range', () => {
+      // Its extent is not finite, so neither is the mean that sizes the
+      // cell: no segment has a cell index, and all of them fall back to
+      // checking every other. The cross near 0 must still hop.
+      const edges = [
+        routed('w', [
+          { x: -1.7e308, y: 10 },
+          { x: 1.7e308, y: 10 },
+        ]),
+        routed('h', [
+          { x: 0, y: 0 },
+          { x: 200, y: 0 },
+        ]),
+        routed('v', [
+          { x: 100, y: -100 },
+          { x: 100, y: 100 },
+        ]),
+      ]
+      const { jumps } = jumpsWithinCellBudget(edges, 8 * edges.length)
+
+      expect(new Map(jumps)).toEqual(new Map([['v', [{ segment: 0, x: 100, y: 0 }]]]))
+    })
+
+    it('keeps a far outlier from widening every other segment', () => {
+      // One edge 1e16 away from a board of crosses near the origin: the
+      // board's span is then 1e16 cells, while each cross stays local.
+      const crosses = Array.from({ length: 200 }, (_, i) =>
+        cross(1, 0, i * 300, 0).map((edge) => ({ ...edge, id: `${edge.id}${i}` })),
+      ).flat()
+      const edges = [
+        routed('far', [
+          { x: -1e16, y: -1e16 },
+          { x: -1e16 + 100, y: -1e16 },
+        ]),
+        ...crosses,
+      ]
+      const segments = edges.length
+      narrowTests.count = 0
+      const { jumps, visits } = jumpsWithinCellBudget(edges, 64 * segments)
+
+      expect(jumps.size).toBe(200)
+      expect(jumps.get('v199')).toEqual([{ segment: 0, x: 199 * 300 + 50, y: 50 }])
+      expect(visits / segments).toBeLessThanOrEqual(64)
+      // Checking every segment against every other would be 80_000 pairs.
+      expect(narrowTests.count / segments).toBeLessThanOrEqual(4)
+    })
+  })
 })
