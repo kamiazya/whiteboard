@@ -489,9 +489,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A render lays out a bounded number of embedded documents.** Embeds nest
   three levels deep, and one render lays out at most 128 embedded documents
   across every level and both kinds of embed (a file node's canvas preview,
-  a `![[…]]` in a body). So a workspace whose documents each embed many
-  others cannot make one render cost the cube of its fan-out. Past the
-  budget an embed draws as its placeholder or card. The budget holds for
+  a `![[…]]` in a body). The canvases those embeds draw lay out at most
+  4000 elements (nodes, edges and lines) between them — one maximal board's
+  worth — so a hub naming one maximal board many times draws it once, not
+  once per embed. So a workspace whose documents each embed many others
+  cannot make one render cost the cube of its fan-out, nor a multiple of its
+  largest board. Past either budget an embed draws as its placeholder or
+  card. The budget holds for
   `wb_scene_render`, export and the web app's preview alike.
 - **A move into the daemon is bounded.** Moving a browser workspace to the
   daemon is one request of at most 24 MiB carrying at most 2000 documents.

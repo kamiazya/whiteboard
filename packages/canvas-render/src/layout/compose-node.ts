@@ -108,16 +108,17 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
   if (cached !== undefined) {
     body = cached
   } else {
+    const refusedBefore = options.nestedLayoutBudget.refused
     try {
       const laid = typesetMdastBlocks(
         resolveReferences(options.parseBody(text), options.resolveAlias),
         mdastOptionsFor(maxWidth, options),
       )
       body = fitTextBody(laid, node, options)
-      // A body laid out with the nested-layout budget spent may hold an embed
-      // drawn as its placeholder only because THIS render ran out; caching it
-      // would hand that degradation to a later render that has budget left.
-      if (cacheKey !== undefined && options.nestedLayoutBudget.remaining > 0) {
+      // A body whose embed this render's budget refused holds a placeholder
+      // only because THIS render ran out; caching it would hand that
+      // degradation to a later render that has budget left.
+      if (cacheKey !== undefined && options.nestedLayoutBudget.refused === refusedBefore) {
         options.contentCache?.set(cacheKey, body)
       }
     } catch (err) {
