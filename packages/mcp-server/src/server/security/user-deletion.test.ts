@@ -190,8 +190,9 @@ describe('createUserDeletion', () => {
 })
 
 // ADR-0053 decision 4: the workspaces a deleted person's namespace holds move
-// to each one's oldest surviving owner, and a segment that collides there is
-// suffixed in the inheritor's namespace.
+// to each one's oldest surviving owner. The inheritor did not choose those
+// segments, so each takes a tail of its id rather than landing under a bare
+// name the inheritor would type for one of their own.
 describe('createUserDeletion — the namespace a deleted person held', () => {
   const carol = { authenticator: 'oidc:https://id.example', subject: 'carol' }
 
@@ -225,21 +226,22 @@ describe('createUserDeletion — the namespace a deleted person held', () => {
     expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     const [first] = [bobUser, carolUser].sort((a, b) => (a.id < b.id ? -1 : 1))
-    expect(await placed('ws-1')).toEqual({ namespace: first?.handle, segment: 'design' })
+    expect(await placed('ws-1')).toEqual({ namespace: first?.handle, segment: 'design-ws1' })
   })
 
-  it("suffixes a segment the inheritor's namespace already holds", async () => {
+  it("leaves the inheritor's own segment of that name, and suffixes one the tail collides with", async () => {
     const user = await deactivated(ada, 'Ada')
     const bobUser = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
     await workspaceRow('ws-ada', user.handle, 'design')
     await workspaceRow('ws-bob', bobUser.handle, 'design')
+    await workspaceRow('ws-bob-2', bobUser.handle, 'design-wsada')
     await members.addMember('ws-ada', user.id)
     await members.addMember('ws-ada', bobUser.id)
     await createWorkspaceRoles(handle.db).setRole('ws-ada', bobUser.id, 'owner')
 
     expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
-    expect(await placed('ws-ada')).toEqual({ namespace: bobUser.handle, segment: 'design-2' })
+    expect(await placed('ws-ada')).toEqual({ namespace: bobUser.handle, segment: 'design-wsada-2' })
     expect(await placed('ws-bob')).toEqual({ namespace: bobUser.handle, segment: 'design' })
   })
 

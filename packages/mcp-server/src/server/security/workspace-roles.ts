@@ -137,7 +137,9 @@ async function rehomeFrom(trx: TenantTransaction, workspaceId: string, profileId
     .where('memberProfiles.id', '=', profileId)
     .executeTakeFirst()
   if (held === undefined) return
-  await moveIntoNamespace(trx, held, await oldestOwnerNamespace(trx, workspaceId, profileId))
+  await moveIntoNamespace(trx, held, await oldestOwnerNamespace(trx, workspaceId, profileId), {
+    handedOver: true,
+  })
 }
 
 // `by` null is the operator, who is held to the last-owner rule alone.

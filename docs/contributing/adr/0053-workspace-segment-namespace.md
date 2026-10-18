@@ -436,6 +436,17 @@ workspace's sole owner, so a surviving owner always exists.
 - **A segment that collides in the inheritor's namespace** is suffixed
   with `firstFreeSegment` there. The inheritor sees all of their own
   namespace, so the suffix tells nobody anything new.
+- **Correction (as built): an inherited segment takes a tail of the
+  workspace id** — `journal` becomes `journal-<last eight id characters,
+  lowercased>`, then `firstFreeSegment` as above if even that is held. The
+  same applies when the holder stops being an owner without being deleted
+  (demoted or removed), which moves the workspace by this rule too. Kept
+  as it was, the segment is one the inheritor never chose, under the bare
+  name they would type for their own workspace: a person could create
+  `journal`, make somebody an owner and leave, and that person's own
+  `journal` — a URL, or an agent's `createWorkspace: true` — would reach a
+  workspace its planter is still a member of. A move into `me`, which no
+  server-mode user holds, keeps the segment.
 - **A deleted person's handle becomes free to choose again.** An old URL
   can then point into the new holder's namespace. It still reaches only
   workspaces the opener is a member of, so this can cause confusion but

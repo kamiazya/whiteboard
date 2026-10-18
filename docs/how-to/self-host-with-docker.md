@@ -283,6 +283,17 @@ link grants nothing by itself — only membership does.
 
 Only an owner can change anything. A workspace always keeps at least one
 owner, so demoting or removing the last owner is refused with `last_owner`.
+
+A workspace lives in the namespace of the person who holds it, and that
+person must be one of its owners. When they stop being one — they demote or
+remove themselves, another owner does it, or they are deleted — the workspace
+moves to its oldest remaining owner. Its short name gains a tail taken from
+its identifier (`journal` becomes, say, `journal-7k3qzmab`), because the new
+holder did not choose that name: kept as it was, it would answer the
+`/w/<handle>/journal` or agent `journal` they would use for a workspace of
+their own, and their writes would land in a workspace somebody else is still
+a member of. The new holder can rename it as soon as it arrives. A workspace
+the new holder already has under that short name is left alone.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool
 call that names a workspace the caller is not a member of fails with
 `not_a_member`, whether or not that workspace exists, so the answer does not
