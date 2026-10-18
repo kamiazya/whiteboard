@@ -25,7 +25,7 @@ function scopedTo(
   return middleware.map((each) => (c, next) => (owns(c) ? each(c, next) : next()))
 }
 
-type DocumentHandler = (
+export type DocumentHandler = (
   c: Context,
   workspaceId: string,
   path: string,

@@ -7,6 +7,7 @@ import {
   WORKSPACE_TREE_KEY,
   writeCommentThread,
   writeMarkdownBody,
+  writeProposal,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
@@ -15,6 +16,8 @@ import {
   CANVAS_MAX_NODES,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
+  DOCUMENT_MAX_OPEN_CHANGES,
+  DOCUMENT_MAX_OPEN_THREADS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
@@ -436,6 +439,32 @@ describe('promoteWorkspace', () => {
             textNode({ id: `n${i}`, x: 0, y: 0, width: 100, height: 40, text: 'n' }),
           ),
           edges: [],
+        }),
+    },
+    'open-threads': {
+      at: 'notes/roadmap',
+      write: (doc: Board) => {
+        for (let i = 0; i <= DOCUMENT_MAX_OPEN_THREADS; i += 1) {
+          writeCommentThread(doc, {
+            id: `t${i}`,
+            anchor: { kind: 'document' },
+            status: 'open',
+            messages: [{ id: 'm1', body: 'hello' }],
+          })
+        }
+      },
+    },
+    'open-changes': {
+      at: 'sketch',
+      write: (board: Board) =>
+        writeProposal(board, {
+          id: 'p1',
+          changes: Array.from({ length: DOCUMENT_MAX_OPEN_CHANGES + 1 }, (_, i) => ({
+            id: `ch${i}`,
+            status: 'open' as const,
+            op: 'node.add' as const,
+            node: textNode({ id: `n${i}`, x: 0, y: 0, width: 100, height: 40, text: 'n' }),
+          })),
         }),
     },
   } satisfies Record<

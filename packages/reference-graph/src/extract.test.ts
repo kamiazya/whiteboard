@@ -6,9 +6,11 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { snippetAround } from '@kamiazya/whiteboard-search'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { extractContentFacts, splitBearerTags, tagBearersOf } from './extract.js'
+import { backlinksIn } from './reference-aggregate.js'
 
 function docWith(kind: 'spatial' | 'markdown' | undefined): LoroDoc {
   const doc = new LoroDoc()
@@ -149,5 +151,34 @@ describe('what a tag bearer is called in an excerpt', () => {
       e2: 'Alpha → Zone',
       e3: 'Alpha → ghost',
     })
+  })
+})
+
+describe('a wikilink excerpt in cached facts', () => {
+  const body = `${'filler words '.repeat(12)}see [[target-doc]] here${' and more'.repeat(12)}`
+  const doc = new LoroDoc()
+  writeDocumentKind(doc, 'markdown')
+  writeMarkdownBody(doc, body)
+  const facts = extractContentFacts({ kind: 'markdown' }, doc)
+
+  it('is held as a place in the text, not as a copy of the excerpt', () => {
+    // A copy per reference is what made a dense body cost ~23x its size in
+    // heap: the excerpt is cut when a backlink is answered instead.
+    expect(facts.refs).toHaveLength(1)
+    expect(facts.refs[0]).not.toHaveProperty('context')
+  })
+
+  it('reads back as the excerpt the backlink always carried', () => {
+    const index = body.indexOf('[[target-doc]]')
+    const source = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const target = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const entries = [
+      { documentId: source, path: 'source', kind: 'markdown' as const },
+      { documentId: target, path: 'target-doc', kind: 'markdown' as const },
+    ]
+    const { backlinks } = backlinksIn(entries as never, new Map([[source, facts]]), target)
+    expect(backlinks.map((backlink) => backlink.contexts)).toEqual([
+      [snippetAround(body, index, '[[target-doc]]'.length)],
+    ])
   })
 })

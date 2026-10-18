@@ -284,13 +284,26 @@ empty the Trash of what you no longer need to let the rest go. Anything
 this browser cannot read stays behind too. The result names each one when
 the move finishes, and the browser copy is kept so nothing is lost.
 
+One move also carries at most 2000 trashed documents and 120,000 saved
+versions. Past either, the browser leaves the rest behind and names them (for
+saved versions, the oldest automatic checkpoints go first), and keeps its
+copy. A daemon sent more refuses the whole move with
+`promote_too_many_carried` and keeps none of it.
+
 One move carries at most 2000 documents, the most a browser keeps on a
 desktop. The daemon refuses a larger workspace whole, with the error
 `promote_too_many_documents`, and keeps none of it. The same 2000 is the most
 a daemon workspace holds, so a move into a workspace that already holds
 documents is refused, with `too_many_documents`, when the two together would
 hold more — and at 2000 the daemon refuses any new document, however it is
-added, with the same error.
+added, with the same error. Folders have a ceiling of their own, 4000, and a
+move that would leave the workspace holding more is refused with
+`too_many_folders`.
+
+A saved version is held to the same limits as the documents themselves: a
+move whose saved versions include one with a body, node text or board past
+its limit is refused whole, under the error a sync write past that limit
+gets (for example `markdown_too_large`), and keeps none of it.
 
 Once the daemon confirms it holds every document, image, trashed document
 and saved version that moved, the old browser copy is removed — its Trash

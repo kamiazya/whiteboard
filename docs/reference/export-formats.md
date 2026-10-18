@@ -82,15 +82,22 @@ not:
   document, while a workspace with no documents yet takes it whole, since
   nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
-  at a path outside the path grammar or longer than 1,024 characters; a
-  document already at such a path can still be moved to a valid one. The
+  or a folder at a path outside the path grammar or longer than 1,024
+  characters — which is also what keeps a tree of folders from nesting
+  deeper than a path can name; a document already at such a path can still be
+  moved to a valid one. The
   workspace document's `update` also refuses, with
   `400 {"error":"unreadable_document_meta"}`, an update that would leave a
   readable document or folder with meta this server cannot read — a document's
   kind, segment, id or timestamps, or any key on a folder besides its segment —
-  which would hide it and everything below it — and, with
-  `400 {"error":"document_name_too_long"}`, one that gives a document a name
-  longer than 200 characters. A name stored longer before that bound can
+  which would hide it and everything below it. A document's `update` refuses,
+  with `400 {"error":"invalid_document_root"}`, an update that adds a root
+  container named after one of a document node's own keys (`documentId`,
+  `segment`, `kind`, `name`, `nameChosen`, `createdAt`, `updatedAt`), or a
+  content container under its own name but of another kind (a text named
+  `nodes`). The workspace document's `update` also refuses, with
+  `400 {"error":"document_name_too_long"}`, an update that gives a document a
+  name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`
   refuse, with `413 {"error":"too_many_documents"}`, an update or record that
   would leave the workspace holding more than 2000 documents; a workspace that
@@ -99,7 +106,31 @@ not:
   and answers it the same way: a document's `update` to a path no document
   holds yet, `POST /api/v1/workspaces/{id}/documents`, a duplicate, a restore
   from the trash, and a version restored to a new path. `wb_workspace_edit`'s
-  `document.create` refuses at that op, with the same message.
+  `document.create` refuses at that op, with the same message. Folders — the
+  nodes a path's parts hang from, which hold no document themselves — have a
+  ceiling of their own, 4000, answered with
+  `413 {"error":"too_many_folders"}` by the workspace document's `update` and
+  `promote`, and by a create, a move or a trash restore whose new folders
+  would pass it, in the browser and on the daemon alike. A workspace already
+  holding more still lists, and still takes a write that adds no folder.
+  A sync `update` also refuses, with
+  `409 {"error":"causal_gap"}` and nothing stored, an update that builds on a
+  change the daemon does not hold; the web app sends it again, and it lands
+  once the daemon holds what it builds on.
+- **Rewriting references** is held to the same ceilings, the 262,144
+  characters of a body and the 8,192 of a text node. Each link is longer than
+  the name it replaces, and a moved document's new path can be longer than
+  its old one, so either rewrite can grow a text. Link mentions (the
+  Connections panel's Link, `POST /api/v1/workspaces/{id}/documents/{documentId}/linkify-mentions`)
+  that would carry the body or a node past its ceiling write nothing: the
+  route answers `413` with `{"error":"markdown_too_large"}` or
+  `{"error":"node_text_too_large"}`, and the mention stays listed. When a move
+  follows references, a document the new path would carry past a ceiling is
+  left as written, with its references still naming the old path, in the
+  browser and on the daemon alike. The daemon reports it among the documents
+  the move could not rewrite: in `wb_workspace_edit`'s
+  `follow.failedDocumentIds`, or its log for the rename route. The move
+  itself stands.
 
 ## How large a text node, a label, a comment, a tag and a document name may be
 
@@ -223,28 +254,57 @@ the bound still takes a write, and a copy of its document stays readable. A
 browser-kept workspace refuses the same change the way it refuses an
 over-long node.
 
-## How many nodes and edges one canvas may hold
+## How many nodes, edges and lines one canvas may hold
 
-One canvas holds at most **2,000 nodes** and at most **2,000 edges**. Every
+One canvas holds at most **2,000 nodes** and at most **2,000 edges and lines
+together** — a line (ink) counts against the same bound as an edge, because
+the layout routes both the same way and one costs what the other does. Every
 render, export, layout read and tidy lays the whole board out again, and the
-cost grows with how many edges are routed among how many boxes: about seven
-seconds for a board of 2,000 nodes and 2,000 edges, and minutes for boards
-several times that size. `wb_canvas_edit` refuses the op that would take a
-board past either bound, naming it — "the canvas would hold 2001 nodes, past
-the 2000-node limit for one canvas" — and writes nothing; the same bound
-applies to a batch stored as a proposal. A `tidy` op's `scope` and a
-`region.set` op's `nodes` list at most 2,000 ids, and its `edges` at most
-2,000.
+cost grows with how many edges and lines are routed among how many boxes:
+about seven seconds for a board of 2,000 nodes and 2,000 edges, and minutes
+for boards several times that size. `wb_canvas_edit` refuses the op that would
+take a board past either bound, naming it — "the canvas would hold 2001 nodes,
+past the 2000-node limit for one canvas", or "the canvas would hold 2001 edges
+and lines, past the limit of 2000 edges and lines together for one canvas" —
+and writes nothing; the same bound applies to a batch stored as a proposal. A
+`tidy` op's `scope` and a `region.set` op's `nodes` list at most 2,000 ids,
+and its `edges` at most 2,000.
 
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — refuse an update that grows a board past either bound
-with `413` and `{"error":"too_many_nodes_or_edges"}`, storing nothing; `promote` names
-the canvas. A browser-kept workspace refuses the same change the way it
-refuses an over-long node: nothing is saved, the page goes back to what is
-stored, and the notice says why. A board stored past a bound before it existed
-still reads, and still takes any change that leaves it no larger — moving,
-restyling, or replacing one node with another — so removing nodes or edges is
-how it shrinks.
+with `413` and `{"error":"too_many_nodes_or_edges"}` (the code covers lines
+too), storing nothing; `promote` names the canvas. A browser-kept workspace
+refuses the same change the way it refuses an over-long node: nothing is
+saved, the page goes back to what is stored, and the notice says why. A board
+stored past a bound before it existed still reads, and still takes any change
+that leaves it no larger — moving, restyling, or replacing one node with
+another — so removing nodes, edges or lines is how it shrinks.
+
+## How many open comment threads and proposed changes one document may hold
+
+One document holds at most **500 open comment threads** and at most **1,000
+open proposed changes**, across all of its proposals. Every render and export
+of a canvas lays its comment bubbles and proposal bubbles out again, each
+placed against every box and every bubble before it, so the cost grows faster
+than the count: at 2,000 nodes, 500 open threads add about two seconds and
+2,000 add about fourteen. Only OPEN ones count — a resolved thread, and an
+adopted or dismissed change, stay in the document and are never deleted, so
+resolving or deciding is how a document at a limit takes another.
+
+`wb_thread_edit` (a `thread.add`, or a `thread.resolve` that reopens) and
+`wb_canvas_edit`'s `comment.add` refuse the op that would pass the thread
+limit — "the document would hold 501 open comment threads, past the limit of
+500 open comment threads for one document" — and write nothing. A proposal
+from `wb_canvas_edit` or `wb_body_edit` is refused when it would leave the
+document past the change limit, counting the changes every earlier proposal
+still holds open, so a series of small proposals is held to the same limit as
+one large one.
+
+The daemon's sync routes refuse an update that would pass either with `413`
+and `{"error":"too_many_open_threads"}` or `{"error":"too_many_open_changes"}`,
+storing nothing; a browser-kept workspace refuses it the same way it refuses a
+board past its size, with a notice. A document stored past a limit before it
+existed still reads, and still takes any change that opens nothing.
 
 ## How many ops one call may carry
 

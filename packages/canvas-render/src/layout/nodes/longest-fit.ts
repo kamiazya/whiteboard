@@ -38,10 +38,12 @@ export function longestFittingCount(
 /** From a count that fits, step up until one does not: `[fits, does not]`. */
 function gallopUp(fits: (n: number) => boolean, from: number, limit: number): [number, number] {
   let lo = from
-  for (let step = 1; lo < limit; step *= 2) {
+  let step = 1
+  while (lo < limit) {
     const probe = Math.min(limit, lo + step)
     if (!fits(probe)) return [lo, probe]
     lo = probe
+    step *= 2
   }
   // Every prefix up to `limit` fits. Any upper bound at most one past `lo`
   // ends the bisection with `lo` unchanged, so `limit + 1` names the

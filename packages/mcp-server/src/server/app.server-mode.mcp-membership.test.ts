@@ -498,3 +498,111 @@ describe("server mode /api/v1 — a bare segment is the caller's own", () => {
     expect(text).not.toContain('stray')
   })
 })
+
+/**
+ * A `versions:write` grant restores a document in place. Restoring into
+ * another path — a new document, or over another one — and rolling a
+ * subtree back each create, replace or delete documents, which is what
+ * `workspace:write` grants, so they need it on both surfaces.
+ */
+describe('server mode — a restore that writes other documents needs workspace:write', () => {
+  const VERSIONS_ONLY = 'mcp:call canvas:read workspace:read versions:read versions:write'
+  // The history is the data directory's, so the documents have to be there too.
+  beforeEach(async () => {
+    const boot = await bootSelfHostDeps(tempDir)
+    app = createApp({ ...options, serverDeps: boot.serverDeps, dataLayout: boot.dataLayout })
+  })
+
+  async function savedNote() {
+    const ada = await agentOf('ada')
+    try {
+      const created = await ada.call('wb_workspace_edit', {
+        ...createPlans,
+        ops: [
+          ...createPlans.ops,
+          { op: 'document.create', path: 'other', kind: 'markdown', markdown: 'kept' },
+        ],
+      })
+      expect(created.isError, textOf(created)).toBeFalsy()
+      const listed = await ada.call('wb_document_list', { workspaceId: 'plans' })
+      const documents = (listed.structuredContent?.documents ?? []) as Array<{
+        documentId: string
+        path: string
+      }>
+      const documentId = documents.find((d) => d.path === 'notes')?.documentId ?? ''
+      const saved = await ada.call('wb_version_save', {
+        workspaceId: 'plans',
+        documentIds: [documentId],
+        label: 'before',
+      })
+      expect(saved.isError, textOf(saved)).toBeFalsy()
+      const rows = (saved.structuredContent?.saved ?? []) as Array<{ version: { id: string } }>
+      return { documentId, versionId: rows[0]?.version.id ?? '' }
+    } finally {
+      await ada.close()
+    }
+  }
+
+  async function documentPaths(): Promise<string[]> {
+    const ada = await agentOf('ada')
+    try {
+      const listed = await ada.call('wb_document_list', { workspaceId: 'plans' })
+      const documents = (listed.structuredContent?.documents ?? []) as Array<{ path: string }>
+      return documents.map((d) => d.path).sort()
+    } finally {
+      await ada.close()
+    }
+  }
+
+  it.each([
+    ['into a new path', { targetPath: 'copy' }],
+    ['over another document', { targetPath: 'other', overwrite: true }],
+    ['as a subtree', { subtree: true }],
+  ])('refuses wb_version_restore %s, writing nothing', async (_case, mode) => {
+    const { documentId, versionId } = await savedNote()
+    const narrow = await agentOf('ada', VERSIONS_ONLY)
+    try {
+      const res = await narrow.call('wb_version_restore', {
+        workspaceId: 'plans',
+        documentId,
+        versionId,
+        ...mode,
+      })
+      expect(res.isError).toBe(true)
+      expect(textOf(res)).toMatch(/insufficient_scope/)
+      const inPlace = await narrow.call('wb_version_restore', {
+        workspaceId: 'plans',
+        documentId,
+        versionId,
+      })
+      expect(inPlace.isError, textOf(inPlace)).toBeFalsy()
+    } finally {
+      await narrow.close()
+    }
+    expect(await documentPaths()).toEqual(['notes', 'other'])
+  })
+
+  it.each([
+    ['into a new path', { targetPath: 'copy' }],
+    ['over another document', { targetPath: 'other', overwrite: true }],
+    ['as a subtree', { subtree: true }],
+  ])('refuses the restore route %s with 403, writing nothing', async (_case, mode) => {
+    const { versionId } = await savedNote()
+    const token = await tokenFor('ada', VERSIONS_ONLY)
+    const restore = (body: unknown) =>
+      app.request(
+        `${PUBLIC_URL}/api/workspaces/plans/documents/notes/versions/${versionId}/restore`,
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      )
+    const res = await restore(mode)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'insufficient_scope' })
+    expect((await restore({})).status).toBe(200)
+    expect((await restore({ targetPath: 'notes' })).status).toBe(200)
+    expect(await documentPaths()).toEqual(['notes', 'other'])
+  })
+})

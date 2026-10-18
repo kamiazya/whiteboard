@@ -272,7 +272,7 @@ the boundary described above.
 ## HTTP protections
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
-- **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today). A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
+- **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today), and each tool it calls would still need the scope its `/api` twin does — a macaroon scoped `mcp:call` and `canvas:read` is refused a write tool with `insufficient_scope`, as server mode refuses a bearer. A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
 - **Security headers**: every response carries `frame-ancestors 'none'` (unless the route sets its own CSP), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 - **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 10s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
@@ -450,6 +450,44 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `mcp:call`, and a tool call also needs the scope the same operation needs
   over HTTP, or it is refused with `insufficient_scope` before it runs. The
   table is [Scopes a bearer token needs on `/mcp`](../how-to/self-host-with-docker.md#scopes-a-bearer-token-needs-on-mcp).
+- **Adding, removing or moving a document needs `workspace:write` on every
+  surface, and so do the trash and the pins.** `canvas:write` edits what
+  documents say. A live-sync update is read before it is applied: one that
+  would add, delete or move a document, purge, restore or rewrite a trash
+  entry, change which documents are pinned, or write anything else in the
+  workspace record outside its documents, or that addresses a path no
+  document holds, is refused with `403` unless the grant also holds
+  `workspace:write`, and nothing of it is kept. A document's own update
+  cannot reach its place in the workspace either: one that adds a part named
+  after the document's id, segment, kind, name or timestamps, or a part of
+  the wrong kind under a name the document already uses, is refused with
+  `400 {"error":"invalid_document_root"}`. A
+  live-sync update is judged after it is taken into the keeper's working
+  copy, so one the keeper cannot finish judging — a check that fails rather
+  than answering, or a save that fails — is dropped with that copy unsaved,
+  exactly as a refused one is, and never rides a later save. So is one
+  that builds on a change the keeper does not hold: the engine would park
+  those changes where no check reads them and apply them once the gap
+  filled, so the update is answered `409` (`causal_gap`) and kept nowhere,
+  and the client sends it again once the keeper holds what it builds on. Moving
+  a whole workspace in needs `canvas:write`, `workspace:write` and
+  `versions:write`.
+- **A version grant restores in place, and writes no other document.**
+  `versions:write` restores a document to one of its own saved versions. A
+  restore into another path, or of a whole subtree, creates, replaces or
+  deletes other documents, so it also needs `workspace:write` — over HTTP
+  and through `wb_version_restore` alike — and is refused with
+  `insufficient_scope`, writing nothing, without it.
+- **A tool call tells its caller what went wrong, not how.** A failed call
+  answers a member with the refusal or a generic fault, never the storage
+  path, SQL or engine detail behind it. The server's log records are not
+  forwarded to them over MCP logging either, since a record can carry a raw
+  error or another user's ids; the operator reads them on stderr.
+- **What describes the whole server is an administrator's.** The runtime
+  status (the process and every user's open live-sync streams) and the
+  storage report (every workspace's size) answer only a tenant
+  administrator. Any other signed-in person is refused, even though their
+  session holds the `runtime:read` scope that the font catalogue needs.
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
@@ -468,6 +506,21 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   path outside the path grammar, give it a name past the length limit, or
   bring back a body or node text past its limit is refused and changes
   nothing, in the browser and on the daemon alike.
+- **Rewriting references is held to the same text bounds.** Linking a
+  document's mentions, or following a move into the documents that name the
+  old path, never leaves a body or a node's text past its limit: Link
+  refuses and writes nothing, and a move leaves such a document as written,
+  which the daemon reports. The details are in
+  [Export formats](../reference/export-formats.md#how-large-a-markdown-document-may-be).
+- **A saved version is held to the bounds of any other write.** A move into
+  the daemon carries the browser's saved versions, each naming a past state
+  of the record, and a sync write is judged only on the state it leaves. So
+  the daemon judges each carried version's state too, and refuses the move
+  whole — in the same error a sync write gets (`markdown_too_large`,
+  `too_many_nodes_or_edges`, …) — when one holds a body, node text, label or
+  board past its limit. A restore judges the state it is about to write the
+  same way, in every mode, and refuses with that error before writing
+  anything.
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.
@@ -489,15 +542,23 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A render lays out a bounded number of embedded documents.** Embeds nest
   three levels deep, and one render lays out at most 128 embedded documents
   across every level and both kinds of embed (a file node's canvas preview,
-  a `![[…]]` in a body). So a workspace whose documents each embed many
-  others cannot make one render cost the cube of its fan-out. Past the
-  budget an embed draws as its placeholder or card. The budget holds for
+  a `![[…]]` in a body). The canvases those embeds draw lay out at most
+  4000 elements (nodes, edges and lines) between them — one maximal board's
+  worth — so a hub naming one maximal board many times draws it once, not
+  once per embed. So a workspace whose documents each embed many others
+  cannot make one render cost the cube of its fan-out, nor a multiple of its
+  largest board. Past either budget an embed draws as its placeholder or
+  card. The budget holds for
   `wb_scene_render`, export and the web app's preview alike.
 - **A move into the daemon is bounded.** Moving a browser workspace to the
-  daemon is one request of at most 24 MiB carrying at most 2000 documents.
-  The daemon counts the documents before it merges anything, and refuses a
-  larger record whole (`promote_too_many_documents`). So one request cannot
-  make the daemon write an unbounded number of saved versions.
+  daemon is one request of at most 24 MiB carrying at most 2000 documents,
+  2000 trashed documents and 120,000 saved versions. The daemon counts all
+  three before it judges or merges anything, and refuses a larger move whole
+  (`promote_too_many_documents`, `promote_too_many_carried`). Each saved
+  version is checked against the record before the merge, and rows naming
+  the same document at the same point are checked once, so repeating one row
+  costs almost nothing. So one request cannot make the daemon write, or
+  check, an unbounded number of saved versions.
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is
@@ -505,17 +566,32 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   a create through `/api/v1` or `wb_workspace_edit`, a document's update to a
   new path, a duplicate, a trash restore — so repeating small writes cannot
   grow a record without limit either. The documents one update edits are
-  checkpointed one at a time, not all at once.
-- **A canvas holds a bounded number of nodes and edges.** Every render,
+  checkpointed one at a time, not all at once. Folders are bounded the same
+  way, at 4000 (`too_many_folders`), since every listing walks them as it
+  walks documents, and each folder's path is held to the 1,024-character path
+  bound a document's is (`invalid_path`), which bounds how deep the tree can
+  nest. A record stored before either bound still lists.
+- **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
-  board holds at most 2000 nodes and 2000 edges, however the change arrives:
+  board holds at most 2000 nodes and 2000 edges and lines together (a line is
+  routed like an edge and costs the same), however the change arrives:
   `wb_canvas_edit` refuses the op that would pass either, and a sync update
   or a move is refused whole (`too_many_nodes_or_edges`). One batch tidies at most
-  once, so a single call cannot repeat a whole-board layout once per op. What
+  once, so a single call cannot repeat a whole-board layout once per op.
+  The overlay on top of the board is bounded the same way: a document holds
+  at most 500 open comment threads and 1000 open proposed changes, counted
+  across all of its proposals (`too_many_open_threads`,
+  `too_many_open_changes`). Resolved threads are not counted, since the
+  daemon never draws them; a reader who asks the web app to show resolved
+  comments lays all of them out in their own browser. What
   is still NOT bounded is how long the largest permitted board takes to lay
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in
   [Export formats](../reference/export-formats.md).
+  On a server running several instances these ceilings are checked by each
+  instance on its own, so writes landing at once through different
+  instances can together pass one; see
+  [Running several instances](../how-to/self-host-with-docker.md#running-several-instances).
 - **The data directory answers to the operator.** The stdio entry and the
   local daemon require a data directory owned by this user, refuse one that
   is a symlink rather than follow it, and make it owner-only. Server mode leaves its ownership and mode as the operator set

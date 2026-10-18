@@ -12,7 +12,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { frameLabel, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
+import { searchableTexts } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
 import type { DocumentReferenceFacts, RawReference } from './reference-aggregate.js'
 
@@ -20,7 +20,9 @@ function textReferences(value: string): RawReference[] {
   return scanReferences(value).map((match) => ({
     target: match.target,
     via: 'wikilink' as const,
-    context: snippetAround(value, match.index, match.full.length),
+    text: value,
+    index: match.index,
+    length: match.full.length,
   }))
 }
 

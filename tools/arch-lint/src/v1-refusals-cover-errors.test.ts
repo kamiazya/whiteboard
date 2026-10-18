@@ -64,6 +64,10 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  CausalGapError:
+    'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
+  UnjudgedImportError:
+    'a judge that threw rather than answered, which is the keeper failing and not the caller; it reaches /api/v1 only through a trash restore and is answered as the 500 it is',
   NoRoomForCopyError:
     'raised only by duplicating a document, which is the /api/workspaces duplicate route; /api/v1 has no duplicate',
   DocumentMoveIntoSelfError:
@@ -73,6 +77,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
   DocumentContentLossError:
     'raised by a markdown write to a document with no kind; POST …/documents writes the kind at birth, so what it writes into is never unkinded',
   NotASpatialDocumentError: 'raised by the render tools on a document that is not spatial',
+  DocumentCreationRefusedError:
+    'raised only by the per-document sync update’s lazy create, a daemon route; /api/v1 creates documents by POST …/documents',
   FragmentNotFoundError: CANVAS_TOOLS,
   ThreadEditError: CANVAS_TOOLS,
   CanvasEditError: CANVAS_TOOLS,
@@ -114,16 +120,24 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and bounds every id it is handed before a write',
   CanvasTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and creates a spatial document empty, and wb_canvas_edit refuses the same growth as a CanvasEditError',
+  TooManyOpenThreadsError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit / wb_canvas_edit refuse the same growth as their own op errors',
+  TooManyOpenChangesError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no proposal',
+  OpenChangesCeilingError:
+    'raised by canvas-propose / body-edit proposals, tool-only; /api/v1 writes no proposal',
   SyncWriteRefusalError:
     'the abstract base of the sync write refusals below and of TooManyDocumentsError; raised only as one of them, never bare',
   TextBreachRefusalError:
-    'the abstract base of the eight sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
+    'the abstract base of the ten sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 bounds a name through documentNameSchema before any write',
   OffGrammarPathError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
+  RootNoDocumentHoldsError:
+    'raised by applyDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes content through the bridge, which names only the content containers',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

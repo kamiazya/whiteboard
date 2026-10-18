@@ -4,7 +4,7 @@
 // a refusal added here reaches each surface with the same code and status.
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
   CONTAINER_NAME_LIMIT_PHRASE,
@@ -15,6 +15,8 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
+  OPEN_CHANGES_LIMIT_PHRASE,
+  OPEN_THREADS_LIMIT_PHRASE,
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
@@ -25,7 +27,9 @@ import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-
 export {
   SyncWriteRefusalError,
   TooManyDocumentsError,
+  TooManyFoldersError,
   WORKSPACE_MAX_DOCUMENTS,
+  WORKSPACE_MAX_FOLDERS,
 } from '@kamiazya/whiteboard-ports'
 
 /** The document a refused text belongs to, once the caller could tell. */
@@ -237,7 +241,8 @@ class ContainerNameTooLongError extends TextBreachRefusalError {
 }
 
 /**
- * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES` edges —
+ * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES`
+ * edges and lines together —
  * the bounds every tool write holds, since each render, export and tidy lays
  * the whole board out again. A board stored past one still takes an edit that
  * does not grow it.
@@ -249,16 +254,60 @@ class CanvasTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'canvas-size'>,
     readonly at?: RefusedIn,
   ) {
-    const board = `a canvas of ${breach.count} ${breach.measure}`
+    const board = `a canvas of ${breach.count} ${breach.measure === 'nodes' ? 'nodes' : 'edges and lines'}`
     super(
       valueRefusalMessage(
         at,
         `leave ${board}`,
         `is ${board}`,
-        breach.measure === 'nodes' ? CANVAS_NODES_LIMIT_PHRASE : CANVAS_EDGES_LIMIT_PHRASE,
+        breach.measure === 'nodes'
+          ? CANVAS_NODES_LIMIT_PHRASE
+          : CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
       ),
     )
     this.name = 'CanvasTooLargeError'
+  }
+}
+
+function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
+  return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
+}
+
+/**
+ * A document left holding more open comment threads than
+ * `DOCUMENT_MAX_OPEN_THREADS` — the overlay each render lays out again. A
+ * document stored past it still takes an edit that opens nothing.
+ */
+class TooManyOpenThreadsError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-threads']
+
+  constructor(
+    readonly breach: BreachOf<'open-threads'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(at, `${breach.count} open comment threads`, OPEN_THREADS_LIMIT_PHRASE),
+    )
+    this.name = 'TooManyOpenThreadsError'
+  }
+}
+
+/** The same for open proposed changes, past `DOCUMENT_MAX_OPEN_CHANGES`. */
+class TooManyOpenChangesError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-changes']
+
+  constructor(
+    readonly breach: BreachOf<'open-changes'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(
+        at,
+        `${breach.count} open proposed changes`,
+        OPEN_CHANGES_LIMIT_PHRASE,
+      ),
+    )
+    this.name = 'TooManyOpenChangesError'
   }
 }
 
@@ -279,27 +328,46 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new ContainerNameTooLongError(breach, at)
     case 'canvas-size':
       return new CanvasTooLargeError(breach, at)
+    case 'open-threads':
+      return new TooManyOpenThreadsError(breach, at)
+    case 'open-changes':
+      return new TooManyOpenChangesError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)
   }
 }
 
+/** How many refused paths a refusal names, and how much of each. */
+const REFUSED_PATHS_NAMED = 3
+const REFUSED_PATH_SHOWN_CHARS = 120
+
+function shortened(path: string): string {
+  return path.length <= REFUSED_PATH_SHOWN_CHARS
+    ? path
+    : `${path.slice(0, REFUSED_PATH_SHOWN_CHARS)}… (${path.length} characters)`
+}
+
 /**
- * A sync write refused because it would put documents at paths
+ * A sync write refused because it would put documents or folders at paths
  * `documentPathSchema` refuses — off the segment grammar, or past
  * `DOCUMENT_PATH_MAX_LENGTH` — a path every listing and search of the
- * workspace then fails on. Nothing of the write was kept. The message names
- * both rules, since a path can break either.
+ * workspace then fails on, and, for a folder, the bound that keeps the tree
+ * from growing deeper than a path can name. Nothing of the write was kept.
+ * The message names both rules, since a path can break either.
  */
 export class OffGrammarPathError extends SyncWriteRefusalError {
   readonly code = 'invalid_path'
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
-    const quoted = paths.map((path) => JSON.stringify(path)).join(', ')
+    // A chain of folders past the bound refuses every path below the bound,
+    // each longer than the last, so only the first few are named, and short.
+    const named = paths.slice(0, REFUSED_PATHS_NAMED).map((path) => JSON.stringify(shortened(path)))
+    const more = paths.length - named.length
+    const quoted = more > 0 ? `${named.join(', ')} and ${more} more` : named.join(', ')
     super(
-      `This update would put documents at paths this keeper cannot store: ${quoted}. A path may be at most ${DOCUMENT_PATH_MAX_LENGTH} characters, and each segment may hold only ASCII letters, digits and interior hyphens`,
+      `This update would put documents or folders at paths this keeper cannot store: ${quoted}. A path may be at most ${DOCUMENT_PATH_MAX_LENGTH} characters, and each segment may hold only ASCII letters, digits and interior hyphens`,
     )
     this.name = 'OffGrammarPathError'
   }
@@ -326,6 +394,27 @@ export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
 }
 
 /**
+ * A document's sync write refused because it adds roots no workspace node can
+ * take as content: named after a key the node keeps for itself (its id,
+ * segment, kind, name or stamps), or after a content container but of another
+ * kind. A document's content and its node's meta share one map, so kept, the
+ * first would rewrite the node — hiding it from every listing, or naming it at
+ * any length — from a grant that may only edit content. Nothing of the write
+ * was kept.
+ */
+export class RootNoDocumentHoldsError extends SyncWriteRefusalError {
+  readonly code = 'invalid_document_root'
+  readonly status = 400
+
+  constructor(public readonly roots: readonly string[]) {
+    super(
+      `This update adds root containers a workspace document cannot hold (${roots.map((root) => JSON.stringify(root)).join(', ')}): a document's id, segment, kind, name and timestamps belong to its place in the workspace, and a content container keeps the kind it has`,
+    )
+    this.name = 'RootNoDocumentHoldsError'
+  }
+}
+
+/**
  * A sync write refused because it would give documents display names past
  * `DOCUMENT_NAME_MAX_LENGTH`, the bound every other name write holds. A name
  * stored longer before the bound, left or shortened, is let through.
@@ -342,11 +431,32 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
   }
 }
 
+/**
+ * A sync write refused because its changes build on a change this keeper
+ * does not hold. Loro parks such changes outside the oplog, where no bound is
+ * judged, and applies them as soon as a later import supplies what they
+ * build on — so the instance holding them is dropped and nothing is kept.
+ * 409 rather than a 4xx a client gives up on: sending again once the keeper
+ * holds the change lands, which is the ordinary end of a keeper briefly
+ * behind its own record.
+ */
+export class CausalGapError extends SyncWriteRefusalError {
+  readonly code = 'causal_gap'
+  readonly status = 409
+
+  constructor() {
+    super(
+      'This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first',
+    )
+    this.name = 'CausalGapError'
+  }
+}
+
 /** What a surface answers a sync write's throw with, or `undefined` for one it does not answer. */
 export function syncWriteAnswer(err: unknown):
   | {
       readonly code: SyncWriteRefusalCode | typeof DOCUMENT_ENGINE_TRAP_CODE
-      readonly status: 400 | 413 | 500
+      readonly status: 400 | 409 | 413 | 500
     }
   | undefined {
   if (err instanceof SyncWriteRefusalError) return { code: err.code, status: err.status }

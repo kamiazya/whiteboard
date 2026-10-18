@@ -15,6 +15,14 @@
 #
 # Configuration lives in sonar-project.properties, next to the exclusions it
 # has to stay in sync with.
+#
+# Two jobs, because SONAR_TOKEN must not share a job with dependency code: a
+# secret scoped to one step is no boundary inside one job's filesystem, so an
+# install or a test run earlier in it could rewrite what the scan step runs.
+# `coverage` installs and runs the tests with no secret; `scan` holds the token
+# and executes nothing from the repository or its dependencies — it checks the
+# tree out to READ it, verifies the lcov `coverage` uploaded against its
+# digest, and hands both to the pinned scanner action.
 name: SonarQube
 
 on:
@@ -42,24 +50,28 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  analyze:
+  coverage:
     # A pull request from a fork gets no secrets, so SONAR_TOKEN is empty and
     # the scan would fail on authentication after paying for a full coverage
-    # run. Skip the job outright rather than spend ~10 minutes to fail.
+    # run. Skip the job outright rather than spend ~25 minutes to fail.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    # Measured on main: 1059-2093s, recently 1739-2093s (2026-10, the growth
-    # being "Collect coverage": 1222s to 1470s between two main runs), so 45
-    # minutes had fallen to 1.29x of the newest run. A run that hits the limit
-    # is cancelled, not failed — no check goes red and the dashboard keeps
-    # answering from the last analysis that finished. Keep this at 1.5x the
-    # newest measured duration or more.
+    permissions:
+      contents: read
+    # Measured on main while coverage and scan were one job: 1059-2093s,
+    # recently 1739-2093s (2026-10, the growth being "Collect coverage": 1222s
+    # to 1470s between two main runs). Kept at the old job's limit, which held
+    # 1.5x of the newest whole run, until the split's own durations are known.
+    # A run that hits the limit is cancelled, not failed — no check goes red and
+    # the dashboard keeps answering from the last analysis that finished.
     timeout-minutes: 55
+    outputs:
+      analyze: ${{ steps.detect.outputs.analyze }}
+      lcov_sha256: ${{ steps.digest.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Sonar's "new code" period is decided from git history, and its
-          # issue attribution from blame; a shallow clone has neither.
+          # The detect step diffs `HEAD^1...HEAD`, which needs their merge base.
           fetch-depth: 0
           # Nothing here performs an authenticated git operation, and the job
           # installs and runs the tree's own tooling — keep the job token away
@@ -92,7 +104,68 @@ jobs:
         continue-on-error: true
         run: pnpm coverage
 
-      - if: steps.detect.outputs.analyze == 'true'
-        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+      # A run that crashed before writing the lcov still gets its analysis,
+      # without coverage, as it did when this was one job: an empty digest is
+      # what tells `scan` there is nothing to download.
+      - name: Digest the lcov for scan
+        id: digest
+        if: steps.detect.outputs.analyze == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f tmp/coverage/lcov.info ]; then
+            echo "sha256=$(sha256sum tmp/coverage/lcov.info | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::pnpm coverage wrote no tmp/coverage/lcov.info; the analysis runs without coverage"
+          fi
+
+      - name: Upload the lcov for scan
+        if: steps.digest.outputs.sha256 != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sonar-lcov-${{ github.run_id }}
+          path: tmp/coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 1
+          # A re-run of this job replaces the previous attempt's lcov rather
+          # than failing on the name.
+          overwrite: true
+
+  scan:
+    needs: coverage
+    if: needs.coverage.outputs.analyze == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    # Unmeasured on its own: the one-job runs spent 620-870s outside "Collect
+    # coverage", install included, so 30 minutes is over 2x of that.
+    timeout-minutes: 30
+    # Runs no repository or dependency code. The scanner reads the source to
+    # analyse it, so the whole tree is checked out, but nothing installs and
+    # nothing in it executes: the scanner action is a pinned JavaScript action
+    # that downloads a signature-verified scanner CLI, which parses the files.
+    # The cost is type resolution — with no node_modules the TypeScript
+    # analysis resolves no third-party types, which a type-aware rule can feel.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Sonar's "new code" period is decided from git history, and its
+          # issue attribution from blame; a shallow clone has neither.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the lcov coverage uploaded
+        if: needs.coverage.outputs.lcov_sha256 != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sonar-lcov-${{ github.run_id }}
+          path: tmp/coverage
+
+      - name: Verify the lcov against coverage's digest
+        if: needs.coverage.outputs.lcov_sha256 != ''
+        env:
+          LCOV_SHA256: ${{ needs.coverage.outputs.lcov_sha256 }}
+        run: echo "$LCOV_SHA256  tmp/coverage/lcov.info" | sha256sum -c -
+
+      - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

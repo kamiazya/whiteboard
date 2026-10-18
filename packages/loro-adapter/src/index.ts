@@ -7,7 +7,7 @@ export {
   writeThreadMessage,
 } from './comment-threads.js'
 export type { DocumentContainers } from './containers.js'
-export { MARKDOWN_BODY_KEY } from './containers.js'
+export { MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
 export { contentDigestOfDocument } from './content-digest.js'
 export { type DocumentBatchWriter, withDocumentBatch } from './document-batch.js'
 export { type DocumentContent, readDocumentContent } from './document-content.js'
@@ -22,6 +22,7 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
+export { rootsNoDocumentNodeHolds } from './document-node-roots.js'
 export { isEngineTrap } from './engine-trap.js'
 export {
   DEFAULT_FILE_GRACE_MS,
@@ -66,10 +67,12 @@ export {
 export { countSpatialNodes } from './spatial-node-count.js'
 export {
   importWithinTextLimits,
+  judgeStateWithinTextLimits,
   SYNC_TEXT_BREACH_CODES,
   type SyncTextBreach,
   type SyncTextJudgement,
   syncTextLimitJudge,
+  UnjudgedImportError,
 } from './sync-text-limits.js'
 export {
   markThreadPassages,
@@ -78,6 +81,7 @@ export {
 } from './thread-marks.js'
 export {
   documentsTouchedSince,
+  organisationChangedSince,
   stampEditedDocuments,
   type TouchedDocument,
 } from './touched-documents.js'

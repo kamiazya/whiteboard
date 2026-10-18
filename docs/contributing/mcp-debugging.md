@@ -34,10 +34,11 @@ Note on the deprecated core Logging capability (`logging/setLevel` + `notificati
 | stdio | 2026-07-28 | records from a tool call whose `_meta` sets `io.modelcontextprotocol/logLevel` (the threshold) |
 | HTTP `/mcp` | 2025 | nothing: the endpoint answers in JSON mode, which has no stream for a request's notifications. `logging/setLevel` is accepted and has no effect |
 | HTTP `/mcp` | 2026-07-28 | records from a tool call whose `_meta` sets `io.modelcontextprotocol/logLevel`, on that call's response stream |
+| HTTP `/mcp` on server mode | any | nothing. The caller is a member of a shared server, not its operator, and a record can carry an error's stack, a storage path or another user's ids — the same detail a failed tool call's text withholds from them. The operator reads the server's stderr |
 
 The development stdio proxy (`mcp-http-stdio-proxy.mjs`, below) is not a transport of its own: it relays each stdin line to HTTP `/mcp`, so a client on it gets the HTTP rows. A client that negotiates (`versionNegotiation: { mode: 'auto' }`, or a `2026-07-28` pin) runs the modern era through it and receives a `_meta`-opted call's records ahead of the result; a client that never negotiates runs the 2025 era and receives none. `mcp-http-stdio-proxy.script.test.ts` pins both against a real daemon.
 
-`WHITEBOARD_LOG_LEVEL` applies first: a record below it is never produced. Structured logs always reach stderr regardless, and stderr is where to look for anything outside a tool call. `logging-forwarding.test.ts` pins each row.
+`WHITEBOARD_LOG_LEVEL` applies first: a record below it is never produced. Structured logs always reach stderr regardless, and stderr is where to look for anything outside a tool call. `logging-forwarding.test.ts` pins each row, and `logging-forwarding.server-mode.test.ts` the server-mode one.
 
 When upgrading the `@modelcontextprotocol/*` packages, re-check this matrix, the era tests (`app.test.ts` modern-pinned client, `serve-stdio-eras.test.ts`), and the related initialize tests before shipping.
 

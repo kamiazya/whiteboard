@@ -14,6 +14,7 @@ import {
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
   TooManyDocumentsError,
+  TooManyFoldersError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
@@ -133,11 +134,12 @@ export const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
 ]
 
 /**
- * A new document past the workspace's document ceiling, in the code the sync
- * routes answer it with, so a client reads one refusal however it minted.
+ * A new document or folder past the workspace's ceiling for it, in the code
+ * the sync routes answer it with, so a client reads one refusal however it
+ * minted.
  */
-export const tooManyDocuments: ErrorAnswer = (err) =>
-  err instanceof TooManyDocumentsError
+export const pastWorkspaceCeiling: ErrorAnswer = (err) =>
+  err instanceof TooManyDocumentsError || err instanceof TooManyFoldersError
     ? { status: 413, body: errorBody(err.code, err.message) }
     : null
 

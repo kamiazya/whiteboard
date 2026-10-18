@@ -6,6 +6,7 @@ import {
   renameDocumentPathResponseSchema,
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { TooManyFoldersError } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -537,7 +538,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
     const [updateRes, renameRes] = await Promise.all([updatePromise, renamePromise])
     expect(renameRes.status).toBe(200)
-    expect(updateRes.status).toBe(200)
+    expect(updateRes.status).toBe(409) // nothing at the old path holds what it builds on
 
     // Exactly one canvas must survive -- the update must not have silently
     // inserted a phantom duplicate back at the old path.
@@ -689,6 +690,20 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(res2.status).toBe(500)
     const json2: unknown = await res2.json()
     expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
+  })
+
+  it('answers a move whose new folders would pass the folder ceiling 413 too_many_folders', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    const router = await routerFailing('moveDocument', new TooManyFoldersError(4001))
+
+    const res = await router.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'x/b' }),
+    })
+
+    expect(res.status).toBe(413)
+    await expect(res.json()).resolves.toMatchObject({ error: 'too_many_folders' })
   })
 })
 

@@ -177,12 +177,17 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // whole workspace document. Same tier as the per-document equivalents —
   // a workspace-granularity update is still a document mutation, just scoped
   // wider, and the snapshot answers the same content canvas:read grants.
-  // Promotion merges the record AND writes explicit checkpoints for it
-  // (ADR-0039), so it needs what both of those need.
+  // An update that adds, removes or moves a document needs workspace:write as
+  // well, which is judged of the update itself rather than here: the gate sees
+  // a path, and only the operations say what kind of change they make
+  // (`DocumentRouterOptions.mayPlaceDocuments`). The per-document update's
+  // lazy create below is judged the same way.
+  // Promotion merges a whole record in — documents, content AND explicit
+  // checkpoints (ADR-0039) — so it needs what each of those needs.
   {
     name: 'workspace-document/promote',
     claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/promote$/, 'POST'),
-    decide: always('canvas:write', 'versions:write'),
+    decide: always('canvas:write', 'workspace:write', 'versions:write'),
     workspace: wHandle,
   },
   {
@@ -391,6 +396,30 @@ export type GatedWorkspaceHandle =
   | { readonly kind: 'none' }
   | { readonly kind: 'handle'; readonly handle: string }
   | { readonly kind: 'undecodable' }
+
+/**
+ * What a restore needs beyond the `versions:write` its route and tool are
+ * registered under. In place it rewrites the one document whose history it
+ * reads, which is a history operation. Into another path it creates or
+ * replaces that document, and as a subtree it reverts, resurrects and deletes
+ * descendants — document writes, so they need `workspace:write`, the scope
+ * creating, replacing and deleting documents takes everywhere else.
+ *
+ * The body names the mode, and a route's scope is decided from its path and
+ * verb before any body is read, so each surface asks this once the request
+ * is parsed. `path` is the document's, where the surface knows it: a target
+ * equal to it is the in-place restore. A surface that does not know it treats
+ * any target as another document.
+ */
+export function restoreScopes(
+  asked: { readonly targetPath?: unknown; readonly subtree?: unknown },
+  path?: string,
+): readonly AuthScope[] {
+  const elsewhere = typeof asked.targetPath === 'string' && asked.targetPath !== path
+  return elsewhere || asked.subtree === true
+    ? ['versions:write', 'workspace:write']
+    : ['versions:write']
+}
 
 /**
  * The workspace HANDLE this request's route reaches, for the membership

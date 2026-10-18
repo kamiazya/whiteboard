@@ -70,6 +70,7 @@ describe('a workspace-document update that edits many documents', () => {
     const signalled: string[] = []
     const app = createWorkspaceDocumentRouter({
       serverDeps: { ...serverDeps, liveDocuments },
+      mayPlaceDocuments: () => true,
       triggerAutoVersion: (_workspaceId, path) => {
         signalled.push(path)
       },

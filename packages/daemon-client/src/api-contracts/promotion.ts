@@ -1,5 +1,7 @@
 import {
   base64urlSchema,
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
   promotedTrashBytesRequestSchema,
   promotedVersionRequestSchema,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
@@ -13,6 +15,7 @@ export type {
   PromotedTrashBytes,
   PromotedVersion,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
+export { PROMOTE_MAX_TRASH, PROMOTE_MAX_VERSIONS }
 
 /**
  * The most a promote request body may carry: the content ceiling, which a
@@ -35,8 +38,11 @@ export const promoteWorkspaceRequestSchema = z
   .object({
     /** The record as `doc.export({ mode: 'snapshot' })`, base64url. */
     snapshot: base64urlSchema,
-    trash: z.array(promotedTrashBytesRequestSchema).optional(),
-    versions: z.array(promotedVersionRequestSchema).optional(),
+    // Counted before any row is judged, so a request cannot repeat rows
+    // until the body ceiling; the daemon answers past either 413
+    // `promote_too_many_carried`, and the sender leaves the rest behind.
+    trash: z.array(promotedTrashBytesRequestSchema).max(PROMOTE_MAX_TRASH).optional(),
+    versions: z.array(promotedVersionRequestSchema).max(PROMOTE_MAX_VERSIONS).optional(),
   })
   .strict()
 export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSchema>

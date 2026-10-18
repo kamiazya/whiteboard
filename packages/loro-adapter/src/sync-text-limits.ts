@@ -5,7 +5,7 @@
 // keeper accepted and the other would refuse, which is what promoting a
 // browser-kept workspace to the daemon would otherwise trip over.
 import {
-  CANVAS_MAX_EDGES,
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
@@ -18,15 +18,15 @@ import {
   TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
-import type {
-  ContainerID,
-  JsonSchema,
+import {
+  type ContainerID,
+  type JsonSchema,
   LoroDoc,
-  LoroMap,
-  LoroText,
-  MapOp,
-  TextOp,
-  VersionVector,
+  type LoroMap,
+  type LoroText,
+  type MapOp,
+  type TextOp,
+  type VersionVector,
 } from 'loro-crdt'
 import { heldBefore, longNameBreach, type NameSuspect, nameSuspectsOf } from './container-names.js'
 import {
@@ -39,7 +39,20 @@ import {
   THREADS_KEY,
 } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
-import { liftStoredNode } from './legacy-lifts.js'
+import {
+  annotationBreach,
+  annotationCounts,
+  mostOpenAnnotations,
+  type OpenAnnotationsBreach,
+  SMALLEST_ANNOTATION_BOUND,
+} from './sync-annotation-limits.js'
+import {
+  fieldLength,
+  longestTag,
+  nodeLocationLength,
+  nodeTextLength,
+  tagsIn,
+} from './value-lengths.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
@@ -53,7 +66,11 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * board's tags past `TAGS_PER_ELEMENT_MAX` in number or with one past
  * `TAG_MAX_CHARS` (`tags`), or a container it brought in named past
  * `CONTAINER_NAME_MAX_CHARS` (`container-name`), or a board it grew past
- * `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES` edges (`canvas-size`).
+ * `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES` edges and lines
+ * together (`canvas-size`), or a document it left holding more than
+ * `DOCUMENT_MAX_OPEN_THREADS` open comment threads (`open-threads`) or
+ * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
+ * more than before.
  * Lengths are UTF-16 units, the length every limit counts.
  *
  * The board's size is judged here with its text because it is the same
@@ -110,13 +127,15 @@ export type SyncTextBreach =
     }
   | {
       readonly shape: 'canvas-size'
-      /** Which bound: the board's nodes, or its edges. */
-      readonly measure: 'nodes' | 'edges'
+      /** Which bound: the board's nodes, or its edges and lines together. */
+      readonly measure: 'nodes' | 'edges-and-lines'
       /** How many the board would hold. */
       readonly count: number
       /** The map holding them, so a caller can name the document. */
       readonly container: ContainerID
     }
+  | OpenAnnotationsBreach<'open-threads'>
+  | OpenAnnotationsBreach<'open-changes'>
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -133,6 +152,8 @@ export const SYNC_TEXT_BREACH_CODES = {
   tags: 'tags_too_large',
   'container-name': 'container_name_too_long',
   'canvas-size': 'too_many_nodes_or_edges',
+  'open-threads': 'too_many_open_threads',
+  'open-changes': 'too_many_open_changes',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -144,48 +165,19 @@ export interface SyncTextJudgement {
    * placement checks it only then.
    */
   readonly touchesNodeMeta: boolean
+  /**
+   * Whether the import parked changes that build on a change the document
+   * does not hold. Loro keeps them outside the oplog, so the judgement never
+   * read them, and applies them as soon as a later import supplies what they
+   * build on — so a keeper refuses the update and drops the instance, the
+   * one way to be rid of them.
+   */
+  readonly pending: boolean
 }
 
 type Op = JsonSchema['changes'][number]['ops'][number]
 type LongValue = { container: ContainerID; key: string; bound: BoundedValue }
 type Run = { counter: number; pos: number; units: number }
-
-/**
- * A node value's text as the reader lifts it (`liftStoredNode`): a value
- * carrying a legacy kind is read from its `text` whatever `resource` it also
- * holds, so the judge measures the lifted value rather than guessing which
- * field wins. The longer of the two, since a value the lift leaves holding
- * both is one the reader drops anyway.
- */
-function nodeTextLength(value: unknown): number {
-  const lifted = liftStoredNode(value)
-  if (typeof lifted !== 'object' || lifted === null) return 0
-  const resource = (lifted as { resource?: unknown }).resource
-  return Math.max(fieldLength(resource, 'content'), fieldLength(lifted, 'text'))
-}
-
-/**
- * A node value's longest location as every reader lifts it: the resource's
- * `location` or `subpath`, the legacy `url`, `file` or `subpath` field, or a
- * group's `background` — an image location every reader of image references
- * follows.
- */
-function nodeLocationLength(value: unknown): number {
-  if (typeof value !== 'object' || value === null) return 0
-  const resource = (value as { resource?: unknown }).resource
-  return Math.max(
-    fieldLength(resource, 'location'),
-    fieldLength(resource, 'subpath'),
-    ...['url', 'file', 'subpath', 'background'].map((field) => fieldLength(value, field)),
-  )
-}
-
-/** The length of a value's string field, 0 when it has none. */
-function fieldLength(value: unknown, field: string): number {
-  if (typeof value !== 'object' || value === null) return 0
-  const held = (value as Record<string, unknown>)[field]
-  return typeof held === 'string' ? held.length : 0
-}
 
 /**
  * Whether `container` is a thread's message map — under a document's root or
@@ -208,26 +200,6 @@ interface BoundedValue {
   readonly length: (value: unknown) => number
   readonly holds: (doc: LoroDoc, container: ContainerID, key: string) => boolean
   readonly breach: (amount: number, key: string, container: ContainerID) => SyncTextBreach
-}
-
-/**
- * The tags a map value carries: a node's or edge's own `tags` field, or —
- * for the board, whose tags are one value under their own key — the value
- * itself.
- */
-function tagsIn(value: unknown): readonly unknown[] {
-  if (Array.isArray(value)) return value
-  if (typeof value !== 'object' || value === null) return []
-  const held = (value as { tags?: unknown }).tags
-  return Array.isArray(held) ? held : []
-}
-
-function longestTag(value: unknown): number {
-  let longest = 0
-  for (const tag of tagsIn(value)) {
-    if (typeof tag === 'string' && tag.length > longest) longest = tag.length
-  }
-  return longest
 }
 
 /**
@@ -345,6 +317,8 @@ interface UpdateWrites {
   names: NameSuspect[]
   /** Every map the update set a key in — the only maps a board can have grown in. */
   setInto: Set<ContainerID>
+  /** Every map the update set or deleted a key in — the only maps whose size it changed. */
+  mapsWritten: Set<ContainerID>
   touchesNodeMeta: boolean
 }
 
@@ -385,6 +359,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
     longValues: new Map(),
     names: [],
     setInto: new Set(),
+    mapsWritten: new Set(),
     touchesNodeMeta: false,
   }
   for (const change of json.changes) {
@@ -402,6 +377,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
 /** A map value long enough to break a bound if it is where that bound applies, kept for the judgement after the import. */
 function readMapWrite(writes: UpdateWrites, op: Op): void {
   const content = op.content as MapOp
+  writes.mapsWritten.add(op.container)
   if (content.type !== 'insert') return
   writes.setInto.add(op.container)
   BOUNDED_VALUES.forEach((bound, index) => {
@@ -468,11 +444,17 @@ function valueBreach(
   return null
 }
 
-/** The bound a board's map holds, by the key it sits under. */
+/**
+ * Each per-canvas bound and the maps it counts together. Edges and lines
+ * share one: the layout routes both through one pipeline, so a line costs
+ * what an edge costs (`canvas-size`).
+ */
 const CANVAS_BOUNDS = [
-  { key: NODES_KEY, measure: 'nodes', max: CANVAS_MAX_NODES },
-  { key: EDGES_KEY, measure: 'edges', max: CANVAS_MAX_EDGES },
+  { keys: [NODES_KEY], measure: 'nodes', max: CANVAS_MAX_NODES },
+  { keys: [EDGES_KEY, LINES_KEY], measure: 'edges-and-lines', max: CANVAS_MAX_EDGES_AND_LINES },
 ] as const
+
+type CanvasBound = (typeof CANVAS_BOUNDS)[number]
 
 /** How many entries the map `container` holds in the doc's current state; 0 when there is none. */
 function entriesIn(doc: LoroDoc, container: ContainerID): number {
@@ -484,10 +466,38 @@ function entriesIn(doc: LoroDoc, container: ContainerID): number {
   }
 }
 
+/** The bound `container` counts toward, when it is one of a board's element maps. */
+function canvasBoundOf(doc: LoroDoc, container: ContainerID): CanvasBound | undefined {
+  return CANVAS_BOUNDS.find(({ keys }) =>
+    keys.some((key) => isContentContainer(doc, container, key)),
+  )
+}
+
+/**
+ * The maps `bound` counts on the board holding `container`, in the doc's
+ * current state; a sibling the board does not hold yet is absent. A root is
+ * opened only when present, so the judgement adds none to the record.
+ */
+function boardMaps(doc: LoroDoc, container: ContainerID, bound: CanvasBound): LoroMap[] {
+  const parent = (doc.getContainerById(container) as LoroMap | undefined)?.parent() as
+    | LoroMap
+    | undefined
+  if (parent === undefined) {
+    const roots = doc.getShallowValue()
+    return bound.keys.filter((key) => key in roots).map((key) => doc.getMap(key))
+  }
+  return bound.keys.flatMap((key) => {
+    const map = parent.get(key) as LoroMap | undefined
+    return map === undefined ? [] : [map]
+  })
+}
+
 /**
  * A board the update grew past a per-canvas bound. Only the maps it set a key
  * in can have grown, and a board past a bound before the update is judged
- * against itself, by `growsPast`, so removing is how it shrinks.
+ * against itself, by `growsPast`, so removing is how it shrinks. `before`
+ * holds the size, as the update found it, of every map the update wrote;
+ * any other map on the board it left as it was.
  */
 function canvasBreach(
   doc: LoroDoc,
@@ -495,10 +505,12 @@ function canvasBreach(
   before: ReadonlyMap<ContainerID, number>,
 ): SyncTextBreach | null {
   for (const container of setInto) {
-    const bound = CANVAS_BOUNDS.find(({ key }) => isContentContainer(doc, container, key))
+    const bound = canvasBoundOf(doc, container)
     if (bound === undefined) continue
-    const count = entriesIn(doc, container)
-    if (growsPast(bound.max, before.get(container) ?? 0, count)) {
+    const maps = boardMaps(doc, container, bound)
+    const count = maps.reduce((sum, map) => sum + map.size, 0)
+    const was = maps.reduce((sum, map) => sum + (before.get(map.id) ?? map.size), 0)
+    if (growsPast(bound.max, was, count)) {
       return { shape: 'canvas-size', measure: bound.measure, count, container }
     }
   }
@@ -537,7 +549,9 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  * On a breach `doc` holds operations it must not keep, possibly still
  * detached: the caller discards the instance. Bytes the engine refuses are
  * rethrown with `doc` as it was. An engine trap is rethrown as it came; the
- * instance it struck is unusable.
+ * instance it struck is unusable. Anything else thrown once the import has
+ * landed is rethrown as `UnjudgedImportError`, so a caller cannot read it as
+ * refused bytes and keep an instance holding operations nobody judged.
  */
 export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTextJudgement {
   const from = doc.oplogVersion()
@@ -548,16 +562,42 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   // does not bar a record from a fresh workspace.
   const replays = from.length() > 0
   if (replays) doc.detach()
+  let pending: boolean
   try {
-    doc.import(update)
+    pending = (doc.import(update).pending?.size ?? 0) > 0
   } catch (err) {
     // A refused import left the oplog as it was; a trapped instance is never touched again.
     if (replays && !isEngineTrap(err)) doc.attach()
     throw err
   }
+  try {
+    return { ...judgeImported(doc, from, replays), pending }
+  } catch (err) {
+    if (isEngineTrap(err)) throw err
+    throw new UnjudgedImportError(err)
+  }
+}
+
+/**
+ * An update landed in a document and its judgement threw before it could
+ * answer. The document holds the update's operations, judged or not, so it
+ * must be discarded exactly as a refused one is.
+ */
+export class UnjudgedImportError extends Error {
+  constructor(cause: unknown) {
+    super('The update was imported but could not be judged', { cause })
+    this.name = 'UnjudgedImportError'
+  }
+}
+
+function judgeImported(
+  doc: LoroDoc,
+  from: VersionVector,
+  replays: boolean,
+): Omit<SyncTextJudgement, 'pending'> {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
-  const judged = (breach: SyncTextBreach | null): SyncTextJudgement => ({
+  const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
   })
@@ -572,17 +612,39 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   )
   const namedBefore = replays ? heldBefore(doc, writes.names) : new Set<ContainerID>()
   const entriesBefore = new Map(
-    replays ? [...writes.setInto].map((container) => [container, entriesIn(doc, container)]) : [],
+    [...writes.mapsWritten].map((container) => [
+      container,
+      replays ? entriesIn(doc, container) : 0,
+    ]),
   )
+  const annotationsBefore = replays ? annotationCounts(doc, writes.mapsWritten) : new Map()
   if (replays) doc.attach()
   const longName = longNameBreach(doc, writes.names, namedBefore)
   return judged(
     longName === null
       ? (bodyBreach(doc, writes.net) ??
           valueBreach(doc, writes.longValues, before) ??
-          canvasBreach(doc, writes.setInto, entriesBefore))
+          canvasBreach(doc, writes.setInto, entriesBefore) ??
+          annotationBreach(doc, writes.mapsWritten, annotationsBefore))
       : { shape: 'container-name', ...longName },
   )
+}
+
+/**
+ * The verdict `importWithinTextLimits` gives the state `doc` is in, as though
+ * that state were written into an empty document — for a state no sync write
+ * produced, such as a saved version checked out of a carried record, which
+ * the judge never saw as a head. One judgement rather than a second set of
+ * bounds, so a version cannot be refused or admitted by a rule the sync
+ * surface does not apply. Every bound is judged against nothing before, and
+ * no run is, as for any write into an empty document.
+ *
+ * `forkAt` so a checked-out `doc` is judged at the state it shows, not at its
+ * oplog's head. `doc` is left as it was.
+ */
+export function judgeStateWithinTextLimits(doc: LoroDoc): SyncTextBreach | null {
+  const state = doc.forkAt(doc.frontiers()).export({ mode: 'snapshot' })
+  return importWithinTextLimits(new LoroDoc(), state).breach
 }
 
 /**
@@ -603,19 +665,25 @@ function longestBody(doc: LoroDoc): number {
 }
 
 /**
- * The most nodes or edges any board in `doc` holds, at its root or under any
- * workspace-tree node — opened only where present, as `longestBody` does.
+ * The most any board in `doc` holds against one per-canvas bound — its nodes,
+ * or its edges and lines together — at its root or under any workspace-tree
+ * node, opened only where present, as `longestBody` does.
  */
 function largestBoard(doc: LoroDoc): number {
   const roots = doc.getShallowValue()
   let largest = 0
-  for (const { key } of CANVAS_BOUNDS) {
-    if (key in roots) largest = Math.max(largest, doc.getMap(key).size)
+  for (const { keys } of CANVAS_BOUNDS) {
+    const held = keys.reduce((sum, key) => sum + (key in roots ? doc.getMap(key).size : 0), 0)
+    largest = Math.max(largest, held)
   }
   if (!(WORKSPACE_TREE_KEY in roots)) return largest
   for (const node of doc.getTree(WORKSPACE_TREE_KEY).getNodes()) {
-    for (const { key } of CANVAS_BOUNDS) {
-      largest = Math.max(largest, (node.data.get(key) as LoroMap | undefined)?.size ?? 0)
+    for (const { keys } of CANVAS_BOUNDS) {
+      const held = keys.reduce(
+        (sum, key) => sum + ((node.data.get(key) as LoroMap | undefined)?.size ?? 0),
+        0,
+      )
+      largest = Math.max(largest, held)
     }
   }
   return largest
@@ -662,10 +730,12 @@ function heldBound(record: LoroDoc, measure: (doc: LoroDoc) => number): (walk: b
  * `sync-text-limits.tags.test.ts` pin that encoding). An update short
  * enough that no limit can be reached — no longer than the smallest bound,
  * a label's, and not enough to take the longest body past its own, nor the
- * largest board past a node or edge bound, since an update adds no more map
- * entries than it has bytes — is therefore answered without being applied.
+ * largest board past a node or edge-and-line bound, nor any document past an
+ * open-thread or open-change bound, since an update adds no more map entries
+ * (nor sets more statuses) than it has bytes — is therefore answered without
+ * being applied.
  *
- * Neither the longest body nor the largest board is walked for each update:
+ * Neither the longest body, the largest board nor the most open annotations is walked for each update:
  * every document would be read on every keystroke, in a workspace of
  * hundreds of notes. Each is walked once and then held as a bound
  * (`heldBound`), raised by the byte length of whatever `record` gained since
@@ -689,12 +759,20 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
   let copy: LoroDoc | null = null
   const longestBodyAtMost = heldBound(record, longestBody)
   const largestBoardAtMost = heldBound(record, largestBoard)
+  const mostOpenAtMost = heldBound(record, mostOpenAnnotations)
   return (update) => {
     const most = update.byteLength
     if (most <= SMALLEST_VALUE_BOUND) {
       const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
       const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
-      if ((bodyFits(false) || bodyFits(true)) && (boardFits(false) || boardFits(true))) return null
+      const openFits = (walk: boolean) => mostOpenAtMost(walk) + most <= SMALLEST_ANNOTATION_BOUND
+      if (
+        (bodyFits(false) || bodyFits(true)) &&
+        (boardFits(false) || boardFits(true)) &&
+        (openFits(false) || openFits(true))
+      ) {
+        return null
+      }
     }
     if (copy === null) copy = record.fork()
     else copy.import(record.export({ mode: 'update', from: copy.oplogVersion() }))
@@ -702,8 +780,10 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
     // Dropped before the judgement, and kept only once it passes: a breach,
     // refused bytes and an engine trap each leave the copy unusable.
     copy = null
-    const { breach } = importWithinTextLimits(judging, update)
-    if (breach === null) copy = judging
+    const { breach, pending } = importWithinTextLimits(judging, update)
+    // A copy holding parked changes would apply them when a later update
+    // fills their gap, and judge that update by them.
+    if (breach === null && !pending) copy = judging
     return breach
   }
 }

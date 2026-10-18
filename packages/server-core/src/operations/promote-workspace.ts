@@ -34,6 +34,8 @@ export type PromoteWorkspaceResult =
   | { kind: 'too-many-documents'; documents: number; limit: number }
   /** What was carried beside the record does not match it; nothing was merged. */
   | { kind: 'unmatched-carried'; reason: string }
+  /** More trash entries or versions than a promote carries; nothing was judged or merged. */
+  | { kind: 'too-many-carried'; plane: 'trash' | 'versions'; carried: number; limit: number }
   | {
       kind: 'promoted'
       /** The documents the record carried, each now with an explicit checkpoint. */
@@ -162,6 +164,10 @@ export async function promoteWorkspace(
     versions: input.versions ?? [],
   })
   if (carried.kind === 'refused') return { kind: 'unmatched-carried', reason: carried.reason }
+  if (carried.kind === 'too-many') {
+    const { plane, carried: count, limit } = carried
+    return { kind: 'too-many-carried', plane, carried: count, limit }
+  }
 
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,

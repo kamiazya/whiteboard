@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
 
 const CLI = join(REPO_ROOT, 'tools/checks/src/sonar-analysis-inputs.mjs')
@@ -76,8 +77,6 @@ describe('sonar-analysis-inputs', () => {
 })
 
 describe('sonarqube.yml', () => {
-  const lines = workflow.replace(/^\s*#.*$/gm, '').split('\n')
-
   it('keeps 1.5x headroom over the newest measured run (~1680s), not 30 minutes', () => {
     const minutes = Number(/timeout-minutes: (\d+)/.exec(workflow)?.[1])
     expect(minutes).toBeGreaterThanOrEqual(45)
@@ -88,24 +87,31 @@ describe('sonarqube.yml', () => {
   })
 
   it('puts every costly step behind the detect step', () => {
-    const gated = (needle: string): boolean => {
-      const at = lines.findIndex((line) => line.includes(needle))
-      expect(at, `${needle} not found`).toBeGreaterThan(-1)
-      // A step runs from its `- ` marker to the next one.
-      let first = at
-      while (first > 0 && !/^\s{6}- /.test(lines[first] ?? '')) first -= 1
-      let last = at + 1
-      while (last < lines.length && !/^\s{6}- /.test(lines[last] ?? '')) last += 1
-      return lines.slice(first, last).join('\n').includes("steps.detect.outputs.analyze == 'true'")
+    const jobs = (
+      parseYaml(workflow) as {
+        jobs: Record<string, { needs?: string; if?: string; steps?: { if?: string }[] }>
+      }
+    ).jobs
+    const stepGatedBy = (needle: string, gate: string): { job: string; gated: boolean } => {
+      for (const [id, job] of Object.entries(jobs)) {
+        const step = (job.steps ?? []).find((s) => JSON.stringify(s).includes(needle))
+        if (step !== undefined) return { job: id, gated: (step.if ?? '').includes(gate) }
+      }
+      throw new Error(`${needle} not found`)
     }
+    const detect = "steps.detect.outputs.analyze == 'true'"
     for (const needle of [
       './.github/actions/setup-pnpm',
       'pnpm install --frozen-lockfile',
       'pnpm coverage',
-      'sonarqube-scan-action',
     ]) {
-      expect(gated(needle), `${needle} runs on a diff that cannot change the analysis`).toBe(true)
+      expect(stepGatedBy(needle, detect), needle).toEqual({ job: 'coverage', gated: true })
     }
+    // The scan is its own job, so the gate is the job's: it waits on the
+    // coverage job and runs only when that job's detect step said so.
+    expect(stepGatedBy('sonarqube-scan-action', '').job).toBe('scan')
+    expect(jobs.scan?.needs).toBe('coverage')
+    expect(jobs.scan?.if).toBe("needs.coverage.outputs.analyze == 'true'")
   })
 })
 

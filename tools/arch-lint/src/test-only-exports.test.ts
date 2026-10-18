@@ -237,8 +237,14 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/loro-adapter/src/content-digest.ts#stableStringify':
+    "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
+  'packages/loro-adapter/src/content-sync.ts#jsonEqual':
+    'production reaches it through the content sync; exported so a property can hold the explicit-stack comparison to the recursive one it replaced, at depths no recursion survives',
   'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_LAYOUT_BUDGET':
     'the per-render bound on nested layouts; production reads it in its own module, and the embed-budget test asserts every fan-out shape stays under the named bound rather than a copied number',
+  'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_ELEMENT_BUDGET':
+    'the per-render bound on the elements nested canvases lay out; production reads it in its own module, and the embed-budget test derives every expected miniature count from it rather than a copied number',
   'packages/mcp-server/src/shared/process-identity.ts#readProcessStartMs':
     "production reaches it as recordedProcess's default; exported so the dev scripts' bare-node copy is held to it, and so a test needing /proc start times can probe for them and skip where the platform has none",
   'packages/mcp-server/src/server/store/backup-guarded-blob-store.ts#BackupGuardedBlobStore':

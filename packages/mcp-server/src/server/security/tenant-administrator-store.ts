@@ -6,6 +6,8 @@
  * at the person's next request without anything to clean up.
  */
 import type { TenantScoped } from '../store/db/tenant-database.js'
+import type { AuthenticatorBinding } from './member-profile-store.js'
+import { actorAdministers } from './user-deactivation.js'
 
 interface TenantAdministrator {
   readonly profileId: string
@@ -19,12 +21,60 @@ export interface TenantAdministratorStore {
   appoint(profileId: string, appointedBy: string | null): Promise<void>
   /** Whether there was an appointment to remove. */
   dismiss(profileId: string): Promise<boolean>
+  /**
+   * `dismiss` on behalf of the administrator `by` — what an administrator's
+   * request goes through — refused when `by` no longer administers the
+   * tenant, or is the one dismissed, which together keep an active
+   * administrator. The operator dismisses through `dismiss`.
+   */
+  dismissKeepingAnAdministrator(profileId: string, by: string): Promise<KeptAppointment>
   isAppointed(profileId: string): Promise<boolean>
   /** Oldest appointment first. */
   list(): Promise<TenantAdministrator[]>
 }
 
-export function createTenantAdministratorStore(db: TenantScoped): TenantAdministratorStore {
+type KeptAppointment = 'dismissed' | 'unchanged' | 'not-an-administrator'
+
+interface TenantAdministratorStoreOptions {
+  /** The administrators the sign-in configuration names (ADR-0049 decision 2). */
+  readonly configuredAdministrators?: readonly AuthenticatorBinding[]
+}
+
+async function appointmentExists(db: TenantScoped, profileId: string): Promise<boolean> {
+  const row = await db
+    .selectFrom('tenantAdministrators')
+    .select('profileId')
+    .where('profileId', '=', profileId)
+    .executeTakeFirst()
+  return row !== undefined
+}
+
+async function dismissKeepingAnAdministrator(
+  db: TenantScoped,
+  configured: readonly AuthenticatorBinding[],
+  profileId: string,
+  by: string,
+): Promise<KeptAppointment> {
+  // The actor is someone other than the person dismissed, so an actor still
+  // administering in the same statement IS an active administrator left
+  // behind. Two administrators dismissing each other at once therefore
+  // cannot both land.
+  const deleted = await db
+    .deleteFrom('tenantAdministrators')
+    .where('profileId', '=', profileId)
+    .where('profileId', '!=', by)
+    .where(actorAdministers(configured, by))
+    .returning('profileId')
+    .execute()
+  if (deleted.length > 0) return 'dismissed'
+  return (await appointmentExists(db, profileId)) ? 'not-an-administrator' : 'unchanged'
+}
+
+export function createTenantAdministratorStore(
+  db: TenantScoped,
+  options: TenantAdministratorStoreOptions = {},
+): TenantAdministratorStore {
+  const configured = options.configuredAdministrators ?? []
   return {
     async appoint(profileId, appointedBy) {
       await db
@@ -41,14 +91,9 @@ export function createTenantAdministratorStore(db: TenantScoped): TenantAdminist
         .execute()
       return deleted.length > 0
     },
-    async isAppointed(profileId) {
-      const row = await db
-        .selectFrom('tenantAdministrators')
-        .select('profileId')
-        .where('profileId', '=', profileId)
-        .executeTakeFirst()
-      return row !== undefined
-    },
+    dismissKeepingAnAdministrator: (profileId, by) =>
+      dismissKeepingAnAdministrator(db, configured, profileId, by),
+    isAppointed: (profileId) => appointmentExists(db, profileId),
     async list() {
       return db
         .selectFrom('tenantAdministrators')

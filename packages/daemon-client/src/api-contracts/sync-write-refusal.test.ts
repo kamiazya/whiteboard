@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { isPermanentWriteRefusal, syncWriteRefusalOf } from './sync-write-refusal.js'
 
 describe('isPermanentWriteRefusal', () => {
-  it.each([400, 404, 409, 413, 422])('a %i refuses the bytes for good', (status) => {
+  it.each([400, 404, 413, 422])('a %i refuses the bytes for good', (status) => {
     expect(isPermanentWriteRefusal(status)).toBe(true)
   })
 
   // A credential is renewed by a new session, 408 and 429 ask for a retry by
-  // name, and a 5xx is the keeper's own trouble: each may land later.
-  it.each([200, 401, 403, 408, 429, 500, 503])('a %i may land when sent again', (status) => {
+  // name, a 409 is a causal gap the keeper closes by catching up, and a 5xx
+  // is the keeper's own trouble: each may land later.
+  it.each([200, 401, 403, 408, 409, 429, 500, 503])('a %i may land when sent again', (status) => {
     expect(isPermanentWriteRefusal(status)).toBe(false)
   })
 })

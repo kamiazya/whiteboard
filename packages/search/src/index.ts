@@ -2,6 +2,7 @@ export {
   type AlsoIndex,
   type DocumentTerms,
   documentTerms,
+  excerpterFor,
   fullTextSearch,
   type SearchableDocument,
 } from './full-text.js'

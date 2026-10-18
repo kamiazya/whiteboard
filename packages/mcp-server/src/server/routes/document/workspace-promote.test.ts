@@ -8,21 +8,33 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promoteWorkspaceResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
+  promoteWorkspaceResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   documentContainers,
   exportWorkspaceSubtree,
   readMarkdownBody,
+  readSpatialCanvas,
   recordTrashEntry,
   resolveWorkspaceDocumentById,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
+  writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  CANVAS_MAX_NODES,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -205,6 +217,44 @@ it('refuses a record past the document cap with 413 under its own code, and keep
   expect(body.message).toContain(String(PROMOTE_DOCUMENT_CAP))
   expect(await documents()).toHaveLength(0)
   expect(await new FileVersionStore().list('session1', 'd0')).toHaveLength(0)
+})
+
+it('refuses more saved versions than one move carries with 413 under its own code, and keeps none of it', async () => {
+  const { promote, documents } = harness()
+  const row = { id: 'v', documentId: ROADMAP_ID, createdAt: 1, auto: true, frontiers: 'AA' }
+  const res = await promote({
+    snapshot: b64u(browserSnapshot()),
+    versions: Array.from({ length: PROMOTE_MAX_VERSIONS + 1 }, () => row),
+  })
+  expect(res.status).toBe(413)
+  const body = (await res.json()) as { error: string; message: string }
+  // Not `invalid_body`, which a sender reads as an older keeper refusing the planes.
+  expect(body.error).toBe('promote_too_many_carried')
+  expect(body.message).toContain(`${PROMOTE_MAX_VERSIONS} saved versions`)
+  expect(await documents()).toHaveLength(0)
+})
+
+it('refuses more trashed documents than one move carries with the same code', async () => {
+  const { promote, documents } = harness()
+  const res = await promote({
+    snapshot: b64u(browserSnapshot()),
+    trash: Array.from({ length: PROMOTE_MAX_TRASH + 1 }, () => ({
+      documentId: SKETCH_ID,
+      bytes: 'AA',
+    })),
+  })
+  expect(res.status).toBe(413)
+  expect(((await res.json()) as { error: string }).error).toBe('promote_too_many_carried')
+  expect(await documents()).toHaveLength(0)
+})
+
+it('carries every automatic checkpoint a browser at the document ceiling can hold', () => {
+  // server-core states the version cap without the history package it is
+  // sized from; this is where both are in reach.
+  expect(PROMOTE_MAX_VERSIONS).toBeGreaterThanOrEqual(
+    MAX_AUTO_PER_DOCUMENT * WORKSPACE_MAX_DOCUMENTS,
+  )
+  expect(PROMOTE_MAX_TRASH).toBe(WORKSPACE_MAX_DOCUMENTS)
 })
 
 it('answers 404 for a workspace the daemon never registered', async () => {
@@ -444,4 +494,114 @@ it('confirms every carried version on a re-run after the daemon took a checkpoin
 
   const second = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...second.versionsKept].sort()).toEqual(ids)
+})
+
+it('refuses a carried version naming a body past the markdown limit with 413, and merges nothing', async () => {
+  const { promote, documents } = harness()
+  const doc = new LoroDoc()
+  doc.setPeerId(2n)
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'notes/roadmap',
+    documentId: ROADMAP_ID,
+    kind: 'markdown',
+  })
+  const body = documentContainers(doc, ROADMAP_ID)
+  const half = Math.ceil((MARKDOWN_MAX_CHARS + 1) / 2)
+  // Grown in two prepended pieces, so no single insert is past the one-write bound.
+  writeMarkdownBody(body, 'a'.repeat(half))
+  writeMarkdownBody(body, 'b'.repeat(half) + 'a'.repeat(half))
+  const oversized = encodeFrontiers(doc.oplogFrontiers())
+  writeMarkdownBody(body, '# short again')
+  const res = await promote({
+    snapshot: b64u(new Uint8Array(doc.export({ mode: 'snapshot' }))),
+    versions: [
+      {
+        id: DRAFTED_VERSION_ID,
+        documentId: ROADMAP_ID,
+        createdAt: 1_000,
+        auto: false,
+        frontiers: b64u(oversized),
+      },
+    ],
+  })
+  expect(res.status).toBe(413)
+  const answered = (await res.json()) as { error: string; message: string }
+  expect(answered.error).toBe('markdown_too_large')
+  expect(answered.message).toMatch(/^The document at "notes\/roadmap" /)
+  expect(await documents()).toEqual([])
+})
+
+it.each([
+  ['a person', { kind: 'human', displayName: 'Mallory' }],
+  ['an agent', { kind: 'ai', displayName: 'Mallory', agentId: 'mallory-agent' }],
+  ['nobody', undefined],
+] as const)('names the calling member on a carried version stating %s, and dates none after the move', async (_case, stated) => {
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+      callerName: async () => 'Ada',
+    }),
+  )
+  const record = browserRecordWithTrashAndVersion()
+  const [version] = record.versions
+  const future = Date.now() + 365 * 24 * 60 * 60 * 1000
+  const res = await app.request('/api/w/session1/workspace-document/promote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...record,
+      versions: [{ ...version, createdAt: future, ...(stated && { operator: stated }) }],
+    }),
+  })
+  expect(res.status).toBe(200)
+  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
+    (entry) => entry.id === DRAFTED_VERSION_ID,
+  )
+  expect(carried?.operator).toEqual({ kind: 'human', displayName: 'Ada' })
+  expect(Date.parse(carried?.createdAt ?? '')).toBeLessThanOrEqual(Date.now())
+})
+
+it('keeps the operator and date a carried version states on the local daemon', async () => {
+  const { promote } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const [version] = record.versions
+  const operator = { kind: 'human', displayName: 'Yuki' } as const
+  expect((await promote({ ...record, versions: [{ ...version, operator }] })).status).toBe(200)
+  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
+    (entry) => entry.id === DRAFTED_VERSION_ID,
+  )
+  expect(carried?.operator).toEqual(operator)
+  expect(carried?.createdAt).toBe(new Date(1_000).toISOString())
+})
+
+it('answers a restore of a saved state past a sync limit with 413 in the sync refusal code, writing nothing', async () => {
+  const { app } = harness()
+  const oversized = new LoroDoc()
+  writeSpatialCanvas(oversized, {
+    nodes: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) =>
+      textNode({ id: `n${i}`, text: 'n', x: 0, y: 0, width: 1, height: 1 }),
+    ),
+    edges: [],
+  })
+  // Stored past the sync judge, as a carried version once was.
+  await serverDeps.liveDocuments.save('session1', 'canvas-a', oversized, { kind: 'spatial' })
+  const version = await serverDeps.versions.save('session1', 'canvas-a', oversized, {
+    auto: false,
+  })
+  const live = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  writeSpatialCanvas(live, {
+    nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],
+    edges: [],
+  })
+  await serverDeps.liveDocuments.save('session1', 'canvas-a', live, { overwrite: true })
+
+  const res = await app.request(
+    `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/restore`,
+    { method: 'POST' },
+  )
+  expect(res.status).toBe(413)
+  expect(await res.json()).toMatchObject({ error: 'too_many_nodes_or_edges' })
+  const after = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  expect(readSpatialCanvas(after).nodes.map((node) => node.id)).toEqual(['kept'])
 })

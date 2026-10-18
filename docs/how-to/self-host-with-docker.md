@@ -214,10 +214,17 @@ from there. The same is available through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
-A version a member saves, and the checkpoint left when a workspace is moved
-in from a browser, show that member's profile name in the History panel. The
-server takes the name from whoever signed in, not from the request, so a
-member cannot save a version under someone else's name.
+Removing a member, or deactivating them, also stops a write of theirs that is
+still arriving: an update or upload whose body was in transit when they were
+removed is refused with `403 not_a_member` and changes nothing. Their open
+live-sync streams end as well.
+
+A version a member saves, the checkpoint left when a workspace is moved
+in from a browser, and each saved version that move carries show that
+member's profile name in the History panel. The server takes the name from
+whoever signed in, not from the request, so a member cannot save a version
+under someone else's name. A carried version keeps the date the browser
+saved it, except that none is dated after the move itself.
 
 To bring in someone who is not a user yet, an owner creates an invitation
 with `POST /api/workspaces/<workspace>/invitations`. The response carries a
@@ -350,9 +357,22 @@ the same things through either surface:
 | `workspace:read` | `wb_document_list` |
 | `workspace:write` | `wb_workspace_edit` (creating, replacing and deleting documents, and `createWorkspace`) |
 | `versions:read` | `wb_version_list` |
-| `versions:write` | `wb_version_save`, `wb_version_restore` |
+| `versions:write` | `wb_version_save`, `wb_version_restore` (restoring a document in place) |
+
+Restoring a version anywhere but in place also writes other documents, so it
+needs `workspace:write` as well as `versions:write`: `wb_version_restore`
+with a `targetPath` (a new document, or one it replaces with `overwrite`) or
+with `subtree: true` (which reverts, brings back and deletes the document's
+descendants). The HTTP restore route asks the same, answering `403` with
+`insufficient_scope`; there a `targetPath` equal to the document's own path is
+the in-place restore. A browser session holds both scopes.
 
 A call without the scope fails with `insufficient_scope` and changes nothing.
+The HTTP API draws the same line. A live-sync update with only
+`canvas:write` may edit documents' content. If it would add, delete or move
+a document, change what is in the trash or which documents are pinned, or it
+is addressed to a path no document holds, it is refused with `403` and
+changes nothing. That needs `workspace:write` as well.
 A token scoped `mcp:call canvas:read` can read documents but cannot edit or
 delete them. To give an agent everything, ask your identity provider for
 `mcp:call canvas:read canvas:write workspace:read workspace:write versions:read versions:write`.
@@ -411,13 +431,27 @@ available through `/api/people`:
   See [Deleting a user](#deleting-a-user).
 - `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
   an administrator. Only appointments can be dismissed here; someone named in
-  the configuration stays an administrator until the list changes.
+  the configuration stays an administrator until the list changes. An
+  administrator cannot dismiss themselves, so a dismissal always leaves the
+  one who made it. Two administrators dismissing each other at the same
+  moment cannot both succeed: the second finds it no longer administers.
+- A deactivation or a dismissal checks again, as it is made, that whoever
+  asked for it is still an active administrator. One dismissed or
+  deactivated while their request was in flight gets
+  `403 not_an_administrator` and changes nothing.
 - `POST /api/invitations` creates an invitation link to the server alone.
   Accepting it makes a user and nothing more. It works only while whoever
   created it is still an active administrator. A dismissed or deactivated
   administrator's links stop working.
 
 Everyone else gets `403 not_an_administrator`.
+
+The server's own figures are an administrator's too. `GET /api/runtime/status`
+(the process, and how many live-sync streams every user has open) and
+`GET /api/runtime/storage` (the bytes of every workspace on the server)
+answer `403 not_an_administrator` to anyone else, whatever scopes their
+session or bearer token holds. `GET /api/runtime/ping` stays public, for
+health checks.
 
 **Every change an administrator makes needs a recent sign-in.** That covers
 deactivating, reactivating, deleting, appointing, dismissing and inviting;
@@ -430,6 +464,8 @@ the change again.
 
 - The time is the ID token's `auth_time`. A provider that does not send it
   leaves every session unable to administer, and the refusal is the same.
+  So does an `auth_time` more than 60 seconds ahead of the server's clock:
+  keep the server's clock in sync with the provider's.
 - A provider behind a reverse proxy (`kind: trusted-header`) cannot be asked
   to sign someone in again, so its administrators cannot make changes from
   the web app.
@@ -449,7 +485,8 @@ from the machine that holds the data directory:
 whiteboard server deactivate-user --json --user=<user id or display name> [--reactivate]
 ```
 
-Their sessions end at once. After that, a sign-in is refused with
+Their sessions end at once, including one a sign-in still in progress was
+about to open. After that, a sign-in is refused with
 `deactivated`, and any request with a session or bearer token gets `403`
 with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
@@ -595,6 +632,17 @@ make that visible to the people using them:
    A browser reopens its stream whenever it drops, so if an instance goes
    away its browsers reconnect wherever the load balancer sends them next. MCP
    clients need no affinity: `/mcp` keeps no per-connection state.
+
+**The size ceilings are judged per instance.** A workspace's 2000 documents,
+a canvas's 2000 nodes and 2000 edges and lines, and a document's 500 open
+comment threads and 1000 open proposed changes are each checked by the
+instance a write arrives at, against the record as that instance holds it,
+one write at a time. Writes arriving at different instances at the same
+moment are checked without seeing each other, so each can add whatever room
+was left: k such writes can take the record past a ceiling by up to k − 1
+times that room. Nothing is lost or corrupted. Once a record is past a
+ceiling, every write that would grow it further is refused, until it is
+back under. A single instance never overshoots.
 
 ## Persistent data volume
 

@@ -27,6 +27,9 @@ import type { LoggingLevel, McpServer } from '@modelcontextprotocol/server'
 //     stream to carry a request's notifications, so nothing is delivered;
 //     `logging/setLevel` is accepted and binds a per-request server that is
 //     discarded with the request.
+//   - HTTP `/mcp` on server mode: nothing, in either era. The tool wrapper
+//     opens no scope for a member's call (`callerReadsServerLog`), since a
+//     record can carry a raw error or another user's ids.
 // The project logger's own threshold (`WHITEBOARD_LOG_LEVEL`) applies first:
 // a record below it is never produced, whatever a client asks for.
 import { addLogDestination, lineToLogRecord } from '../log.js'

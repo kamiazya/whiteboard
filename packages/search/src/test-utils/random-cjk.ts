@@ -20,7 +20,7 @@ export function randomCjk(chars: number, seed = 1): string {
   let out = ''
   // Chunked: spreading a quarter-million arguments into one call overflows the stack.
   for (let i = 0; i < codes.length; i += 8192) {
-    out += String.fromCharCode(...codes.slice(i, i + 8192))
+    out += String.fromCodePoint(...codes.slice(i, i + 8192))
   }
   return out
 }

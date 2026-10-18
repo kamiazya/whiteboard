@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PROMOTE_MAX_TRASH,
+  PROMOTE_MAX_VERSIONS,
   type PromoteWorkspaceResponse,
   promoteWorkspaceRequestSchema,
   promoteWorkspaceResponseSchema,
@@ -42,6 +44,23 @@ describe('promotion schemas', () => {
     // An id the daemon's version store could not key a row by.
     expect(refused([{ ...version, id: 'not/an/id' }])).toBe(false)
     expect(refused([{ ...version, label: '' }])).toBe(false)
+  })
+
+  it('takes as many trash entries and versions as one move carries, and refuses one more', () => {
+    const version = {
+      id: 'v',
+      documentId: '01BRWAAAAAAAAAAAAAAAAAAAA0',
+      createdAt: 1,
+      auto: true,
+      frontiers: 'AA',
+    }
+    const trashed = { documentId: '01BRWAAAAAAAAAAAAAAAAAAAA1', bytes: 'AA' }
+    const takes = (body: object) =>
+      promoteWorkspaceRequestSchema.safeParse({ snapshot: 'c25hcHNob3Q', ...body }).success
+    expect(takes({ versions: Array(PROMOTE_MAX_VERSIONS).fill(version) })).toBe(true)
+    expect(takes({ versions: Array(PROMOTE_MAX_VERSIONS + 1).fill(version) })).toBe(false)
+    expect(takes({ trash: Array(PROMOTE_MAX_TRASH).fill(trashed) })).toBe(true)
+    expect(takes({ trash: Array(PROMOTE_MAX_TRASH + 1).fill(trashed) })).toBe(false)
   })
 
   it('roundtrips the response', () => {

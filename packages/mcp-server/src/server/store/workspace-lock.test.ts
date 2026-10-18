@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { _resetWorkspaceLocksForTests, withWorkspaceWriteLock } from './workspace-lock.js'
+import {
+  _resetWorkspaceLocksForTests,
+  runWithWriteAdmission,
+  withWorkspaceWriteLock,
+} from './workspace-lock.js'
 
 afterEach(() => {
   _resetWorkspaceLocksForTests()
@@ -130,5 +134,55 @@ describe('withWorkspaceWriteLock', () => {
     releaseHolder()
     await Promise.all([holderPromise, otherPromise])
     expect(events).toEqual(['holder-enter', 'holder-exit', 'other-ran'])
+  })
+})
+
+describe('runWithWriteAdmission', () => {
+  it('asks on each lock the chain enters, not on a re-entry, and not outside it', async () => {
+    const asked: string[] = []
+    const admit = async (workspaceId: string) => {
+      asked.push(workspaceId)
+    }
+    await runWithWriteAdmission(admit, async () => {
+      await withWorkspaceWriteLock('ws_a', () => withWorkspaceWriteLock('ws_a', async () => {}))
+      await withWorkspaceWriteLock('ws_b', async () => {})
+    })
+    await withWorkspaceWriteLock('ws_a', async () => {})
+    expect(asked).toEqual(['ws_a', 'ws_b'])
+  })
+
+  it('runs nothing under a refused admission and leaves the lock free', async () => {
+    const ran = vi.fn()
+    const refused = runWithWriteAdmission(
+      async () => {
+        throw new Error('refused')
+      },
+      () => withWorkspaceWriteLock('ws_a', async () => ran()),
+    )
+    await expect(refused).rejects.toThrow('refused')
+    expect(ran).not.toHaveBeenCalled()
+    await withWorkspaceWriteLock('ws_a', async () => ran())
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops asking once the chain it ran has settled', async () => {
+    const asked: string[] = []
+    let later: Promise<void> | undefined
+    let fire = () => {}
+    const fired = new Promise<void>((resolve) => {
+      fire = resolve
+    })
+    await runWithWriteAdmission(
+      async (workspaceId) => {
+        asked.push(workspaceId)
+      },
+      async () => {
+        // Armed inside the chain, run after it: a checkpoint's shape.
+        later = fired.then(() => withWorkspaceWriteLock('ws_a', async () => {}))
+      },
+    )
+    fire()
+    await later
+    expect(asked).toEqual([])
   })
 })

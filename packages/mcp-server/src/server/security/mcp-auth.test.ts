@@ -58,7 +58,11 @@ describe('what reaches /mcp in local-daemon mode', () => {
       resolver: createCredentialResolver({ daemonToken: 'secret', macaroonRootKey: ROOT_KEY }),
     })
 
-    expect(await post(strategy, `Bearer ${token}`)).toEqual({ ok: true })
+    // Its scopes travel on, so each tool call is held to them.
+    expect(await post(strategy, `Bearer ${token}`)).toEqual({
+      ok: true,
+      scopes: ['canvas:read', 'mcp:call'],
+    })
   })
 
   it('refuses a macaroon attenuated below mcp:call with 403', async () => {

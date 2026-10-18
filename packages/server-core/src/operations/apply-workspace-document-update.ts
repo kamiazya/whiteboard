@@ -1,9 +1,11 @@
 import {
   documentsTouchedSince,
+  organisationChangedSince,
   seedNamesFromTitles,
   stampEditedDocuments,
   type TouchedDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { LoroDoc, VersionVector } from 'loro-crdt'
 import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -24,6 +26,16 @@ export interface ApplyWorkspaceDocumentUpdateInput {
    * every promoted document read "edited just now".
    */
   readonly origin?: 'edit' | 'transfer'
+  /**
+   * Whether the caller may add, remove or move documents, and touch the
+   * trash and the pins — the adapter's decision, from the caller's grant.
+   * `false` refuses an update that changes how the workspace is organised
+   * (`organisationChangedSince`) and keeps nothing of it; content edits go
+   * through either way. Absent means true: the check
+   * reads the update's operations a second time, which a caller holding
+   * every scope has no reason to pay for.
+   */
+  readonly mayPlaceDocuments?: boolean
 }
 
 /** A document whose content an applied update wrote. */
@@ -32,6 +44,25 @@ type EditedDocument = Pick<TouchedDocument, 'documentId' | 'path'>
 type ApplyWorkspaceDocumentUpdateResult =
   | { readonly kind: 'applied'; readonly edited: readonly EditedDocument[] }
   | { readonly kind: 'malformed-update' }
+  | { readonly kind: 'placement-refused' }
+
+/**
+ * Whether the update just imported into `doc` changes how the workspace is
+ * organised (`organisationChangedSince`) — and if so, drops the cached record
+ * unsaved: the import already landed in it, and dropping it is what leaves
+ * nothing of the refused update.
+ */
+function refusePlacement(
+  doc: LoroDoc,
+  since: VersionVector,
+  target: Parameters<typeof runEvictingOnEngineTrap>[0],
+): boolean {
+  const placed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
+    organisationChangedSince(doc, since),
+  )
+  if (placed) target.evict()
+  return placed
+}
 
 /**
  * Applies a client's workspace-granularity Loro update and persists it — the
@@ -76,14 +107,7 @@ export async function applyWorkspaceDocumentUpdate(
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
-    const target = {
-      subject: `the workspace record of ${workspaceId}`,
-      fields: { workspaceId },
-      evict() {
-        deps.workspaceDocuments.evict(workspaceId)
-        deps.workspaceDocuments.evictProjections(workspaceId)
-      },
-    }
+    const target = droppableRecord(deps, workspaceId)
     const since = doc.oplogVersion()
     try {
       importWithinSyncLimits(doc, update, target, { workspaceRecord: true })
@@ -91,27 +115,70 @@ export async function applyWorkspaceDocumentUpdate(
       if (isSyncWriteRefusal(err)) {
         throw err
       }
-      log.warning('workspace-document update rejected: malformed Loro import data', {
+      log.warning('workspace-document update rejected: the import was refused or not judged', {
         workspaceId,
         updateBytes: update.byteLength,
         err,
       })
       return { kind: 'malformed-update' }
     }
-    // Before the save, so the name and the stamp ride the same write and its
-    // fan-out hands them back to the replica that made the edit.
-    const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
-      const found = documentsTouchedSince(doc, since)
-      seedNamesFromTitles(doc, found)
-      if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
-      return found
-    })
-    // Fan-out to subscribers happens inside save.
-    await deps.workspaceDocuments.save(workspaceId, doc)
-    deps.workspaceDocuments.evictProjections(workspaceId)
-    const edited = touched
-      .filter((each) => each.contentWritten)
-      .map(({ documentId, path }) => ({ documentId, path }))
-    return { kind: 'applied', edited }
+    // From here the cached record holds the update, so a throw anywhere
+    // before the save completes drops it unsaved: kept, it would ride the
+    // next ordinary save by anyone, unrefused.
+    try {
+      return await keepImported(deps, input, doc, since, target)
+    } catch (err) {
+      target.evict()
+      throw err
+    }
   })
+}
+
+/**
+ * The cached record as a refusal drops it. Idempotent, so a failure a nested
+ * step already answered by dropping the record is not dropped twice.
+ */
+function droppableRecord(
+  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  workspaceId: string,
+): Parameters<typeof runEvictingOnEngineTrap>[0] {
+  let dropped = false
+  return {
+    subject: `the workspace record of ${workspaceId}`,
+    fields: { workspaceId },
+    evict() {
+      if (dropped) return
+      dropped = true
+      deps.workspaceDocuments.evict(workspaceId)
+      deps.workspaceDocuments.evictProjections(workspaceId)
+    },
+  }
+}
+
+/** The placement check, the naming and stamping, and the save, over a record holding the update. */
+async function keepImported(
+  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  input: ApplyWorkspaceDocumentUpdateInput,
+  doc: LoroDoc,
+  since: VersionVector,
+  target: Parameters<typeof runEvictingOnEngineTrap>[0],
+): Promise<ApplyWorkspaceDocumentUpdateResult> {
+  if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
+    return { kind: 'placement-refused' }
+  }
+  // Before the save, so the name and the stamp ride the same write and its
+  // fan-out hands them back to the replica that made the edit.
+  const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
+    const found = documentsTouchedSince(doc, since)
+    seedNamesFromTitles(doc, found)
+    if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
+    return found
+  })
+  // Fan-out to subscribers happens inside save.
+  await deps.workspaceDocuments.save(input.workspaceId, doc)
+  deps.workspaceDocuments.evictProjections(input.workspaceId)
+  const edited = touched
+    .filter((each) => each.contentWritten)
+    .map(({ documentId, path }) => ({ documentId, path }))
+  return { kind: 'applied', edited }
 }

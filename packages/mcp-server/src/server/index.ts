@@ -108,11 +108,11 @@ function applyLoadedConfigFileForServerEntrypoint(): void {
   const { dataDir: _ignoredDataDir, ...applicableConfig } = loaded.config
   applyConfigFileToEnvAndLogLevel(applicableConfig, process.env)
   const log = getLogger('server-index')
-  log.info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
+  log.info({ filepaths: loaded.filepaths }, 'loaded whiteboard config file')
 
   if (loaded.config.dataDir !== undefined) {
     log.warning(
-      { filepath: loaded.filepath },
+      { filepaths: loaded.filepaths },
       'config file dataDir is not honored on this entrypoint; set WHITEBOARD_DATA_DIR instead',
     )
   }

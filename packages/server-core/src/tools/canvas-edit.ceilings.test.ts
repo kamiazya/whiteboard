@@ -1,4 +1,8 @@
-import { CANVAS_MAX_EDGES, CANVAS_MAX_NODES, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  CANVAS_MAX_EDGES_AND_LINES,
+  CANVAS_MAX_NODES,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
@@ -16,7 +20,7 @@ const box = (i: number): SpatialNode =>
     text: `n${i}`,
   })
 
-async function editOn(nodes: readonly SpatialNode[], edges: number, ops: unknown[]) {
+async function editOn(nodes: readonly SpatialNode[], edges: number, ops: unknown[], lines = 0) {
   const store = new FakeDocumentStore()
   await seedCanvas(store, {
     nodes: [...nodes],
@@ -25,6 +29,13 @@ async function editOn(nodes: readonly SpatialNode[], edges: number, ops: unknown
       from: { node: 'n0' },
       to: { node: 'n1' },
     })),
+    ...(lines > 0 && {
+      lines: Array.from({ length: lines }, (_, i) => ({
+        id: `l${i}`,
+        from: { kind: 'node' as const, node: 'n0' },
+        to: { kind: 'point' as const, point: { x: 500, y: 500 } },
+      })),
+    }),
   })
   return createCanvasEditTool(makeDeps(store)).execute({
     workspaceId: WORKSPACE_ID,
@@ -60,10 +71,38 @@ describe('wb_canvas_edit holds the per-canvas node and edge ceilings', () => {
     )
   })
 
+  const addEdge = {
+    op: 'edge.add',
+    edge: { id: 'extra', from: { node: 'n1' }, to: { node: 'n0' } },
+  }
+  const addLine = {
+    op: 'line.add',
+    line: {
+      id: 'extra',
+      from: { kind: 'node', node: 'n1' },
+      to: { kind: 'point', point: { x: 900, y: 900 } },
+    },
+  }
+  const pastEdgesAndLines = (op: string) =>
+    new RegExp(
+      `ops\\[0\\] \\(${op}\\).*${CANVAS_MAX_EDGES_AND_LINES + 1} edges and lines, past the limit of ${CANVAS_MAX_EDGES_AND_LINES} edges and lines together for one canvas`,
+    )
+
   test('an edge.add that would take the canvas past the edge ceiling names it', async () => {
-    const add = { op: 'edge.add', edge: { id: 'extra', from: { node: 'n1' }, to: { node: 'n0' } } }
-    await expect(editOn(nodesOf(2), CANVAS_MAX_EDGES, [add])).rejects.toThrow(
-      new RegExp(`ops\\[0\\] \\(edge.add\\).*${CANVAS_MAX_EDGES}-edge limit for one canvas`),
+    await expect(editOn(nodesOf(2), CANVAS_MAX_EDGES_AND_LINES, [addEdge])).rejects.toThrow(
+      pastEdgesAndLines('edge.add'),
+    )
+  })
+
+  test('a line.add counts against the same ceiling as the edges', async () => {
+    await expect(editOn(nodesOf(2), CANVAS_MAX_EDGES_AND_LINES, [addLine])).rejects.toThrow(
+      pastEdgesAndLines('line.add'),
+    )
+  })
+
+  test('an edge.add onto a board whose lines fill the ceiling is refused', async () => {
+    await expect(editOn(nodesOf(2), 0, [addEdge], CANVAS_MAX_EDGES_AND_LINES)).rejects.toThrow(
+      pastEdgesAndLines('edge.add'),
     )
   })
 
@@ -91,7 +130,12 @@ describe('wb_canvas_edit holds the per-canvas node and edge ceilings', () => {
       false,
     )
     expect(
-      parse({ op: 'region.set', within: 'g', nodes: [], edges: ids(CANVAS_MAX_EDGES + 1) }).success,
+      parse({
+        op: 'region.set',
+        within: 'g',
+        nodes: [],
+        edges: ids(CANVAS_MAX_EDGES_AND_LINES + 1),
+      }).success,
     ).toBe(false)
   })
 })

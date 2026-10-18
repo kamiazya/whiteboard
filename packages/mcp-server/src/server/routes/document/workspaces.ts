@@ -57,11 +57,11 @@ import {
   hasDescendants,
   moveIntoSelf,
   notFoundAs,
+  pastWorkspaceCeiling,
   pathTakenAs,
   refusedBy,
   segmentTaken,
   titleRefusal,
-  tooManyDocuments,
   workspaceNotFound,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -116,8 +116,9 @@ export interface WorkspacesRouterOptions {
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
   /** The membership gate GET /api/workspaces filters the listing
    *  through, rather than refusing the whole request — a name is a leak to a
-   *  non-member the way its content is. Absent means no filtering (server-
-   *  mode, and any composition that has not wired members). */
+   *  non-member the way its content is. Server mode always wires it; absent
+   *  — the local daemon, whose one person is in everything — means no
+   *  filtering. */
   admit?: WorkspaceAdmit
   /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
    *  on the local daemon, where an unclaimed workspace is open by design. */
@@ -464,6 +465,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
           moveIntoSelf,
           pathTakenAs(),
           corruptStored,
+          pastWorkspaceCeiling,
         ])
         if (owned) return c.json(owned.body, owned.status)
         if (isDatabaseBusy(err)) throw err
@@ -524,7 +526,7 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
         const owned = firstOwned(err, [
           notFoundAs(`No document "${path}" to duplicate`),
           cannotPlaceCopy,
-          tooManyDocuments,
+          pastWorkspaceCeiling,
         ])
         if (owned) return c.json(owned.body, owned.status)
         throw err

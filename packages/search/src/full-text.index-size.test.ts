@@ -35,7 +35,7 @@ describe('documentTerms ceiling', () => {
       ...tokenizeForIndex('Q3'),
       ...tokenizeForIndex(body),
     ]
-    expect(terms.length).toBe(every.length)
+    expect(terms).toHaveLength(every.length)
     expect(terms.counts.size).toBe(new Set(every).size)
   })
 

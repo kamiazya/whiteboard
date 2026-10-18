@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { createMemberProfileStore } from './member-profile-store.js'
 import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
+import { createUserDeactivation } from './user-deactivation.js'
 
 const T0 = 1_800_000_000_000
 const person = { authenticator: 'oidc:https://sso.corp.example', subject: 'ada-1' }
@@ -62,5 +64,21 @@ describe('sign-in sessions', () => {
     const token = await sessions.create(person, T0, 1000)
     const other = createSignInSessionStore(tenantDatabase(handle.rawDb, 'tenant-two'))
     expect(await other.resolve(token, T0 + 1)).toBeNull()
+  })
+
+  it('opens for an active user only, never a deactivated one or nobody', async () => {
+    expect(await sessions.createForActiveUser(person, T0, 1000)).toBeNull()
+    const user = await createMemberProfileStore(handle.db).ensureProfile({
+      binding: person,
+      displayName: 'Ada',
+    })
+    const token = await sessions.createForActiveUser(person, T0, 1000, T0 - 5)
+    expect(token).not.toBeNull()
+    expect(await sessions.open(token as string, T0 + 1)).toEqual({
+      person,
+      authenticatedAt: T0 - 5,
+    })
+    await createUserDeactivation(handle.db).deactivate(user.id, T0)
+    expect(await sessions.createForActiveUser(person, T0, 1000)).toBeNull()
   })
 })

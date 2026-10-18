@@ -82,6 +82,51 @@ export function documentsTouchedSince(workspace: LoroDoc, since: VersionVector):
   return touched
 }
 
+// The node-map keys that say WHICH document a node is and where it sits; a
+// write to any other key (content, display name, edit stamps) leaves the
+// workspace holding the same documents at the same paths.
+const PLACEMENT_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'kind'])
+
+/**
+ * Whether the operations after `since` change how the workspace is organised
+ * rather than what its documents say: a node created, deleted or moved in the
+ * tree, a node's identity, segment or kind rewritten, or ANY write outside the
+ * tree — the trash, the pinned list and the rest of the workspace's own meta,
+ * or a root nobody reads. Content, display names and edit stamps answer false.
+ *
+ * Outside the tree is judged whole rather than by naming the trash and the
+ * pins, because nothing a document says lives there: a root added to the
+ * record tomorrow is the workspace's, and is held to the same grant from the
+ * day it exists.
+ *
+ * What a keeper asks of an update from a caller entitled to edit content but
+ * not to add, remove or move documents, purge or restore the trash, or pin.
+ */
+export function organisationChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
+  const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
+  const underTree = new Map<ContainerID, boolean | undefined>()
+  const isUnderTree = (container: ContainerID) => {
+    if (!underTree.has(container)) {
+      const path = workspace.getPathToContainer(container)
+      underTree.set(container, path === undefined ? undefined : path[0] === WORKSPACE_TREE_KEY)
+    }
+    return underTree.get(container)
+  }
+  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
+  return changes
+    .flatMap((change) => change.ops)
+    .some((op) => {
+      if (op.container === tree) return true
+      const under = isUnderTree(op.container)
+      // No path at all is a container under a node a delete took: judged as
+      // the tree's, by the placement keys below, as it always was.
+      if (under === false) return true
+      const content = op.content as { readonly key?: unknown }
+      if (typeof content.key !== 'string' || !PLACEMENT_KEYS.has(content.key)) return false
+      return workspace.getPathToContainer(op.container)?.length === 2
+    })
+}
+
 /**
  * Stamps `updatedAt` on every touched document whose content was written,
  * and commits — the edit clock a listing reads, moved by an import the way

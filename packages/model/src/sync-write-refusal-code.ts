@@ -17,9 +17,14 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'tags_too_large',
   'container_name_too_long',
   'too_many_nodes_or_edges',
+  'too_many_open_threads',
+  'too_many_open_changes',
   'unreadable_document_meta',
+  'invalid_document_root',
   'document_name_too_long',
   'invalid_path',
   'too_many_documents',
+  'too_many_folders',
+  'causal_gap',
 ])
 export type SyncWriteRefusalCode = z.infer<typeof syncWriteRefusalCodeSchema>

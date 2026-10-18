@@ -48,7 +48,11 @@ afterEach(() => {
 describe('live-doc router', () => {
   it('returns a Hono instance', () => {
     const triggerAutoVersion = vi.fn()
-    const app = createLiveDocRouter({ serverDeps, triggerAutoVersion })
+    const app = createLiveDocRouter({
+      serverDeps,
+      triggerAutoVersion,
+      mayPlaceDocuments: () => true,
+    })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -179,11 +183,13 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     await saveDocument('session1', 'canvas-a', initial)
 
     // Pull it into the doc-cache so there is a live cached doc to poison.
-    await app.request('/api/w/session1/document/canvas-a/snapshot')
+    const served = await app.request('/api/w/session1/document/canvas-a/snapshot')
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
 
-    // Build a client update that adds a second element.
-    const clientDoc = LoroDoc.fromSnapshot(initial.export({ mode: 'snapshot' }))
+    // Build a client update that adds a second element, on the snapshot the
+    // route served: the cached document is a projection with an oplog of its
+    // own, so a delta built on `initial` builds on changes it does not hold.
+    const clientDoc = LoroDoc.fromSnapshot(new Uint8Array(await served.arrayBuffer()))
     const prevVV = clientDoc.version()
     const clientList = clientDoc.getMovableList('elements')
     const clientElem = clientList.insertContainer(clientList.length, new LoroMap())

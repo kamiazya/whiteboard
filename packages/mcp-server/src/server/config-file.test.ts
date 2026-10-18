@@ -12,13 +12,18 @@ import {
 import { captureLogsForTests, getLogLevel, setLogLevel } from './log.js'
 
 let dir: string
+// The home config is always read, so a case about the cwd file alone points
+// it at an empty directory rather than at whatever the machine running it has.
+let emptyHome: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'whiteboard-config-file-'))
+  emptyHome = mkdtempSync(join(tmpdir(), 'whiteboard-config-empty-home-'))
 })
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
+  rmSync(emptyHome, { recursive: true, force: true })
 })
 
 describe('loadConfigFile', () => {
@@ -36,21 +41,21 @@ describe('loadConfigFile', () => {
       join(dir, '.whiteboardrc.json'),
       JSON.stringify({ logLevel: 'info', openBrowser: false }),
     )
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config).toEqual({ logLevel: 'info', openBrowser: false })
-    expect(loaded?.filepath).toBe(join(dir, '.whiteboardrc.json'))
+    expect(loaded?.filepaths).toEqual([join(dir, '.whiteboardrc.json')])
   })
 
   it('parses YAML from .whiteboard/config.yaml', () => {
     mkdirSync(join(dir, '.whiteboard'))
     writeFileSync(join(dir, '.whiteboard', 'config.yaml'), 'logLevel: debug\nopenBrowser: true\n')
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config).toEqual({ logLevel: 'debug', openBrowser: true })
   })
 
   it('parses an extensionless .whiteboardrc (JSON body)', () => {
     writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'notice' }))
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config).toEqual({ logLevel: 'notice' })
   })
 
@@ -59,7 +64,7 @@ describe('loadConfigFile', () => {
       join(dir, 'package.json'),
       JSON.stringify({ name: 'x', whiteboard: { logLevel: 'error' } }),
     )
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config).toEqual({ logLevel: 'error' })
   })
 
@@ -70,7 +75,7 @@ describe('loadConfigFile', () => {
       join(dir, 'package.json'),
       JSON.stringify({ name: 'x', whiteboard: { logLevel: 'error' } }),
     )
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config.logLevel).toBe('debug')
   })
 
@@ -107,7 +112,7 @@ describe('loadConfigFile', () => {
     )
     const capture = captureLogsForTests()
     try {
-      const loaded = loadConfigFile(dir)
+      const loaded = loadConfigFile(dir, { homeDir: emptyHome })
       expect(loaded?.config).toEqual({ logLevel: 'debug' })
       const warning = capture.records.find((r) => r.msg.includes('unknown whiteboard config'))
       expect(warning).toBeDefined()
@@ -150,19 +155,19 @@ describe('loadConfigFile', () => {
 
   it('fails fast with the file path and key on an invalid value', () => {
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'not-a-level' }))
-    expect(() => loadConfigFile(dir)).toThrow(/\.whiteboardrc\.json/)
-    expect(() => loadConfigFile(dir)).toThrow(/logLevel/)
+    expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(/\.whiteboardrc\.json/)
+    expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(/logLevel/)
   })
 
   it('parses the openBrowser key', () => {
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ openBrowser: false }))
-    const loaded = loadConfigFile(dir)
+    const loaded = loadConfigFile(dir, { homeDir: emptyHome })
     expect(loaded?.config).toEqual({ openBrowser: false })
   })
 
   it('fails fast when openBrowser is not a boolean', () => {
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ openBrowser: 'nope' }))
-    expect(() => loadConfigFile(dir)).toThrow(/openBrowser/)
+    expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(/openBrowser/)
   })
 
   it('never includes the token value in a thrown validation message for another key', () => {
@@ -171,7 +176,7 @@ describe('loadConfigFile', () => {
       JSON.stringify({ token: 'super-secret-token', logLevel: 'bad' }),
     )
     try {
-      loadConfigFile(dir)
+      loadConfigFile(dir, { homeDir: emptyHome })
       throw new Error('expected loadConfigFile to throw')
     } catch (err) {
       expect(String(err)).not.toContain('super-secret-token')
@@ -195,7 +200,7 @@ describe('loadConfigFile', () => {
         : `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed'); module.exports = { token: 'pwned' }`
     writeFileSync(join(dir, `evil.${ext}`), body)
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ $import: `./evil.${ext}` }))
-    expect(() => loadConfigFile(dir)).toThrow(/must never execute code/)
+    expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(/must never execute code/)
     expect(existsSync(sentinel)).toBe(false)
   })
 
@@ -266,6 +271,52 @@ describe('loadConfigFile refuses dataDir and token from the working directory', 
     mkdirSync(join(homeDir, '.whiteboard'))
     writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'dataDir: /data\n')
     expect(loadConfigFile(homeDir, { homeDir })?.config).toEqual({ dataDir: '/data' })
+    expect(loadConfigFile(homeDir, { homeDir })?.filepaths).toEqual([
+      join(homeDir, '.whiteboard', 'config.yaml'),
+    ])
+  })
+})
+
+describe('loadConfigFile layers a working-directory config over the home one', () => {
+  let homeDir: string
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(
+      join(homeDir, '.whiteboard', 'config.yaml'),
+      'dataDir: /data\ntoken: t\nlogLevel: warning\nopenBrowser: true\n',
+    )
+  })
+  afterEach(() => {
+    rmSync(homeDir, { recursive: true, force: true })
+  })
+
+  it('keeps the home dataDir and token when a cwd file sets only logLevel', () => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'debug' }))
+    const loaded = loadConfigFile(dir, { homeDir })
+    expect(loaded?.config).toEqual({
+      dataDir: '/data',
+      token: 't',
+      logLevel: 'debug',
+      openBrowser: true,
+    })
+    expect(loaded?.filepaths).toEqual([
+      join(homeDir, '.whiteboard', 'config.yaml'),
+      join(dir, '.whiteboardrc'),
+    ])
+  })
+
+  it('lets each key the cwd file sets win over the home value', () => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ openBrowser: false }))
+    expect(loadConfigFile(dir, { homeDir })?.config).toMatchObject({
+      logLevel: 'warning',
+      openBrowser: false,
+    })
+  })
+
+  it('still refuses a cwd file that sets token, whatever the home file holds', () => {
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ token: 'planted-token' }))
+    expect(() => loadConfigFile(dir, { homeDir })).toThrow(/"token"/)
   })
 })
 
@@ -364,6 +415,8 @@ describe('loadConfigFile refuses a file whose root is not an object', () => {
     ['a number', '42'],
   ])('%s', (_name, body) => {
     writeFileSync(join(dir, '.whiteboardrc.json'), body)
-    expect(() => loadConfigFile(dir)).toThrow(/expected an object at the root/)
+    expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(
+      /expected an object at the root/,
+    )
   })
 })

@@ -37,7 +37,7 @@ export function createServerModePeople(
 ): { people: ServerModePeople; signIn: CompleteSignInDeps } {
   const configured = options.configuredAdministrators ?? []
   const signIn = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS, configured)
-  const appointments = createTenantAdministratorStore(db)
+  const appointments = createTenantAdministratorStore(db, { configuredAdministrators: configured })
   const people: ServerModePeople = {
     members: signIn.members,
     sessions: signIn.sessions,

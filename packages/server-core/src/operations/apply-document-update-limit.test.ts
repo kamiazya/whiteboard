@@ -15,6 +15,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
+  UnjudgedImportError,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialNode,
@@ -564,7 +565,7 @@ describe('an engine trap while a sync update is brought into the state', () => {
     expect(storedPathsOf(store)).toEqual(['Meeting notes', 'other'])
   })
 
-  it('rethrows an attach failure that is not a trap untouched, without dropping the cached doc', async () => {
+  it('drops the cached doc when an attach failure that is not a trap leaves the update unjudged', async () => {
     const store = new StoredDoc(liveSeed('short'))
     const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
     const cached = store.get()
@@ -572,10 +573,17 @@ describe('an engine trap while a sync update is brought into the state', () => {
       throw new Error('refused')
     }
 
-    await expect(
-      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
-    ).rejects.toThrow('refused')
-    expect(store.evictions).toBe(0)
+    const thrown = await applyDocumentUpdate(liveDeps(store), {
+      workspaceId: WS,
+      path: PATH,
+      update,
+    }).catch((err: unknown) => err)
+
+    // The import landed before the attach, so the instance holds the update.
+    expect(thrown).toBeInstanceOf(UnjudgedImportError)
+    expect(thrown).toMatchObject({ cause: { message: 'refused' } })
+    expect(store.evictions).toBe(1)
+    expect(store.saves).toBe(0)
   })
 
   it('drops a per-document cached doc too', async () => {

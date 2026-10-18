@@ -15,6 +15,7 @@
 
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
+import { snippetAround } from '@kamiazya/whiteboard-search'
 import { describe, expect } from 'vitest'
 import type { DocumentReferenceFacts } from './reference-aggregate.js'
 import { ReferenceAggregate } from './reference-aggregate.js'
@@ -38,11 +39,20 @@ const factsArb: fc.Arbitrary<DocumentReferenceFacts> = fc.record(
     kind: fc.option(fc.constantFrom(...documentKindSchema.options), { nil: undefined }),
     texts: fc.array(fc.constantFrom('Plan の話', 'plain prose'), { maxLength: 2 }),
     refs: fc.array(
-      fc.record({
-        target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
-        via: fc.constantFrom<Via>('wikilink', 'embed-node', 'file-node'),
-        context: fc.string({ minLength: 1, maxLength: 3 }),
-      }),
+      fc.oneof(
+        fc.record({
+          target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
+          via: fc.constant<'wikilink'>('wikilink'),
+          text: fc.string({ minLength: 1, maxLength: 3 }),
+          index: fc.constant(0),
+          length: fc.constant(1),
+        }),
+        fc.record({
+          target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
+          via: fc.constantFrom<Exclude<Via, 'wikilink'>>('embed-node', 'file-node'),
+          context: fc.string({ minLength: 1, maxLength: 3 }),
+        }),
+      ),
       { maxLength: 4 },
     ),
   },
@@ -85,7 +95,11 @@ function expectedBacklinks(
       .map(([id, facts]) => ({
         id,
         facts,
-        contexts: facts.refs.filter(points).map((r) => r.context),
+        contexts: facts.refs
+          .filter(points)
+          .map((r) =>
+            r.via === 'wikilink' ? snippetAround(r.text, r.index, r.length) : r.context,
+          ),
       }))
       .filter((hit) => hit.contexts.length > 0)
       // Single-segment or one-level paths, so plain string order is the

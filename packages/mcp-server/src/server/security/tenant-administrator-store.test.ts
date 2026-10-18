@@ -76,6 +76,69 @@ describe('createTenantAdministratorStore', () => {
     expect(await admins.isAppointed(ada.id)).toBe(false)
   })
 
+  describe('dismissing on an administrator’s behalf', () => {
+    it('dismisses while the actor administers, so never the last', async () => {
+      const ada = await user('ada')
+      const bob = await user('bob')
+      await admins.appoint(ada.id, null)
+      await admins.appoint(bob.id, null)
+      expect(await admins.dismissKeepingAnAdministrator(bob.id, ada.id)).toBe('dismissed')
+      await admins.appoint(bob.id, null)
+      expect(await admins.dismissKeepingAnAdministrator(ada.id, bob.id)).toBe('dismissed')
+      // bob alone is left; ada no longer administers, so cannot act at all.
+      expect(await admins.dismissKeepingAnAdministrator(bob.id, ada.id)).toBe(
+        'not-an-administrator',
+      )
+      expect(await admins.dismissKeepingAnAdministrator(bob.id, bob.id)).toBe(
+        'not-an-administrator',
+      )
+      expect(await admins.isAppointed(bob.id)).toBe(true)
+      expect(await admins.dismissKeepingAnAdministrator(ada.id, bob.id)).toBe('unchanged')
+    })
+
+    it('refuses an actor who no longer administers', async () => {
+      const [ada, bob, cy] = [await user('ada'), await user('bob'), await user('cy')]
+      for (const u of [ada, bob, cy]) await admins.appoint(u.id, null)
+      await admins.dismiss(ada.id)
+      expect(await admins.dismissKeepingAnAdministrator(bob.id, ada.id)).toBe(
+        'not-an-administrator',
+      )
+      expect(await admins.isAppointed(bob.id)).toBe(true)
+    })
+
+    it('counts an actor the configuration names as administering', async () => {
+      const cyBinding = passkeyBinding('https://a.example', 'cy')
+      const configured = createTenantAdministratorStore(handle.db, {
+        configuredAdministrators: [cyBinding],
+      })
+      const ada = await user('ada')
+      const bob = await user('bob')
+      const cy = await user('cy')
+      await admins.appoint(ada.id, null)
+      await admins.appoint(cy.id, null)
+      expect(await configured.dismissKeepingAnAdministrator(ada.id, cy.id)).toBe('dismissed')
+      await admins.dismiss(cy.id)
+      await admins.appoint(bob.id, null)
+      // A configured actor acts without an appointment.
+      expect(await configured.dismissKeepingAnAdministrator(bob.id, cy.id)).toBe('dismissed')
+    })
+
+    it('does not count another tenant’s administrator as one acting here', async () => {
+      const ada = await user('ada')
+      await admins.appoint(ada.id, null)
+      const otherDb = tenantDatabase(handle.rawDb, 'other-tenant')
+      const otherBob = await createMemberProfileStore(otherDb).ensureProfile({
+        binding: passkeyBinding('https://a.example', 'bob'),
+        displayName: 'bob',
+      })
+      await createTenantAdministratorStore(otherDb).appoint(otherBob.id, null)
+      expect(await admins.dismissKeepingAnAdministrator(ada.id, otherBob.id)).toBe(
+        'not-an-administrator',
+      )
+      expect(await admins.isAppointed(ada.id)).toBe(true)
+    })
+  })
+
   // A tenant's administrators are its own, like its users.
   it('does not see another tenant’s administrators', async () => {
     const ada = await user('ada')

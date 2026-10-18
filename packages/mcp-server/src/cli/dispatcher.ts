@@ -637,7 +637,7 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
   if (loaded === null) return { kind: 'ok', openBrowser: undefined }
 
   applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
-  getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
+  getLogger('cli-dispatcher').info({ filepaths: loaded.filepaths }, 'loaded whiteboard config file')
 
   return { kind: 'ok', openBrowser: loaded.config.openBrowser }
 }

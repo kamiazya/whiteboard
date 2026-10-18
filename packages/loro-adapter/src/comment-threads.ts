@@ -111,16 +111,21 @@ export function writeThreadMessage(
  * Closes or reopens a thread. One key, last-writer-wins, which is all a
  * status needs: two peers resolving concurrently agree, and neither touches
  * the messages beneath.
+ *
+ * Answers whether it wrote: a thread this replica does not hold in the
+ * threads plane — a legacy comment no writer has migrated — has no status to
+ * set, and a caller counting open threads must not count it as changed.
  */
 export function setCommentThreadStatus(
   doc: DocumentContainers,
   threadId: string,
   status: CommentThreadStatus,
-): void {
+): boolean {
   const container = threadContainer(doc, threadId)
-  if (container === undefined) return
+  if (container === undefined) return false
   container.set(STATUS_FIELD, status)
   doc.commit()
+  return true
 }
 
 /**
@@ -186,4 +191,19 @@ export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number 
     commentsMap.delete(commentId)
   }
   return migrated
+}
+
+/**
+ * How many threads in `threadsMap` are open, read off each thread's status
+ * alone rather than through the schema `readCommentThreads` parses with, so
+ * a sync judgement pays one field per thread. A thread without an `open`
+ * status is not drawn as one, and is not counted.
+ */
+export function openThreadCount(threadsMap: LoroMap): number {
+  let open = 0
+  for (const threadId of threadsMap.keys()) {
+    const stored = threadsMap.get(threadId)
+    if (stored instanceof LoroMap && stored.get(STATUS_FIELD) === 'open') open += 1
+  }
+  return open
 }

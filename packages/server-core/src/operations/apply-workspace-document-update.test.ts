@@ -1,5 +1,7 @@
 import {
   createWorkspaceDocumentAtPath,
+  documentContainers,
+  MARKDOWN_BODY_KEY,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -192,5 +194,45 @@ describe('applyWorkspaceDocumentUpdate', () => {
     expect(result).toEqual({ kind: 'malformed-update' })
     expect(fake.dropped).toEqual([])
     expect(await fake.workspaceDocuments.get(WS)).toBe(cached)
+  })
+
+  describe('for a caller who may not place documents', () => {
+    it('refuses an update that adds a document, keeping nothing of it', async () => {
+      const fake = cachingWorkspaceDocuments()
+      const result = await applyWorkspaceDocumentUpdate(
+        { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+        { workspaceId: WS, update: workspaceUpdateBytes('canvas-a'), mayPlaceDocuments: false },
+      )
+
+      expect(result).toEqual({ kind: 'placement-refused' })
+      expect(fake.saves()).toBe(0)
+      expect(fake.dropped).toEqual([`record ${WS}`, `projections ${WS}`])
+      expect(readWorkspaceDocuments(await fake.workspaceDocuments.get(WS))).toEqual([])
+    })
+
+    it('applies an update that only edits a document it already holds', async () => {
+      const fake = cachingWorkspaceDocuments()
+      const held = await fake.workspaceDocuments.get(WS)
+      const documentId = generateDocumentId()
+      createWorkspaceDocumentAtPath(held, { path: 'note', documentId, kind: 'markdown' })
+      held.commit()
+      const replica = new LoroDoc()
+      replica.import(held.export({ mode: 'snapshot' }))
+      const from = replica.oplogVersion()
+      documentContainers(replica, documentId).getText(MARKDOWN_BODY_KEY).insert(0, 'hello')
+      replica.commit()
+
+      const result = await applyWorkspaceDocumentUpdate(
+        { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+        {
+          workspaceId: WS,
+          update: replica.export({ mode: 'update', from }),
+          mayPlaceDocuments: false,
+        },
+      )
+
+      expect(result).toEqual({ kind: 'applied', edited: [{ documentId, path: 'note' }] })
+      expect(fake.saves()).toBe(1)
+    })
   })
 })

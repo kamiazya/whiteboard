@@ -1,7 +1,7 @@
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
-  CANVAS_MAX_EDGES,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
@@ -9,6 +9,8 @@ import {
   CONTAINER_NAME_LIMIT_PHRASE,
   CONTAINER_NAME_MAX_CHARS,
   commentMessageInputSchema,
+  DOCUMENT_MAX_OPEN_CHANGES,
+  DOCUMENT_MAX_OPEN_THREADS,
   LABEL_LIMIT_PHRASE,
   LABEL_MAX_CHARS,
   labelInputSchema,
@@ -18,6 +20,8 @@ import {
   NODE_TEXT_MAX_CHARS,
   nodeFileInputSchema,
   nodeTextInputSchema,
+  OPEN_CHANGES_LIMIT_PHRASE,
+  OPEN_THREADS_LIMIT_PHRASE,
   syncWriteRefusalCodeSchema,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
@@ -31,11 +35,14 @@ import type { ZodString } from 'zod'
 import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
 import {
+  CausalGapError,
   DocumentNameTooLongError,
   OffGrammarPathError,
+  RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
   syncWriteAnswer,
   TooManyDocumentsError,
+  TooManyFoldersError,
   textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './sync-write-refusals.js'
@@ -46,8 +53,11 @@ const MAP = 'cid:0@1:Map'
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
+  RootNoDocumentHoldsError: () => new RootNoDocumentHoldsError(['nameChosen']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
+  TooManyFoldersError: () => new TooManyFoldersError(4001),
+  CausalGapError: () => new CausalGapError(),
 }
 
 /**
@@ -77,6 +87,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     textBreachRefusal({ shape: 'container-name', chars: 70_000, container: MAP }),
   'canvas-size': () =>
     textBreachRefusal({ shape: 'canvas-size', measure: 'nodes', count: 2_001, container: MAP }),
+  'open-threads': () => textBreachRefusal({ shape: 'open-threads', count: 501, container: MAP }),
+  'open-changes': () => textBreachRefusal({ shape: 'open-changes', count: 1_001, container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -248,21 +260,44 @@ describe('a refused container name', () => {
 })
 
 describe('a refused canvas size', () => {
-  const refusal = (measure: 'nodes' | 'edges', count: number, at?: refusals.RefusedIn) =>
+  const refusal = (measure: 'nodes' | 'edges-and-lines', count: number, at?: refusals.RefusedIn) =>
     textBreachRefusal({ shape: 'canvas-size', measure, count, container: MAP }, at).message
 
   it('says how large the board would be and ends on the bound the tool holds', () => {
     expect(refusal('nodes', CANVAS_MAX_NODES + 1)).toBe(
       `This update would leave a canvas of ${CANVAS_MAX_NODES + 1} nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
     )
-    expect(refusal('edges', CANVAS_MAX_EDGES + 1)).toBe(
-      `This update would leave a canvas of ${CANVAS_MAX_EDGES + 1} edges, past ${CANVAS_EDGES_LIMIT_PHRASE}`,
+    expect(refusal('edges-and-lines', CANVAS_MAX_EDGES_AND_LINES + 1)).toBe(
+      `This update would leave a canvas of ${CANVAS_MAX_EDGES_AND_LINES + 1} edges and lines, past ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`,
     )
   })
 
   it('names the document holding it, once resolved', () => {
     expect(refusal('nodes', 2_500, { path: 'boards/ops' })).toBe(
       `The document at "boards/ops" is a canvas of 2500 nodes, past ${CANVAS_NODES_LIMIT_PHRASE}`,
+    )
+  })
+})
+
+describe('a refused count of open annotations', () => {
+  const refusal = (
+    shape: 'open-threads' | 'open-changes',
+    count: number,
+    at?: refusals.RefusedIn,
+  ) => textBreachRefusal({ shape, count, container: MAP }, at).message
+
+  it('says how many would be open and ends on the bound the tools hold', () => {
+    expect(refusal('open-threads', DOCUMENT_MAX_OPEN_THREADS + 1)).toBe(
+      `This update would leave ${DOCUMENT_MAX_OPEN_THREADS + 1} open comment threads on a document, past ${OPEN_THREADS_LIMIT_PHRASE}`,
+    )
+    expect(refusal('open-changes', DOCUMENT_MAX_OPEN_CHANGES + 1)).toBe(
+      `This update would leave ${DOCUMENT_MAX_OPEN_CHANGES + 1} open proposed changes on a document, past ${OPEN_CHANGES_LIMIT_PHRASE}`,
+    )
+  })
+
+  it('names the document holding them, once resolved', () => {
+    expect(refusal('open-threads', 600, { path: 'boards/ops' })).toBe(
+      `The document at "boards/ops" holds 600 open comment threads, past ${OPEN_THREADS_LIMIT_PHRASE}`,
     )
   })
 })

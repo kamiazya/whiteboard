@@ -16,16 +16,19 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import { PROMOTE_MAX_TRASH, PROMOTE_MAX_VERSIONS } from '../versions/version-entry.js'
 import { judgeCarried } from './promote-carried.js'
 import { promoteWorkspace } from './promote-workspace.js'
+import { TextBreachRefusalError } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -256,5 +259,213 @@ describe('promoteWorkspace, carried planes', () => {
     expect(target.saves()).toBe(0)
     expect(target.deps.blobStore.held.size).toBe(0)
     expect(target.deps.versions.adopted.size).toBe(0)
+  })
+})
+
+/**
+ * A record whose HEAD every sync write would take, with one version naming a
+ * past state no sync write could have stored: grown in pieces each under the
+ * one-write bound, and shrunk again before the record was sent.
+ */
+function recordWithOversizedPast(grow: (doc: LoroDoc) => void, shrink: (doc: LoroDoc) => void) {
+  const doc = new LoroDoc()
+  doc.setPeerId(2n)
+  grow(doc)
+  const oversized = encodeFrontiers(doc.oplogFrontiers())
+  shrink(doc)
+  return {
+    snapshot: doc.export({ mode: 'snapshot' }),
+    trash: [],
+    versions: [
+      { id: 'past-limit', documentId: ROADMAP_ID, createdAt: 1, auto: false, frontiers: oversized },
+    ],
+  }
+}
+
+const half = Math.ceil((MARKDOWN_MAX_CHARS + 1) / 2)
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 1, height: 1 })
+
+describe('promoteWorkspace, a carried version past a sync limit', () => {
+  it.each([
+    [
+      'a body past the markdown limit',
+      'markdown_too_large',
+      () =>
+        recordWithOversizedPast(
+          (doc) => {
+            createWorkspaceDocumentAtPath(doc, {
+              path: 'roadmap',
+              documentId: ROADMAP_ID,
+              kind: 'markdown',
+            })
+            const body = documentContainers(doc, ROADMAP_ID)
+            // Prepended, so no single insert is past the one-write bound.
+            writeMarkdownBody(body, 'a'.repeat(half))
+            writeMarkdownBody(body, 'b'.repeat(half) + 'a'.repeat(half))
+          },
+          (doc) => writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# short again'),
+        ),
+    ],
+    [
+      'a board past the node limit',
+      'too_many_nodes_or_edges',
+      () =>
+        recordWithOversizedPast(
+          (doc) => {
+            createWorkspaceDocumentAtPath(doc, {
+              path: 'roadmap',
+              documentId: ROADMAP_ID,
+              kind: 'spatial',
+            })
+            const nodes = Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => box(`n${i}`))
+            writeSpatialCanvas(documentContainers(doc, ROADMAP_ID), { nodes, edges: [] })
+            doc.commit()
+          },
+          (doc) => {
+            writeSpatialCanvas(documentContainers(doc, ROADMAP_ID), {
+              nodes: [box('kept')],
+              edges: [],
+            })
+            doc.commit()
+          },
+        ),
+    ],
+  ])('refuses %s with the sync refusal, and merges nothing', async (_case, code, build) => {
+    const target = daemon()
+    const refused = await promoteWorkspace(target.deps, {
+      workspaceId: WS,
+      operator,
+      ...build(),
+    }).catch((err: unknown) => err)
+    expect(refused).toBeInstanceOf(TextBreachRefusalError)
+    expect(refused).toMatchObject({ code, status: 413 })
+    expect(target.saves()).toBe(0)
+    expect(target.deps.versions.adopted.size).toBe(0)
+  })
+})
+
+/**
+ * The judgement's cost, counted in checkouts of the incoming record: each is
+ * a move of the whole fork, followed by a projection and a size judgement of
+ * the document it names, on the serving loop.
+ */
+describe('judgeCarried, what judging the carried versions costs', () => {
+  it('refuses one version past the cap before checking any out', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: PROMOTE_MAX_VERSIONS + 1 }, (_, i) => ({
+      ...version,
+      id: `row-${i}`,
+    }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      expect(judged).toEqual({
+        kind: 'too-many',
+        plane: 'versions',
+        carried: PROMOTE_MAX_VERSIONS + 1,
+        limit: PROMOTE_MAX_VERSIONS,
+      })
+      expect(checkout).not.toHaveBeenCalled()
+    } finally {
+      checkout.mockRestore()
+    }
+  })
+
+  it('refuses one trashed document past the cap before hashing any', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [carried] = record.trash
+    if (carried === undefined) throw new Error('no trash')
+    const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
+    try {
+      const judged = await judgeCarried(incoming, {
+        trash: Array.from({ length: PROMOTE_MAX_TRASH + 1 }, () => carried),
+        versions: [],
+      })
+      expect(judged).toEqual({
+        kind: 'too-many',
+        plane: 'trash',
+        carried: PROMOTE_MAX_TRASH + 1,
+        limit: PROMOTE_MAX_TRASH,
+      })
+      expect(digest).not.toHaveBeenCalled()
+    } finally {
+      digest.mockRestore()
+    }
+  })
+
+  it('answers every row naming one point from one judgement of it', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
+    const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+    if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
+    expect(new Set(judged.versions.map((row) => row.contentDigest)).size).toBe(1)
+    expect(judged.versions.map((row) => row.id)).toEqual(rows.map((row) => row.id))
+  })
+
+  it('counts the checkouts 1000 rows naming one frontier cost', async () => {
+    const record = await browserRecord()
+    const incoming = new LoroDoc()
+    incoming.import(record.snapshot)
+    const [version] = record.versions
+    if (version === undefined) throw new Error('no version')
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    // The size judgement forks the projected document once per judgement.
+    const forkAt = vi.spyOn(LoroDoc.prototype, 'forkAt')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      expect(judged.kind).toBe('admitted')
+      expect(checkout).toHaveBeenCalledTimes(1)
+      expect(forkAt).toHaveBeenCalledTimes(1)
+    } finally {
+      checkout.mockRestore()
+      forkAt.mockRestore()
+    }
+  })
+
+  it('checks out a point once, and judges each document at it for itself', async () => {
+    const doc = new LoroDoc()
+    doc.setPeerId(2n)
+    for (const [path, documentId] of [
+      ['roadmap', ROADMAP_ID],
+      ['board', BOARD_ID],
+    ] as const) {
+      createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
+      writeMarkdownBody(documentContainers(doc, documentId), `# ${path}`)
+    }
+    doc.commit()
+    const point = encodeFrontiers(doc.oplogFrontiers())
+    writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# later')
+    doc.commit()
+    const incoming = new LoroDoc()
+    incoming.import(doc.export({ mode: 'snapshot' }))
+    const rows = [ROADMAP_ID, BOARD_ID].map((documentId) => ({
+      id: `v-${documentId}`,
+      documentId,
+      createdAt: 1,
+      auto: true,
+      frontiers: point,
+    }))
+    const checkout = vi.spyOn(LoroDoc.prototype, 'checkout')
+    try {
+      const judged = await judgeCarried(incoming, { trash: [], versions: rows })
+      if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
+      expect(checkout).toHaveBeenCalledTimes(1)
+      // Each row is judged for its own document, not answered from the other's.
+      const [roadmap, board] = judged.versions
+      expect(roadmap?.contentDigest).not.toBe(board?.contentDigest)
+    } finally {
+      checkout.mockRestore()
+    }
   })
 })

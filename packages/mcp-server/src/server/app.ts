@@ -35,6 +35,7 @@ import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createTenantPeopleRouter } from './routes/tenant-people.js'
 import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
+import type { AdministratorCheck } from './security/administrator-check.js'
 import {
   type CredentialResolver,
   createCredentialResolver,
@@ -46,6 +47,7 @@ import {
   type CallerName,
   callerDisplayName,
   callerGrant,
+  callerHolds,
   callerUserId,
   creatorAsFirstMember,
   type FirstMember,
@@ -409,10 +411,23 @@ function runtimeRouter(
     getStatus: serverMode ? wiring.serverModeGetStatus! : options.getStatus,
     credentialResolver: wiring.credentialResolver,
     endpointProofKey: wiring.token,
-    ...(serverMode ? { serverModeGrant: callerGrant } : {}),
+    ...(options.authMode === 'server-mode'
+      ? {
+          serverModeGrant: callerGrant,
+          readsInstance: administersTenant(options.people.administration.check),
+        }
+      : {}),
     storageReport: () => computeStorageReport(scope.dataDir),
     readLastAutoCompactedAt: () => readLatestCompactedAt(scope),
   })
+}
+
+/** Whether the request's person administers this tenant; a grant naming nobody does not. */
+function administersTenant(check: AdministratorCheck) {
+  return async (c: Context): Promise<boolean> => {
+    const person = callerGrant(c)?.person
+    return person !== undefined && check.isAdministrator(person)
+  }
 }
 
 export function createApp(options: AppOptions) {
@@ -507,9 +522,12 @@ export function createApp(options: AppOptions) {
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
       serverDeps: options.serverDeps,
+      mayPlaceDocuments: (c) => callerHolds(c, ['workspace:write']),
       scope,
       versionStore,
       exportPaths,
+      // Either mode's auth middleware remembers the grant it resolved.
+      callerScopes: (c) => callerGrant(c)?.scopes,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),

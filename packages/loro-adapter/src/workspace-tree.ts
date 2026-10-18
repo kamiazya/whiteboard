@@ -36,6 +36,7 @@ import {
   freshNodeRoots,
   nodeRoots,
   projectedKind,
+  rootFitsNode,
   syncRootContainer,
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
@@ -189,9 +190,26 @@ interface Walked {
   readonly path: string
 }
 
+/**
+ * The children of `node` pushed onto `stack` so that popping visits them in
+ * tree order — the depth-first pre-order a recursive walk produces, kept with
+ * an explicit stack because a client chooses how deep its tree is, and a
+ * recursive walk overflowed the call stack at about 1800 nested folders.
+ */
+function pushChildren<T>(
+  stack: T[],
+  children: readonly LoroTreeNode[],
+  item: (child: LoroTreeNode) => T,
+): void {
+  for (let i = children.length - 1; i >= 0; i--) stack.push(item(children[i] as LoroTreeNode))
+}
+
 function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
-  const visit = (node: LoroTreeNode, prefix: string): void => {
+  const stack: Array<{ readonly node: LoroTreeNode; readonly prefix: string }> = []
+  pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '' }))
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    const { node, prefix } = next
     const read = readMeta(node)
     // A node whose meta this build cannot read is skipped rather than thrown
     // on: it is one node of a workspace, and refusing the whole listing over
@@ -200,15 +218,34 @@ function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked
     // segment, and inventing one would place them somewhere nobody chose.
     if (read === null) {
       onUnreadable?.(node)
-      return
+      continue
     }
     const segment = read.type === 'document' ? read.meta.segment : read.segment
     const path = prefix === '' ? segment : `${prefix}/${segment}`
     out.push({ node, read, path })
-    for (const child of node.children() ?? []) visit(child, path)
+    pushChildren(stack, node.children() ?? [], (child) => ({ node: child, prefix: path }))
   }
-  for (const root of tree(doc).roots()) visit(root, '')
   return out
+}
+
+/**
+ * Copies the subtree rooted at `source` under `parent` (the root when
+ * absent), node by node in tree order, with `create` minting each node in
+ * its destination.
+ */
+function copySubtree(
+  source: LoroTreeNode,
+  parent: TreeID | undefined,
+  create: (parent: TreeID | undefined) => LoroTreeNode,
+): void {
+  const stack: Array<{ readonly from: LoroTreeNode; readonly into: TreeID | undefined }> = [
+    { from: source, into: parent },
+  ]
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    const node = create(next.into)
+    copyNodeData(next.from, node)
+    pushChildren(stack, next.from.children() ?? [], (child) => ({ from: child, into: node.id }))
+  }
 }
 
 /**
@@ -678,6 +715,11 @@ export function adoptWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
+/** What a document node keeps for itself, so never a content root (`rootFitsNode`). */
+export const NODE_META_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(workspaceNodeMetaSchema.shape),
+)
+
 /**
  * Makes an EXISTING tree document's content equal a standalone document's —
  * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
@@ -716,8 +758,8 @@ export function writeWorkspaceDocumentContent(
   for (const [key, value] of Object.entries(projected)) {
     // Belt to the projection's braces: a source that somehow carries a plane
     // key (an import, a record from the branch era) must not write it onto
-    // the node.
-    if (isPlaneKey(key)) continue
+    // the node, nor a root the node cannot hold.
+    if (isPlaneKey(key) || !rootFitsNode(node.data, key, value, NODE_META_KEYS)) continue
     if (syncRootContainer(roots, key, value, source)) changed = true
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
@@ -771,12 +813,9 @@ export function exportWorkspaceSubtree(doc: LoroDoc, path: string): Uint8Array |
   if (source === null) return null
   const out = new LoroDoc()
   const outTree = out.getTree(WORKSPACE_TREE_KEY)
-  const copy = (from: LoroTreeNode, parent: TreeID | undefined): void => {
-    const node = parent === undefined ? outTree.createNode() : outTree.createNode(parent)
-    copyNodeData(from, node)
-    for (const child of from.children() ?? []) copy(child, node.id)
-  }
-  copy(source.node, undefined)
+  copySubtree(source.node, undefined, (parent) =>
+    parent === undefined ? outTree.createNode() : outTree.createNode(parent),
+  )
   out.commit()
   return out.export({ mode: 'snapshot' })
 }
@@ -800,13 +839,9 @@ export function importWorkspaceSubtree(
   const meta = readMeta(first)
   if (meta === null || meta.type !== 'document') return null
   const parent = parentPath === undefined ? undefined : ensureFolderPath(doc, parentPath.split('/'))
-  const copy = (from: LoroTreeNode, into: TreeID | undefined): LoroTreeNode => {
-    const node = into === undefined ? tree(doc).createNode() : tree(doc).createNode(into)
-    copyNodeData(from, node)
-    for (const child of from.children() ?? []) copy(child, node.id)
-    return node
-  }
-  copy(first, parent)
+  copySubtree(first, parent, (into) =>
+    into === undefined ? tree(doc).createNode() : tree(doc).createNode(into),
+  )
   doc.commit()
   return resolveWorkspaceDocumentById(doc, meta.meta.documentId)
 }
@@ -866,19 +901,19 @@ export function forgetTrashEntry(doc: LoroDoc, documentId: string): void {
  * path — a collision the row-backed model cannot produce, because there was
  * never a row at `a` to begin with.
  *
- * Repeated to a fixpoint: emptying a folder can empty its parent.
+ * One walk, read from the deepest end: in tree order every node comes after
+ * its ancestors, so read backwards a folder is reached only once everything
+ * below it has been, and emptying a folder can then empty its parent in the
+ * same pass. The fixpoint this replaced walked the whole tree again after
+ * every removal — measured, 1000 empty folders took 59 s to prune.
  */
 export function pruneEmptyFolders(doc: LoroDoc): void {
-  let removed = true
-  while (removed) {
-    removed = false
-    for (const entry of walk(doc)) {
-      if (entry.read.type !== 'folder') continue
-      if ((entry.node.children() ?? []).length > 0) continue
-      tree(doc).delete(entry.node.id)
-      removed = true
-      break
-    }
+  const walked = walk(doc)
+  for (let i = walked.length - 1; i >= 0; i--) {
+    const entry = walked[i] as Walked
+    if (entry.read.type !== 'folder') continue
+    if ((entry.node.children() ?? []).length > 0) continue
+    tree(doc).delete(entry.node.id)
   }
   doc.commit()
 }

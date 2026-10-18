@@ -32,7 +32,7 @@ enumerate which spellings of true it accepts.
 | `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
 | `WHITEBOARD_DAEMON_TOKEN` | The bearer token the local daemon (`whiteboard daemon run`) accepts, in place of a random one minted at each start. The preferred way to fix a token: unlike a config file's `token` it is not stored in a file, and unlike `--token` (refused, since a command line is visible to every process) it is not on the command line. It cannot be combined with `--token-stdin`; the daemon refuses to start with both, and refuses to start when the variable is set but empty: an empty token is a configured token no bearer can match, not an open daemon (a macaroon still resolves on its own root key; only the daemon-token grant and the anonymous fallback are closed). | unset (a random token per start) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
-| `WHITEBOARD_LOG_LEVEL` | Minimum severity the server emits, using the RFC 5424 names (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). `warn` is accepted for `warning`, matching the wider Node ecosystem, and the value is case-insensitive with surrounding whitespace trimmed. Any other value **aborts startup**: it used to become `warning` silently, so an operator who set `debug` to investigate an incident got no debug output and no reason. `MCP_HTTP_DEBUG=1` lowers this to `info` on its own. An MCP client receives only the records emitted inside its own tool call, at or above this level: over stdio a 2025-era client can raise its threshold with `logging/setLevel` for the connection, and over HTTP `/mcp` only a 2026-07-28 call that sets `_meta` `io.modelcontextprotocol/logLevel` receives any. | `warning` |
+| `WHITEBOARD_LOG_LEVEL` | Minimum severity the server emits, using the RFC 5424 names (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). `warn` is accepted for `warning`, matching the wider Node ecosystem, and the value is case-insensitive with surrounding whitespace trimmed. Any other value **aborts startup**: it used to become `warning` silently, so an operator who set `debug` to investigate an incident got no debug output and no reason. `MCP_HTTP_DEBUG=1` lowers this to `info` on its own. An MCP client receives only the records emitted inside its own tool call, at or above this level: over stdio a 2025-era client can raise its threshold with `logging/setLevel` for the connection, and over HTTP `/mcp` only a 2026-07-28 call that sets `_meta` `io.modelcontextprotocol/logLevel` receives any. A server-mode `/mcp` caller receives none: the records stay on the server's stderr. | `warning` |
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server emits `mcp-http:init` / `mcp-http` log records (JSON lines on stderr, `scope` `mcp-http`) to help diagnose request flow. | unset |
 | `WHITEBOARD_OTEL` | Turns on OpenTelemetry tracing for the local daemon (`whiteboard daemon run`), server mode (`whiteboard server run`) and the stdio MCP entry. On for `1`, `true` or `yes`; anything else is off. Without `OTEL_EXPORTER_OTLP_ENDPOINT`, each span is written to **stderr** as one JSON line (`scope` `otel`), which is safe beside stdio JSON-RPC. Off, the tracing SDK is never loaded, so there is no cost. A failure to start the SDK is logged (`initTracing failed; tracing disabled`) and the process carries on untraced rather than refusing to start. See [Observability](../contributing/observability.md) for what is traced. | unset (off) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | An OTLP/HTTP collector to send spans to, for example `http://localhost:4318`. Setting it turns tracing on by itself; `WHITEBOARD_OTEL` is not also needed. The exporter also honours the standard OTLP variables it reads itself, such as `OTEL_EXPORTER_OTLP_HEADERS` (credentials for a hosted backend) and `OTEL_EXPORTER_OTLP_TIMEOUT`. | unset (stderr JSON lines when `WHITEBOARD_OTEL` is on) |
@@ -117,9 +117,10 @@ order in the current directory:
 7. `whiteboard.config.json`
 8. `package.json` (`"whiteboard"` field)
 
-If nothing is found in the current directory, `~/.whiteboard/config.yaml`
-is consulted as a per-machine fallback — so a `dataDir` in it redirects every
-command run from a directory with no file of its own.
+`~/.whiteboard/config.yaml` is read as well, as the per-machine defaults —
+so a `dataDir` in it redirects every command, wherever it is run. A file found
+in the current directory is layered on top: each key it sets wins over the
+home file's, and every key it does not set keeps the home file's value.
 
 **A config file in the current directory may not set `dataDir` or `token`.**
 The current directory is wherever you, or an MCP client, started the command —
@@ -131,8 +132,9 @@ code 1 and a message naming the file and the key; it may still set `logLevel`
 and `openBrowser`. Put `dataDir` and `token` in `~/.whiteboard/config.yaml`,
 the only file that may set them (there is no flag that names a config file).
 When the current directory IS your home directory, that file is found there
-and keeps its trust. Only one file is ever read: a current-directory file,
-even one setting only `logLevel`, means the home file is not consulted. Only declarative JSON/YAML/rc formats
+and keeps its trust. A current-directory file that sets only `logLevel`
+therefore changes the log level and nothing else: your home `dataDir` and
+`token` still apply. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately
 NOT searched, so a config file can never execute code at daemon startup.
 

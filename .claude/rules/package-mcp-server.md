@@ -344,7 +344,10 @@ held to `isOccupying` by the same property.
 The root pino instance in `log.ts` redacts a fixed list of field names —
 top-level (`token`, `daemonToken`, `bootstrapToken`, `accessToken`,
 `authorization`, `cookie`, `password`, `secret`, `apiKey`, `privateJwk`,
-`rootKey`, `d` — the JWK private exponent) and one level of
+`rootKey`, `d` — the JWK private exponent — `clientSecretValue`,
+`sessionToken`, `codeVerifier`, `nonce`, `browserBinding`,
+`invitationToken`, `workspaceKey`; `state` is deliberately not listed, being
+a job or liveness state in these logs) and one level of
 nesting under any key (`*.token`, `*.daemonToken`, …) — replacing the value
 with `[redacted]` before the record reaches stderr, an MCP
 `notifications/message` subscriber, or a test capture sink. This is what

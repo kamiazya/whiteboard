@@ -82,7 +82,7 @@ const { people } = await openServerModePeople({ dataDir, publicBaseUrl: PUBLIC_U
 // Fake deterministic auth strategy — no real OAuth/JWKS involved.
 // Returns 401 when Authorization header is absent, 403 when the required
 // scope is not in the granted set, ok otherwise.
-function makeScopeStrategy(grantedScopes) {
+function makeScopeStrategy(grantedScopes, person) {
   const granted = new Set(grantedScopes)
   return {
     async authorize(input) {
@@ -96,6 +96,7 @@ function makeScopeStrategy(grantedScopes) {
       }
       return {
         ok: true,
+        ...(person === undefined ? {} : { person }),
         context: {
           kind: 'oauth-resource-server',
           subject: 'smoke-sub',
@@ -141,6 +142,22 @@ function makeApp(scopes, overrides = {}) {
     shutdown: () => Promise.resolve(),
     ...overrides,
   })
+}
+
+// The same people, with the smoke's caller counted as a tenant administrator,
+// for the scenario that judges what an administrator's status view carries.
+function administeredBySmokeCaller(base) {
+  const check = base.administration.check
+  return {
+    ...base,
+    administration: {
+      ...base.administration,
+      check: {
+        isAdministrator: async () => true,
+        administratorIds: () => check.administratorIds(),
+      },
+    },
+  }
 }
 
 // The scope gate is what scenarios 5a/5b judge. Past it, server mode still
@@ -285,7 +302,22 @@ try {
 
   // --- Scenario 4: runtime status sanitization ---
   {
-    const app = makeApp(['runtime:read'])
+    // Instance status answers tenant administrators only; a caller who is not
+    // one is refused before anything is read.
+    const refused = await req(makeApp(['runtime:read']), 'GET', '/api/runtime/status', {
+      bearer: SMOKE_TOKEN,
+    })
+    if (refused.status !== 403)
+      fail('4: expected 403 on /api/runtime/status for a non-administrator', {
+        status: refused.status,
+      })
+    const app = makeApp(['runtime:read'], {
+      people: administeredBySmokeCaller(people),
+      authStrategy: makeScopeStrategy(['runtime:read'], {
+        authenticator: 'oidc:smoke',
+        subject: 'smoke-sub',
+      }),
+    })
     const res = await req(app, 'GET', '/api/runtime/status', { bearer: SMOKE_TOKEN })
     if (res.status !== 200) fail('4: expected 200 on /api/runtime/status', { status: res.status })
     const body = await res.text()

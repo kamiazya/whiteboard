@@ -2,16 +2,21 @@ import { documentReferenceMarkup } from '@kamiazya/whiteboard-codec'
 import {
   type DocumentContainers,
   MARKDOWN_BODY_KEY,
+  NODES_KEY,
   readSpatialCanvas,
   reconcileSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
+  growsPast,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
   nodeText,
   spatialCanvasSchema,
   withNodeText,
 } from '@kamiazya/whiteboard-model'
 import { unlinkedNameSpans } from './reference-aggregate.js'
+import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 /** The document a mention names, as a listing knows it. */
 export interface LinkifyTarget {
@@ -53,6 +58,10 @@ export function linkMarkupFor(target: LinkifyTarget): string {
  * only the rewritten nodes are touched: lines, tags, facets and comments are
  * not this operation's to change, and a record the reader skipped (a newer
  * client's) is not this operation's to delete.
+ *
+ * Each link is longer than the name it replaces, so linking can carry a body
+ * or a node past the ceiling every other write to it is held to: that throws
+ * `ReferenceRewriteTooLargeError` before anything is written.
  */
 export function linkifyMentionsIn(
   doc: DocumentContainers,
@@ -62,7 +71,12 @@ export function linkifyMentionsIn(
   const markup = linkMarkupFor(target)
   if (kind === 'markdown') {
     const text = doc.getText(MARKDOWN_BODY_KEY)
-    const spans = unlinkedNameSpans(text.toString(), target.name)
+    const body = text.toString()
+    const spans = unlinkedNameSpans(body, target.name)
+    const grown = body.length + spans.length * (markup.length - target.name.length)
+    if (growsPast(MARKDOWN_MAX_CHARS, body.length, grown)) {
+      throw new ReferenceRewriteTooLargeError({ shape: 'body', chars: grown, container: text.id })
+    }
     for (const span of [...spans].reverse()) {
       text.delete(span.index, span.length)
       text.insert(span.index, markup)
@@ -76,26 +90,42 @@ export function linkifyMentionsIn(
   const nodes = canvas.nodes.map((node) => {
     const text = nodeText(node)
     if (text === undefined) return node
-    const result = rewriteMentions(text, target.name, markup)
-    linked += result.count
-    return result.count === 0 ? node : withNodeText(node, result.text)
+    const spans = unlinkedNameSpans(text, target.name)
+    if (spans.length === 0) return node
+    // Judged from the span count before anything is built, as the body is.
+    const grown = text.length + spans.length * (markup.length - target.name.length)
+    if (growsPast(NODE_TEXT_MAX_CHARS, text.length, grown)) {
+      throw new ReferenceRewriteTooLargeError({
+        shape: 'node-text',
+        chars: grown,
+        nodeId: node.id,
+        container: doc.getMap(NODES_KEY).id,
+      })
+    }
+    linked += spans.length
+    return withNodeText(node, spliced(text, spans, markup))
   })
   if (linked > 0)
     reconcileSpatialCanvas(doc, canvas, spatialCanvasSchema.parse({ ...canvas, nodes }))
   return linked
 }
 
-function rewriteMentions(
+/**
+ * `text` with each span replaced by `markup`, in one forward pass: the
+ * pieces between spans are collected and joined once, so a node with many
+ * mentions costs its length rather than its length per mention.
+ */
+function spliced(
   text: string,
-  name: string,
+  spans: readonly { readonly index: number; readonly length: number }[],
   markup: string,
-): { text: string; count: number } {
-  const spans = unlinkedNameSpans(text, name)
-  let out = text
-  // Reverse order so earlier spans' offsets stay valid while later ones are
-  // spliced.
-  for (const span of [...spans].reverse()) {
-    out = out.slice(0, span.index) + markup + out.slice(span.index + span.length)
+): string {
+  const pieces: string[] = []
+  let from = 0
+  for (const span of spans) {
+    pieces.push(text.slice(from, span.index), markup)
+    from = span.index + span.length
   }
-  return { text: out, count: spans.length }
+  pieces.push(text.slice(from))
+  return pieces.join('')
 }

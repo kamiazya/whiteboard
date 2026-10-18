@@ -80,6 +80,7 @@ import {
   moveDocumentInputSchema,
   NoRoomForCopyError,
   refuseNewDocuments,
+  refuseNewFolders,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -234,7 +235,12 @@ export class LoroWorkspaceDocumentIndex
       if (restoring === null) return null
       // A refusal rather than null: the row is fine and restorable once the
       // workspace has room, which the caller has to be told to make.
-      refuseNewDocuments(readWorkspaceDocuments(doc).length, restoring)
+      const nodes = readWorkspaceNodes(doc)
+      refuseNewDocuments(
+        nodes.filter((node) => node.type === 'document').length,
+        restoring.documents,
+      )
+      refuseNewFolders(foldersIn(nodes), restoring.folders + foldersMissingFor(nodes, entry.path))
       const restored = importWorkspaceSubtree(doc, stored.bytes, parentPath)
       if (restored === null) return null
       forgetTrashEntry(doc, input.documentId)
@@ -336,7 +342,9 @@ export class LoroWorkspaceDocumentIndex
       const doc = await this.#open(input.workspaceId)
       // Before the tree is touched: the record `#open` answers may be the
       // live one, so a refused create must leave nothing in it.
-      refuseNewDocuments(readWorkspaceDocuments(doc).length)
+      const nodes = readWorkspaceNodes(doc)
+      refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
+      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.path))
       const created = createWorkspaceDocumentAtPath(doc, {
         path: input.path,
         documentId: generateDocumentId(),
@@ -446,6 +454,7 @@ export class LoroWorkspaceDocumentIndex
       }
       const taken = moveCollision(nodes, moving, input.from, input.to)
       if (taken !== undefined) throw new DocumentPathTakenError(input.workspaceId, taken)
+      refuseNewFolders(foldersIn(nodes), foldersMissingFor(nodes, input.to))
       // ONE tree move. The descendants come with it because their paths are
       // their ancestors' — there is no per-row rewrite to order, so the
       // depth-ordering a row-backed store needs does not arise.
@@ -549,6 +558,23 @@ export class LoroWorkspaceDocumentIndex
 }
 
 type WorkspaceNodes = ReturnType<typeof readWorkspaceNodes>
+
+const foldersIn = (nodes: WorkspaceNodes) => nodes.filter((node) => node.type === 'folder').length
+
+/**
+ * How many folders placing something at `path` would create: one for each
+ * ancestor no node holds yet, since an existing node of either kind is
+ * reused as the parent (`ensureFolderPath`).
+ */
+function foldersMissingFor(nodes: WorkspaceNodes, path: string): number {
+  const held = new Set(nodes.map((node) => node.path))
+  const segments = path.split('/')
+  let missing = 0
+  for (let depth = 1; depth < segments.length; depth++) {
+    if (!held.has(segments.slice(0, depth).join('/'))) missing += 1
+  }
+  return missing
+}
 
 /**
  * Every path the move frees: the moving nodes' own, and every FOLDER the

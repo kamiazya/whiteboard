@@ -7,11 +7,18 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeFile, nodeText, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import {
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+  nodeFile,
+  nodeText,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { rewriteDocumentReferences } from './rewrite.js'
+import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 const PLAN = new Map([['design/login', 'archive/login']])
 
@@ -102,5 +109,58 @@ describe('rewriteDocumentReferences', () => {
       true,
     )
     expect(readMarkdownBody(documentContainers(workspace, id))).toBe('see [[archive/login]]')
+  })
+})
+
+describe('rewriteDocumentReferences, held to the text ceilings', () => {
+  const LONG = new Map([['a', `archive/${'x'.repeat(60)}`]])
+
+  it('refuses to grow a body past the markdown ceiling, and writes nothing', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, '[[a]] '.repeat(Math.floor(MARKDOWN_MAX_CHARS / 12)))
+    const before = doc.oplogVersion().encode()
+
+    expect(() => rewriteDocumentReferences(doc, LONG, 'markdown')).toThrow(
+      ReferenceRewriteTooLargeError,
+    )
+    expect(doc.oplogVersion().encode()).toEqual(before)
+  })
+
+  it('refuses a board whose rewrite grows any node past the node ceiling, and writes none of it', () => {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'spatial')
+    writeSpatialCanvas(
+      doc,
+      spatialCanvasSchema.parse({
+        nodes: [
+          textNode({ id: 'fits', x: 0, y: 0, width: 10, height: 10, text: 'see [[a]]' }),
+          textNode({
+            id: 'dense',
+            x: 0,
+            y: 20,
+            width: 10,
+            height: 10,
+            text: '[[a]] '.repeat(Math.floor(NODE_TEXT_MAX_CHARS / 12)),
+          }),
+        ],
+        edges: [],
+      }),
+    )
+    const before = doc.oplogVersion().encode()
+
+    expect(() => rewriteDocumentReferences(doc, LONG, 'spatial')).toThrow(
+      expect.objectContaining({
+        breach: expect.objectContaining({ shape: 'node-text', nodeId: 'dense' }),
+      }),
+    )
+    expect(doc.oplogVersion().encode()).toEqual(before)
+  })
+
+  it('still rewrites a body that shrinks, even one stored past the ceiling', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, `${'y'.repeat(MARKDOWN_MAX_CHARS)} [[design/login]]`)
+
+    expect(rewriteDocumentReferences(doc, new Map([['design/login', 'd']]), 'markdown')).toBe(true)
+    expect(readMarkdownBody(doc).endsWith('[[d]]')).toBe(true)
   })
 })

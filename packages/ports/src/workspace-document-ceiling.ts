@@ -11,7 +11,7 @@ import type { SyncWriteRefusalCode } from '@kamiazya/whiteboard-model'
  */
 export abstract class SyncWriteRefusalError extends Error {
   abstract readonly code: SyncWriteRefusalCode
-  abstract readonly status: 400 | 413
+  abstract readonly status: 400 | 409 | 413
 }
 
 /**
@@ -56,5 +56,49 @@ export class TooManyDocumentsError extends SyncWriteRefusalError {
 export function refuseNewDocuments(held: number, adding = 1): void {
   if (adding > 0 && held + adding > WORKSPACE_MAX_DOCUMENTS) {
     throw new TooManyDocumentsError(held + adding)
+  }
+}
+
+/**
+ * The most FOLDERS — nodes holding a path component and no document — a
+ * workspace record held by this keeper may list. Every listing walks every
+ * node, and a folder costs a listing what a document does (measured: about
+ * 22 µs a node, so 10000 folders add about 215 ms to every listing and 50000
+ * over a second), while a client mints folders as freely as documents and a
+ * path holds at most `DOCUMENT_PATH_MAX_LENGTH / 2` of them.
+ *
+ * Twice the document ceiling: room for every document to sit in a folder of
+ * its own two levels deep. A separate ceiling rather than a share of the
+ * document one, because a folder exists only to hold documents — counting it
+ * as one would refuse a workspace of 2000 documents for being organised.
+ */
+export const WORKSPACE_MAX_FOLDERS = 2 * WORKSPACE_MAX_DOCUMENTS
+
+/**
+ * A write refused because it would leave the workspace record listing more
+ * than `WORKSPACE_MAX_FOLDERS` folders, and more than it listed before. As
+ * with documents, a record already past the bound still takes a write that
+ * adds none. Nothing of the write was kept.
+ */
+export class TooManyFoldersError extends SyncWriteRefusalError {
+  readonly code = 'too_many_folders'
+  readonly status = 413
+
+  constructor(public readonly folders: number) {
+    super(
+      `This write would leave the workspace holding ${folders} folders; a workspace holds at most ${WORKSPACE_MAX_FOLDERS}. Move or delete some folders' documents first`,
+    )
+    this.name = 'TooManyFoldersError'
+  }
+}
+
+/**
+ * Throws `TooManyFoldersError` when a workspace holding `held` folders would
+ * pass the ceiling by taking `adding` more. Asked before the record is
+ * touched, as `refuseNewDocuments` is.
+ */
+export function refuseNewFolders(held: number, adding: number): void {
+  if (adding > 0 && held + adding > WORKSPACE_MAX_FOLDERS) {
+    throw new TooManyFoldersError(held + adding)
   }
 }
