@@ -103,6 +103,38 @@ describe.skipIf(!CHMOD_IS_OBSERVABLE)('a backup is readable by its owner alone',
     expect((await lstat(join(backupRoot, 'blobs'))).mode & 0o777).toBe(0o700)
   })
 
+  // An entry already in place is reused, not rewritten, so the reuse is the
+  // only point a pass can close a shared one an earlier build left open.
+  it('closes a mirrored blob and file it reuses rather than copies', async () => {
+    const digest = await seedDataDir()
+    const fileDigest = createHash('sha256').update('a version thumbnail').digest('hex')
+    const backupRoot = join(root, 'backups')
+    const reused = [
+      { top: 'blobs', digest, contents: 'an uploaded image' },
+      { top: 'files', digest: fileDigest, contents: 'a version thumbnail' },
+    ]
+    for (const entry of reused) {
+      const shard = join(backupRoot, entry.top, entry.digest.slice(0, 2))
+      await mkdir(shard, { recursive: true })
+      await writeFile(join(shard, entry.digest.slice(2)), entry.contents)
+      await chmod(shard, 0o755)
+      await chmod(join(shard, entry.digest.slice(2)), 0o644)
+    }
+    const outcome = await performBackup({
+      dataDir,
+      outputDir: join(backupRoot, '2026-03-04T05-06-07.000Z'),
+      mirrorRoot: backupRoot,
+    })
+    expect(outcome.kind).toBe('ok')
+
+    for (const entry of reused) {
+      const shard = join(backupRoot, entry.top, entry.digest.slice(0, 2))
+      expect(await readFile(join(shard, entry.digest.slice(2)), 'utf8')).toBe(entry.contents)
+      expect((await lstat(shard)).mode & 0o777).toBe(0o700)
+      expect((await lstat(join(shard, entry.digest.slice(2)))).mode & 0o777).toBe(0o600)
+    }
+  })
+
   it('writes the database snapshot for its owner alone', async () => {
     const dest = join(root, 'snapshot', 'whiteboard.db')
     await snapshotDatabaseInto(dataDir, dest)

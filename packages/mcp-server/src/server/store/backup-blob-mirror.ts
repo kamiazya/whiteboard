@@ -245,7 +245,10 @@ async function mirrorShard(
     const source = blobShardPath(sourceRoot, digest)
     const destination = blobShardPath(join(backupRoot, BLOBS_DIRNAME), digest)
     const held = await sizeOf(destination)
-    if (held !== undefined && held >= ((await sizeOf(source)) ?? 0)) continue
+    if (held !== undefined && held >= ((await sizeOf(source)) ?? 0)) {
+      await closeReusedEntry(backupRoot, BLOBS_DIRNAME, digest)
+      continue
+    }
     await mkdirOwnerOnly(
       backupRoot,
       BLOBS_DIRNAME,
@@ -296,7 +299,10 @@ async function mirrorNamedTree(
     const digest = sha256Hex(bytes)
     into[file.relative] = digest
     const destination = blobShardPath(join(backupRoot, FILES_DIRNAME), digest)
-    if ((await sizeOf(destination)) === bytes.length) continue
+    if ((await sizeOf(destination)) === bytes.length) {
+      await closeReusedEntry(backupRoot, FILES_DIRNAME, digest)
+      continue
+    }
     await mkdirOwnerOnly(
       backupRoot,
       FILES_DIRNAME,
@@ -466,6 +472,18 @@ async function mkdirOwnerOnly(backupRoot: string, top: string, shardDir: string)
   await mkdir(shardDir, { recursive: true, mode: BACKUP_DIR_MODE })
   await chmod(join(backupRoot, top), BACKUP_DIR_MODE)
   await chmod(shardDir, BACKUP_DIR_MODE)
+}
+
+/**
+ * A mirror entry a pass reuses instead of writing, closed the way a written
+ * one is. The mirror is shared by every retained backup, so an entry an
+ * earlier build wrote under the umask would otherwise stay readable by others
+ * for as long as any backup names it: reuse is the only point a pass reaches it.
+ */
+async function closeReusedEntry(backupRoot: string, top: string, digest: string): Promise<void> {
+  const root = join(backupRoot, top)
+  await mkdirOwnerOnly(backupRoot, top, blobShardDir(root, digest))
+  await chmod(blobShardPath(root, digest), BACKUP_FILE_MODE)
 }
 
 /** A file's size, or `undefined` when there is none to stat. */
