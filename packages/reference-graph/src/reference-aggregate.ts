@@ -1,4 +1,4 @@
-import { createUniqueNameResolver, scanReferences } from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver, findNextReference } from '@kamiazya/whiteboard-codec'
 import {
   compareCodeUnit,
   documentIdSchema,
@@ -136,17 +136,31 @@ export function unlinkedNameSpans(
   text: string,
   name: string,
 ): readonly { index: number; length: number }[] {
-  const refs = scanReferences(text).map(
-    (match) => [match.index, match.index + match.full.length] as const,
-  )
-  const spans: { index: number; length: number }[] = []
+  return [...unlinkedNameSpansIn(text, name)]
+}
+
+/**
+ * The spans of `unlinkedNameSpans`, one at a time, so a caller that needs a
+ * few stops the walk there. References are disjoint and come in order, so
+ * the only one that can cover an occurrence is the first that ends after
+ * it: one forward pass over both, with each reference scanned only once an
+ * occurrence has reached it.
+ */
+function* unlinkedNameSpansIn(
+  text: string,
+  name: string,
+): Generator<{ index: number; length: number }> {
+  let ref = findNextReference(text, 0)
   let cursor = 0
   for (;;) {
     const at = text.indexOf(name, cursor)
-    if (at === -1) return spans
+    if (at === -1) return
     cursor = at + name.length
-    if (refs.some(([from, to]) => at >= from && at < to)) continue
-    spans.push({ index: at, length: name.length })
+    while (ref !== undefined && ref.index + ref.full.length <= at) {
+      ref = findNextReference(text, ref.index + ref.full.length)
+    }
+    if (ref !== undefined && at >= ref.index) continue
+    yield { index: at, length: name.length }
   }
 }
 
@@ -156,7 +170,7 @@ const MENTION_CONTEXTS = 3
 /** A snippet around every unlinked occurrence of `name`, across `texts`. */
 function* unlinkedContexts(texts: readonly string[], name: string): Iterable<string> {
   for (const text of texts) {
-    for (const span of unlinkedNameSpans(text, name)) {
+    for (const span of unlinkedNameSpansIn(text, name)) {
       yield snippetAround(text, span.index, span.length)
     }
   }
