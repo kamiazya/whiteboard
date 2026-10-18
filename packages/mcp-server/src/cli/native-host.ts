@@ -15,6 +15,7 @@ import { resolveDaemonEndpoint } from '../daemon/native-host/daemon-endpoint.js'
 import {
   installNativeHost,
   type ManifestDir,
+  NativeHostInstallIncompleteError,
   nativeHostManifestDirs,
 } from '../daemon/native-host/install.js'
 import { runNativeHost } from '../daemon/native-host/relay.js'
@@ -179,13 +180,20 @@ async function installAndAnswer(options: Parameters<typeof installNativeHost>[0]
   try {
     result = await installNativeHost(options)
   } catch (err) {
-    // A refused data dir or launcher is an answer the `--json` reader parses,
-    // not a crash: nothing was written, so there is no launcher to name.
-    return answerInstall({
-      ok: false,
-      reason: err instanceof Error ? err.message : String(err),
-      manifests: [],
-    })
+    // A refusal is an answer the `--json` reader parses, not a crash. One
+    // that came after the launcher was written names it and every manifest
+    // already in place, so the answer says what is on disk; a refused data
+    // dir or launcher wrote nothing, and names nothing.
+    const reason = err instanceof Error ? err.message : String(err)
+    if (err instanceof NativeHostInstallIncompleteError) {
+      return answerInstall({
+        ok: false,
+        reason,
+        launcher: err.launcher,
+        manifests: [...err.manifests],
+      })
+    }
+    return answerInstall({ ok: false, reason, manifests: [] })
   }
   const ok = result.manifests.length > 0
   const reason = ok

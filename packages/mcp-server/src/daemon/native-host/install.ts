@@ -218,30 +218,58 @@ async function writeLauncher(options: InstallOptions): Promise<string> {
   return launcher
 }
 
+/**
+ * An install that failed after the launcher was written. Carries what is on
+ * disk — the launcher, and each manifest fully written (and registered) before
+ * the failure — so a caller answers what is there instead of "nothing".
+ */
+export class NativeHostInstallIncompleteError extends Error {
+  constructor(
+    readonly launcher: string,
+    readonly manifests: readonly ManifestDir[],
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause })
+    this.name = 'NativeHostInstallIncompleteError'
+  }
+}
+
 export async function installNativeHost(
   options: InstallOptions,
 ): Promise<{ launcher: string; manifests: ManifestDir[] }> {
   const launcher = await writeLauncher(options)
+  const written: ManifestDir[] = []
+  try {
+    for (const manifestDir of options.manifestDirs) {
+      await writeManifest(options, launcher, manifestDir)
+      written.push(manifestDir)
+    }
+  } catch (err) {
+    throw new NativeHostInstallIncompleteError(launcher, written, err)
+  }
+  return { launcher, manifests: written }
+}
+
+async function writeManifest(
+  options: InstallOptions,
+  launcher: string,
+  { dir, engine, registryKey }: ManifestDir,
+): Promise<void> {
   const register = options.register ?? regAdd
   const allowed = ALLOWED[options.extensionBuild ?? 'production']
-
-  for (const { dir, engine, registryKey } of options.manifestDirs) {
-    const manifest = {
-      name: NATIVE_HOST_NAME,
-      description: 'Relays the whiteboard extension to the local whiteboard daemon',
-      path: launcher,
-      type: 'stdio',
-      // Only the engine's own key: Firefox refuses a manifest that also
-      // carries Chromium's, as "No such native application".
-      ...(engine === 'firefox'
-        ? { allowed_extensions: [allowed.firefox] }
-        : { allowed_origins: [`chrome-extension://${allowed.chromium}/`] }),
-    }
-    const manifestPath = join(dir, `${NATIVE_HOST_NAME}.json`)
-    await mkdir(dir, { recursive: true })
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    if (registryKey !== undefined)
-      await register(`${registryKey}\\${NATIVE_HOST_NAME}`, manifestPath)
+  const manifest = {
+    name: NATIVE_HOST_NAME,
+    description: 'Relays the whiteboard extension to the local whiteboard daemon',
+    path: launcher,
+    type: 'stdio',
+    // Only the engine's own key: Firefox refuses a manifest that also
+    // carries Chromium's, as "No such native application".
+    ...(engine === 'firefox'
+      ? { allowed_extensions: [allowed.firefox] }
+      : { allowed_origins: [`chrome-extension://${allowed.chromium}/`] }),
   }
-  return { launcher, manifests: [...options.manifestDirs] }
+  const manifestPath = join(dir, `${NATIVE_HOST_NAME}.json`)
+  await mkdir(dir, { recursive: true })
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  if (registryKey !== undefined) await register(`${registryKey}\\${NATIVE_HOST_NAME}`, manifestPath)
 }

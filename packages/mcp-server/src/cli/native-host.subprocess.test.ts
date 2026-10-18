@@ -225,6 +225,30 @@ describe('whiteboard native-host', () => {
     expect(() => readFileSync(join(dataDir, 'native-host', 'whiteboard-native-host'))).toThrow()
   }, 30_000)
 
+  // A failure past the launcher leaves it on disk, and a reader deciding what
+  // to clean up or retry needs to be told what is there.
+  it('names the launcher and the manifests written before a later step failed', () => {
+    const dataDir = ownerOnlyDataDir()
+    const manifestDir = join(scratch, 'NativeMessagingHosts')
+    const blocker = join(scratch, 'not-a-dir')
+    writeFileSync(blocker, '')
+    const installed = installCli([
+      `--data-dir=${dataDir}`,
+      `--manifest-dir=${manifestDir}`,
+      `--firefox-manifest-dir=${join(blocker, 'native-messaging-hosts')}`,
+    ])
+    expect(installed.status, installed.stderr).toBe(1)
+    const result = nativeHostInstallOutputSchema.parse(JSON.parse(installed.stdout))
+    const launcher = join(dataDir, 'native-host', 'whiteboard-native-host')
+    expect(result).toMatchObject({
+      ok: false,
+      launcher,
+      manifests: [{ browser: 'explicit', engine: 'chromium', dir: manifestDir }],
+    })
+    expect(result.reason).toContain(blocker)
+    expect(readFileSync(launcher, 'utf8')).toContain('native-host run')
+  }, 30_000)
+
   it('relays a refused daemon record as a refusal naming the record', async () => {
     const dataDir = ownerOnlyDataDir()
     writeFileSync(join(dataDir, 'elsewhere.json'), '{}')

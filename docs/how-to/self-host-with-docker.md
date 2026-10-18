@@ -549,7 +549,10 @@ should parse stdout only when it is non-empty rather than assuming every
 non-zero exit carries a line. `whiteboard native-host install --json` prints the
 same `schemaVersion` with `ok`, `launcher`, `manifests` and, when `ok` is
 false, a `reason`. A refused data directory or launcher answers `ok: false`
-with no `launcher` and no manifests, since nothing was written.
+with no `launcher` and no manifests, since nothing was written. A failure after
+the launcher was written (a manifest directory that cannot be created, a
+registry write) answers `ok: false` naming the `launcher` and the `manifests`
+already in place.
 
 ### Deleting a user
 
