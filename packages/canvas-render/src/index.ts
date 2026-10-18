@@ -55,6 +55,7 @@ export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-an
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
+export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {

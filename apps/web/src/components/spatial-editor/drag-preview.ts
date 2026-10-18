@@ -18,6 +18,7 @@ import { type CanvasEdge, frameHolds, isFrame, RESOURCE_KINDS } from '@kamiazya/
 
 import {
   assignEdgeAnchors,
+  createRoutingBudget,
   type EdgeSides,
   edgeArrowPolygons,
   flattenDrawnEdgePath,
@@ -152,28 +153,52 @@ export function computeDragPreview(
         from: { node: gestureState.fromNodeId },
         to: { node: targetId },
       }
-      const routingStyle = resolveCanvasEdgeStyle(canvas).style
-      const anchors = assignEdgeAnchors(
-        nodes,
-        [...canvas.edges, tentative],
-        routingStyle,
-        connect.frozenEdgeSides,
-      )
-      const routed = routeEdge(nodes, tentative, routingStyle, anchors.get(tentative.id))
-      // The preview shows the DRAWN line the drop will produce: rounded
-      // corners flattened and the committed arrowheads, from the same
-      // producers the editor's committed render uses.
-      // ponytail: no line-jump hops here — computing them needs every
-      // other edge routed per frame; wire computeEdgeJumps in if the
-      // hopless preview ever reads as a bug.
-      return {
-        kind: 'line',
-        path: flattenDrawnEdgePath(routed.path, [], routed.rounded === true),
-        arrows: edgeArrowPolygons(routed).map((arrow) => arrow.points),
-      }
+      return previewLine(nodes, tentative, connect)
     }
     default:
       return undefined
+  }
+}
+
+/**
+ * The drawn line the drop will produce for `tentative`: rounded corners
+ * flattened and the committed arrowheads, from the same producers the
+ * editor's committed render uses.
+ *
+ * ponytail: no line-jump hops here — computing them needs every other edge
+ * routed per frame; wire computeEdgeJumps in if the hopless preview ever
+ * reads as a bug.
+ */
+function previewLine(
+  nodes: SpatialCanvas['nodes'],
+  tentative: CanvasEdge,
+  connect: ConnectPreviewContext,
+): DragPreview {
+  const { canvas } = connect
+  const routingStyle = resolveCanvasEdgeStyle(canvas).style
+  // One routing account per pointer move, as a layout opens one: without it
+  // a board that sends every route to the grid search runs that search
+  // unbounded on each frame of the gesture.
+  const budget = createRoutingBudget()
+  const anchors = assignEdgeAnchors(
+    nodes,
+    [...canvas.edges, tentative],
+    routingStyle,
+    connect.frozenEdgeSides,
+    budget,
+  )
+  const routed = routeEdge(
+    nodes,
+    tentative,
+    routingStyle,
+    anchors.get(tentative.id),
+    undefined,
+    budget,
+  )
+  return {
+    kind: 'line',
+    path: flattenDrawnEdgePath(routed.path, [], routed.rounded === true),
+    arrows: edgeArrowPolygons(routed).map((arrow) => arrow.points),
   }
 }
 
