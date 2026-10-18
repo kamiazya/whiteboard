@@ -29,8 +29,9 @@ const MAX_DOCUMENTS = 20
  * The most one call answers with, summed over its documents: each one's
  * `content` plus its serialised `threads` and `proposals`. Four
  * maximal markdown bodies: MAX_DOCUMENTS alone let twenty maximal boards
- * through in one response. The first document is always answered, however
- * large, so any document stays readable — by asking for it alone.
+ * through in one response. The first document's content is always answered,
+ * however large, so any document stays readable by asking for it alone; its
+ * annotation layer is what gets trimmed to fit (`annotationsTruncated`).
  */
 const MAX_CONTENT_CHARS = 4 * MARKDOWN_MAX_CHARS
 
@@ -80,6 +81,12 @@ const readDocumentSchema = z
     // can learn whether what it proposed was adopted or dismissed. Absent
     // when there are none.
     proposals: z.array(proposalSchema).optional(),
+    annotationsTruncated: z
+      .literal(true)
+      .optional()
+      .describe(
+        'Present when this document alone exceeded the response budget: its content is whole, and `threads` and `proposals` hold only the leading entries that fit.',
+      ),
   })
   .strict()
 
@@ -129,7 +136,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_get' as const,
     description:
-      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. A document that cannot be read is reported in `failed` rather than failing the whole call.',
+      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. A document too large to answer whole keeps its whole content but carries only the leading threads and proposals that fit, with `annotationsTruncated: true`. A document that cannot be read is reported in `failed` rather than failing the whole call.',
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
@@ -151,9 +158,14 @@ export function createDocumentGetTool(deps: ServerDeps) {
           continue
         }
         const charged = chargedChars(read)
-        if (documents.length > 0 && contentChars + charged > MAX_CONTENT_CHARS) {
+        if (contentChars + charged > MAX_CONTENT_CHARS) {
+          if (documents.length > 0) {
+            overBudget = true
+            failed.push({ documentId, reason: readAloneReason(documentId) })
+            continue
+          }
+          documents.push(trimAnnotations(read))
           overBudget = true
-          failed.push({ documentId, reason: readAloneReason(documentId) })
           continue
         }
         contentChars += charged
@@ -210,6 +222,34 @@ function chargedChars(read: ReadDocument): number {
     (read.threads === undefined ? 0 : JSON.stringify(read.threads).length) +
     (read.proposals === undefined ? 0 : JSON.stringify(read.proposals).length)
   )
+}
+
+/**
+ * A lone read over the budget keeps its content and as many leading threads,
+ * then proposals, as the rest of the budget holds. Leading rather than
+ * newest because the stored order is the only order both arrays share.
+ */
+function trimAnnotations(read: ReadDocument): ReadDocument {
+  let room = MAX_CONTENT_CHARS - read.content.length
+  const take = <T>(items: readonly T[] | undefined): T[] => {
+    const kept: T[] = []
+    for (const item of items ?? []) {
+      const cost = JSON.stringify(item).length
+      if (cost > room) break
+      room -= cost
+      kept.push(item)
+    }
+    return kept
+  }
+  const { threads: _threads, proposals: _proposals, ...rest } = read
+  const threads = take(read.threads)
+  const proposals = take(read.proposals)
+  return {
+    ...rest,
+    ...(threads.length === 0 ? {} : { threads }),
+    ...(proposals.length === 0 ? {} : { proposals }),
+    annotationsTruncated: true,
+  }
 }
 
 function readAloneReason(documentId: string): string {
