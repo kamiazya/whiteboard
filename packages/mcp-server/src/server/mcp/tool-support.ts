@@ -3,13 +3,18 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
-import { toolErrorText } from '../security/mcp-caller.js'
+import { callerReadsServerLog, toolErrorText } from '../security/mcp-caller.js'
 import { runWithRequestLog } from './logging.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { TOOL_PROFILES, UNPROFILED_TOOL_PROFILE } from './tool-profiles.js'
 
 // MCP tracer. Calls into the no-op API when tracing is disabled.
 const mcpTracer = (): ReturnType<typeof getTracer> => getTracer('whiteboard.mcp')
+
+// The call's own log sink, where its caller may read the server's records.
+function forwardedLog<L>(extra: { mcpReq?: { log?: L } } | undefined): L | undefined {
+  return callerReadsServerLog() ? extra?.mcpReq?.log : undefined
+}
 
 export function structuredJsonResult<T extends object>(result: T) {
   const structuredContent = result as T & { [key: string]: unknown }
@@ -128,7 +133,7 @@ export function registerToolWithAnnotations<
       },
       async (span) => {
         try {
-          return await runWithRequestLog(extra?.mcpReq?.log, () => handler(args, extra))
+          return await runWithRequestLog(forwardedLog(extra), () => handler(args, extra))
         } catch (err) {
           span.recordException(err instanceof Error ? err : new Error(String(err)))
           span.setStatus({

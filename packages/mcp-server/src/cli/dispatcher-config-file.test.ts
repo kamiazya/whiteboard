@@ -188,7 +188,7 @@ describe('whiteboard daemon run — config file wiring', () => {
 
     const loadRecord = capture.records.find((r) => r.msg.includes('loaded whiteboard config file'))
     expect(loadRecord).toBeDefined()
-    expect(loadRecord?.data?.filepath).toBe(join(home, '.whiteboard', 'config.yaml'))
+    expect(loadRecord?.data?.filepaths).toEqual([join(home, '.whiteboard', 'config.yaml')])
     expect(JSON.stringify(capture.records)).not.toContain('file-token-value')
   })
 
@@ -331,13 +331,13 @@ describe('a working-directory config may not set dataDir or token', () => {
     expect(process.env.WHITEBOARD_DAEMON_TOKEN).toBeUndefined()
   })
 
-  it('applies a cwd config that sets only logLevel, which shadows the home config whole', async () => {
+  it('keeps the home dataDir under a cwd config that sets only logLevel', async () => {
     writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'error' }))
     writeHomeConfig({ dataDir: join(dir, 'from-home') })
     await captureStdio(() => main(['daemon', 'status', '--json']))
-    // One config file applies, never a merge of two: the cwd file wins the
-    // search, so the home file is not read.
-    expect(seen.get('daemon status')).not.toContain(join(dir, 'from-home'))
+    // The cwd file is layered over the home file, so a repository that only
+    // tunes the log level does not silently move the user's data.
+    expect(seen.get('daemon status')).toContain(join(dir, 'from-home'))
     expect(process.env.WHITEBOARD_LOG_LEVEL).toBe('error')
   })
 })

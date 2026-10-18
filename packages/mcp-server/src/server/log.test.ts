@@ -129,6 +129,16 @@ describe('redaction', () => {
     password: 'hunter2',
     secret: 'shh',
     apiKey: 'sk-secret',
+    // The sign-in flow's own carriers: an OIDC client secret, the session a
+    // completed sign-in opens, a sign-in attempt's PKCE verifier, nonce and
+    // browser binding, an invitation link's token, and a replica's key.
+    clientSecretValue: 'oidc-client-secret',
+    sessionToken: 'session-secret-token',
+    codeVerifier: 'pkce-secret-verifier',
+    nonce: 'oidc-secret-nonce',
+    browserBinding: 'attempt-secret-binding',
+    invitationToken: 'invitation-secret-token',
+    workspaceKey: 'replica-secret-key',
   }
 
   it('redacts every known secret field at the top level, for both the stderr destination and the MCP-notification-style capture destination', () => {
@@ -159,7 +169,10 @@ describe('redaction', () => {
   it('redacts secret fields nested one level deep (e.g. a wholesale client/request object)', () => {
     const log = getLogger('redact-test')
     log.warning(
-      { client: { baseUrl: 'http://127.0.0.1:3099', token: 'daemon-secret-token' } },
+      {
+        client: { baseUrl: 'http://127.0.0.1:3099', token: 'daemon-secret-token' },
+        attempt: { provider: 'corp', codeVerifier: 'pkce-secret-verifier' },
+      },
       'logged the whole daemon client by mistake',
     )
 
@@ -175,6 +188,8 @@ describe('redaction', () => {
     const line = String(lastCall?.[0])
     expect(line).toContain('logged the whole daemon client by mistake')
     expect(line).not.toContain('daemon-secret-token')
+    expect(line).not.toContain('pkce-secret-verifier')
+    expect(line).toContain('corp')
   })
 
   it('does not let a token nested inside a logged Error leak through the err/error/cause serializers', () => {
@@ -197,10 +212,21 @@ describe('redaction', () => {
 
   it('leaves ordinary diagnostic fields untouched so redaction does not silently eat normal logs', () => {
     const log = getLogger('redact-test')
-    log.warning({ workspaceId: 'ws_1', path: 'a', durationMs: 12 }, 'normal diagnostic record')
+    // `state` names a sign-in attempt's OIDC state too, and is left out of
+    // the list on purpose: it is far more often a liveness or job state, and
+    // the attempt it names cannot be taken without its browser binding.
+    log.warning(
+      { workspaceId: 'ws_1', path: 'a', durationMs: 12, state: 'running' },
+      'normal diagnostic record',
+    )
 
     const record = cap.records[0]
-    expect(record.data).toMatchObject({ workspaceId: 'ws_1', path: 'a', durationMs: 12 })
+    expect(record.data).toMatchObject({
+      workspaceId: 'ws_1',
+      path: 'a',
+      durationMs: 12,
+      state: 'running',
+    })
   })
 })
 

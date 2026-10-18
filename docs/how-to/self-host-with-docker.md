@@ -433,6 +433,13 @@ available through `/api/people`:
 
 Everyone else gets `403 not_an_administrator`.
 
+The server's own figures are an administrator's too. `GET /api/runtime/status`
+(the process, and how many live-sync streams every user has open) and
+`GET /api/runtime/storage` (the bytes of every workspace on the server)
+answer `403 not_an_administrator` to anyone else, whatever scopes their
+session or bearer token holds. `GET /api/runtime/ping` stays public, for
+health checks.
+
 **Every change an administrator makes needs a recent sign-in.** That covers
 deactivating, reactivating, deleting, appointing, dismissing and inviting;
 reading the list does not need one. The administrator must have signed in at

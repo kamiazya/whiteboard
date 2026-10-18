@@ -225,8 +225,34 @@ describe('app — server-mode composition', () => {
 
   // Req 3: runtime status sanitized
   describe('server-mode runtime status sanitization', () => {
+    // The status describes the whole instance, so on server mode only an
+    // administrator reads it (app.server-mode.runtime-administrators.test.ts).
+    function administratorOptions(overrides?: Partial<ServerModeAppOptions>): ServerModeAppOptions {
+      const base = makeServerModeOptions(['runtime:read'])
+      const strategy = base.authStrategy
+      return {
+        ...base,
+        authStrategy: {
+          async authorize(input) {
+            const decision = await strategy.authorize(input)
+            return decision.ok
+              ? { ...decision, person: { authenticator: 'oidc:https://idp.test', subject: 'ops' } }
+              : decision
+          },
+        },
+        people: {
+          ...people,
+          administration: {
+            ...people.administration,
+            check: { isAdministrator: async () => true, administratorIds: async () => new Set() },
+          },
+        },
+        ...overrides,
+      }
+    }
+
     it('response does not contain internal host, port, dataDir, or mcp endpoint', async () => {
-      const app = createApp(makeServerModeOptions(['runtime:read']))
+      const app = createApp(administratorOptions())
       const res = await app.request('/api/runtime/status', {
         headers: { authorization: BEARER },
       })
@@ -239,7 +265,7 @@ describe('app — server-mode composition', () => {
     })
 
     it('storage.dataDir is replaced with [server-managed]', async () => {
-      const app = createApp(makeServerModeOptions(['runtime:read']))
+      const app = createApp(administratorOptions())
       const res = await app.request('/api/runtime/status', { headers: { authorization: BEARER } })
       const body = (await res.json()) as Record<string, unknown>
       const storage = body.storage as Record<string, unknown>
@@ -248,7 +274,7 @@ describe('app — server-mode composition', () => {
 
     it('mcp.endpoint is derived from publicBaseUrl', async () => {
       const app = createApp(
-        makeServerModeOptions(['runtime:read'], {
+        administratorOptions({
           publicBaseUrl: 'https://myserver.example.com',
         }),
       )
@@ -259,7 +285,7 @@ describe('app — server-mode composition', () => {
     })
 
     it('port is 443 for https:// publicBaseUrl without explicit port', async () => {
-      const app = createApp(makeServerModeOptions(['runtime:read']))
+      const app = createApp(administratorOptions())
       const res = await app.request('/api/runtime/status', { headers: { authorization: BEARER } })
       const body = (await res.json()) as Record<string, unknown>
       expect(body.port).toBe(443)
@@ -267,7 +293,7 @@ describe('app — server-mode composition', () => {
 
     it('port is derived from explicit port in publicBaseUrl', async () => {
       const app = createApp(
-        makeServerModeOptions(['runtime:read'], {
+        administratorOptions({
           publicBaseUrl: 'https://example.com:8443',
           allowedOrigins: ['https://example.com:8443'],
         }),

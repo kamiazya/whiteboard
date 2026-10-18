@@ -15,7 +15,8 @@
 //
 // Trust boundary: `loadConfigFile` only ever consults the given `cwd`
 // itself (searchStrategy 'none', no ancestor walk-up, no OS-level global
-// config directory) and the explicit `~/.whiteboard/config.yaml` fallback.
+// config directory) and the explicit `~/.whiteboard/config.yaml`, which it
+// reads beneath the cwd file.
 // An ancestor of cwd — e.g. the root of an untrusted cloned repo — must
 // never be able to plant a config that injects `token` into a nested
 // project's daemon. The cwd itself is no more trusted than its ancestors (an
@@ -100,7 +101,8 @@ type KnownKey = (typeof KNOWN_KEYS)[number]
 export type WhiteboardConfigFile = z.infer<typeof whiteboardConfigFileSchema>
 
 export interface LoadedConfigFile {
-  readonly filepath: string
+  /** Every file the config was read from, the home config first. */
+  readonly filepaths: readonly string[]
   readonly config: WhiteboardConfigFile
 }
 
@@ -181,10 +183,12 @@ function isHomeConfig(filepath: string, homeDir: string): boolean {
   }
 }
 
-// Loads a whiteboard config file from `cwd` itself (no ancestor walk-up).
-// Falls back to `~/.whiteboard/config.yaml` when nothing is found there.
-// Returns null when no file exists anywhere — daemon behavior must stay
-// byte-identical in that case.
+// Loads the home-directory config (`~/.whiteboard/config.yaml`) and a config
+// file from `cwd` itself (no ancestor walk-up), the cwd file's keys layered
+// over the home file's. A cwd file therefore tunes what it may set without
+// dropping the home file's `dataDir` and `token`, which only the home file
+// may set. Returns null when no file exists anywhere — daemon behavior must
+// stay byte-identical in that case.
 export function loadConfigFile(
   cwd: string = process.cwd(),
   options: LoadConfigFileOptions = {},
@@ -194,8 +198,8 @@ export function loadConfigFile(
   // This is a deliberate trust-boundary choice, not cosmiconfig's default —
   // an ancestor of cwd (e.g. the root of an untrusted cloned repo) must not
   // be able to plant a config that injects `token` into a nested project's
-  // daemon. The only other place consulted is the
-  // explicit home-directory fallback below.
+  // daemon. The only other place consulted is the explicit home-directory
+  // config below.
   const explorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [...CONFIG_FILE_SEARCH_PLACES],
     searchStrategy: 'none',
@@ -204,12 +208,31 @@ export function loadConfigFile(
 
   const homeDir = options.homeDir ?? homedir()
   const found = explorer.search(cwd)
-  if (found && !found.isEmpty) {
-    const config = validateLoadedConfig(found.config, found.filepath)
-    if (!isHomeConfig(found.filepath, homeDir)) refuseWorkingDirectoryKeys(config, found.filepath)
-    return { filepath: found.filepath, config }
+  const cwdFile = found && !found.isEmpty ? found : null
+  if (cwdFile !== null && isHomeConfig(cwdFile.filepath, homeDir)) {
+    return {
+      filepaths: [cwdFile.filepath],
+      config: validateLoadedConfig(cwdFile.config, cwdFile.filepath),
+    }
   }
+  const cwdLoaded = cwdFile === null ? null : loadWorkingDirectoryConfig(cwdFile)
+  const homeLoaded = loadHomeConfig(homeDir)
+  if (homeLoaded === null && cwdLoaded === null) return null
+  return {
+    filepaths: [homeLoaded?.filepath, cwdLoaded?.filepath].filter((p) => p !== undefined),
+    config: { ...homeLoaded?.config, ...cwdLoaded?.config },
+  }
+}
 
+function loadWorkingDirectoryConfig(found: { config: unknown; filepath: string }) {
+  const config = validateLoadedConfig(found.config, found.filepath)
+  refuseWorkingDirectoryKeys(config, found.filepath)
+  return { filepath: found.filepath, config }
+}
+
+function loadHomeConfig(
+  homeDir: string,
+): { filepath: string; config: WhiteboardConfigFile } | null {
   const homeConfigExplorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [HOME_CONFIG_FILE_RELATIVE_PATH],
     searchStrategy: 'none',
