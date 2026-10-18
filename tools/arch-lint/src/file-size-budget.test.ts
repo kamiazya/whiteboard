@@ -180,7 +180,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the standalone restore and the projection all apply is `content-sync.ts`.
   // Raised by 16 for the chosen-name mark: it has to be written by the name
   // writers here, which are the only place every keeper's rename converges.
-  'packages/loro-adapter/src/workspace-tree.ts': 975,
+  // Raised by 6 for the node-meta keys the content write must skip: they are
+  // derived from the node schema declared here, and the rule itself lives in
+  // `content-sync.ts` (`rootFitsNode`).
+  'packages/loro-adapter/src/workspace-tree.ts': 981,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush

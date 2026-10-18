@@ -88,9 +88,14 @@ not:
   `400 {"error":"unreadable_document_meta"}`, an update that would leave a
   readable document or folder with meta this server cannot read — a document's
   kind, segment, id or timestamps, or any key on a folder besides its segment —
-  which would hide it and everything below it — and, with
-  `400 {"error":"document_name_too_long"}`, one that gives a document a name
-  longer than 200 characters. A name stored longer before that bound can
+  which would hide it and everything below it. A document's `update` refuses,
+  with `400 {"error":"invalid_document_root"}`, an update that adds a root
+  container named after one of a document node's own keys (`documentId`,
+  `segment`, `kind`, `name`, `nameChosen`, `createdAt`, `updatedAt`), or a
+  content container under its own name but of another kind (a text named
+  `nodes`). The workspace document's `update` also refuses, with
+  `400 {"error":"document_name_too_long"}`, an update that gives a document a
+  name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`
   refuse, with `413 {"error":"too_many_documents"}`, an update or record that
   would leave the workspace holding more than 2000 documents; a workspace that

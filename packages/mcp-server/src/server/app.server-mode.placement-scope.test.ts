@@ -191,6 +191,34 @@ describe('server mode — a canvas:write grant without workspace:write', () => {
     expect(resolveWorkspaceDocument(await workspaceRecord(workspaceId), 'fresh')).toBeNull()
   })
 
+  // A document's content and its node's own meta share one map on the tree
+  // node, so a root named after a meta key would rewrite the node from a
+  // grant that may only edit content.
+  it.each([
+    ['a map named nameChosen', (doc: LoroDoc) => doc.getMap('nameChosen').set('x', 1)],
+    ['a text named name', (doc: LoroDoc) => doc.getText('name').insert(0, 'n'.repeat(5000))],
+    ['a text named kind', (doc: LoroDoc) => doc.getText('kind').insert(0, 'markdown')],
+    ['a text where content holds a map', (doc: LoroDoc) => doc.getText('nodes').insert(0, 'x')],
+  ])('refuses a per-document update adding %s, and the document stays listed', async (_, add) => {
+    const workspaceId = await workspaceWithNotes()
+    const doc = new LoroDoc()
+    add(doc)
+    doc.commit()
+
+    const res = await post(
+      `/api/w/${workspaceId}/document/notes/update`,
+      BEARER,
+      new Uint8Array(doc.export({ mode: 'update' })),
+    )
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'invalid_document_root' })
+    const entry = resolveWorkspaceDocument(await workspaceRecord(workspaceId), 'notes')
+    expect(entry).not.toBeNull()
+    expect(entry?.name).toBeUndefined()
+    expect(entry?.kind).toBe('spatial')
+  })
+
   it('still edits a document’s content through either update route', async () => {
     const workspaceId = await workspaceWithNotes()
 

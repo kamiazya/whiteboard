@@ -37,6 +37,7 @@ import * as refusals from './sync-write-refusals.js'
 import {
   DocumentNameTooLongError,
   OffGrammarPathError,
+  RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
   syncWriteAnswer,
   TooManyDocumentsError,
@@ -50,6 +51,7 @@ const MAP = 'cid:0@1:Map'
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
+  RootNoDocumentHoldsError: () => new RootNoDocumentHoldsError(['nameChosen']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
 }

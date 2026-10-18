@@ -42,6 +42,8 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would add a comment thread, a proposal or another part of a document under an id longer than one may be.',
   unreadable_document_meta:
     'It would leave documents in this workspace that could not be read, hiding them.',
+  invalid_document_root:
+    'It would add a part to a document under a name the workspace keeps for itself, or of a kind that name cannot hold.',
   too_many_documents:
     'It would leave this workspace holding more documents than one workspace may. Move some documents to another workspace first.',
 }

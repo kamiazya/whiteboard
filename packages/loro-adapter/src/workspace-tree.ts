@@ -36,6 +36,7 @@ import {
   freshNodeRoots,
   nodeRoots,
   projectedKind,
+  rootFitsNode,
   syncRootContainer,
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
@@ -678,6 +679,11 @@ export function adoptWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
+/** What a document node keeps for itself, so never a content root (`rootFitsNode`). */
+export const NODE_META_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(workspaceNodeMetaSchema.shape),
+)
+
 /**
  * Makes an EXISTING tree document's content equal a standalone document's —
  * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
@@ -716,8 +722,8 @@ export function writeWorkspaceDocumentContent(
   for (const [key, value] of Object.entries(projected)) {
     // Belt to the projection's braces: a source that somehow carries a plane
     // key (an import, a record from the branch era) must not write it onto
-    // the node.
-    if (isPlaneKey(key)) continue
+    // the node, nor a root the node cannot hold.
+    if (isPlaneKey(key) || !rootFitsNode(node.data, key, value, NODE_META_KEYS)) continue
     if (syncRootContainer(roots, key, value, source)) changed = true
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
