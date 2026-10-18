@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import type { AuthScope } from '../security/auth-strategy.js'
-import { holdV1CreateBodyToScope } from './v1-create-scope.js'
+import type { AuthScope } from './auth-strategy.js'
+import { holdV1CreateBodyToScope } from './v1-create-body-scope.js'
 
 const CREATE = '/api/v1/workspaces/ws1/documents'
 

@@ -19,11 +19,12 @@ const LEGACY_ERA_ONLY = new Proxy(
   },
 ) as ServerDeps
 
-function routerWith(fetchImpl: (request: Request) => Promise<Response>) {
+function routerWith(fetchImpl: (request: Request) => Promise<Response>, standaloneStream = true) {
   const fetch = vi.fn(fetchImpl)
   const deps = {
     modernMcpHandler: { fetch } as unknown as McpRouterDeps['modernMcpHandler'],
     serverDeps: LEGACY_ERA_ONLY,
+    standaloneStream,
   } satisfies McpRouterDeps
   return { router: createMcpRouter(deps), fetch }
 }
@@ -73,6 +74,19 @@ describe('the /mcp router', () => {
     const { router, fetch } = routerWith(async () => new Response('{}'))
 
     expect((await router.fetch(new Request('http://d/api/runtime/ping'))).status).toBe(404)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('the /mcp router without a standalone stream', () => {
+  it('answers a GET with 405 and builds no server for it', async () => {
+    const { router, fetch } = routerWith(async () => new Response('unreached'), false)
+    const res = await router.request('http://d/mcp', {
+      method: 'GET',
+      headers: { accept: 'text/event-stream' },
+    })
+    expect(res.status).toBe(405)
+    expect(res.headers.get('allow')).toBe('POST')
     expect(fetch).not.toHaveBeenCalled()
   })
 })

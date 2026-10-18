@@ -59,6 +59,9 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
   // How many content-sized request bodies are being read at once: live state
   // the root arms and the body ceiling every content route uses draws on.
   'server/content-slots.ts',
+  // How many `/mcp` listen streams are open, per user and in all: live state
+  // server mode's root arms in front of `/mcp`.
+  'server/mcp-listen-streams.ts',
   'server/daemon-actor.ts',
   'server/current-workspace.ts',
   // Startup clean-up of data-dir artifacts a retired feature left behind.

@@ -18,6 +18,13 @@ import {
 } from './content-slots.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
+import {
+  capListenStreams,
+  isEventStream,
+  isListenRequest,
+  MCP_LISTEN_STREAM_CAPS,
+  releasedWhenDone,
+} from './mcp-listen-streams.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
@@ -34,7 +41,6 @@ import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createTenantPeopleRouter } from './routes/tenant-people.js'
-import { holdV1CreateBodyToScope } from './routes/v1-create-scope.js'
 import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
 import type { AdministratorCheck } from './security/administrator-check.js'
 import {
@@ -66,6 +72,7 @@ import {
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
 import { createServerModeStoredDataRedaction } from './security/server-mode-redaction.js'
+import { holdV1CreateBodyToScope } from './security/v1-create-body-scope.js'
 import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { readLatestCompactedAt } from './store/document-store.js'
@@ -185,6 +192,16 @@ function mountMcpMiddleware(
     }
     app.use('/mcp', createServerModeMcpAuthMiddleware(options.authStrategy, options.people))
     app.use('/mcp', mcpContentSlot())
+    const { members } = options.people
+    app.use(
+      '/mcp',
+      capListenStreams({
+        caps: MCP_LISTEN_STREAM_CAPS,
+        userOf: (c) => callerUserId(c, members),
+        refused: (userId, cap) =>
+          httpLog.warning({ userId, cap }, 'mcp listen stream refused: too many open'),
+      }),
+    )
   } else {
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
   }
@@ -216,9 +233,9 @@ function mountMcpMiddleware(
 // rides that stream and is released when it ends, errors or is cancelled.
 // A `subscriptions/listen` stream is the exception — it carries no call, is
 // open for as long as the client likes, and holding a slot for it would let
-// a few listeners lock every content-sized request out. The SDK refuses a
-// request whose `Mcp-Method` header disagrees with its body, so the header
-// names what the stream is.
+// a few listeners lock every content-sized request out; it is counted by
+// `capListenStreams` instead. The SDK refuses a request whose `Mcp-Method`
+// header disagrees with its body, so the header names what the stream is.
 function mcpContentSlot(): MiddlewareHandler {
   return async (c, next) => {
     if (c.req.method.toUpperCase() !== 'POST') return next()
@@ -238,45 +255,6 @@ function mcpContentSlot(): MiddlewareHandler {
       if (!riding) slot()
     }
   }
-}
-
-function isEventStream(response: Response): boolean {
-  return response.headers.get('content-type')?.toLowerCase().includes('text/event-stream') === true
-}
-
-function isListenRequest(c: Context): boolean {
-  return c.req.header('mcp-method') === 'subscriptions/listen'
-}
-
-/** `body`, calling `release` once it has been read to its end, has failed, or was cancelled. */
-function releasedWhenDone(
-  body: ReadableStream<Uint8Array>,
-  release: () => void,
-): ReadableStream<Uint8Array> {
-  const reader = body.getReader()
-  return new ReadableStream<Uint8Array>(
-    {
-      async pull(controller) {
-        try {
-          const { done, value } = await reader.read()
-          if (done) {
-            release()
-            controller.close()
-            return
-          }
-          controller.enqueue(value)
-        } catch (error) {
-          release()
-          controller.error(error)
-        }
-      },
-      async cancel(reason) {
-        release()
-        await reader.cancel(reason)
-      },
-    },
-    { highWaterMark: 0 },
-  )
 }
 
 // The people store a composition keeps, where it keeps one: what lets a
@@ -313,6 +291,20 @@ function mountContentSlots(app: Hono, options: AppOptions): void {
       requestLog.warning({ userId, cap }, 'content request refused: too many in flight'),
   })
   app.use('*', arm)
+}
+
+/**
+ * server-core's /api/v1 document surface (workspace tree, documentId + alias
+ * world). Mounted at '/' because its routes carry full /api/v1/* paths; the
+ * /api/* auth middlewares registered before it already cover it.
+ */
+function mountDocumentServer(app: Hono, options: AppOptions): void {
+  app.use('/api/v1/*', limitV1WriteBody())
+  app.use(
+    '/api/v1/*',
+    holdV1CreateBodyToScope((c) => callerGrant(c)?.scopes),
+  )
+  app.route('/', createDocumentServer(options.serverDeps).app)
 }
 
 /** The routers only server mode mounts: a workspace's people as its owners manage them (ADR-0049). */
@@ -501,20 +493,19 @@ export function createApp(options: AppOptions) {
     },
   })
 
-  app.route('/', createMcpRouter({ modernMcpHandler, serverDeps: options.serverDeps }))
+  app.route(
+    '/',
+    createMcpRouter({
+      modernMcpHandler,
+      serverDeps: options.serverDeps,
+      standaloneStream: options.authMode === 'local-daemon',
+    }),
+  )
 
   mountLocalDaemonRouters(app, options)
   mountServerModeRouters(app, options)
 
-  // server-core's /api/v1 document surface (workspace tree, documentId +
-  // alias world). Mounted at '/' because its routes carry full /api/v1/*
-  // paths; the /api/* auth middlewares registered above already cover it.
-  app.use('/api/v1/*', limitV1WriteBody())
-  app.use(
-    '/api/v1/*',
-    holdV1CreateBodyToScope((c) => callerGrant(c)?.scopes),
-  )
-  app.route('/', createDocumentServer(options.serverDeps).app)
+  mountDocumentServer(app, options)
 
   const admit = membership.admit
 

@@ -30,6 +30,15 @@ export interface McpRouterDeps {
   readonly modernMcpHandler: ReturnType<typeof createMcpHandler>
   /** The deps the root composed, so a legacy-era server answers with them too. */
   readonly serverDeps: ServerDeps
+  /**
+   * Whether a GET opens the legacy standalone event stream. Each server
+   * here is built for one request and nothing holds it afterwards, so that
+   * stream never carries a message — it only keeps a server alive for as
+   * long as the client holds it open. Server mode answers 405, which the
+   * spec gives a server offering no such stream; the local daemon, one
+   * person's, keeps serving it to the clients that open one.
+   */
+  readonly standaloneStream: boolean
 }
 
 /**
@@ -173,6 +182,13 @@ async function closeUnlessStreaming(
 export function createMcpRouter(deps: McpRouterDeps): Hono {
   const router = new Hono()
   router.all('/mcp', async (c) => {
+    if (!deps.standaloneStream && c.req.method.toUpperCase() === 'GET') {
+      return c.json(
+        { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null },
+        405,
+        { Allow: 'POST' },
+      )
+    }
     const startedAt = Date.now()
     const trace = mcpHttpTrace(shouldLogMcpHttpDebug())
     const parsedBody = await jsonBodyOf(c)

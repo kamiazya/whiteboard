@@ -1,7 +1,7 @@
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context, MiddlewareHandler } from 'hono'
-import { type AuthScope, hasRequiredScopes } from '../security/auth-strategy.js'
-import { createBodyScopes } from '../security/route-scope-registry.js'
+import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
+import { createBodyScopes } from './route-scope-registry.js'
 
 const V1_DOCUMENT_CREATE = /^\/api\/v1\/workspaces\/[^/]+\/documents$/
 

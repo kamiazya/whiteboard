@@ -236,6 +236,20 @@ A request counts from the moment its route starts reading the body until it
 is answered, so ordinary edits, which are small and quick, rarely meet either
 limit. The local daemon serves one person and applies neither.
 
+## MCP stream limits
+
+Two kinds of `/mcp` stream carry no tool call. Server mode bounds both; the
+local daemon serves one person and leaves both as they are:
+
+| Stream | Server mode | When it is reached |
+|---|---|---|
+| The legacy standalone stream (`GET /mcp`) | Not offered | Answered `405 Method Not Allowed` with `Allow: POST`, as the MCP specification provides for a server that offers no such stream. Nothing is ever sent down it, so a client loses nothing: the MCP SDK's client treats a `405` here as "no stream". |
+| `subscriptions/listen` streams open per user | 16 | The next one is refused with `429` and a JSON-RPC error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`). A place frees when one of that user's streams ends, errors or is closed by its client. |
+| `subscriptions/listen` streams open in total, per instance | 1024 | Same refusal, for everyone, until a stream closes. |
+
+As with the large request limits, every caller whose grant names no user on
+this instance counts as one user.
+
 ## Codex sandbox constraints
 
 Inside the Codex sandbox, two issues are common:
