@@ -148,6 +148,28 @@ describe('server mode sign-in', () => {
     expect(JSON.parse(String(posted?.[1]?.body))).toEqual({ invitation: 'inv-123', returnTo: '/' })
   })
 
+  // Back from the provider restores this page from the back/forward cache with
+  // its state intact, so a button left disabled would be a dead end.
+  it('enables Accept again when the page is restored from the back/forward cache', async () => {
+    const goTo = vi.fn()
+    const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))
+    renderAt(
+      `${invite.pathname}${invite.hash}`,
+      { providers: [corp], accepted: 'https://idp.test/authorize?state=s' },
+      goTo,
+    )
+    const name = /continue with corp sso/i
+    fireEvent.click(await screen.findByRole('button', { name }))
+    await waitFor(() => expect(goTo).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true)
+
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(false),
+    )
+  })
+
   it('says so when the keeper cannot take the acceptance', async () => {
     const goTo = vi.fn()
     const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))

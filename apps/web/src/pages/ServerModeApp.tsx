@@ -191,6 +191,15 @@ function AcceptInvitation({
   onUnavailable: () => void
 }>) {
   const [busy, setBusy] = useState(false)
+  // Back from the provider, the browser may restore this page from its
+  // back/forward cache with `busy` still set, which would leave no way on.
+  useEffect(() => {
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) setBusy(false)
+    }
+    window.addEventListener('pageshow', restored)
+    return () => window.removeEventListener('pageshow', restored)
+  }, [])
   const accept = async () => {
     setBusy(true)
     const location = await acceptInvitation(fetchFn, provider.id, invitation)
