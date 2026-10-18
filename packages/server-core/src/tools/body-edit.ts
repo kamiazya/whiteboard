@@ -323,13 +323,17 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
     // as one inside a single call would. The overlap and the limit
     // checks therefore see what the proposal already holds; the refusal
     // still names a change from THIS call, the one the caller can shrink.
+    //
+    // This call's own passages are placed first: a refusal of one of them
+    // then costs nothing for what the proposal holds, which can be up to
+    // `DOCUMENT_MAX_OPEN_CHANGES` passages, each a search of the body.
     const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
-    const existing = placeExisting(body, continuing)
     const placed = placeAll(
       body,
       input.ops,
       new Set(continuing?.changes.map((change) => change.id) ?? []),
     )
+    const existing = placeExisting(body, continuing)
     assertDisjoint([...existing, ...placed])
     assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
     const proposed = await storeBodyProposal({
