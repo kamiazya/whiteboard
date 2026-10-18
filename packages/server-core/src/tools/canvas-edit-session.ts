@@ -8,6 +8,7 @@ import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyNodePatch,
   boundsOf,
+  CANVAS_MAX_NODES,
   type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
@@ -167,6 +168,13 @@ export class CanvasEditSession {
    */
   tidied = false
   /**
+   * How many nodes this batch has placed inside groups. Each placement is
+   * a packing search over the group, and nothing else bounds the sum: a
+   * batch alternating `region.set` between two groups moves the same
+   * members on every op. One canvas's worth is what a batch may place.
+   */
+  placedInside = 0
+  /**
    * Groups this batch put at the cursor, with the sizes they were given
    * (a default is not a choice). A caller that adds a group with no
    * position and then declares its members has said where the group
@@ -297,6 +305,15 @@ export class CanvasEditSession {
     group: SpatialNode,
     sizes: readonly { width: number; height: number }[],
   ): { x: number; y: number }[] => {
+    const placing = this.placedInside + sizes.length
+    if (placing > CANVAS_MAX_NODES) {
+      fail(
+        index,
+        opName,
+        `a batch places at most ${CANVAS_MAX_NODES} nodes inside groups, and this op would take it to ${placing}; move the rest in another call`,
+      )
+    }
+    this.placedInside = placing
     const bounds = this.nodeAt(group.id) ?? group
     const placements = placeWithin(bounds, sizes, this.nodes.filter(this.enclosedBy(bounds)))
     this.growToHold(

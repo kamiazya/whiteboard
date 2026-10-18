@@ -160,6 +160,13 @@ function crowds(a: Rect, b: Rect): boolean {
  * it. Each row is walked past whatever crowds the candidate, and when the
  * row is full the next starts under the lowest of what blocked it.
  *
+ * Each node's search RESUMES where the previous node landed instead of
+ * restarting at the top row. Restarting made the k-th node of a one-wide
+ * column walk k rows, each against every rect taken — cubic in the column,
+ * and a region may hold every node on the board. The price is that a later,
+ * smaller node does not go back for a gap an earlier one skipped, which is
+ * density, and density is not promised here.
+ *
  * ponytail: a node wider than the box overflows it rather than being shrunk
  * (the caller grows the box). Pack properly if regions turn out to be used
  * for dense layouts.
@@ -169,23 +176,38 @@ export function placeWithin(
   sizes: readonly { width: number; height: number }[],
   occupied: readonly Rect[],
 ): { x: number; y: number }[] {
-  const taken: Rect[] = [...occupied]
+  const taken = new TakenRows()
+  for (const rect of occupied) taken.add(rect)
   const out: { x: number; y: number }[] = []
+  let from: RowCursor = { y: box.y + PLACEMENT_GUTTER_PX, x: box.x + PLACEMENT_GUTTER_PX }
   for (const size of sizes) {
-    const at = freeSlotFor(box, size, taken)
-    out.push({ x: at.x, y: at.y })
-    taken.push(at)
+    const slot = freeSlotFor(box, size, taken, from)
+    out.push({ x: slot.at.x, y: slot.at.y })
+    taken.add(slot.at)
+    from = slot.resume
   }
   return out
 }
 
 /**
- * The first free slot for ONE box, scanning rows top to bottom.
+ * Where a slot search starts: a row's `y`, the `x` to try first, and — when
+ * resuming partway along a row — the lowest bottom seen in it so far, which
+ * is where the row after it starts.
+ */
+interface RowCursor {
+  readonly y: number
+  readonly x: number
+  readonly midRow?: { readonly nextRow: number }
+}
+
+/**
+ * The first free slot for ONE box, scanning rows top to bottom from `from`.
  *
  * Each row is walked past whatever crowds the candidate, and when the row is
  * full the next starts under the LOWEST of what blocked it. Every hit sits at
  * or below `y` with the gutter, so the walk strictly advances and ends once
- * `y` is under everything taken.
+ * `y` is under everything taken. A row's first slot is tried even for a node
+ * wider than the box, which overflows rather than never landing.
  *
  * Separated from `placeWithin` because that is the only thing the outer loop
  * does: place one box, remember it, repeat. Written as three nested loops the
@@ -195,24 +217,103 @@ export function placeWithin(
 function freeSlotFor(
   box: Rect,
   size: { width: number; height: number },
-  taken: readonly Rect[],
-): Rect {
+  taken: TakenRows,
+  from: RowCursor,
+): { at: Rect; resume: RowCursor } {
   const left = box.x + PLACEMENT_GUTTER_PX
   const right = box.x + box.width
-  let y = box.y + PLACEMENT_GUTTER_PX
+  let y = from.y
+  let x = from.x
+  let nextRow = from.midRow?.nextRow
+  let rowStart = from.midRow === undefined
   for (;;) {
-    let x = left
-    let nextRow: number | undefined
     for (;;) {
+      if (!rowStart && x + size.width > right) break
+      rowStart = false
       const candidate = { x, y, ...size }
-      const hit = taken.find((rect) => crowds(candidate, rect))
-      if (hit === undefined) return candidate
-      const below = hit.y + hit.height + PLACEMENT_GUTTER_PX
+      const hit = taken.firstCrowding(candidate)
+      const below = (hit ?? candidate).y + (hit ?? candidate).height + PLACEMENT_GUTTER_PX
       nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
+      if (hit === undefined) {
+        return {
+          at: candidate,
+          resume: { y, x: x + size.width + PLACEMENT_GUTTER_PX, midRow: { nextRow } },
+        }
+      }
       x = hit.x + hit.width + PLACEMENT_GUTTER_PX
-      if (x + size.width > right) break
     }
     y = nextRow ?? y + size.height + PLACEMENT_GUTTER_PX
+    x = left
+    nextRow = undefined
+    rowStart = true
+  }
+}
+
+/** Height of one bucket of `TakenRows`, in canvas pixels. */
+const ROW_BUCKET_PX = 512
+/**
+ * A rect reaching across more buckets than this is kept in one list every
+ * query reads, so a very tall rect costs one entry rather than one per
+ * bucket it spans — sizes are unbounded, and a bucket per 512px of a
+ * million-pixel box would be the allocation this index exists to avoid.
+ */
+const MAX_BUCKETS_PER_RECT = 32
+
+function bucketSpan(top: number, bottom: number): { first: number; last: number } | undefined {
+  const first = Math.floor(top / ROW_BUCKET_PX)
+  const last = Math.floor(bottom / ROW_BUCKET_PX)
+  return last - first > MAX_BUCKETS_PER_RECT ? undefined : { first, last }
+}
+
+/**
+ * The rects a box has taken, bucketed by the rows they crowd, so a crowding
+ * test reads its neighbours instead of everything in the box. A rect sits in
+ * every bucket its gutter-widened vertical extent touches, which is every
+ * bucket a candidate it crowds can start a query from.
+ */
+class TakenRows {
+  private readonly rects: Rect[] = []
+  private readonly buckets = new Map<number, number[]>()
+  private readonly tall: number[] = []
+
+  add(rect: Rect): void {
+    const index = this.rects.length
+    this.rects.push(rect)
+    const span = bucketSpan(
+      rect.y - PLACEMENT_GUTTER_PX,
+      rect.y + rect.height + PLACEMENT_GUTTER_PX,
+    )
+    if (span === undefined) {
+      this.tall.push(index)
+      return
+    }
+    for (let bucket = span.first; bucket <= span.last; bucket++) {
+      const row = this.buckets.get(bucket)
+      if (row === undefined) this.buckets.set(bucket, [index])
+      else row.push(index)
+    }
+  }
+
+  /**
+   * The EARLIEST-taken rect crowding `candidate` — the one a scan of every
+   * taken rect in order would have found, so which blocker the walk steps
+   * past does not depend on how the rects are bucketed.
+   */
+  firstCrowding(candidate: Rect): Rect | undefined {
+    let first = Number.POSITIVE_INFINITY
+    const consider = (index: number) => {
+      if (index < first && crowds(candidate, this.rects[index] as Rect)) first = index
+    }
+    for (const index of this.tall) consider(index)
+    const span = bucketSpan(candidate.y, candidate.y + candidate.height)
+    if (span === undefined) {
+      for (let index = 0; index < this.rects.length; index++) consider(index)
+    } else {
+      for (let bucket = span.first; bucket <= span.last; bucket++) {
+        for (const index of this.buckets.get(bucket) ?? []) consider(index)
+      }
+    }
+    return this.rects[first]
   }
 }
 

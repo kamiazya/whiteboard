@@ -22,6 +22,12 @@ interface Rect {
 
 const HELD = 200
 const ARRIVING = 200
+/**
+ * A constant number of reads per rect, never one per pair. Measured at about
+ * 14 per rect; the search that restarted at the top row and scanned every
+ * taken rect read these 200 held rects 40,400,000 times.
+ */
+const READ_CEILING = 20 * (HELD + ARRIVING)
 const WIDTH = 200
 const HEIGHT = 60
 
@@ -45,13 +51,12 @@ function countingHeld(count: number): { rects: Rect[]; reads: () => number } {
 }
 
 describe('placeWithin cost', () => {
-  it('reads what a one-column box holds, per node it takes', () => {
+  it('reads what a one-column box holds a constant number of times per rect', () => {
     const box = { x: 0, y: 0, width: WIDTH + 2 * PLACEMENT_GUTTER_PX, height: 1000 }
     const held = countingHeld(HELD)
     const sizes = Array.from({ length: ARRIVING }, () => ({ width: WIDTH, height: HEIGHT }))
     const placed = placeWithin(box, sizes, held.rects)
     expect(placed).toHaveLength(ARRIVING)
-    // Pinned exactly, so a change in either direction has to say why.
-    expect(held.reads()).toBe(40_400_000)
+    expect(held.reads()).toBeLessThanOrEqual(READ_CEILING)
   })
 })
