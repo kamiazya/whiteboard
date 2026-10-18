@@ -47,6 +47,16 @@ function creatorOf(container: ContainerID): { peer: `${number}`; counter: number
 }
 
 /**
+ * Whether `doc` holds the op that creates `container` — true for a root. Only
+ * then does the container have a parent, and only then is its path safe to
+ * ask for.
+ */
+export function holdsContainerCreation(doc: LoroDoc, container: ContainerID): boolean {
+  const creator = creatorOf(container)
+  return creator === null || (doc.oplogVersion().get(creator.peer) ?? 0) > creator.counter
+}
+
+/**
  * The first container an op of `change` writes into without its creation in
  * the change's causal past — the change's own earlier ops, and what its deps
  * reach. A client can only write into a container it holds, so no real

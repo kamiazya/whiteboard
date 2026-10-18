@@ -65,6 +65,7 @@ export {
   writeProposal,
 } from './proposals.js'
 export { countSpatialNodes } from './spatial-node-count.js'
+export { holdsContainerCreation } from './sync-structure-limits.js'
 export {
   importWithinTextLimits,
   judgeStateWithinTextLimits,

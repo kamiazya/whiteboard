@@ -1,4 +1,8 @@
-import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  holdsContainerCreation,
+  readWorkspaceDocuments,
+  WORKSPACE_TREE_KEY,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -86,6 +90,9 @@ function promotedDocumentAt(
 function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
   if (!(err instanceof TextBreachRefusalError)) return err
   const { container } = err.breach
+  // A container whose creating op the record lacks has no parent, and asking
+  // the engine for its path panics rather than answering `undefined`.
+  if (!holdsContainerCreation(incoming, container)) return err
   const entry = promotedDocumentAt(incoming, container)
   if (entry === undefined) return err
   const held = incoming.getContainerById(container)

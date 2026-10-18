@@ -580,6 +580,58 @@ describe('promoteWorkspace', () => {
     expect(fake.saves()).toBe(0)
   })
 
+  it('refuses a record whose orphan write has no attaching change, without a path lookup', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'sketch',
+      documentId: SKETCH_ID,
+      kind: 'spatial',
+    })
+    record.commit()
+    // A write into a map peer 777's first op would create; that op never arrives.
+    const orphan = new LoroDoc()
+    orphan.setPeerId(888n)
+    orphan.importJsonUpdates(
+      JSON.stringify({
+        schema_version: 1,
+        start_version: {},
+        peers: null,
+        changes: [
+          {
+            id: '0@888',
+            timestamp: 0,
+            deps: [],
+            lamport: 0,
+            msg: null,
+            ops: [
+              {
+                container: 'cid:0@777:Map',
+                content: { type: 'insert', key: 'n1', value: { id: 'n1' } },
+                counter: 0,
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    record.import(orphan.export({ mode: 'update' }))
+    const refusal = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+        blobStore: fake.blobs,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
+    ).catch((err: unknown) => err)
+    expect(syncWriteAnswer(refusal)).toEqual({ code: 'causal_gap', status: 409 })
+    expect(refusal).toMatchObject({ breach: { shape: 'unattached-container' } })
+    expect(refusal).not.toHaveProperty('at.path')
+    expect(fake.saves()).toBe(0)
+  })
+
   it('refuses a record holding more documents than a promote carries, before merging any of it', async () => {
     const fake = fakes()
     const documents = WORKSPACE_MAX_DOCUMENTS + 1
