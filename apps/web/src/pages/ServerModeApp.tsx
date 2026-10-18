@@ -216,6 +216,44 @@ function Page({ children }: { children: React.ReactNode }) {
   )
 }
 
+// Without an invitation each provider is a link to begin; with one, each is
+// the button that accepts it.
+function ProviderChoices({
+  fetchFn,
+  goTo,
+  providers,
+  invitation,
+  onAcceptUnavailable,
+}: Readonly<{
+  fetchFn: Fetch
+  goTo: GoTo
+  providers: Providers
+  invitation?: string
+  onAcceptUnavailable: () => void
+}>) {
+  return (
+    <ul className="flex w-full max-w-xs flex-col gap-2">
+      {providers.map((provider) => (
+        <li key={provider.id}>
+          {invitation === undefined ? (
+            <a href={signInHref(provider.id)} className={providerButton}>
+              Continue with {provider.displayName}
+            </a>
+          ) : (
+            <AcceptInvitation
+              fetchFn={fetchFn}
+              goTo={goTo}
+              provider={provider}
+              invitation={invitation}
+              onUnavailable={onAcceptUnavailable}
+            />
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function SignInPage({
   fetchFn,
   goTo,
@@ -251,26 +289,15 @@ function SignInPage({
           This server has no sign-in provider configured. Ask the person who runs it.
         </p>
       )}
-      <ul className="flex w-full max-w-xs flex-col gap-2">
-        {providers !== 'unavailable' &&
-          providers?.map((provider) => (
-            <li key={provider.id}>
-              {invitation === undefined ? (
-                <a href={signInHref(provider.id)} className={providerButton}>
-                  Continue with {provider.displayName}
-                </a>
-              ) : (
-                <AcceptInvitation
-                  fetchFn={fetchFn}
-                  goTo={goTo}
-                  provider={provider}
-                  invitation={invitation}
-                  onUnavailable={() => setAcceptFailed(true)}
-                />
-              )}
-            </li>
-          ))}
-      </ul>
+      {providers !== 'unavailable' && providers !== undefined && (
+        <ProviderChoices
+          fetchFn={fetchFn}
+          goTo={goTo}
+          providers={providers}
+          {...(invitation === undefined ? {} : { invitation })}
+          onAcceptUnavailable={() => setAcceptFailed(true)}
+        />
+      )}
     </Page>
   )
 }

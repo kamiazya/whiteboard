@@ -40,10 +40,12 @@ export type SignInSessionResponse = z.infer<typeof signInSessionResponseSchema>
  * navigation must never be what joins a person to a workspace. The token
  * travels in the body, so it stays out of a URL a proxy logs.
  */
-export const acceptInvitationRequestSchema = z.object({
-  invitation: z.string(),
-  returnTo: z.string().optional(),
-})
+export const acceptInvitationRequestSchema = z
+  .object({
+    invitation: z.string(),
+    returnTo: z.string().optional(),
+  })
+  .strict()
 
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>
 
