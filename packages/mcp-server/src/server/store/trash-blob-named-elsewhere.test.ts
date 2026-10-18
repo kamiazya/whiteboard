@@ -31,10 +31,11 @@ afterEach(async () => {
 async function storeRecordNaming(
   workspaceId: string,
   ref: { algorithm: 'sha-256'; digestHex: string },
+  documentId = '01BRWAAAAAAAAAAAAAAAAAAAA2',
 ): Promise<void> {
   const doc = new LoroDoc()
   recordTrashEntry(doc, {
-    documentId: '01BRWAAAAAAAAAAAAAAAAAAAA2',
+    documentId,
     path: 'gone',
     deletedAt: 1,
     blob: ref,
@@ -99,13 +100,24 @@ describe('cost of one answer', () => {
     for (let i = 0; i < OTHERS; i += 1) await storeRecordNaming(`ws-other-${i}`, OTHER_REF)
   }
 
-  it('decodes every other workspace record on a repeated purge', async () => {
+  it('decodes no unchanged record on a repeated purge', async () => {
     await storeOthers()
     const ask = trashBlobNamedElsewhere(storeScope(dir))
     await ask({ workspaceId: 'ws-a', ref: REF })
     const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
 
     expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
-    expect(open).toHaveBeenCalledTimes(OTHERS)
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('reads again, alone, a record that changed since the last answer', async () => {
+    await storeOthers()
+    const ask = trashBlobNamedElsewhere(storeScope(dir))
+    expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
+    await storeRecordNaming('ws-other-3', REF, '01BRWAAAAAAAAAAAAAAAAAAAA3')
+    const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+
+    expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(true)
+    expect(open.mock.calls).toEqual([['ws-other-3']])
   })
 })
