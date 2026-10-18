@@ -197,8 +197,14 @@ describe('deactivating a person', () => {
 
   it('reactivates a user, and refuses one this keeper does not have', async () => {
     await people.deactivate(ids.bob as string, null, NOW)
-    expect(await people.reactivate(ids.bob as string)).toEqual({ kind: 'done', changed: true })
-    expect(await people.reactivate('nobody')).toEqual({ kind: 'refused', reason: 'unknown_user' })
+    expect(await people.reactivate(ids.bob as string, ids.ada as string)).toEqual({
+      kind: 'done',
+      changed: true,
+    })
+    expect(await people.reactivate('nobody', ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'unknown_user',
+    })
   })
 })
 
@@ -296,6 +302,35 @@ describe('administrators acting on each other at once', () => {
     expect(await members.isDeactivated(binding('bob'))).toBe(false)
   })
 
+  it('refuses an appointment by someone dismissed since they were authorized', async () => {
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await people.appoint(ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await appointments.isAppointed(ids.cy as string)).toBe(false)
+  })
+
+  it('refuses a reactivation by someone dismissed since they were authorized', async () => {
+    await people.deactivate(ids.cy as string, null, NOW)
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await people.reactivate(ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect(await members.isDeactivated(binding('cy'))).toBe(true)
+  })
+
+  it('refuses a deletion by someone dismissed since they were authorized', async () => {
+    await people.deactivate(ids.cy as string, null, NOW)
+    expect(await people.dismiss(ids.ada as string, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await deletePerson(deletion, ids.cy as string, ids.ada as string)).toEqual({
+      kind: 'refused',
+      reason: 'not_an_administrator',
+    })
+    expect((await members.listUsers()).map((u) => u.id)).toContain(ids.cy)
+  })
+
   it('lets the operator dismiss the last administrator', async () => {
     expect(await people.dismiss(ids.bob as string, null)).toEqual({ kind: 'done' })
     expect(await people.dismiss(ids.ada as string, null)).toEqual({ kind: 'done' })
@@ -304,17 +339,19 @@ describe('administrators acting on each other at once', () => {
 
 describe('deleting a person', () => {
   it('refuses a user who is still active, then deletes them once deactivated', async () => {
-    expect(await deletePerson(deletion, ids.bob as string)).toEqual({
+    expect(await deletePerson(deletion, ids.bob as string, ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'not_deactivated',
     })
     await people.deactivate(ids.bob as string, null, NOW)
-    expect(await deletePerson(deletion, ids.bob as string)).toEqual({ kind: 'done' })
+    expect(await deletePerson(deletion, ids.bob as string, ids.ada as string)).toEqual({
+      kind: 'done',
+    })
     expect((await members.listUsers()).map((u) => u.id)).not.toContain(ids.bob)
   })
 
   it('refuses someone who is not a user here', async () => {
-    expect(await deletePerson(deletion, 'nobody')).toEqual({
+    expect(await deletePerson(deletion, 'nobody', ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'unknown_user',
     })
@@ -324,7 +361,7 @@ describe('deleting a person', () => {
     const soleOwner: UserDeletion = {
       delete: async () => ({ kind: 'sole-owner', workspaceIds: ['ws-a', 'ws-b'] }),
     }
-    expect(await deletePerson(soleOwner, ids.bob as string)).toEqual({
+    expect(await deletePerson(soleOwner, ids.bob as string, ids.ada as string)).toEqual({
       kind: 'refused',
       reason: 'sole_owner',
       workspaceIds: ['ws-a', 'ws-b'],

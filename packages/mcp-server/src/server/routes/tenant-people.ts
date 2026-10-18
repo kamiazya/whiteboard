@@ -92,7 +92,7 @@ function mountDeactivation(app: Hono, admin: Administration): void {
     const acting = await administering(c, admin)
     if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
-    const outcome = await admin.people.reactivate(userId)
+    const outcome = await admin.people.reactivate(userId, acting)
     if (outcome.kind === 'refused') return refuse(c, outcome)
     log.notice({ userId, by: acting }, 'user reactivated')
     return c.json(deactivationResponseSchema.parse({ userId, deactivated: false }), 200)
@@ -104,7 +104,7 @@ function mountDeletion(app: Hono, admin: Administration): void {
     const acting = await administering(c, admin)
     if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
-    const outcome = await deletePerson(admin.options.administration.deletion, userId)
+    const outcome = await deletePerson(admin.options.administration.deletion, userId, acting)
     if (outcome.kind === 'refused') return refuse(c, outcome)
     log.notice({ userId, by: acting }, 'user deleted')
     return c.json(deletionResponseSchema.parse({ userId, deleted: true }), 200)

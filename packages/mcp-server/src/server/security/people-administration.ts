@@ -146,8 +146,11 @@ export interface PeopleAdministration {
       >
   >
   /** `changed` is false when they were not deactivated. */
-  reactivate(userId: string): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user'>>
-  appoint(userId: string, by: By): Promise<Done | Refused<'unknown_user'>>
+  reactivate(
+    userId: string,
+    by: By,
+  ): Promise<Done<{ readonly changed: boolean }> | Refused<'unknown_user' | 'not_an_administrator'>>
+  appoint(userId: string, by: By): Promise<Done | Refused<'unknown_user' | 'not_an_administrator'>>
   dismiss(
     userId: string,
     by: By,
@@ -196,15 +199,20 @@ export function createPeopleAdministration(deps: PeopleAdministrationDeps): Peop
       )
     },
 
-    async reactivate(userId) {
+    async reactivate(userId, by) {
       if (!(await isUser(userId))) return unknown
-      return { kind: 'done', changed: await deps.deactivation.reactivate(userId) }
+      if (by === null) {
+        return { kind: 'done', changed: await deps.deactivation.reactivate(userId) }
+      }
+      const outcome = await deps.deactivation.reactivateAsAdministrator(userId, by)
+      if (outcome === 'not-an-administrator') return NOT_AN_ADMINISTRATOR
+      return { kind: 'done', changed: outcome === 'reactivated' }
     },
 
     async appoint(userId, by) {
       if (!(await isUser(userId))) return unknown
-      await deps.appointments.appoint(userId, by)
-      return { kind: 'done' }
+      const outcome = await deps.appointments.appoint(userId, by)
+      return outcome === 'not-an-administrator' ? NOT_AN_ADMINISTRATOR : { kind: 'done' }
     },
 
     async dismiss(userId, by) {
@@ -299,9 +307,14 @@ export function createWorkspacePeopleAdministration(deps: {
 export async function deletePerson(
   deletion: UserDeletion,
   userId: string,
-): Promise<Done | Refused<'unknown_user' | 'not_deactivated'> | SoleOwner> {
-  const outcome = await deletion.delete(userId)
+  by: By,
+): Promise<
+  Done | Refused<'unknown_user' | 'not_deactivated' | 'not_an_administrator'> | SoleOwner
+> {
+  const outcome = await deletion.delete(userId, by)
   switch (outcome.kind) {
+    case 'not-an-administrator':
+      return NOT_AN_ADMINISTRATOR
     case 'deleted':
       return { kind: 'done' }
     case 'unknown-user':

@@ -35,7 +35,7 @@ export async function deactivateUser(
   })
   // The operator deactivates as nobody's user, so no self-refusal applies.
   const outcome = reactivate
-    ? await people.reactivate(found.user.id)
+    ? await people.reactivate(found.user.id, null)
     : await people.deactivate(found.user.id, null, now)
   if (outcome.kind === 'refused') return operatorRefusal(outcome)
   return { kind: 'ok', user: found.user, deactivated: !reactivate, changed: outcome.changed }

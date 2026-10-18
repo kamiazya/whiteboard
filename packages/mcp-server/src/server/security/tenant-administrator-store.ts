@@ -5,9 +5,9 @@
  * that list is checked against the request, so removing a name takes effect
  * at the person's next request without anything to clean up.
  */
-import type { TenantScoped } from '../store/db/tenant-database.js'
+import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
-import { actorAdministers } from './user-deactivation.js'
+import { actorAdministers, administersNow } from './user-deactivation.js'
 
 interface TenantAdministrator {
   readonly profileId: string
@@ -17,8 +17,12 @@ interface TenantAdministrator {
 }
 
 export interface TenantAdministratorStore {
-  /** Idempotent: an existing appointment is kept as it was. */
-  appoint(profileId: string, appointedBy: string | null): Promise<void>
+  /**
+   * Idempotent: an existing appointment is kept as it was. Refused when
+   * `appointedBy` no longer administers the tenant; the operator, appointing
+   * from the command line, passes null and is not held to it.
+   */
+  appoint(profileId: string, appointedBy: string | null): Promise<Appointment>
   /** Whether there was an appointment to remove. */
   dismiss(profileId: string): Promise<boolean>
   /**
@@ -34,6 +38,8 @@ export interface TenantAdministratorStore {
 }
 
 type KeptAppointment = 'dismissed' | 'unchanged' | 'not-an-administrator'
+
+type Appointment = 'appointed' | 'not-an-administrator'
 
 interface TenantAdministratorStoreOptions {
   /** The administrators the sign-in configuration names (ADR-0049 decision 2). */
@@ -76,13 +82,18 @@ export function createTenantAdministratorStore(
 ): TenantAdministratorStore {
   const configured = options.configuredAdministrators ?? []
   return {
-    async appoint(profileId, appointedBy) {
-      await db
-        .insertInto('tenantAdministrators')
-        .values({ profileId, appointedBy, appointedAt: Date.now() })
-        .onConflict((oc) => oc.columns(['profileId']).doNothing())
-        .execute()
-    },
+    appoint: (profileId, appointedBy) =>
+      inTenantTransaction(db, async (trx) => {
+        if (appointedBy !== null && !(await administersNow(trx, configured, appointedBy))) {
+          return 'not-an-administrator'
+        }
+        await trx
+          .insertInto('tenantAdministrators')
+          .values({ profileId, appointedBy, appointedAt: Date.now() })
+          .onConflict((oc) => oc.columns(['profileId']).doNothing())
+          .execute()
+        return 'appointed'
+      }),
     async dismiss(profileId) {
       const deleted = await db
         .deleteFrom('tenantAdministrators')
