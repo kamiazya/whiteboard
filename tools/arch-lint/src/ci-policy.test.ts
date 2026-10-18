@@ -129,13 +129,19 @@ describe('release.yml — a job holding a publish credential runs no repository 
   const PRIVILEGED = (job: ReleaseCredentialJob) =>
     job.permissions?.['id-token'] === 'write' || job.permissions?.packages === 'write'
   // pnpm and npx run the workspace's scripts or a fetched package; node runs a
-  // repo file; npm's install/ci/run/exec/pack verbs run lifecycle scripts.
+  // repo file; npm's install/ci/run/exec/pack verbs run lifecycle scripts. A
+  // shell or Python handed a file, an executable named by a relative path and
+  // a docker build each run what the tree or the artifact says to.
   const RUNS_CODE = [
     /\bpnpm\b/,
     /\bnpx\b/,
     /\bcorepack\b/,
     /\bnode\s/,
     /\bnpm\s+(install|i|ci|run|run-script|exec|test|pack|rebuild)\b/,
+    /\b(?:bash|sh)\s+(?:-\S+\s+)*[^\s;&|-]/,
+    /\bpython3?\b/,
+    /(?:^|[\s;&|(])\.{1,2}\/\S/m,
+    /\bdocker\s+(?:build|buildx\s+build)\b/,
   ]
 
   const privileged = Object.entries(releaseJobs()).filter(([, job]) => PRIVILEGED(job))
