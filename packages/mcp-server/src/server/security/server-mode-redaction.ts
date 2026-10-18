@@ -13,36 +13,63 @@ import { getLogger } from '../log.js'
 
 const log = getLogger('server-mode')
 
-const CORRUPT_STORED_DATA_PUBLIC_MESSAGE =
-  'Stored data this request needed is corrupt. The server log names it.'
+/**
+ * The refusals whose message quotes what a dependency threw, answered with a
+ * fixed one instead. A stored document OKF cannot spell is refused with the
+ * serializer's own text; the caller can still act on the fixed message,
+ * since it names the repair.
+ */
+const PUBLIC_MESSAGES: ReadonlyMap<string, { status: number; message: string }> = new Map([
+  [
+    'corrupt_stored_data',
+    {
+      status: 500,
+      message: 'Stored data this request needed is corrupt. The server log names it.',
+    },
+  ],
+  [
+    'document_serialize_failed',
+    {
+      status: 409,
+      message:
+        'This document holds a value its format cannot spell, so it cannot be read in it. ' +
+        "Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it. " +
+        'The server log has the detail.',
+    },
+  ],
+])
 
 const INTERNAL_TOOL_ERROR_TEXT =
   'internal_error: the server failed to handle this call. The server log has the detail.'
 
 /**
- * Rewrites every `corrupt_stored_data` answer to a fixed message. One
+ * Rewrites every answer `PUBLIC_MESSAGES` names to its fixed message. One
  * response-side seam rather than a flag threaded through each router, so a
- * route added later that answers the code is covered without knowing about
- * this.
+ * route added later that answers one of the codes is covered without
+ * knowing about this.
  */
 export function createServerModeStoredDataRedaction(): MiddlewareHandler {
   return async (c, next) => {
     await next()
-    if (c.res.status !== 500) return
+    if (c.res.status !== 409 && c.res.status !== 500) return
     if (!c.res.headers.get('content-type')?.includes('application/json')) return
     const body: unknown = await c.res
       .clone()
       .json()
       .catch(() => null)
-    if ((body as { error?: unknown } | null)?.error !== 'corrupt_stored_data') return
+    const error = (body as { error?: unknown } | null)?.error
+    const fixed = typeof error === 'string' ? PUBLIC_MESSAGES.get(error) : undefined
+    if (fixed === undefined || fixed.status !== c.res.status) return
     log.error(
-      { method: c.req.method, path: c.req.path, detail: (body as { message?: unknown }).message },
-      'stored data is corrupt',
+      {
+        method: c.req.method,
+        path: c.req.path,
+        error,
+        detail: (body as { message?: unknown }).message,
+      },
+      'refusal detail withheld from the caller',
     )
-    c.res = c.json(
-      { error: 'corrupt_stored_data', message: CORRUPT_STORED_DATA_PUBLIC_MESSAGE },
-      500,
-    )
+    c.res = c.json({ error, message: fixed.message }, fixed.status as 409 | 500)
   }
 }
 
