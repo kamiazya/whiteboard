@@ -131,3 +131,53 @@ describe('placeWithin far from the origin', () => {
     expect(placed).toHaveLength(6)
   })
 })
+
+/**
+ * A staircase of narrow members, each one pixel right of and one pixel
+ * taller than the last, and an arriving node so wide that the box is one
+ * pixel short of room for it after the last of them. Every candidate in a
+ * row crowds every member still standing, each step clears only one, and
+ * each row ends one member shorter: a walk that asks for the earliest
+ * crowding member per step reads the whole bucket once per step, so the
+ * walk is cubic in the staircase.
+ */
+const STAIRS = 200
+const WIDE = 10_000
+/**
+ * Quadratic is the floor for this shape — each of its STAIRS rows has to
+ * look at the members still standing in it — so the ceiling allows a
+ * constant number of reads per member per row. The walk that re-read the
+ * bucket per step read these 200 members 5,595,500 times.
+ */
+const STAIR_READ_CEILING = 8 * STAIRS * STAIRS
+
+function countingStairs(count: number): { rects: Rect[]; reads: () => number } {
+  let reads = 0
+  const rects = Array.from({ length: count }, (_, i) => {
+    const rect: Rect = {
+      x: PLACEMENT_GUTTER_PX + i,
+      y: PLACEMENT_GUTTER_PX,
+      width: 1,
+      height: 1 + i,
+    }
+    return new Proxy(rect, {
+      get(target, key: keyof Rect) {
+        reads += 1
+        return target[key]
+      },
+    })
+  })
+  return { rects, reads: () => reads }
+}
+
+describe('placeWithin cost against a staircase', () => {
+  it('reads a staircase of members a bounded number of times per row', () => {
+    const lastStep = PLACEMENT_GUTTER_PX + (STAIRS - 1) + 1 + PLACEMENT_GUTTER_PX
+    const box = { x: 0, y: 0, width: lastStep + WIDE - 1, height: 1000 }
+    const held = countingStairs(STAIRS)
+    const placed = placeWithin(box, [{ width: WIDE, height: 1 }], held.rects)
+    // Under the whole staircase, at the row's start: the box had room nowhere above.
+    expect(placed).toEqual([{ x: PLACEMENT_GUTTER_PX, y: STAIRS + 2 * PLACEMENT_GUTTER_PX }])
+    expect(held.reads()).toBeLessThanOrEqual(STAIR_READ_CEILING)
+  })
+})
