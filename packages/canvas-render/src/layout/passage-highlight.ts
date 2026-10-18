@@ -29,6 +29,7 @@ import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiaz
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
 import { type SceneWalkNode, sceneChildrenOf } from '../scene-children.js'
+import { type LooseSpan, looseOccurrences } from './loose-occurrences.js'
 import { runFontOf } from './nodes/mdast-layout-options.js'
 
 /** A thread about a passage of a node's text, as the layout needs it. */
@@ -118,16 +119,6 @@ function separated(previous: TextRunNode, run: TextRunNode): boolean {
   return gap > run.bbox.h * SPACE_GAP_RATIO
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** `quote` as a pattern that tolerates any whitespace where it has some. */
-function loosePattern(quote: string): RegExp {
-  const body = quote.trim().split(/\s+/).map(escapeRegExp).join('\\s+')
-  return new RegExp(body, 'g')
-}
-
 const WHITESPACE = /\s/
 
 const squash = (value: string): string => value.replace(/\s+/g, ' ')
@@ -157,11 +148,6 @@ function readOutward(text: string, from: number, step: 1 | -1): (k: number) => s
   }
 }
 
-interface Span {
-  readonly start: number
-  readonly end: number
-}
-
 /** The node's markdown source and the anchor's stored offsets into it. */
 export interface PassageSource {
   readonly text: string
@@ -183,7 +169,6 @@ export interface PassageSource {
 function sourceOccurrence(
   source: PassageSource,
   quote: TextQuoteSelector,
-  pattern: RegExp,
 ): { readonly index: number; readonly count: number } | 'orphaned' {
   const placed = resolveTextAnchor(source.text, {
     kind: 'text',
@@ -192,9 +177,9 @@ function sourceOccurrence(
     end: source.end,
   })
   if (placed.kind === 'orphaned') return 'orphaned'
-  // The loose pattern matches from the quote's first non-blank character.
+  // A loose occurrence starts at the quote's first non-blank character.
   const lead = quote.exact.length - quote.exact.trimStart().length
-  const starts = Array.from(source.text.matchAll(pattern), (match) => match.index)
+  const starts = looseOccurrences(source.text, quote.exact).map((span) => span.start)
   return { index: starts.indexOf(placed.start + lead), count: starts.length }
 }
 
@@ -219,16 +204,11 @@ function findPassage(
   rendered: string,
   quote: TextQuoteSelector,
   source?: PassageSource,
-): Span | null {
-  if (quote.exact.trim() === '') return null
-  const pattern = loosePattern(quote.exact)
-  const matches: Span[] = Array.from(rendered.matchAll(pattern), (match) => ({
-    start: match.index,
-    end: match.index + match[0].length,
-  }))
+): LooseSpan | null {
+  const matches = looseOccurrences(rendered, quote.exact)
   if (matches.length === 0) return null
   if (source !== undefined) {
-    const inSource = sourceOccurrence(source, quote, pattern)
+    const inSource = sourceOccurrence(source, quote)
     if (inSource === 'orphaned') return null
     const same = matches[inSource.index]
     if (inSource.count === matches.length && same !== undefined) return same
@@ -238,12 +218,12 @@ function findPassage(
 
 function bestScored(
   rendered: string,
-  matches: readonly Span[],
+  matches: readonly LooseSpan[],
   quote: TextQuoteSelector,
-): Span | null {
+): LooseSpan | null {
   const prefix = squash(quote.prefix ?? '')
   const suffix = squash(quote.suffix ?? '')
-  let best: Span | null = null
+  let best: LooseSpan | null = null
   let bestScore = -1
   for (const match of matches) {
     const score =

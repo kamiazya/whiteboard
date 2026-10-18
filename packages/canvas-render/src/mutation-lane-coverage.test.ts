@@ -319,9 +319,15 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 109 and 23 with `layout/nodes/longest-fit.ts`, the prefix search lifted
     // out of `truncate.ts`'s cut loop; in the lane because that file is.
+    //
+    // 110 with `layout/loose-occurrences.ts`, the whitespace-loose passage
+    // search lifted out of `passage-highlight.ts`. Outside the lane, as that
+    // file is: a property against the regex it replaced pins every span, and
+    // its overlap, squash and end-offset branches were mutation-checked by
+    // hand against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 109,
+      production: 110,
     })
   })
 

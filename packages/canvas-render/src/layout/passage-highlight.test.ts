@@ -252,8 +252,9 @@ describe('a passage highlight finds a quote in time linear in the text', () => {
   // A whitespace-loose regex re-reads up to the whole quote at every start
   // on a periodic text before failing, so one search costs text x quote.
   // Measured on a shared 4-core machine: sixteen threads quoting 2000 words
-  // of an 8 Ki `a a a …` node took 1.8 s per layout at best. The ceiling is
-  // judged on the fastest of three, so one load spike cannot fail it.
+  // of an 8 Ki `a a a …` node took 1.8 s per layout at best; squashing
+  // whitespace and searching exactly, 17-34 ms. The ceiling is judged on the
+  // fastest of three, so one load spike cannot fail it.
   it('lays sixteen long non-matching quotes over a periodic 8 Ki node quickly', () => {
     const text = 'a '.repeat(NODE_TEXT_MAX_CHARS / 2).trim()
     const runs = runsOf(text)

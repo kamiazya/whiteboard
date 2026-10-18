@@ -57,8 +57,13 @@ const ORPHANED: ResolvedTextAnchor = { kind: 'orphaned' }
  */
 const NATIVE_SEARCH_MAX_CHARS = 256
 
-/** Every index where `needle` starts in `haystack`, including overlaps. */
-function occurrences(haystack: string, needle: string): number[] {
+/**
+ * Every index where `needle` starts in `haystack`, including overlaps — at
+ * most `haystack.length x NATIVE_SEARCH_MAX_CHARS` steps whatever the text
+ * repeats. Exported because the canvas re-finds a passage in RENDERED text
+ * and must use this search rather than grow a second one.
+ */
+export function textOccurrences(haystack: string, needle: string): number[] {
   return needle.length <= NATIVE_SEARCH_MAX_CHARS
     ? nativeOccurrences(haystack, needle)
     : linearOccurrences(haystack, needle)
@@ -194,7 +199,7 @@ export function resolveTextAnchor(
     return { kind: 'placed', start: anchor.start, end: anchor.end }
   }
 
-  const candidates = occurrences(body, exact)
+  const candidates = textOccurrences(body, exact)
   if (candidates.length === 0) return ORPHANED
   const at = candidates[0] as number
   if (candidates.length === 1) return { kind: 'placed', start: at, end: at + exact.length }
