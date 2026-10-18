@@ -27,7 +27,8 @@
 // removing its record, another OS user can create a pipe under the recorded
 // name. So a pipe is asked to prove it holds the record's token
 // (`../shared/endpoint-proof.ts`) without being sent it, and only a proof makes
-// it `running`.
+// it `running`. A socket whose directory is missing is never `running` for a
+// live pid: whoever recreates the directory decides what answers there.
 
 import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { z } from 'zod'
@@ -56,8 +57,9 @@ import { isNamedPipe, type SocketTrust, socketTrust } from './daemon-socket.js'
  *   named, when it was a runtime status at all: a person has to find that
  *   process to stop it, and the record cannot tell them.
  *   `untrustedSocket` says why, instead, when the record's socket is not
- *   one only this user could have made: whoever holds it, the record's token
- *   is not sent there.
+ *   one only this user could have made — its directory may be another
+ *   user's, or is missing for whoever creates it next: whoever holds it, the
+ *   record's token is not sent there.
  * - `pid-reused`: the pid is alive, started after the record, and nothing
  *   accepts a connection on the record's socket — or its directory does not
  *   exist, in which case nothing is asked at all. A socket that accepts and
@@ -114,6 +116,18 @@ const SOCKET_ASK_TIMEOUT_MS = 1_500
 const PROOF_MAX_BODY_BYTES = 1_024
 
 type Ask = (req: DaemonRequest) => Promise<DaemonAnswer>
+
+const RUNNING: DaemonLiveness = { state: 'running' }
+
+/**
+ * Why a live pid whose socket directory is gone is held rather than running:
+ * `running` hands its reader the socket and the token, and the next process to
+ * create that directory — another user's, under the temp-dir fallback — is
+ * what would receive them. It is not a leftover either while the pid may be
+ * the daemon, which a temp cleaner can leave serving with no directory.
+ */
+const NO_SOCKET_DIRECTORY =
+  'the socket directory does not exist, and whoever creates it next decides what answers there'
 
 /**
  * The record's socket's answer, or the verdict its silence gives: only a
@@ -190,11 +204,15 @@ export async function daemonLiveness(
   const { socketPath } = record
   const trust = socketPath === undefined ? undefined : trustOf(socketPath)
   if (trust?.kind === 'refused') return { state: 'unconfirmed', untrustedSocket: trust.reason }
-  if (identity === 'writer') return { state: 'running' }
-  if (identity === 'unknown') {
-    if (socketPath === undefined || !isNamedPipe(socketPath)) return { state: 'running' }
-    return provenPipe(request, socketPath, record.token)
+  if (socketPath === undefined) return identity === 'foreign' ? { state: 'pid-reused' } : RUNNING
+  if (trust?.kind === 'absent') {
+    return identity === 'foreign'
+      ? { state: 'pid-reused' }
+      : { state: 'unconfirmed', untrustedSocket: NO_SOCKET_DIRECTORY }
   }
-  if (socketPath === undefined || trust?.kind === 'absent') return { state: 'pid-reused' }
+  if (identity === 'writer') return RUNNING
+  if (identity === 'unknown') {
+    return isNamedPipe(socketPath) ? provenPipe(request, socketPath, record.token) : RUNNING
+  }
   return confirmedPid(request, record, socketPath)
 }

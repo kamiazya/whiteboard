@@ -236,10 +236,27 @@ describe('daemonLiveness against a socket this user does not hold alone', () => 
     expect(asked).toEqual([])
   })
 
+  it('sends nothing, and holds nothing, where the socket directory does not exist, for a pid started after its record', async () => {
+    const asked: DaemonRequest[] = []
+    const socketPath = join(silentSocketPath(), 'gone', 'd.sock')
+    const record = { pid: PID, startedAt, socketPath, token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...startedAfter,
+      request: async (req) => {
+        asked.push(req)
+        return { status: 200, body: { pid: PID } }
+      },
+    })
+    expect(asked).toEqual([])
+    expect(liveness.state).toBe('pid-reused')
+  })
+
+  // `running` is what hands a reader the record's socket and token: with no
+  // directory there, whoever creates it first decides who receives them.
   it.each([
-    ['started after its record', startedAfter],
     ['whose start time cannot be read', noStartTime],
-  ])('sends nothing, and holds nothing, where the socket directory does not exist, for a pid %s', async (_, identity) => {
+    ['started before its record', startedBefore],
+  ])('does not call running, and asks nothing, a socket with no directory, for a pid %s', async (_, identity) => {
     const asked: DaemonRequest[] = []
     const socketPath = join(silentSocketPath(), 'gone', 'd.sock')
     const record = { pid: PID, startedAt, socketPath, token: TOKEN }
@@ -251,7 +268,22 @@ describe('daemonLiveness against a socket this user does not hold alone', () => 
       },
     })
     expect(asked).toEqual([])
-    expect(liveness.state).toBe(identity === startedAfter ? 'pid-reused' : 'running')
+    expect(liveness).toEqual({
+      state: 'unconfirmed',
+      untrustedSocket: expect.stringContaining('does not exist'),
+    })
+  })
+
+  it.each([
+    ['whose start time cannot be read', noStartTime],
+    ['started before its record', startedBefore],
+  ])('holds the record of a socket the trust seam finds absent, for a pid %s', async (_, identity) => {
+    const record = { pid: PID, startedAt, socketPath: '/run/whiteboard/d.sock', token: TOKEN }
+    const liveness = await daemonLiveness(record, {
+      ...identity,
+      socketTrust: () => ({ kind: 'absent' }),
+    })
+    expect(liveness.state).toBe('unconfirmed')
   })
 
   it('asks, under the token, a socket in an owner-only directory of its own', async () => {

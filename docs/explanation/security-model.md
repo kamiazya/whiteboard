@@ -37,8 +37,16 @@ The local daemon has one person: the machine's owner
   how to move the socket somewhere of your own (`XDG_RUNTIME_DIR`, or
   `TMPDIR` when that is unset). `whiteboard daemon run` and `daemon stop`
   then leave the record alone and signal no process, and the native host
-  relays nothing. When the directory does not exist at all, no daemon can be
-  listening there: the client sends nothing and treats the record as stale.
+  relays nothing. When the directory does not exist at all, the client
+  sends nothing either, since whoever creates it next decides what answers
+  there. If the recorded pid now belongs to a process that started after
+  the record, the record is treated as stale. If the pid may still be the
+  daemon (a temp-directory cleaner can remove the directory under a live
+  daemon), the daemon is reported as not confirmed rather than running:
+  `daemon status` and `daemon doctor` say the socket directory does not
+  exist, the native host relays nothing, and `daemon run` and `daemon stop`
+  leave the record and the process alone. Stop that process yourself, then
+  start the daemon again.
 - **Every client reaches it there**: the CLI, the stdio MCP entry, and the
   native messaging host that the browser extension starts. A web page never
   talks to the daemon over HTTP, and the daemon serves no page — there is no

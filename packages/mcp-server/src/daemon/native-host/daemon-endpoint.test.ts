@@ -88,6 +88,27 @@ describe('resolveDaemonEndpoint', () => {
     await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toEqual({ socketPath, token: 't' })
   })
 
+  // A temp cleaner can remove the fallback socket directory under a live
+  // daemon; whoever recreates it first would receive the token.
+  it.each([
+    ['started before its record', () => Date.now() - 60_000],
+    ['whose start time cannot be read', () => null],
+  ])('hands out no token for a socket whose directory is gone, for a pid %s', async (_, startMs) => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    const socketPath = join(dataDir, 'gone', 'd.sock')
+    const record = {
+      pid: process.pid,
+      version: '0.0.0',
+      startedAt: new Date().toISOString(),
+      socketPath,
+      token: 'secret-token',
+    }
+    await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record))
+    const resolved = resolveDaemonEndpoint(dataDir, { isAlive: () => true, startMs })
+    await expect(resolved).rejects.toThrow('does not exist')
+    await expect(resolved).rejects.not.toThrow('secret-token')
+  })
+
   // After an unclean stop the record outlives its socket, and where the socket
   // directory is a predictable /tmp path another user can recreate it and
   // listen there: the token must not reach whatever answers.
