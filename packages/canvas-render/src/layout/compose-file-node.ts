@@ -14,7 +14,7 @@ import {
   placeAboveNode,
   placeInNode,
 } from './node-box.js'
-import { spendNestedLayout } from './nodes/embed-budget.js'
+import { canvasElementCount, spendNestedLayout } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import { fitSceneIntoBox } from './scale-scene.js'
 
@@ -42,7 +42,7 @@ function composeFileEmbed(
     file === undefined ||
     options.embedDepth >= FILE_EMBED_DEPTH_CAP ||
     options.activeEmbedPath.has(file) ||
-    !spendNestedLayout(options.nestedLayoutBudget)
+    !spendNestedLayout(options.nestedLayoutBudget, canvasElementCount(child))
   ) {
     return undefined
   }

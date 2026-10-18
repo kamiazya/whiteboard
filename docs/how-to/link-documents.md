@@ -35,8 +35,9 @@ so type `![[` and pick the document:
   written here. Embeds nest, three levels deep; a document that embeds
   itself, directly or through another, shows a placeholder at the point
   the loop closes. One view draws at most 128 embedded documents in all,
-  counting canvas miniatures and file-node previews; past that, an embed
-  shows its placeholder and a file node its card.
+  counting canvas miniatures and file-node previews, and the canvases they
+  show hold at most 4000 nodes, edges and lines between them; past either,
+  an embed shows its placeholder and a file node its card.
 - A **canvas** target renders as a framed miniature of the whole canvas,
   scaled to the column, under its display name. The name is a link that
   opens the canvas. File nodes inside the miniature keep their card form;

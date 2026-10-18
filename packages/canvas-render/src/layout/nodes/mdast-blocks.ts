@@ -37,7 +37,7 @@ import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
 import { escapeXmlText } from '../../xml-escape.js'
-import { createNestedLayoutBudget, spendNestedLayout } from './embed-budget.js'
+import { canvasElementCount, createNestedLayoutBudget, spendNestedLayout } from './embed-budget.js'
 import { createInlineJunction, headCharacter } from './inline-junction.js'
 import { longestFittingCount } from './longest-fit.js'
 import { layoutCodeBlock } from './mdast-code-block.js'
@@ -1034,17 +1034,17 @@ function layoutEmbedBlock(
   if (embedPath.includes(documentId)) return placeholder('cycle')
   if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
   if (resolved === undefined) return placeholder('unresolvable')
-  // Spent here for both targets: a canvas target's miniature is laid out by
-  // `layoutEmbeddedCanvas`, which must not spend again for the same embed.
-  if (!spendNestedLayout(options.nestedLayoutBudget)) return placeholder('budget')
-  const nextPath = [...embedPath, documentId]
   // A fragment narrows the document to the part it names. One the document
   // does not hold is unresolvable in the same way a missing document is:
   // the reader sees the address, linked, and nothing is invented.
+  const whole = 'canvas' in resolved ? resolved.canvas : undefined
+  const canvas = whole && fragment !== undefined ? selectCanvasFragment(whole, fragment) : whole
+  // Spent ONCE for both targets, a canvas charged by the part it lays out.
+  const charge = canvasElementCount(canvas)
+  if (!spendNestedLayout(options.nestedLayoutBudget, charge)) return placeholder('budget')
+  const nextPath = [...embedPath, documentId]
   if ('canvas' in resolved) {
     if (options.layoutEmbeddedCanvas === undefined) return placeholder('unresolvable')
-    const canvas =
-      fragment === undefined ? resolved.canvas : selectCanvasFragment(resolved.canvas, fragment)
     if (canvas === undefined) return placeholder('unresolvable')
     return layoutCanvasEmbedBlock(documentId, fragment, canvas, cursor, options, nextPath)
   }

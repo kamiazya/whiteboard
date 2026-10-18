@@ -12,8 +12,9 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { layoutMdastBlocks } from './markdown-body.js'
-import { NESTED_LAYOUT_BUDGET } from './nodes/embed-budget.js'
+import { NESTED_ELEMENT_BUDGET, NESTED_LAYOUT_BUDGET } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
@@ -187,7 +188,7 @@ describe('nested layout budget', () => {
       }),
       resolveEmbed: () => ({ root: { type: 'root', children: [] } }),
       contentCache: cache,
-      nestedLayoutBudget: { remaining },
+      nestedLayoutBudget: { remaining, elementsRemaining: NESTED_ELEMENT_BUDGET, refused: 0 },
     })
     const canvas: SpatialCanvas = {
       nodes: [textNode({ id: 't', x: 0, y: 0, width: 260, height: 200, text: 'body' })],
@@ -202,4 +203,198 @@ describe('nested layout budget', () => {
     expect(count(fresh.nodes, 'embedResolved')).toBe(1)
     expect(cache.size).toBe(1)
   })
+})
+
+/**
+ * A board of `nodes` text nodes chained by `edges` edges and `lines` free
+ * lines — the element count the budget charges, laid out cheaply.
+ */
+function board(nodes: number, edges: number, lines = 0): SpatialCanvas {
+  return {
+    nodes: Array.from({ length: nodes }, (_, i) =>
+      textNode({
+        id: `b${i}`,
+        x: (i % 40) * 50,
+        y: Math.floor(i / 40) * 50,
+        width: 40,
+        height: 40,
+        text: '',
+      }),
+    ),
+    edges: Array.from({ length: edges }, (_, i) => ({
+      id: `e${i}`,
+      from: { node: `b${i % nodes}` },
+      to: { node: `b${(i + 1) % nodes}` },
+    })),
+    lines: Array.from({ length: lines }, (_, i) => ({
+      id: `l${i}`,
+      from: { kind: 'point' as const, point: { x: i, y: 0 } },
+      to: { kind: 'point' as const, point: { x: i, y: 10 } },
+    })),
+  }
+}
+
+const elementsOf = (canvas: SpatialCanvas): number =>
+  canvas.nodes.length + canvas.edges.length + (canvas.lines ?? []).length
+
+/** A hub of `count` file nodes that all name the one document `B`. */
+function hubNaming(count: number): SpatialCanvas {
+  return {
+    nodes: Array.from({ length: count }, (_, i) =>
+      fileNode({
+        id: `f${i}`,
+        x: (i % 16) * 300,
+        y: Math.floor(i / 16) * 240,
+        width: 260,
+        height: 200,
+        file: 'B',
+      }),
+    ),
+    edges: [],
+  }
+}
+
+describe('nested element budget', () => {
+  it('charges a repeated large board by what it lays out, not once per embed', () => {
+    const big = board(1000, 0)
+    const scene = layoutSpatialCanvas(hubNaming(NESTED_LAYOUT_BUDGET), {
+      measure: createFakeMeasure(),
+      appearance: APPEARANCE,
+      parseBody: () => ({ type: 'root', children: [] }),
+      resolveReference: () => ({ canvas: big }),
+      expandFileNode: () => true,
+    })
+    const embeds = count(scene.nodes, 'embedResolved')
+    expect(embeds).toBe(Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(big)))
+    // Every hub node still draws, the excess as its card.
+    expect(scene.nodes.filter((n) => n.kind === 'shape').length).toBe(NESTED_LAYOUT_BUDGET)
+  })
+
+  it('charges a body embed of a canvas by the canvas it lays out', () => {
+    const big = board(1000, 0)
+    const scene = layoutMdastBlocks(
+      {
+        type: 'root',
+        children: Array.from({ length: 16 }, () => ({
+          type: 'paragraph' as const,
+          children: [{ type: 'embed' as const, documentId: 'B' }],
+        })),
+      },
+      {
+        measure: createFakeMeasure(),
+        maxWidth: 600,
+        fontFamily: 'sans-serif',
+        resolveEmbed: () => ({ canvas: big }),
+      },
+    )
+    expect(count(scene.nodes, 'embedResolved')).toBe(
+      Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(big)),
+    )
+    expect(count(scene.nodes, 'embedPlaceholder', 'budget')).toBe(
+      16 - Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(big)),
+    )
+  })
+
+  it('counts lines, and a board past the whole budget draws its card', () => {
+    const scene = layoutSpatialCanvas(hubNaming(1), {
+      measure: createFakeMeasure(),
+      appearance: APPEARANCE,
+      parseBody: () => ({ type: 'root', children: [] }),
+      resolveReference: () => ({ canvas: board(1, 0, NESTED_ELEMENT_BUDGET) }),
+      expandFileNode: () => true,
+    })
+    expect(count(scene.nodes, 'embedResolved')).toBe(0)
+  })
+
+  it('an embed it refuses spends nothing, so a smaller one after it still draws', () => {
+    const big = board(1, 0, NESTED_ELEMENT_BUDGET)
+    const small = board(3, 2)
+    const hub: SpatialCanvas = {
+      nodes: [
+        fileNode({ id: 'f0', x: 0, y: 0, width: 260, height: 200, file: 'big' }),
+        fileNode({ id: 'f1', x: 300, y: 0, width: 260, height: 200, file: 'small' }),
+      ],
+      edges: [],
+    }
+    const scene = layoutSpatialCanvas(hub, {
+      measure: createFakeMeasure(),
+      appearance: APPEARANCE,
+      parseBody: () => ({ type: 'root', children: [] }),
+      resolveReference: (ref) => ({ canvas: ref === 'big' ? big : small }),
+      expandFileNode: () => true,
+    })
+    expect(count(scene.nodes, 'embedResolved')).toBe(1)
+  })
+
+  it('charges a fragment embed by the part it selects, not the whole board', () => {
+    const scene = layoutMdastBlocks(
+      {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [{ type: 'embed', documentId: 'B', fragment: '^b0' }],
+          },
+        ],
+      },
+      {
+        measure: createFakeMeasure(),
+        maxWidth: 600,
+        fontFamily: 'sans-serif',
+        resolveEmbed: () => ({ canvas: board(NESTED_ELEMENT_BUDGET + 1, 0) }),
+      },
+    )
+    expect(count(scene.nodes, 'embedResolved')).toBe(1)
+  })
+
+  it('does not cache a body whose canvas embed the element budget refused', () => {
+    const cache = new Map<string, FittedBlocks>()
+    const scene = layoutSpatialCanvas(
+      {
+        nodes: [textNode({ id: 't', x: 0, y: 0, width: 260, height: 200, text: 'body' })],
+        edges: [],
+      },
+      {
+        measure: createFakeMeasure(),
+        appearance: APPEARANCE,
+        parseBody: () => ({
+          type: 'root',
+          children: [{ type: 'paragraph', children: [{ type: 'embed', documentId: 'B' }] }],
+        }),
+        resolveEmbed: () => ({ canvas: board(2, 0) }),
+        contentCache: cache,
+        nestedLayoutBudget: { remaining: NESTED_LAYOUT_BUDGET, elementsRemaining: 1, refused: 0 },
+      },
+    )
+    expect(count(scene.nodes, 'embedPlaceholder', 'budget')).toBe(1)
+    expect(cache.size).toBe(0)
+  })
+
+  // Empty nodes carry most of the elements because they are the cheapest to
+  // lay out: what is under test is the arithmetic, not the router.
+  fcTest.prop(
+    [
+      fc.integer({ min: 1, max: 48 }),
+      fc.integer({ min: 1, max: NESTED_ELEMENT_BUDGET + 100 }),
+      fc.integer({ min: 0, max: 10 }),
+      fc.integer({ min: 0, max: 10 }),
+    ],
+    withDefaults({ numRuns: 15 }),
+  )(
+    'the miniatures one render draws never lay out more than the budget',
+    (hubSize, nodes, edges, lines) => {
+      const target = board(nodes, edges, lines)
+      const scene = layoutSpatialCanvas(hubNaming(hubSize), {
+        measure: createFakeMeasure(),
+        appearance: APPEARANCE,
+        parseBody: () => ({ type: 'root', children: [] }),
+        resolveReference: () => ({ canvas: target }),
+        expandFileNode: () => true,
+      })
+      const embeds = count(scene.nodes, 'embedResolved')
+      expect(embeds * elementsOf(target)).toBeLessThanOrEqual(NESTED_ELEMENT_BUDGET)
+      // Not vacuous: the budget is spent as far as it goes.
+      expect(embeds).toBe(Math.min(hubSize, Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(target))))
+    },
+  )
 })

@@ -1,3 +1,5 @@
+import { CANVAS_MAX_EDGES, CANVAS_MAX_NODES, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+
 /**
  * How many NESTED documents one render may lay out, across every embed kind:
  * a file node's canvas miniature and a markdown body's `![[…]]` block alike.
@@ -21,6 +23,23 @@
 export const NESTED_LAYOUT_BUDGET = 128
 
 /**
+ * How many canvas ELEMENTS — nodes, edges and lines — the nested canvases of
+ * one render may lay out between them.
+ *
+ * The layout count alone does not bound cost, because one layout is priced by
+ * the board it lays out: 128 file nodes naming one maximal board laid that
+ * board out 128 times, about seven seconds each on the daemon's measurer
+ * (`mcp-server/scripts/measure/nested-embed-cost.mjs`). One maximal board's
+ * worth — `CANVAS_MAX_NODES + CANVAS_MAX_EDGES` — caps the nested work at
+ * about one more top-level render, whatever the fan-out, while any board a
+ * canvas may hold still fits as a single miniature unless it also carries
+ * lines. An embed whose canvas would overdraw it degrades exactly as one
+ * past the count does, and spends nothing, so a smaller embed after it may
+ * still draw.
+ */
+export const NESTED_ELEMENT_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES
+
+/**
  * The budget's running account for ONE top-level render. A counter rather
  * than a value threaded functionally, because sibling embeds spend from one
  * pool and a recursion returning scenes has no channel to hand back what is
@@ -30,15 +49,31 @@ export const NESTED_LAYOUT_BUDGET = 128
  */
 export interface NestedLayoutBudget {
   remaining: number
+  elementsRemaining: number
+  /** Embeds refused so far, so a cache can tell a body this render degraded. */
+  refused: number
 }
 
 export function createNestedLayoutBudget(): NestedLayoutBudget {
-  return { remaining: NESTED_LAYOUT_BUDGET }
+  return { remaining: NESTED_LAYOUT_BUDGET, elementsRemaining: NESTED_ELEMENT_BUDGET, refused: 0 }
 }
 
-/** Spends one nested layout; `false` when none is left, and nothing is spent. */
-export function spendNestedLayout(budget: NestedLayoutBudget): boolean {
-  if (budget.remaining <= 0) return false
+/** What a nested canvas charges the element budget: everything it lays out; a body, 0. */
+export function canvasElementCount(canvas: SpatialCanvas | undefined): number {
+  if (canvas === undefined) return 0
+  return canvas.nodes.length + canvas.edges.length + (canvas.lines?.length ?? 0)
+}
+
+/**
+ * Spends one nested layout of `elements` canvas elements;
+ * `false` when either account cannot cover it, and nothing is spent.
+ */
+export function spendNestedLayout(budget: NestedLayoutBudget, elements: number): boolean {
+  if (budget.remaining <= 0 || elements > budget.elementsRemaining) {
+    budget.refused += 1
+    return false
+  }
   budget.remaining -= 1
+  budget.elementsRemaining -= elements
   return true
 }
