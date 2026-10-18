@@ -33,6 +33,33 @@ const routed = (id: string, path: readonly { x: number; y: number }[]): Resolved
   toEnd: 'arrow',
 })
 
+/**
+ * Runs `computeEdgeJumps` counting its broad-phase cell visits — every one
+ * reads the grid's cell map once — and throws once `budget` is spent. The
+ * throw is what makes a runaway grid FAIL: the work is synchronous, so a
+ * vitest timeout cannot interrupt it and the run would otherwise hang.
+ */
+function jumpsWithinCellBudget(
+  edges: readonly ResolvedEdgeNode[],
+  budget: number,
+): { jumps: ReturnType<typeof computeEdgeJumps>; visits: number } {
+  let visits = 0
+  const get = Map.prototype.get
+  const spy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (
+    this: Map<unknown, unknown>,
+    key,
+  ) {
+    visits++
+    if (visits > budget) throw new Error(`cell-visit budget of ${budget} exceeded`)
+    return get.call(this, key)
+  })
+  try {
+    return { jumps: computeEdgeJumps(edges), visits }
+  } finally {
+    spy.mockRestore()
+  }
+}
+
 const STEP_PX = 20
 const BENDS = 64
 
@@ -67,7 +94,7 @@ describe('computeEdgeJumps cost', () => {
     const segments = edges.reduce((n, e) => n + e.path.length - 1, 0)
 
     narrowTests.count = 0
-    const jumps = computeEdgeJumps(edges)
+    const { jumps, visits } = jumpsWithinCellBudget(edges, 64 * segments)
 
     // The subject is present: every crosser still hops its staircase, and
     // nothing else hops at all.
@@ -78,6 +105,10 @@ describe('computeEdgeJumps cost', () => {
     // All pairs is about segments² / 2 — 2.2e9 here; 3_268 per segment at a
     // tenth of this size. Measured 1_950 in all behind the grid.
     expect(narrowTests.count / segments).toBeLessThanOrEqual(0.1)
+    expect(visits).toBeGreaterThan(segments)
+    // Each segment reads its cells twice, to find candidates and to enter
+    // itself. Measured 4.17 per segment.
+    expect(visits / segments).toBeLessThanOrEqual(8)
   })
 
   it('caps the hops one segment draws', () => {
