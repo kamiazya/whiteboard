@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
 import { createTenantAdministratorStore } from './tenant-administrator-store.js'
@@ -74,6 +75,47 @@ describe('createUserDeactivation', () => {
     await deactivation.deactivate(user.id, 1_000)
     await deactivation.reactivate(user.id)
     expect(await members.membershipRole('ws-1', user.id)).toBe('owner')
+  })
+
+  // A link speaks with its inviter's authority, which reactivating restores;
+  // a link they minted before must not come back to life with it.
+  it('deletes the links the user minted that nobody accepted, and keeps the rest', async () => {
+    const invitations = createInvitationStore(handle.db)
+    const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const other = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
+    await members.addMember('ws-1', user.id)
+    await members.addMember('ws-2', other.id)
+    const theirs = await invitations.createLink({
+      invitedBy: user.id,
+      workspaceId: 'ws-1',
+      now: 0,
+      ttlMs: HOUR,
+    })
+    const others = await invitations.createLink({
+      invitedBy: other.id,
+      workspaceId: 'ws-2',
+      now: 0,
+      ttlMs: HOUR,
+    })
+
+    const accepted = await invitations.createLink({
+      invitedBy: user.id,
+      workspaceId: 'ws-1',
+      now: 0,
+      ttlMs: HOUR,
+    })
+    expect(await invitations.redeem(accepted.invitation.id, 'someone', 1)).toBe(true)
+
+    await deactivation.deactivate(user.id, 1_000)
+    await deactivation.reactivate(user.id)
+
+    expect(await invitations.listPending('ws-1', 1)).toEqual([])
+    const kept = await handle.db.selectFrom('invitations').select('id').execute()
+    expect(kept.map((row) => row.id).sort()).toEqual(
+      [accepted.invitation.id, others.invitation.id].sort(),
+    )
+    expect((await invitations.openLink(theirs.token, 1)).ok).toBe(false)
+    expect((await invitations.openLink(others.token, 1)).ok).toBe(true)
   })
 
   it('answers false for an unknown user and for a change already made', async () => {

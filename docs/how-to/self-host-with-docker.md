@@ -252,6 +252,8 @@ A link speaks for the owner who created it, so it works only while they could
 still create it. If they are removed from the workspace, made a member, or
 deactivated, every link they created and nobody has accepted stops working.
 Whoever arrives through one is refused, the same as with an expired link.
+Deactivating them deletes those links, so reactivating them later does not
+bring one back.
 
 Owners can review and take back the links still waiting to be accepted:
 
@@ -514,7 +516,9 @@ about to open. After that, a sign-in is refused with
 `deactivated`, and any request with a session or bearer token gets `403`
 with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
-have to sign in again because their old sessions do not come back.
+have to sign in again because their old sessions do not come back. Nor do
+the invitation links they created that nobody had accepted: deactivating
+deletes them.
 
 ### Reading the output in a script
 
