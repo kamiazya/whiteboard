@@ -325,9 +325,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // file is: a property against the regex it replaced pins every span, and
     // its overlap, squash and end-offset branches were mutation-checked by
     // hand against it.
+    //
+    // 111 with `layout/edges/segment-intersection.ts`, the line-jump narrow
+    // phase lifted out of `edge-jumps.ts` so its cost test can count calls.
+    // Outside the lane, as that file is: the edge-jumps tests pin both of its
+    // rejection branches.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 110,
+      production: 111,
     })
   })
 
