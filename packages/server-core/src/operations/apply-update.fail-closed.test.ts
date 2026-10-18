@@ -136,7 +136,7 @@ describe('a workspace-document sync update whose judgement throws after the impo
       ).resolves.toMatchObject({ kind: 'applied' })
 
       const record = stored(store)
-      expect(record.getTree(WORKSPACE_TREE_KEY).getNodes().length).toBe(nodesBefore)
+      expect(record.getTree(WORKSPACE_TREE_KEY).getNodes()).toHaveLength(nodesBefore)
       expect(readMarkdownBody(documentContainers(record, DOC_ID))).toBe('more body')
     },
     DEEP_CHAIN_TIMEOUT_MS,

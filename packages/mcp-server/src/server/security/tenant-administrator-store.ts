@@ -94,13 +94,12 @@ export function createTenantAdministratorStore(
     dismissKeepingAnAdministrator: (profileId, by) =>
       dismissKeepingAnAdministrator(db, configured, profileId, by),
     isAppointed: (profileId) => appointmentExists(db, profileId),
-    async list() {
-      return db
+    list: () =>
+      db
         .selectFrom('tenantAdministrators')
         .select(['profileId', 'appointedBy', 'appointedAt'])
         .orderBy('appointedAt', 'asc')
         .orderBy('profileId', 'asc')
-        .execute()
-    },
+        .execute(),
   }
 }

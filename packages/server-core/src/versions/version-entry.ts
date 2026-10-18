@@ -3,7 +3,6 @@ import {
   versionLabelSchema,
   WORKSPACE_ID_PATTERN,
 } from '@kamiazya/whiteboard-model'
-import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 
 /**
@@ -155,7 +154,7 @@ export const PROMOTE_MAX_VERSIONS = 120_000
  * documents a workspace holds. A browser past it leaves the rest behind and
  * names them, as it does a trashed document too large for the body.
  */
-export const PROMOTE_MAX_TRASH = WORKSPACE_MAX_DOCUMENTS
+export { WORKSPACE_MAX_DOCUMENTS as PROMOTE_MAX_TRASH } from '@kamiazya/whiteboard-ports'
 
 /**
  * The evidence a person was present when a row was written (ADR-0039).

@@ -150,7 +150,7 @@ export function matchDocumentsTail(
   if (match === null) return null
   const workspaceId = decodeSegment(match[1] ?? '')
   const rawTail = (match[2] ?? '').replace(/\/$/, '').split('/')
-  const tail = rawTail.map(decodeSegment)
+  const tail = rawTail.map((segment) => decodeSegment(segment))
   if (workspaceId === null || tail.some((segment) => segment === null || segment === '')) {
     return null
   }

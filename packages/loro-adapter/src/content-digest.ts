@@ -80,7 +80,10 @@ function stringifyWithin(value: unknown, depth: number): string {
     return `[${value.map((item) => stringifyWithin(item, depth + 1)).join(',')}]`
   const record = value as Record<string, unknown>
   const keys = Object.keys(record).sort(compareCodeUnit)
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${stringifyWithin(record[key], depth + 1)}`).join(',')}}`
+  const members = keys.map(
+    (key) => `${JSON.stringify(key)}:${stringifyWithin(record[key], depth + 1)}`,
+  )
+  return `{${members.join(',')}}`
 }
 
 /**
@@ -113,7 +116,9 @@ function pushMembers(
   const count = keys === null ? (record as unknown as unknown[]).length : keys.length
   for (let i = count - 1; i >= 0; i--) {
     const key = keys === null ? i : (keys[i] as string)
-    const head = `${i > 0 ? ',' : ''}${keys === null ? '' : `${JSON.stringify(key)}:`}`
+    const separator = i > 0 ? ',' : ''
+    const label = keys === null ? '' : `${JSON.stringify(key)}:`
+    const head = separator + label
     const item = record[key]
     const leaf = scalar(item)
     if (leaf !== null) stack.push(head + leaf)

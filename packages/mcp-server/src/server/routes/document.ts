@@ -184,7 +184,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     createRestoreRouter({
       versionStore,
       serverDeps: options.serverDeps,
-      progress: async (event) => {
+      progress: (event) => {
         sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
       },
       ...(options.callerScopes === undefined ? {} : { callerScopes: options.callerScopes }),

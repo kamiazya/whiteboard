@@ -113,7 +113,7 @@ export function registerToolWithAnnotations<
       : config._meta
   // Wrap the handler so thrown errors become isError responses, and so
   // every tool call is observable as a single MCP-semconv span.
-  const tracedHandler = async (
+  const tracedHandler = (
     args: InferToolArgs<I>,
     extra: Parameters<typeof handler>[1],
   ): Promise<unknown> => {
