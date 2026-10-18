@@ -128,7 +128,11 @@ export const KEEPER_LIMIT_REASON = {
   tags_too_large:
     'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
   too_many_nodes_or_edges:
-    'It would give this canvas more nodes or edges than one canvas may hold. Remove some first, or split the board across canvases.',
+    'It would give this canvas more nodes, or more edges and lines, than one canvas may hold. Remove some first, or split the board across canvases.',
+  too_many_open_threads:
+    'It would leave more comment threads open on this document than one document may hold. Resolve some first.',
+  too_many_open_changes:
+    'It would leave more proposed changes open on this document than one document may hold. Adopt or dismiss some first.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>
 
 /**

@@ -32,6 +32,7 @@ import {
   resolveSummaryWord,
 } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { openThreadsRefusal } from './open-annotation-ceilings.js'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -354,8 +355,14 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
   const held = new Set(readAnnotations(doc).map((thread) => thread.id))
   const now = new Date().toISOString()
   const touched = new Set<string>()
+  const openNow = () => readAnnotations(doc).filter((thread) => thread.status === 'open').length
+  const openAtLoad = openNow()
   for (const [index, op] of input.ops.entries()) {
     applyThreadOp({ doc, content, held, touched, now, index }, op)
+    // A reply opens nothing, so only the two ops that can are counted.
+    if (op.op === 'message.add') continue
+    const refusal = openThreadsRefusal(openAtLoad, openNow())
+    if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
   }
 
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)

@@ -1,18 +1,21 @@
 /**
- * What one canvas costs the daemon to lay out and to tidy, by how many nodes
- * and edges it holds — the work every render, export and layout read repeats
- * on the serving loop, and what the per-canvas node and edge ceilings are
- * sized against.
+ * What one canvas costs the daemon to lay out and to tidy, by how many nodes,
+ * edges and lines it holds — the work every render, export and layout read
+ * repeats on the serving loop, and what the per-canvas ceilings are sized
+ * against.
  *
  * Run:
- *   [EDGES_PER_CLUSTER=12] [ONLY=layout|tidy] node --import tsx/esm \
- *     scripts/measure/canvas-size-cost.mjs [nodeCounts...]
+ *   [EDGES_PER_CLUSTER=12] [LINES_PER_CLUSTER=0] [ONLY=layout|tidy] \
+ *     node --import tsx/esm scripts/measure/canvas-size-cost.mjs [nodeCounts...]
  *
  * The canvas is clusters of twelve boxes, far enough apart that an edge
  * inside one cannot reach the next, with `EDGES_PER_CLUSTER` edges inside each
  * and roughly one in seven reaching another cluster — the shape a real board
  * takes, rather than a grid of edges that all span it. `EDGES_PER_CLUSTER=0`
  * keeps two edges only, which prices the node half of layout alone.
+ * `LINES_PER_CLUSTER` adds that many lines (ink) inside each cluster, drawn
+ * the way the edges are, so a row prices what lines add beside them: the
+ * layout routes edges and lines through one pipeline.
  *
  * Layout runs as `wb_scene_render` runs it: the daemon's own text measurer and
  * the light theme. Tidy runs as `wb_canvas_edit`'s tidy op runs it, over every
@@ -31,6 +34,7 @@ import { createExportTextMeasurer } from '../../src/server/export/measure-text.t
 const counts = process.argv.slice(2).map(Number)
 const nodeCounts = counts.length > 0 ? counts : [300, 1000, 2000]
 const edgesPerCluster = Number(process.env.EDGES_PER_CLUSTER ?? 12)
+const linesPerCluster = Number(process.env.LINES_PER_CLUSTER ?? 0)
 const only = process.env.ONLY
 const appearance = createSpatialTheme({ mode: 'light' })
 const { measure } = await createExportTextMeasurer({ fontsDir: '/nonexistent-fonts-dir' })
@@ -88,7 +92,27 @@ function clusteredCanvas(nodeCount) {
       }
     }
   }
-  return { nodes, edges }
+  return { nodes, edges, lines: clusterLines(nodes, clusters, random) }
+}
+
+/** `LINES_PER_CLUSTER` lines inside each cluster, about one in seven reaching another, as the edges do. */
+function clusterLines(nodes, clusters, random) {
+  const int = (max) => Math.floor(random() * max)
+  const lines = []
+  for (let c = 0; c < clusters; c++) {
+    const members = nodes.filter((node) => node.id.startsWith(`c${c}n`))
+    for (let l = 0; l < linesPerCluster; l++) {
+      const from = members[int(members.length)].id
+      const to = random() < 0.15 ? nodes[int(nodes.length)].id : members[int(members.length)].id
+      if (from === to) continue
+      lines.push({
+        id: `l${lines.length}`,
+        from: { kind: 'node', node: from },
+        to: { kind: 'node', node: to },
+      })
+    }
+  }
+  return lines
 }
 
 function cpuMs(run) {
@@ -105,12 +129,12 @@ const warm = clusteredCanvas(24)
 layOut(warm)
 tidy(warm)
 
-console.log(' nodes  edges  layout ms    tidy ms')
+console.log(' nodes  edges  lines  layout ms    tidy ms')
 for (const count of nodeCounts) {
   const canvas = clusteredCanvas(count)
   const layoutMs = only === 'tidy' ? Number.NaN : layOut(canvas)
   const tidyMs = only === 'layout' ? Number.NaN : tidy(canvas)
   console.log(
-    `${String(canvas.nodes.length).padStart(6)} ${String(canvas.edges.length).padStart(6)} ${layoutMs.toFixed(0).padStart(10)} ${tidyMs.toFixed(0).padStart(10)}`,
+    `${String(canvas.nodes.length).padStart(6)} ${String(canvas.edges.length).padStart(6)} ${String(canvas.lines.length).padStart(6)} ${layoutMs.toFixed(0).padStart(10)} ${tidyMs.toFixed(0).padStart(10)}`,
   )
 }

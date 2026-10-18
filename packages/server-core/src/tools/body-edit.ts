@@ -32,6 +32,7 @@ import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
+import { refuseOpenChangeGrowth } from './open-annotation-ceilings.js'
 import { proposalAuthorSchema } from './proposal-author.js'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 import { withWorkspaceWrite } from './write-lock.js'
@@ -276,6 +277,7 @@ async function storeBodyProposal(args: {
     createdAt: continuing?.createdAt ?? new Date().toISOString(),
     changes: [...args.changes],
   }
+  refuseOpenChangeGrowth(open, proposal)
   writeProposal(doc, proposal)
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
   // Read back rather than answering with the changes this call contributed.

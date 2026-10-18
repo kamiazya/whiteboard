@@ -1,4 +1,5 @@
 export * from './annotation.js'
+export * from './annotation-limits.js'
 export * from './asset-ref.js'
 export { boundsOf, isFiniteRect } from './bounds.js'
 export * from './canvas-size.js'

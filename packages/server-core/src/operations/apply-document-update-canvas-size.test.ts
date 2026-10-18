@@ -2,7 +2,7 @@
  * The per-canvas node and edge ceilings on the editor's sync writes.
  *
  * `wb_canvas_edit` refuses the op that would take a board past
- * `CANVAS_MAX_NODES` or `CANVAS_MAX_EDGES`; a sync write carries Loro bytes no
+ * `CANVAS_MAX_NODES` or `CANVAS_MAX_EDGES_AND_LINES`; a sync write carries Loro bytes no
  * op reads, so the same bound is judged against what the bytes do. The double
  * keeps a stored snapshot beside its cached instance, so "nothing was kept" is
  * observable as what the next read finds.

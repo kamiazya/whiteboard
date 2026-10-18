@@ -223,28 +223,57 @@ the bound still takes a write, and a copy of its document stays readable. A
 browser-kept workspace refuses the same change the way it refuses an
 over-long node.
 
-## How many nodes and edges one canvas may hold
+## How many nodes, edges and lines one canvas may hold
 
-One canvas holds at most **2,000 nodes** and at most **2,000 edges**. Every
+One canvas holds at most **2,000 nodes** and at most **2,000 edges and lines
+together** — a line (ink) counts against the same bound as an edge, because
+the layout routes both the same way and one costs what the other does. Every
 render, export, layout read and tidy lays the whole board out again, and the
-cost grows with how many edges are routed among how many boxes: about seven
-seconds for a board of 2,000 nodes and 2,000 edges, and minutes for boards
-several times that size. `wb_canvas_edit` refuses the op that would take a
-board past either bound, naming it — "the canvas would hold 2001 nodes, past
-the 2000-node limit for one canvas" — and writes nothing; the same bound
-applies to a batch stored as a proposal. A `tidy` op's `scope` and a
-`region.set` op's `nodes` list at most 2,000 ids, and its `edges` at most
-2,000.
+cost grows with how many edges and lines are routed among how many boxes:
+about seven seconds for a board of 2,000 nodes and 2,000 edges, and minutes
+for boards several times that size. `wb_canvas_edit` refuses the op that would
+take a board past either bound, naming it — "the canvas would hold 2001 nodes,
+past the 2000-node limit for one canvas", or "the canvas would hold 2001 edges
+and lines, past the limit of 2000 edges and lines together for one canvas" —
+and writes nothing; the same bound applies to a batch stored as a proposal. A
+`tidy` op's `scope` and a `region.set` op's `nodes` list at most 2,000 ids,
+and its `edges` at most 2,000.
 
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — refuse an update that grows a board past either bound
-with `413` and `{"error":"too_many_nodes_or_edges"}`, storing nothing; `promote` names
-the canvas. A browser-kept workspace refuses the same change the way it
-refuses an over-long node: nothing is saved, the page goes back to what is
-stored, and the notice says why. A board stored past a bound before it existed
-still reads, and still takes any change that leaves it no larger — moving,
-restyling, or replacing one node with another — so removing nodes or edges is
-how it shrinks.
+with `413` and `{"error":"too_many_nodes_or_edges"}` (the code covers lines
+too), storing nothing; `promote` names the canvas. A browser-kept workspace
+refuses the same change the way it refuses an over-long node: nothing is
+saved, the page goes back to what is stored, and the notice says why. A board
+stored past a bound before it existed still reads, and still takes any change
+that leaves it no larger — moving, restyling, or replacing one node with
+another — so removing nodes, edges or lines is how it shrinks.
+
+## How many open comment threads and proposed changes one document may hold
+
+One document holds at most **500 open comment threads** and at most **1,000
+open proposed changes**, across all of its proposals. Every render and export
+of a canvas lays its comment bubbles and proposal bubbles out again, each
+placed against every box and every bubble before it, so the cost grows faster
+than the count: at 2,000 nodes, 500 open threads add about two seconds and
+2,000 add about fourteen. Only OPEN ones count — a resolved thread, and an
+adopted or dismissed change, stay in the document and are never deleted, so
+resolving or deciding is how a document at a limit takes another.
+
+`wb_thread_edit` (a `thread.add`, or a `thread.resolve` that reopens) and
+`wb_canvas_edit`'s `comment.add` refuse the op that would pass the thread
+limit — "the document would hold 501 open comment threads, past the limit of
+500 open comment threads for one document" — and write nothing. A proposal
+from `wb_canvas_edit` or `wb_body_edit` is refused when it would leave the
+document past the change limit, counting the changes every earlier proposal
+still holds open, so a series of small proposals is held to the same limit as
+one large one.
+
+The daemon's sync routes refuse an update that would pass either with `413`
+and `{"error":"too_many_open_threads"}` or `{"error":"too_many_open_changes"}`,
+storing nothing; a browser-kept workspace refuses it the same way it refuses a
+board past its size, with a notice. A document stored past a limit before it
+existed still reads, and still takes any change that opens nothing.
 
 ## How many ops one call may carry
 

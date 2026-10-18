@@ -4,7 +4,7 @@
 // a refusal added here reaches each surface with the same code and status.
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  CANVAS_EDGES_LIMIT_PHRASE,
+  CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_NODES_LIMIT_PHRASE,
   COMMENT_MESSAGE_LIMIT_PHRASE,
   CONTAINER_NAME_LIMIT_PHRASE,
@@ -15,6 +15,8 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
+  OPEN_CHANGES_LIMIT_PHRASE,
+  OPEN_THREADS_LIMIT_PHRASE,
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
@@ -237,7 +239,8 @@ class ContainerNameTooLongError extends TextBreachRefusalError {
 }
 
 /**
- * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES` edges —
+ * A board grown past `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES`
+ * edges and lines together —
  * the bounds every tool write holds, since each render, export and tidy lays
  * the whole board out again. A board stored past one still takes an edit that
  * does not grow it.
@@ -249,16 +252,60 @@ class CanvasTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'canvas-size'>,
     readonly at?: RefusedIn,
   ) {
-    const board = `a canvas of ${breach.count} ${breach.measure}`
+    const board = `a canvas of ${breach.count} ${breach.measure === 'nodes' ? 'nodes' : 'edges and lines'}`
     super(
       valueRefusalMessage(
         at,
         `leave ${board}`,
         `is ${board}`,
-        breach.measure === 'nodes' ? CANVAS_NODES_LIMIT_PHRASE : CANVAS_EDGES_LIMIT_PHRASE,
+        breach.measure === 'nodes'
+          ? CANVAS_NODES_LIMIT_PHRASE
+          : CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
       ),
     )
     this.name = 'CanvasTooLargeError'
+  }
+}
+
+function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
+  return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
+}
+
+/**
+ * A document left holding more open comment threads than
+ * `DOCUMENT_MAX_OPEN_THREADS` — the overlay each render lays out again. A
+ * document stored past it still takes an edit that opens nothing.
+ */
+class TooManyOpenThreadsError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-threads']
+
+  constructor(
+    readonly breach: BreachOf<'open-threads'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(at, `${breach.count} open comment threads`, OPEN_THREADS_LIMIT_PHRASE),
+    )
+    this.name = 'TooManyOpenThreadsError'
+  }
+}
+
+/** The same for open proposed changes, past `DOCUMENT_MAX_OPEN_CHANGES`. */
+class TooManyOpenChangesError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['open-changes']
+
+  constructor(
+    readonly breach: BreachOf<'open-changes'>,
+    readonly at?: RefusedIn,
+  ) {
+    super(
+      openAnnotationsMessage(
+        at,
+        `${breach.count} open proposed changes`,
+        OPEN_CHANGES_LIMIT_PHRASE,
+      ),
+    )
+    this.name = 'TooManyOpenChangesError'
   }
 }
 
@@ -279,6 +326,10 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new ContainerNameTooLongError(breach, at)
     case 'canvas-size':
       return new CanvasTooLargeError(breach, at)
+    case 'open-threads':
+      return new TooManyOpenThreadsError(breach, at)
+    case 'open-changes':
+      return new TooManyOpenChangesError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)

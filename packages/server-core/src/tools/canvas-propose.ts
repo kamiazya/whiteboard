@@ -17,6 +17,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { CanvasEditInput } from './canvas-edit-ops.js'
+import { refuseOpenChangeGrowth } from './open-annotation-ceilings.js'
 
 // Turning one `wb_canvas_edit` batch into a proposal (ADR-0029 decision 7).
 //
@@ -313,6 +314,7 @@ export async function storeCanvasProposal(args: {
     createdAt: continuing?.createdAt ?? new Date().toISOString(),
     changes,
   }
+  refuseOpenChangeGrowth(open, proposal)
   writeProposal(doc, proposal)
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
   // Read back rather than answering with the changes this call contributed.
