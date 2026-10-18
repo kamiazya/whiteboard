@@ -5,6 +5,7 @@ import {
   type DocumentKind,
   documentIdSchema,
   documentKindSchema,
+  MARKDOWN_MAX_CHARS,
   proposalSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -23,6 +24,14 @@ import { workspaceAddressArgSchema } from './workspace-address-arg.js'
  * and surveying many documents is `wb_document_list` plus that, not this.
  */
 const MAX_DOCUMENTS = 20
+
+/**
+ * The most `content` one call answers with, summed over its documents. Four
+ * maximal markdown bodies: MAX_DOCUMENTS alone let twenty maximal boards
+ * through in one response. The first document is always answered, however
+ * large, so any document stays readable — by asking for it alone.
+ */
+const MAX_CONTENT_CHARS = 4 * MARKDOWN_MAX_CHARS
 
 const documentGetInputSchema = z
   .object({
@@ -125,42 +134,70 @@ export function createDocumentGetTool(deps: ServerDeps) {
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
       const documents: ReadDocument[] = []
       const failed: DocumentGetOutput['failed'] = []
+      let contentChars = 0
+      let overBudget = false
       // Serial rather than Promise.all: the store behind this is SQLite in
       // the daemon, and concurrent reads of one file are what SQLITE_BUSY is
       // made of (the same reason GET /api/workspaces sequences its own).
-      for (const documentId of input.documentIds) {
-        // Placement first: `loadOrCreateDocument` conjures an empty document
-        // for any id, so without this an id that never existed reads as a
-        // document that lost its kind — the wrong cause, with a repair that
-        // does not apply to it.
-        const entry = await deps.documentIndex.resolveDocumentById({
-          workspaceId: input.workspaceId,
-          documentId,
-        })
-        if (entry === null) {
-          failed.push({
-            documentId,
-            reason: `Document not found: ${documentId}. This workspace holds no document with that id; wb_document_list shows the ones it does.`,
-          })
+      for (const documentId of new Set(input.documentIds)) {
+        if (overBudget) {
+          failed.push({ documentId, reason: readAloneReason(documentId) })
           continue
         }
-        try {
-          documents.push(await readOne(deps, input, documentId, entry.kind))
-        } catch (error) {
-          // Only the failures that are genuinely ABOUT this document: it has
-          // no kind to read it by, or its content has no representation in
-          // that format. Everything else propagates.
-          if (
-            !(error instanceof DocumentKindUnknownError || error instanceof DocumentSerializeError)
-          ) {
-            throw error
-          }
-          failed.push({ documentId, reason: reportedFaultText(deps, 'wb_document_get', error) })
+        const read = await readOrFail(deps, input, documentId)
+        if ('reason' in read) {
+          failed.push(read)
+          continue
         }
+        if (documents.length > 0 && contentChars + read.content.length > MAX_CONTENT_CHARS) {
+          overBudget = true
+          failed.push({ documentId, reason: readAloneReason(documentId) })
+          continue
+        }
+        contentChars += read.content.length
+        documents.push(read)
       }
       return { documents, failed }
     },
   }
+}
+
+type FailedRead = DocumentGetOutput['failed'][number]
+
+async function readOrFail(
+  deps: ServerDeps,
+  input: DocumentGetInput,
+  documentId: string,
+): Promise<ReadDocument | FailedRead> {
+  // Placement first: `loadOrCreateDocument` conjures an empty document
+  // for any id, so without this an id that never existed reads as a
+  // document that lost its kind — the wrong cause, with a repair that
+  // does not apply to it.
+  const entry = await deps.documentIndex.resolveDocumentById({
+    workspaceId: input.workspaceId,
+    documentId,
+  })
+  if (entry === null) {
+    return {
+      documentId,
+      reason: `Document not found: ${documentId}. This workspace holds no document with that id; wb_document_list shows the ones it does.`,
+    }
+  }
+  try {
+    return await readOne(deps, input, documentId, entry.kind)
+  } catch (error) {
+    // Only the failures that are genuinely ABOUT this document: it has
+    // no kind to read it by, or its content has no representation in
+    // that format. Everything else propagates.
+    if (!(error instanceof DocumentKindUnknownError || error instanceof DocumentSerializeError)) {
+      throw error
+    }
+    return { documentId, reason: reportedFaultText(deps, 'wb_document_get', error) }
+  }
+}
+
+function readAloneReason(documentId: string): string {
+  return `Not read: this call's answer reached its ${MAX_CONTENT_CHARS}-character content budget before ${documentId}. Read it alone, or in a smaller batch.`
 }
 
 async function readOne(
