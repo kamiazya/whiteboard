@@ -3,7 +3,7 @@ import { parseMarkdownBody } from './pipeline.js'
 
 /**
  * How parse time scales with body size, per shape. A body is the shape's
- * unit repeated to a target length, timed at two lengths four times apart,
+ * unit repeated to a target length, timed at two lengths sixteen times apart,
  * and the scaling exponent fitted from the pair: ~1 is linear, ~2 quadratic.
  * A ratio, not a duration, so the verdict does not depend on how fast or
  * loaded the machine is — only on the shape of the cost curve.
@@ -25,14 +25,20 @@ type Shape = {
   /**
    * Length of the repeated text at the smaller of the two sizes. Sized per
    * shape so a superlinear one is already dominated by its superlinear term
-   * there, and still finishes at four times the size before the fix.
+   * there, and still finishes at sixteen times the size before the fix.
    */
   small?: number
 }
 
 const DEFAULT_SMALL = 8_000
-const GROWTH = 4
-/** Fitted exponents land near 1 or near 2; this splits them with margin. */
+const GROWTH = 16
+/**
+ * Fitted exponents land near 1 or near 2; this splits them with margin. The
+ * wide growth is what keeps the margin under load: a timing disturbed by a
+ * factor r moves the exponent by log(r)/log(GROWTH), so a 2.3x burst on one
+ * side costs 0.3 here and cost 0.6 at a growth of four, where shapes that
+ * read 0.9 alone failed under five parallel copies.
+ */
 const LINEAR_EXPONENT_CEILING = 1.5
 
 const SHAPES: Shape[] = [
@@ -114,30 +120,35 @@ function bodyOf(shape: Shape, length: number): string {
   return shape.wrap ? shape.wrap(units) : units
 }
 
-/**
- * Fastest of up to three parses: the minimum is the run least disturbed by
- * the rest of the machine. A parse that already takes half a second is
- * dominated by its own work, so it is not repeated.
- */
+/** One timed parse, floored so a sub-millisecond one cannot divide by zero. */
 function parseMillis(body: string): number {
-  let fastest = Number.POSITIVE_INFINITY
-  for (let run = 0; run < 3; run++) {
-    const started = performance.now()
-    parseMarkdownBody(body)
-    fastest = Math.min(fastest, performance.now() - started)
-    if (fastest > 500) break
-  }
-  // A clock floor, so a sub-millisecond parse cannot divide by zero.
-  return Math.max(fastest, 0.05)
+  const started = performance.now()
+  parseMarkdownBody(body)
+  return Math.max(performance.now() - started, 0.05)
 }
 
+/**
+ * Fastest of up to three parses at each size, the two sizes taken in turn:
+ * the minimum is the run least disturbed by the rest of the machine, and
+ * alternating means a burst of load lands on both sizes rather than on
+ * whichever was being timed then. A large
+ * parse that already takes half a second is dominated by its own work, so
+ * it is not repeated.
+ */
 function scalingExponent(shape: Shape): number {
+  const length = shape.small ?? DEFAULT_SMALL
+  const smallBody = bodyOf(shape, length)
+  const largeBody = bodyOf(shape, length * GROWTH)
   // One untimed parse first, so the small body is not charged the JIT warm-up
   // that the large one then skips.
-  const length = shape.small ?? DEFAULT_SMALL
-  parseMarkdownBody(bodyOf(shape, length))
-  const small = parseMillis(bodyOf(shape, length))
-  const large = parseMillis(bodyOf(shape, length * GROWTH))
+  parseMarkdownBody(smallBody)
+  let small = Number.POSITIVE_INFINITY
+  let large = Number.POSITIVE_INFINITY
+  for (let run = 0; run < 3; run++) {
+    small = Math.min(small, parseMillis(smallBody))
+    if (run > 0 && large > 500) continue
+    large = Math.min(large, parseMillis(largeBody))
+  }
   return Math.log(large / small) / Math.log(GROWTH)
 }
 
