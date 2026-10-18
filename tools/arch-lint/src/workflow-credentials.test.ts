@@ -318,3 +318,117 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     })
   })
 })
+
+/**
+ * A job whose output is published or deployed builds from a cold pnpm store.
+ * The store cache is keyed only by the lockfile hash, with a prefix fallback,
+ * and the default branch's own test, coverage and mutation jobs — which run
+ * every dev and test dependency — write it. A store poisoned there would be
+ * linked into the npm tarball, the image or the site, and the sha256 the build
+ * reports is taken after the install, so it would certify the poisoned output.
+ * So every job a publishing job `needs`, transitively, opts out of the store
+ * cache and restores no other cache. A `workflow_run` upstream is out of
+ * reach here by design: preview-pr-build.yml runs the PR's own copy of its
+ * file, so nothing in it can be enforced from the default branch, and its
+ * deploy checks what the artifact contains instead.
+ */
+describe('workflows — every job a publish or deploy job needs builds from a cold store', () => {
+  const SETUP_PNPM = './.github/actions/setup-pnpm'
+  const CACHE_ACTION_RE = /^actions\/cache(?:\/restore)?@/
+  const SETUP_NODE_RE = /^actions\/setup-node@/
+  // A publish or deploy credential: a repository secret, or a token the job
+  // mints for a registry — npm and Sigstore OIDC, the GHCR push.
+  const publishes = (job: WorkflowJob): boolean =>
+    /secrets\.(?!GITHUB_TOKEN\b)\w+/.test(JSON.stringify(job)) ||
+    job.permissions?.['id-token'] === 'write' ||
+    job.permissions?.packages === 'write'
+
+  const sites = everyWorkflowJob()
+  const byFile = new Map<string, Map<string, WorkflowJob>>()
+  for (const { file, id, job } of sites) {
+    byFile.set(file, (byFile.get(file) ?? new Map()).set(id, job))
+  }
+  function upstream(file: string, id: string, seen = new Set<string>()): Set<string> {
+    for (const need of [byFile.get(file)?.get(id)?.needs ?? []].flat()) {
+      if (seen.has(need)) continue
+      seen.add(need)
+      upstream(file, need, seen)
+    }
+    return seen
+  }
+  const upstreamSites = [
+    ...new Set(
+      sites
+        .filter(({ job }) => publishes(job))
+        .flatMap(({ file, id }) => [...upstream(file, id)].map((need) => `${file}:${need}`)),
+    ),
+  ].sort()
+
+  function cacheFindings(job: WorkflowJob): string[] {
+    return (job.steps ?? []).flatMap((step) => {
+      const uses = step.uses ?? ''
+      const label = step.name ?? uses
+      if (uses === SETUP_PNPM && step.with?.['cache-store'] !== 'false')
+        return [`${label}: restores the pnpm store cache`]
+      if (CACHE_ACTION_RE.test(uses)) return [`${label}: restores a cache`]
+      if (SETUP_NODE_RE.test(uses) && step.with?.cache !== undefined)
+        return [`${label}: setup-node restores a package-manager cache`]
+      return []
+    })
+  }
+
+  it('finds the build jobs upstream of a publish or deploy', () => {
+    expect(upstreamSites).toEqual(
+      expect.arrayContaining([
+        'deploy-preview.yml:build-latest',
+        'release.yml:build-docker',
+        'release.yml:build-mcp',
+        'release.yml:build-web',
+        'sonarqube.yml:coverage',
+      ]),
+    )
+  })
+
+  it.each(upstreamSites)('%s restores no cache', (site) => {
+    const job = sites.find((s) => s.site === site)?.job as WorkflowJob
+    expect(cacheFindings(job)).toEqual([])
+  })
+
+  it('flags each way a cache can be restored', () => {
+    expect(
+      cacheFindings({
+        steps: [
+          { uses: SETUP_PNPM },
+          { uses: SETUP_PNPM, with: { 'cache-store': 'false' } },
+          { uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' },
+          { uses: 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' },
+          {
+            uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e',
+            with: { cache: 'pnpm' },
+          },
+        ],
+      }),
+    ).toHaveLength(4)
+  })
+
+  // `cache-store: 'false'` is only worth what the action does with it.
+  it("setup-pnpm restores nothing when cache-store is 'false'", () => {
+    const action = parseYaml(
+      readFileSync(join(REPO_ROOT, '.github/actions/setup-pnpm/action.yml'), 'utf-8'),
+    ) as { runs?: { steps?: WorkflowStep[] } }
+    const steps = action.runs?.steps ?? []
+    const caches = steps.filter((step) => CACHE_ACTION_RE.test(step.uses ?? ''))
+    expect(caches.length).toBeGreaterThan(0)
+    for (const step of caches) {
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
+      expect(step.if?.replace(/\s+/g, '')).toBe("${{inputs.cache-store=='true'}}")
+    }
+    const setupNode = steps.filter((step) => SETUP_NODE_RE.test(step.uses ?? ''))
+    expect(setupNode).toHaveLength(1)
+    for (const step of setupNode) {
+      expect(step.with?.cache).toBeUndefined()
+      // setup-node detects a package manager on its own unless told not to.
+      expect(step.with?.['package-manager-cache']).toBe(false)
+    }
+  })
+})

@@ -91,6 +91,10 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm
         if: steps.detect.outputs.analyze == 'true'
+        with:
+          # A cold store: the scan job uploads what this job produced with the
+          # Sonar token in reach, so nothing here is built from a shared cache.
+          cache-store: 'false'
 
       - name: Install dependencies
         if: steps.detect.outputs.analyze == 'true'

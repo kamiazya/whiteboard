@@ -136,6 +136,13 @@ and checks out the repository, runs a repository action, or runs `pnpm`, `npx`, 
 a script-running `npm` verb, and on a release checkout that keeps the token where the job
 does not push with it (only `advance-stable` does).
 
+Every build job upstream of a publish or deploy installs into a cold pnpm store
+(`cache-store: 'false'` on `setup-pnpm`): the store cache is keyed by the lockfile alone
+and written by default-branch jobs that run every dev and test dependency, and a store
+poisoned there would be packed into the output that the reported sha256 then certifies.
+`workflow-credentials.test.ts` fails on any job a publishing job `needs` that restores a
+cache.
+
 ### `build-mcp` and `publish-mcp` jobs (npm OIDC provenance)
 
 `build-mcp` steps (in order):

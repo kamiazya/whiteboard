@@ -175,6 +175,9 @@ jobs:
           # source tree may predate .node-version.
           # local-node-version.test.ts fails when this drifts from .node-version.
           node-version: 24
+          # A cold store: this job's output is published, and the store cache is
+          # written by default-branch jobs that run every dev and test dependency.
+          cache-store: 'false'
 
       - name: Install dependencies (workspace root)
         working-directory: .
@@ -291,6 +294,9 @@ jobs:
       - uses: ./.github/actions/setup-pnpm
         with:
           node-version: 24
+          # A cold store: this job's output is published, and the store cache is
+          # written by default-branch jobs that run every dev and test dependency.
+          cache-store: 'false'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -476,7 +482,7 @@ jobs:
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
           IMAGE_REPO: ghcr.io/${{ github.repository }}
-        run: cosign sign --yes $IMAGE_REPO@$DIGEST
+        run: cosign sign --yes "$IMAGE_REPO@$DIGEST"
 
   # The web deploy is split the same way as the publish halves: `build-web`
   # installs and builds apps/web — dependency code — with `contents: read` and
@@ -498,6 +504,10 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
+        with:
+          # A cold store: this job's output is published, and the store cache is
+          # written by default-branch jobs that run every dev and test dependency.
+          cache-store: 'false'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
