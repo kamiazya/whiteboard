@@ -59,6 +59,17 @@ jobs:
       - name: Audit (high+ vulnerabilities, prod deps only)
         run: pnpm audit:prod
 
+      # pnpm-lock.yaml above carries pnpm-workspace.yaml's overrides; an
+      # `npx @kamiazya/whiteboard-mcp` install carries none of them, so this
+      # audits what npm resolves for the packed package in an empty
+      # directory. Scheduled rather than on every PR: it needs the registry
+      # for the resolution itself, and a finding here is cleared by a DIRECT
+      # dependency bump or an upstream release, which no unrelated PR can
+      # do. `!cancelled()` so a merge-gate finding does not hide this one.
+      - name: Audit what a consumer installs (npm, no workspace overrides)
+        if: ${{ !cancelled() }}
+        run: pnpm audit:published
+
       - name: Say what a failure means, on the run page
         if: failure()
         run: |
@@ -72,4 +83,8 @@ jobs:
             echo 'A transitive package behind an override in `pnpm-workspace.yaml` is'
             echo 'raised by moving the override BOUND. Dependabot proposes no PR for'
             echo 'that class, which is why this workflow exists.'
+            echo
+            echo 'If only the consumer-install audit failed, the override does not help:'
+            echo 'overrides are not published. Raise the DIRECT dependency whose range'
+            echo 'admits the vulnerable version, or wait for its upstream fix.'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -27,6 +27,7 @@
     "test:watch": "vitest --project mcp-node",
     "check:local": "pnpm lint && pnpm secretlint && pnpm test:scripts && pnpm knip && pnpm audit:prod && pnpm typecheck",
     "audit:prod": "node tools/checks/src/audit-with-retry.mjs",
+    "audit:published": "node tools/checks/src/audit-published.mjs",
     "check:pr-title": "pnpm --filter @kamiazya/whiteboard-mcp check:pr-title",
     "verify:git-hooks": "node packages/mcp-server/scripts/verify-git-hooks.mjs",
     "typecheck": "pnpm -r typecheck",
