@@ -170,6 +170,18 @@ jobs:
           LCOV_SHA256: ${{ needs.coverage.outputs.lcov_sha256 }}
         run: echo "$LCOV_SHA256  tmp/coverage/lcov.info" | sha256sum -c -
 
+      # The scanner reads sonar-project.properties from the checked-out tree
+      # with the token in its environment, so where the token goes is pinned
+      # here: a command-line -D outranks the file, and a tree that sets
+      # sonar.host.url or the API base URL cannot redirect it. The organization
+      # and project key are pinned beside them and held equal to the file's by
+      # workflow-credentials.test.ts.
       - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.scanner.apiBaseUrl=https://api.sonarcloud.io
+            -Dsonar.organization=kamiazya
+            -Dsonar.projectKey=kamiazya_whiteboard

@@ -230,6 +230,35 @@ function nearestFirst(before: number[], after: number[], around: number, max: nu
   return nearest
 }
 
+/**
+ * Which of a quote's occurrences resolution would score around `around`,
+ * given every one of them: the index range `[from, to)` of `sorted`
+ * (ascending, as found) holding the `max` nearest, the lower of two equally
+ * near kept at the cut. The nearest of a sorted list are contiguous in it, so
+ * a range says it exactly.
+ *
+ * Exported because the canvas scores occurrences it has already collected
+ * from RENDERED text, and must bound them by this rule rather than a copy.
+ */
+export function scoredOccurrenceRange(
+  sorted: readonly number[],
+  around: number,
+  max: number = SCORED_OCCURRENCES_MAX,
+): { readonly from: number; readonly to: number } {
+  let split = 0
+  for (let hi = sorted.length; split < hi; ) {
+    const mid = (split + hi) >>> 1
+    if ((sorted[mid] as number) < around) split = mid + 1
+    else hi = mid
+  }
+  const before = sorted.slice(Math.max(0, split - max), split).reverse()
+  const after = sorted.slice(split, split + max)
+  let fromBefore = 0
+  for (const at of nearestFirst(before, after, around, max)) if (at < around) fromBefore += 1
+  const taken = Math.min(max, sorted.length)
+  return { from: split - fromBefore, to: split - fromBefore + taken }
+}
+
 const matchedBefore = (body: string, at: number, prefix: string): number =>
   sharedContext(prefix, 'before', (k) => body[at - 1 - k])
 

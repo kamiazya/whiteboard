@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MAX_DOCS_PER_STREAM } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
+import { DOCUMENT_PATH_MAX_LENGTH, WORKSPACE_SEGMENT_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { getReadyClientCount } from '../sync-audience.js'
@@ -87,6 +88,60 @@ describe('the sync route applying a subscribe batch', () => {
 
       expect(held.status).toBe(200)
       expect(fresh.status).toBe(400)
+      await close()
+    },
+    SETTLE,
+  )
+})
+
+describe('the sync route recording readiness', () => {
+  const ready = (doc: string) => ({ doc, message: { type: 'client_ready' } })
+
+  it(
+    'refuses a client_ready past the stream cap and keeps the set at the cap',
+    async () => {
+      const { post, close } = await openedRouter()
+      for (const doc of docs(MAX_DOCS_PER_STREAM)) {
+        expect((await post('message', ready(doc))).status).toBe(200)
+      }
+
+      const beyond = await post('message', ready('ws-cap/beyond'))
+      const held = await post('message', ready('ws-cap/doc-0'))
+      const now = (await (await post('subscribe', {})).json()) as { docs: string[] }
+
+      expect(beyond.status).toBe(400)
+      expect(await beyond.json()).toEqual({ error: 'too_many_subscriptions' })
+      expect(held.status).toBe(200)
+      expect(now.docs).toHaveLength(MAX_DOCS_PER_STREAM)
+      expect(now.docs).not.toContain('ws-cap/beyond')
+      await close()
+    },
+    SETTLE,
+  )
+})
+
+describe('the sync route bounding the doc keys it holds', () => {
+  const overLong = `${'h'.repeat(WORKSPACE_SEGMENT_MAX_LENGTH)}/${'p'.repeat(DOCUMENT_PATH_MAX_LENGTH + 1)}`
+
+  it.each([
+    ['an over-long subscribe', 'subscribe', { subscribe: [overLong] }],
+    ['an over-long unsubscribe', 'subscribe', { unsubscribe: [overLong] }],
+    ['an over-long client_ready', 'message', { doc: overLong, message: { type: 'client_ready' } }],
+    [
+      'a client_ready naming no workspace',
+      'message',
+      { doc: 'no-workspace-named', message: { type: 'client_ready' } },
+    ],
+  ] as const)(
+    'refuses %s as an invalid body',
+    async (_, route, body) => {
+      const { post, close } = await openedRouter()
+      const res = await post(route, body)
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe('invalid_request')
+      const now = (await (await post('subscribe', {})).json()) as { docs: string[] }
+      expect(now.docs).toEqual([])
       await close()
     },
     SETTLE,

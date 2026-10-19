@@ -167,3 +167,66 @@ describe('reading a library off a document', () => {
     ).toBe(true)
   })
 })
+
+// What a library may hold is bounded, because it is recomposed into the
+// registry on every read that resolves a stencil and its size is otherwise
+// whatever was written or synced.
+describe('the size of a stencil library', () => {
+  const sized = (count: number) =>
+    Object.fromEntries(
+      Array.from(
+        { length: count },
+        (_, index) => [`s${String(index).padStart(4, '0')}`, { displayName: `S${index}` }] as const,
+      ),
+    )
+  const write = (stencils: Record<string, unknown>) =>
+    bundledFacetRegistry.validateFacetWrite(VISUAL_STENCILS_KEY, { stencils })
+
+  it('accepts a library at the cap', () => {
+    expect(write(sized(256)).ok).toBe(true)
+  })
+
+  it('refuses a library over the cap at the write, naming the cap and the count', () => {
+    const result = write(sized(257))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toMatch(/at most 256 stencils/)
+    expect(result.message).toMatch(/257/)
+  })
+
+  it('refuses an oversized library by its count alone, before judging any entry', () => {
+    // Judging every entry first would hand the author one issue per bad
+    // stencil — tens of thousands of them in one message — and pay for
+    // every parse before the refusal that was coming anyway.
+    const bad = Object.fromEntries(
+      Array.from({ length: 300 }, (_, index) => [`s${index}`, { displayName: 7 }] as const),
+    )
+    const result = write(bad)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toMatch(/at most 256 stencils/)
+    expect(result.message).not.toMatch(/displayName/)
+  })
+
+  it('reads only the first stencils by name when a stored library is over the cap', () => {
+    // A library that arrived some other way than this write — a synced edit
+    // — is read rather than refused, and what is read stays bounded.
+    const library = readStencilLibrary({ [VISUAL_STENCILS_KEY]: { stencils: sized(300) } })
+    const names = Object.keys(library)
+    expect(names).toHaveLength(256)
+    expect(names[0]).toBe('s0000')
+    expect(names.at(-1)).toBe('s0255')
+  })
+
+  it('counts the cap over the stencils it keeps, so refused entries do not crowd out good ones', () => {
+    const stencils = {
+      ...Object.fromEntries(
+        Array.from({ length: 50 }, (_, index) => [`a${index}`, { displayName: '' }] as const),
+      ),
+      ...sized(256),
+    }
+    const library = readStencilLibrary({ [VISUAL_STENCILS_KEY]: { stencils } })
+    expect(Object.keys(library)).toHaveLength(256)
+    expect(Object.keys(library)[0]).toBe('s0000')
+  })
+})

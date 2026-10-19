@@ -57,6 +57,16 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
       stencils: { bad: { displayName: 'Bad', color: 'red' } },
       names: [/bad/, /color/, /"1" to "6"/],
     },
+    {
+      what: 'more stencils than a library may hold',
+      stencils: Object.fromEntries(
+        Array.from({ length: 300 }, (_, index) => [
+          `s${index}`,
+          { displayName: 'S', facets: { 'nope.nothing/v0': {} } },
+        ]),
+      ),
+      names: [/at most 256 stencils/, /\b300\b/],
+    },
   ])('$what, naming the stencil and what is wrong', async ({ stencils, names }) => {
     const deps = await libraryDocument()
     const refusal = await writeLibrary(deps, stencils).then(

@@ -278,6 +278,32 @@ describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 
+  // A character reference decodes before CSS reads the text, in an attribute
+  // value and in SVG `<style>` text alike (the HTML parser decodes both inside
+  // foreign content, and so does XML). Named references count too: HTML's
+  // table spells `\\` as `&bsol;`, `@` as `&commat;` and `(` as `&lpar;`.
+  it.each([
+    '<svg><rect style="fill: &#117;rl(https://evil.example/x)"/></svg>',
+    '<svg><rect style="fill: &#x75;rl(//evil.example)"/></svg>',
+    '<svg><rect style="fill: u&#92;72l(//evil.example)"/></svg>',
+    '<svg><rect style="&#64;import \'//evil.example/x.css\'"/></svg>',
+    '<svg><rect style="fill: u&bsol;72l(//evil.example)"/></svg>',
+    '<svg><rect style="fill: url&lpar;//evil.example)"/></svg>',
+    '<svg><style>&#64;import "//evil.example/x.css";</style></svg>',
+    '<svg><style>g{background:&#x75;rl(//evil.example)}</style></svg>',
+    '<svg><style>&commat;import "//evil.example/x.css";</style></svg>',
+  ])('refuses the character reference in %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it("accepts XML's predefined references in CSS, and a reference in label text", () => {
+    expect(
+      fragmentIsEmbeddable(
+        '<svg style="font-family: &quot;trebuchet ms&quot;;"><style>.a&gt;rect{fill:red}</style><text>&#64;import &amp; &#117;rl(</text></svg>',
+      ),
+    ).toBe(true)
+  })
+
   it('accepts an ordinary inline style, and label text naming @import', () => {
     expect(
       fragmentIsEmbeddable(

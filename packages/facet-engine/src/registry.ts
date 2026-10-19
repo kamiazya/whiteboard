@@ -196,15 +196,26 @@ function assertAssetShapes(plugin: FacetPlugin): void {
   ] as const
   for (const { kind, entries, schema } of kinds) {
     for (const [name, asset] of Object.entries(entries ?? {})) {
-      assertAssetName(plugin.id, name)
-      const result = schema.safeParse(asset)
-      if (!result.success) {
-        throw new Error(
-          `plugin "${plugin.id}" ${kind} asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
-        )
-      }
+      assertAssetShape(plugin.id, kind, name, schema, asset)
     }
   }
+}
+
+function assertAssetShape<S extends z.ZodType>(
+  pluginId: string,
+  kind: string,
+  name: string,
+  schema: S,
+  asset: unknown,
+): z.output<S> {
+  assertAssetName(pluginId, name)
+  const result = schema.safeParse(asset)
+  if (!result.success) {
+    throw new Error(
+      `plugin "${pluginId}" ${kind} asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+    )
+  }
+  return result.data
 }
 
 /**
@@ -530,14 +541,51 @@ function migrateForward(
   return result.success ? { kind: 'resolved', value: result.data } : { kind: 'dropped' }
 }
 
+function definitionLookup(
+  byId: ReadonlyMap<string, FacetPlugin>,
+): (namespace: string, name: string) => FacetDefinition | undefined {
+  return (namespace, name) => byId.get(namespace)?.facets.find((facet) => facet.name === name)
+}
+
+const currentKey = (namespace: string, definition: FacetDefinition): string =>
+  `${namespace}.${definition.name}/${definition.version}`
+
+/**
+ * Why a registry BUILD of `plugins` plus a workspace library holding this one
+ * stencil would refuse it — the same message, from the same checks — or
+ * `undefined` when it would not, without building anything.
+ *
+ * A library is content and its size is whatever was written, so finding its
+ * refused entries by building a registry per entry made one bad library cost
+ * as many full builds as it had entries, on every read. `plugins` must
+ * already build on their own (they are a registry's): only then is the
+ * stencil's own shape and facet payloads all that can refuse it.
+ */
+export function workspaceStencilRefusal(
+  plugins: readonly FacetPlugin[],
+): (name: string, stencil: unknown) => string | undefined {
+  const definitionOf = definitionLookup(indexPlugins(plugins))
+  return (name, stencil) => {
+    try {
+      const asset = assertAssetShape(
+        WORKSPACE_PLUGIN_ID,
+        'stencil',
+        name,
+        stencilAssetSchema,
+        stencil,
+      )
+      for (const [key, payload] of Object.entries(asset.facets)) {
+        assertStencilFacet(`${WORKSPACE_PLUGIN_ID}.${name}`, key, payload, definitionOf, currentKey)
+      }
+      return undefined
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }
+}
+
 export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
-  const byId = indexPlugins(plugins)
-
-  const definitionOf = (namespace: string, name: string): FacetDefinition | undefined =>
-    byId.get(namespace)?.facets.find((facet) => facet.name === name)
-
-  const currentKey = (namespace: string, definition: FacetDefinition): string =>
-    `${namespace}.${definition.name}/${definition.version}`
+  const definitionOf = definitionLookup(indexPlugins(plugins))
 
   const { themes, icons, stencils } = collectAssets(plugins)
   assertSpecimenIconsRegistered(plugins, icons)
