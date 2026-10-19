@@ -28,6 +28,7 @@ import {
   withoutStoredEntry,
   withStoredEntry,
 } from './stored-record.js'
+import { trimTrailingSlashes } from './trim-trailing-slashes.js'
 
 const STORE_KEY = 'whiteboard:replica-offline-passkeys'
 const SALT_BYTES = 32
@@ -46,7 +47,7 @@ export type OfflinePasskeyCredentials = Pick<CredentialsContainer, 'create' | 'g
 
 /** The same (daemon, workspace) key `replica-wrapped-key-store.ts` uses, so the two records pair up. */
 const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
-  `${daemonBaseUrl.replace(/\/+$/, '')}\u0000${workspaceId}`
+  `${trimTrailingSlashes(daemonBaseUrl)}\u0000${workspaceId}`
 
 function load(): StoredRecord<OfflinePasskey> {
   return readStoredRecord(safeGetItem(STORE_KEY), offlinePasskeySchema)

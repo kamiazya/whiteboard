@@ -33,6 +33,7 @@ import {
   withoutStoredEntry,
   withStoredEntry,
 } from './stored-record.js'
+import { trimTrailingSlashes } from './trim-trailing-slashes.js'
 
 const STORE_KEY = 'whiteboard:replica-sealed-keys'
 
@@ -44,7 +45,7 @@ const STORE_KEY = 'whiteboard:replica-sealed-keys'
 const SEPARATOR = '\u0000'
 
 /** Same normalisation the passkey pin store uses, so one daemon is one key. */
-const daemonKey = (daemonBaseUrl: string): string => daemonBaseUrl.replace(/\/+$/, '')
+const daemonKey = (daemonBaseUrl: string): string => trimTrailingSlashes(daemonBaseUrl)
 
 const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
   `${daemonKey(daemonBaseUrl)}${SEPARATOR}${workspaceId}`

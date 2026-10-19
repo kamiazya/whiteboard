@@ -87,6 +87,14 @@ describe('the stored record', () => {
     expect(loadOfflinePasskey('http://127.0.0.1:4000', WORKSPACE)).toBeNull()
   })
 
+  // A daemon URL is a value a person can type; a long slash run that does
+  // not end it must cost a linear trim, not a regex retried from every slash.
+  it('keys a daemon URL holding a long interior slash run in linear time', () => {
+    const started = performance.now()
+    expect(loadOfflinePasskey(`${'/'.repeat(100_000)}x`, WORKSPACE)).toBeNull()
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
   it('drops one record and leaves the others', () => {
     saveOfflinePasskey(DAEMON, 'a', RECORD)
     saveOfflinePasskey(DAEMON, 'b', RECORD)
