@@ -49,16 +49,39 @@ const decodeDataUrl = (href: string): { mime: string; bytes: Uint8Array } | unde
   return { mime: mime.toLowerCase(), bytes }
 }
 
+/**
+ * SVG text that asks resvg for work its declared size does not bound. A
+ * filter is rasterised at device resolution, synchronously: one feMorphology
+ * of radius 10 over a 100px image costs 46ms at export scale 1 and 17.7s at
+ * scale 8, and every further primitive adds as much again
+ * (`scripts/measure/nested-svg-filter-cost.mjs`; masks, patterns and `<use>`
+ * fan-out measured flat). So every way of ASKING for a filter refuses — a
+ * `<filter>` or `fe*` element under any prefix, a `filter` attribute or CSS
+ * property (a comment may sit before its `:`) — read after XML character
+ * references are decoded, as does a CSS escape that could spell one, an
+ * entity that could expand into one, and a nested `<image>`, which resvg
+ * does not draw today, so refusing one costs nothing it would show. The bare
+ * word in a label asks for nothing and is kept.
+ */
+const UNBOUNDED_SVG_WORK =
+  /<(?:[\w.-]+:)?(?:filter\b|fe[a-z]|image\b)|\bfilter\s*(?:[:=]|\/\*)|<!entity|\\/i
+
+const asksForUnboundedWork = (mime: string, bytes: Uint8Array): boolean =>
+  mime === 'image/svg+xml' &&
+  UNBOUNDED_SVG_WORK.test(unescapeAttribute(new TextDecoder().decode(bytes)))
+
 /** The pixels a `data:` href declares, or `undefined` when it cannot be sized. */
 const pixelsOf = (href: string): number | undefined => {
   const decoded = decodeDataUrl(unescapeAttribute(href))
-  return decoded && declaredPixels(decoded.mime, decoded.bytes)
+  if (decoded === undefined || asksForUnboundedWork(decoded.mime, decoded.bytes)) return undefined
+  return declaredPixels(decoded.mime, decoded.bytes)
 }
 
 /**
  * The SVG with every image resvg would read from outside it dropped, and
  * every inline `data:` image it could not size dropped too — an unknown type,
- * an unreadable header, an ambiguous encoding. Throws `ExportTooLargeError`
+ * an unreadable header, an ambiguous encoding, an SVG asking for filter work
+ * its size does not bound. Throws `ExportTooLargeError`
  * when the images left declare more pixels between them than the export
  * budget, since resvg decodes each at the size its header declares, on the
  * serving loop, however few bytes encoded it.

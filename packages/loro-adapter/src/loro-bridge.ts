@@ -1,5 +1,4 @@
 import {
-  type AnnotationAnchor,
   anchoredOnAny,
   type CanvasComment,
   type CanvasEdge,
@@ -10,14 +9,10 @@ import {
   type SpatialNode,
   spatialNodeSchema,
   storedTagsSchema,
-  threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
 import { readCanvasComments } from './annotations.js'
-import {
-  migrateCanvasCommentsToThreads,
-  readCommentThreads,
-  writeThreadInto,
-} from './comment-threads.js'
+import { deleteCommentInto, writeCommentInto } from './canvas-comment-write.js'
+import { migrateCanvasCommentsToThreads } from './comment-threads.js'
 import {
   CANVAS_KEY,
   CANVAS_TAGS_FIELD,
@@ -60,7 +55,7 @@ function readCanvasTags(doc: DocumentContainers): string[] | undefined {
  */
 function dropLockInto(doc: DocumentContainers, mapKey: string, id: string): void {
   const locksMap = doc.getMap(mapKey)
-  if (locksMap.keys().includes(id)) locksMap.delete(id)
+  if (locksMap.get(id) !== undefined) locksMap.delete(id)
 }
 function nodeToFields(node: SpatialNode): Fields {
   // Refuse non-finite geometry LOUDLY: readSpatialCanvas round-trips every
@@ -138,30 +133,6 @@ function lineToFields(line: CanvasLine): Fields {
   if (line.bends !== undefined) fields.bends = line.bends
   if (line.facets !== undefined) fields.facets = line.facets
   return fields
-}
-
-function assertWritableComment(comment: CanvasComment): void {
-  // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
-  // comment through the Zod schema and silently drops failures, so a NaN
-  // anchor written here would delete the comment for every reader.
-  for (const [field, value] of [
-    ['x', comment.x],
-    ['y', comment.y],
-  ] as const) {
-    if (!Number.isFinite(value)) {
-      throw new TypeError(
-        `canvas comment "${comment.id}" has a non-finite ${field} (${value}); the anchor must be finite`,
-      )
-    }
-  }
-  // The same class of loss one field over: the thread this comment becomes
-  // carries both references on one spatial anchor, which the anchor schema
-  // refuses, so a reader would drop the comment for everyone.
-  if (comment.targetNodeId !== undefined && comment.targetEdgeId !== undefined) {
-    throw new TypeError(
-      `canvas comment "${comment.id}" names both a node and an edge; a comment is about one of them`,
-    )
-  }
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
@@ -283,9 +254,26 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
 }
 
 /**
- * Returns false (writing nothing) when the node id is absent.
+ * Removes one node and its lock, and NOT what is anchored on it — every
+ * caller follows with `sweepAnchoredInto`. Returns false (writing nothing)
+ * when the node id is absent.
+ */
+function deleteNodeInto(doc: DocumentContainers, nodeId: string): boolean {
+  const nodesMap = doc.getMap(NODES_KEY)
+  if (nodesMap.get(nodeId) === undefined) return false
+  nodesMap.delete(nodeId)
+  dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
+  return true
+}
+
+/**
+ * Removes every edge and line anchored on one of `ids`, with its lock.
  *
- * The sweep is the model's `anchoredOnAny` — the same definition the
+ * Takes a SET so a run of node removals pays one pass: every edge and line is
+ * read across the wasm boundary and schema-parsed, and doing that once per
+ * removed node made clearing a board quadratic.
+ *
+ * The test is the model's `anchoredOnAny` — the same definition the
  * editor's command, the proposal adopt and the agent's `node.remove` apply —
  * over BOTH collections an end can name a node from. It followed edges
  * alone for a while, so a box deleted in the editor left its ink anchored to
@@ -294,13 +282,8 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
  * share the edge lock plane (see `writeSpatialCanvas`), so a cascaded line's
  * lock goes the way a cascaded edge's does.
  */
-function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean {
-  const nodesMap = doc.getMap(NODES_KEY)
-  if (!nodesMap.keys().includes(nodeId)) return false
-
-  nodesMap.delete(nodeId)
-  dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
-  const ids = new Set([nodeId])
+function sweepAnchoredInto(doc: DocumentContainers, ids: ReadonlySet<string>): void {
+  if (ids.size === 0) return
   const edgesMap = doc.getMap(EDGES_KEY)
   for (const edgeId of edgesMap.keys()) {
     const parsed = canvasEdgeSchema.safeParse(liftLegacyExtension(edgesMap.get(edgeId)))
@@ -317,7 +300,6 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
       dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
     }
   }
-  return true
 }
 
 function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
@@ -327,7 +309,7 @@ function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
 /** Returns false (writing nothing) when the line id is absent. */
 function deleteLineInto(doc: DocumentContainers, lineId: string): boolean {
   const linesMap = doc.getMap(LINES_KEY)
-  if (!linesMap.keys().includes(lineId)) return false
+  if (linesMap.get(lineId) === undefined) return false
   linesMap.delete(lineId)
   dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
   return true
@@ -336,71 +318,9 @@ function deleteLineInto(doc: DocumentContainers, lineId: string): boolean {
 /** Returns false (writing nothing) when the edge id is absent. */
 function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   const edgesMap = doc.getMap(EDGES_KEY)
-  if (!edgesMap.keys().includes(edgeId)) return false
+  if (edgesMap.get(edgeId) === undefined) return false
   edgesMap.delete(edgeId)
   dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
-  return true
-}
-
-// Shared with writeCanvasComment/deleteCanvasComment below, so field
-// projection (including assertWritableComment's loud non-finite-anchor refusal)
-// cannot drift between the single-commit and withSpatialBatch paths.
-/** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
-function flatCanCarry(anchor: AnnotationAnchor): boolean {
-  return anchor.kind === 'spatial' && anchor.nodeIds === undefined && anchor.width === undefined
-}
-
-function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  // Refuses a non-finite anchor loudly and before anything is stored — a
-  // thread whose anchor fails the schema would be dropped by every reader.
-  assertWritableComment(comment)
-  migrateCanvasCommentsToThreads(doc)
-  const incoming = threadFromCanvasComment(comment)
-  const held = readCommentThreads(doc).find((thread) => thread.id === comment.id)
-  if (held === undefined) {
-    writeThreadInto(doc, incoming)
-    return
-  }
-  // A flat comment is a PROJECTION of its thread, and writing a projection
-  // back verbatim loses what it could not carry. Two things it cannot:
-  // - an anchor beyond a point, a node or an edge. A thread on a node's
-  //   text projects as a comment on that node, a node set or a region as a
-  //   comment at its corner, and written back each would become that
-  //   point. The text and the status are what a flat write can honestly
-  //   change; the anchor it saw is the one it keeps.
-  // - the opening message's identity. The projection borrows the thread's
-  //   id for its one message, which is right for a comment the canvas
-  //   opened and wrong for one an MCP peer opened with a message id of its
-  //   own: written under the thread's id, an edit ADDED a message and
-  //   sorted it ahead of the original, which then read as a reply.
-  const opening = held.messages[0]
-  const edited = incoming.messages[0]
-  if (opening === undefined || edited === undefined) {
-    writeThreadInto(doc, incoming)
-    return
-  }
-  writeThreadInto(doc, {
-    ...incoming,
-    anchor: flatCanCarry(held.anchor) ? incoming.anchor : held.anchor,
-    messages: [
-      {
-        ...edited,
-        id: opening.id,
-        ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
-        ...(opening.author === undefined ? {} : { author: opening.author }),
-      },
-    ],
-  })
-}
-
-/** Returns false (writing nothing) when the comment id is absent. */
-function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean {
-  // The legacy entry goes too, or the fallback read below would resurrect a
-  // comment this call closed.
-  migrateCanvasCommentsToThreads(doc)
-  const threadsMap = doc.getMap(THREADS_KEY)
-  if (!threadsMap.keys().includes(commentId)) return false
-  threadsMap.delete(commentId)
   return true
 }
 
@@ -436,7 +356,9 @@ export function writeSpatialEdge(doc: DocumentContainers, edge: CanvasEdge): voi
  * Idempotent and a no-op (no commit) for an id absent from the doc.
  */
 export function deleteSpatialNode(doc: DocumentContainers, nodeId: string): void {
-  if (deleteNodeCascadeInto(doc, nodeId)) doc.commit()
+  if (!deleteNodeInto(doc, nodeId)) return
+  sweepAnchoredInto(doc, new Set([nodeId]))
+  doc.commit()
 }
 
 /**
@@ -513,15 +435,17 @@ export function reconcileSpatialCanvasInto(
   next: SpatialCanvas,
 ): boolean {
   let wrote = false
-  const writer = spatialBatchWriter(doc, () => {
+  const { writer, settle } = spatialBatchWriter(doc, () => {
     wrote = true
   })
   // Order is load-bearing: a node's delete cascades to its edges, so the
-  // node pass runs before the edge pass exactly as it always has.
+  // node pass runs before the edge pass exactly as it always has. Its
+  // removals come last in that pass, so they share one sweep.
   reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
   reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
   reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
   reconcileById(prev.comments ?? [], next.comments ?? [], writer.writeComment, writer.deleteComment)
+  settle()
 
   const facetsMoved = !sameValue(prev.facets, next.facets)
   const tagsMoved = !sameValue(prev.tags, next.tags)
@@ -548,38 +472,66 @@ export interface SpatialBatchWriter {
   deleteComment(commentId: string): void
 }
 
-/** The writes `withSpatialBatch` and the reconcile share; `markWrote` fires on each that changed the doc. */
-function spatialBatchWriter(doc: DocumentContainers, markWrote: () => void): SpatialBatchWriter {
-  return {
+/**
+ * The writes `withSpatialBatch` and the reconcile share; `markWrote` fires on
+ * each that changed the doc.
+ *
+ * A node removal's cascade is DEFERRED to the next write of any other kind,
+ * or to `settle()`, which the owner calls once the writes are done — so a
+ * run of node removals sweeps the edges and lines once. Deferring no further
+ * than the next write keeps every write seeing the canvas it always saw: an
+ * edge written after its node was removed survives, as it did when each
+ * removal swept at once.
+ */
+function spatialBatchWriter(
+  doc: DocumentContainers,
+  markWrote: () => void,
+): { writer: SpatialBatchWriter; settle: () => void } {
+  const removedNodes = new Set<string>()
+  const settle = (): void => {
+    sweepAnchoredInto(doc, removedNodes)
+    removedNodes.clear()
+  }
+  const writer: SpatialBatchWriter = {
     writeNode(node) {
+      settle()
       writeNodeInto(doc, node)
       markWrote()
     },
     writeEdge(edge) {
+      settle()
       writeEdgeInto(doc, edge)
       markWrote()
     },
     deleteNode(nodeId) {
-      if (deleteNodeCascadeInto(doc, nodeId)) markWrote()
+      if (!deleteNodeInto(doc, nodeId)) return
+      removedNodes.add(nodeId)
+      markWrote()
     },
     deleteEdge(edgeId) {
+      settle()
       if (deleteEdgeInto(doc, edgeId)) markWrote()
     },
     writeLine(line) {
+      settle()
       writeLineInto(doc, line)
       markWrote()
     },
     deleteLine(lineId) {
+      settle()
       if (deleteLineInto(doc, lineId)) markWrote()
     },
     writeComment(comment) {
+      settle()
       writeCommentInto(doc, comment)
       markWrote()
     },
     deleteComment(commentId) {
+      settle()
       if (deleteCommentInto(doc, commentId)) markWrote()
     },
   }
+  return { writer, settle }
 }
 
 /**
@@ -606,10 +558,17 @@ export function withSpatialBatch(
   fn: (writer: SpatialBatchWriter) => void,
 ): void {
   let wrote = false
-  const writer = spatialBatchWriter(doc, () => {
+  const { writer, settle } = spatialBatchWriter(doc, () => {
     wrote = true
   })
-  fn(writer)
+  try {
+    fn(writer)
+  } finally {
+    // On a throw too: the removals `fn` already made were cascaded before it
+    // threw when each swept at once, and the pending ops a caller converges
+    // from must still hold no edge anchored on a removed node.
+    settle()
+  }
   // Success path only — a finally-commit would break the error contract
   // above (the session fallback's own commit must stay the only one).
   if (wrote) doc.commit()
@@ -714,7 +673,11 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   // shape the canvas renderer still takes.
   // With the nodes in hand: a passage of a node's text projects as a comment
   // on that node, which needs the node's corner to stand at.
-  const comments = readCanvasComments(doc, (id) => nodes.find((node) => node.id === id))
+  // The FIRST node with an id wins, as a scan from the front would answer: two
+  // stored keys can hold one id only in a record a broken writer left.
+  const nodeById = new Map<string, SpatialNode>()
+  for (const node of nodes) if (!nodeById.has(node.id)) nodeById.set(node.id, node)
+  const comments = readCanvasComments(doc, (id) => nodeById.get(id))
 
   const canvas: SpatialCanvas = {
     nodes,

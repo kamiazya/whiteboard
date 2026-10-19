@@ -17,6 +17,13 @@ import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const ROOT = REPO_ROOT
 const AUDIT_WORKFLOW = '.github/workflows/audit.yml'
+const RELEASE_WORKFLOW = '.github/workflows/release.yml'
+
+// The second audit: the published package's own resolution, with npm and
+// none of pnpm-workspace.yaml's overrides (tools/checks/src/audit-published.mjs).
+// It is NOT the merge gate's command, so it is held apart from the
+// byte-identical comparison below rather than allowed to break it.
+const PUBLISHED_AUDIT = 'pnpm audit:published'
 
 interface WorkflowStep {
   name: string
@@ -40,6 +47,13 @@ async function auditCommandsIn(workflowPath: string, jobId: string): Promise<str
   return job.steps
     .map((step) => step.run)
     .filter((run): run is string => run?.startsWith('pnpm audit') === true)
+    .filter((run) => !run.startsWith(PUBLISHED_AUDIT))
+}
+
+async function stepsOf(workflowPath: string, jobId: string) {
+  const job = (await jobsOf(workflowPath)).find((candidate) => candidate.id === jobId)
+  if (job === undefined) throw new Error(`${workflowPath} has no \`${jobId}\` job`)
+  return job.steps
 }
 
 describe('the scheduled audit', () => {
@@ -71,5 +85,40 @@ describe('the scheduled audit', () => {
   it('finds the command it is comparing', async () => {
     expect(await auditCommandsIn(AUDIT_WORKFLOW, 'audit')).toEqual(['pnpm audit:prod'])
     expect(await auditCommandsIn('.github/workflows/ci.yml', 'check')).toEqual(['pnpm audit:prod'])
+  })
+})
+
+// pnpm-lock.yaml carries the workspace's overrides and a consumer's install
+// carries none, so the merge-gate audit can report a floor as cleared that
+// `npx @kamiazya/whiteboard-mcp` never gets. The published audit is where
+// that resolution is read; these pin that it actually runs.
+describe('the published-resolution audit', () => {
+  it('is a root script pointing at the published-audit runner', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')) as {
+      scripts: Record<string, string>
+    }
+    expect(pkg.scripts['audit:published']).toBe('node tools/checks/src/audit-published.mjs')
+  })
+
+  it('runs on the schedule even when the merge-gate audit failed first', async () => {
+    const steps = await stepsOf(AUDIT_WORKFLOW, 'audit')
+    const published = steps.find((step) => step.run === PUBLISHED_AUDIT)
+    expect(published, `${AUDIT_WORKFLOW} does not run \`${PUBLISHED_AUDIT}\``).toBeDefined()
+    // A step after a failed one is skipped by default, so without this a
+    // merge-gate finding would hide every consumer-side one behind it.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
+    expect(published?.if).toBe('${{ !cancelled() }}')
+  })
+
+  it('audits the packed release tarball before it is uploaded for publishing', async () => {
+    const steps = await stepsOf(RELEASE_WORKFLOW, 'build-mcp')
+    const pack = steps.findIndex((step) => step.name === 'Pack the tarball')
+    const audit = steps.findIndex((step) => step.run === `${PUBLISHED_AUDIT} --tarball "$TARBALL"`)
+    const upload = steps.findIndex((step) => step.name === 'Upload the tarball for publish-mcp')
+    expect(pack, 'build-mcp has no `Pack the tarball` step').toBeGreaterThanOrEqual(0)
+    expect(audit, `build-mcp does not run \`${PUBLISHED_AUDIT}\` on the tarball`).toBeGreaterThan(
+      pack,
+    )
+    expect(upload).toBeGreaterThan(audit)
   })
 })

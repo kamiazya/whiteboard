@@ -193,6 +193,49 @@ describe('sign-in attempts', () => {
       expect(await capped.take(neighbour.state, neighbour.browserBinding, T0 + 50)).not.toBeNull()
     })
 
+    // Concurrent begins each count the table before any of them inserts, so
+    // unless room-making and the insert are one step, a burst overshoots the
+    // ceiling and the next burst sheds far more than it adds — down past the
+    // flooding source's own attempts to everybody else's.
+    it('sheds at most one attempt per begin under a concurrent flood', async () => {
+      const maxPending = 10
+      const capped = createSignInAttemptStore(handle.db, { maxPending })
+      const flooder = '198.51.100.9'
+      for (let i = 0; i < maxPending; i++) {
+        await capped.begin({
+          providerId: 'corp',
+          returnTo: '/',
+          source: flooder,
+          now: T0 + i,
+          ttlMs: TTL,
+        })
+      }
+      const victim = await capped.begin({
+        providerId: 'corp',
+        returnTo: '/',
+        source: '203.0.113.7',
+        now: T0 + maxPending,
+        ttlMs: TTL,
+      })
+      const pending = async () =>
+        (await handle.rawDb.selectFrom('signInAttempts').select('state').execute()).length
+      for (let burst = 1; burst <= 2; burst++) {
+        await Promise.all(
+          Array.from({ length: 2 * maxPending }, (_, i) =>
+            capped.begin({
+              providerId: 'corp',
+              returnTo: '/',
+              source: flooder,
+              now: T0 + 100 * burst + i,
+              ttlMs: TTL,
+            }),
+          ),
+        )
+        expect(await pending()).toBe(maxPending)
+      }
+      expect(await capped.take(victim.state, victim.browserBinding, T0 + 1000)).not.toBeNull()
+    })
+
     it('counts an IPv4-mapped IPv6 address as its IPv4 address', async () => {
       for (const source of ['198.51.100.9', '::ffff:198.51.100.9', '::ffff:c633:6409']) {
         await victimBegins(attempts, source)

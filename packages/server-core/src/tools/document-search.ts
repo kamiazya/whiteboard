@@ -68,6 +68,7 @@ function collectSearchable(
   parsed: DocumentSearchInput,
 ): SearchCandidate[] {
   const searchable: SearchCandidate[] = []
+  const wanted = parsed.tags === undefined ? undefined : new Set(parsed.tags)
   for (const entry of entries) {
     const facts = content.get(entry.documentId)
     // Narrowing for `Map.get`, not a branch: `factsFor` sets an entry
@@ -79,13 +80,8 @@ function collectSearchable(
     if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
     // ONE bearer carries every listed tag (ADR-0040 decision 3): a note
     // by its frontmatter, a board by its own tags, or one node or edge.
-    let named: string[] = []
-    if (parsed.tags !== undefined) {
-      const wanted = new Set(parsed.tags)
-      const carrying = facts.bearers.filter((bearer) => carriesEvery(bearer.tags, wanted))
-      if (carrying.length === 0) continue
-      named = carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
-    }
+    const named = wanted === undefined ? [] : namedCarrying(facts.bearers, wanted)
+    if (named === undefined) continue
     searchable.push({
       documentId: entry.documentId,
       path: entry.path,
@@ -96,6 +92,19 @@ function collectSearchable(
     })
   }
   return searchable
+}
+
+/**
+ * What the bearers carrying every `wanted` tag are known by, or `undefined`
+ * when none carries them all and the document is not a candidate.
+ */
+function namedCarrying(
+  bearers: ContentFacts['bearers'],
+  wanted: ReadonlySet<string>,
+): string[] | undefined {
+  const carrying = bearers.filter((bearer) => carriesEvery(bearer.tags, wanted))
+  if (carrying.length === 0) return undefined
+  return carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
 }
 
 /**

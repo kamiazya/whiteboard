@@ -22,6 +22,7 @@ import {
   okfActorInputSchema,
   placeTextAnchor,
   type SpatialAnchor,
+  type SpatialCanvas,
   type TextAnchor,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -126,6 +127,25 @@ function mintThreadId(taken: ReadonlySet<string>): string {
 }
 
 /**
+ * A board's ids, indexed once per batch: an anchor may name a board's worth of
+ * nodes and a batch may hold many anchors, so looking each id up by walking the
+ * board is ops x ids x nodes of work under the workspace write lock.
+ */
+interface BoardIndex {
+  readonly nodes: ReadonlyMap<string, SpatialCanvas['nodes'][number]>
+  readonly edgeIds: ReadonlySet<string>
+}
+
+function boardIndexOf(content: DocumentContent): BoardIndex | undefined {
+  if (content.kind === 'markdown') return undefined
+  const { nodes, edges } = content.canvas
+  return {
+    nodes: new Map(nodes.map((node) => [node.id, node])),
+    edgeIds: new Set(edges.map((edge) => edge.id)),
+  }
+}
+
+/**
  * The anchor as it is stored, or why it names nothing on this document.
  * Checked at write time because an orphaned thread (ADR-0026 decision 4) is
  * what a LATER deletion leaves behind: opening one already orphaned is a typo
@@ -137,25 +157,28 @@ function mintThreadId(taken: ReadonlySet<string>): string {
 function storedAnchor(
   anchor: AnnotationAnchor,
   content: DocumentContent,
+  board: BoardIndex | undefined,
 ): { readonly anchor: AnnotationAnchor } | { readonly refusal: string } {
   if (anchor.kind === 'document') return { anchor }
   if (anchor.kind === 'spatial') {
-    const refusal = spatialAnchorRefusal(anchor, content)
+    const refusal = spatialAnchorRefusal(anchor, board)
     return refusal === undefined ? { anchor } : { refusal }
   }
-  return storedTextAnchor(anchor, content)
+  return storedTextAnchor(anchor, content, board)
 }
 
-function spatialAnchorRefusal(anchor: SpatialAnchor, content: DocumentContent): string | undefined {
-  if (content.kind === 'markdown') {
+function spatialAnchorRefusal(
+  anchor: SpatialAnchor,
+  board: BoardIndex | undefined,
+): string | undefined {
+  if (board === undefined) {
     return 'a markdown document has no canvas to anchor to; anchor to a quoted passage (kind: text) or to the document as a whole (kind: document)'
   }
-  const { nodes, edges } = content.canvas
   const missingNode = [anchor.nodeId, ...(anchor.nodeIds ?? [])].find(
-    (id) => id !== undefined && !nodes.some((node) => node.id === id),
+    (id) => id !== undefined && !board.nodes.has(id),
   )
   if (missingNode !== undefined) return `node "${missingNode}" is not on the canvas`
-  if (anchor.edgeId !== undefined && !edges.some((edge) => edge.id === anchor.edgeId)) {
+  if (anchor.edgeId !== undefined && !board.edgeIds.has(anchor.edgeId)) {
     return `edge "${anchor.edgeId}" is not on the canvas`
   }
   return undefined
@@ -165,16 +188,17 @@ function spatialAnchorRefusal(anchor: SpatialAnchor, content: DocumentContent): 
 function quotedText(
   nodeId: string | undefined,
   content: DocumentContent,
+  board: BoardIndex | undefined,
 ): { readonly text: string } | { readonly refusal: string } {
   if (nodeId === undefined) {
     return content.kind === 'markdown'
       ? { text: content.body }
       : { refusal: 'a canvas has no body to quote; name the text node the passage is in (nodeId)' }
   }
-  if (content.kind === 'markdown') {
+  if (board === undefined) {
     return { refusal: `a markdown document has no node "${nodeId}"; omit nodeId to quote its body` }
   }
-  const node = content.canvas.nodes.find((candidate) => candidate.id === nodeId)
+  const node = board.nodes.get(nodeId)
   if (node === undefined) return { refusal: `node "${nodeId}" is not on the canvas` }
   const text = nodeText(node)
   return text === undefined ? { refusal: `node "${nodeId}" is not a text node` } : { text }
@@ -183,8 +207,9 @@ function quotedText(
 function storedTextAnchor(
   anchor: TextAnchor,
   content: DocumentContent,
+  board: BoardIndex | undefined,
 ): { readonly anchor: TextAnchor } | { readonly refusal: string } {
-  const quoted = quotedText(anchor.nodeId, content)
+  const quoted = quotedText(anchor.nodeId, content, board)
   if ('refusal' in quoted) return quoted
   const placed = placeTextAnchor(quoted.text, anchor)
   if (placed !== undefined) return { anchor: placed }
@@ -202,6 +227,8 @@ interface ThreadEditContext {
   readonly doc: LoroDoc
   /** What the document held before the batch; no op here changes it. */
   readonly content: DocumentContent
+  /** `content`'s board ids, or `undefined` for a markdown document. */
+  readonly board: BoardIndex | undefined
   /** The thread ids this document holds, grown as the batch opens more. */
   readonly held: Set<string>
   /**
@@ -268,7 +295,7 @@ const THREAD_EDIT_HANDLERS: {
     }
     const blank = blankRefusal(op.body)
     if (blank !== undefined) throw new ThreadEditError(index, op.op, blank)
-    const stored = storedAnchor(op.anchor, ctx.content)
+    const stored = storedAnchor(op.anchor, ctx.content, ctx.board)
     if ('refusal' in stored) throw new ThreadEditError(index, op.op, stored.refusal)
     writeCommentThread(doc, {
       id,
@@ -388,6 +415,7 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
     documentId: input.documentId,
   })
   const content = readDocumentContent(doc, indexed?.kind)
+  const board = boardIndexOf(content)
   const atLoad = readAnnotations(doc)
   const held = new Set(atLoad.map((thread) => thread.id))
   const tally = tallyOf(atLoad)
@@ -395,7 +423,7 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
   const now = new Date().toISOString()
   const touched = new Set<string>()
   for (const [index, op] of input.ops.entries()) {
-    applyThreadOp({ doc, content, held, tally, touched, now, index }, op)
+    applyThreadOp({ doc, content, board, held, tally, touched, now, index }, op)
     // A reply opens nothing, so only the two ops that can are counted.
     if (op.op === 'message.add') continue
     const refusal = openThreadsRefusal(openAtLoad, tally.open)

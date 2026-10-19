@@ -205,6 +205,25 @@ describe('fragmentIsEmbeddable refuses live HTML and remote loads', () => {
     ).toBe(true)
   })
 
+  // `image-set()` loads from a quoted string as readily as `url()` does, and
+  // spells no `url(` for that check to find.
+  it.each([
+    [
+      'a style element',
+      '<svg><style>g{background:image-set("https://evil.example" 1x)}</style></svg>',
+    ],
+    [
+      'a style attribute',
+      '<svg><rect style="background: -webkit-image-set(\'//evil.example\' 1x)"/></svg>',
+    ],
+    [
+      'a presentation attribute',
+      '<svg><rect fill="IMAGE-SET(\'https://evil.example\' 1x)"/></svg>',
+    ],
+  ])('refuses image-set() in %s', (_where, svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
   it('reads attributes only inside tags, so label text naming them is accepted', () => {
     expect(
       fragmentIsEmbeddable(

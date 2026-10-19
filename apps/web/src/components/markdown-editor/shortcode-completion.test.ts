@@ -2,7 +2,7 @@ import { CompletionContext, type CompletionResult } from '@codemirror/autocomple
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
-import { shortcodeCompletionSource } from './shortcode-completion.js'
+import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 
 /**
  * The `:` half of the shortcode feature: what opens the list, what it
@@ -177,5 +177,27 @@ describe('an icon is offered under the same colon', () => {
   /** The prose guard still holds — a hyphen must not open a list in a date. */
   it('stays shut where the colon is punctuation', async () => {
     expect(await complete('from 10:30-11')).toBeNull()
+  })
+})
+
+/**
+ * The glyph renderer is installed once per editor and sees EVERY source's
+ * rows, so a label alone says nothing about who offered it: a document a
+ * person named `icon-x` arrives through the wiki-link source with that label.
+ */
+describe('which rows the icon glyph is drawn on', () => {
+  const [renderer] = shortcodeOptionRenderers
+  if (renderer === undefined) throw new Error('expected the glyph renderer')
+
+  it('draws it on an icon row this source offered', async () => {
+    const result = await complete('a :icon-st')
+    const row = result?.options.find((o) => o.label === 'icon-star')
+    if (row === undefined) throw new Error('expected the icon-star row')
+    expect(renderer.render(row)).not.toBeNull()
+  })
+
+  it('draws none on another source row whose label starts with icon-', () => {
+    expect(renderer.render({ label: 'icon-x', section: 'Documents' })).toBeNull()
+    expect(renderer.render({ label: 'icon-x', section: { name: 'Icons', rank: 0 } })).toBeNull()
   })
 })

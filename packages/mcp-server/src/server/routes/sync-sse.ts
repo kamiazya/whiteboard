@@ -154,7 +154,8 @@ function exceedsStreamCap(
   subscribe: readonly string[],
   unsubscribe: readonly string[],
 ): boolean {
-  const adding = subscribe.filter((key) => !docs.has(key) && !unsubscribe.includes(key))
+  const leaving = new Set(unsubscribe)
+  const adding = subscribe.filter((key) => !docs.has(key) && !leaving.has(key))
   return docs.size + adding.length > MAX_DOCS_PER_STREAM
 }
 

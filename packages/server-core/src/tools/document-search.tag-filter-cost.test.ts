@@ -91,6 +91,42 @@ describe('wb_document_search tag filter cost', () => {
   })
 })
 
+describe('wb_document_search tag filter set-up cost', () => {
+  it('indexes the filter once per search, not once per document', async () => {
+    const DOCUMENTS = 40
+    const FILTER = 1000
+    const deps = makeTestDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
+    for (let i = 0; i < DOCUMENTS; i += 1) {
+      await wbDocumentCreate(deps, { workspaceId: WS, path: `note-${i}`, kind: 'markdown' })
+    }
+    const filter = Array.from({ length: FILTER }, (_, i) => `wanted-${i}`)
+    // `new Set(iterable)` inserts through `add`, so a patched `add` sees the
+    // filter being indexed however the tool builds its set. No document
+    // carries a filter tag, so no other insertion of one is possible. Patched
+    // by hand: a spy's own bookkeeping inserts into a Set and recurses.
+    const realAdd = Set.prototype.add
+    let inserted = 0
+    Set.prototype.add = function <T>(this: Set<T>, value: T) {
+      if (typeof value === 'string' && value.startsWith('wanted-')) inserted += 1
+      return realAdd.call(this, value)
+    }
+    try {
+      const out = await createDocumentSearchTool(deps, vectorCacheFor(deps)).execute({
+        workspaceId: WS,
+        tags: filter,
+      })
+      expect(out.results).toEqual([])
+    } finally {
+      Set.prototype.add = realAdd
+    }
+    // The subject is present: the filter was indexed at least once.
+    expect(inserted).toBeGreaterThanOrEqual(FILTER)
+    // Indexing it per document inserted 40,000.
+    expect(inserted).toBeLessThanOrEqual(2 * FILTER)
+  })
+})
+
 /** The filter as first written, kept verbatim as the oracle. */
 function carryingByOldRule(bearers: readonly Bearer[], wanted: readonly string[]): Bearer[] {
   return bearers.filter((bearer) => wanted.every((tag) => bearer.tags.includes(tag)))

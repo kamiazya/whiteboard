@@ -162,9 +162,15 @@ cache.
    artifacts or internal `_artifacts`.
 8. Upload SBOM as GitHub Actions artifact `npm-sbom-<run_id>` (retained 90 days,
    `if-no-files-found: error`).
-9. `pnpm pack`, which resolves the `catalog:` protocol to concrete ranges, then upload the
-   tarball as `npm-tarball-<run_id>` (retained 7 days) and report its sha256 as a job
-   output.
+9. `pnpm pack`, which resolves the `catalog:` protocol to concrete ranges.
+10. `pnpm audit:published --tarball <it>`: npm installs that tarball into an empty
+    directory — with none of `pnpm-workspace.yaml`'s overrides, which are not published —
+    and `npm audit --omit=dev --audit-level=high` runs there. Step 5 reads the lockfile,
+    where an override can clear a floor a consumer's install never gets; this reads what
+    `npx @kamiazya/whiteboard-mcp` resolves. The scheduled `audit.yml` runs the same check
+    daily.
+11. Upload the tarball as `npm-tarball-<run_id>` (retained 7 days) and report its sha256
+    as a job output.
 
 Permissions: `contents: read`. No environment.
 

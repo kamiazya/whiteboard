@@ -234,6 +234,16 @@ jobs:
           echo "tarball=$name" >> "$GITHUB_OUTPUT"
           echo "sha256=$(sha256sum "$RUNNER_TEMP/npm-tarball/$name" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+      - name: Audit what a consumer installs from this tarball
+        # `pnpm audit` above reads the lockfile, which has the workspace's
+        # overrides applied; the published tarball carries none, so npm
+        # resolves its ranges afresh for every consumer. This installs the
+        # tarball just packed into an empty directory and audits that.
+        working-directory: .
+        env:
+          TARBALL: ${{ runner.temp }}/npm-tarball/${{ steps.pack.outputs.tarball }}
+        run: pnpm audit:published --tarball "$TARBALL"
+
       - name: Upload the tarball for publish-mcp
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

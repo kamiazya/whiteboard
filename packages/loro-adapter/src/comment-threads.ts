@@ -138,27 +138,39 @@ export function setCommentThreadStatus(
  * same contract `readSpatialCanvas` already keeps for nodes and comments.
  */
 export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
-  const threadsMap = doc.getMap(THREADS_KEY)
   const threads: CommentThread[] = []
-  for (const threadId of threadsMap.keys()) {
-    const container = threadContainer(doc, threadId)
-    if (container === undefined) continue
-    const messagesContainer = container.get(MESSAGES_KEY)
-    const messages = acceptedEntries(
-      messagesContainer instanceof LoroMap ? messagesContainer : undefined,
-      commentMessageSchema,
-    )
-    const createdAt = container.get(CREATED_AT_FIELD)
-    const parsed = commentThreadSchema.safeParse({
-      id: threadId,
-      anchor: container.get(ANCHOR_FIELD),
-      status: container.get(STATUS_FIELD),
-      ...(createdAt === undefined ? {} : { createdAt }),
-      messages: messages.sort(compareMessages),
-    })
-    if (parsed.success) threads.push(parsed.data)
+  for (const threadId of doc.getMap(THREADS_KEY).keys()) {
+    const thread = readCommentThread(doc, threadId)
+    if (thread !== undefined) threads.push(thread)
   }
   return threads.sort((a, b) => compareCodeUnit(a.id, b.id))
+}
+
+/**
+ * One thread by id, read exactly as `readCommentThreads` reads each — for a
+ * writer that rewrites one thread and must not pay for the whole plane.
+ * Absent, or rejected by the schema, it is `undefined`.
+ */
+export function readCommentThread(
+  doc: DocumentContainers,
+  threadId: string,
+): CommentThread | undefined {
+  const container = threadContainer(doc, threadId)
+  if (container === undefined) return undefined
+  const messagesContainer = container.get(MESSAGES_KEY)
+  const messages = acceptedEntries(
+    messagesContainer instanceof LoroMap ? messagesContainer : undefined,
+    commentMessageSchema,
+  )
+  const createdAt = container.get(CREATED_AT_FIELD)
+  const parsed = commentThreadSchema.safeParse({
+    id: threadId,
+    anchor: container.get(ANCHOR_FIELD),
+    status: container.get(STATUS_FIELD),
+    ...(createdAt === undefined ? {} : { createdAt }),
+    messages: messages.sort(compareMessages),
+  })
+  return parsed.success ? parsed.data : undefined
 }
 
 /**
@@ -181,6 +193,9 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
  */
 export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number {
   const commentsMap = doc.getMap(COMMENTS_KEY)
+  // Every write seam calls this, once per comment it writes, so the common
+  // case — nothing left to migrate — must not materialise the thread ids.
+  if (commentsMap.size === 0) return 0
   const existing = new Set(doc.getMap(THREADS_KEY).keys())
   let migrated = 0
   for (const commentId of commentsMap.keys()) {
