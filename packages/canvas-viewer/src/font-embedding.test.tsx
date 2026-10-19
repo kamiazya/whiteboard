@@ -38,6 +38,41 @@ describe('withViewerFontEmbedded with host-held faces', () => {
     expect(out).not.toContain("font-family:'Roboto'")
   })
 
+  // A family name is spliced into a CSS string inside XML text, so a quote
+  // ends the CSS string and a `<` or `&` ends or corrupts the XML. Such a
+  // face is left out — the export falls back to a system face — while the
+  // others still travel.
+  it.each([
+    ['a single quote', "a'b"],
+    ['a double quote', 'a"b'],
+    ['a backslash', 'a\\b'],
+    ['a closing style tag', 'a</style><script>x</script>'],
+    ['an ampersand', 'a&amp;b'],
+    ['a greater-than sign', 'a>b'],
+    ['a newline', 'a\nb'],
+    ['a NUL', 'a\u0000b'],
+    ['a DEL', 'a\u007fb'],
+  ])('leaves out a face whose family name carries %s', async (_label, family) => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1, 2, 3])))
+    const out = await withViewerFontEmbedded('<svg xmlns="http://www.w3.org/2000/svg"></svg>', [
+      { family, bytes: new Uint8Array([7]).buffer },
+      { family: 'Yomogi', bytes: new Uint8Array([1]).buffer },
+    ])
+    expect(out).not.toContain(family)
+    expect(out).not.toContain(fontBytesToDataUri(new Uint8Array([7]).buffer))
+    expect(out).toContain("font-family:'Yomogi'")
+    const doc = new DOMParser().parseFromString(out, 'image/svg+xml')
+    expect(doc.getElementsByTagName('parsererror')).toHaveLength(0)
+  })
+
+  it('still embeds a family name with spaces, digits and non-ASCII letters', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1, 2, 3])))
+    const out = await withViewerFontEmbedded('<svg xmlns="x"></svg>', [
+      { family: 'Noto Sans JP 2-Bold 源ノ角', bytes: new Uint8Array([1]).buffer },
+    ])
+    expect(out).toContain("font-family:'Noto Sans JP 2-Bold 源ノ角'")
+  })
+
   // The <img> a PNG export draws through is an XML parser: one byte lost at
   // the splice and the export is a broken image rather than a drawing with
   // the wrong face, so the output is read the way that parser reads it.

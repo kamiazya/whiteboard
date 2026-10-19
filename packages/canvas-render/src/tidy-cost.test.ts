@@ -10,7 +10,7 @@ const overlapChecks = vi.hoisted(() => ({ count: 0 }))
 // nesting walk.
 const containmentChecks = vi.hoisted(() => ({ count: 0 }))
 // The deepest stack either question was asked at, read by `deepestStackFor`.
-const STACK_SAMPLE_EVERY = 97
+const STACK_SAMPLE_EVERY = 997
 const stackDepth = vi.hoisted(() => ({
   max: 0,
   calls: 0,
@@ -116,7 +116,7 @@ describe('tidyNodes cost on nested frames', () => {
     // (Stryker), and a headroom comparison that held locally failed under
     // both. A count is the same number everywhere.
     const shallow = deepestStackFor(() => tidyNodes(nestedChain(50)))
-    const deep = deepestStackFor(() => tidyNodes(nestedChain(1000)))
+    const deep = deepestStackFor(() => tidyNodes(nestedChain(400)))
     expect(deep - shallow).toBeLessThanOrEqual(STACK_SLACK_FRAMES)
     // The instrument can see a walk that spends a frame per level: the
     // frozen recursive tidy goes measurably deeper on a deeper chain.

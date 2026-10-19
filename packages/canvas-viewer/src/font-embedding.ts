@@ -46,6 +46,26 @@ export interface EmbeddableFace {
   readonly bytes: ArrayBuffer
 }
 
+/**
+ * A family name is written into a single-quoted CSS string that itself sits in
+ * XML text, so a quote or backslash would end or escape the CSS string and a
+ * `<`, `>` or `&` would end or corrupt the `<style>` element. Such a face is
+ * REFUSED rather than escaped: no real family name needs those characters, and
+ * escaping would take two encoders composed in the right order (CSS, then XML)
+ * where a refusal has nothing to get wrong. The cost is the cheapest failure
+ * this function already has — that face falls back to a system one.
+ */
+const UNSPLICEABLE_FAMILY = /['"\\<>&]/
+
+function isSpliceableFamily(family: string): boolean {
+  if (UNSPLICEABLE_FAMILY.test(family)) return false
+  for (let i = 0; i < family.length; i++) {
+    const code = family.charCodeAt(i)
+    if (code < 0x20 || code === 0x7f) return false
+  }
+  return true
+}
+
 /** Test seam: the memo would otherwise carry one test's stubbed fetch into the next. */
 export function _resetViewerFontEmbeddingForTests(): void {
   dataUriPromise = undefined
@@ -80,10 +100,12 @@ export async function withViewerFontEmbedded(
       : [
           `@font-face{font-family:'${VIEWER_FONT_FAMILY}';src:url('${dataUri}') format('truetype');}`,
         ]),
-    ...extraFaces.map(
-      (face) =>
-        `@font-face{font-family:'${face.family}';src:url('${fontBytesToDataUri(face.bytes)}') format('truetype');}`,
-    ),
+    ...extraFaces
+      .filter((face) => isSpliceableFamily(face.family))
+      .map(
+        (face) =>
+          `@font-face{font-family:'${face.family}';src:url('${fontBytesToDataUri(face.bytes)}') format('truetype');}`,
+      ),
   ]
   if (rules.length === 0) return svg
 

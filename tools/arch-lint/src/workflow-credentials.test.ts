@@ -183,17 +183,38 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     expect(credentialJobs.map((s) => s.site)).toContain(site)
   })
 
-  // The scanner runs no repository code unless its configuration names a
-  // program for it: `sonar.nodejs.executable` or `sonar.scanner.javaExePath`
-  // pointing into the checkout would run that file with the token in reach.
-  it('sonar-project.properties names no program for the scanner to run', () => {
-    const properties = readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8')
-    const keys = properties
+  // The scanner runs with SONAR_TOKEN in reach and reads this file from the
+  // checked-out tree, so the tree must not configure the scanner's own
+  // runtime: `sonar.nodejs.executable` or `sonar.scanner.javaExePath` would run
+  // a file from the checkout, `sonar.scanner.javaOpts` hands the engine's JVM
+  // arbitrary flags (an agent, a system property), and a proxy, truststore or
+  // keystore setting routes or re-terminates the TLS the token travels over.
+  const SCANNER_RUNTIME_KEY = /executable|exepath|javaopts|proxy|truststore|keystore/i
+  const propertyKeys = (properties: string): string[] =>
+    properties
       .split('\n')
       .map((line) => /^\s*([\w.-]+)\s*[=:]/.exec(line)?.[1])
       .filter((key): key is string => key !== undefined)
+
+  it('sonar-project.properties configures nothing of the scanner runtime', () => {
+    const keys = propertyKeys(readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8'))
     expect(keys).toContain('sonar.projectKey')
-    expect(keys.filter((key) => /executable|exepath/i.test(key))).toEqual([])
+    expect(keys.filter((key) => SCANNER_RUNTIME_KEY.test(key))).toEqual([])
+  })
+
+  it.each([
+    'sonar.nodejs.executable=./x',
+    'sonar.scanner.javaExePath=./x',
+    'sonar.scanner.javaOpts=-javaagent:./x.jar',
+    'sonar.scanner.proxyHost=evil.example',
+    'sonar.scanner.proxyPort=8080',
+    'sonar.scanner.proxyUser=u',
+    'sonar.scanner.truststorePath=./ca.p12',
+    'sonar.scanner.truststorePassword=x',
+    'sonar.scanner.keystorePath=./k.p12',
+  ])('refuses a planted %s', (line) => {
+    const keys = propertyKeys(`sonar.projectKey=k\n${line}\n`)
+    expect(keys.filter((key) => SCANNER_RUNTIME_KEY.test(key))).toHaveLength(1)
   })
 
   // The scanner reads sonar-project.properties from the checked-out tree with
@@ -517,5 +538,32 @@ describe('workflows — a job holding a write-scoped token builds from a cold st
     expect(grantsWrite(undefined)).toBe(false)
     expect(grantsWrite(effectivePermissions({}, { packages: 'write' }))).toBe(true)
     expect(grantsWrite(effectivePermissions({ permissions: {} }, 'write-all'))).toBe(false)
+  })
+})
+
+// mutation.yml's pr-report job runs PR-authored code (the local setup-pnpm
+// action, .claude/scripts/mutation-comment.mjs) under a pull-requests: write
+// token. That is safe only because `pull_request` hands a same-repo PR's run
+// that token and a fork's run a read-only one. `pull_request_target` or
+// `workflow_run` would run the same PR code under the BASE repository's
+// write token, fork or not.
+describe('a workflow that runs PR code under a write token', () => {
+  const mutation = parseYaml(
+    readFileSync(join(REPO_ROOT, '.github/workflows/mutation.yml'), 'utf-8'),
+  ) as {
+    on?: Record<string, unknown>
+    jobs?: Record<string, { permissions?: Record<string, string>; steps?: { uses?: string }[] }>
+  }
+
+  it('mutation.yml pr-report still runs PR code with pull-requests: write', () => {
+    const report = mutation.jobs?.['pr-report']
+    expect(report?.permissions?.['pull-requests']).toBe('write')
+    expect((report?.steps ?? []).some((step) => (step.uses ?? '').startsWith('./'))).toBe(true)
+  })
+
+  it('mutation.yml is triggered by pull_request, never a base-token trigger', () => {
+    const triggers = Object.keys(mutation.on ?? {})
+    expect(triggers).toContain('pull_request')
+    expect(triggers.filter((t) => t === 'pull_request_target' || t === 'workflow_run')).toEqual([])
   })
 })

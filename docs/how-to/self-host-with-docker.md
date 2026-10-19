@@ -1094,5 +1094,7 @@ deployment state.
   name a path under the data directory and include a stack trace.
 - What a member sees of a server fault carries no storage detail. A stored
   file or record the server cannot read answers `corrupt_stored_data` with a
-  fixed message, and an MCP tool call that fails for any reason other than a
-  refusal answers `internal_error`. The detail goes to the server log.
+  fixed message, one stored in a format newer than the server reads answers
+  `stored_document_unsupported_version` with a fixed message, and an MCP tool
+  call that fails for any reason other than a refusal answers
+  `internal_error`. The detail goes to the server log.

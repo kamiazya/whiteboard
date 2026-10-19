@@ -179,6 +179,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # This job runs PR-authored code (.github/actions/setup-pnpm,
+  # .claude/scripts/mutation-comment.mjs) under a pull-requests: write token.
+  # That is safe only because the trigger is `pull_request`, which gives a
+  # fork's run a read-only token. Never move this workflow to
+  # pull_request_target or workflow_run: both run PR code under the base
+  # repository's write token. tools/arch-lint's workflow-credentials.test.ts
+  # pins the trigger.
+  #
   # One comment out of the legs': the survivors of every leg that finished,
   # and a line for every leg that did not. Runs after a failed leg too — that
   # line is the point — and stays quiet when a newer push cancelled the run,

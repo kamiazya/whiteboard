@@ -26,6 +26,7 @@ describe('server-mode answer redaction', () => {
   it.each([
     ['document_serialize_failed', 409],
     ['corrupt_stored_data', 500],
+    ['stored_document_unsupported_version', 500],
   ] as const)('answers %s with a fixed message and logs the detail', async (error, status) => {
     capture = captureLogsForTests('debug')
     const res = await answering(error, status).request('/api/x')

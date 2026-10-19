@@ -81,10 +81,8 @@ function collectSearchable(
     // by its frontmatter, a board by its own tags, or one node or edge.
     let named: string[] = []
     if (parsed.tags !== undefined) {
-      const wanted = parsed.tags
-      const carrying = facts.bearers.filter((bearer) =>
-        wanted.every((tag) => bearer.tags.includes(tag)),
-      )
+      const wanted = new Set(parsed.tags)
+      const carrying = facts.bearers.filter((bearer) => carriesEvery(bearer.tags, wanted))
       if (carrying.length === 0) continue
       named = carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
     }
@@ -98,6 +96,20 @@ function collectSearchable(
     })
   }
   return searchable
+}
+
+/**
+ * Whether `tags` holds every member of `wanted`, in ONE pass over `tags`.
+ *
+ * A filter may list a tag up to a thousand times and a bearer may carry as
+ * many, so judging tag by tag (`every` over `includes`) is their product per
+ * bearer — seconds of synchronous work over a full board. Counting distinct
+ * hits keeps it linear in what the bearer carries.
+ */
+function carriesEvery(tags: readonly string[], wanted: ReadonlySet<string>): boolean {
+  const hit = new Set<string>()
+  for (const tag of tags) if (wanted.has(tag)) hit.add(tag)
+  return hit.size === wanted.size
 }
 
 /** documentId -> 1-based position, for whichever rankings exist. */

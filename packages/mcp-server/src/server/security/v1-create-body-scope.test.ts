@@ -46,6 +46,18 @@ describe('holdV1CreateBodyToScope', () => {
     expect((await post(appGranting(['workspace:write']), '{not json')).status).toBe(201)
   })
 
+  it('refuses a create that reached it with no recorded grant', async () => {
+    // Either mode's auth middleware records a grant before /api/v1, so none
+    // recorded means the request got here some other way: fail closed, even
+    // for a body that asks for no more than placing a document.
+    const spatial = JSON.stringify({ path: 'p', kind: 'spatial' })
+    for (const body of [BODY, spatial, '{not json']) {
+      const res = await post(appGranting(undefined), body)
+      expect(res.status, body).toBe(403)
+      expect(await res.json()).toMatchObject({ error: 'insufficient_scope' })
+    }
+  })
+
   it('judges only the create route', async () => {
     const res = await post(appGranting(['workspace:write']), BODY, '/api/v1/workspaces/ws1/other')
     expect(res.status).toBe(201)

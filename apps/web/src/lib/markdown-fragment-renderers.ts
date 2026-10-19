@@ -180,7 +180,7 @@ const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
  * `&#117;rl(`, `&#64;import` or HTML's named `&bsol;` before CSS reads the
  * text, in an attribute value and in SVG `<style>` text alike. Neither engine
  * writes an escape or a reference other than those five into CSS — a style
- * attribute or a `<style>` element — or an `@import` anywhere.
+ * or presentation attribute, or a `<style>` element — or an `@import` anywhere.
  */
 const UNREADABLE_CSS = /\\|@import|&(?!(?:amp|lt|gt|quot|apos);)/i
 const STYLE_ELEMENT_OPEN = /<(?:[\w.-]+:)?style\b/gi
@@ -220,18 +220,27 @@ function attributeValue(svg: string, from: number, end: number): string {
   return svg.slice(quoted ? from + 1 : from, quoted ? end - 1 : end).trim()
 }
 
+/**
+ * Attributes whose value CSS reads: `style`, and the presentation attributes
+ * that take a `url()` — SVG2 parses those with the CSS value grammar, so an
+ * escape or character reference in one reaches a `url(` that `NON_LOCAL_URL`,
+ * reading the raw text, never sees.
+ */
+const CSS_VALUED_ATTRIBUTE =
+  /^(?:style|fill|stroke|filter|mask|clip-path|marker|marker-start|marker-mid|marker-end|cursor)$/i
+
 /** `src`, and `href` under any prefix — XML binds `x:href` to xlink as readily as `xlink:href`. */
 const LINK_ATTRIBUTE = /^(?:src|(?:[\w.-]+:)?href)$/i
 
 /**
  * An attribute that runs script (`on<event>`), submits a form
- * (`action`/`formaction`), or loads from outside the fragment (a `src` or
+ * (`action`/`formaction`), holds CSS `NON_LOCAL_URL` cannot read, or loads from outside the fragment (a `src` or
  * `href` not naming a local `#id`, quoted or not — `fragmentHrefsAreLocal`
  * reads quoted values only).
  */
 function isRefusedAttribute(name: string, value: string): boolean {
   if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name)) return true
-  if (/^style$/i.test(name) && UNREADABLE_CSS.test(value)) return true
+  if (CSS_VALUED_ATTRIBUTE.test(name) && UNREADABLE_CSS.test(value)) return true
   return LINK_ATTRIBUTE.test(name) && !value.startsWith('#')
 }
 
