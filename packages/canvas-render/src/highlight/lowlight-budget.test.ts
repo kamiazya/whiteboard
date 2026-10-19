@@ -43,6 +43,11 @@ describe('the tokeniser cost budget', () => {
     expect(handed).toEqual([])
   })
 
+  it('renders a fence plain once one identifier passes 4096 characters by a margin', () => {
+    expect(highlightCode('ts', `const ${'a'.repeat(6_000)} = 1`)).toBeUndefined()
+    expect(handed).toEqual([])
+  })
+
   it('renders a fence of many long identifiers plain, since the cost is their squares summed', () => {
     const source = `${'a'.repeat(3_000)}\n`.repeat(64)
     expect(highlightCode('typescript', source)).toBeUndefined()
@@ -50,7 +55,7 @@ describe('the tokeniser cost budget', () => {
   })
 
   it('renders a yaml fence with one very long line plain', () => {
-    expect(highlightCode('yaml', `key: ${'a '.repeat(32_768)}`)).toBeUndefined()
+    expect(highlightCode('yaml', `key: ${'a '.repeat(8_192)}`)).toBeUndefined()
     expect(handed).toEqual([])
   })
 

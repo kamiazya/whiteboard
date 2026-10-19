@@ -127,12 +127,59 @@ function toLines(tree: HastNode): CodeTokenLines {
 }
 
 /**
- * canvas-render's `highlightCode` seam. Total: an unregistered language or
- * anything lowlight throws returns `undefined`, and the fence renders plain.
+ * highlight.js re-scans a run its grammar cannot settle from each of its
+ * positions, so tokenising costs the SQUARE of that run's length, summed over
+ * runs. In javascript, typescript and bash the run is an identifier-like
+ * `[A-Za-z0-9_]` stretch (`$`, punctuation, whitespace and non-ASCII letters
+ * all end it); in yaml it is a whole line, spaces included. On one machine a
+ * 32 Ki-character identifier cost 2.9s (javascript), 6.1s (typescript) and
+ * 1.1s (bash), and a 32 Ki-character yaml line of words 0.7-0.9s — inside
+ * synchronous layout, while ordinary code of 256 Ki characters costs ~200ms.
+ *
+ * So the fence is priced first, in one linear pass, and one over budget
+ * renders plain — the path an unregistered language already takes. `$` is
+ * counted although it measured as a breaker: over-counting can only render
+ * a pathological fence plain, never a slow one highlighted.
+ */
+const WORD_RUN = /[A-Za-z0-9_$]+/g
+const LINE_RUN = /[^\n]+/g
+
+/**
+ * 4096^2 squared characters: one 4096-character identifier, about 95ms in
+ * typescript (the most expensive grammar) and 50ms in javascript. No real
+ * identifier comes near it, so ordinary code of any length stays coloured.
+ */
+const WORD_RUN_BUDGET = 4096 * 4096
+
+/**
+ * yaml's per-squared-character cost measured ~7x below typescript's, so
+ * 8192^2 holds a yaml fence near 60ms while a 256 Ki body of 256-character
+ * lines still highlights.
+ */
+const LINE_RUN_BUDGET = 8192 * 8192
+
+/** Grammars whose cost is quadratic in a whole LINE, not just in a word. */
+const LINE_PRICED = new Set(['yaml'])
+
+function withinBudget(value: string, run: RegExp, budget: number): boolean {
+  let total = 0
+  for (const match of value.matchAll(run)) {
+    total += match[0].length ** 2
+    if (total > budget) return false
+  }
+  return true
+}
+
+/**
+ * canvas-render's `highlightCode` seam. Total: an unregistered language, a
+ * fence over the tokeniser's cost budget, or anything lowlight throws returns
+ * `undefined`, and the fence renders plain.
  */
 export function highlightCode(lang: string, value: string): CodeTokenLines | undefined {
   const name = ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()
   if (name === '' || !lowlight.registered(name)) return undefined
+  if (!withinBudget(value, WORD_RUN, WORD_RUN_BUDGET)) return undefined
+  if (LINE_PRICED.has(name) && !withinBudget(value, LINE_RUN, LINE_RUN_BUDGET)) return undefined
   try {
     return toLines(lowlight.highlight(name, value) as unknown as HastNode)
   } catch {
