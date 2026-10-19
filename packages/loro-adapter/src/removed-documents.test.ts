@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { documentsRemovedSince } from './removed-documents.js'
 import {
+  createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
+  ensureFolderPath,
   importWorkspaceSubtree,
+  moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
   readWorkspaceDocuments,
 } from './workspace-tree.js'
@@ -14,6 +17,7 @@ import {
 const A = '01BRWAAAAAAAAAAAAAAAAAAAA1'
 const B = '01BRWAAAAAAAAAAAAAAAAAAAA2'
 const C = '01BRWAAAAAAAAAAAAAAAAAAAA3'
+const D = '01BRWAAAAAAAAAAAAAAAAAAAA4'
 
 function create(doc: LoroDoc, path: string, documentId: string, body = ''): void {
   createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
@@ -123,6 +127,46 @@ describe('documentsRemovedSince', () => {
     expect(restored((removed[0] as { bytes: Uint8Array }).bytes).map((e) => e.documentId)).toEqual([
       shadowed.documentId,
     ])
+  })
+
+  it('exports the removed document, not a folder ahead of it at its path', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocument(doc, { documentId: A, segment: 'a', kind: 'markdown' })
+    ensureFolderPath(doc, ['a', 'c'])
+    createWorkspaceDocument(doc, { documentId: B, segment: 'c', kind: 'markdown', parentId: A })
+
+    const removed = removedBy(doc, (d) => deleteWorkspaceDocument(d, { documentId: B }))
+
+    expect(removed.map((each) => each.documentId)).toEqual([B])
+    expect(restored((removed[0] as { bytes: Uint8Array }).bytes).map((e) => e.documentId)).toEqual([
+      B,
+    ])
+  })
+
+  it('leaves out of an ancestor a shadowing document that was exported on its own', () => {
+    // `x` holds a folder `s` and, after it, a document `s`, so `x/s/y` is
+    // claimed twice: the owner under the folder, the shadowed one under the
+    // document. Both go with `x` but neither rides it, since the document
+    // `s` survives between — so each is exported alone, and `x`'s bytes must
+    // carry neither, or a restore of `x` brings the owner back a second time.
+    const doc = new LoroDoc()
+    createWorkspaceDocument(doc, { documentId: A, segment: 'x', kind: 'markdown' })
+    ensureFolderPath(doc, ['x', 's'])
+    create(doc, 'x/s/y', B)
+    createWorkspaceDocument(doc, { documentId: C, segment: 's', kind: 'markdown', parentId: A })
+    createWorkspaceDocument(doc, { documentId: D, segment: 'y', kind: 'markdown', parentId: C })
+    const owner = readWorkspaceDocuments(doc).find((each) => each.documentId === B)
+    if (owner?.path !== 'x/s/y' || owner.shadowed === true) throw new Error('no path collision')
+
+    const removed = removedBy(doc, (d) => {
+      moveWorkspaceDocument(d, { documentId: C })
+      deleteWorkspaceDocument(d, { documentId: D })
+      deleteWorkspaceDocument(d, { documentId: A })
+    })
+
+    expect(removed.map((each) => each.documentId).sort()).toEqual([A, B, D])
+    const ancestor = removed.find((each) => each.documentId === A) as { bytes: Uint8Array }
+    expect(restored(ancestor.bytes).map((each) => each.documentId)).toEqual([A])
   })
 
   it('counts a document moved under a node a concurrent delete took', () => {

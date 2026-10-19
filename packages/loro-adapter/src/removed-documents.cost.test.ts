@@ -32,8 +32,8 @@ vi.mock('@kamiazya/whiteboard-model', async (original) => {
 })
 
 const N = 200
-/** Per document in the record: a handful of handles and ancestry tests each. */
-const PER_DOCUMENT = 8
+/** Per document in the record: one walk before the update and one after cost about two. */
+const PER_DOCUMENT = 4
 
 const id = (i: number) => `01BRW${String(i).padStart(21, '0')}`
 
