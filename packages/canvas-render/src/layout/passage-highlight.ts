@@ -21,6 +21,7 @@
 import {
   type CommentThread,
   resolveTextAnchor,
+  scoredOccurrenceRange,
   sharedContext,
   type TextAnchor,
   type TextQuoteSelector,
@@ -99,12 +100,24 @@ interface Piece {
  */
 const SPACE_GAP_RATIO = 0.15
 
-function renderedTextOf(runs: readonly TextRunNode[]): { text: string; pieces: Piece[] } {
+const WHITESPACE = /\s/
+
+interface RenderedText {
+  readonly text: string
+  readonly pieces: readonly Piece[]
+}
+
+function renderedTextOf(runs: readonly TextRunNode[]): RenderedText {
   let text = ''
   const pieces: Piece[] = []
   let previous: TextRunNode | undefined
   for (const run of runs) {
-    if (previous !== undefined && !/\s$/.test(text) && separated(previous, run)) text += ' '
+    // The last character only: a regex anchored at the end still tries
+    // every position of the string, which made building the text runs x
+    // text.
+    if (previous !== undefined && !WHITESPACE.test(text.at(-1) ?? '') && separated(previous, run)) {
+      text += ' '
+    }
     pieces.push({ run, at: text.length })
     text += run.text
     previous = run
@@ -118,8 +131,6 @@ function separated(previous: TextRunNode, run: TextRunNode): boolean {
   const gap = run.bbox.x - (previous.bbox.x + previous.bbox.w)
   return gap > run.bbox.h * SPACE_GAP_RATIO
 }
-
-const WHITESPACE = /\s/
 
 const squash = (value: string): string => value.replace(/\s+/g, ' ')
 
@@ -207,13 +218,35 @@ function findPassage(
 ): LooseSpan | null {
   const matches = looseOccurrences(rendered, quote.exact)
   if (matches.length === 0) return null
+  let around = 0
   if (source !== undefined) {
     const inSource = sourceOccurrence(source, quote)
     if (inSource === 'orphaned') return null
     const same = matches[inSource.index]
     if (inSource.count === matches.length && same !== undefined) return same
+    const scaled = Math.round((Math.max(0, inSource.index) * matches.length) / inSource.count)
+    around = matches[Math.min(matches.length - 1, scaled)]?.start ?? 0
   }
-  return bestScored(rendered, matches, quote)
+  return bestScored(rendered, nearestScored(matches, around), quote)
+}
+
+/**
+ * The rendered occurrences worth scoring: at most the number the model's
+ * resolver scores, nearest where the anchor sits — so a quote that occurs
+ * everywhere costs a bounded comparison per passage, as it does there.
+ *
+ * Where it sits is mapped by occurrence NUMBER, the source's scaled to the
+ * rendered count: the stored offsets index the source and not these runs,
+ * and the number is the part of them that survives rendering. Without a
+ * source the first occurrences are kept, where the tie-break looks first.
+ * A quote with at most that many occurrences is scored exactly as before.
+ */
+function nearestScored(matches: readonly LooseSpan[], around: number): readonly LooseSpan[] {
+  const { from, to } = scoredOccurrenceRange(
+    matches.map((span) => span.start),
+    around,
+  )
+  return from === 0 && to === matches.length ? matches : matches.slice(from, to)
 }
 
 function bestScored(
@@ -248,12 +281,17 @@ export function passageBoxes(
   quote: TextQuoteSelector,
   measure: MeasureText,
   source?: PassageSource,
+  // Built once per node by a caller drawing several passages over `runs`.
+  { text, pieces }: RenderedText = renderedTextOf(runs),
 ): readonly ShapeSceneNode['bbox'][] {
-  const { text, pieces } = renderedTextOf(runs)
   const range = findPassage(text, quote, source)
   if (range === null) return []
   const boxes: ShapeSceneNode['bbox'][] = []
-  for (const { run, at } of pieces) {
+  // From the last piece starting at or before the passage, so a passage
+  // visits only the runs it may cross rather than every run of the node.
+  for (let index = lastPieceAtOrBefore(pieces, range.start); index < pieces.length; index += 1) {
+    const { run, at } = pieces[index] as Piece
+    if (at >= range.end) break
     const runEnd = at + run.text.length
     const from = Math.max(range.start, at) - at
     const to = Math.min(range.end, runEnd) - at
@@ -266,6 +304,17 @@ export function passageBoxes(
     boxes.push({ x: run.bbox.x + lead, y: run.bbox.y, w: width, h: run.bbox.h })
   }
   return boxes
+}
+
+function lastPieceAtOrBefore(pieces: readonly Piece[], offset: number): number {
+  let low = 0
+  let high = pieces.length
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    if ((pieces[mid] as Piece).at <= offset) low = mid + 1
+    else high = mid
+  }
+  return Math.max(0, low - 1)
 }
 
 /**
@@ -285,10 +334,12 @@ export function composePassageHighlights(
   sourceText: string,
 ): readonly ShapeSceneNode[] {
   const out: ShapeSceneNode[] = []
+  const rendered = renderedTextOf(runs)
   for (const passage of passages) {
     const look = passage.resolved ? appearance.resolved : appearance.open
     const { quote, start, end } = passage.anchor
-    passageBoxes(runs, quote, measure, { text: sourceText, start, end }).forEach((bbox, index) => {
+    const boxes = passageBoxes(runs, quote, measure, { text: sourceText, start, end }, rendered)
+    boxes.forEach((bbox, index) => {
       out.push({
         kind: 'shape',
         id: `${passage.threadId}/passage-${index}`,
