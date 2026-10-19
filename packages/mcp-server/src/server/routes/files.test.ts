@@ -255,6 +255,9 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(csp).toMatch(/(^|;\s*)sandbox(\s*;|$)/)
     expect(csp).toContain("default-src 'none'")
     expect(csp).not.toContain('allow-scripts')
+    // The route's CSP replaces the baseline's, so it carries the framing
+    // refusal itself: no page may embed the document in a frame.
+    expect(csp).toMatch(/(^|;\s*)frame-ancestors 'none'(\s*;|$)/)
     expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="file-svg.svg"')
     // The bytes are served as stored: the defence is the headers, not a rewrite.
     expect(await res.text()).toBe(svg)
