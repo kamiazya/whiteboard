@@ -270,6 +270,20 @@ reach — which keeps the measured requirement above, since a padded
 user-space box has area on both axes even for a straight edge. The same
 board exports in about 2s, and the exported pixels are byte-identical.
 
+**Correction (2026-10-19): the regions are budgeted in total.** A per-element
+region bounds each element by what it draws, which bounds nothing in sum: a
+corner-to-corner edge's own extent is the whole scene, and drop-shadowed
+comment bubbles stack. 200 such edges asked resvg for 816M pixels of blur;
+ten 4096-character comment bubbles took 9.4s with their shadows and 66ms
+without. The SVG backend (`svg/filter-budget.ts`) now sums every referencing
+element's region, clipped to the drawn box, at the raster scale the caller
+passes (`SvgDocumentOptions.rasterScale`, which the PNG export sets to its
+`scale`), counting a drop-shadow pixel twice since resvg spends about 550ms
+per megapixel on one against 270ms on a glow. Past 8M glow-equivalent device
+pixels the largest regions lose their filter, and their definitions go with
+them, until the sum fits. The worst boards it admits spent about 1.75s in
+resvg; a board under it renders the same bytes as before.
+
 ### 9. Fonts: a theme names a family and nothing more
 
 `fontFamily` is a family name. Whether a face for it exists on a surface is

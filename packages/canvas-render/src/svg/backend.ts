@@ -14,9 +14,9 @@ import type {
 import { isFiniteBox } from '../finite-box.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
-import { collectDefs } from './defs.js'
 import { documentHref, embedHref } from './document-href.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
+import { boundFilterWork } from './filter-budget.js'
 import { formatCoord, sanitizeHref } from './format.js'
 import { type IconTable, renderIconUse } from './icon.js'
 import { renderLegend } from './legend.js'
@@ -503,6 +503,11 @@ export interface SvgDocumentOptions {
   readonly shapes?: ShapeTable
   /** `'omit'`: the host draws the legend itself (the editor's overlay). Not an envelope option. */
   readonly legend?: 'omit'
+  /** Device pixels per user unit the document will be rasterised at (a PNG
+   *  export's `scale`), default 1. Filter work is budgeted in device pixels,
+   *  so a 2x export keeps a quarter of the filter area a 1x one does. Not an
+   *  envelope option. */
+  readonly rasterScale?: number
 }
 
 function hasEnvelopeOptions(
@@ -586,12 +591,15 @@ export function buildSvgDocumentParts(
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
   const tables: ResolveTables = { icons: options?.icons, shapes: options?.shapes }
-  const body = scene.nodes
+  const rendered = scene.nodes
     .map((node) => renderNode(node, tables))
     .map((node) => applyOptimizationPasses(node))
+  // Filter regions are charged only inside the box that gets rasterised: the
+  // envelope's viewBox when there is one, the scene's own bounds otherwise.
+  const clip = hasEnvelopeOptions(options) ? resolveViewBox(scene, options) : sceneBounds(scene)
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
-  const collected = collectDefs(body)
+  const { body, defs: collected } = boundFilterWork(rendered, clip, options?.rasterScale)
   const defs: SvgChild =
     collected.length > 0
       ? el(
@@ -605,7 +613,7 @@ export function buildSvgDocumentParts(
     return { rootAttrs: { xmlns: SVG_XMLNS }, defs, background: [], body, legend: [] }
   }
 
-  const viewBox = resolveViewBox(scene, options)
+  const viewBox = clip
   const width = resolveDimension(options.width, viewBox.w)
   const height = resolveDimension(options.height, viewBox.h)
   const viewBoxAttr = `${formatCoord(viewBox.x)} ${formatCoord(viewBox.y)} ${formatCoord(viewBox.w)} ${formatCoord(viewBox.h)}`

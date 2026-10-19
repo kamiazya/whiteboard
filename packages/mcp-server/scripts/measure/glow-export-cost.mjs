@@ -15,8 +15,10 @@
  *   long body, so their drop-shadowed bubbles stack.
  *
  * Each row also reports `filterMpx`: the summed area of every filter region
- * the SVG references, clipped to the canvas, at the export's scale — the
- * quantity the backend's filter budget bounds.
+ * the SVG references, clipped to the canvas, at the export's scale, a drop
+ * shadow's counted twice — the quantity the backend's filter budget
+ * (`FILTER_REGION_BUDGET_PX`) bounds — and `svgMs`, the time to build the
+ * SVG alone, so `ms - svgMs` is roughly what resvg spent.
  *
  * Run:
  *   [BOARD=grid] [SCALE=1] [DEADLINE_MS=300000] \
@@ -52,7 +54,9 @@ function filterMpx(svg, scale) {
     }
     const w = Math.max(0, Math.min(box[0] + box[2], vx + vw) - Math.max(box[0], vx))
     const h = Math.max(0, Math.min(box[1] + box[3], vy + vh) - Math.max(box[1], vy))
-    area += w * h
+    // A drop-shadow pixel costs resvg about twice a glow pixel, and the
+    // backend's budget counts it twice; so does this column.
+    area += (m[3] === 'wb-drop-shadow' ? 2 : 1) * w * h
   }
   return Math.round((area * scale * scale) / 1e4) / 100
 }
@@ -120,10 +124,12 @@ async function row(count) {
   const started = performance.now()
   const result = await renderSpatialCanvasToPng(canvas, fonts, { style: 'document', scale })
   const ms = Math.round(performance.now() - started)
+  const svgStarted = performance.now()
   const { svg } = await renderSpatialCanvasToSvg(canvas, fonts, { style: 'document' })
+  const svgMs = Math.round(performance.now() - svgStarted)
   const mpx = filterMpx(svg, scale)
   process.stdout.write(
-    `${JSON.stringify({ shape, count, scale, ms, filterMpx: mpx, bytes: result.png?.length })}\n`,
+    `${JSON.stringify({ shape, count, scale, ms, svgMs, filterMpx: mpx, bytes: result.png?.length })}\n`,
   )
 }
 

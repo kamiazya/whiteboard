@@ -58,8 +58,9 @@ function cornerEdgeBoard(count: number): Scene {
   const corners = (i: number): ResolvedEdgeNode => ({
     kind: 'edge',
     id: `e${i}`,
+    // Each a pixel apart, so every edge declares a filter of its own.
     path: [
-      { x: 0, y: 0 },
+      { x: i % 50, y: 0 },
       { x: SIDE, y: SIDE },
     ],
     fromSide: 'right',
@@ -114,5 +115,49 @@ describe('filter region budget', () => {
     const { references, work } = filterWork(svg)
     expect(references).toBeGreaterThan(0)
     expect(work).toBeLessThanOrEqual(BUDGET)
+  })
+
+  it('drops the largest regions first, and their definitions with them', () => {
+    const svg = renderSceneToSvg(cornerEdgeBoard(200), { padding: 10 })
+    const referenced = new Set([...svg.matchAll(/filter="url\(#([^)]+)\)"/g)].map((m) => m[1]))
+    const declared = [...svg.matchAll(/<filter id="([^"]+)"/g)].map((m) => m[1])
+    // The two small anchors keep their glow; the scene-sized edges lose theirs.
+    expect(svg.match(/<rect [^>]*filter="url\(#wb-glow-/g)).toHaveLength(2)
+    expect(declared.every((id) => referenced.has(id))).toBe(true)
+  })
+
+  it('budgets in device pixels at the raster scale', () => {
+    // One corner edge sums about 4M: inside the budget at 1x, four times it at 2x.
+    const scene = cornerEdgeBoard(1)
+    const at1x = filterWork(renderSceneToSvg(scene, { padding: 10 }))
+    const at2x = filterWork(renderSceneToSvg(scene, { padding: 10, rasterScale: 2 }), 2)
+    expect(at1x.references).toBe(3)
+    expect(at2x.references).toBeLessThan(3)
+    expect(at2x.work).toBeLessThanOrEqual(BUDGET)
+  })
+
+  it('treats an unset raster scale as 1x', () => {
+    const scene = cornerEdgeBoard(1)
+    expect(renderSceneToSvg(scene, { padding: 10, rasterScale: 1 })).toBe(
+      renderSceneToSvg(scene, { padding: 10 }),
+    )
+    expect(filterWork(renderSceneToSvg(scene, { padding: 10 })).references).toBe(3)
+  })
+
+  it('charges a region only inside the document box', () => {
+    // A glowing box a hundred times the viewport: unclipped its region is 25M,
+    // inside the 500px viewBox it is a quarter of a megapixel.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          id: 'vast',
+          bbox: { x: 0, y: 0, w: 5000, h: 5000 },
+          appearance: { stroke: '#67e8f9', strokeWidth: 2, glow: GLOW },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene, { viewBox: { x: 0, y: 0, w: 500, h: 500 } })
+    expect(filterWork(svg).references).toBe(1)
   })
 })
