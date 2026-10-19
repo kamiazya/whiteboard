@@ -160,7 +160,7 @@ function fragmentHrefsAreLocal(svg: string): boolean {
 // name characters, not ASCII word characters: an XML name may start with any
 // letter, so `<é:script>` is a script element too.
 /** A namespace prefix, as the element patterns here admit one. */
-const ELEMENT_PREFIX = `[^\\s<>/:="']+:`
+const ELEMENT_PREFIX = String.raw`[^\s<>/:="']+:`
 const SCRIPT_ELEMENT = /<(?:[^\s<>/:="']+:)?script\b/i
 /**
  * Live HTML inside an SVG: a `<foreignObject>` carries arbitrary XHTML (a
@@ -180,7 +180,7 @@ const HTML_ISLAND_ELEMENT = /<(?:[^\s<>/:="']+:)?(?:foreignObject|form)\b/i
  * `hasMarkupInIntegrationPoint` covers them. Neither engine writes any of these.
  */
 const HTML_PARSER_ELEMENT = new RegExp(
-  `<(?:${ELEMENT_PREFIX})?(?:${[
+  String.raw`<(?:${ELEMENT_PREFIX})?(?:${[
     'b',
     'big',
     'blockquote',
@@ -228,7 +228,7 @@ const HTML_PARSER_ELEMENT = new RegExp(
     'noframes',
     'noscript',
     'plaintext',
-  ].join('|')})(?![^\\s/>])|<\\/(?:${ELEMENT_PREFIX})?(?:p|br)(?![^\\s/>])`,
+  ].join('|')})(?![^\s/>])|<\/(?:${ELEMENT_PREFIX})?(?:p|br)(?![^\s/>])`,
   'i',
 )
 /**
@@ -246,14 +246,17 @@ const MARKUP_DECLARATION = /<[!?]|<\/(?![a-zA-Z>])/
  * `<title>`, always holding text alone, so one that holds an element was
  * steered there by document text.
  */
-const INTEGRATION_POINT_OPEN = new RegExp(`<(?:${ELEMENT_PREFIX})?(title|desc)(?![^\\s/>])`, 'gi')
+const INTEGRATION_POINT_OPEN = new RegExp(
+  String.raw`<(?:${ELEMENT_PREFIX})?(title|desc)(?![^\s/>])`,
+  'gi',
+)
 
 function hasMarkupInIntegrationPoint(svg: string): boolean {
   const opens = new RegExp(INTEGRATION_POINT_OPEN.source, 'gi')
   for (let open = opens.exec(svg); open; open = opens.exec(svg)) {
     const bodyStart = svg.indexOf('>', open.index)
     if (bodyStart < 0) return false
-    const close = new RegExp(`</(?:${ELEMENT_PREFIX})?${open[1]}(?![^\\s/>])`, 'gi')
+    const close = new RegExp(String.raw`</(?:${ELEMENT_PREFIX})?${open[1]}(?![^\s/>])`, 'gi')
     close.lastIndex = bodyStart
     const end = close.exec(svg)?.index ?? svg.length
     if (/<[a-zA-Z]/.test(svg.slice(bodyStart, end))) return true
