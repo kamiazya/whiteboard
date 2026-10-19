@@ -234,6 +234,7 @@ function buildSvg(
   options: HeadlessExportOptions,
   measure: MeasureText,
   fontAvailable: (family: string) => boolean,
+  rasterScale = 1,
 ): { svg: string; scene: Scene; background: string } {
   const mode = exportMode(options)
   const palette = exportPalette(canvas, options)
@@ -249,6 +250,9 @@ function buildSvg(
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background,
+    // resvg blurs filter regions at device resolution, so the backend's
+    // filter budget has to know the zoom the PNG is drawn at.
+    rasterScale,
     // Dark node chrome uses transparent fills, so body runs sit directly on
     // the dark background — the root-level inheritable fill is what keeps
     // them legible. Light stays byte-identical (no root fill).
@@ -320,9 +324,10 @@ async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
 
   return {
     async render(canvas, options) {
-      const { svg, scene, background } = buildSvg(canvas, options, measure, fontAvailable)
       const fitTo = fitToScale(options.scale ?? 1)
-      refuseOversizedTarget(svg, fitTo.mode === 'zoom' ? fitTo.value : 1)
+      const zoom = fitTo.mode === 'zoom' ? fitTo.value : 1
+      const { svg, scene, background } = buildSvg(canvas, options, measure, fontAvailable, zoom)
+      refuseOversizedTarget(svg, zoom)
       const drawable = boundedDataImages(svg)
       const installed = await installedFontFiles(fontsDir)
       const resvg = new Resvg(drawable, {

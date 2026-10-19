@@ -521,6 +521,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   storage report (every workspace's size) answer only a tenant
   administrator. Any other signed-in person is refused, even though their
   session holds the `runtime:read` scope that the font catalogue needs.
+- **A workspace's people are changed only through a browser sign-in.** An
+  owner adds, re-roles and removes people, mints and takes back invitation
+  links, and changes the workspace's segment from the web app while signed
+  in. The same owner presenting a bearer token — even one scoped
+  `workspace:write` — is refused with `403 sign_in_required` and nothing
+  changes; no invitation link is minted. That is the bar tenant
+  administration holds. A bearer still reads a workspace's people and still
+  changes its display name.
 - **Authority is checked again as a change is made.** A request is
   authorized when it arrives, and its change lands later. Every change an
   administrator makes to a tenant's people — deactivating, reactivating,
@@ -541,7 +549,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
-  fails, and open streams are capped per user and per instance. The limits
+  fails, and open streams are capped per user and per instance. A stream
+  also ends when the grant that opened it expires — the sign-in session's
+  expiry, or a bearer token's `exp` — even if nothing is sent down it; the
+  web app then reconnects, and the new stream needs a grant that is still
+  valid. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
   update, a promote, an upload, a document created from its content or a

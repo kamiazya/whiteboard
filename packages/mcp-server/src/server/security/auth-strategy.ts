@@ -108,6 +108,10 @@ export type AuthDecision =
       /** The verified bearer token behind `person`, read only when that
        *  person has no user yet (ADR-0046 decision 5). */
       bearer?: () => BearerToken
+      /** When the credential stops being valid, epoch milliseconds — absent
+       *  for one with no bound. What outlives the request (a sync stream)
+       *  ends there. */
+      expiresAt?: number
     }
   | {
       ok: false

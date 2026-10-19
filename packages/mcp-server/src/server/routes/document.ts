@@ -4,8 +4,8 @@ import { type Context, Hono } from 'hono'
 import type {
   CallerName,
   FirstMember,
+  OwnerChange,
   WorkspaceAdmit,
-  WorkspaceOwnership,
 } from '../security/membership-gate.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto-version.js'
 import type { StoreScope } from '../store/store-scope.js'
@@ -85,7 +85,7 @@ export interface DocumentRouterOptions {
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
   firstMember?: FirstMember
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
-  ownsWorkspace?: WorkspaceOwnership
+  ownerChange?: OwnerChange
 }
 
 // The checkpoint trigger the live-doc and workspace-document update routes fire.
@@ -121,7 +121,7 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
     ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
     ...(options.admit === undefined ? {} : { admit: options.admit }),
     ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
-    ...(options.ownsWorkspace === undefined ? {} : { ownsWorkspace: options.ownsWorkspace }),
+    ...(options.ownerChange === undefined ? {} : { ownerChange: options.ownerChange }),
   }
 }
 

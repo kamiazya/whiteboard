@@ -11,23 +11,23 @@
 import type { Context } from 'hono'
 import type { InvitationStore } from './invitation-store.js'
 import type { MemberProfileStore } from './member-profile-store.js'
-import { callerUserId } from './membership-gate.js'
+import { callerGrant, callerUserId, type OwnerChangeRefusal } from './membership-gate.js'
 
 export interface WorkspacePeopleKeeper {
-  /** Whether this request may change the people of `workspaceId`. */
-  canManage(c: Context, workspaceId: string): Promise<boolean>
+  /** Whether the person behind this request owns `workspaceId` — enough to
+   *  READ what only owners see. */
+  owns(c: Context, workspaceId: string): Promise<boolean>
+  /** Whether this request may CHANGE the people of `workspaceId`: null when
+   *  it may, else why not. */
+  mayChange(c: Context, workspaceId: string): Promise<OwnerChangeRefusal | null>
   /** Who is acting, for the invitations they create; null for nobody here. */
   actingUserId(c: Context): Promise<string | null>
   /** Absent where nothing could redeem an invitation link. */
   readonly invitations?: { readonly store: InvitationStore; readonly origin: string }
 }
 
-/**
- * Whether the person behind this request is an owner of `workspaceId` — what
- * every owner-only change on server mode asks, a workspace's people and its
- * segment alike.
- */
-export async function callerOwns(
+// Whether the person behind this request is an owner of `workspaceId`.
+async function callerOwns(
   c: Context,
   members: MemberProfileStore,
   workspaceId: string,
@@ -37,13 +37,30 @@ export async function callerOwns(
   return (await members.membershipRole(workspaceId, caller)) === 'owner'
 }
 
+/**
+ * What every owner-only change on server mode asks — a workspace's people and
+ * its segment alike: an owner, acting through a browser sign-in. A bearer has
+ * no browser behind it, however it is scoped, so it never administers a
+ * workspace, exactly as it never administers the tenant
+ * (`people-administration.ts`). A non-owner is told so first, as there.
+ */
+export async function ownerChangeRefusal(
+  c: Context,
+  members: MemberProfileStore,
+  workspaceId: string,
+): Promise<OwnerChangeRefusal | null> {
+  if (!(await callerOwns(c, members, workspaceId))) return 'not_an_owner'
+  return callerGrant(c)?.kind === 'signed-in' ? null : 'sign_in_required'
+}
+
 export function serverModePeopleKeeper(deps: {
   readonly members: MemberProfileStore
   readonly invitations: InvitationStore
   readonly origin: string
 }): WorkspacePeopleKeeper {
   return {
-    canManage: (c, workspaceId) => callerOwns(c, deps.members, workspaceId),
+    owns: (c, workspaceId) => callerOwns(c, deps.members, workspaceId),
+    mayChange: (c, workspaceId) => ownerChangeRefusal(c, deps.members, workspaceId),
     actingUserId: (c) => callerUserId(c, deps.members),
     invitations: { store: deps.invitations, origin: deps.origin },
   }

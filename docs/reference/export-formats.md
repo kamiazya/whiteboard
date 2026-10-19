@@ -646,6 +646,17 @@ document — a decoder allocates what the header declares, however few bytes enc
 document past it is refused with a `400 invalid_request` before anything is drawn; shrink or
 remove an image, or export SVG.
 
+Glow halos and comment drop shadows have a budget of their own, because a renderer blurs
+the whole area each one covers: about **8 megapixels** of halo, counted at the export's
+`scale` and only inside the picture, with a shadow's area counting twice. A board past it
+is not refused; it is drawn with the LARGEST halos and shadows left off until the rest fit, and
+every node, edge, label and comment is still drawn. An ordinary board stays well inside it —
+a 150-node `visual.neon` board uses about 6 — but the boards that pass it are the ones whose
+halos are largest: edges that cross the whole board, nodes the size of the board, and stacks of
+long comments. A higher `scale` spends the budget faster, since a 2x PNG has four times the pixels
+under each halo. SVG export, `wb_scene_render` and the web app's export apply the same
+budget at 1x.
+
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face
 named and the coordinates measured always agree. `unresolvedFamilies` reports nothing in that

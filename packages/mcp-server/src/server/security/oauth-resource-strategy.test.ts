@@ -520,3 +520,25 @@ describe('createOAuthResourceServerAuthStrategy + createAsyncAuthStrategyMiddlew
     expect(res.headers.get('www-authenticate')).toBe('Bearer')
   })
 })
+
+// A JWT says when it expires in seconds; everything the decision feeds (a sync
+// stream's end) counts in milliseconds.
+describe('createOAuthResourceServerAuthStrategy — expiry', () => {
+  it("carries the token's exp on the decision, in milliseconds", async () => {
+    const { validator } = makeFakeValidator({
+      ok: true,
+      subject: 'sub-1',
+      issuer: 'https://idp.example/',
+      audience: 'res-1',
+      scopes: ['canvas:read'],
+      expiresAt: 1_900_000_000,
+    })
+    const decision = await createOAuthResourceServerAuthStrategy({ validator }).authorize({
+      method: 'GET',
+      path: '/api/x',
+      authorizationHeader: 'Bearer abc',
+      requiredScopes: ['canvas:read'],
+    })
+    expect(decision).toMatchObject({ ok: true, expiresAt: 1_900_000_000_000 })
+  })
+})

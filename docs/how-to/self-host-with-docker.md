@@ -222,6 +222,11 @@ still an active owner of the workspace. An owner made a member, removed or
 deactivated while their request was in flight gets `403 not_an_owner` and
 changes nothing.
 
+These changes, and creating or revoking an invitation link, are made through
+a browser sign-in: an owner calling them with a bearer token, however it is
+scoped, gets `403 sign_in_required`, the same as for tenant administration.
+A bearer can still list a workspace's people.
+
 Removing a member, or deactivating them, also stops a write of theirs that is
 still arriving: an update or upload whose body was in transit when they were
 removed is refused with `403 not_a_member` and changes nothing. Their open

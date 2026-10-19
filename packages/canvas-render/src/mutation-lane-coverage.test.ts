@@ -337,9 +337,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // as `embed-budget.ts` is: it holds two constants and a constructor, and
     // the checks that spend it live in `grid-route.ts` and
     // `edge-crossing-sweep.ts`, which are in it.
+    //
+    // 113 with `svg/filter-budget.ts`, the summed filter-region bound. Outside
+    // the lane, as the rest of `svg/` is: `filter-region-budget.test.ts`
+    // reads the sum off the SVG with its own parser, and its budget, shadow
+    // weight, raster scale, clip, largest-first order and definition removal
+    // were each mutation-checked by hand against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 112,
+      production: 113,
     })
   })
 

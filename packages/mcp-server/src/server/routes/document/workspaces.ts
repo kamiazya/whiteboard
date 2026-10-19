@@ -39,8 +39,9 @@ import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
 import type {
   FirstMember,
+  OwnerChange,
+  OwnerChangeRefusal,
   WorkspaceAdmit,
-  WorkspaceOwnership,
 } from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath } from '../../validators.js'
@@ -92,14 +93,21 @@ async function countDocuments(index: DocumentIndex, workspaceId: string): Promis
   }
 }
 
-// The refusal the owner-only people routes answer, in the same shape.
+// The refusals the owner-only people routes answer, in the same shape.
 // One answer for a plain member and for an owner whose namespace does not
 // hold the workspace (ADR-0053 decision 3, as corrected): neither may change
-// the segment, and neither reaches the collision check.
-const SEGMENT_NOT_OWNED = {
-  error: 'not_an_owner',
-  message: 'only the owner whose namespace holds this workspace can change its segment',
-} as const satisfies WorkspacePeopleRefusal
+// the segment, and neither reaches the collision check. An owner acting
+// through a bearer is refused before it too.
+const SEGMENT_REFUSALS = {
+  not_an_owner: {
+    error: 'not_an_owner',
+    message: 'only the owner whose namespace holds this workspace can change its segment',
+  },
+  sign_in_required: {
+    error: 'sign_in_required',
+    message: "changing a workspace's segment needs a browser sign-in, not a bearer",
+  },
+} as const satisfies { [K in OwnerChangeRefusal]: WorkspacePeopleRefusal & { error: K } }
 
 // The precondition only a segment change carries; a display name stays any
 // member's to change.
@@ -108,7 +116,8 @@ function heldByCaller(c: Context, segment: string | undefined): { heldBy?: strin
 }
 
 function renameRefusal(err: unknown) {
-  if (isWorkspaceNotHeldError(err)) return { status: 403 as const, body: SEGMENT_NOT_OWNED }
+  if (isWorkspaceNotHeldError(err))
+    return { status: 403 as const, body: SEGMENT_REFUSALS.not_an_owner }
   return firstOwned(err, [segmentTaken, workspaceNotFound, corruptStored])
 }
 
@@ -138,9 +147,9 @@ export interface WorkspacesRouterOptions {
   /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
    *  on the local daemon, where an unclaimed workspace is open by design. */
   firstMember?: FirstMember
-  /** ADR-0053 decision 3: a segment changes for an owner only. Absent on the
-   *  local daemon, whose one person owns everything. */
-  ownsWorkspace?: WorkspaceOwnership
+  /** ADR-0053 decision 3: a segment changes for an owner only, signed in at
+   *  this host. Absent on the local daemon, whose one person owns everything. */
+  ownerChange?: OwnerChange
 }
 
 // GET /api/workspaces
@@ -325,7 +334,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // PATCH, not PUT: a field ABSENT means "leave this layer alone", which is
   // the port's contract and something PUT cannot express — under PUT a body
   // carrying only a name would be asking to drop the address.
-  const owns = options.ownsWorkspace ?? (() => Promise.resolve(true))
+  const ownerChange = options.ownerChange ?? (() => Promise.resolve(null))
   app.patch('/api/workspaces/:workspaceId', async (c) => {
     const handle = c.req.param('workspaceId')
     const malformed = refuseMalformedHandle(c, handle)
@@ -343,9 +352,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       const workspaceId = await workspaceIdFromHandle(c, handle)
       // Asked before the rename, so a member never reaches the collision
       // check: a taken and a free segment answer alike.
-      if (parsed.data.segment !== undefined && !(await owns(c, workspaceId))) {
-        return c.json(SEGMENT_NOT_OWNED, 403)
-      }
+      const refused = parsed.data.segment === undefined ? null : await ownerChange(c, workspaceId)
+      if (refused !== null) return c.json(SEGMENT_REFUSALS[refused], 403)
       // Only the holder changes a segment, decided by the write itself: a
       // co-owner left behind by a hand-over could otherwise rename the tailed
       // segment back to its recipient's bare name. Never refuses on `me`.

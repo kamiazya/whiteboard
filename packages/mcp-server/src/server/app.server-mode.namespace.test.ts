@@ -300,6 +300,23 @@ describe('server mode — only an owner changes a segment', () => {
     expect(await res.json()).toMatchObject({ error: 'not_an_owner' })
   })
 
+  // Moving the address everyone else uses is an owner's administration, which
+  // a bearer never does however it is scoped; a display name stays any
+  // member's to change, through any grant.
+  it("refuses the owner's segment change through a bearer, and keeps it a name change", async () => {
+    const { ada, plans } = await planWithMember()
+    const bearer = { authorization: 'Bearer ada' }
+
+    const moved = await rename(bearer, plans.workspaceId, { segment: 'roadmap' })
+    const named = await rename(bearer, plans.workspaceId, { displayName: 'Plans 2027' })
+
+    expect(moved.status).toBe(403)
+    expect(await moved.json()).toMatchObject({ error: 'sign_in_required' })
+    expect(named.status).toBe(200)
+    expect(await named.json()).toMatchObject({ segment: 'plans', displayName: 'Plans 2027' })
+    expect((await rename(ada, plans.workspaceId, { segment: 'roadmap' })).status).toBe(200)
+  })
+
   it('lets a member change the display name alone', async () => {
     const { bob, plans } = await planWithMember()
 

@@ -68,7 +68,7 @@ describe('glow filter regions', () => {
     const areas = regionAreas(svg)
     const references = [...svg.matchAll(/filter="url\(#(wb-glow-[^)]+)\)"/g)].map((m) => m[1]!)
     // The subject is present: every element glows and every reference resolves.
-    expect(references.length).toBe(scene.nodes.length)
+    expect(references).toHaveLength(scene.nodes.length)
     expect(references.every((id) => areas.has(id))).toBe(true)
 
     const rasterised = references.reduce((sum, id) => sum + areas.get(id)!, 0)

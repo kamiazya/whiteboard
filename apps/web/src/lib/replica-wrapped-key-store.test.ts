@@ -41,6 +41,14 @@ describe('saveWrappedKey / loadWrappedKey', () => {
     expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
   })
 
+  // A daemon URL is a value a person can type; a long slash run that does
+  // not end it must cost a linear trim, not a regex retried from every slash.
+  it('keys a daemon URL holding a long interior slash run in linear time', () => {
+    const started = performance.now()
+    expect(loadWrappedKey(`${'/'.repeat(100_000)}x`, 'ws-1')).toBeNull()
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
   it('replaces the blob for a pair rather than accumulating', () => {
     saveWrappedKey(DAEMON, 'ws-1', BLOB)
     const next = { ...BLOB, ct: 'GBkaGxwdHh8gISIj' }

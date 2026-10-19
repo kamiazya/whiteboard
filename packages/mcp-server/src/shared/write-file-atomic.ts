@@ -54,8 +54,10 @@ export async function commitStagedWrite(
   options: { mode?: number } = {},
 ): Promise<void> {
   const { mode } = options
+  // 'wx' creates or fails: a file or symlink already at the staged name is
+  // never truncated or followed, and — not being ours — never removed below.
+  const staged = await open(tempPath, 'wx', mode)
   try {
-    const staged = await open(tempPath, 'w', mode)
     try {
       await staged.writeFile(data)
       if (mode !== undefined && platform() !== 'win32') {

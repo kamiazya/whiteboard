@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureLogsForTests } from '../server/log.js'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
 import { readProcessStartMs } from '../shared/process-identity.js'
 import { captureSignalListeners } from '../shared/test-utils/signal-listeners.js'
@@ -503,6 +504,7 @@ describe('runDaemonRun token source conflict', () => {
     fakeStdin.setEncoding = vi.fn()
     const originalStdin = process.stdin
     Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true })
+    const capture = captureLogsForTests('warning')
     try {
       // Wait for the real 'data' listener to attach before emitting: the
       // startup path now awaits an async purge step ahead of the stdin
@@ -526,9 +528,47 @@ describe('runDaemonRun token source conflict', () => {
       expect(startHttpServerMock).toHaveBeenCalledWith(
         expect.objectContaining({ token: 'stdin-only-token' }),
       )
+      // A stdin token is operator-chosen too, so its length is judged the same way.
+      expect(capture.records.filter((r) => /shorter/.test(r.msg))).toHaveLength(1)
     } finally {
+      capture.restore()
       Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true })
     }
+  })
+})
+
+describe('runDaemonRun warns about a token too short to resist an offline guess', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  // The proof route answers an HMAC keyed by the token to anyone who reaches
+  // the socket, so a short operator-chosen token can be brute-forced offline.
+  async function shortTokenWarnings(env: Record<string, string>) {
+    const capture = captureLogsForTests('warning')
+    try {
+      const outcome = await runDaemonRun({
+        tokenStdin: false,
+        dataDir: '/tmp/whiteboard-test',
+        env,
+      })
+      expect(outcome.kind).toBe('running')
+      return capture.records.filter((r) => r.scope === 'daemon-startup' && /shorter/.test(r.msg))
+    } finally {
+      capture.restore()
+    }
+  }
+
+  it('warns once, naming the length but never the token, for a 31-character env token', async () => {
+    const token = 'x'.repeat(31)
+    const warnings = await shortTokenWarnings({ WHITEBOARD_DAEMON_TOKEN: token })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]?.level).toBe('warning')
+    expect(JSON.stringify(warnings[0])).not.toContain(token)
+    expect(warnings[0]?.data).toMatchObject({ length: 31, minimumLength: 32 })
+  })
+
+  it('stays quiet for a 32-character env token and for a minted one', async () => {
+    expect(await shortTokenWarnings({ WHITEBOARD_DAEMON_TOKEN: 'y'.repeat(32) })).toHaveLength(0)
+    expect(await shortTokenWarnings({})).toHaveLength(0)
   })
 })
 

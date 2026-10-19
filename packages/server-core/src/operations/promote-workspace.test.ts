@@ -149,6 +149,7 @@ function fakes(peer = 1n) {
     workspaceDoc,
     saves: () => saves,
     evictions: () => evictions,
+    deps: { liveDocuments: live as LiveDocuments, workspaceDocuments, versions, blobStore: blobs },
   }
 }
 
@@ -162,15 +163,11 @@ const CEILING_TIMEOUT_MS = 30_000
 describe('promoteWorkspace', () => {
   it('merges the record and writes one explicit human checkpoint per promoted document', async () => {
     const fake = fakes()
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: browserRecord(), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: browserRecord(),
+      operator,
+    })
     expect(result.kind).toBe('promoted')
     if (result.kind !== 'promoted') return
     expect([...result.recorded].sort()).toEqual([ROADMAP_ID, SKETCH_ID])
@@ -188,15 +185,11 @@ describe('promoteWorkspace', () => {
 
   it("writes no row for the target's own documents", async () => {
     const fake = fakes()
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: browserRecord(), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: browserRecord(),
+      operator,
+    })
     expect(result.kind).toBe('promoted')
     expect(fake.versions.saves).toHaveLength(2)
     for (const save of fake.versions.saves) {
@@ -207,15 +200,11 @@ describe('promoteWorkspace', () => {
 
   it("when the promoted document wins the contested path it gets the row and the target's own does not", async () => {
     const fake = fakes(2n)
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: browserRecord(1n), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: browserRecord(1n),
+      operator,
+    })
     expect(result.kind).toBe('promoted')
     if (result.kind !== 'promoted') return
     expect([...result.recorded].sort()).toEqual([ROADMAP_ID, SKETCH_ID, CONTESTED_ID])
@@ -242,30 +231,22 @@ describe('promoteWorkspace', () => {
     writeMarkdownBody(documentContainers(record, ROADMAP_ID), '# roadmap v1')
     record.commit()
 
-    await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }) as Uint8Array, operator },
-    )
+    await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }) as Uint8Array,
+      operator,
+    })
 
     expect(resolveWorkspaceDocumentById(fake.workspaceDoc, ROADMAP_ID)?.updatedAt).toBe(1_000)
   })
 
   it('refuses bytes that are not a Loro snapshot before touching the workspace', async () => {
     const fake = fakes()
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: new Uint8Array([1, 2, 3, 4]), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: new Uint8Array([1, 2, 3, 4]),
+      operator,
+    })
     expect(result).toEqual({ kind: 'malformed-snapshot' })
     expect(fake.saves()).toBe(0)
     expect(fake.versions.saves).toEqual([])
@@ -302,15 +283,11 @@ describe('promoteWorkspace', () => {
     vi.spyOn(LoroDoc.prototype, 'import').mockImplementationOnce(() => {
       throw Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
     })
-    const failure = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: browserRecord(), operator },
-    ).catch((err: unknown) => err)
+    const failure = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: browserRecord(),
+      operator,
+    }).catch((err: unknown) => err)
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
     expect(fake.saves()).toBe(0)
   })
@@ -330,15 +307,11 @@ describe('promoteWorkspace', () => {
       kind: 'markdown',
     })
     record.commit()
-    const refusal = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
-    ).catch((err: unknown) => err)
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator,
+    }).catch((err: unknown) => err)
     // The merge's own refusal: one judgement of a path for promote and sync alike.
     expect(refusal).toBeInstanceOf(OffGrammarPathError)
     expect(refusal).toMatchObject({ paths: ['Meeting notes'] })
@@ -371,7 +344,10 @@ describe('promoteWorkspace', () => {
       write: (doc: Board) => doc.getText('body').insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
     },
     runs: {
+      // Written into the roadmap, but a runs cost is the whole update's, so
+      // the refusal names no document.
       at: 'notes/roadmap',
+      unscoped: true,
       // Two runs each within the limit, scattered so they never join, then
       // cut back so the body itself is short: only their cost refuses them.
       write: (doc: Board) => {
@@ -559,6 +535,7 @@ describe('promoteWorkspace', () => {
     keyof typeof SYNC_TEXT_BREACH_CODES,
     {
       at: string
+      unscoped?: true
       status?: number
       write?: (doc: Board) => void
       onRecord?: (record: LoroDoc, documentId: string) => void
@@ -567,7 +544,7 @@ describe('promoteWorkspace', () => {
 
   it.each(
     Object.keys(SYNC_TEXT_BREACH_CODES) as (keyof typeof SYNC_TEXT_BREACH_CODES)[],
-  )('refuses a record whose document holds a %s breach, naming the document', async (shape) => {
+  )('refuses a record whose document holds a %s breach, naming the document that holds it', async (shape) => {
     const { at } = breachCases[shape]
     const fake = fakes()
     const record = new LoroDoc()
@@ -584,6 +561,7 @@ describe('promoteWorkspace', () => {
     })
     const documentId = at === 'sketch' ? SKETCH_ID : ROADMAP_ID
     const breachCase: {
+      unscoped?: true
       status?: number
       write?: (doc: Board) => void
       onRecord?: (record: LoroDoc, documentId: string) => void
@@ -591,21 +569,57 @@ describe('promoteWorkspace', () => {
     breachCase.write?.(documentContainers(record, documentId))
     breachCase.onRecord?.(record, documentId)
     record.commit()
-    const refusal = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
-    ).catch((err: unknown) => err)
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator,
+    }).catch((err: unknown) => err)
     expect(syncWriteAnswer(refusal)).toEqual({
       code: SYNC_TEXT_BREACH_CODES[shape],
       status: breachCase.status ?? 413,
     })
-    expect(refusal).toMatchObject({ breach: { shape }, at: { path: at } })
-    expect((refusal as Error).message).toMatch(new RegExp(`^The document at "${at}" `))
+    expect(refusal).toMatchObject({ breach: { shape } })
+    if (breachCase.unscoped) {
+      expect((refusal as { at?: unknown }).at).toBeUndefined()
+      expect((refusal as Error).message).not.toContain(at)
+    } else {
+      expect(refusal).toMatchObject({ at: { path: at } })
+      expect((refusal as Error).message).toMatch(new RegExp(`^The document at "${at}" `))
+    }
+    expect(fake.saves()).toBe(0)
+  })
+
+  it('refuses a runs breach spread over two documents without naming either one', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'notes/roadmap',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+    })
+    createWorkspaceDocumentAtPath(record, {
+      path: 'notes/retro',
+      documentId: CONTESTED_ID,
+      kind: 'markdown',
+    })
+    // One run per document, each within the limit and each body short of
+    // it: only their cost summed over the update refuses them.
+    const piece = 'x'.repeat((MARKDOWN_MAX_CHARS * 3) / 4)
+    documentContainers(record, ROADMAP_ID).getText('body').insert(0, piece)
+    documentContainers(record, CONTESTED_ID).getText('body').insert(0, piece)
+    record.commit()
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator,
+    }).catch((err: unknown) => err)
+    expect(refusal).toMatchObject({ breach: { shape: 'runs' } })
+    expect((refusal as { at?: unknown }).at).toBeUndefined()
+    const { message } = refusal as Error
+    expect(message).not.toContain('notes/roadmap')
+    expect(message).not.toContain('notes/retro')
+    expect(message).toMatch(/^This update makes /)
     expect(fake.saves()).toBe(0)
   })
 
@@ -646,15 +660,11 @@ describe('promoteWorkspace', () => {
       }),
     )
     record.import(orphan.export({ mode: 'update' }))
-    const refusal = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
-    ).catch((err: unknown) => err)
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator,
+    }).catch((err: unknown) => err)
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'causal_gap', status: 409 })
     expect(refusal).toMatchObject({ breach: { shape: 'unattached-container' } })
     expect(refusal).not.toHaveProperty('at.path')
@@ -678,15 +688,11 @@ describe('promoteWorkspace', () => {
       .setContainer(MARKDOWN_BODY_KEY, new LoroText())
       .insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1))
     record.commit()
-    const refusal = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
-    ).catch((err: unknown) => err)
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator,
+    }).catch((err: unknown) => err)
     expect(syncWriteAnswer(refusal)).toMatchObject({ status: 413 })
     expect(refusal).not.toHaveProperty('at.path')
     expect(fake.saves()).toBe(0)
@@ -695,15 +701,11 @@ describe('promoteWorkspace', () => {
   it('refuses a record holding more documents than a promote carries, before merging any of it', async () => {
     const fake = fakes()
     const documents = WORKSPACE_MAX_DOCUMENTS + 1
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: recordOf(documents), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: recordOf(documents),
+      operator,
+    })
     expect(result).toEqual({
       kind: 'too-many-documents',
       documents,
@@ -720,15 +722,11 @@ describe('promoteWorkspace', () => {
     timeout: CEILING_TIMEOUT_MS,
   }, async () => {
     const fake = fakes()
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS - 1), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS - 1),
+      operator,
+    })
     expect(result.kind).toBe('promoted')
     expect(fake.versions.saves).toHaveLength(WORKSPACE_MAX_DOCUMENTS - 1)
   })
@@ -738,15 +736,11 @@ describe('promoteWorkspace', () => {
     fake.versions.save = async () => {
       throw new TooManyVersionsError(200)
     }
-    const result = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: recordOf(2), operator },
-    )
+    const result = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: recordOf(2),
+      operator,
+    })
     expect(result.kind).toBe('promoted')
     expect(result.kind === 'promoted' ? result.recorded : null).toEqual([])
     expect(fake.saves()).toBeGreaterThan(0)
@@ -756,15 +750,11 @@ describe('promoteWorkspace', () => {
     timeout: CEILING_TIMEOUT_MS,
   }, async () => {
     const fake = fakes()
-    const refusal = await promoteWorkspace(
-      {
-        liveDocuments: fake.live,
-        workspaceDocuments: fake.workspaceDocuments,
-        versions: fake.versions,
-        blobStore: fake.blobs,
-      },
-      { workspaceId: WS, snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS), operator },
-    ).catch((err: unknown) => err)
+    const refusal = await promoteWorkspace(fake.deps, {
+      workspaceId: WS,
+      snapshot: recordOf(WORKSPACE_MAX_DOCUMENTS),
+      operator,
+    }).catch((err: unknown) => err)
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'too_many_documents', status: 413 })
     expect(fake.saves()).toBe(0)
     expect(fake.versions.saves).toHaveLength(0)

@@ -93,6 +93,9 @@ function promotedDocumentAt(
  */
 function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
   if (!(err instanceof TextBreachRefusalError)) return err
+  // A runs cost is summed over the whole update, so the container holding the
+  // longest run is no more its cause than any other document the update wrote.
+  if (err.breach.shape === 'runs') return textBreachRefusal(err.breach)
   const { container } = err.breach
   // A container whose creating op the record lacks has no parent, and asking
   // the engine for its path panics rather than answering `undefined`.

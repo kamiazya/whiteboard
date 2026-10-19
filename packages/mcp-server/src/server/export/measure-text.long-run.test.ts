@@ -11,6 +11,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
+import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type * as opentype from 'opentype.js'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -48,6 +49,34 @@ describe('a paragraph far longer than a line', () => {
     // Present before bounded: no call at all would satisfy the bound.
     expect(lengths.length).toBeGreaterThan(0)
     expect(Math.max(...lengths)).toBeLessThanOrEqual(256)
+  })
+
+  it('bounds a segment whose whole tail joins its base', async () => {
+    const measure = await opentypeMeasureText()
+    const spy = vi.spyOn(opentypeApi.Font.prototype, 'getAdvanceWidth')
+    // One base and combining acute accents up to a node text's ceiling: no
+    // code point after the first is a safe place to cut.
+    const cluster = `a${String.fromCodePoint(0x301).repeat(NODE_TEXT_MAX_CHARS - 1)}`
+
+    measure(cluster, descriptor(16))
+
+    const lengths = spy.mock.calls.map(([text]) => text.length)
+    expect(lengths.length).toBeGreaterThan(0)
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(256)
+    expect(lengths.reduce((sum, length) => sum + length, 0)).toBe(cluster.length)
+  })
+
+  it('measures a capped cluster as one whole-run call does', async () => {
+    const path = (await resolveExportFontFaces()).regular
+    if (path === null) throw new Error('the vendored Regular face did not resolve')
+    const font = opentypeApi.parse((await readFile(path)).buffer)
+    const measure = await opentypeMeasureText()
+    // The forced cuts land deep in the mark tail, where this face's ccmp no
+    // longer reaches back to the dotted base, so the sum stays exact here.
+    const cluster = `i${String.fromCodePoint(0x307).repeat(1023)}`
+    const whole = font.getAdvanceWidth(cluster, 16, { kerning: false })
+
+    expect(measure(cluster, descriptor(16)).advanceWidth).toBeCloseTo(whole, 9)
   })
 })
 
