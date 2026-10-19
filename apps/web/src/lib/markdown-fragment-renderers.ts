@@ -292,12 +292,23 @@ function hasRefusedAttribute(svg: string): boolean {
   return false
 }
 
-/** Whether a `<style>` element's text holds CSS `NON_LOCAL_URL` cannot read. */
+/**
+ * Whether a `<style>` element's text holds CSS `NON_LOCAL_URL` cannot read.
+ * An element runs from its open to the next close, or to the end when none
+ * follows. Every open before that close shares its end, so its text is part
+ * of the first one's: reading from the first and resuming after the close
+ * reads each character once.
+ */
 function hasUnreadableStyleElement(svg: string): boolean {
-  for (const open of svg.matchAll(STYLE_ELEMENT_OPEN)) {
-    const rest = svg.slice(open.index)
-    const close = rest.search(STYLE_ELEMENT_CLOSE)
-    if (UNREADABLE_CSS.test(close < 0 ? rest : rest.slice(0, close))) return true
+  const opens = new RegExp(STYLE_ELEMENT_OPEN.source, 'gi')
+  const closes = new RegExp(STYLE_ELEMENT_CLOSE.source, 'gi')
+  for (let open = opens.exec(svg); open; open = opens.exec(svg)) {
+    closes.lastIndex = open.index
+    const close = closes.exec(svg)
+    const end = close ? close.index : svg.length
+    if (UNREADABLE_CSS.test(svg.slice(open.index, end))) return true
+    if (!close) return false
+    opens.lastIndex = end
   }
   return false
 }

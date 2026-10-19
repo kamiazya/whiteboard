@@ -332,6 +332,26 @@ describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 
+  // Each `<style` used to be read to the next close, or to the end when
+  // none follows, which is quadratic in the number of opens.
+  it('reads many unclosed style elements in linear time', () => {
+    const opens = '<style>'.repeat(50_000)
+    const started = performance.now()
+    expect(fragmentIsEmbeddable(`<svg>${opens}g{fill:red}</svg>`)).toBe(true)
+    expect(fragmentIsEmbeddable(`<svg>${opens}@import "//evil.example/x.css";</svg>`)).toBe(false)
+    expect(fragmentIsEmbeddable(`<svg>${opens}g{fill:red}</style>@import "x"</svg>`)).toBe(true)
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
+  it('refuses unreadable CSS after an earlier style element closes', () => {
+    expect(
+      fragmentIsEmbeddable('<svg><style>g{fill:red}</style><style><style>@import "x";</svg>'),
+    ).toBe(false)
+    expect(
+      fragmentIsEmbeddable('<svg><style>g{fill:red}</style>@import "x"<style>g{}</style></svg>'),
+    ).toBe(true)
+  })
+
   it('accepts a presentation attribute naming a local url() or a plain colour', () => {
     expect(
       fragmentIsEmbeddable(
