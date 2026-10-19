@@ -432,3 +432,58 @@ describe('workflows — every job a publish or deploy job needs builds from a co
     }
   })
 })
+
+/**
+ * A job holding a write-scoped job token restores no pnpm store cache. The
+ * store is written by jobs that run every dev and test dependency, so a
+ * poisoned entry would be linked into a job whose token can push, comment or
+ * publish. Read per job, falling back to the workflow root's `permissions:`,
+ * which is what a job without its own inherits.
+ */
+describe('workflows — a job holding a write-scoped token builds from a cold store', () => {
+  const SETUP_PNPM = './.github/actions/setup-pnpm'
+  type Permissions = string | Record<string, string> | undefined
+  const grantsWrite = (permissions: Permissions): boolean =>
+    typeof permissions === 'string'
+      ? permissions.includes('write')
+      : Object.values(permissions ?? {}).includes('write')
+  /** A job without its own `permissions:` holds the workflow root's. */
+  const effectivePermissions = (job: WorkflowJob, root: Permissions): Permissions =>
+    (job.permissions as Permissions) ?? root
+
+  const dir = join(REPO_ROOT, '.github/workflows')
+  const rootPermissions = new Map<string, Permissions>(
+    readdirSync(dir)
+      .filter((file) => /\.ya?ml$/.test(file))
+      .map((file) => [
+        file,
+        (parseYaml(readFileSync(join(dir, file), 'utf-8')) as { permissions?: Permissions })
+          .permissions,
+      ]),
+  )
+  const writeJobs = everyWorkflowJob().filter(({ file, job }) =>
+    grantsWrite(effectivePermissions(job, rootPermissions.get(file))),
+  )
+  const setupSites = writeJobs.flatMap(({ site, job }) =>
+    (job.steps ?? [])
+      .filter((step) => step.uses === SETUP_PNPM)
+      .map((step) => [site, step.with?.['cache-store']] as const),
+  )
+
+  it('finds the write-token jobs that set up pnpm', () => {
+    expect(setupSites.map(([site]) => site)).toContain('mutation.yml:pr-report')
+  })
+
+  it.each(setupSites)("%s passes cache-store: 'false'", (_site, cacheStore) => {
+    expect(cacheStore).toBe('false')
+  })
+
+  it('reads a write scope granted at the workflow root or as a shorthand', () => {
+    expect(grantsWrite('write-all')).toBe(true)
+    expect(grantsWrite({ contents: 'read', 'pull-requests': 'write' })).toBe(true)
+    expect(grantsWrite({ contents: 'read' })).toBe(false)
+    expect(grantsWrite(undefined)).toBe(false)
+    expect(grantsWrite(effectivePermissions({}, { packages: 'write' }))).toBe(true)
+    expect(grantsWrite(effectivePermissions({ permissions: {} }, 'write-all'))).toBe(false)
+  })
+})
