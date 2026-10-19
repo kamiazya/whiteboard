@@ -295,6 +295,8 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
     ['a namespaced filter', '<s:filter xmlns:s="http://www.w3.org/2000/svg" id="f"/>'],
     ['a namespaced filter primitive', '<s:feFlood xmlns:s="http://www.w3.org/2000/svg"/>'],
     ['a filter attribute', '<rect width="10" height="10" filter="url(#f)"/>'],
+    ['a spaced filter attribute', '<rect width="10" height="10" filter = "url(#f)"/>'],
+    ['a CSS filter with a comment before its colon', '<style>rect{filter/**/:blur(9px)}</style>'],
     ['a CSS filter in a style attribute', '<rect style="filter: blur(9px)"/>'],
     ['a CSS filter in a style element', '<style>rect{filter:blur(9px)}</style><rect/>'],
     ['a filter spelled with a character reference', '<rect style="f&#105;lter:blur(9px)"/>'],
@@ -312,6 +314,15 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
       '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"/></svg>',
     )
     expect(boundedDataImages(imageSvg(`data:image/svg+xml,${svg}`))).not.toContain('href=')
+  })
+
+  it.each([
+    ['a label naming the word', '<text x="0" y="9">Filter</text>'],
+    ['a title naming the word', '<title>filter results</title><rect width="10" height="10"/>'],
+    ['an id naming the word', '<rect id="filtered" width="10" height="10"/>'],
+  ])('keeps one carrying %s', (_name, body) => {
+    const kept = svgImage(body)
+    expect(boundedDataImages(imageSvg(kept))).toContain(`href="${kept}"`)
   })
 
   it('keeps a plain SVG within the budget', () => {

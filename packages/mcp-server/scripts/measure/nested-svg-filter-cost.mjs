@@ -14,7 +14,8 @@
  * px, `primitives` how many filter primitives (or masks) it chains, and
  * `zoom` the export scale (`fitTo: zoom`, at most 8). Each row runs in its
  * own process, killed at `DEADLINE_MS`, so a row that stalls reports `>`
- * the deadline instead of hanging the table.
+ * the deadline instead of hanging the table, and a row that fails reports
+ * its error rather than passing for a stall.
  */
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -84,7 +85,12 @@ if (process.argv[2] === '--row') {
       timeout: deadline,
       encoding: 'utf8',
     })
-    const ms = run.status === 0 ? run.stdout : `> ${deadline}`
+    const ms =
+      run.status === 0
+        ? run.stdout
+        : run.error?.code === 'ETIMEDOUT'
+          ? `> ${deadline}`
+          : `error: ${run.error?.message ?? run.stderr.match(/^\w*Error\b.*$/m)?.[0] ?? `exit ${run.status}`}`
     process.stdout.write(
       `${kind.padEnd(8)} ${side.padStart(5)} ${n.padStart(6)} ${r.padStart(7)} ${zoom.padStart(5)}   ${ms}\n`,
     )

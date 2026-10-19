@@ -55,12 +55,16 @@ const decodeDataUrl = (href: string): { mime: string; bytes: Uint8Array } | unde
  * of radius 10 over a 100px image costs 46ms at export scale 1 and 17.7s at
  * scale 8, and every further primitive adds as much again
  * (`scripts/measure/nested-svg-filter-cost.mjs`; masks, patterns and `<use>`
- * fan-out measured flat). So any spelling of `filter` refuses, read after
- * XML character references are decoded, as is a CSS escape that could spell
- * it, an entity that could expand into it, and a nested `<image>` — which
- * resvg does not draw today, so refusing one costs nothing it would show.
+ * fan-out measured flat). So every way of ASKING for a filter refuses — a
+ * `<filter>` or `fe*` element under any prefix, a `filter` attribute or CSS
+ * property (a comment may sit before its `:`) — read after XML character
+ * references are decoded, as does a CSS escape that could spell one, an
+ * entity that could expand into one, and a nested `<image>`, which resvg
+ * does not draw today, so refusing one costs nothing it would show. The bare
+ * word in a label asks for nothing and is kept.
  */
-const UNBOUNDED_SVG_WORK = /filter|<(?:[\w.-]+:)?(?:fe[a-z]|image\b)|<!entity|\\/i
+const UNBOUNDED_SVG_WORK =
+  /<(?:[\w.-]+:)?(?:filter\b|fe[a-z]|image\b)|\bfilter\s*(?:[:=]|\/\*)|<!entity|\\/i
 
 const asksForUnboundedWork = (mime: string, bytes: Uint8Array): boolean =>
   mime === 'image/svg+xml' &&
