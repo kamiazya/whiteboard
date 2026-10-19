@@ -139,7 +139,11 @@
       // compiler is enabled but its imports are never followed, and both packages
       // needed an ignoreDependencies entry that hid a real unused-dependency
       // answer.
-      "project": ["src/**/*.tsx", "src/**/*.ts", "src/**/*.css", "scripts/**/*.mjs"]
+      "project": ["src/**/*.tsx", "src/**/*.ts", "src/**/*.css", "scripts/**/*.mjs"],
+      // Bundled into the generated service worker by workbox-build, never
+      // imported by src: declared in `dependencies` so `pnpm audit --prod`
+      // covers code the hosted origin serves (web-shipped-dependencies.test.ts).
+      "ignoreDependencies": ["workbox-core", "workbox-precaching", "workbox-routing", "workbox-strategies"]
     }
   },
   "ignoreDependencies": [
