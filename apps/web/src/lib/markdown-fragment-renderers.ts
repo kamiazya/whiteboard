@@ -251,10 +251,23 @@ const INTEGRATION_POINT_OPEN = new RegExp(
   'gi',
 )
 
+/** Where the tag opened at `from` ends: its first `>` outside a quoted value, or -1. */
+function tagEnd(svg: string, from: number): number {
+  let quote = ''
+  for (let i = from; i < svg.length; i++) {
+    const ch = svg[i]
+    if (quote !== '') {
+      if (ch === quote) quote = ''
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if (ch === '>') return i
+  }
+  return -1
+}
+
 function hasMarkupInIntegrationPoint(svg: string): boolean {
   const opens = new RegExp(INTEGRATION_POINT_OPEN.source, 'gi')
   for (let open = opens.exec(svg); open; open = opens.exec(svg)) {
-    const bodyStart = svg.indexOf('>', open.index)
+    const bodyStart = tagEnd(svg, open.index)
     if (bodyStart < 0) return false
     const close = new RegExp(String.raw`</(?:${ELEMENT_PREFIX})?${open[1]}(?![^\s/>])`, 'gi')
     close.lastIndex = bodyStart

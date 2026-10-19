@@ -118,6 +118,9 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
   // The tokenizer's other bogus-comment openers, each closed at the first `>`.
   const processingInstructionHidden = '<svg><?<g a="?><svg onload=alert(1)>"></g></svg>'
   const endTagHidden = '<svg></ <g a="> <svg onload=alert(1)>"></g></svg>'
+  // A `>` or a close tag inside the integration point's own attribute value.
+  const integrationPointAttributeHidden =
+    '<svg><title a="> </s:title>"><style><x y="</style><svg onload=alert(1)>"></title></svg>'
 
   it('parses the breakout sample into a live handler', () => {
     // A template's content is inert, so the parsed <img> never loads.
@@ -140,6 +143,7 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
     processingInstructionHidden,
     endTagHidden,
     '<svg></1<g a="> <svg onload=alert(1)>"></g></svg>',
+    integrationPointAttributeHidden,
   ])('refuses %j', (svg) => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
@@ -164,6 +168,12 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
     ),
   )('refuses a <%s> element', (name) => {
     expect(fragmentIsEmbeddable(`<svg><${name}/></svg>`)).toBe(false)
+  })
+
+  it('parses a style behind a quoted title attribute into a live handler', () => {
+    const host = document.createElement('template')
+    host.innerHTML = integrationPointAttributeHidden
+    expect(host.content.querySelector('[onload]')).not.toBeNull()
   })
 
   it('parses a comment-hidden tag into a live handler', () => {
