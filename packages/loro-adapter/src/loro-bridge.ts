@@ -764,7 +764,11 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   // shape the canvas renderer still takes.
   // With the nodes in hand: a passage of a node's text projects as a comment
   // on that node, which needs the node's corner to stand at.
-  const comments = readCanvasComments(doc, (id) => nodes.find((node) => node.id === id))
+  // The FIRST node with an id wins, as a scan from the front would answer: two
+  // stored keys can hold one id only in a record a broken writer left.
+  const nodeById = new Map<string, SpatialNode>()
+  for (const node of nodes) if (!nodeById.has(node.id)) nodeById.set(node.id, node)
+  const comments = readCanvasComments(doc, (id) => nodeById.get(id))
 
   const canvas: SpatialCanvas = {
     nodes,
