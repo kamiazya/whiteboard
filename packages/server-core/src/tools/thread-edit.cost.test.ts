@@ -8,7 +8,7 @@
  * lock — so looking each named id up by walking the board is ops x ids x nodes
  * of work, repeatable at will because a refused batch stores nothing.
  */
-import * as loroAdapter from '@kamiazya/whiteboard-loro-adapter'
+import type * as loroAdapter from '@kamiazya/whiteboard-loro-adapter'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
