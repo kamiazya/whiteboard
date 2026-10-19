@@ -85,12 +85,16 @@ if (process.argv[2] === '--row') {
       timeout: deadline,
       encoding: 'utf8',
     })
-    const ms =
-      run.status === 0
-        ? run.stdout
-        : run.error?.code === 'ETIMEDOUT'
-          ? `> ${deadline}`
-          : `error: ${run.error?.message ?? run.stderr.match(/^\w*Error\b.*$/m)?.[0] ?? `exit ${run.status}`}`
+    let ms
+    if (run.status === 0) {
+      ms = run.stdout
+    } else if (run.error?.code === 'ETIMEDOUT') {
+      ms = `> ${deadline}`
+    } else {
+      const exited = `exit ${run.status}`
+      const reason = run.error?.message ?? run.stderr.match(/^\w*Error\b.*$/m)?.[0] ?? exited
+      ms = `error: ${reason}`
+    }
     process.stdout.write(
       `${kind.padEnd(8)} ${side.padStart(5)} ${n.padStart(6)} ${r.padStart(7)} ${zoom.padStart(5)}   ${ms}\n`,
     )

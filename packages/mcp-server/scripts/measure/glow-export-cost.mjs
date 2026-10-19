@@ -59,7 +59,8 @@ if (process.argv[2] === '--row') {
       timeout: deadline,
     })
     if (run.error?.code === 'ETIMEDOUT' || run.signal === 'SIGTERM') {
-      process.stdout.write(`${JSON.stringify({ count, ms: `>${deadline}` })}\n`)
+      const timedOut = { count, ms: `>${deadline}` }
+      process.stdout.write(`${JSON.stringify(timedOut)}\n`)
     } else if (run.status !== 0) {
       process.stdout.write(
         `${JSON.stringify({ count, error: run.stderr.trim().split('\n').pop() })}\n`,
