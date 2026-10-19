@@ -57,4 +57,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0044-sign-in-attempt-source',
   '0045-sign-in-attempt-source-prefixes',
   '0046-workspace-namespace',
+  '0047-sign-in-attempt-fresh',
 ] as const satisfies readonly string[]

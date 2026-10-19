@@ -527,6 +527,10 @@ the change again.
   leaves every session unable to administer, and the refusal is the same.
   So does an `auth_time` more than 60 seconds ahead of the server's clock:
   keep the server's clock in sync with the provider's.
+- **Sign in again** holds the provider to what it was asked (OpenID Connect
+  `max_age=0`): an ID token whose `auth_time` is missing, or older than the
+  sign-in it was asked for, is refused there and then, and the person lands on
+  the sign-in screen with `provider_refused` rather than back on the page.
 - A provider behind a reverse proxy (`kind: trusted-header`) cannot be asked
   to sign someone in again, so its administrators cannot make changes from
   the web app.

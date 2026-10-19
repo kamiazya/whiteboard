@@ -50,12 +50,13 @@ export interface RelyingParty {
   ): Promise<VerifiedClaims>
 }
 
-export function createRelyingParty(options: { fetch?: client.CustomFetch } = {}): RelyingParty {
-  // Discovery once per provider; a failed discovery is not cached, so a
-  // provider that was briefly down is retried on the next sign-in.
+// Discovery once per provider; a failed discovery is not cached, so a
+// provider that was briefly down is retried on the next sign-in.
+function discoveryCache(
+  fetch: client.CustomFetch | undefined,
+): (provider: ResolvedProvider) => Promise<client.Configuration> {
   const configs = new Map<string, Promise<client.Configuration>>()
-
-  function configurationFor(provider: ResolvedProvider): Promise<client.Configuration> {
+  return (provider) => {
     const known = configs.get(provider.id)
     if (known !== undefined) return known
     const pending = client.discovery(
@@ -63,13 +64,16 @@ export function createRelyingParty(options: { fetch?: client.CustomFetch } = {})
       provider.clientId,
       undefined,
       client.ClientSecretPost(provider.clientSecretValue),
-      options.fetch === undefined ? undefined : { [client.customFetch]: options.fetch },
+      fetch === undefined ? undefined : { [client.customFetch]: fetch },
     )
     configs.set(provider.id, pending)
     pending.catch(() => configs.delete(provider.id))
     return pending
   }
+}
 
+export function createRelyingParty(options: { fetch?: client.CustomFetch } = {}): RelyingParty {
+  const configurationFor = discoveryCache(options.fetch)
   return {
     async authorizationUrl(provider, { redirectUri, state, nonce, codeVerifier, fresh }) {
       return client.buildAuthorizationUrl(await configurationFor(provider), {
@@ -83,7 +87,7 @@ export function createRelyingParty(options: { fetch?: client.CustomFetch } = {})
       })
     },
 
-    async exchange(provider, callbackUrl, { state, nonce, codeVerifier }) {
+    async exchange(provider, callbackUrl, { state, nonce, codeVerifier, fresh }) {
       const tokens = await client.authorizationCodeGrant(
         await configurationFor(provider),
         callbackUrl,
@@ -92,6 +96,9 @@ export function createRelyingParty(options: { fetch?: client.CustomFetch } = {})
           expectedState: state,
           expectedNonce: nonce,
           idTokenExpected: true,
+          // The `max_age=0` the authorization request sent, so openid-client
+          // requires `auth_time` and refuses one older than its clock tolerance.
+          ...(fresh === true ? { maxAge: 0 } : {}),
         },
       )
       const claims = tokens.claims()

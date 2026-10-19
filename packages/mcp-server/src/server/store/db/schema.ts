@@ -231,6 +231,8 @@ interface SignInAttemptsTable {
   sourcePrefix48: string
   /** SHA-256 of the IPv6 /56 the source sits in (an IPv4 source's own address). */
   sourcePrefix56: string
+  /** 1 when the attempt asked the provider for a sign-in made now, else 0. */
+  fresh: Generated<number>
 }
 
 // Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,

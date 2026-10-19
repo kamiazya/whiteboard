@@ -40,6 +40,21 @@ describe('sign-in attempts', () => {
     expect(await attempts.take(begun.state, begun.browserBinding, T0 + 2)).toBeNull()
   })
 
+  it('hands back whether the attempt asked for a sign-in made now', async () => {
+    const begin = (fresh?: boolean) =>
+      attempts.begin({
+        providerId: 'corp',
+        returnTo: '/',
+        ...(fresh === undefined ? {} : { fresh }),
+        source: PEER,
+        now: T0,
+        ttlMs: TTL,
+      })
+    const [fresh, plain] = [await begin(true), await begin()]
+    expect((await attempts.take(fresh.state, fresh.browserBinding, T0 + 1))?.fresh).toBe(true)
+    expect((await attempts.take(plain.state, plain.browserBinding, T0 + 1))?.fresh).toBe(false)
+  })
+
   // A mismatched browser must not burn the attempt for its rightful owner.
   it('keeps the attempt for its owner when another browser presents the state', async () => {
     const begun = await attempts.begin({

@@ -119,6 +119,7 @@ export const LEDGER: Ledger = {
     source: text,
     sourcePrefix48: text,
     sourcePrefix56: text,
+    fresh: integer,
   },
   workspaceMemberships: { workspaceId: text, profileId: text, createdAt: integer, role: text },
   tenantAdministrators: { profileId: text, appointedBy: textOrNull, appointedAt: integer },
