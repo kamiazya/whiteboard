@@ -163,23 +163,66 @@ export function usable(nodes: readonly TidyNode[]): TidyNode[] {
 }
 
 /**
- * Outermost-rooted single-scoop units: a group is a unit root iff no other
- * group's box fully contains it (identical boxes tie-break to the earlier
- * document index); each root claims every yet-unclaimed node its box
- * contains in ONE flat scoop, so nested groups and their members can never
- * be double-assigned. Everything else is a singleton unit.
+ * Which frames stand OVER which: `h` encloses `g` when its box fully contains
+ * `g`'s, identical boxes going to the earlier in document order. A frame is
+ * a level's unit root iff none of its enclosers is at that level.
+ *
+ * Answered once for the whole board and handed to every level, because the
+ * answer does not change between them: a level's nodes are a subsequence of
+ * the board's, in the same order, so the tie-break agrees too. Asking each
+ * level afresh cost g^2 containment tests per level, and a chain of nested
+ * frames has as many levels as frames — cubic, 323s for the 2000 a canvas
+ * may hold.
+ *
+ * Each frame's enclosers are listed smallest first, so a level's question is
+ * usually settled by the first entry: the frame just around it, which is a
+ * member of the same level unless it is the level's own root.
  */
-export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
+export interface FrameNesting {
+  readonly enclosers: (frame: TidyNode) => readonly TidyNode[]
+}
+
+export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
+  const frames = nodes.filter((n) => n.frame)
+  const rects = new Map(frames.map((f) => [f, rectOf(f)]))
+  const rect = (f: TidyNode) => rects.get(f) ?? rectOf(f)
+  const order = new Map(frames.map((f, i) => [f, i]))
+  const at = (f: TidyNode) => order.get(f) ?? 0
+  const area = (f: TidyNode) => f.width * f.height
+  // NaN (an overflowing area) only reorders the scan; membership is decided
+  // by `fullyContains` alone.
+  const smallestFirst = [...frames].sort((a, b) => area(a) - area(b) || at(a) - at(b))
+  const enclosers = new Map<TidyNode, TidyNode[]>()
+  for (const g of frames) {
+    enclosers.set(
+      g,
+      smallestFirst.filter(
+        (h) =>
+          h.id !== g.id &&
+          fullyContains(rect(h), rect(g)) &&
+          (!fullyContains(rect(g), rect(h)) || at(h) < at(g)),
+      ),
+    )
+  }
+  return { enclosers: (frame) => enclosers.get(frame) ?? [] }
+}
+
+/**
+ * Outermost-rooted single-scoop units: a group is a unit root iff no other
+ * group at this level encloses it (`FrameNesting`); each root claims every
+ * yet-unclaimed node more than half inside its box in ONE flat scoop, so
+ * nested groups and their members can never be double-assigned. Everything
+ * else is a singleton unit.
+ */
+export function buildUnits(
+  nodes: readonly TidyNode[],
+  options: TidyOptions,
+  nesting: FrameNesting = frameNesting(nodes),
+): Unit[] {
   const locked = options.locked ?? (() => false)
   const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
-  const groups = nodes.filter((n) => n.frame)
-  const isRoot = (g: TidyNode, index: number) =>
-    !groups.some(
-      (h, hIndex) =>
-        h.id !== g.id &&
-        fullyContains(rectOf(h), rectOf(g)) &&
-        (!fullyContains(rectOf(g), rectOf(h)) || hIndex < index),
-    )
+  const atLevel = new Set(nodes.filter((n) => n.frame))
+  const isRoot = (g: TidyNode) => !nesting.enclosers(g).some((h) => atLevel.has(h))
   const claimed = new Set<string>()
   const units: Unit[] = []
   let movableCount = 0
@@ -201,15 +244,15 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
       dy: 0,
     })
   }
-  for (const [index, node] of nodes.entries()) {
+  for (const node of nodes) {
     if (claimed.has(node.id)) continue
-    if (node.frame && isRoot(node, groups.indexOf(node))) {
-      void index
+    if (node.frame && isRoot(node)) {
+      const frame = rectOf(node)
       const members = nodes.filter(
-        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),
+        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(frame, rectOf(m))),
       )
       for (const m of members) claimed.add(m.id)
-      pushUnit(node.id, members, rectOf(node))
+      pushUnit(node.id, members, frame)
     }
   }
   for (const node of nodes) {
@@ -218,7 +261,9 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
     pushUnit(node.id, [node], rectOf(node))
   }
   // Units participate in document order of their root — rebuild that order
-  // (group roots were emitted before later singletons above).
+  // (group roots were emitted before later singletons above). A level of a
+  // nested chain is one unit, and needs no order.
+  if (units.length < 2) return units
   const orderOf = new Map(nodes.map((n, i) => [n.id, i]))
   units.sort((a, b) => (orderOf.get(a.rootId) ?? 0) - (orderOf.get(b.rootId) ?? 0))
   return units

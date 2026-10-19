@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { tidyNodes as recursiveTidyNodes } from './test-utils/tidy-reference/tidy.js'
 import { tidyNodes } from './tidy.js'
 
 // Work, not wall time: every collision test tidy makes goes through
@@ -86,9 +87,51 @@ describe('tidyNodes cost on nested frames', () => {
     }
   })
 
-  it('tidies a chain of 2000 nested frames without overflowing the stack', () => {
-    const started = performance.now()
-    expect(() => tidyNodes(nestedChain(2000))).not.toThrow()
-    expect(performance.now() - started).toBeLessThan(5_000)
+  it('tidies the deepest chain a canvas can hold in quadratic containment checks', () => {
+    const n = 2000
+    containmentChecks.count = 0
+    tidyNodes(nestedChain(n))
+    // Was 323s of wall time on one tidy; 3.3s after, with these mocks off.
+    expect(containmentChecks.count).toBeLessThanOrEqual(4 * n * n)
   }, 120_000)
+
+  it('walks the nesting without spending call stack per level', () => {
+    // A canvas chooses how deep its frames go, so the walk must not need a
+    // stack frame per level. Run with almost no stack left, a chain the
+    // recursive walk cannot finish is one this one must. The subject's chain
+    // is deeper than the spare stack holds even one trivial frame per level,
+    // so a leaner recursion than the reference's overflows there too; the
+    // reference's premise needs only the shorter one, and pays its cubic
+    // walk on fewer levels before it overflows.
+    expect(() => withLittleStack(() => recursiveTidyNodes(nestedChain(300)))).toThrow(RangeError)
+    expect(() => withLittleStack(() => tidyNodes(nestedChain(1000)))).not.toThrow()
+  }, 60_000)
 })
+
+/**
+ * Run `fn` with roughly `SPARE_FRAMES` trivial frames of stack left, found by
+ * probing how deep this realm lets a trivial function recurse rather than by
+ * assuming a stack size. Measured here: the explicit-stack walk finishes with
+ * 50 spare, and on a 300-frame chain the reference recursion (two frames a
+ * level) overflows with up to 1200 spare, so 400 is a factor of three from
+ * either edge.
+ */
+const SPARE_FRAMES = 400
+function withLittleStack(fn: () => unknown): void {
+  const probe = (depth: number): number => {
+    try {
+      return probe(depth + 1)
+    } catch {
+      return depth
+    }
+  }
+  const limit = probe(0)
+  const descend = (depth: number): void => {
+    if (depth > 0) {
+      descend(depth - 1)
+      return
+    }
+    fn()
+  }
+  descend(limit - SPARE_FRAMES)
+}

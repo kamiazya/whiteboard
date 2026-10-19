@@ -79,6 +79,8 @@ import {
 import { alignBands } from './tidy-bands.js'
 import {
   buildUnits,
+  type FrameNesting,
+  frameNesting,
   overlapsWithMargin,
   type Point,
   type Rect,
@@ -371,10 +373,16 @@ function applyFloor(
  * it: growth only, so a frame drawn roomier than it needs stays as drawn.
  */
 function enclosing(frame: Rect, rects: readonly Rect[]): Rect {
-  const x = Math.min(frame.x, ...rects.map((r) => r.x - TIDY_MARGIN_PX))
-  const y = Math.min(frame.y, ...rects.map((r) => r.y - TIDY_MARGIN_PX))
-  const right = Math.max(frame.x + frame.w, ...rects.map((r) => r.x + r.w + TIDY_MARGIN_PX))
-  const bottom = Math.max(frame.y + frame.h, ...rects.map((r) => r.y + r.h + TIDY_MARGIN_PX))
+  let x = frame.x
+  let y = frame.y
+  let right = frame.x + frame.w
+  let bottom = frame.y + frame.h
+  for (const r of rects) {
+    x = Math.min(x, r.x - TIDY_MARGIN_PX)
+    y = Math.min(y, r.y - TIDY_MARGIN_PX)
+    right = Math.max(right, r.x + r.w + TIDY_MARGIN_PX)
+    bottom = Math.max(bottom, r.y + r.h + TIDY_MARGIN_PX)
+  }
   return { x, y, w: right - x, h: bottom - y }
 }
 
@@ -446,35 +454,35 @@ function framePolicyFor(units: readonly Unit[], options: TidyOptions): FramePoli
  * safe is `tidyNodes` settling to a fixpoint; this would only make them
  * rarer, for more work.
  *
- * Writes each member's settled rect into `settled`, and a frame that grew
- * carries its new box on its own unit too.
+ * Split in two around the level the members form, so `tidyLevel` can walk
+ * the nesting with a stack of its own: `descendInto` says what level a
+ * frame's members are, and `absorbInner` grows the frame to hold what that
+ * level settled, on its unit too.
  */
-function tidyInsideFrames(
-  units: readonly Unit[],
-  nodes: readonly TidyNode[],
-  options: TidyOptions,
-  origin: Point,
-  settled: Map<string, Rect>,
-): void {
-  const policy = framePolicyFor(units, options)
-  for (const unit of units) {
-    const inner = unit.members.filter((m) => m.id !== unit.rootId)
-    if (inner.length === 0) continue
-    const frame = settled.get(unit.rootId)
-    if (frame === undefined) continue
-    const innerSettled = tidyLevel(
-      inner,
-      options,
-      anchorsToYieldTo(nodes, new Set(inner.map((m) => m.id)), policy.marginCanMove),
-      innerOrigin(unit, frame, origin),
-      innerFloor(frame),
-    )
-    for (const [id, rect] of innerSettled) settled.set(id, rect)
-    if (!policy.grows(unit, inner)) continue
-    const grown = enclosing(frame, [...innerSettled.values()])
-    settled.set(unit.rootId, grown)
-    unit.bbox = { ...grown }
+function descendInto(level: LevelWalk, unit: Unit): LevelInput | undefined {
+  const inner = unit.members.filter((m) => m.id !== unit.rootId)
+  if (inner.length === 0) return undefined
+  const frame = level.settled.get(unit.rootId)
+  if (frame === undefined) return undefined
+  return {
+    nodes: inner,
+    outside: anchorsToYieldTo(
+      level.input.nodes,
+      new Set(inner.map((m) => m.id)),
+      level.policy.marginCanMove,
+    ),
+    origin: innerOrigin(unit, frame, level.input.origin),
+    floor: innerFloor(frame),
   }
+}
+
+function absorbInner(level: LevelWalk, unit: Unit, inner: readonly TidyNode[]): void {
+  const frame = level.settled.get(unit.rootId)
+  if (frame === undefined || !level.policy.grows(unit, inner)) return
+  const innerSettled = inner.flatMap((m) => level.settled.get(m.id) ?? [])
+  const grown = enclosing(frame, innerSettled)
+  level.settled.set(unit.rootId, grown)
+  unit.bbox = { ...grown }
 }
 
 /**
@@ -532,47 +540,131 @@ function applyUnitDeltas(units: readonly Unit[], settled: Map<string, Rect>): vo
 }
 
 /**
- * One level of the tidy: every node's settled rect, frames tidied inside
- * (recursively) and grown before the level's own units align and separate.
+ * What a level is tidied FROM: its nodes, and the three facts its frame
+ * hands it (none at the top level, which has no frame around it).
+ */
+interface LevelInput {
+  readonly nodes: readonly TidyNode[]
+  /**
+   * The anchors of what this level's frame does not hold and the margin
+   * rule cannot move, for the margin snap to yield to. Empty at the top
+   * level.
+   */
+  readonly outside: { readonly x: readonly number[]; readonly y: readonly number[] }
+  /**
+   * Where this level's grid is laid FROM: the board's zero at the top level,
+   * a frame's own corner inside one (see `roundToGrid`).
+   */
+  readonly origin: Point
+  /**
+   * Inside a frame: the margin its members start at, as an ANCHOR rather
+   * than only a floor. A member hugging the frame's top or left edge is
+   * moved in to it rather than the frame grown around it — the frame's
+   * top-left is its anchor and its alignment with its peers, and stays put;
+   * only an immobile member can push a frame up or left. A member already
+   * clear of it but within `TIDY_BAND_PX` is pulled ONTO it, which is what
+   * makes frames that line up hold members that line up: bands run among a
+   * frame's members and among the frames, never across them, so nothing
+   * else can see that a member at 32 in one frame and one at 40 in another
+   * are a column to a reader. Superseding an earlier decision that a frame
+   * padded to more than the margin was padded and tidy left it alone (user,
+   * 2026-09-10): it costs 8px of movement on a board already fine, and buys
+   * the alignment no band reaches.
+   */
+  readonly floor?: Point
+}
+
+/** A level part-way through tidying its frames' members. */
+interface LevelWalk {
+  readonly input: LevelInput
+  readonly units: Unit[]
+  /**
+   * Every node's rect so far, ONE map for the whole walk. A level's nodes
+   * are its frame's members and no other unit's, so a level only ever
+   * writes rects nothing else at its depth reads, and when it opens its
+   * nodes still hold their drawn rects — which is what a map of its own
+   * would have started from. Copying one per level was the walk's largest
+   * remaining cost on a deep chain.
+   */
+  readonly settled: Map<string, Rect>
+  readonly policy: FramePolicy
+  /** The next unit whose members have not been tidied yet. */
+  next: number
+  /** The unit whose members are the level above this one on the stack. */
+  descended?: Unit
+}
+
+function openLevel(
+  input: LevelInput,
+  options: TidyOptions,
+  nesting: FrameNesting,
+  settled: Map<string, Rect>,
+): LevelWalk {
+  const units = buildUnits(input.nodes, options, nesting)
+  return {
+    input,
+    units,
+    settled,
+    policy: framePolicyFor(units, options),
+    next: 0,
+  }
+}
+
+/** The level's own passes, once every frame in it holds its tidied members. */
+function closeLevel(level: LevelWalk, options: TidyOptions): void {
+  const { units, settled, input } = level
+  if (input.floor !== undefined) applyFloor(units, input.floor, input.outside)
+  runPassesToFixpoint(units, options, input.origin, input.floor)
+  snapStaleAnchors(units, input.origin)
+  applyUnitDeltas(units, settled)
+}
+
+/**
+ * Every node's settled rect: frames tidied inside and grown before the
+ * level's own units align and separate, all the way down.
+ *
+ * The nesting is walked with an explicit stack rather than by recursion,
+ * because a canvas chooses how deep its frames go — up to one level per
+ * node — and that depth is not something a call stack should be asked to
+ * hold. The visiting order is the recursion's: a frame's members are
+ * tidied, depth first, before the next unit at its level.
  */
 function tidyLevel(
-  nodes: readonly TidyNode[],
+  top: LevelInput,
   options: TidyOptions,
-  // The anchors of what this level's frame does not hold and the margin
-  // rule cannot move, for the margin snap to yield to. Empty at the top
-  // level, which has no frame around it.
-  outside: { readonly x: readonly number[]; readonly y: readonly number[] },
-  // Where this level's grid is laid FROM: the board's zero at the top
-  // level, a frame's own corner inside one (see `roundToGrid`).
-  origin: Point,
-  // Inside a frame: the margin its members start at, as an ANCHOR rather
-  // than only a floor. A member hugging the frame's top or left edge is
-  // moved in to it rather than the frame grown around it — the frame's
-  // top-left is its anchor and its alignment with its peers, and stays put;
-  // only an immobile member can push a frame up or left. A member already
-  // clear of it but within `TIDY_BAND_PX` is pulled ONTO it, which is what
-  // makes frames that line up hold members that line up: bands run among a
-  // frame's members and among the frames, never across them, so nothing
-  // else can see that a member at 32 in one frame and one at 40 in another
-  // are a column to a reader. Superseding an earlier decision that a frame
-  // padded to more than the margin was padded and tidy left it alone (user,
-  // 2026-09-10): it costs 8px of movement on a board already fine, and buys
-  // the alignment no band reaches.
-  floor?: Point,
+  nesting: FrameNesting,
 ): Map<string, Rect> {
-  const units = buildUnits(nodes, options)
-  const settled = new Map<string, Rect>(nodes.map((n) => [n.id, rectOf(n)]))
-  tidyInsideFrames(units, nodes, options, origin, settled)
-  if (floor !== undefined) applyFloor(units, floor, outside)
-  runPassesToFixpoint(units, options, origin, floor)
-  snapStaleAnchors(units, origin)
-  applyUnitDeltas(units, settled)
-  return settled
+  const settled = new Map<string, Rect>(top.nodes.map((n) => [n.id, rectOf(n)]))
+  const stack = [openLevel(top, options, nesting, settled)]
+  for (;;) {
+    const level = stack[stack.length - 1]
+    if (level === undefined) return settled
+    const unit = level.units[level.next]
+    if (unit !== undefined) {
+      level.next++
+      const inner = descendInto(level, unit)
+      if (inner === undefined) continue
+      level.descended = unit
+      stack.push(openLevel(inner, options, nesting, settled))
+      continue
+    }
+    closeLevel(level, options)
+    stack.pop()
+    const parent = stack[stack.length - 1]
+    if (parent?.descended !== undefined) {
+      absorbInner(parent, parent.descended, level.input.nodes)
+      parent.descended = undefined
+    }
+  }
 }
 
 /** Rounded, because that is the state a caller applies and re-enters with. */
 function settleOnce(nodes: readonly TidyNode[], options: TidyOptions): TidyNode[] {
-  const settled = tidyLevel(nodes, options, { x: [], y: [] }, { x: 0, y: 0 })
+  const settled = tidyLevel(
+    { nodes, outside: { x: [], y: [] }, origin: { x: 0, y: 0 } },
+    options,
+    frameNesting(nodes),
+  )
   return nodes.map((node) => {
     const rect = settled.get(node.id)
     if (rect === undefined) return node

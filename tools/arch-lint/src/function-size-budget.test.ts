@@ -484,6 +484,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/test-utils/annotation-density-metrics.ts#scoreProposalDensity': 51,
   'packages/canvas-render/src/test-utils/golden-scene.ts#buildDeterminismGoldenScene': 71,
   'packages/canvas-render/src/test-utils/routing-corpus.ts#clusteredLayout': 53,
+  // A frozen verbatim copy of `buildUnits` before frame nesting was resolved
+  // once per settle pass: the oracle
+  // `packages/canvas-render/src/tidy-nesting.property.test.ts` holds the
+  // production tidy to, so it cannot be split without ceasing to be the copy.
+  'packages/canvas-render/src/test-utils/tidy-reference/tidy-units.ts#buildUnits': 54,
   'packages/canvas-render/src/theme/spatial-theme.ts#buildTheme': 119,
   'packages/canvas-render/src/tidy-units.ts#buildUnits': 55,
   'packages/canvas-viewer/src/CanvasViewer.tsx#CanvasViewer': 136,

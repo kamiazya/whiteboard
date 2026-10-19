@@ -258,8 +258,8 @@ export const KNOWN_EQUIVALENT = {
   //
   // The other two are `buildUnits`', each equivalent by construction.
   // `h.id !== g.id` only excludes `g` itself, and for `g` the last conjunct is
-  // already `!true || index < index`, false (ids are unique in a canvas).
-  // `hIndex < index` -> false makes every twin of an identical pair a root,
+  // already `!true || at(g) < at(g)`, false (ids are unique in a canvas).
+  // `at(h) < at(g)` -> false makes every twin of an identical pair a root,
   // but the earlier twin is visited first and claims the later one, so the
   // later is skipped as claimed. Each verified by applying the edit and
   // running tidy's suites, drawing-quality and server-core's
@@ -268,7 +268,7 @@ export const KNOWN_EQUIVALENT = {
     'EqualityOperator: w > 0 -> w >= 0': 1,
     'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
     'ConditionalExpression: h.id !== g.id -> true': 1,
-    'ConditionalExpression: hIndex < index -> false': 1,
+    'ConditionalExpression: at(h) < at(g) -> false': 1,
   },
   // Guards that change no output of `tidyNodes`. A yield anchor list seeded
   // with a string (both of `anchorsToYieldTo`'s arrays) is read only by
