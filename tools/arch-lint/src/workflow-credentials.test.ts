@@ -214,8 +214,14 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     expect(args['sonar.host.url']).toBe('https://sonarcloud.io')
     expect(args['sonar.scanner.apiBaseUrl']).toBe('https://api.sonarcloud.io')
     const properties = readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8')
-    const fileValue = (key: string): string | undefined =>
-      new RegExp(`^\\s*${key.replace(/\./g, '\\.')}\\s*[=:]\\s*(\\S+)`, 'm').exec(properties)?.[1]
+    const fileValues = new Map(
+      properties
+        .split('\n')
+        .map((line) => /^\s*([^#!\s=:][^\s=:]*)\s*[=:]\s*(\S+)/.exec(line))
+        .filter((match) => match !== null)
+        .map((match) => [match[1], match[2]] as const),
+    )
+    const fileValue = (key: string): string | undefined => fileValues.get(key)
     for (const key of ['sonar.organization', 'sonar.projectKey']) {
       expect(args[key], key).toBeDefined()
       expect(args[key], `${key} matches sonar-project.properties`).toBe(fileValue(key))
