@@ -22,6 +22,7 @@ import type {
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
+import { type QuoteMemory, quoteMemoryFor } from '../lib/quote-occurrences.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
 
 export interface CommentsRail {
@@ -176,8 +177,17 @@ export function useCommentsRail(args: {
    * answers `undefined` — "this host cannot tell", which the panel renders
    * as neither placed nor orphaned.
    */
+  // Where each quote was found in the last body, carried to the next so a
+  // keystroke does not cost every row a search of the whole body. A cache,
+  // not state: nothing renders from it, and losing it costs only the search.
+  const quoteMemoryRef = useRef<QuoteMemory | null>(null)
   const resolveAnchor = useMemo(() => {
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody, threadMarks)
+    if (documentKind === 'markdown') {
+      const memory =
+        markdownBody === null ? undefined : quoteMemoryFor(quoteMemoryRef.current, markdownBody)
+      if (memory !== undefined) quoteMemoryRef.current = memory
+      return markdownAnchorResolver(markdownBody, threadMarks, memory)
+    }
     if (documentKind !== 'spatial' || canvas === null) return undefined
     // Every reference a canvas anchor can carry — a node, an edge, a node
     // set, a passage of a node's text — judged by one reader.

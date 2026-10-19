@@ -17,7 +17,9 @@
  *
  * Placement goes through `resolveTextAnchor`, the same function the
  * annotation projection and the adopt write path both read. One answer, so
- * what is highlighted and what adoption rewrites cannot disagree.
+ * what is highlighted and what adoption rewrites cannot disagree. An edit
+ * carries forward only where each quote occurs (`quote-occurrences.ts`),
+ * which lets a keystroke skip the search without changing that answer.
  */
 
 import {
@@ -29,7 +31,13 @@ import {
 } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from '@codemirror/view'
 import type { Proposal } from '@kamiazya/whiteboard-model'
-import { resolveTextAnchor } from '@kamiazya/whiteboard-model'
+import {
+  advanceKnownQuotes,
+  type KnownQuotes,
+  NO_KNOWN_QUOTES,
+  resolveRemembering,
+  textEditsOf,
+} from '../../lib/quote-occurrences.js'
 import { bucketByLine, buttonGutterHandlers } from './line-button-gutter.js'
 
 /** Where one open proposed passage sits in the body as it stands right now. */
@@ -66,12 +74,14 @@ export interface PlacedPassage {
 export function placePassages(
   body: string,
   proposals: readonly Proposal[],
+  known: KnownQuotes = NO_KNOWN_QUOTES,
+  learnt: Map<string, readonly number[] | null> = new Map(),
 ): readonly PlacedPassage[] {
   const placed: PlacedPassage[] = []
   for (const proposal of proposals) {
     for (const change of proposal.changes) {
       if (change.op !== 'body.replace' || change.status !== 'open') continue
-      const resolved = resolveTextAnchor(body, change.anchor)
+      const resolved = resolveRemembering(body, change.anchor, undefined, known, learnt)
       if (resolved.kind !== 'placed') continue
       placed.push({
         proposalId: proposal.id,
@@ -105,10 +115,13 @@ interface ProposalState {
   readonly projection: ProposalProjection
   readonly placed: readonly PlacedPassage[]
   readonly marks: DecorationSet
+  /** Where the projected quotes occur in the doc this state holds. */
+  readonly known: KnownQuotes
 }
 
-function project(doc: string, projection: ProposalProjection): ProposalState {
-  const placed = placePassages(doc, projection.proposals)
+function project(doc: string, projection: ProposalProjection, known: KnownQuotes): ProposalState {
+  const learnt = new Map<string, readonly number[] | null>()
+  const placed = placePassages(doc, projection.proposals, known, learnt)
   const marks = new RangeSetBuilder<Decoration>()
   // No empty-range branch, for `annotation-decorations`' reason: CodeMirror
   // throws on an empty mark, and `textQuoteSelectorSchema`'s `exact` carries
@@ -130,22 +143,27 @@ function project(doc: string, projection: ProposalProjection): ProposalState {
       }),
     )
   }
-  return { projection, placed, marks: marks.finish() }
+  return { projection, placed, marks: marks.finish(), known: learnt }
 }
 
 const proposalField = StateField.define<ProposalState>({
-  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION),
+  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION, NO_KNOWN_QUOTES),
   update(value, tr) {
+    const projection = tr.effects.reduce<ProposalProjection | null>(
+      (found, effect) => found ?? (effect.is(setProposalProjection) ? effect.value : null),
+      null,
+    )
+    if (projection === null && !tr.docChanged) return value
     // `tr.newDoc`, never `tr.state.doc` — a state field's update runs while
     // the new state is being built.
-    for (const effect of tr.effects) {
-      if (effect.is(setProposalProjection)) return project(tr.newDoc.toString(), effect.value)
-    }
+    const doc = tr.newDoc.toString()
     // Re-resolve rather than map through the change set: the adopt write path
     // reads the same resolver, and a mapped range would let the two disagree
     // about where a passage is — including about whether it still exists.
-    if (tr.docChanged) return project(tr.newDoc.toString(), value.projection)
-    return value
+    const known = tr.docChanged
+      ? advanceKnownQuotes(value.known, doc, textEditsOf(tr.changes))
+      : value.known
+    return project(doc, projection ?? value.projection, known)
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.marks),
 })

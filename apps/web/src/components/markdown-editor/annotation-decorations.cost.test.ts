@@ -14,7 +14,7 @@
  * Counted through the model's exports, which is where every whole-body search
  * the web makes goes: a resolution, or a search for a quote's occurrences.
  */
-import { EditorState } from '@codemirror/state'
+import { EditorState, type TransactionSpec } from '@codemirror/state'
 import { type CommentThread, DOCUMENT_MAX_OPEN_THREADS } from '@kamiazya/whiteboard-model'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { annotationDecorations, setAnnotationProjection } from './annotation-decorations.js'
@@ -66,7 +66,7 @@ function projected(): EditorState {
 }
 
 /** The work one transaction does, after the projection that set it up. */
-function measure(state: EditorState, spec: Parameters<EditorState['update']>[0]) {
+function measure(state: EditorState, spec: TransactionSpec) {
   reset()
   // `.state`: a transaction builds its state, and runs the fields, only when asked.
   void state.update(spec).state

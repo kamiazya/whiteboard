@@ -19,7 +19,9 @@
  * mapped positions through CodeMirror's change sets (which would let a
  * highlight follow an edit inside its own passage) the two would disagree,
  * and a thread the rail calls lost would still be highlighted in the body.
- * One answer, one function.
+ * One answer, one function. What an edit carries forward is only where each
+ * quote occurs (`quote-occurrences.ts`), which is what lets a keystroke skip
+ * the search without changing the answer.
  */
 
 import {
@@ -38,7 +40,14 @@ import {
   gutterLineClass,
 } from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
-import { type LivePassage, resolveTextAnchor } from '../../lib/text-anchor.js'
+import {
+  advanceKnownQuotes,
+  type KnownQuotes,
+  NO_KNOWN_QUOTES,
+  resolveRemembering,
+  textEditsOf,
+} from '../../lib/quote-occurrences.js'
+import type { LivePassage } from '../../lib/text-anchor.js'
 import { bucketByLine, buttonGutterHandlers } from './line-button-gutter.js'
 
 /** Where one conversation sits in the body as it stands right now. */
@@ -60,6 +69,8 @@ export function placeThreads(
   body: string,
   threads: readonly CommentThread[],
   marks?: ReadonlyMap<string, LivePassage>,
+  known: KnownQuotes = NO_KNOWN_QUOTES,
+  learnt: Map<string, readonly number[] | null> = new Map(),
 ): readonly PlacedThread[] {
   const placed: PlacedThread[] = []
   for (const thread of threads) {
@@ -67,7 +78,7 @@ export function placeThreads(
     // surface this document has not got, and there is nothing here to draw
     // it over. `markdownAnchorResolver` says the same thing for the rail.
     if (thread.anchor.kind !== 'text') continue
-    const resolved = resolveTextAnchor(body, thread.anchor, marks?.get(thread.id))
+    const resolved = resolveRemembering(body, thread.anchor, marks?.get(thread.id), known, learnt)
     if (resolved.kind !== 'placed') continue
     placed.push({
       threadId: thread.id,
@@ -111,6 +122,8 @@ interface AnnotationState {
   readonly projection: AnnotationProjection
   readonly placed: readonly PlacedThread[]
   readonly marks: DecorationSet
+  /** Where the projected quotes occur in the doc this state holds. */
+  readonly known: KnownQuotes
 }
 
 /**
@@ -203,8 +216,13 @@ class ResolvedLineMarker extends GutterMarker {
 
 const RESOLVED_LINE_MARKER = new ResolvedLineMarker()
 
-function project(doc: string, projection: AnnotationProjection): AnnotationState {
-  const placed = placeThreads(doc, projection.threads, projection.marks)
+function project(
+  doc: string,
+  projection: AnnotationProjection,
+  known: KnownQuotes,
+): AnnotationState {
+  const learnt = new Map<string, readonly number[] | null>()
+  const placed = placeThreads(doc, projection.threads, projection.marks, known, learnt)
   const marks = new RangeSetBuilder<Decoration>()
   // No empty-range branch, and that is a decision rather than an oversight:
   // CodeMirror throws on an empty mark decoration, and what stops one here is
@@ -226,23 +244,28 @@ function project(doc: string, projection: AnnotationProjection): AnnotationState
       }),
     )
   }
-  return { projection, placed, marks: marks.finish() }
+  return { projection, placed, marks: marks.finish(), known: learnt }
 }
 
 const annotationField = StateField.define<AnnotationState>({
-  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION),
+  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION, NO_KNOWN_QUOTES),
   update(value, tr) {
+    const projection = tr.effects.reduce<AnnotationProjection | null>(
+      (found, effect) => found ?? (effect.is(setAnnotationProjection) ? effect.value : null),
+      null,
+    )
+    if (projection === null && !tr.docChanged) return value
     // `tr.newDoc`, never `tr.state.doc`: a state field's update runs WHILE
     // the new state is being built, so asking it for itself is the recursive
     // read CodeMirror provides this for.
-    for (const effect of tr.effects) {
-      if (effect.is(setAnnotationProjection)) return project(tr.newDoc.toString(), effect.value)
-    }
+    const doc = tr.newDoc.toString()
     // Re-resolve rather than map through the change set: see the module note
     // — the rail reads the same resolver, and a mapped range would let the
     // two disagree about whether a thread still has a place.
-    if (tr.docChanged) return project(tr.newDoc.toString(), value.projection)
-    return value
+    const known = tr.docChanged
+      ? advanceKnownQuotes(value.known, doc, textEditsOf(tr.changes))
+      : value.known
+    return project(doc, projection ?? value.projection, known)
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.marks),
 })
