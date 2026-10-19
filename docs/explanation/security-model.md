@@ -660,7 +660,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   daemon never draws them; a reader who asks the web app to show resolved
   comments lays all of them out in their own browser. What every render
   does read of every thread, resolved ones included, is a node-set anchor,
-  so one anchor names at most 2000 nodes (`comment_anchor_too_large`). What
+  so one anchor names at most 2000 nodes (`comment_anchor_too_large`); and
+  every reader of a note re-finds each thread's and change's passage after
+  each edit, so a passage quote is at most 1024 characters
+  (`anchor_quote_too_long`). What
   is still NOT bounded is how long the largest permitted board takes to lay
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in

@@ -130,6 +130,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   'container-name': 'container_name_too_long',
   'canvas-size': 'too_many_nodes_or_edges',
   'thread-anchor': 'comment_anchor_too_large',
+  'anchor-quote': 'anchor_quote_too_long',
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
   'content-root': 'invalid_document_root',

@@ -7,6 +7,7 @@
  * someone else, possibly on another machine — so the quote's SURROUNDINGS
  * are as load-bearing as the quote.
  */
+import { TEXT_ANCHOR_QUOTE_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { TextAnchor } from './text-anchor.js'
 
 /**
@@ -38,7 +39,7 @@ const ANCHOR_CONTEXT_CHARS = 16
 
 export function textAnchorForSelection(body: string, from: number, to: number): TextAnchor | null {
   const start = Math.max(0, Math.min(from, to))
-  const end = Math.min(body.length, Math.max(from, to))
+  const end = quoteEnd(body, start, Math.min(body.length, Math.max(from, to)))
   const exact = body.slice(start, end)
   // A quote of nothing, or of only whitespace, re-anchors onto any gap in the
   // document — and `textQuoteSelectorSchema` rejects the empty one outright.
@@ -61,4 +62,18 @@ export function textAnchorForSelection(body: string, from: number, to: number): 
     start,
     end,
   }
+}
+
+/**
+ * Where the quote stops: at the selection's end, or — for a passage longer
+ * than one anchor may quote, which a caret in a long block selects — as far
+ * in as the bound allows, so the conversation is anchored to the passage's
+ * start rather than refused. Never between the halves of a surrogate pair,
+ * which would quote a character the body does not have.
+ */
+function quoteEnd(body: string, start: number, end: number): number {
+  if (end - start <= TEXT_ANCHOR_QUOTE_MAX_CHARS) return end
+  const clipped = start + TEXT_ANCHOR_QUOTE_MAX_CHARS
+  const last = body.charCodeAt(clipped - 1)
+  return last >= 0xd800 && last <= 0xdbff ? clipped - 1 : clipped
 }

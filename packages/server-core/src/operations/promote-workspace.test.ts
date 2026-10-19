@@ -24,6 +24,7 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   TAG_MAX_CHARS,
+  TEXT_ANCHOR_QUOTE_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
@@ -453,6 +454,22 @@ describe('promoteWorkspace', () => {
             nodeIds: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`),
             x: 0,
             y: 0,
+          },
+          status: 'resolved',
+          messages: [{ id: 'm1', body: 'hello' }],
+        }),
+    },
+    'anchor-quote': {
+      at: 'notes/roadmap',
+      // Resolved, so the open-thread ceiling does not see it: the quote bound must.
+      write: (doc: Board) =>
+        writeCommentThread(doc, {
+          id: 't1',
+          anchor: {
+            kind: 'text',
+            quote: { exact: 'q'.repeat(TEXT_ANCHOR_QUOTE_MAX_CHARS + 1) },
+            start: 0,
+            end: TEXT_ANCHOR_QUOTE_MAX_CHARS + 1,
           },
           status: 'resolved',
           messages: [{ id: 'm1', body: 'hello' }],

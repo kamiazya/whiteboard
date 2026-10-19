@@ -11,6 +11,7 @@ import {
   NODE_TEXT_MAX_CHARS,
   TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
+  TEXT_ANCHOR_QUOTE_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import type { ContainerID, LoroDoc } from 'loro-crdt'
 import { ANCHOR_FIELD } from './comment-threads.js'
@@ -20,15 +21,18 @@ import {
   EDGES_KEY,
   LINES_KEY,
   NODES_KEY,
+  PROPOSALS_KEY,
   THREADS_KEY,
 } from './containers.js'
 import {
   anchorNodeIdCount,
+  changeAnchorQuoteLength,
   fieldLength,
   longestTag,
   nodeLocationLength,
   nodeTextLength,
   tagsIn,
+  threadAnchorQuoteLength,
 } from './value-lengths.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
@@ -76,6 +80,13 @@ export type ValueBreach =
       /** The thread's own map, so a caller can name the document. */
       readonly container: ContainerID
     }
+  | {
+      readonly shape: 'anchor-quote'
+      readonly chars: number
+      /** The thread or the proposed change whose anchor quotes it. */
+      readonly elementId: string
+      readonly container: ContainerID
+    }
 
 /**
  * Whether `container` is a thread's message map — under a document's root or
@@ -84,6 +95,16 @@ export type ValueBreach =
 function isThreadMessages(doc: LoroDoc, container: ContainerID): boolean {
   const path = doc.getPathToContainer(container)
   if (path?.at(-1) !== 'messages' || path.at(-3) !== THREADS_KEY) return false
+  return path.length === 3 || (path.length === 5 && path[0] === WORKSPACE_TREE_KEY)
+}
+
+/**
+ * Whether `container` is one proposal's change map — under a document's root
+ * or a workspace-tree node, `proposals` > proposal > `changes`.
+ */
+function isProposalChanges(doc: LoroDoc, container: ContainerID): boolean {
+  const path = doc.getPathToContainer(container)
+  if (path?.at(-1) !== 'changes' || path.at(-3) !== PROPOSALS_KEY) return false
   return path.length === 3 || (path.length === 5 && path[0] === WORKSPACE_TREE_KEY)
 }
 
@@ -185,6 +206,31 @@ export const BOUNDED_VALUES: readonly BoundedValue[] = [
       shape: 'thread-anchor',
       count,
       threadId: String(doc.getPathToContainer(container)?.at(-1)),
+      container,
+    }),
+  },
+  {
+    // Every reader of a markdown body re-finds each passage by its quote
+    // after every edit, resolved threads included.
+    max: TEXT_ANCHOR_QUOTE_MAX_CHARS,
+    length: threadAnchorQuoteLength,
+    holds: (doc, container, key) => key === ANCHOR_FIELD && isThread(doc, container),
+    breach: (chars, _key, container, doc) => ({
+      shape: 'anchor-quote',
+      chars,
+      elementId: String(doc.getPathToContainer(container)?.at(-1)),
+      container,
+    }),
+  },
+  {
+    // A proposed passage is placed the same way, decided changes included.
+    max: TEXT_ANCHOR_QUOTE_MAX_CHARS,
+    length: changeAnchorQuoteLength,
+    holds: isProposalChanges,
+    breach: (chars, changeId, container) => ({
+      shape: 'anchor-quote',
+      chars,
+      elementId: changeId,
       container,
     }),
   },

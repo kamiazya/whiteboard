@@ -69,3 +69,20 @@ export function anchorNodeIdCount(value: unknown): number {
   const held = (value as { nodeIds?: unknown }).nodeIds
   return Array.isArray(held) ? held.length : 0
 }
+
+/** The length of a text anchor's quoted passage, 0 when `anchor` quotes none. */
+function quoteLength(anchor: unknown): number {
+  if (typeof anchor !== 'object' || anchor === null) return 0
+  return fieldLength((anchor as { quote?: unknown }).quote, 'exact')
+}
+
+/** How long a thread's stored anchor's quote is: what every reader of the body re-finds. */
+export function threadAnchorQuoteLength(value: unknown): number {
+  return quoteLength(value)
+}
+
+/** How long a proposed change's anchor's quote is, 0 for a change with no text anchor. */
+export function changeAnchorQuoteLength(value: unknown): number {
+  if (typeof value !== 'object' || value === null) return 0
+  return quoteLength((value as { anchor?: unknown }).anchor)
+}

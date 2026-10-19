@@ -255,6 +255,21 @@ characters nearest the passage. The editor writes 16. An anchor stored with a
 longer context still reads, and only its 32 characters nearest the passage
 count toward placing it.
 
+The quoted passage itself — a text anchor's `exact` — carries at most **1,024
+characters**, a long paragraph. Every place that draws a passage finds it
+again after each edit, resolved threads and decided changes included, and the
+cost grows with the quote. `wb_thread_edit` refuses a longer one on
+`thread.add`, and `wb_body_edit` on `body.replace`, with "a text anchor's
+quote is longer than the 1024-character limit for the passage one anchor
+quotes"; anchor a comment to a shorter passage, and split a longer
+replacement across changes. The daemon's sync routes refuse an update that
+would store one with `413` and `{"error":"anchor_quote_too_long"}`, storing
+nothing, and a browser-kept workspace refuses it the same way. Commenting in
+the editor on a selection or a block longer than that anchors the
+conversation to its first 1,024 characters. An anchor stored with a longer
+quote before this limit existed still reads, and a verdict on such a change
+is still taken.
+
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of
