@@ -396,6 +396,11 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
+  // The rail's quote-occurrence cache. The next body is diffed against the
+  // one it was built from, so another document's body is a whole-body edit
+  // that re-searches; nothing renders from it.
+  memory:
+    'no subject: a cache of where quotes occur in the last body, rebuilt from any other body it is handed',
   // Which panel the one inspector slot shows — properties, comments,
   // connections or history. How the reader looks rather than what at:
   // everything a panel SAYS is document-scoped and cleared on its own
