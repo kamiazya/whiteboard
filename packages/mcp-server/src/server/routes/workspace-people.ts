@@ -42,6 +42,7 @@ const REFUSALS = {
   not_a_member: [404, 'no such member in this workspace'],
   last_owner: [409, 'a workspace keeps at least one owner; make someone else an owner first'],
   unknown_invitation: [404, 'no pending invitation by that id in this workspace'],
+  sign_in_required: [403, "changing a workspace's people needs a browser sign-in, not a bearer"],
   too_many_invitations: [
     409,
     `this workspace already has ${MAX_PENDING_WORKSPACE_INVITATIONS} pending invitations; revoke one first`,
@@ -65,18 +66,15 @@ function toPerson(member: WorkspaceMember) {
 
 const workspaceOf = (c: Context) => workspaceIdFromHandle(c, c.req.param('workspace') ?? '')
 
-// The workspace this request addresses, when its caller may change its people.
-async function ownedBy(c: Context, keeper: WorkspacePeopleKeeper): Promise<string | null> {
-  const workspaceId = await workspaceOf(c)
-  return (await keeper.canManage(c, workspaceId)) ? workspaceId : null
-}
-
-// `ownedBy` and who is acting, for a change that must re-check, when it runs,
-// that they still own the workspace.
+// The workspace this request addresses and who is changing its people, or the
+// refusal to send. Who is acting is recorded so a change can re-check, when it
+// runs, that they still own the workspace.
 async function actingOwner(c: Context, keeper: WorkspacePeopleKeeper) {
-  const workspaceId = await ownedBy(c, keeper)
-  const by = workspaceId === null ? null : await keeper.actingUserId(c)
-  return workspaceId === null || by === null ? null : { workspaceId, by }
+  const workspaceId = await workspaceOf(c)
+  const refusal = await keeper.mayChange(c, workspaceId)
+  if (refusal !== null) return refuse(c, refusal)
+  const by = await keeper.actingUserId(c)
+  return by === null ? refuse(c, 'not_an_owner') : { workspaceId, by }
 }
 
 async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: string) {
@@ -92,7 +90,7 @@ function mountRemoval(
 ): void {
   app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
     const owner = await actingOwner(c, keeper)
-    if (owner === null) return refuse(c, 'not_an_owner')
+    if (owner instanceof Response) return owner
     const { workspaceId, by } = owner
     const userId = c.req.param('userId')
     const removed = await people.remove(workspaceId, userId, by)
@@ -109,9 +107,9 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
   if (invitations === undefined) return
   const { store, origin } = invitations
   app.post('/api/workspaces/:workspace/invitations', async (c) => {
-    const workspaceId = await ownedBy(c, keeper)
-    const invitedBy = await keeper.actingUserId(c)
-    if (workspaceId === null || invitedBy === null) return refuse(c, 'not_an_owner')
+    const owner = await actingOwner(c, keeper)
+    if (owner instanceof Response) return owner
+    const { workspaceId, by: invitedBy } = owner
     // ponytail: counted before the insert, so mints racing each other may
     // overshoot by however many are in flight — a bound on a flood, not an
     // exact count; a conditional insert if it ever needs to be exact.
@@ -124,8 +122,8 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
   })
 
   app.get('/api/workspaces/:workspace/invitations', async (c) => {
-    const workspaceId = await ownedBy(c, keeper)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const workspaceId = await workspaceOf(c)
+    if (!(await keeper.owns(c, workspaceId))) return refuse(c, 'not_an_owner')
     const pending = await store.listPending(workspaceId, Date.now())
     const invitations = pending.map((invitation) => ({
       id: invitation.id,
@@ -138,7 +136,7 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
 
   app.delete('/api/workspaces/:workspace/invitations/:invitationId', async (c) => {
     const owner = await actingOwner(c, keeper)
-    if (owner === null) return refuse(c, 'not_an_owner')
+    if (owner instanceof Response) return owner
     const { workspaceId, by } = owner
     const revoked = await store.revoke(workspaceId, c.req.param('invitationId'), by)
     if (revoked === 'not-an-owner') return refuse(c, 'not_an_owner')
@@ -156,7 +154,7 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
   app.get('/api/workspaces/:workspace/people', async (c) => {
     const workspaceId = await workspaceOf(c)
     const people = (await roles.list(workspaceId)).map(toPerson)
-    const canManage = await keeper.canManage(c, workspaceId)
+    const canManage = (await keeper.mayChange(c, workspaceId)) === null
     return c.json(workspacePeopleResponseSchema.parse({ people, canManage }), 200)
   })
 
@@ -167,7 +165,7 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     })
     if ('refusal' in body) return body.refusal
     const owner = await actingOwner(c, keeper)
-    if (owner === null) return refuse(c, 'not_an_owner')
+    if (owner instanceof Response) return owner
     const { workspaceId, by } = owner
     const { userId } = body.data
     const added = await people.add(workspaceId, userId, by)
@@ -182,7 +180,7 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     })
     if ('refusal' in body) return body.refusal
     const owner = await actingOwner(c, keeper)
-    if (owner === null) return refuse(c, 'not_an_owner')
+    if (owner instanceof Response) return owner
     const { workspaceId, by } = owner
     const userId = c.req.param('userId')
     const changed = await people.changeRole(workspaceId, userId, body.data.role, by)

@@ -521,6 +521,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   storage report (every workspace's size) answer only a tenant
   administrator. Any other signed-in person is refused, even though their
   session holds the `runtime:read` scope that the font catalogue needs.
+- **A workspace's people are changed only through a browser sign-in.** An
+  owner adds, re-roles and removes people, mints and takes back invitation
+  links, and changes the workspace's segment from the web app while signed
+  in. The same owner presenting a bearer token — even one scoped
+  `workspace:write` — is refused with `403 sign_in_required` and nothing
+  changes; no invitation link is minted. That is the bar tenant
+  administration holds. A bearer still reads a workspace's people and still
+  changes its display name.
 - **Authority is checked again as a change is made.** A request is
   authorized when it arrives, and its change lands later. Every change an
   administrator makes to a tenant's people — deactivating, reactivating,

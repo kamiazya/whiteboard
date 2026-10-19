@@ -2,7 +2,8 @@
  * ADR-0049 decision 1 over HTTP on server mode: any member reads a
  * workspace's people, only an owner changes them, and the last owner stays.
  * The server-mode middleware is in front, as it is in the app, so the
- * membership gate is the real one.
+ * membership gate is the real one. Owners act through a browser sign-in, the
+ * only grant a change to a workspace's people accepts.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -23,6 +24,7 @@ import type { AsyncAuthStrategy } from '../security/oauth-resource-strategy.js'
 import { createWorkspacePeopleAdministration } from '../security/people-administration.js'
 import { serverModePeopleKeeper } from '../security/people-keepers.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
+import { SESSION_COOKIE, type SignInSessionStore } from '../security/sign-in-session-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { endSyncStreamsOf } from '../sync-streams.js'
 import { createWorkspacePeopleRouter } from './workspace-people.js'
@@ -31,13 +33,18 @@ vi.mock('../sync-streams.js', () => ({ endSyncStreamsOf: vi.fn() }))
 
 const AUTHENTICATOR = 'oidc:https://idp.test'
 
-// "Bearer <sub>": a verified bearer naming that subject.
+const ORIGIN = 'https://wb.test'
+
+// "Bearer <sub>": a verified bearer naming that subject, carrying every scope;
+// "Bearer <sub> <scope>…": one carrying only those.
 const strategy: AsyncAuthStrategy = {
   async authorize({ authorizationHeader }) {
-    const sub = (authorizationHeader ?? '').replace(/^Bearer /, '')
+    const [sub = '', ...scoped] = (authorizationHeader ?? '').replace(/^Bearer /, '').split(' ')
+    const scopes =
+      scoped.length === 0 ? ALL_AUTH_SCOPES : ALL_AUTH_SCOPES.filter((s) => scoped.includes(s))
     return {
       ok: true,
-      context: { kind: 'oauth-resource-server', subject: sub, scopes: ALL_AUTH_SCOPES },
+      context: { kind: 'oauth-resource-server', subject: sub, scopes },
       person: { authenticator: AUTHENTICATOR, subject: sub },
     }
   },
@@ -47,15 +54,31 @@ let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let invitations: InvitationStore
+let sessions: SignInSessionStore
 let app: Hono
 let staleApp: Hono
 let roles: ReturnType<typeof serverModePeople>['people']['roles']
 const ids: Record<string, string> = {}
+const sessionOf: Record<string, string> = {}
+
+// `as` signed in at this host, the way the web app's people screen calls.
+function signedIn(as: string): Record<string, string> {
+  return { cookie: `${SESSION_COOKIE}=${sessionOf[as] ?? ''}`, origin: ORIGIN }
+}
 
 async function call(as: string, method: string, path: string, body?: object) {
+  return callWith(signedIn(as), method, path, body)
+}
+
+async function callWith(
+  credential: Record<string, string>,
+  method: string,
+  path: string,
+  body?: object,
+) {
   const res = await app.request(`/api/workspaces/ws-1${path}`, {
     method,
-    headers: { authorization: `Bearer ${as}`, 'content-type': 'application/json' },
+    headers: { ...credential, 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   return { status: res.status, body: (await res.json()) as Record<string, unknown> }
@@ -68,22 +91,22 @@ beforeEach(async () => {
   members = stores.members
   roles = stores.people.roles
   invitations = stores.people.invitations
+  sessions = stores.sessions
   for (const name of ['ada', 'bob', 'eve']) {
-    const user = await members.ensureProfile({
-      binding: { authenticator: AUTHENTICATOR, subject: name },
-      displayName: name,
-    })
+    const binding = { authenticator: AUTHENTICATOR, subject: name }
+    const user = await members.ensureProfile({ binding, displayName: name })
     ids[name] = user.id
+    sessionOf[name] = await sessions.create(binding, Date.now(), 60_000, Date.now())
   }
   await members.addMember('ws-1', ids.ada as string)
   await members.addMember('ws-1', ids.bob as string)
 
-  const keeper = serverModePeopleKeeper({ members, invitations, origin: 'https://wb.test' })
+  const keeper = serverModePeopleKeeper({ members, invitations, origin: ORIGIN })
   const mount = (k: typeof keeper) => {
     const mounted = new Hono()
     mounted.use(
       '/api/*',
-      createServerModeApiAuthMiddleware(strategy, { ...stores.people, origin: 'https://wb.test' }),
+      createServerModeApiAuthMiddleware(strategy, { ...stores.people, origin: ORIGIN }),
     )
     mounted.route(
       '/',
@@ -98,7 +121,7 @@ beforeEach(async () => {
   app = mount(keeper)
   // A keeper whose ownership answer was read before the owner was demoted:
   // what a request authorized just ahead of a demotion sees.
-  staleApp = mount({ ...keeper, canManage: async () => true })
+  staleApp = mount({ ...keeper, mayChange: async () => null })
 })
 
 afterEach(async () => {
@@ -196,7 +219,7 @@ describe('workspace people', () => {
     const asAda = (method: string, path: string, body?: object) =>
       staleApp.request(`/api/workspaces/ws-1${path}`, {
         method,
-        headers: { authorization: 'Bearer ada', 'content-type': 'application/json' },
+        headers: { ...signedIn('ada'), 'content-type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       })
     const refused = async (res: Response) => [
@@ -242,6 +265,57 @@ describe('workspace people', () => {
     expect(await invitations.openLink(token, Date.now())).toMatchObject({
       ok: true,
       invitation: { workspaceId: 'ws-1', invitedBy: ids.ada },
+    })
+  })
+
+  // A bearer has no browser behind it, so whatever it is scoped it never
+  // administers a workspace's people — the bar tenant administration holds.
+  describe('an owner acting through a bearer', () => {
+    const scopedToWrite = { authorization: 'Bearer ada workspace:write' }
+
+    it.each([
+      ['invite by link', 'POST', '/invitations', {}],
+      ['add a person', 'POST', '/people', { userId: 'eve' }],
+      ['change a role', 'PATCH', '/people/bob', { role: 'owner' }],
+      ['remove a person', 'DELETE', '/people/bob', undefined],
+    ] as const)('is refused a sign-in to %s', async (_what, method, path, body) => {
+      const named = path.replace(/\/(bob)$/, () => `/${ids.bob}`)
+      const asked = body !== undefined && 'userId' in body ? { userId: ids.eve } : body
+      for (const credential of [scopedToWrite, { authorization: 'Bearer ada' }]) {
+        const res = await callWith(credential, method, named, asked)
+        expect(res).toEqual({
+          status: 403,
+          body: { error: 'sign_in_required', message: expect.any(String) },
+        })
+      }
+      expect(await members.membershipRole('ws-1', ids.bob as string)).toBe('member')
+      expect(await members.membershipRole('ws-1', ids.eve as string)).toBeNull()
+      expect(await invitations.listPending('ws-1', Date.now())).toEqual([])
+    })
+
+    it('is refused a sign-in to revoke a pending link', async () => {
+      const { invitation } = await invitations.createLink({
+        invitedBy: ids.ada as string,
+        workspaceId: 'ws-1',
+        now: Date.now(),
+        ttlMs: 60_000,
+      })
+      expect(
+        await callWith(scopedToWrite, 'DELETE', `/invitations/${invitation.id}`),
+      ).toMatchObject({ status: 403, body: { error: 'sign_in_required' } })
+      expect(await invitations.listPending('ws-1', Date.now())).toHaveLength(1)
+    })
+
+    it('still reads the people, and is told it cannot change them', async () => {
+      const listed = await callWith(scopedToWrite, 'GET', '/people')
+      expect(listed.status).toBe(200)
+      expect(listed.body.canManage).toBe(false)
+    })
+
+    it('refuses a member the same way it always did, before asking for a sign-in', async () => {
+      expect(
+        await callWith({ authorization: 'Bearer bob' }, 'POST', '/people', { userId: ids.eve }),
+      ).toMatchObject({ status: 403, body: { error: 'not_an_owner' } })
     })
   })
 
@@ -339,7 +413,7 @@ describe('workspace people', () => {
   ])('refuses a body that is not JSON when asked to %s', async (_what, method, path) => {
     const res = await app.request(`/api/workspaces/ws-1${path}`, {
       method,
-      headers: { authorization: 'Bearer ada', 'content-type': 'application/json' },
+      headers: { ...signedIn('ada'), 'content-type': 'application/json' },
       body: '{not json',
     })
     expect(res.status).toBe(400)

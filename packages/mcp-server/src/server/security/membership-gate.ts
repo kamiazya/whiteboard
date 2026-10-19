@@ -5,6 +5,7 @@
  * addresses, and the same answer for handlers that decide membership
  * themselves (the workspace list, the SSE transport).
  */
+import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { Context } from 'hono'
 import { getLogger } from '../log.js'
 import {
@@ -87,12 +88,19 @@ export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
   return (c, workspaceId) => workspaceAccess(grantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members)
 }
 
+/** Why an owner-only change is refused: the caller is no owner, or is one
+ *  acting through a grant that may not administer (`people-keepers.ts`). */
+export type OwnerChangeRefusal = Extract<
+  WorkspacePeopleRefusal['error'],
+  'not_an_owner' | 'sign_in_required'
+>
+
 /**
- * Whether this request's person owns the workspace (ADR-0049) — what an
- * owner-only change asks before it runs. Absent where there are no people to
- * tell apart.
+ * Whether this request may make a change only an owner makes (ADR-0049) —
+ * null when it may, else why not — asked before the change runs. Absent
+ * where there are no people to tell apart.
  */
-export type WorkspaceOwnership = (c: Context, workspaceId: string) => Promise<boolean>
+export type OwnerChange = (c: Context, workspaceId: string) => Promise<OwnerChangeRefusal | null>
 
 /**
  * ADR-0046 decision 10: on a keeper where every workspace is members-only

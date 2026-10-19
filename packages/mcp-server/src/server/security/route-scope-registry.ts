@@ -327,6 +327,21 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
+  // A workspace's people and its invitation links (ADR-0049), mounted on
+  // server mode only. The scope is the workspace one, as below; what a change
+  // needs beyond it is an OWNER acting through a browser SIGN-IN, which the
+  // router asks per request (`people-keepers.ts`) because no scope says it —
+  // so a bearer scoped `workspace:write` reaches the route and is refused
+  // there, as tenant administration refuses one. A segment change has the
+  // same bar, but is the workspace's own PATCH and decided by its body, so
+  // `workspaces (rest)` keeps it.
+  {
+    name: 'workspace people',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/(?:people|invitations)(?:\/[^/]+)?\/?$/),
+    decide: byAccess('workspace:write', 'workspace:read'),
+    workspace: workspacesHandle,
+  },
+
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   //
   // The rest of the /api/v1 document surface (server-core's createServer,

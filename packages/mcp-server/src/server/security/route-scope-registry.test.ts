@@ -396,6 +396,12 @@ const SCOPE_DECISIONS = [
     '/api/v1/workspaces/ws1/documents/d1/linkify-mentions',
     scoped('canvas:write'),
   ],
+  ['workspace people', 'GET', '/api/workspaces/ws1/people', scoped('workspace:read')],
+  ['workspace people', 'POST', '/api/workspaces/ws1/people', scoped('workspace:write')],
+  ['workspace people', 'PATCH', '/api/workspaces/ws1/people/u1', scoped('workspace:write')],
+  ['workspace people', 'DELETE', '/api/workspaces/ws1/people/u1', scoped('workspace:write')],
+  ['workspace people', 'POST', '/api/workspaces/ws1/invitations', scoped('workspace:write')],
+  ['workspace people', 'DELETE', '/api/workspaces/ws1/invitations/i1', scoped('workspace:write')],
   ['workspaces (rest)', 'GET', '/api/workspaces/ws1', scoped('workspace:read')],
   ['workspaces (rest)', 'GET', '/api/workspaces/ws1/trash', scoped('workspace:read')],
   ['workspaces (rest)', 'PATCH', '/api/workspaces/ws1', scoped('workspace:write')],
@@ -498,6 +504,7 @@ const CLAIMED_BY = {
   'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
   'v1 document content': ['GET', '/api/v1/workspaces/ws1/documents/d1/okf'],
+  'workspace people': ['POST', '/api/workspaces/ws1/invitations'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
   'tenant people': ['PUT', '/api/people/u1/administrator'],
   'runtime (rest)': ['GET', '/api/runtime/status'],
@@ -544,6 +551,7 @@ const GATED = [
   'files/purge-dangling',
   'documents/optimize-all',
   'v1 document content',
+  'workspace people',
   'workspaces (rest)',
 ]
 
