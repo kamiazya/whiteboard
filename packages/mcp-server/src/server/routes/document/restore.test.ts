@@ -403,6 +403,24 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     expect(apiErrorReason(await res.json())).toMatch(/version/i)
   })
 
+  it('refuses a restore that reached a wired scope seam with no recorded grant', async () => {
+    // Either mode's auth middleware records a grant before this route, so
+    // none recorded means the request got here some other way: fail closed.
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        callerScopes: () => undefined,
+      }),
+    )
+    const res = await app.request(
+      '/api/workspaces/session1/documents/canvas-a/versions/nonexistent/restore',
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'insufficient_scope' })
+  })
+
   it('returns 400 for an invalid version id', async () => {
     const app = createRouter()
     const res = await app.request(

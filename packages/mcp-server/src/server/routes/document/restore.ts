@@ -35,8 +35,8 @@ export interface RestoreRouterOptions {
   progress?: RestoreProgress
   /**
    * The scopes of the grant the auth middleware resolved for this request.
-   * Absent, or answering undefined, for a router mounted without that
-   * middleware, which gates nothing.
+   * Absent for a router mounted without that middleware, which gates
+   * nothing; answering undefined refuses the restore.
    */
   callerScopes?: CallerScopes
 }
@@ -130,13 +130,20 @@ function restoreAnswer(
 /**
  * The registry scoped this route by its path, before the body said which
  * restore it is; one that writes other documents needs more (`restoreScopes`).
+ *
+ * `callerScopes` absent is a router mounted with no auth middleware, which
+ * gates nothing. Wired but answering undefined is a request that skipped the
+ * middleware that always records a grant, so it holds no scopes at all.
  */
 function scopeRefusal(
-  granted: readonly AuthScope[] | undefined,
+  callerScopes: CallerScopes | undefined,
+  c: Context,
   asked: { readonly targetPath?: string; readonly subtree?: boolean },
   path: string,
 ): ApiErrorBody | null {
-  if (granted === undefined || hasRequiredScopes(granted, restoreScopes(asked, path))) return null
+  if (callerScopes === undefined) return null
+  const granted = callerScopes(c)
+  if (granted !== undefined && hasRequiredScopes(granted, restoreScopes(asked, path))) return null
   return errorBody(
     'insufficient_scope',
     "This credential's scopes do not reach a restore into another document or a subtree.",
@@ -171,7 +178,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
       })
       if ('refusal' in asked) return asked.refusal
-      const outOfScope = scopeRefusal(options.callerScopes?.(c), asked.data, path)
+      const outOfScope = scopeRefusal(options.callerScopes, c, asked.data, path)
       if (outOfScope) return c.json(outOfScope, 403)
       const { targetPath, overwrite, subtree } = asked.data
       try {
