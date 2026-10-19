@@ -1,5 +1,5 @@
 import { errorBody } from '@kamiazya/whiteboard-server-core'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, HonoRequest, MiddlewareHandler } from 'hono'
 
 /** Long enough for a sync write in flight to finish; a write chain retries after it. */
 const RETRY_AFTER_SECONDS = 1
@@ -67,15 +67,23 @@ interface ArmedSlots {
   readonly refused: (userId: string | null, cap: CapReached) => void
 }
 
-/** The slots a request's composition armed, keyed by the request itself — the
- *  same per-request idiom as the membership gate's grant memo, since the route
- *  that reads the body is mounted far from the root that knows the caps. */
-const armed = new WeakMap<Request, ArmedSlots>()
+/** The slots a request's composition armed, keyed by the request — the same
+ *  per-request idiom as the membership gate's grant memo, since the route that
+ *  reads the body is mounted far from the root that knows the caps. Keyed by
+ *  Hono's request wrapper rather than the raw `Request`, because a body limit
+ *  reading a body of unstated length swaps `c.req.raw` for a new `Request`. */
+const armed = new WeakMap<HonoRequest, ArmedSlots>()
+
+/** Whose slots a request already took, so a later take for it — `/mcp`'s
+ *  per-request charge for a batch, read after its body — is charged to the
+ *  same caller. The grant memo the caller is resolved from is keyed by the raw
+ *  `Request`, which a body limit may have replaced by then. */
+const callerOf = new WeakMap<HonoRequest, string | null>()
 
 /** Arms content slots for every request this app serves, as server mode's root does. */
 export function armContentSlots(arm: ArmedSlots): MiddlewareHandler {
   return async (c, next) => {
-    armed.set(c.req.raw, arm)
+    armed.set(c.req, arm)
     await next()
   }
 }
@@ -95,9 +103,10 @@ export async function takeContentSlot(
   c: Context,
   answer: RefusalAnswer = apiRefusal,
 ): Promise<(() => void) | Response> {
-  const arm = armed.get(c.req.raw)
+  const arm = armed.get(c.req)
   if (arm === undefined) return () => {}
-  const userId = await arm.userOf(c)
+  const userId = callerOf.has(c.req) ? (callerOf.get(c.req) ?? null) : await arm.userOf(c)
+  callerOf.set(c.req, userId)
   const slot = arm.slots.take(userId)
   if (typeof slot === 'function') return slot
   arm.refused(userId, slot)

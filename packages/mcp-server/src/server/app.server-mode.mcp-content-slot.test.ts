@@ -328,3 +328,65 @@ describe('server mode — /mcp content slot over a modern-era stream', () => {
     expect(disguised.headers.get('content-type')).not.toContain('text/event-stream')
   })
 })
+
+const LEGACY = '2025-03-26'
+
+/** A raw legacy-era POST whose body is a JSON-RPC batch of `count` list calls. */
+function legacyBatchOf(subject: string, count: number) {
+  return Promise.resolve(
+    app.request(`${PUBLIC_URL}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${subject}`,
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'mcp-protocol-version': LEGACY,
+      },
+      body: JSON.stringify(
+        Array.from({ length: count }, (_, i) => ({
+          jsonrpc: '2.0',
+          id: i + 1,
+          method: 'tools/call',
+          params: { name: 'wb_document_list', arguments: { workspaceId: WORKSPACE } },
+        })),
+      ),
+    }),
+  )
+}
+
+describe('server mode — /mcp content slots for a legacy-era batch', () => {
+  it('refuses a batch holding more calls than the caller has slots, before any runs', async () => {
+    const ada = await adaWithWorkspace()
+    try {
+      gate.arm()
+      const answer = legacyBatchOf('ada', CONTENT_REQUEST_CAPS.perUser + 1)
+      const outcome = await Promise.race([
+        answer.then((response) => response.status),
+        gate.entered(1).then(() => 'a call started' as const),
+      ])
+      expect(outcome).toBe(429)
+    } finally {
+      await ada.close()
+    }
+  })
+
+  it('charges every call a batch admits, so the next call is refused', async () => {
+    const ada = await adaWithWorkspace()
+    try {
+      gate.arm()
+      const batch = legacyBatchOf('ada', CONTENT_REQUEST_CAPS.perUser)
+      await gate.entered(CONTENT_REQUEST_CAPS.perUser)
+
+      expect(await answerTo(ada, () => ada.client.callTool(listCall))).toBe(429)
+
+      gate.release()
+      const answered = await batch
+      expect(answered.status).toBe(200)
+      const results = (await answered.json()) as Array<{ result?: { isError?: boolean } }>
+      expect(results).toHaveLength(CONTENT_REQUEST_CAPS.perUser)
+      for (const r of results) expect(r.result?.isError).toBeFalsy()
+    } finally {
+      await ada.close()
+    }
+  })
+})

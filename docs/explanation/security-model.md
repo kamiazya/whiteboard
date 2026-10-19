@@ -566,8 +566,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   update, a promote, an upload, a document created from its content or a
   JSON-RPC request to `/mcp` is read whole before it is applied, so the
   bodies in flight are capped per user and per instance, and the next one is
-  refused before it is read. Callers whose grant names no user on the
-  instance share one user's allowance. The limits are
+  refused before it is read. A JSON-RPC batch to `/mcp`, which clients on
+  the 2025-03-26 protocol revision may send, counts once for each request in
+  it, because each runs at the same time as the others: a batch holding more
+  requests than the caller has room for is refused whole, before any of it
+  runs. Callers whose grant names no user on the instance share one user's
+  allowance. The limits are
   [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,

@@ -240,6 +240,11 @@ error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`) rather
 than `too_many_requests`. A call answered as an event stream (one that sends
 progress or log messages before its result) counts until that stream ends,
 not merely until it opens; a `subscriptions/listen` stream does not count.
+A JSON-RPC batch (a body that is an array, which the 2025-03-26 protocol
+revision allows) counts once for each request in it, since its requests run
+at the same time: one holding more requests than the caller has room for is
+refused whole with the same `429`, after its body is read and before any of
+it runs.
 A caller whose grant names no user on this instance
 (a token for no person, or a person with no user here) is counted with every
 other such caller as one user, so together they hold at most the per-user
