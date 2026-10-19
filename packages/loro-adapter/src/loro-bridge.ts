@@ -60,7 +60,7 @@ function readCanvasTags(doc: DocumentContainers): string[] | undefined {
  */
 function dropLockInto(doc: DocumentContainers, mapKey: string, id: string): void {
   const locksMap = doc.getMap(mapKey)
-  if (locksMap.keys().includes(id)) locksMap.delete(id)
+  if (locksMap.get(id) !== undefined) locksMap.delete(id)
 }
 function nodeToFields(node: SpatialNode): Fields {
   // Refuse non-finite geometry LOUDLY: readSpatialCanvas round-trips every
@@ -283,9 +283,26 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
 }
 
 /**
- * Returns false (writing nothing) when the node id is absent.
+ * Removes one node and its lock, and NOT what is anchored on it — every
+ * caller follows with `sweepAnchoredInto`. Returns false (writing nothing)
+ * when the node id is absent.
+ */
+function deleteNodeInto(doc: DocumentContainers, nodeId: string): boolean {
+  const nodesMap = doc.getMap(NODES_KEY)
+  if (nodesMap.get(nodeId) === undefined) return false
+  nodesMap.delete(nodeId)
+  dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
+  return true
+}
+
+/**
+ * Removes every edge and line anchored on one of `ids`, with its lock.
  *
- * The sweep is the model's `anchoredOnAny` — the same definition the
+ * Takes a SET so a run of node removals pays one pass: every edge and line is
+ * read across the wasm boundary and schema-parsed, and doing that once per
+ * removed node made clearing a board quadratic.
+ *
+ * The test is the model's `anchoredOnAny` — the same definition the
  * editor's command, the proposal adopt and the agent's `node.remove` apply —
  * over BOTH collections an end can name a node from. It followed edges
  * alone for a while, so a box deleted in the editor left its ink anchored to
@@ -294,13 +311,8 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
  * share the edge lock plane (see `writeSpatialCanvas`), so a cascaded line's
  * lock goes the way a cascaded edge's does.
  */
-function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean {
-  const nodesMap = doc.getMap(NODES_KEY)
-  if (!nodesMap.keys().includes(nodeId)) return false
-
-  nodesMap.delete(nodeId)
-  dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
-  const ids = new Set([nodeId])
+function sweepAnchoredInto(doc: DocumentContainers, ids: ReadonlySet<string>): void {
+  if (ids.size === 0) return
   const edgesMap = doc.getMap(EDGES_KEY)
   for (const edgeId of edgesMap.keys()) {
     const parsed = canvasEdgeSchema.safeParse(liftLegacyExtension(edgesMap.get(edgeId)))
@@ -317,7 +329,6 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
       dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
     }
   }
-  return true
 }
 
 function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
@@ -327,7 +338,7 @@ function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
 /** Returns false (writing nothing) when the line id is absent. */
 function deleteLineInto(doc: DocumentContainers, lineId: string): boolean {
   const linesMap = doc.getMap(LINES_KEY)
-  if (!linesMap.keys().includes(lineId)) return false
+  if (linesMap.get(lineId) === undefined) return false
   linesMap.delete(lineId)
   dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
   return true
@@ -336,7 +347,7 @@ function deleteLineInto(doc: DocumentContainers, lineId: string): boolean {
 /** Returns false (writing nothing) when the edge id is absent. */
 function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   const edgesMap = doc.getMap(EDGES_KEY)
-  if (!edgesMap.keys().includes(edgeId)) return false
+  if (edgesMap.get(edgeId) === undefined) return false
   edgesMap.delete(edgeId)
   dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
   return true
@@ -436,7 +447,9 @@ export function writeSpatialEdge(doc: DocumentContainers, edge: CanvasEdge): voi
  * Idempotent and a no-op (no commit) for an id absent from the doc.
  */
 export function deleteSpatialNode(doc: DocumentContainers, nodeId: string): void {
-  if (deleteNodeCascadeInto(doc, nodeId)) doc.commit()
+  if (!deleteNodeInto(doc, nodeId)) return
+  sweepAnchoredInto(doc, new Set([nodeId]))
+  doc.commit()
 }
 
 /**
@@ -513,15 +526,17 @@ export function reconcileSpatialCanvasInto(
   next: SpatialCanvas,
 ): boolean {
   let wrote = false
-  const writer = spatialBatchWriter(doc, () => {
+  const { writer, settle } = spatialBatchWriter(doc, () => {
     wrote = true
   })
   // Order is load-bearing: a node's delete cascades to its edges, so the
-  // node pass runs before the edge pass exactly as it always has.
+  // node pass runs before the edge pass exactly as it always has. Its
+  // removals come last in that pass, so they share one sweep.
   reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
   reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
   reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
   reconcileById(prev.comments ?? [], next.comments ?? [], writer.writeComment, writer.deleteComment)
+  settle()
 
   const facetsMoved = !sameValue(prev.facets, next.facets)
   const tagsMoved = !sameValue(prev.tags, next.tags)
@@ -548,38 +563,66 @@ export interface SpatialBatchWriter {
   deleteComment(commentId: string): void
 }
 
-/** The writes `withSpatialBatch` and the reconcile share; `markWrote` fires on each that changed the doc. */
-function spatialBatchWriter(doc: DocumentContainers, markWrote: () => void): SpatialBatchWriter {
-  return {
+/**
+ * The writes `withSpatialBatch` and the reconcile share; `markWrote` fires on
+ * each that changed the doc.
+ *
+ * A node removal's cascade is DEFERRED to the next write of any other kind,
+ * or to `settle()`, which the owner calls once the writes are done — so a
+ * run of node removals sweeps the edges and lines once. Deferring no further
+ * than the next write keeps every write seeing the canvas it always saw: an
+ * edge written after its node was removed survives, as it did when each
+ * removal swept at once.
+ */
+function spatialBatchWriter(
+  doc: DocumentContainers,
+  markWrote: () => void,
+): { writer: SpatialBatchWriter; settle: () => void } {
+  const removedNodes = new Set<string>()
+  const settle = (): void => {
+    sweepAnchoredInto(doc, removedNodes)
+    removedNodes.clear()
+  }
+  const writer: SpatialBatchWriter = {
     writeNode(node) {
+      settle()
       writeNodeInto(doc, node)
       markWrote()
     },
     writeEdge(edge) {
+      settle()
       writeEdgeInto(doc, edge)
       markWrote()
     },
     deleteNode(nodeId) {
-      if (deleteNodeCascadeInto(doc, nodeId)) markWrote()
+      if (!deleteNodeInto(doc, nodeId)) return
+      removedNodes.add(nodeId)
+      markWrote()
     },
     deleteEdge(edgeId) {
+      settle()
       if (deleteEdgeInto(doc, edgeId)) markWrote()
     },
     writeLine(line) {
+      settle()
       writeLineInto(doc, line)
       markWrote()
     },
     deleteLine(lineId) {
+      settle()
       if (deleteLineInto(doc, lineId)) markWrote()
     },
     writeComment(comment) {
+      settle()
       writeCommentInto(doc, comment)
       markWrote()
     },
     deleteComment(commentId) {
+      settle()
       if (deleteCommentInto(doc, commentId)) markWrote()
     },
   }
+  return { writer, settle }
 }
 
 /**
@@ -606,10 +649,17 @@ export function withSpatialBatch(
   fn: (writer: SpatialBatchWriter) => void,
 ): void {
   let wrote = false
-  const writer = spatialBatchWriter(doc, () => {
+  const { writer, settle } = spatialBatchWriter(doc, () => {
     wrote = true
   })
-  fn(writer)
+  try {
+    fn(writer)
+  } finally {
+    // On a throw too: the removals `fn` already made were cascaded before it
+    // threw when each swept at once, and the pending ops a caller converges
+    // from must still hold no edge anchored on a removed node.
+    settle()
+  }
   // Success path only — a finally-commit would break the error contract
   // above (the session fallback's own commit must stay the only one).
   if (wrote) doc.commit()
