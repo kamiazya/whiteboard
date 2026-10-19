@@ -50,16 +50,15 @@ const svgFor = (kind, side, n, r) => {
   if (kind === 'pattern') {
     let body = ''
     for (let i = 0; i < n; i++) {
-      body += `<pattern id="p${i}" width="1" height="1" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="blue"/></pattern>${rect(`fill="url(#p${i})"`)}`
+      const filled = rect(`fill="url(#p${i})"`)
+      body += `<pattern id="p${i}" width="1" height="1" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="blue"/></pattern>${filled}`
     }
     return body
   }
   const primitive = {
     morph: `<feMorphology operator="dilate" radius="${r}"/>`,
     blur: `<feGaussianBlur stdDeviation="${r}"/>`,
-    conv: `<feConvolveMatrix order="${r}" kernelMatrix="${Array(r * r)
-      .fill(1)
-      .join(' ')}"/>`,
+    conv: `<feConvolveMatrix order="${r}" kernelMatrix="${new Array(r * r).fill(1).join(' ')}"/>`,
   }[kind]
   return `<filter id="f" x="0" y="0" width="1" height="1">${primitive.repeat(n)}</filter>${rect('filter="url(#f)"')}`
 }

@@ -176,7 +176,7 @@ const ANIMATION_ELEMENT =
  * and any `image-set(` (`-webkit-` included), which loads from a quoted
  * string without spelling `url(` at all. Neither engine writes one.
  */
-const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)|image-set\(/i
+const NON_LOCAL_URL = /url\((?!\s*(?:['"]\s*)?#)|image-set\(/i
 /**
  * CSS that `NON_LOCAL_URL` cannot read: an escape (`u\72l(` is `url(`),
  * `@import`, which loads a sheet without spelling `url(` at all, and any
