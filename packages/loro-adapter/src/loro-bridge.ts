@@ -1,5 +1,4 @@
 import {
-  type AnnotationAnchor,
   anchoredOnAny,
   type CanvasComment,
   type CanvasEdge,
@@ -10,14 +9,10 @@ import {
   type SpatialNode,
   spatialNodeSchema,
   storedTagsSchema,
-  threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
 import { readCanvasComments } from './annotations.js'
-import {
-  migrateCanvasCommentsToThreads,
-  readCommentThread,
-  writeThreadInto,
-} from './comment-threads.js'
+import { deleteCommentInto, writeCommentInto } from './canvas-comment-write.js'
+import { migrateCanvasCommentsToThreads } from './comment-threads.js'
 import {
   CANVAS_KEY,
   CANVAS_TAGS_FIELD,
@@ -138,30 +133,6 @@ function lineToFields(line: CanvasLine): Fields {
   if (line.bends !== undefined) fields.bends = line.bends
   if (line.facets !== undefined) fields.facets = line.facets
   return fields
-}
-
-function assertWritableComment(comment: CanvasComment): void {
-  // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
-  // comment through the Zod schema and silently drops failures, so a NaN
-  // anchor written here would delete the comment for every reader.
-  for (const [field, value] of [
-    ['x', comment.x],
-    ['y', comment.y],
-  ] as const) {
-    if (!Number.isFinite(value)) {
-      throw new TypeError(
-        `canvas comment "${comment.id}" has a non-finite ${field} (${value}); the anchor must be finite`,
-      )
-    }
-  }
-  // The same class of loss one field over: the thread this comment becomes
-  // carries both references on one spatial anchor, which the anchor schema
-  // refuses, so a reader would drop the comment for everyone.
-  if (comment.targetNodeId !== undefined && comment.targetEdgeId !== undefined) {
-    throw new TypeError(
-      `canvas comment "${comment.id}" names both a node and an edge; a comment is about one of them`,
-    )
-  }
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
@@ -350,68 +321,6 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   if (edgesMap.get(edgeId) === undefined) return false
   edgesMap.delete(edgeId)
   dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
-  return true
-}
-
-// Shared with writeCanvasComment/deleteCanvasComment below, so field
-// projection (including assertWritableComment's loud non-finite-anchor refusal)
-// cannot drift between the single-commit and withSpatialBatch paths.
-/** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
-function flatCanCarry(anchor: AnnotationAnchor): boolean {
-  return anchor.kind === 'spatial' && anchor.nodeIds === undefined && anchor.width === undefined
-}
-
-function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  // Refuses a non-finite anchor loudly and before anything is stored — a
-  // thread whose anchor fails the schema would be dropped by every reader.
-  assertWritableComment(comment)
-  migrateCanvasCommentsToThreads(doc)
-  const incoming = threadFromCanvasComment(comment)
-  const held = readCommentThread(doc, comment.id)
-  if (held === undefined) {
-    writeThreadInto(doc, incoming)
-    return
-  }
-  // A flat comment is a PROJECTION of its thread, and writing a projection
-  // back verbatim loses what it could not carry. Two things it cannot:
-  // - an anchor beyond a point, a node or an edge. A thread on a node's
-  //   text projects as a comment on that node, a node set or a region as a
-  //   comment at its corner, and written back each would become that
-  //   point. The text and the status are what a flat write can honestly
-  //   change; the anchor it saw is the one it keeps.
-  // - the opening message's identity. The projection borrows the thread's
-  //   id for its one message, which is right for a comment the canvas
-  //   opened and wrong for one an MCP peer opened with a message id of its
-  //   own: written under the thread's id, an edit ADDED a message and
-  //   sorted it ahead of the original, which then read as a reply.
-  const opening = held.messages[0]
-  const edited = incoming.messages[0]
-  if (opening === undefined || edited === undefined) {
-    writeThreadInto(doc, incoming)
-    return
-  }
-  writeThreadInto(doc, {
-    ...incoming,
-    anchor: flatCanCarry(held.anchor) ? incoming.anchor : held.anchor,
-    messages: [
-      {
-        ...edited,
-        id: opening.id,
-        ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
-        ...(opening.author === undefined ? {} : { author: opening.author }),
-      },
-    ],
-  })
-}
-
-/** Returns false (writing nothing) when the comment id is absent. */
-function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean {
-  // The legacy entry goes too, or the fallback read below would resurrect a
-  // comment this call closed.
-  migrateCanvasCommentsToThreads(doc)
-  const threadsMap = doc.getMap(THREADS_KEY)
-  if (threadsMap.get(commentId) === undefined) return false
-  threadsMap.delete(commentId)
   return true
 }
 

@@ -369,6 +369,35 @@ function anchorOf(spec: Board['comments'][number], i: number): AnnotationAnchor 
   }
 }
 
+/** The board's comments, in every shape a document can hold one. */
+function seedComments(doc: Doc, specs: Board['comments']): void {
+  specs.forEach((spec, i) => {
+    const id = `c${i}`
+    if (spec.shape === 'flat') {
+      writeCanvasComment(doc, {
+        id,
+        x: i,
+        y: 0,
+        text: `flat ${i}`,
+        ...(spec.resolved ? { resolved: true } : {}),
+      })
+    } else if (spec.shape === 'legacy') {
+      doc.getMap(COMMENTS_KEY).set(id, { id, x: i, y: 1, text: 'old', targetNodeId: spec.target })
+      doc.commit()
+    } else {
+      writeCommentThread(doc, {
+        id,
+        anchor: anchorOf(spec, i),
+        status: spec.resolved ? 'resolved' : 'open',
+        messages: [{ id: spec.ownOpening ? `${id}-m` : id, body: `opening ${i}` }],
+      })
+    }
+    for (let r = 0; r < spec.replies; r += 1) {
+      writeThreadMessage(doc, id, { id: `r${r}`, body: `reply ${r}` })
+    }
+  })
+}
+
 /** The same board, op for op, in a fresh document. */
 function build(board: Board): Doc {
   const doc = new LoroDoc()
@@ -394,31 +423,7 @@ function build(board: Board): Doc {
     doc.commit()
   }
   for (const id of board.elementLocks) setEdgeLock(doc, id, true)
-  board.comments.forEach((spec, i) => {
-    const id = `c${i}`
-    if (spec.shape === 'flat') {
-      writeCanvasComment(doc, {
-        id,
-        x: i,
-        y: 0,
-        text: `flat ${i}`,
-        ...(spec.resolved ? { resolved: true } : {}),
-      })
-    } else if (spec.shape === 'legacy') {
-      doc.getMap(COMMENTS_KEY).set(id, { id, x: i, y: 1, text: 'old', targetNodeId: spec.target })
-      doc.commit()
-    } else {
-      writeCommentThread(doc, {
-        id,
-        anchor: anchorOf(spec, i),
-        status: spec.resolved ? 'resolved' : 'open',
-        messages: [{ id: spec.ownOpening ? `${id}-m` : id, body: `opening ${i}` }],
-      })
-    }
-    for (let r = 0; r < spec.replies; r += 1) {
-      writeThreadMessage(doc, id, { id: `r${r}`, body: `reply ${r}` })
-    }
-  })
+  seedComments(doc, board.comments)
   return doc
 }
 
