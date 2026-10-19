@@ -274,8 +274,22 @@ describe('fragmentIsEmbeddable reads through a namespace prefix', () => {
   it.each([
     '<svg xmlns:s="http://www.w3.org/2000/svg"><s:script>alert(1)</s:script></svg>',
     '<svg xmlns:s="http://www.w3.org/2000/svg"><s:foreignObject/></svg>',
+    // An XML name may start with any letter, not only an ASCII one.
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:script>alert(1)</é:script></svg>',
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:foreignObject/></svg>',
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:form/></svg>',
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:set attributeName="href" to="#a"/></svg>',
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:animate attributeName="x"/></svg>',
+    '<svg xmlns:é="http://www.w3.org/2000/svg"><é:style>g{fill:u\\72l(//evil.example)}</é:style></svg>',
+    '<svg xmlns:é="http://www.w3.org/1999/xlink"><use é:href=https://evil.example/x.svg#a /></svg>',
   ])('refuses %j', (svg) => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('ends a style element at a close under the same non-ASCII prefix', () => {
+    const svg =
+      '<svg xmlns:é="http://www.w3.org/2000/svg"><é:style>g{fill:red}</é:style><text>a\\b</text></svg>'
+    expect(fragmentIsEmbeddable(svg)).toBe(true)
   })
 })
 
