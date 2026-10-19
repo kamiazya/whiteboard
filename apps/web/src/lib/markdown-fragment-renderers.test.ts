@@ -286,10 +286,19 @@ describe('fragmentIsEmbeddable reads through a namespace prefix', () => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 
-  it('ends a style element at a close under the same non-ASCII prefix', () => {
+  it('ends a style element at a close under the same prefix', () => {
     const svg =
-      '<svg xmlns:é="http://www.w3.org/2000/svg"><é:style>g{fill:red}</é:style><text>a\\b</text></svg>'
+      '<svg xmlns:s="http://www.w3.org/2000/svg"><s:style>g{fill:red}</s:style><text>a\\b</text></svg>'
     expect(fragmentIsEmbeddable(svg)).toBe(true)
+  })
+
+  // The HTML parser reads `</` before a non-ASCII letter as a bogus comment
+  // ending at the first `>`, so such a close hides whatever follows it from
+  // the attribute walk — whichever reader the fragment meets.
+  it('refuses a close tag under a non-ASCII prefix', () => {
+    const svg =
+      '<svg xmlns:é="http://www.w3.org/2000/svg"><é:style>g{fill:red}</é:style><text>a</text></svg>'
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 })
 

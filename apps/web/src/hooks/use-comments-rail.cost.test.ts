@@ -15,7 +15,7 @@
  */
 import { type CommentThread, DOCUMENT_MAX_OPEN_THREADS } from '@kamiazya/whiteboard-model'
 import { renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { useCommentsRail } from './use-comments-rail.js'
 
 const BODY_CHARS = vi.hoisted(() => 45 * 750)
@@ -38,7 +38,6 @@ vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
 })
 
 const BODY = 'The quick brown fox jumps over the lazy dog. '.repeat(750)
-expect(BODY.length).toBe(BODY_CHARS)
 const QUOTE_CHARS = 300
 
 function orphan(index: number): CommentThread {
@@ -61,6 +60,11 @@ function reset(): void {
 }
 
 describe("the rail's orphan badge, under every orphan a document may hold", () => {
+  // The counter keys a whole-body search on BODY_CHARS, so BODY must be that long.
+  beforeAll(() => {
+    expect(BODY).toHaveLength(BODY_CHARS)
+  })
+
   it('answers every row after a one-character insert without searching the whole body again', () => {
     const hook = renderHook(
       ({ body }: { body: string }) =>

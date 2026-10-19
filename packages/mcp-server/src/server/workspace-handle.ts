@@ -1,6 +1,6 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
-import type { Context } from 'hono'
+import type { Context, HonoRequest } from 'hono'
 import { workspaceRegistry } from './store/document-store.js'
 import { validateWorkspaceId, validationErrorBody } from './validators.js'
 
@@ -19,18 +19,21 @@ export const NO_NAMESPACE = ''
  * single-person keeper's — the local daemon, stdio — whose one namespace is
  * `me`.
  */
-const callerNamespaces = new WeakMap<Request, string>()
+// Keyed on the HonoRequest, not `c.req.raw`: `hono/body-limit` replaces the
+// raw request for a body of unstated length, after which a raw-keyed record
+// would answer nobody and every bare segment would resolve in `me`.
+const callerNamespaces = new WeakMap<HonoRequest, string>()
 
 export function rememberCallerNamespace(c: Context, namespace: string): void {
-  callerNamespaces.set(c.req.raw, namespace)
+  callerNamespaces.set(c.req, namespace)
 }
 
 export function callerNamespaceOf(c: Context): string {
-  return callerNamespaceOfRequest(c.req.raw)
+  return callerNamespaceOfRequest(c.req)
 }
 
-/** `callerNamespaceOf` for a holder of the bare request, as server-core's `/api/v1` is. */
-export function callerNamespaceOfRequest(request: Request): string {
+/** `callerNamespaceOf` for a holder of the request alone, as server-core's `/api/v1` is. */
+export function callerNamespaceOfRequest(request: HonoRequest): string {
   return callerNamespaces.get(request) ?? SINGLE_PERSON_NAMESPACE
 }
 
@@ -58,7 +61,8 @@ export async function resolveWorkspaceHandleToId(
 }
 
 /**
- * Per-REQUEST memo, keyed on the underlying `Request`, so a handle is
+ * Per-REQUEST memo, keyed on the HonoRequest (stable across a body-limit
+ * swap of the raw request, as `callerNamespaces` above), so a handle is
  * resolved once no matter how many composed routers and helpers read it.
  * The daemon has no single middleware to hang this on: its handlers reach
  * module-level store state rather than one injected `deps`, and two of the
@@ -67,13 +71,13 @@ export async function resolveWorkspaceHandleToId(
  * second answer keys write locks, doc caches and connection registries, and
  * two independent resolutions of the same handle are two chances to disagree.
  */
-const memo = new WeakMap<Request, Map<string, string>>()
+const memo = new WeakMap<HonoRequest, Map<string, string>>()
 
 export async function workspaceIdFromHandle(c: Context, handle: string): Promise<string> {
-  let perRequest = memo.get(c.req.raw)
+  let perRequest = memo.get(c.req)
   if (perRequest === undefined) {
     perRequest = new Map()
-    memo.set(c.req.raw, perRequest)
+    memo.set(c.req, perRequest)
   }
   const hit = perRequest.get(handle)
   if (hit !== undefined) return hit

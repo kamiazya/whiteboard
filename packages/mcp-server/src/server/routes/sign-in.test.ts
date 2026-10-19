@@ -223,6 +223,35 @@ describe('sign-in through an OIDC provider', () => {
     expect((await signIn.sessions.open(session, Date.now()))?.authenticatedAt).toBe(now * 1000)
   })
 
+  // `max_age=0` asks the provider for a sign-in made now; the exchange holds
+  // it to that, so a provider that answers with an old session's token is
+  // refused at the callback rather than only when administration reads it.
+  it.each([
+    ['reports an old sign-in', { auth_time: Math.floor(Date.now() / 1000) - 3600 }],
+    ['reports no sign-in time', {}],
+  ])('refuses a re-authentication whose ID token %s', async (_name, authTime) => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const first = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const started = await app.request(`${BASE}/auth/reauthenticate?return=%2Fpeople`, {
+      headers: { cookie: `${SESSION_COOKIE}=${first}` },
+    })
+    idp.next({ sub: 'ada-1', ...authTime })
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    const done = await app.request(idp.authorize(started.headers.get('location') as string), {
+      headers: { cookie: `__Host-wb_signin=${binding}` },
+    })
+    expect(done.headers.get('location')).toBe('/sign-in?error=provider_refused')
+    expect(cookieFrom(done, SESSION_COOKIE)).toBeUndefined()
+    expect(await signIn.sessions.open(first, Date.now())).not.toBeNull()
+  })
+
+  it('accepts an old auth_time on an ordinary sign-in, which asked for no max_age', async () => {
+    const { app } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1', auth_time: Math.floor(Date.now() / 1000) - 3600 })
+    expect(cookieFrom(await signInThrough(app), SESSION_COOKIE)).toBeTruthy()
+  })
+
   it('sends someone with no session to the sign-in screen rather than a provider', async () => {
     const { app } = appFor({ createAccounts: true })
     const res = await app.request(`${BASE}/auth/reauthenticate`)

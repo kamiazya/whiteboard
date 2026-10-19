@@ -81,6 +81,34 @@ describe('how many sync streams the keeper holds open', () => {
     expect((await open(app, 'bob')).res.status).toBe(200)
   })
 
+  // Hono answers HEAD by running the GET handler and dropping its body, so a
+  // stream opened that way has no reader that could ever close it.
+  it('refuses to open a stream for HEAD, so it holds no slot', async () => {
+    const app = router({ ...userFromHeader, streamCaps: { perUser: 1, total: 10 } })
+    const head = await app.request('/api/sync/stream', {
+      method: 'HEAD',
+      headers: { 'x-user': 'bob' },
+    })
+    expect(head.status).toBe(405)
+    expect(head.headers.get('allow')).toBe('GET')
+    expect(openSyncStreamCount()).toBe(0)
+    expect((await open(app, 'bob')).res.status).toBe(200)
+  })
+
+  it('forgets a stream whose request was aborted before anything read it', async () => {
+    const app = router({ ...userFromHeader, streamCaps: { perUser: 1, total: 10 } })
+    const controller = new AbortController()
+    const res = await app.request('/api/sync/stream', {
+      headers: { 'x-user': 'bob' },
+      signal: controller.signal,
+    })
+    expect(res.status).toBe(200)
+    expect(openSyncStreamCount()).toBe(1)
+    controller.abort()
+    await expect.poll(() => openSyncStreamCount()).toBe(0)
+    expect((await open(app, 'bob')).res.status).toBe(200)
+  })
+
   it('admits a user again once one of their streams closes', async () => {
     const app = router({ ...userFromHeader, streamCaps: { perUser: 1, total: 10 } })
     const first = await open(app, 'bob')

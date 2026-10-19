@@ -170,16 +170,7 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
     // themselves never required. Ends that sweep past nothing share the
     // base depth; their corridors occupy disjoint tangent ranges.
     const dir = Math.sign(tangentCoordinate(member.end.side, member.end.farCenter) - member.t)
-    const rank =
-      dir === 0
-        ? 0
-        : dir > 0
-          ? sortedT.length - firstIndexWhere(sortedT, (t) => t > member.t)
-          : // A non-finite box compares below nothing, as the scan it replaced did.
-            Number.isNaN(member.t)
-            ? 0
-            : firstIndexWhere(sortedT, (t) => t >= member.t)
-    const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
+    const depth = ORTHOGONAL_STUB_PX + sweepRank(sortedT, member.t, dir) * STUB_LANE_STEP_PX
     const entry = entries.get(member.end.edgeId) ?? {}
     entries.set(
       member.end.edgeId,
@@ -188,6 +179,15 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
         : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
     )
   }
+}
+
+/** How many of the side's ends an end sweeping in `dir` from `t` passes. */
+function sweepRank(sortedT: readonly number[], t: number, dir: number): number {
+  if (dir === 0) return 0
+  if (dir > 0) return sortedT.length - firstIndexWhere(sortedT, (other) => other > t)
+  // A non-finite box compares below nothing, as the scan it replaced did.
+  if (Number.isNaN(t)) return 0
+  return firstIndexWhere(sortedT, (other) => other >= t)
 }
 
 /** The first index of ascending `sorted` whose value satisfies a monotone `holds`, or its length. */

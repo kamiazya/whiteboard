@@ -8,6 +8,8 @@
  * that has to hold across fourteen tools and every route.
  */
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
+import { Hono, type HonoRequest } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 import { createServer } from './create-server.js'
@@ -115,6 +117,45 @@ describe('workspace addresses in the caller’s namespace', () => {
     const res = await serverFor('alice').app.request('/api/v1/workspaces/design/documents')
     expect(res.status).toBe(200)
     expect(JSON.stringify(await res.json())).toContain('alices')
+  })
+
+  // The seam is handed the HonoRequest, which `hono/body-limit` keeps while
+  // it swaps `c.req.raw` for a body of unstated length — so a namespace a
+  // keeper recorded before that swap is still the one /api/v1 resolves in.
+  it('resolves in the recorded namespace behind a body limit, for a body of unstated length', async () => {
+    const recorded = new WeakMap<HonoRequest, string>()
+    const server = createServer(
+      makeTestDeps({
+        documentStore: new InMemoryDocumentStore(),
+        documentIndex: index,
+        documentTeardown: inMemoryDocumentTeardown(),
+        callerNamespace: async (request) =>
+          (request === undefined ? undefined : recorded.get(request)) ?? 'me',
+      }),
+    )
+    const app = new Hono()
+    app.use('*', async (c, next) => {
+      recorded.set(c.req, 'alice')
+      await next()
+    })
+    app.use('*', bodyLimit({ maxSize: 64 * 1024 }))
+    app.route('/', server.app)
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(JSON.stringify({ path: 'behind-limit', kind: 'markdown' })),
+        )
+        controller.close()
+      },
+    })
+    const res = await app.request('/api/v1/workspaces/design/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+    expect(res.status).toBe(201)
+    expect(await pathsIn(serverFor('alice'), ALICES)).toContain('behind-limit')
   })
 
   it('reaches a qualified handle in any namespace, whoever is calling', async () => {

@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { documentsRemovedSince } from './removed-documents.js'
 import {
+  createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
+  ensureFolderPath,
   importWorkspaceSubtree,
+  moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
   readWorkspaceDocuments,
 } from './workspace-tree.js'
@@ -14,6 +17,7 @@ import {
 const A = '01BRWAAAAAAAAAAAAAAAAAAAA1'
 const B = '01BRWAAAAAAAAAAAAAAAAAAAA2'
 const C = '01BRWAAAAAAAAAAAAAAAAAAAA3'
+const D = '01BRWAAAAAAAAAAAAAAAAAAAA4'
 
 function create(doc: LoroDoc, path: string, documentId: string, body = ''): void {
   createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
@@ -123,6 +127,67 @@ describe('documentsRemovedSince', () => {
     expect(restored((removed[0] as { bytes: Uint8Array }).bytes).map((e) => e.documentId)).toEqual([
       shadowed.documentId,
     ])
+  })
+
+  it('exports the removed document, not a folder ahead of it at its path', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocument(doc, { documentId: A, segment: 'a', kind: 'markdown' })
+    ensureFolderPath(doc, ['a', 'c'])
+    createWorkspaceDocument(doc, { documentId: B, segment: 'c', kind: 'markdown', parentId: A })
+
+    const removed = removedBy(doc, (d) => deleteWorkspaceDocument(d, { documentId: B }))
+
+    expect(removed.map((each) => each.documentId)).toEqual([B])
+    expect(restored((removed[0] as { bytes: Uint8Array }).bytes).map((e) => e.documentId)).toEqual([
+      B,
+    ])
+  })
+
+  it('carries each removed document in exactly one export when paths collide', () => {
+    // `x` holds a folder `s` and, after it, a document `s`, so `x/s/y` is
+    // claimed twice: B under the folder, D under the document. B rides `x`,
+    // whose subtree holds it through the folder; D does not, since the
+    // document `s` survives between — so D is exported alone and `x`'s bytes
+    // must leave it out, or a restore of `x` brings D back a second time.
+    const doc = new LoroDoc()
+    createWorkspaceDocument(doc, { documentId: A, segment: 'x', kind: 'markdown' })
+    ensureFolderPath(doc, ['x', 's'])
+    create(doc, 'x/s/y', B)
+    createWorkspaceDocument(doc, { documentId: C, segment: 's', kind: 'markdown', parentId: A })
+    createWorkspaceDocument(doc, { documentId: D, segment: 'y', kind: 'markdown', parentId: C })
+    const owner = readWorkspaceDocuments(doc).find((each) => each.documentId === B)
+    if (owner?.path !== 'x/s/y' || owner.shadowed === true) throw new Error('no path collision')
+
+    const removed = removedBy(doc, (d) => {
+      moveWorkspaceDocument(d, { documentId: C })
+      deleteWorkspaceDocument(d, { documentId: D })
+      deleteWorkspaceDocument(d, { documentId: A })
+    })
+
+    expect(removed.map((each) => each.documentId).sort()).toEqual([A, D])
+    const carried = removed.flatMap((each) => restored(each.bytes).map((e) => e.documentId))
+    expect(carried.sort()).toEqual([A, B, D])
+  })
+
+  it('exports a removed document whose path ancestor is a removed document on another branch', () => {
+    // A folder `s` holds B, and a root document C is also `s`: B's nearest
+    // path ancestor holding a document is C, but C's subtree does not hold B.
+    const doc = new LoroDoc()
+    ensureFolderPath(doc, ['s'])
+    create(doc, 's/y', B, 'inside the folder')
+    createWorkspaceDocument(doc, { documentId: C, segment: 's', kind: 'markdown' })
+    doc.commit()
+
+    const removed = removedBy(doc, (d) => {
+      deleteWorkspaceDocument(d, { documentId: B })
+      deleteWorkspaceDocument(d, { documentId: C })
+    })
+
+    expect(removed.map((each) => each.documentId).sort()).toEqual([B, C])
+    const folded = removed.find((each) => each.documentId === B) as { bytes: Uint8Array }
+    expect(restored(folded.bytes)).toEqual([{ documentId: B, body: 'inside the folder' }])
+    const root = removed.find((each) => each.documentId === C) as { bytes: Uint8Array }
+    expect(restored(root.bytes).map((each) => each.documentId)).toEqual([C])
   })
 
   it('counts a document moved under a node a concurrent delete took', () => {

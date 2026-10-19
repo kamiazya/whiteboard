@@ -196,7 +196,9 @@ it, restrict its file permissions). Prefer `WHITEBOARD_DAEMON_TOKEN` (or
 
 ## Live-sync stream limits
 
-A page receives live edits over one event stream (`GET /api/sync/stream`).
+A page receives live edits over one event stream (`GET /api/sync/stream`;
+any other method, `HEAD` included, is answered `405` with `Allow: GET` and
+opens nothing).
 The web app opens **one stream per browser profile**, shared by all of its tabs
 through a SharedWorker; where SharedWorker is unavailable (Chrome on Android)
 each tab opens its own. These limits are fixed, not configurable:

@@ -5,16 +5,14 @@
  */
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { forgetTrashEntry, readTrashEntries, recordTrashEntry } from './workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   exportWorkspaceSubtree,
-  forgetTrashEntry,
   importWorkspaceSubtree,
   pruneEmptyFolders,
-  readTrashEntries,
   readWorkspaceNodes,
-  recordTrashEntry,
   WORKSPACE_TREE_KEY,
 } from './workspace-tree.js'
 

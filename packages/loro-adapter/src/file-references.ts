@@ -20,12 +20,11 @@
 import { LoroDoc } from 'loro-crdt'
 import type { DocumentContainers } from './containers.js'
 import { collectImageRefIds } from './image-refs.js'
-import type { TrashEntry } from './workspace-tree.js'
+import { readTrashEntries, type TrashEntry } from './workspace-trash.js'
 import {
   documentContainers,
   importWorkspaceSubtree,
   projectWorkspaceDocument,
-  readTrashEntries,
   readWorkspaceDocuments,
   unreadableWorkspaceNodes,
 } from './workspace-tree.js'

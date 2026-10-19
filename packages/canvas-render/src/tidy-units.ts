@@ -268,3 +268,56 @@ export function buildUnits(
   units.sort((a, b) => (orderOf.get(a.rootId) ?? 0) - (orderOf.get(b.rootId) ?? 0))
   return units
 }
+
+/**
+ * What one `tidyNodes` call may spend on the parts of the frame walk whose
+ * cost grows faster than the board: asking every frame whether it stands
+ * over every other (`frameNesting`, once per settling pass), and opening a
+ * level per frame, each doing work in proportion to the nodes it holds.
+ *
+ * Neither is bounded by the node cap alone. A canvas of 2000 frames each
+ * strictly inside the next — or 2000 identical frames, which nest by the
+ * document-order tie-break — has a level per frame, every one holding every
+ * frame inside it: 4e6 level visits and 1.2e7 containment checks over two
+ * passes, 3.8s on the serving loop for one tidy op.
+ *
+ * Past the budget the walk keeps what it has not reached as it was drawn: a
+ * frame it cannot afford to open is not tidied inside nor grown, and its
+ * members travel with it as one unit; a settling pass it cannot afford is
+ * not run, so `tidyNodes` answers with the last pass it completed. Such a
+ * tidy may not be idempotent — a second one starts with a fresh budget.
+ * Below the budget nothing changes: every check refuses only work the
+ * account cannot cover.
+ */
+export interface TidyBudget {
+  /** Frame pairs `frameNesting` may still compare, `frames^2` per pass. */
+  nesting: number
+  /** Nodes the levels of the walk may still hold, summed over levels and passes. */
+  levels: number
+}
+
+/**
+ * Sized against what the suite and the boards a canvas may hold spend. The
+ * busiest tidy in canvas-render's suite holds 602 level visits and compares
+ * 484 frame pairs; a 2000-node board of 167 frames holding eleven boxes each
+ * spends about 8e3 visits over its two passes, a 2000-frame grid 8e6 pairs.
+ * 5e5 visits is about 0.4s of walk, 60 times that clustered board, and
+ * covers a 2000-node board nested 20 deep over all twelve passes. 1.6e7
+ * pairs is four passes over 2000 frames, about 0.9s.
+ */
+const TIDY_LEVEL_VISITS = 500_000
+const TIDY_NESTING_PAIRS = 16_000_000
+
+export function createTidyBudget(): TidyBudget {
+  return { nesting: TIDY_NESTING_PAIRS, levels: TIDY_LEVEL_VISITS }
+}
+
+/**
+ * Take `work` from one account, or nothing when it cannot cover all of it,
+ * so no check spends part and refuses the rest.
+ */
+export function spendTidy(budget: TidyBudget, account: keyof TidyBudget, work: number): boolean {
+  if (work > budget[account]) return false
+  budget[account] -= work
+  return true
+}

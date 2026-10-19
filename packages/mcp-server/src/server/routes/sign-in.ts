@@ -165,6 +165,7 @@ async function startAttempt(
     providerId: provider.id,
     returnTo: safeReturnPath(request.returnTo, deps.publicBaseUrl),
     ...(request.invitation === undefined ? {} : { invitationToken: request.invitation }),
+    fresh: request.fresh ?? false,
     // The socket's peer, never a forwarded-for header a caller can write:
     // behind a proxy that is the proxy, which costs per-client shedding and
     // nothing else.
@@ -244,14 +245,16 @@ async function verifiedClaims(
   c: Context,
   routing: Routing,
   provider: ResolvedProvider,
-  checks: { nonce: string; codeVerifier: string },
+  checks: { nonce: string; codeVerifier: string; fresh: boolean },
 ): Promise<VerifiedClaims | null> {
   const callback = new URL(routing.callbackUrl(provider.id))
   callback.search = new URL(c.req.url).search
   try {
     return await routing.deps.rp.exchange(provider, callback, {
       state: c.req.query('state') ?? '',
-      ...checks,
+      nonce: checks.nonce,
+      codeVerifier: checks.codeVerifier,
+      fresh: checks.fresh,
     })
   } catch (err) {
     log.warning(

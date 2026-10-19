@@ -51,7 +51,7 @@ describe('server mode invite page', () => {
     expect(window.location.href).not.toContain('inv-123')
     expect(window.location.pathname).toBe(invite.pathname)
     // Replaced, not pushed: Back must not land on the tokened entry.
-    expect(window.history.length).toBe(entries)
+    expect(window.history).toHaveLength(entries)
 
     fireEvent.click(await screen.findByRole('button', { name: /continue with corp sso/i }))
     await waitFor(() => expect(goTo).toHaveBeenCalledWith('https://idp.test/authorize'))

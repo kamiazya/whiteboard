@@ -407,6 +407,7 @@ async function holdStream(
   options: SyncSseRouterOptions,
   expiresAt: number | undefined,
   session: string | undefined,
+  signal: AbortSignal,
 ): Promise<void> {
   registerSyncStream(streamId, streamEntry(stream, streamId, userId, options, session))
   const disarm = expiresAt === undefined ? () => {} : endAtExpiry(stream, streamId, expiresAt)
@@ -421,6 +422,10 @@ async function holdStream(
       resolve()
     })
   })
+  // A request aborted before its body is read settles no pending write, so
+  // nothing would reach onAbort through the body; the request's own signal does.
+  if (signal.aborted) stream.abort()
+  else signal.addEventListener('abort', () => stream.abort(), { once: true })
   const ready: SyncReadyEvent = { streamId }
   await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
   if (stream.aborted) {
@@ -435,6 +440,11 @@ async function holdStream(
   await closed
 }
 
+function refuseStreamMethod(c: Context) {
+  c.header('Allow', 'GET')
+  return c.json(errorBody('method_not_allowed', 'the sync stream opens with GET only'), 405)
+}
+
 export function createSyncSseRouter(options: SyncSseRouterOptions) {
   const app = new Hono()
   // Every workspace-record update the operations commit (ADR-0018) fans out
@@ -445,6 +455,10 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
   })
 
   app.get('/api/sync/stream', async (c) => {
+    // Hono routes HEAD to a GET handler and discards the body it returns, so
+    // a stream opened for HEAD has no reader that could ever end it: it would
+    // hold one of its user's stream slots until the grant ran out.
+    if (c.req.method !== 'GET') return refuseStreamMethod(c)
     // The id is minted here and never accepted from the caller. A client-chosen
     // key into a server-side registry lets one client name another's stream —
     // displacing it on open, or adding and removing that client's
@@ -459,11 +473,15 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
 
     const expiresAt = options.grantExpiresAt?.(c)
     const session = options.sessionOf?.(c)
+    const signal = c.req.raw.signal
     return streamSSE(c, (stream) =>
-      holdStream(stream, streamId, userId, options, expiresAt, session),
+      holdStream(stream, streamId, userId, options, expiresAt, session, signal),
     )
   })
 
+  // Registered after the GET route, which answers GET and HEAD first, so
+  // every other method gets the same refusal rather than a route-less 404.
+  app.all('/api/sync/stream', refuseStreamMethod)
   app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))
   app.post('/api/sync/message', (c) => handleMessage(c, options))
 

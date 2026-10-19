@@ -6,14 +6,13 @@ import type { DocumentContainers } from './containers.js'
 import { type FileReferenceReads, scanFileReferences } from './file-references.js'
 import { writeSpatialCanvas } from './loro-bridge.js'
 import { writeProposal } from './proposals.js'
+import { recordTrashEntry, type TrashEntry } from './workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   documentContainers,
   exportWorkspaceSubtree,
   projectWorkspaceDocument,
-  recordTrashEntry,
-  type TrashEntry,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
 

@@ -16,7 +16,7 @@
  */
 import { EditorState, type TransactionSpec } from '@codemirror/state'
 import { type CommentThread, DOCUMENT_MAX_OPEN_THREADS } from '@kamiazya/whiteboard-model'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { annotationDecorations, setAnnotationProjection } from './annotation-decorations.js'
 
 const BODY_CHARS = vi.hoisted(() => 45 * 750)
@@ -39,7 +39,6 @@ vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
 })
 
 const BODY = 'The quick brown fox jumps over the lazy dog. '.repeat(750)
-expect(BODY.length).toBe(BODY_CHARS)
 const QUOTE_CHARS = 300
 
 function orphan(index: number): CommentThread {
@@ -82,6 +81,11 @@ function reset(): void {
 beforeEach(reset)
 
 describe('the annotation projection, under every orphan a document may hold', () => {
+  // The counter keys a whole-body search on BODY_CHARS, so BODY must be that long.
+  beforeAll(() => {
+    expect(BODY).toHaveLength(BODY_CHARS)
+  })
+
   it('answers a one-character insert without searching the whole body again', () => {
     const cost = measure(projected(), { changes: { from: 10, insert: 'x' } })
     expect(cost.resolutions).toBeLessThanOrEqual(2)

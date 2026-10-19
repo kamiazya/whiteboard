@@ -192,7 +192,7 @@ function resolvesWorkspace(
 ): MiddlewareHandler<{ Variables: { workspaceId: string } }, '/api/v1/workspaces/:workspaceId/*'> {
   return async (c, next) => {
     const handle = c.req.param('workspaceId')
-    const resolved = await resolveWorkspaceFor(deps, handle, c.req.raw)
+    const resolved = await resolveWorkspaceFor(deps, handle, c.req)
     const workspaceId = resolved?.workspaceId ?? handle
     if (resolved === null && !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`)) {
       const refusal = await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)

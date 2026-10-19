@@ -45,6 +45,7 @@ import { migration as dropWorkspaceMembersOnly } from './0043-drop-workspace-mem
 import { migration as signInAttemptSource } from './0044-sign-in-attempt-source.js'
 import { migration as signInAttemptSourcePrefixes } from './0045-sign-in-attempt-source-prefixes.js'
 import { migration as workspaceNamespace } from './0046-workspace-namespace.js'
+import { migration as signInAttemptFresh } from './0047-sign-in-attempt-fresh.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -101,4 +102,5 @@ export const migrations: Record<string, Migration> = {
   '0044-sign-in-attempt-source': signInAttemptSource,
   '0045-sign-in-attempt-source-prefixes': signInAttemptSourcePrefixes,
   '0046-workspace-namespace': workspaceNamespace,
+  '0047-sign-in-attempt-fresh': signInAttemptFresh,
 }

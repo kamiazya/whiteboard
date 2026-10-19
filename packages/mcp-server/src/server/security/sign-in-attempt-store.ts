@@ -17,6 +17,8 @@ interface BeginInput {
   readonly providerId: string
   readonly returnTo: string
   readonly invitationToken?: string
+  /** The attempt asks the provider for a sign-in made now. */
+  readonly fresh?: boolean
   /** The client's network address, when the transport knows it. */
   readonly source: string | undefined
   readonly now: number
@@ -30,6 +32,7 @@ interface Attempt {
   /** The hash of the invitation token the attempt began with: what the invitation store keys by. */
   readonly invitationTokenHash: string | null
   readonly returnTo: string
+  readonly fresh: boolean
 }
 
 export interface SignInAttemptStore {
@@ -145,7 +148,12 @@ async function makeRoom(db: TenantScoped, now: number, keep: number): Promise<vo
   }
 }
 
-function mint(providerId: string, returnTo: string, invitationToken: string | undefined) {
+function mint(
+  providerId: string,
+  returnTo: string,
+  invitationToken: string | undefined,
+  fresh: boolean,
+) {
   return {
     state: random(),
     browserBinding: random(),
@@ -156,6 +164,7 @@ function mint(providerId: string, returnTo: string, invitationToken: string | un
     invitationTokenHash: invitationToken === undefined ? null : sha256Hex(invitationToken),
     providerId,
     returnTo,
+    fresh,
   }
 }
 
@@ -165,8 +174,8 @@ export function createSignInAttemptStore(
 ): SignInAttemptStore {
   const keep = Math.max(maxPending - 1, 0)
   return {
-    async begin({ providerId, returnTo, invitationToken, source, now, ttlMs }) {
-      const minted = mint(providerId, returnTo, invitationToken)
+    async begin({ providerId, returnTo, invitationToken, fresh = false, source, now, ttlMs }) {
+      const minted = mint(providerId, returnTo, invitationToken, fresh)
       await inTenantTransaction(db, async (trx) => {
         await makeRoom(trx, now, keep)
         await trx
@@ -179,6 +188,7 @@ export function createSignInAttemptStore(
             codeVerifier: minted.codeVerifier,
             invitationTokenHash: minted.invitationTokenHash,
             returnTo,
+            fresh: fresh ? 1 : 0,
             expiresAt: now + ttlMs,
             ...sourceKeys(source),
           })
@@ -195,9 +205,16 @@ export function createSignInAttemptStore(
         .where('state', '=', state)
         .where('browserBindingHash', '=', sha256Hex(browserBinding))
         .where('expiresAt', '>', now)
-        .returning(['providerId', 'nonce', 'codeVerifier', 'invitationTokenHash', 'returnTo'])
+        .returning([
+          'providerId',
+          'nonce',
+          'codeVerifier',
+          'invitationTokenHash',
+          'returnTo',
+          'fresh',
+        ])
         .execute()
-      return row ?? null
+      return row === undefined ? null : { ...row, fresh: row.fresh === 1 }
     },
   }
 }

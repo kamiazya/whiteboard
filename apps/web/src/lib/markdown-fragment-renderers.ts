@@ -159,6 +159,8 @@ function fragmentHrefsAreLocal(svg: string): boolean {
 // SVG namespace is the same element as `<script>`. The prefix is any run of
 // name characters, not ASCII word characters: an XML name may start with any
 // letter, so `<é:script>` is a script element too.
+/** A namespace prefix, as the element patterns here admit one. */
+const ELEMENT_PREFIX = String.raw`[^\s<>/:="']+:`
 const SCRIPT_ELEMENT = /<(?:[^\s<>/:="']+:)?script\b/i
 /**
  * Live HTML inside an SVG: a `<foreignObject>` carries arbitrary XHTML (a
@@ -166,6 +168,115 @@ const SCRIPT_ELEMENT = /<(?:[^\s<>/:="']+:)?script\b/i
  * SVG opened on its own.
  */
 const HTML_ISLAND_ELEMENT = /<(?:[^\s<>/:="']+:)?(?:foreignObject|form)\b/i
+/**
+ * Markup the HTML parser reads differently from XML. The fragment reaches the
+ * DOM through `innerHTML`, where a breakout tag (HTML's foreign-content list,
+ * `font` included, and the `</p>`/`</br>` end tags) leaves SVG for HTML. Past
+ * it, a raw-text or RCDATA element reads its body as text to its own close, so
+ * `<textarea><x y="</textarea><img onerror>">` — one quoted attribute to
+ * every other check here — ends in a live `<img>`. The raw-text names are
+ * refused too, so a gap in the breakout list is not enough on its own; `style`
+ * and `title` are not, being SVG elements both engines write, and
+ * `hasMarkupInIntegrationPoint` covers them. Neither engine writes any of these.
+ */
+const HTML_PARSER_ELEMENT = new RegExp(
+  String.raw`<(?:${ELEMENT_PREFIX})?(?:${[
+    'b',
+    'big',
+    'blockquote',
+    'body',
+    'br',
+    'center',
+    'code',
+    'dd',
+    'div',
+    'dl',
+    'dt',
+    'em',
+    'embed',
+    'font',
+    'h[1-6]',
+    'head',
+    'hr',
+    'i',
+    'img',
+    'li',
+    'listing',
+    'menu',
+    'meta',
+    'nobr',
+    'ol',
+    'p',
+    'pre',
+    'ruby',
+    's',
+    'small',
+    'span',
+    'strong',
+    'strike',
+    'sub',
+    'sup',
+    'table',
+    'tt',
+    'u',
+    'ul',
+    'var',
+    'textarea',
+    'xmp',
+    'iframe',
+    'noembed',
+    'noframes',
+    'noscript',
+    'plaintext',
+  ].join('|')})(?![^\s/>])|<\/(?:${ELEMENT_PREFIX})?(?:p|br)(?![^\s/>])`,
+  'i',
+)
+/**
+ * A comment, CDATA section or doctype, and the tokenizer's two other
+ * bogus-comment openers: `<?`, and `</` before anything but an ASCII letter
+ * or `>` (an empty `</>` is dropped, not a comment). Every check here reads
+ * `<!--<g a="-->` as the start of a quoted attribute while the HTML parser
+ * closes the comment at `-->` — a bogus one at the first `>` — so whatever
+ * follows is live markup the attribute walk never read.
+ */
+const MARKUP_DECLARATION = /<[!?]|<\/(?![a-zA-Z>])/
+/**
+ * SVG's `title` and `desc` are HTML integration points: what they hold is
+ * parsed as HTML, where `<style>` is raw text to its close. Mermaid writes a
+ * `<title>`, always holding text alone, so one that holds an element was
+ * steered there by document text.
+ */
+const INTEGRATION_POINT_OPEN = new RegExp(
+  String.raw`<(?:${ELEMENT_PREFIX})?(title|desc)(?![^\s/>])`,
+  'gi',
+)
+
+/** Where the tag opened at `from` ends: its first `>` outside a quoted value, or -1. */
+function tagEnd(svg: string, from: number): number {
+  let quote = ''
+  for (let i = from; i < svg.length; i++) {
+    const ch = svg[i]
+    if (quote !== '') {
+      if (ch === quote) quote = ''
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if (ch === '>') return i
+  }
+  return -1
+}
+
+function hasMarkupInIntegrationPoint(svg: string): boolean {
+  const opens = new RegExp(INTEGRATION_POINT_OPEN.source, 'gi')
+  for (let open = opens.exec(svg); open; open = opens.exec(svg)) {
+    const bodyStart = tagEnd(svg, open.index)
+    if (bodyStart < 0) return false
+    const close = new RegExp(String.raw`</(?:${ELEMENT_PREFIX})?${open[1]}(?![^\s/>])`, 'gi')
+    close.lastIndex = bodyStart
+    const end = close.exec(svg)?.index ?? svg.length
+    if (/<[a-zA-Z]/.test(svg.slice(bodyStart, end))) return true
+    opens.lastIndex = Math.max(end, bodyStart)
+  }
+  return false
+}
 /**
  * SMIL animation rewrites an attribute after every check here has read it —
  * `<set attributeName="href" to="javascript:…">` turns a local link into a
@@ -192,6 +303,8 @@ const UNREADABLE_CSS = /\\|@import|&(?!(?:amp|lt|gt|quot|apos);)/i
 const STYLE_ELEMENT_OPEN = /<(?:[^\s<>/:="']+:)?style\b/gi
 const STYLE_ELEMENT_CLOSE = /<\/(?:[^\s<>/:="']+:)?style\b/i
 const FORM_ATTRIBUTE = /^(?:form)?action$/i
+/** A frame's inline document and an `<object>`'s resource. */
+const EMBEDDING_ATTRIBUTE = /^(?:[^\s<>/:="']+:)?(?:srcdoc|data)$/i
 const WHITESPACE = /\s/
 const TAG_NAME_END = /[\s/>]/
 const ATTR_NAME_END = /[\s=>/]/
@@ -245,7 +358,7 @@ const LINK_ATTRIBUTE = /^(?:src|(?:[^\s<>/:="']+:)?href)$/i
  * reads quoted values only).
  */
 function isRefusedAttribute(name: string, value: string): boolean {
-  if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name)) return true
+  if (/^on/i.test(name) || FORM_ATTRIBUTE.test(name) || EMBEDDING_ATTRIBUTE.test(name)) return true
   if (CSS_VALUED_ATTRIBUTE.test(name) && UNREADABLE_CSS.test(value)) return true
   return LINK_ATTRIBUTE.test(name) && !value.startsWith('#')
 }
@@ -329,6 +442,9 @@ export function fragmentIsEmbeddable(svg: string): boolean {
     !SCRIPT_ELEMENT.test(svg) &&
     !HTML_ISLAND_ELEMENT.test(svg) &&
     !ANIMATION_ELEMENT.test(svg) &&
+    !HTML_PARSER_ELEMENT.test(svg) &&
+    !MARKUP_DECLARATION.test(svg) &&
+    !hasMarkupInIntegrationPoint(svg) &&
     !NON_LOCAL_URL.test(svg) &&
     !hasUnreadableStyleElement(svg) &&
     !hasRefusedAttribute(svg)

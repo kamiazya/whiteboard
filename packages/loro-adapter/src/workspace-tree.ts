@@ -210,6 +210,8 @@ interface Walked {
   readonly node: LoroTreeNode
   readonly read: Read
   readonly path: string
+  /** The nearest DOCUMENT on its parent chain — not at a path, which another branch may share. */
+  readonly above: string | undefined
 }
 
 /**
@@ -228,10 +230,10 @@ function pushChildren<T>(
 
 function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
-  const stack: Array<{ readonly node: LoroTreeNode; readonly prefix: string }> = []
-  pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '' }))
+  const stack: Array<{ node: LoroTreeNode; prefix: string; above: string | undefined }> = []
+  pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '', above: undefined }))
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    const { node, prefix } = next
+    const { node, prefix, above } = next
     const read = readMeta(node)
     // A node whose meta this build cannot read is skipped rather than thrown
     // on: it is one node of a workspace, and refusing the whole listing over
@@ -244,8 +246,10 @@ function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked
     }
     const segment = read.type === 'document' ? read.meta.segment : read.segment
     const path = prefix === '' ? segment : `${prefix}/${segment}`
-    out.push({ node, read, path })
-    pushChildren(stack, node.children() ?? [], (child) => ({ node: child, prefix: path }))
+    out.push({ node, read, path, above })
+    const up = read.type === 'document' ? read.meta.documentId : above
+    const children = node.children() ?? []
+    pushChildren(stack, children, (child) => ({ node: child, prefix: path, above: up }))
   }
   return out
 }
@@ -394,6 +398,26 @@ export function setWorkspacePinned(doc: LoroDoc, documentId: string, pinned: boo
     list.delete(index, 1)
   }
   doc.commit()
+}
+
+/** A document as one walk placed it, with the tree node it sits on. */
+export interface PlacedWorkspaceDocument {
+  readonly documentId: string
+  readonly path: string
+  readonly id: TreeID
+  /** The documentId of the nearest document on its parent chain, if any. */
+  readonly above: string | undefined
+}
+
+/**
+ * Every document, in tree order, with its derived path and its node's id —
+ * for a caller that goes on to act on many of those nodes and would
+ * otherwise pay a walk, or a path resolution from the root, for each.
+ */
+export function readPlacedWorkspaceDocuments(doc: LoroDoc): PlacedWorkspaceDocument[] {
+  return walk(doc).flatMap(({ node: { id }, read, path, above }) =>
+    read.type === 'document' ? [{ documentId: read.meta.documentId, path, id, above }] : [],
+  )
 }
 
 /** Every node, folders included, in tree order with its derived path. */
@@ -573,6 +597,14 @@ export function deleteWorkspaceDocument(doc: LoroDoc, input: { documentId: strin
   doc.commit()
 }
 
+/** Deletes the node `id` names with its subtree; a node already gone with an ancestor is left be. */
+export function deleteWorkspaceNode(doc: LoroDoc, id: TreeID): void {
+  const workspaceTree = tree(doc)
+  if (!workspaceTree.has(id) || workspaceTree.isNodeDeleted(id)) return
+  workspaceTree.delete(id)
+  doc.commit()
+}
+
 /**
  * The node at `path`, folder or document, or `null`.
  *
@@ -580,7 +612,7 @@ export function deleteWorkspaceDocument(doc: LoroDoc, input: { documentId: strin
  * rule `resolveWorkspaceDocument` follows, so a caller cannot end up with the
  * shadowed one from one lookup and the owner from another.
  */
-function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
+function nodeAtPath(doc: LoroDoc, path: string): Omit<Walked, 'above'> | null {
   return nodesAlong(doc, path).get(path) ?? null
 }
 
@@ -597,8 +629,8 @@ function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
  * the way a walk derives one, so a segment that itself holds a `/` is found
  * where a walk finds it.
  */
-function nodesAlong(doc: LoroDoc, path: string): Map<string, Walked> {
-  const found = new Map<string, Walked>()
+function nodesAlong(doc: LoroDoc, path: string): Map<string, Omit<Walked, 'above'>> {
+  const found = new Map<string, Omit<Walked, 'above'>>()
   const stack: Array<{ readonly node: LoroTreeNode; readonly path: string }> = []
   const pushToward = (children: readonly LoroTreeNode[], prefix: string): void => {
     for (let i = children.length - 1; i >= 0; i--) {
@@ -832,9 +864,6 @@ export function writeWorkspaceDocumentContent(
   return true
 }
 
-/** Where a deleted document's evacuated bytes are recorded. */
-export const WORKSPACE_TRASH_KEY = 'trash'
-
 /**
  * Copies one node's meta into another, containers included.
  *
@@ -873,10 +902,26 @@ function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
  */
 export function exportWorkspaceSubtree(doc: LoroDoc, path: string): Uint8Array | null {
   const source = nodeAtPath(doc, path)
-  if (source === null) return null
+  return source === null ? null : exportSubtreeOf(source.node)
+}
+
+/**
+ * The subtree rooted at the node `id` names, exported as
+ * `exportWorkspaceSubtree` exports one — for a caller holding the node from
+ * a walk it already paid for, since resolving a path again starts from the
+ * root and reads every sibling on the way.
+ */
+export function exportWorkspaceNodeSubtree(doc: LoroDoc, id: TreeID): Uint8Array | null {
+  const workspaceTree = tree(doc)
+  if (!workspaceTree.has(id) || workspaceTree.isNodeDeleted(id)) return null
+  const source = workspaceTree.getNodeByID(id)
+  return source === undefined ? null : exportSubtreeOf(source)
+}
+
+function exportSubtreeOf(source: LoroTreeNode): Uint8Array {
   const out = new LoroDoc()
   const outTree = out.getTree(WORKSPACE_TREE_KEY)
-  copySubtree(source.node, undefined, (parent) =>
+  copySubtree(source, undefined, (parent) =>
     parent === undefined ? outTree.createNode() : outTree.createNode(parent),
   )
   out.commit()
@@ -907,52 +952,6 @@ export function importWorkspaceSubtree(
   )
   doc.commit()
   return resolveWorkspaceDocumentById(doc, meta.meta.documentId)
-}
-
-/** What the trash records about a document that was deleted. */
-export const trashEntrySchema = z
-  .object({
-    documentId: documentIdSchema,
-    /** Where it was, for a listing a human can read. */
-    path: z.string().min(1),
-    deletedAt: z.number().int().nonnegative(),
-    blob: z.object({
-      algorithm: z.literal('sha-256'),
-      digestHex: z.string().regex(/^[0-9a-f]{64}$/),
-    }),
-  })
-  .strict()
-export type TrashEntry = z.infer<typeof trashEntrySchema>
-
-/**
- * Records an evacuation in the workspace document itself.
- *
- * The METADATA syncs and the BYTES do not: a blob ref travels in the tree
- * like any other value, while the bytes sit in content-addressed storage that
- * every keeper already has. Deleting on one device therefore leaves the other
- * able to see what went and ask for it.
- */
-export function recordTrashEntry(doc: LoroDoc, entry: TrashEntry): void {
-  doc.getMap(WORKSPACE_TRASH_KEY).set(entry.documentId, trashEntrySchema.parse(entry))
-  doc.commit()
-}
-
-export function readTrashEntries(doc: LoroDoc): TrashEntry[] {
-  const raw = doc.getMap(WORKSPACE_TRASH_KEY).toJSON() as Record<string, unknown>
-  const out: TrashEntry[] = []
-  for (const value of Object.values(raw)) {
-    const parsed = trashEntrySchema.safeParse(value)
-    // A damaged entry is skipped rather than thrown on: it is one row of a
-    // trash listing, and refusing the whole listing would hide every other
-    // recoverable document behind it.
-    if (parsed.success) out.push(parsed.data)
-  }
-  return out.sort((left, right) => right.deletedAt - left.deletedAt)
-}
-
-export function forgetTrashEntry(doc: LoroDoc, documentId: string): void {
-  doc.getMap(WORKSPACE_TRASH_KEY).delete(documentId)
-  doc.commit()
 }
 
 /**

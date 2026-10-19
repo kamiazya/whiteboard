@@ -14,13 +14,13 @@ import {
   organisationChangedSince,
   stampEditedDocuments,
 } from './touched-documents.js'
+import { recordTrashEntry } from './workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
-  recordTrashEntry,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
   setWorkspaceLastCompactedAt,
