@@ -20,29 +20,41 @@ interface Tagged {
   readonly tags?: readonly string[]
 }
 
-/** The value one element carries under `key`, or `''` — a carried key has at most one. */
-function valueUnder(element: Tagged, key: string): string {
-  for (const tag of element.tags ?? []) {
-    const scoped = parseScopedTag(tag)
-    if (scoped?.key === key) return scoped.value
+/**
+ * Each element's scoped tags as key -> value, read once. A carried key has at
+ * most one value per element; where an element writes two, the first wins,
+ * since the legend only lists keys the score found to be a partition.
+ * Built once per population so the legend costs one pass over the tags
+ * however many keys colour is carried by.
+ */
+function scopedTagsOf<T extends Tagged>(elements: readonly T[]): Map<T, Map<string, string>> {
+  const byElement = new Map<T, Map<string, string>>()
+  for (const element of elements) {
+    const values = new Map<string, string>()
+    for (const tag of element.tags ?? []) {
+      const scoped = parseScopedTag(tag)
+      if (scoped !== undefined && !values.has(scoped.key)) values.set(scoped.key, scoped.value)
+    }
+    byElement.set(element, values)
   }
-  return ''
+  return byElement
 }
 
-function isTagKey(elements: readonly Tagged[], key: string): boolean {
-  return elements.some((element) =>
-    (element.tags ?? []).some((tag) => parseScopedTag(tag)?.key === key),
-  )
+function keysOf(scoped: ReadonlyMap<unknown, ReadonlyMap<string, string>>): Set<string> {
+  const keys = new Set<string>()
+  for (const values of scoped.values()) for (const key of values.keys()) keys.add(key)
+  return keys
 }
 
 function entriesFor<T extends Tagged>(
   elements: readonly T[],
+  scoped: ReadonlyMap<T, ReadonlyMap<string, string>>,
   key: string,
   swatchOf: (element: T) => LegendSwatch,
 ): LegendEntry[] {
   const classes = new Map<string, { count: number; swatch: LegendSwatch }>()
   for (const element of elements) {
-    const value = valueUnder(element, key)
+    const value = scoped.get(element)?.get(key) ?? ''
     const seen = classes.get(value)
     // Constant within the class — that is what `carried` means — so the
     // first member's swatch is the class's.
@@ -68,6 +80,21 @@ function edgeSwatch(appearance: SpatialAppearanceResolver, edge: CanvasEdge): Le
   return stroke === undefined ? {} : { stroke }
 }
 
+/** The keys of `carriedBy` that are scoped tags of this population, each with its values. */
+function legendKeys<T extends Tagged>(
+  elements: readonly T[],
+  carriedBy: readonly string[],
+  of: LegendKey['of'],
+  swatchOf: (element: T) => LegendSwatch,
+): LegendKey[] {
+  if (carriedBy.length === 0) return []
+  const scoped = scopedTagsOf(elements)
+  const tagKeys = keysOf(scoped)
+  return carriedBy
+    .filter((key) => tagKeys.has(key))
+    .map((key) => ({ key, of, entries: entriesFor(elements, scoped, key, swatchOf) }))
+}
+
 export function canvasLegend(
   canvas: SpatialCanvas,
   appearance: SpatialAppearanceResolver,
@@ -75,20 +102,12 @@ export function canvasLegend(
   const score = scoreFacets(canvas)
   const boxes = canvas.nodes.filter((node) => !isFrame(node))
   const keys: LegendKey[] = [
-    ...score.channels.colour.carriedBy
-      .filter((key) => isTagKey(boxes, key))
-      .map((key) => ({
-        key,
-        of: 'boxes' as const,
-        entries: entriesFor(boxes, key, (node) => boxSwatch(appearance, node)),
-      })),
-    ...score.edges.colour.carriedBy
-      .filter((key) => isTagKey(canvas.edges, key))
-      .map((key) => ({
-        key,
-        of: 'edges' as const,
-        entries: entriesFor(canvas.edges, key, (edge) => edgeSwatch(appearance, edge)),
-      })),
+    ...legendKeys(boxes, score.channels.colour.carriedBy, 'boxes', (node) =>
+      boxSwatch(appearance, node),
+    ),
+    ...legendKeys(canvas.edges, score.edges.colour.carriedBy, 'edges', (edge) =>
+      edgeSwatch(appearance, edge),
+    ),
   ]
   const uncarried = {
     boxes: score.channels.colour.use === 'contested',
