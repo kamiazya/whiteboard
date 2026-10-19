@@ -105,8 +105,9 @@ async function canonicalKeys(
 export interface SyncSseRouterOptions {
   /** The workspace-record seam whose updates this stream carries. */
   workspaceDocuments: Pick<ServerDeps['workspaceDocuments'], 'onUpdated'>
-  /** The membership gate. Absent means no gate at all
-   *  (server-mode, and any composition that has not wired members). */
+  /** The membership gate. Server mode always wires it. Absent means no gate
+   *  at all: the local daemon, which has one person (ADR-0050 decision 3),
+   *  and any composition that has not wired members. */
   admit?: WorkspaceAdmit
   /** Whose stream this is, so losing access can end it. Absent: nobody's. */
   userOf?: (c: Context) => Promise<string | null>

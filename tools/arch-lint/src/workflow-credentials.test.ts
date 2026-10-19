@@ -540,3 +540,30 @@ describe('workflows — a job holding a write-scoped token builds from a cold st
     expect(grantsWrite(effectivePermissions({ permissions: {} }, 'write-all'))).toBe(false)
   })
 })
+
+// mutation.yml's pr-report job runs PR-authored code (the local setup-pnpm
+// action, .claude/scripts/mutation-comment.mjs) under a pull-requests: write
+// token. That is safe only because `pull_request` hands a same-repo PR's run
+// that token and a fork's run a read-only one. `pull_request_target` or
+// `workflow_run` would run the same PR code under the BASE repository's
+// write token, fork or not.
+describe('a workflow that runs PR code under a write token', () => {
+  const mutation = parseYaml(
+    readFileSync(join(REPO_ROOT, '.github/workflows/mutation.yml'), 'utf-8'),
+  ) as {
+    on?: Record<string, unknown>
+    jobs?: Record<string, { permissions?: Record<string, string>; steps?: { uses?: string }[] }>
+  }
+
+  it('mutation.yml pr-report still runs PR code with pull-requests: write', () => {
+    const report = mutation.jobs?.['pr-report']
+    expect(report?.permissions?.['pull-requests']).toBe('write')
+    expect((report?.steps ?? []).some((step) => (step.uses ?? '').startsWith('./'))).toBe(true)
+  })
+
+  it('mutation.yml is triggered by pull_request, never a base-token trigger', () => {
+    const triggers = Object.keys(mutation.on ?? {})
+    expect(triggers).toContain('pull_request')
+    expect(triggers.filter((t) => t === 'pull_request_target' || t === 'workflow_run')).toEqual([])
+  })
+})
