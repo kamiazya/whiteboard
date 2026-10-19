@@ -183,10 +183,10 @@ describe('loadConfigFile', () => {
     }
   })
 
-  // A config file is read from the working directory an MCP client launched
-  // us in, which can be an untrusted checkout, so every code-bearing
-  // extension must be refused by our loader — not by whatever cosmiconfig's
-  // defaults happen to do with it.
+  // Every code-bearing extension must be refused by our loader — not by
+  // whatever cosmiconfig's defaults happen to do with it. A working-directory
+  // file cannot `$import` at all (below), so this is reached through the
+  // home config, the one place `$import` is honoured.
   it.each([
     'js',
     'cjs',
@@ -199,7 +199,11 @@ describe('loadConfigFile', () => {
         ? `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(sentinel)}, 'executed'); export default { token: 'pwned' }`
         : `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed'); module.exports = { token: 'pwned' }`
     writeFileSync(join(dir, `evil.${ext}`), body)
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ $import: `./evil.${ext}` }))
+    mkdirSync(join(emptyHome, '.whiteboard'))
+    writeFileSync(
+      join(emptyHome, '.whiteboard', 'config.yaml'),
+      JSON.stringify({ $import: join(dir, `evil.${ext}`) }),
+    )
     expect(() => loadConfigFile(dir, { homeDir: emptyHome })).toThrow(/must never execute code/)
     expect(existsSync(sentinel)).toBe(false)
   })
@@ -274,6 +278,67 @@ describe('loadConfigFile refuses dataDir and token from the working directory', 
     expect(loadConfigFile(homeDir, { homeDir })?.filepaths).toEqual([
       join(homeDir, '.whiteboard', 'config.yaml'),
     ])
+  })
+})
+
+// `$import` makes cosmiconfig read and parse any path the file names, before
+// any key of ours is checked. From the working directory that is a repo's
+// author choosing which of the user's files the daemon opens — and a parse
+// error quotes what it read. Refused there, like dataDir and token, before the
+// target is read; still honoured from the home config, which is the user's own.
+describe('loadConfigFile refuses $import from the working directory', () => {
+  let homeDir: string
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+  })
+  afterEach(() => {
+    rmSync(homeDir, { recursive: true, force: true })
+  })
+
+  // A target whose parse would fail: if it were read, the error would be
+  // the parser's, not the refusal.
+  function unparseableTarget(): string {
+    const target = join(homeDir, 'private.yaml')
+    writeFileSync(target, 'secret: [unterminated\n')
+    return target
+  }
+
+  it.each([
+    ['.whiteboardrc', (target: string) => JSON.stringify({ $import: target })],
+    ['.whiteboardrc.json', (target: string) => JSON.stringify({ $import: [target] })],
+    ['.whiteboardrc.yaml', (target: string) => `$import: ${JSON.stringify(target)}\n`],
+  ] as const)('refuses $import in a cwd %s before reading what it names', (name, body) => {
+    writeFileSync(join(dir, name), body(unparseableTarget()))
+    let thrown: unknown
+    try {
+      loadConfigFile(dir, { homeDir })
+    } catch (err) {
+      thrown = err
+    }
+    expect(String(thrown)).toContain(join(dir, name))
+    expect(String(thrown)).toContain('"$import"')
+  })
+
+  it('refuses $import from package.json#whiteboard in cwd', () => {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'x', whiteboard: { $import: unparseableTarget() } }),
+    )
+    expect(() => loadConfigFile(dir, { homeDir })).toThrow(/"\$import"/)
+  })
+
+  it('honours $import from the home-directory config', () => {
+    writeFileSync(join(homeDir, 'shared.yaml'), 'logLevel: debug\n')
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), '$import: ../shared.yaml\n')
+    expect(loadConfigFile(dir, { homeDir })?.config).toEqual({ logLevel: 'debug' })
+  })
+
+  it('honours $import from the home config when cwd is the home directory itself', () => {
+    writeFileSync(join(homeDir, 'shared.yaml'), 'dataDir: /data\n')
+    mkdirSync(join(homeDir, '.whiteboard'))
+    writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), '$import: ../shared.yaml\n')
+    expect(loadConfigFile(homeDir, { homeDir })?.config).toEqual({ dataDir: '/data' })
   })
 })
 

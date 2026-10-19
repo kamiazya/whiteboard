@@ -22,14 +22,15 @@
 // project's daemon. The cwd itself is no more trusted than its ancestors (an
 // MCP client starts the stdio server in whatever repo is open), so a config
 // found there may tune logLevel/openBrowser but is refused if it sets
-// `dataDir` or `token`; only the home-directory config may set those.
+// `dataDir` or `token`, or names a `$import`; only the home-directory config
+// may do those.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
 
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { cosmiconfigSync, defaultLoadersSync, type LoadersSync } from 'cosmiconfig'
 import { z } from 'zod'
 import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
@@ -170,6 +171,37 @@ function refuseWorkingDirectoryKeys(config: WhiteboardConfigFile, filepath: stri
   )
 }
 
+// `$import` makes cosmiconfig read and parse whatever path it names — any file
+// the user can read — before a single key of ours is looked at, and a parse
+// error quotes what it read. From the working directory that would let a
+// repo's author choose which of the user's files the daemon opens. The check
+// has to sit IN the loader: cosmiconfig resolves imports between loading a
+// file and returning it, so a refusal after `search()` is a refusal after the
+// read. A `package.json` is loaded whole, so its `whiteboard` field is where
+// its `$import` would be.
+function refusingImports(loader: LoadersSync[string], homeDir: string): LoadersSync[string] {
+  return (filepath, contents) => {
+    const loaded: unknown = loader(filepath, contents)
+    if (isHomeConfig(filepath, homeDir)) return loaded
+    const own =
+      basename(filepath, extname(filepath)) === 'package'
+        ? (loaded as Record<string, unknown> | null)?.whiteboard
+        : loaded
+    if (typeof own === 'object' && own !== null && Object.hasOwn(own, '$import')) {
+      throw new Error(
+        `Refusing whiteboard config at ${filepath}: key "$import" is honoured only in ~/${HOME_CONFIG_FILE_RELATIVE_PATH}, not in a config found in the working directory.`,
+      )
+    }
+    return loaded
+  }
+}
+
+function workingDirectoryLoaders(homeDir: string): LoadersSync {
+  return Object.fromEntries(
+    Object.entries(SAFE_LOADERS).map(([ext, loader]) => [ext, refusingImports(loader, homeDir)]),
+  )
+}
+
 // A working directory that IS the home directory finds the home config through
 // the cwd search places; that file is the user's own and keeps its trust.
 // Compared by file identity, so a symlinked home still matches.
@@ -200,13 +232,13 @@ export function loadConfigFile(
   // be able to plant a config that injects `token` into a nested project's
   // daemon. The only other place consulted is the explicit home-directory
   // config below.
+  const homeDir = options.homeDir ?? homedir()
   const explorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [...CONFIG_FILE_SEARCH_PLACES],
     searchStrategy: 'none',
-    loaders: SAFE_LOADERS,
+    loaders: workingDirectoryLoaders(homeDir),
   })
 
-  const homeDir = options.homeDir ?? homedir()
   const found = explorer.search(cwd)
   const cwdFile = found && !found.isEmpty ? found : null
   if (cwdFile !== null && isHomeConfig(cwdFile.filepath, homeDir)) {

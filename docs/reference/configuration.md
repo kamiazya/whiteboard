@@ -131,6 +131,11 @@ So a current-directory file that sets either key stops the command with exit
 code 1 and a message naming the file and the key; it may still set `logLevel`
 and `openBrowser`. Put `dataDir` and `token` in `~/.whiteboard/config.yaml`,
 the only file that may set them (there is no flag that names a config file).
+For the same reason a current-directory file may not use `$import` (the
+config loader's key for pulling in another file): it would make the command
+read and parse any file you can read, before any key is checked. Such a file
+stops the command the same way, before the file it names is opened.
+`~/.whiteboard/config.yaml` may still use `$import`.
 When the current directory IS your home directory, that file is found there
 and keeps its trust. A current-directory file that sets only `logLevel`
 therefore changes the log level and nothing else: your home `dataDir` and
