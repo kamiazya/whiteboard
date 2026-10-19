@@ -62,6 +62,9 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
   // How many `/mcp` listen streams are open, per user and in all: live state
   // server mode's root arms in front of `/mcp`.
   'server/mcp-listen-streams.ts',
+  // The content slots `/mcp` takes per POST and per request in a JSON-RPC
+  // batch: the middleware over `content-slots.ts` server mode's root arms.
+  'server/mcp-content-slots.ts',
   'server/daemon-actor.ts',
   'server/current-workspace.ts',
   // Startup clean-up of data-dir artifacts a retired feature left behind.
