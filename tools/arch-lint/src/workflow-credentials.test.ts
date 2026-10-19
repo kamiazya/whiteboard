@@ -183,17 +183,38 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     expect(credentialJobs.map((s) => s.site)).toContain(site)
   })
 
-  // The scanner runs no repository code unless its configuration names a
-  // program for it: `sonar.nodejs.executable` or `sonar.scanner.javaExePath`
-  // pointing into the checkout would run that file with the token in reach.
-  it('sonar-project.properties names no program for the scanner to run', () => {
-    const properties = readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8')
-    const keys = properties
+  // The scanner runs with SONAR_TOKEN in reach and reads this file from the
+  // checked-out tree, so the tree must not configure the scanner's own
+  // runtime: `sonar.nodejs.executable` or `sonar.scanner.javaExePath` would run
+  // a file from the checkout, `sonar.scanner.javaOpts` hands the engine's JVM
+  // arbitrary flags (an agent, a system property), and a proxy, truststore or
+  // keystore setting routes or re-terminates the TLS the token travels over.
+  const SCANNER_RUNTIME_KEY = /executable|exepath|javaopts|proxy|truststore|keystore/i
+  const propertyKeys = (properties: string): string[] =>
+    properties
       .split('\n')
       .map((line) => /^\s*([\w.-]+)\s*[=:]/.exec(line)?.[1])
       .filter((key): key is string => key !== undefined)
+
+  it('sonar-project.properties configures nothing of the scanner runtime', () => {
+    const keys = propertyKeys(readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8'))
     expect(keys).toContain('sonar.projectKey')
-    expect(keys.filter((key) => /executable|exepath/i.test(key))).toEqual([])
+    expect(keys.filter((key) => SCANNER_RUNTIME_KEY.test(key))).toEqual([])
+  })
+
+  it.each([
+    'sonar.nodejs.executable=./x',
+    'sonar.scanner.javaExePath=./x',
+    'sonar.scanner.javaOpts=-javaagent:./x.jar',
+    'sonar.scanner.proxyHost=evil.example',
+    'sonar.scanner.proxyPort=8080',
+    'sonar.scanner.proxyUser=u',
+    'sonar.scanner.truststorePath=./ca.p12',
+    'sonar.scanner.truststorePassword=x',
+    'sonar.scanner.keystorePath=./k.p12',
+  ])('refuses a planted %s', (line) => {
+    const keys = propertyKeys(`sonar.projectKey=k\n${line}\n`)
+    expect(keys.filter((key) => SCANNER_RUNTIME_KEY.test(key))).toHaveLength(1)
   })
 
   // The scanner reads sonar-project.properties from the checked-out tree with
