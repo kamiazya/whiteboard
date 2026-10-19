@@ -7,7 +7,11 @@
 import { randomBytes } from 'node:crypto'
 import { isIP } from 'node:net'
 import { sha256Hex } from '../../shared/sha256.js'
-import type { TenantDatabase } from '../store/db/tenant-database.js'
+import {
+  inTenantTransaction,
+  type TenantDatabase,
+  type TenantScoped,
+} from '../store/db/tenant-database.js'
 
 interface BeginInput {
   readonly providerId: string
@@ -105,7 +109,7 @@ const SOURCE_LEVELS = ['sourcePrefix48', 'sourcePrefix56', 'source'] as const
 
 // The attempt a full table sheds: the oldest of the heaviest source, found
 // level by level (the oldest such group on a tie).
-async function evictionCandidate(db: TenantDatabase): Promise<{ state: string } | undefined> {
+async function evictionCandidate(db: TenantScoped): Promise<{ state: string } | undefined> {
   let scope = db.selectFrom('signInAttempts')
   for (const level of SOURCE_LEVELS) {
     const heaviest = await scope
@@ -124,8 +128,11 @@ async function evictionCandidate(db: TenantDatabase): Promise<{ state: string } 
 // Leaves room for one more attempt. An attempt nobody finished is otherwise
 // never removed; beginning one sheds them, at the rate of sign-ins and with
 // no worker to declare — the expired first, then, past the ceiling, the
-// evictionCandidate.
-async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<void> {
+// evictionCandidate. It runs in the insert's write transaction: concurrent
+// begins that each counted before any of them inserted would together
+// overshoot the ceiling, and the next burst would then shed far more than it
+// adds, past the flooding source's attempts into everybody else's.
+async function makeRoom(db: TenantScoped, now: number, keep: number): Promise<void> {
   await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
   const { pending } = await db
     .selectFrom('signInAttempts')
@@ -138,6 +145,20 @@ async function makeRoom(db: TenantDatabase, now: number, keep: number): Promise<
   }
 }
 
+function mint(providerId: string, returnTo: string, invitationToken: string | undefined) {
+  return {
+    state: random(),
+    browserBinding: random(),
+    nonce: random(),
+    // RFC 7636 section 4.1: 43-128 characters of the unreserved set;
+    // 32 random bytes in base64url are 43.
+    codeVerifier: random(),
+    invitationTokenHash: invitationToken === undefined ? null : sha256Hex(invitationToken),
+    providerId,
+    returnTo,
+  }
+}
+
 export function createSignInAttemptStore(
   db: TenantDatabase,
   { maxPending = DEFAULT_MAX_PENDING }: SignInAttemptStoreOptions = {},
@@ -145,32 +166,24 @@ export function createSignInAttemptStore(
   const keep = Math.max(maxPending - 1, 0)
   return {
     async begin({ providerId, returnTo, invitationToken, source, now, ttlMs }) {
-      await makeRoom(db, now, keep)
-      const minted = {
-        state: random(),
-        browserBinding: random(),
-        nonce: random(),
-        // RFC 7636 section 4.1: 43-128 characters of the unreserved set;
-        // 32 random bytes in base64url are 43.
-        codeVerifier: random(),
-        invitationTokenHash: invitationToken === undefined ? null : sha256Hex(invitationToken),
-        providerId,
-        returnTo,
-      }
-      await db
-        .insertInto('signInAttempts')
-        .values({
-          state: minted.state,
-          browserBindingHash: sha256Hex(minted.browserBinding),
-          providerId,
-          nonce: minted.nonce,
-          codeVerifier: minted.codeVerifier,
-          invitationTokenHash: minted.invitationTokenHash,
-          returnTo,
-          expiresAt: now + ttlMs,
-          ...sourceKeys(source),
-        })
-        .execute()
+      const minted = mint(providerId, returnTo, invitationToken)
+      await inTenantTransaction(db, async (trx) => {
+        await makeRoom(trx, now, keep)
+        await trx
+          .insertInto('signInAttempts')
+          .values({
+            state: minted.state,
+            browserBindingHash: sha256Hex(minted.browserBinding),
+            providerId,
+            nonce: minted.nonce,
+            codeVerifier: minted.codeVerifier,
+            invitationTokenHash: minted.invitationTokenHash,
+            returnTo,
+            expiresAt: now + ttlMs,
+            ...sourceKeys(source),
+          })
+          .execute()
+      })
       return minted
     },
 
