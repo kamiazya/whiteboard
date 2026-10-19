@@ -41,7 +41,9 @@ const editsArbitrary = fc.record({
   deletes: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 3 }),
 })
 
-function build(nodes: ReadonlyArray<fc.RecordValue<typeof nodeArbitrary>>) {
+type DrawnNode = typeof nodeArbitrary extends fc.Arbitrary<infer T> ? T : never
+
+function build(nodes: ReadonlyArray<DrawnNode>) {
   const doc = new LoroDoc()
   const tree = doc.getTree(WORKSPACE_TREE_KEY)
   const ids: TreeID[] = []
