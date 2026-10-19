@@ -5,13 +5,14 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHMOD_IS_OBSERVABLE } from './test-utils/chmod-is-observable.js'
-import { syncTree, writeFileAtomic } from './write-file-atomic.js'
+import { commitStagedWrite, syncTree, writeFileAtomic } from './write-file-atomic.js'
 
 // The chmod after the write is best-effort, so a test can refuse it to see
 // what the write carried on its own.
@@ -217,6 +218,44 @@ describe('writeFileAtomic', () => {
       UMASK_NARROWS: true,
       UMASK_LEAVES_GROUP_OR_OTHER: true,
     })
+  })
+})
+
+// The staged name is the writer's own: something already at it is never
+// truncated, followed or removed, whoever put it there.
+describe('commitStagedWrite over a staged path that already exists', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'commit-staged-'))
+  })
+  afterEach(() => {
+    fsEvents.log = []
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('refuses a planted file, leaving it and the target untouched', async () => {
+    const staged = join(dir, 'out.json.partial')
+    const target = join(dir, 'out.json')
+    writeFileSync(staged, 'planted')
+    await expect(commitStagedWrite(staged, target, 'new bytes')).rejects.toMatchObject({
+      code: 'EEXIST',
+    })
+    expect(readFileSync(staged, 'utf-8')).toBe('planted')
+    expect(readdirSync(dir)).toEqual(['out.json.partial'])
+  })
+
+  it('refuses a planted symlink rather than writing through it', async () => {
+    const victim = join(dir, 'victim.txt')
+    writeFileSync(victim, 'keep me')
+    const staged = join(dir, 'out.json.partial')
+    symlinkSync(victim, staged)
+    await expect(
+      commitStagedWrite(staged, join(dir, 'out.json'), 'new bytes'),
+    ).rejects.toMatchObject({
+      code: 'EEXIST',
+    })
+    expect(readFileSync(victim, 'utf-8')).toBe('keep me')
+    expect(readdirSync(dir).sort()).toEqual(['out.json.partial', 'victim.txt'])
   })
 })
 
