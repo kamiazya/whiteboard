@@ -11,7 +11,7 @@ import type {
   CommentThreadStatus,
 } from '@kamiazya/whiteboard-model'
 import { Check, Pencil } from 'lucide-react'
-import type { RefObject } from 'react'
+import { type RefObject, useMemo } from 'react'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
@@ -37,8 +37,21 @@ export interface ThreadEdit {
  * scanning the rail saw `**tighten**` while the card beside it drew
  * emphasis.
  */
-function excerptOf(thread: CommentThread): string {
-  return commentExcerpt(thread.messages[0]?.body ?? '')
+function RowSubject({ body, expanded }: { body: string; expanded: boolean }) {
+  // Memoised on the body because the row re-renders whenever the page does —
+  // on a markdown document that is every keystroke — and a parse per row per
+  // render puts every listed conversation's markdown on each one.
+  const excerpt = useMemo(() => commentExcerpt(body), [body])
+  return (
+    <span
+      className={cn(
+        'comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200',
+        expanded && 'sr-only',
+      )}
+    >
+      {excerpt}
+    </span>
+  )
 }
 
 /**
@@ -322,14 +335,7 @@ export function ThreadRow({
               control that collapses this conversation, and a row
               named "whole document 3 messages 0s ago" is not one
               anybody could act on. */}
-          <span
-            className={cn(
-              'comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200',
-              expanded && 'sr-only',
-            )}
-          >
-            {excerptOf(thread)}
-          </span>
+          <RowSubject body={thread.messages[0]?.body ?? ''} expanded={expanded} />
           <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
             {anchorLabel(thread.anchor) === undefined ? null : (
               <span data-testid={`thread-about-${thread.id}`}>{anchorLabel(thread.anchor)}</span>
