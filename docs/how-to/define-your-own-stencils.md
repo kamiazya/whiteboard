@@ -134,6 +134,9 @@ one gives that up on the boxes wearing it.
 - **One library per workspace**, at the path `stencils`. The facet is what makes a document a
   library, but nothing can yet ask which documents carry a facet, so the path is the rule
   rather than a default.
+- **At most 256 stencils per library.** A write of a larger one is refused, and the refusal
+  says how many it holds. A library that grows past the limit some other way (a synced edit)
+  is read as its first 256 valid stencils by name. The others are left out.
 - **A stencil sets appearance only.** A default size is defined in
   [ADR-0034](../contributing/adr/0034-stencil-and-recipe.md) and not implemented.
 

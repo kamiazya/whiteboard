@@ -1,4 +1,33 @@
 /**
+ * How many stencils one library may hold.
+ *
+ * A library is recomposed into the registry on every read that resolves a
+ * stencil, and every stencil in it is offered by the picker and listed by
+ * `wb_facet_list` — so its size is a cost on every one of those, and without
+ * a bound it is whatever a write or a synced edit put there. The number is
+ * set by what a vocabulary can be rather than by what a parser survives: the
+ * bundled vocabulary is six, a board can draw seven silhouettes and six
+ * preset colours, and a reader stops telling stencils apart long before
+ * forty-two combinations, never mind 256. A library that wants more is
+ * several vocabularies, and the named upgrade for that is more than one
+ * library document (`STENCIL_LIBRARY_PATH`).
+ */
+const MAX_STENCILS_PER_LIBRARY = 256
+
+/**
+ * Counted BEFORE any entry is judged, by a pipe rather than a refinement:
+ * zod skips a refinement once an entry has failed, so an oversized library
+ * of bad entries would be answered with one issue per entry — tens of
+ * thousands in a single message — after paying for every parse.
+ */
+const stencilCountSchema = z
+  .record(z.string(), z.unknown())
+  .refine((stencils) => Object.keys(stencils).length <= MAX_STENCILS_PER_LIBRARY, {
+    error: (issue) =>
+      `a stencil library holds at most ${MAX_STENCILS_PER_LIBRARY} stencils; this one has ${Object.keys(issue.input as object).length}`,
+  })
+
+/**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
  * stencil LIBRARY, and the one reader of it.
  *
@@ -86,7 +115,7 @@ const stencilNameSchema = z
  * ITSELF — who it is for, what it extends — can, without moving to v1.
  */
 export const visualStencilsFacetSchema = z.object({
-  stencils: z.record(stencilNameSchema, libraryStencilSchema),
+  stencils: stencilCountSchema.pipe(z.record(stencilNameSchema, libraryStencilSchema)),
 })
 
 /**
@@ -102,7 +131,8 @@ export const visualStencilsFacetSchema = z.object({
  * outer shape is wrong. A stencil the schema refuses is left out and the
  * rest stay, because a malformed library must not stop a drawing being read
  * — the write path is where a bad library is rejected, loudly, with the
- * author present.
+ * author present. For the same reason a library over the cap is read, not
+ * refused: its first `MAX_STENCILS_PER_LIBRARY` valid stencils by name.
  *
  * BY NAME, because there is no other order to be faithful to. A
  * deployment's assets are answered in registration order — the bundled
@@ -122,13 +152,19 @@ export function readStencilLibrary(
   const outer = z.object({ stencils: z.record(z.string(), z.unknown()) }).safeParse(raw)
   if (!outer.success) return {}
   // One stencil at a time: a library is content, and one entry the schema
-  // refuses must not take the others with it.
+  // refuses must not take the others with it. In name order, so a library
+  // over the cap — one that arrived by sync rather than through the write
+  // that refuses it — keeps the FIRST stencils by name, the same ones on
+  // every read, and judges no entry past them.
+  const entries = Object.entries(outer.data.stencils).sort(([left], [right]) =>
+    compareCodeUnit(left, right),
+  )
   const valid: [string, StencilAssetInput][] = []
-  for (const [name, stencil] of Object.entries(outer.data.stencils)) {
+  for (const [name, stencil] of entries) {
+    if (valid.length === MAX_STENCILS_PER_LIBRARY) break
     if (!stencilNameSchema.safeParse(name).success) continue
     const parsed = libraryStencilSchema.safeParse(stencil)
     if (parsed.success) valid.push([name, parsed.data])
   }
-  valid.sort(([left], [right]) => compareCodeUnit(left, right))
   return Object.fromEntries(valid)
 }
