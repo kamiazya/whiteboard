@@ -232,11 +232,14 @@ const HTML_PARSER_ELEMENT = new RegExp(
   'i',
 )
 /**
- * A comment, CDATA section or doctype. Every check here reads `<!--<g a="-->`
- * as the start of a quoted attribute while the HTML parser closes the comment
- * at `-->`, so whatever follows is live markup the attribute walk never read.
+ * A comment, CDATA section or doctype, and the tokenizer's two other
+ * bogus-comment openers: `<?`, and `</` before anything but an ASCII letter
+ * or `>` (an empty `</>` is dropped, not a comment). Every check here reads
+ * `<!--<g a="-->` as the start of a quoted attribute while the HTML parser
+ * closes the comment at `-->` — a bogus one at the first `>` — so whatever
+ * follows is live markup the attribute walk never read.
  */
-const MARKUP_DECLARATION = /<!/
+const MARKUP_DECLARATION = /<[!?]|<\/(?![a-zA-Z>])/
 /**
  * SVG's `title` and `desc` are HTML integration points: what they hold is
  * parsed as HTML, where `<style>` is raw text to its close. Mermaid writes a

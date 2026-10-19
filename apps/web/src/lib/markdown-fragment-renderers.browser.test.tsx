@@ -115,6 +115,9 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
   const breakout = '<svg><p><textarea><x y="</textarea><img src=x onerror=alert(1)>">'
   const integrationPointStyle =
     '<svg><desc><style><x y="</style><svg onload=alert(1)>"></desc></svg>'
+  // The tokenizer's other bogus-comment openers, each closed at the first `>`.
+  const processingInstructionHidden = '<svg><?<g a="?><svg onload=alert(1)>"></g></svg>'
+  const endTagHidden = '<svg></ <g a="> <svg onload=alert(1)>"></g></svg>'
 
   it('parses the breakout sample into a live handler', () => {
     // A template's content is inert, so the parsed <img> never loads.
@@ -134,6 +137,9 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
     '<svg><g DATA="x"/></svg>',
     '<svg><!--<g a="--><svg onload=alert(1)>"></g></svg>',
     '<svg><![CDATA[<g a="]]><svg onload=alert(1)>"></g></svg>',
+    processingInstructionHidden,
+    endTagHidden,
+    '<svg></1<g a="> <svg onload=alert(1)>"></g></svg>',
   ])('refuses %j', (svg) => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
@@ -164,6 +170,19 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
     const host = document.createElement('template')
     host.innerHTML = '<svg><!--<g a="--><svg onload=alert(1)>"></g></svg>'
     expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it.each([
+    processingInstructionHidden,
+    endTagHidden,
+  ])('parses a bogus-comment-hidden tag in %j into a live handler', (svg) => {
+    const host = document.createElement('template')
+    host.innerHTML = svg
+    expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it('accepts an empty end tag, which the parser drops without a comment', () => {
+    expect(fragmentIsEmbeddable('<svg><g></></g></svg>')).toBe(true)
   })
 
   it('accepts a title or desc holding text alone', () => {
