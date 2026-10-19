@@ -15,6 +15,7 @@ import { LoroDoc, LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
+import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
@@ -36,7 +37,7 @@ function deps(store: StoredDoc) {
     ...unusedLiveDocuments(),
     withWriteLock: (_workspaceId, fn) => fn(),
   }
-  return { liveDocuments, workspaceDocuments }
+  return { liveDocuments, workspaceDocuments, blobStore: unusedBlobStore() }
 }
 
 function updateFrom(base: LoroDoc, edit: (doc: LoroDoc) => void): Uint8Array {

@@ -166,7 +166,12 @@ addenda of
   share link, an embed) resolves to it again after a restore. A document's
   **saved versions stay with it in the trash**: they are keyed by that same
   `documentId`, so a restore brings its history back too. This holds whether
-  the browser or the daemon keeps the workspace. The trash
+  the browser or the daemon keeps the workspace, and on the daemon whether
+  the delete arrives as a request or inside a live-sync update of the
+  workspace: the daemon puts every document such an update removes in the
+  trash, with its content as it stood before the update and the documents
+  below it carried along, before it keeps the update — and if that content
+  cannot be stored, the update is refused and nothing of it is kept. The trash
   section appears only when it holds something. **Delete permanently** on a
   trash row is the one step with no way back: after a confirmation it removes
   the row, the evacuated content and the document's saved versions, so the

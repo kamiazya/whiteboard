@@ -484,7 +484,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   entry, change which documents are pinned, or write anything else in the
   workspace record outside its documents, or that addresses a path no
   document holds, is refused with `403` unless the grant also holds
-  `workspace:write`, and nothing of it is kept. A document's own update
+  `workspace:write`, and nothing of it is kept. One the grant does allow
+  to remove a document still cannot destroy it: the daemon puts each
+  document the update removes in the trash, as its own delete does, before
+  keeping the update, so the content stays restorable and its saved versions
+  stay reachable. A document's own update
   cannot reach its place in the workspace either: one that adds a part named
   after the document's id, segment, kind, name or timestamps, or a part of
   the wrong kind under a name the document already uses, is refused with

@@ -17,6 +17,7 @@ import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
+import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
@@ -65,7 +66,7 @@ describe('a workspace-document sync update that builds on a change the keeper la
       ...unusedLiveDocuments(),
       withWriteLock: (_workspaceId, fn) => fn(),
     }
-    return { liveDocuments, workspaceDocuments }
+    return { liveDocuments, workspaceDocuments, blobStore: unusedBlobStore() }
   }
 
   it('is refused as a causal gap, and the change it builds on is then judged alone', async () => {

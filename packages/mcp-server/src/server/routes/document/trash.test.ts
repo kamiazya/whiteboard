@@ -16,6 +16,7 @@ import {
   trashRestoreRefusal,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
+  deleteWorkspaceDocument,
   readSpatialCanvas,
   readTrashEntries,
   recordTrashEntry,
@@ -193,6 +194,37 @@ describe('trash routes', () => {
       await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
     )
     expect(after.entries).toEqual([])
+  })
+
+  it('a document a live-sync update removes is restorable, its content and versions with it', async () => {
+    const WS = 'ws-trash-sync-delete'
+    await saveDocument(WS, 'doomed', canvasDoc('precious'), { kind: 'spatial' })
+    const documentId = (await resolveDocumentIdAtPath(WS, 'doomed')) as string
+    const app = await appWithRealDeps()
+    const versionId = await saveVersion(app, WS, 'doomed')
+    const snapshot = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
+    const replica = new LoroDoc()
+    replica.import(new Uint8Array(await snapshot.arrayBuffer()))
+    const from = replica.oplogVersion()
+    deleteWorkspaceDocument(replica, { documentId })
+
+    const pushed = await app.request(`/api/w/${WS}/workspace-document/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(replica.export({ mode: 'update', from })),
+    })
+    expect(pushed.status).toBe(200)
+
+    const listed = listTrashResponseSchema.parse(
+      await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
+    )
+    expect(listed.entries.map((entry) => entry.documentId)).toEqual([documentId])
+    const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+      method: 'POST',
+    })
+    expect(restored.status).toBe(200)
+    expect(await servedTexts(app, WS, 'doomed')).toEqual(['precious'])
+    expect(await listedVersionIds(app, WS, 'doomed')).toContain(versionId)
   })
 
   it.each(
