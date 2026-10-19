@@ -174,12 +174,15 @@ const ANIMATION_ELEMENT =
 /** Any `url(` whose target is not a fragment-local `#id` (CSS or attribute). */
 const NON_LOCAL_URL = /url\((?!\s*['"]?\s*#)/i
 /**
- * CSS that `NON_LOCAL_URL` cannot read: an escape (`u\72l(` is `url(`) and
- * `@import`, which loads a sheet without spelling `url(` at all. Neither
- * engine writes an escape into CSS — a style attribute or a `<style>`
- * element — or an `@import` anywhere.
+ * CSS that `NON_LOCAL_URL` cannot read: an escape (`u\72l(` is `url(`),
+ * `@import`, which loads a sheet without spelling `url(` at all, and any
+ * character reference but XML's five predefined ones — the parser decodes
+ * `&#117;rl(`, `&#64;import` or HTML's named `&bsol;` before CSS reads the
+ * text, in an attribute value and in SVG `<style>` text alike. Neither engine
+ * writes an escape or a reference other than those five into CSS — a style
+ * attribute or a `<style>` element — or an `@import` anywhere.
  */
-const UNREADABLE_CSS = /\\|@import/i
+const UNREADABLE_CSS = /\\|@import|&(?!(?:amp|lt|gt|quot|apos);)/i
 const STYLE_ELEMENT_OPEN = /<(?:[\w.-]+:)?style\b/gi
 const STYLE_ELEMENT_CLOSE = /<\/(?:[\w.-]+:)?style\b/i
 const FORM_ATTRIBUTE = /^(?:form)?action$/i
