@@ -193,7 +193,9 @@ async function bearerGrant(
       kind: 'external-bearer',
       scopes,
       ...(person === undefined ? {} : { person }),
-      ...(expiresAt === undefined ? {} : { expiresAt }),
+      // A bound that is not a number bounds nothing; recorded, it would end a
+      // sync stream at once (setTimeout reads NaN as 1ms).
+      ...(expiresAt !== undefined && Number.isFinite(expiresAt) ? { expiresAt } : {}),
     },
   }
 }
