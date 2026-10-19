@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
-import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
+import { FRAGMENT_ENGINES, fragmentIsEmbeddable } from './markdown-fragment-renderers.js'
 
 const renderDiagramFragment = FRAGMENT_ENGINES.diagram
 
@@ -104,5 +104,74 @@ describe('renderDiagramFragment (real mermaid)', () => {
     )
     expect(fragment?.svg).toContain('<svg')
     expect(fragment?.svg).not.toMatch(/onclick/i)
+  })
+})
+
+// The fragment reaches the DOM through the HTML parser, which leaves SVG at a
+// breakout tag and reads a raw-text element's body as text up to its close —
+// so markup that reads as one quoted attribute to an XML reader can end in a
+// live element.
+describe('fragmentIsEmbeddable against the HTML parser', () => {
+  const breakout = '<svg><p><textarea><x y="</textarea><img src=x onerror=alert(1)>">'
+  const integrationPointStyle =
+    '<svg><desc><style><x y="</style><svg onload=alert(1)>"></desc></svg>'
+
+  it('parses the breakout sample into a live handler', () => {
+    // A template's content is inert, so the parsed <img> never loads.
+    const host = document.createElement('template')
+    host.innerHTML = breakout
+    expect(host.content.querySelector('img[onerror]')).not.toBeNull()
+  })
+
+  it.each([
+    breakout,
+    '<svg><title><textarea><x y="</textarea><img src=x>"></title></svg>',
+    integrationPointStyle,
+    '<svg><DIV/></svg>',
+    '<svg></p></svg>',
+    '<svg><é:xmp/></svg>',
+    '<svg><g srcdoc="x"/></svg>',
+    '<svg><g DATA="x"/></svg>',
+    '<svg><!--<g a="--><svg onload=alert(1)>"></g></svg>',
+    '<svg><![CDATA[<g a="]]><svg onload=alert(1)>"></g></svg>',
+  ])('refuses %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('accepts data-* attributes and element names that only start like a breakout', () => {
+    expect(
+      fragmentIsEmbeddable(
+        '<svg><g data-id="a"><path d="M0 0"/><polygon/><text>p</text></g></svg>',
+      ),
+    ).toBe(true)
+  })
+
+  it('parses a style inside desc as HTML raw text', () => {
+    const host = document.createElement('template')
+    host.innerHTML = integrationPointStyle
+    expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it.each(
+    'b big blockquote body br center code dd div dl dt em embed font h1 h6 head hr i img li listing menu meta nobr ol p pre ruby s small span strong strike sub sup table tt u ul var textarea xmp iframe noembed noframes noscript plaintext'.split(
+      ' ',
+    ),
+  )('refuses a <%s> element', (name) => {
+    expect(fragmentIsEmbeddable(`<svg><${name}/></svg>`)).toBe(false)
+  })
+
+  it('parses a comment-hidden tag into a live handler', () => {
+    const host = document.createElement('template')
+    host.innerHTML = '<svg><!--<g a="--><svg onload=alert(1)>"></g></svg>'
+    expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it('accepts a title or desc holding text alone', () => {
+    expect(fragmentIsEmbeddable('<svg><title>a &lt; b</title><desc>d</desc><g/></svg>')).toBe(true)
+  })
+
+  it('still embeds a real flowchart', async () => {
+    const fragment = await renderDiagramFragment('mermaid', 'graph TD; A[Alpha]-->B[Beta]')
+    expect(fragment?.svg).toContain('<svg')
   })
 })
