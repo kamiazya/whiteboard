@@ -51,7 +51,8 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
  * Why a sync update was refused: one insert longer than `MARKDOWN_MAX_CHARS`
- * (`run`), a markdown body it left past that limit and longer than it was
+ * (`run`), separate inserts each within it that together cost more to apply
+ * than one insert of that length (`runs`), a markdown body it left past that limit and longer than it was
  * (`body`), a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
  * (`node-text`), a link's URL, a file's path or subpath or a group's
  * background past `NODE_LOCATION_MAX_CHARS` (`node-location`), an edge's, line's or group's
@@ -79,6 +80,15 @@ export type SyncTextBreach =
       readonly shape: 'run' | 'body'
       readonly chars: number
       /** The text container that broke it, so a caller can name the document. */
+      readonly container: ContainerID
+    }
+  | {
+      readonly shape: 'runs'
+      /** Every unit the update inserts, over all its runs. */
+      readonly chars: number
+      /** How many separate runs carried them. */
+      readonly runs: number
+      /** The container holding the longest of them, so a caller can name a document. */
       readonly container: ContainerID
     }
   | ValueBreach
@@ -110,6 +120,7 @@ export type SyncTextBreach =
  */
 export const SYNC_TEXT_BREACH_CODES = {
   run: 'markdown_too_large',
+  runs: 'markdown_too_large',
   body: 'markdown_too_large',
   'node-text': 'node_text_too_large',
   'node-location': 'node_location_too_large',
@@ -160,6 +171,12 @@ const SMALLEST_VALUE_BOUND = Math.min(
   ...BOUNDED_VALUES.map((bound) => bound.max),
 )
 
+/**
+ * What attaching an update may cost, in the engine's terms: one run at
+ * `MARKDOWN_MAX_CHARS`, the cost the limit was sized to (about a second).
+ */
+const RUN_COST_BUDGET = MARKDOWN_MAX_CHARS ** 2
+
 /** Unicode scalar values, the unit Loro's counters and text positions advance by. */
 function scalarLength(text: string): number {
   let length = 0
@@ -182,6 +199,12 @@ function extendRun(previous: Run | undefined, counter: number, pos: number, text
 interface UpdateWrites {
   /** The longest contiguous insert, in UTF-16 units — the length `MARKDOWN_MAX_CHARS` counts. */
   longestRun: { units: number; container: ContainerID | null }
+  /**
+   * What applying every run costs, as the engine charges it: the sum of each
+   * run's squared length in units. Units inserted and runs counted beside it,
+   * for the refusal to say.
+   */
+  runCost: { squared: number; units: number; runs: number }
   /** Characters inserted minus characters deleted, per text container. */
   net: Map<ContainerID, number>
   /**
@@ -232,6 +255,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
   const nodeMaps = new Map<ContainerID, boolean>()
   const writes: UpdateWrites = {
     longestRun: { units: 0, container: null },
+    runCost: { squared: 0, units: 0, runs: 0 },
     net: new Map(),
     longValues: new Map(),
     names: [],
@@ -280,6 +304,13 @@ function readTextWrite(writes: UpdateWrites, runs: Map<string, Run>, peer: strin
   const key = `${op.container} ${peer}`
   const run = extendRun(runs.get(key), op.counter, content.pos, content.text)
   runs.set(key, run)
+  // The run's length before this insert: the run it extended, or nothing.
+  const was = run.units - content.text.length
+  writes.runCost = {
+    squared: writes.runCost.squared + run.units ** 2 - was ** 2,
+    units: writes.runCost.units + content.text.length,
+    runs: writes.runCost.runs + (was === 0 ? 1 : 0),
+  }
   if (run.units > writes.longestRun.units) {
     writes.longestRun = { units: run.units, container: op.container }
   }
@@ -404,8 +435,18 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  * 512 Ki-character insert whose attached import costs 3.4 s), and the
  * operations can be read back as JSON at a cost linear in the update. So the
  * update is taken in detached, its inserts measured, and the state brought
- * up only once no single insert is past the limit — which caps the blocking
- * half at the cost the limit was sized to (about a second).
+ * up only once it is within budget.
+ *
+ * The attach pays for EVERY run, so the budget is on their sum of squared
+ * lengths, at the cost of one run at the limit (`RUN_COST_BUDGET`): one run
+ * past `MARKDOWN_MAX_CHARS` is refused as a `run`, and separate runs each
+ * within it whose squares together pass the budget as `runs`. A cap on the
+ * longest run alone let an update of many runs just under it block for the
+ * sum of them (measured: 8 runs of 200 k characters, 6.3 s). Editor traffic
+ * is many short runs, which this leaves alone: runs of at most 4 Ki units
+ * pass the budget only past 16 Mi units in total, more than a request body
+ * carries. That holds the blocking half at about the second the limit was
+ * sized to.
  *
  * A body or a node's text is judged after the state is brought up, since
  * only the state knows the resulting length. Shrinking either when it is
@@ -474,6 +515,10 @@ function judgeImported(
   const { units, container } = writes.longestRun
   if (replays && units > MARKDOWN_MAX_CHARS && container !== null) {
     return judged({ shape: 'run', chars: units, container })
+  }
+  const cost = writes.runCost
+  if (replays && cost.squared > RUN_COST_BUDGET && container !== null) {
+    return judged({ shape: 'runs', chars: cost.units, runs: cost.runs, container })
   }
   // While detached, the state read is the one before the update; an empty
   // document had no node before it.

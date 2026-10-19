@@ -63,7 +63,9 @@ function valueRefusalMessage(
   return `${what}, past ${limit}`
 }
 
-function bodyRefusalMessage({ shape, chars }: BreachOf<'run' | 'body'>, at?: RefusedIn): string {
+function bodyRefusalMessage(breach: BreachOf<'run' | 'runs' | 'body'>, at?: RefusedIn): string {
+  if (breach.shape === 'runs') return runsRefusalMessage(breach, at)
+  const { shape, chars } = breach
   if (at === undefined) {
     return shape === 'run'
       ? `This update inserts ${chars} characters in one piece, past ${MARKDOWN_LIMIT_PHRASE}`
@@ -75,6 +77,13 @@ function bodyRefusalMessage({ shape, chars }: BreachOf<'run' | 'body'>, at?: Ref
   return shape === 'run'
     ? `The document at ${where} holds in its history one insert of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one write${now}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
     : `The document at ${where} has a body of ${chars} characters, past ${MARKDOWN_LIMIT_PHRASE}`
+}
+
+function runsRefusalMessage({ chars, runs }: BreachOf<'runs'>, at?: RefusedIn): string {
+  const pieces = `${runs} separate inserts of ${chars} characters in all`
+  const cost = `which together cost more to apply than one insert at the ${MARKDOWN_MAX_CHARS}-character limit for one write`
+  if (at === undefined) return `This update makes ${pieces}, ${cost}`
+  return `The document at ${JSON.stringify(at.path)} holds in its history ${pieces}, ${cost}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
 }
 
 /**
@@ -96,14 +105,15 @@ export abstract class TextBreachRefusalError extends SyncWriteRefusalError {
 }
 
 /**
- * A run longer than `MARKDOWN_MAX_CHARS` inserted in one piece, or a markdown
- * body left longer than that and longer than it was.
+ * A run longer than `MARKDOWN_MAX_CHARS` inserted in one piece, separate runs
+ * that together cost more to apply than one that long, or a markdown body
+ * left longer than that and longer than it was.
  */
 class MarkdownBodyTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES.body
 
   constructor(
-    readonly breach: BreachOf<'run' | 'body'>,
+    readonly breach: BreachOf<'run' | 'runs' | 'body'>,
     readonly at?: RefusedIn,
   ) {
     super(bodyRefusalMessage(breach, at))
@@ -409,6 +419,7 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
     case 'unattached-container':
       return new UnattachedContainerError(breach, at)
     case 'run':
+    case 'runs':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)
   }

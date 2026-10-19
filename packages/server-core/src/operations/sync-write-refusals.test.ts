@@ -69,6 +69,7 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
  */
 const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefusalError>> = {
   run: () => textBreachRefusal({ shape: 'run', chars: 300_000, container: MAP }),
+  runs: () => textBreachRefusal({ shape: 'runs', chars: 400_000, runs: 2, container: MAP }),
   body: () => textBreachRefusal({ shape: 'body', chars: 300_000, container: MAP }),
   'node-text': () =>
     textBreachRefusal({ shape: 'node-text', chars: 9_000, nodeId: 'n1', container: MAP }),
