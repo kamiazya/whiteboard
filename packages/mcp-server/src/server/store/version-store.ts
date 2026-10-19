@@ -1,5 +1,6 @@
 import {
   autoVersionsOverCap,
+  carriedAutoVersionsOverCap,
   frontiersFromBase64,
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
@@ -374,8 +375,9 @@ export class FileVersionStore implements VersionStore {
    * arrive whole.
    *
    * The answer is read back BEFORE the automatic cap prunes: a carried
-   * automatic row the cap then retires did reach this keeper, and went the
-   * way one of its own would. Read after, a re-run once this keeper had taken
+   * automatic row the cap then retires did reach this keeper. The cap makes
+   * room from the carried rows alone, never from this keeper's own: a carried
+   * date is the other keeper's claim. Read after, a re-run once this keeper had taken
    * a checkpoint of its own reported that row as never arriving — and the
    * caller, keeping its copy for it, re-sent it on every retry to the same end.
    */
@@ -385,7 +387,10 @@ export class FileVersionStore implements VersionStore {
     if (rows.length === 0) return []
     return withWorkspaceWriteLock(workspaceId, async () => {
       const db = await this.scope.db()
-      await db
+      // RETURNING names only the rows this call inserted: an id already held
+      // is skipped, so naming one of this keeper's own rows cannot make that
+      // row one the cap below may take.
+      const inserted = await db
         .insertInto('versions')
         .values(
           rows.map((row) =>
@@ -403,6 +408,7 @@ export class FileVersionStore implements VersionStore {
           ),
         )
         .onConflict((conflict) => conflict.column('id').doNothing())
+        .returning('id')
         .execute()
       const held = await db
         .selectFrom('versions')
@@ -414,8 +420,9 @@ export class FileVersionStore implements VersionStore {
           rows.map((row) => row.id),
         )
         .execute()
+      const carried = new Set(inserted.map((row) => row.id))
       for (const documentId of new Set(rows.map((row) => row.documentId))) {
-        await this.prune(workspaceId, documentId)
+        await this.prune(workspaceId, documentId, carried)
       }
       return held.map((row) => row.id)
     })
@@ -714,9 +721,15 @@ export class FileVersionStore implements VersionStore {
    * The cap is per document WITHIN a workspace: a promote can land one
    * browser record in two daemon workspaces, so a document id is not unique
    * across them, and a cap counted across both would retire one workspace's
-   * history for the other's activity.
+   * history for the other's activity. With `carried`, the rows an adopt just
+   * inserted, only those may go: a carried row dated after this keeper's own
+   * outranks them in the newest-first cap.
    */
-  private async prune(workspaceId: string, documentId: string): Promise<void> {
+  private async prune(
+    workspaceId: string,
+    documentId: string,
+    carried?: ReadonlySet<string>,
+  ): Promise<void> {
     const db = await this.scope.db()
     const autos = await db
       .selectFrom('versions')
@@ -742,7 +755,10 @@ export class FileVersionStore implements VersionStore {
           .execute()
       ).flatMap((r) => (r.restoredFrom === null ? [] : [r.restoredFrom])),
     )
-    const toRemove = autoVersionsOverCap(autos, referenced)
+    const toRemove =
+      carried === undefined
+        ? autoVersionsOverCap(autos, referenced)
+        : carriedAutoVersionsOverCap(autos, carried, referenced)
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')

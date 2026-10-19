@@ -23,7 +23,8 @@ vi.mock('../config.js', () => ({
 }))
 
 const { FileVersionStore } = await import('./version-store.js')
-const { saveDocument } = await import('./document-store.js')
+const { saveDocument, compactWorkspace, getWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
+  await import('./document-store.js')
 const { frontiersToBase64 } = await import('@kamiazya/whiteboard-history')
 
 function canvasOf(text: string): SpatialCanvas {
@@ -184,6 +185,45 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       await store.adopt('ws-a', rows)
       expect(await autoRowCount('ws-a')).toBe(50)
     })
+
+    it("makes room for carried automatic rows from the carried ones, never this keeper's own", async () => {
+      const genuine: string[] = []
+      for (let i = 0; i < 10; i++) {
+        await edit('ws-a', `own-${i}`)
+        genuine.push(
+          (await at(1_000 + i, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))).id,
+        )
+      }
+      const { documentId } = await handle.db
+        .selectFrom('versions')
+        .select('documentId')
+        .where('id', '=', genuine[0]!)
+        .executeTakeFirstOrThrow()
+      const now = Date.now()
+      const carried = Array.from({ length: 50 }, (_, i) => ({
+        id: `carried-${String(i).padStart(3, '0')}`,
+        documentId,
+        createdAt: now + i,
+        auto: true,
+        frontiers: [],
+        elementCount: 0,
+        contentDigest: 'x',
+      }))
+      // One carried row reuses an own row's id: the insert skips it, and it
+      // must not become prunable by having been named.
+      await store.adopt('ws-a', [...carried, { ...carried[0]!, id: genuine[0]! }])
+      const kept = new Set(
+        (
+          await handle.db
+            .selectFrom('versions')
+            .select('id')
+            .where('workspaceId', '=', 'ws-a')
+            .execute()
+        ).map((row) => row.id),
+      )
+      expect(genuine.filter((id) => !kept.has(id))).toEqual([])
+      expect(await autoRowCount('ws-a')).toBe(50)
+    })
   })
 
   describe('pruneSandwichedAutoVersions', () => {
@@ -342,6 +382,32 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       expect(points.sort()).toEqual(
         [await frontiersOf(first.id), await frontiersOf(second.id)].sort(),
       )
+    })
+
+    it('lets compaction cut only where every version descends from, whatever a row is dated', async () => {
+      // Rewriting one node grows the op log the cut folds away, so the
+      // compaction below has something to gain and really runs.
+      for (let i = 0; i < 40; i++) await edit('ws-a', `churn-${i}`)
+      const first = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
+      await edit('ws-a', 'after')
+      const asSaved = (await store.load('ws-a', first.id))?.toJSON()
+      const { documentId } = await handle.db
+        .selectFrom('versions')
+        .select('documentId')
+        .where('id', '=', first.id)
+        .executeTakeFirstOrThrow()
+      // Dated before every other row while standing at the HEAD: oldest by
+      // time, newest in the history.
+      const head = (await getWorkspaceDoc('ws-a')).frontiers()
+      const carried = { id: 'carried-at-head', documentId, createdAt: 0, auto: false }
+      await store.adopt('ws-a', [
+        { ...carried, frontiers: head, elementCount: 1, contentDigest: 'x' },
+      ])
+
+      expect((await compactWorkspace('ws-a', store)).compacted).toBe(true)
+      _clearWorkspaceDocCacheForTests()
+      expect(asSaved).toBeDefined()
+      expect((await store.load('ws-a', first.id))?.toJSON()).toEqual(asSaved)
     })
 
     it('is empty for a workspace with no versions', async () => {

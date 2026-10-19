@@ -223,40 +223,6 @@ describe('compactWorkspace', () => {
     expect(frontierResult?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
-  it('cuts where every version descends from, not at the row with the oldest date', async () => {
-    const { store, version: v } = await buildCompactableCanvas('test')
-    const { getWorkspaceDoc, _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
-    const [entry] = await store.list('session1', 'test')
-    const documentId = (
-      await handle.db
-        .selectFrom('versions')
-        .select('documentId')
-        .where('id', '=', entry!.id)
-        .executeTakeFirstOrThrow()
-    ).documentId
-    // A carried row may claim any past date; dated before every other row,
-    // it would be the oldest by time while standing at the HEAD.
-    const head = (await getWorkspaceDoc('session1')).frontiers()
-    await store.adopt('session1', [
-      {
-        id: 'carried-at-head',
-        documentId,
-        createdAt: 0,
-        auto: false,
-        frontiers: head,
-        elementCount: 60,
-        contentDigest: 'x',
-      },
-    ])
-
-    const result = await compactWorkspace('session1', store)
-    expect(result.compacted).toBe(true)
-    _clearWorkspaceDocCacheForTests()
-
-    const past = await store.load('session1', v.id)
-    expect(past?.getMovableList('elements').length).toBe(30)
-  })
-
   it('writes lastCompactedAt only on successful compaction', async () => {
     // Case 1: no version → reason='no-versions' → lastCompactedAt stays null.
     const empty = new LoroDoc()

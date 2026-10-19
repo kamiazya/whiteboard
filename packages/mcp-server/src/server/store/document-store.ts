@@ -600,16 +600,10 @@ export async function compactWorkspace(
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId, scope)
 
-    // The cut is the point every version descends from — never the version
-    // with the oldest date, which a carried row can claim while standing at
-    // the head. No such point means nothing can be folded without losing a
-    // version's past, which reads to the caller as nothing to gain.
+    // Causal, never by date: a carried row may date itself before its point.
     const cut = compactionCut(doc, points)
-    if (cut === null) {
-      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
-    }
-    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
-    if (shallow.byteLength >= beforeBytes) {
+    const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    if (shallow === null || shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }
     const { manifest: fresh, chunks } = chunkSnapshot(
