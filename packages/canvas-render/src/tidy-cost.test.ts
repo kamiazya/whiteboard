@@ -96,28 +96,41 @@ describe('tidyNodes cost on nested frames', () => {
   }, 120_000)
 
   it('walks the nesting without spending call stack per level', () => {
-    // A canvas chooses how deep its frames go, so the walk must not need a
-    // stack frame per level. Run with almost no stack left, a chain the
-    // recursive walk cannot finish is one this one must. The subject's chain
-    // is deeper than the spare stack holds even one trivial frame per level,
-    // so a leaner recursion than the reference's overflows there too; the
-    // reference's premise needs only the shorter one, and pays its cubic
-    // walk on fewer levels before it overflows.
-    expect(() => withLittleStack(() => recursiveTidyNodes(nestedChain(300)))).toThrow(RangeError)
-    expect(() => withLittleStack(() => tidyNodes(nestedChain(1000)))).not.toThrow()
-  }, 60_000)
+    // A canvas chooses how deep its frames go, so the stack the walk needs
+    // must not grow with the depth. The headroom a chain needs is measured
+    // HERE rather than assumed: how much stack one tidy uses depends on the
+    // engine, on instrumentation (Stryker) and on what else shares the
+    // worker, and a fixed headroom that held on one machine overflowed on CI.
+    // What holds everywhere is the comparison — twenty times the depth, the
+    // same headroom — while the recursive reference, two frames a level,
+    // needs about a frame per level more.
+    const shallow = headroomFor(() => tidyNodes(nestedChain(50)))
+    const deep = headroomFor(() => tidyNodes(nestedChain(1000)))
+    expect(deep).toBeLessThanOrEqual(2 * shallow)
+    const recursiveShallow = headroomFor(() => recursiveTidyNodes(nestedChain(50)))
+    const recursiveDeep = headroomFor(() => recursiveTidyNodes(nestedChain(300)))
+    expect(recursiveDeep).toBeGreaterThan(recursiveShallow + 250)
+  }, 120_000)
 })
 
 /**
- * Run `fn` with roughly `SPARE_FRAMES` trivial frames of stack left, found by
- * probing how deep this realm lets a trivial function recurse rather than by
- * assuming a stack size. Measured here: the explicit-stack walk finishes with
- * 50 spare, and on a 300-frame chain the reference recursion (two frames a
- * level) overflows with up to 1200 spare, so 400 is a factor of three from
- * either edge.
+ * The fewest trivial frames of stack `fn` needs left to finish, to a factor of
+ * two: found by running it ever deeper in a probed stack rather than by
+ * assuming a stack size, so it means the same thing under any engine.
  */
-const SPARE_FRAMES = 400
-function withLittleStack(fn: () => unknown): void {
+function headroomFor(fn: () => unknown): number {
+  for (let spare = 25; spare < 1 << 20; spare *= 2) {
+    try {
+      withSpareFrames(spare, fn)
+      return spare
+    } catch (err) {
+      if (!(err instanceof RangeError)) throw err
+    }
+  }
+  throw new Error('did not finish with any headroom tried')
+}
+
+function withSpareFrames(spare: number, fn: () => unknown): void {
   const probe = (depth: number): number => {
     try {
       return probe(depth + 1)
@@ -133,5 +146,5 @@ function withLittleStack(fn: () => unknown): void {
     }
     fn()
   }
-  descend(limit - SPARE_FRAMES)
+  descend(Math.max(0, limit - spare))
 }
