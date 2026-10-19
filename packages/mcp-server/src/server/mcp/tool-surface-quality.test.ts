@@ -162,8 +162,7 @@ describe('what the tool table costs to read', () => {
         // `ExtensionFacets` registration meets a scene that now echoes a tag
         // list too, and the registration pays for itself on every node and
         // every edge the answer repeats. +28: the bends cap's `maxItems`, twice.
-        // +16: a node-set anchor's `maxItems` 2000 on the threads it returns.
-        wireBytes: 20762,
+        wireBytes: 20762, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns
         descriptionWords: 39,
         parameters: 3,
         undescribed: 2,
@@ -491,8 +490,7 @@ describe('what the tool table costs to read', () => {
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
         // wire, -16 visible); this row is where it is paid. +174: facetsRaw described.
-        // +16: a node-set anchor's `maxItems` 2000 on the threads it returns.
-        wireBytes: 20528,
+        wireBytes: 20528, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns
         descriptionWords: 115,
         parameters: 4,
         undescribed: 2,
@@ -697,8 +695,7 @@ describe('what the tool table costs to read', () => {
         visibleBytes: 3700, // +16 both: a node-set anchor's `maxItems` 2000 at thread.add; +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        // +16 more wire: the node-set `maxItems` again, on the threads it returns.
-        wireBytes: 6395,
+        wireBytes: 6395, // +16 more: the node-set `maxItems` again, on the threads it returns
         descriptionWords: 138,
         parameters: 32,
         undescribed: 24,
