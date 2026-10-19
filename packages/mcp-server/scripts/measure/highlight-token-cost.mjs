@@ -95,9 +95,11 @@ console.log('| grammar | input | chars | before ms | after ms | plain |')
 console.log('|---|---|---|---|---|---|')
 for (const [lang, label, source, slow] of CASES) {
   const skipBefore = slow && source.length > 32768 && !full
-  const before = skipBefore
-    ? '(skipped)'
-    : median(() => lowlight.highlight(lang, source), slow ? 1 : 3).ms.toFixed(0)
+  let before = '(skipped)'
+  if (!skipBefore) {
+    const runs = slow ? 1 : 3
+    before = median(() => lowlight.highlight(lang, source), runs).ms.toFixed(0)
+  }
   const after = median(() => highlightCode(lang, source), 3)
   console.log(
     `| ${lang} | ${label} | ${source.length} | ${before} | ${after.ms.toFixed(0)} | ${after.result === undefined ? 'yes' : 'no'} |`,
