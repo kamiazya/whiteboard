@@ -284,10 +284,12 @@ describe('passage highlights on an ordinary board', () => {
   afterAllFloor(['are the ones drawn before the cost bound'], () => {
     // The boards draw a highlight often, and reach both ways of choosing
     // one: the same-numbered occurrence, and scoring several by context.
-    // Measured over three runs: 0.88-0.98 drawn, 0.32-0.40 numbered,
-    // 0.46-0.52 scored.
+    // Measured over 23 runs: 0.89-0.94 drawn, 0.17-0.43 numbered,
+    // 0.40-0.60 scored. One board's passages share its source, so a run
+    // varies more than its ~400 passages suggest; each floor sits clear of
+    // the lowest reading and still fails when a branch is never taken.
     expect(reach.drawn / reach.passages).toBeGreaterThan(0.6)
-    expect(reach.numbered / reach.passages).toBeGreaterThan(0.2)
+    expect(reach.numbered / reach.passages).toBeGreaterThan(0.08)
     expect(reach.scored / reach.passages).toBeGreaterThan(0.3)
   })
 })
