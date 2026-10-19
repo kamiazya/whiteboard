@@ -35,6 +35,21 @@
  *
  * Straight routing prices the same parallel board at 15ms and 60ms: the
  * cost is the orthogonal router and the scoring it feeds, run per trial.
+ *
+ * Before and after the trial and repair accounts (`routing-budget.ts`), the
+ * lane rank by binary search and the patched repair, interleaved twice on a
+ * quiet machine:
+ *
+ *                     before            after
+ *   parallel  200     1927 / 2059ms     1492 / 1210ms
+ *   parallel  2000    19535 / 19990ms   6957 / 5939ms
+ *   hub       200     13284 / 14934ms   2725 / 2527ms
+ *   flush     400     5831 / 5430ms     467 / 496ms
+ *   flush     2000    > 120000ms        519 / 505ms
+ *
+ * What is left on the parallel board is the pair loop: every trial re-scores
+ * each of the 200 touched edges against the 199 others, and the trial account
+ * stops the search after 126 of its 182 trials rather than at a handful.
  */
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'

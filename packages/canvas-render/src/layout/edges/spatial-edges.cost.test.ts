@@ -26,6 +26,7 @@ const work = vi.hoisted(() => ({
   rectVisits: 0,
   placementDepth: 0,
   placementVisits: 0,
+  trialAttempts: 0,
 }))
 
 // What a trial pays outside the segment pairs: every edge it touched is
@@ -92,6 +93,11 @@ vi.mock('./edge-anchors.js', async (importOriginal) => {
     buildAnchorGroups: placing(actual.buildAnchorGroups),
     patchAnchorGroups: placing(actual.patchAnchorGroups),
     computeAnchorsFor: placing(actual.computeAnchorsFor),
+    // Asked once per trial or repair candidate, before any of its work.
+    patchWork: (...args: Parameters<typeof actual.patchWork>) => {
+      work.trialAttempts++
+      return actual.patchWork(...args)
+    },
   }
 })
 
@@ -127,6 +133,7 @@ function resetWork(): void {
     rectVisits: 0,
     placementDepth: 0,
     placementVisits: 0,
+    trialAttempts: 0,
   })
 }
 
@@ -255,6 +262,33 @@ function flushBoard(count: number): SpatialCanvas {
   }
 }
 
+/**
+ * `flushBoard(count)` beside `pairs` pairs of side-by-side boxes far off,
+ * two edges each: edges the repair never touches, which a candidate's anchor
+ * pass would re-place all of if it rebuilt the partition.
+ */
+function flushBesideBystanders(count: number, pairs: number): SpatialCanvas {
+  const flush = flushBoard(count)
+  return {
+    ...flush,
+    nodes: [
+      ...flush.nodes,
+      ...Array.from({ length: pairs }, (_, k) => [
+        sized(`c${k}`, 5000 + (k % 20) * 600, Math.floor(k / 20) * 200, 120, 60),
+        sized(`d${k}`, 5300 + (k % 20) * 600, Math.floor(k / 20) * 200, 120, 60),
+      ]).flat(),
+    ],
+    edges: [
+      ...flush.edges,
+      ...Array.from({ length: pairs * 2 }, (_, i) => ({
+        id: `b${i}`,
+        from: { node: `c${i >> 1}` },
+        to: { node: `d${i >> 1}` },
+      })),
+    ],
+  }
+}
+
 describe('side-choice search cost on boards that crowd one side', () => {
   it('bounds the work trials do re-anchoring every edge of a shared side', () => {
     resetWork()
@@ -267,6 +301,10 @@ describe('side-choice search cost on boards that crowd one side', () => {
     // by scanning the group per member made that 2.5e7 visits; by binary
     // search over the sorted coordinates, 1.0e6.
     expect(work.placementVisits).toBeLessThanOrEqual(4_000_000)
+    // Each touched edge's pair lookups are charged to the search's share of
+    // the trial account, which stops this search after 126 of the 182 trials
+    // it would otherwise ask for.
+    expect(work.trialAttempts).toBeLessThanOrEqual(150)
   }, 300_000)
 
   it('bounds the work trials do routing and scoring past every node', () => {
@@ -279,6 +317,10 @@ describe('side-choice search cost on boards that crowd one side', () => {
     // search ran every trial it had: 6.4e8 visits. Charged to the search's
     // share of the layout's trial account, 6.4e7.
     expect(work.rectVisits).toBeLessThanOrEqual(150_000_000)
+    // Once the account refuses a trial the search stops: 30 trials asked
+    // for. Going on to every remaining candidate asks for 375, and each that
+    // happens to fit the remainder is paid for again.
+    expect(work.trialAttempts).toBeLessThanOrEqual(100)
   }, 300_000)
 
   it('bounds the anchor placement the coincident-ends repair makes', () => {
@@ -294,5 +336,17 @@ describe('side-choice search cost on boards that crowd one side', () => {
     // with each rank a scan of the group: 1.0e9 visits. Patched per
     // candidate and charged to the repair account, 1.4e7.
     expect(work.placementVisits).toBeLessThanOrEqual(50_000_000)
+  }, 300_000)
+
+  it('re-places only the groups a repair candidate moves', () => {
+    resetWork()
+    const scene = layoutEdges(flushBesideBystanders(100, 400))
+    const drawn = scene.filter((n) => n.kind === 'edge')
+    expect(drawn).toHaveLength(900)
+    expect(drawn.filter((n) => n.kind === 'edge' && n.path.length > 2).length).toBeGreaterThan(50)
+    // Each candidate patches the four groups its edge leaves and joins:
+    // 1.4e6 visits. Rebuilding the partition per candidate re-places the
+    // 800 bystander ends every time too: 1.0e7.
+    expect(work.placementVisits).toBeLessThanOrEqual(4_000_000)
   }, 300_000)
 })
