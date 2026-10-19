@@ -23,6 +23,14 @@
  * That is what makes reading an update's inserts before applying it
  * affordable.
  *
+ * The `runs` rows are what the judge's budget is for: K separate runs, each
+ * one unit under MARKDOWN_MAX_CHARS, in separate texts of a seeded document.
+ * `applied` is the bare attached import — every run paid for, which is what
+ * the judge let through while it capped only the longest run — and `judged`
+ * is `importWithinTextLimits`, which prices the runs by the sum of their
+ * squared lengths and refuses past one run's worth BEFORE attaching. Set
+ * RUN_COUNTS (comma-separated) to change K; the default reaches 8.
+ *
  * THE PREFLIGHT IS NOT CEREMONY: every write is read back, so a harness whose
  * write silently landed nowhere cannot print a plausible small number. A row
  * whose body did not change, and was not refused, exits 1.
@@ -33,10 +41,11 @@ import { join } from 'node:path'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  importWithinTextLimits,
   readMarkdownBody,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   applyDocumentUpdate,
   applyWorkspaceDocumentUpdate,
@@ -218,6 +227,49 @@ function engineRows(chars) {
   }
 }
 
+/** K runs just under the cap: what attaching them costs, and what the judge spends on them. */
+function runsRow(count) {
+  const target = new LoroDoc()
+  target.getText('body').insert(0, BASE_BODY)
+  target.commit()
+  const client = target.fork()
+  const from = client.oplogVersion()
+  const piece = prose(MARKDOWN_MAX_CHARS - 1)
+  for (let i = 0; i < count; i += 1) client.getText(`t${i}`).insert(0, piece)
+  client.commit()
+  const update = client.export({ mode: 'update', from })
+  const timed = (work) => {
+    const before = process.cpuUsage()
+    const result = work()
+    const spent = process.cpuUsage(before)
+    return { cpuMs: Math.round((spent.user + spent.system) / 1000), result }
+  }
+  const appliedInto = target.fork()
+  const applied = timed(() => appliedInto.import(update))
+  if (appliedInto.getText(`t${count - 1}`).length !== piece.length) {
+    console.error(`preflight: ${count} runs were not applied`)
+    process.exit(1)
+  }
+  const judging = target.fork()
+  const judged = timed(() => importWithinTextLimits(judging, update))
+  const shape = judged.result.breach?.shape ?? null
+  // One run at the cap is what the budget allows; more is refused unapplied.
+  if (shape !== (count === 1 ? null : 'runs')) {
+    console.error(`preflight: ${count} runs judged as ${shape}`)
+    process.exit(1)
+  }
+  return {
+    route: 'runs (cpu ms)',
+    runs: count,
+    units: count * piece.length,
+    applied: applied.cpuMs,
+    judged: judged.cpuMs,
+    verdict: shape ?? 'taken',
+  }
+}
+
+const RUN_COUNTS = (process.env.RUN_COUNTS ?? '1,2,4,8').split(',').map(Number)
+
 const rows = []
 for (const chars of CHARS) {
   for (const [route, run] of [
@@ -238,3 +290,5 @@ for (const chars of CHARS) {
   }
   console.log(JSON.stringify({ chars, route: 'engine (cpu ms)', ...engineRows(chars) }))
 }
+
+for (const count of RUN_COUNTS) console.log(JSON.stringify(runsRow(count)))
