@@ -7,16 +7,10 @@
 import {
   CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
-  COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
   growsPast,
-  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
-  NODE_LOCATION_MAX_CHARS,
-  NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
-  TAG_MAX_CHARS,
-  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import {
   type ContainerID,
@@ -29,15 +23,7 @@ import {
   type VersionVector,
 } from 'loro-crdt'
 import { heldBefore, longNameBreach, type NameSuspect, nameSuspectsOf } from './container-names.js'
-import {
-  CANVAS_KEY,
-  CANVAS_TAGS_FIELD,
-  EDGES_KEY,
-  LINES_KEY,
-  MARKDOWN_BODY_KEY,
-  NODES_KEY,
-  THREADS_KEY,
-} from './containers.js'
+import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { heldBound } from './held-bound.js'
 import { isNodeMetaContainer } from './node-meta-containers.js'
@@ -56,12 +42,11 @@ import {
   unattachedBreach,
 } from './sync-structure-limits.js'
 import {
-  fieldLength,
-  longestTag,
-  nodeLocationLength,
-  nodeTextLength,
-  tagsIn,
-} from './value-lengths.js'
+  BOUNDED_VALUES,
+  type BoundedValue,
+  isContentContainer,
+  type ValueBreach,
+} from './sync-value-bounds.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
@@ -76,7 +61,8 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * `TAG_MAX_CHARS` (`tags`), or a container it brought in named past
  * `CONTAINER_NAME_MAX_CHARS` (`container-name`), or a board it grew past
  * `CANVAS_MAX_NODES` nodes or `CANVAS_MAX_EDGES_AND_LINES` edges and lines
- * together (`canvas-size`), or a document it left holding more than
+ * together (`canvas-size`), or a comment thread whose anchor it left naming
+ * more than `CANVAS_MAX_NODES` nodes (`thread-anchor`), or a document it left holding more than
  * `DOCUMENT_MAX_OPEN_THREADS` open comment threads (`open-threads`) or
  * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
  * more than before.
@@ -95,40 +81,7 @@ export type SyncTextBreach =
       /** The text container that broke it, so a caller can name the document. */
       readonly container: ContainerID
     }
-  | {
-      readonly shape: 'node-text'
-      readonly chars: number
-      readonly nodeId: string
-      /** The map holding the node, so a caller can name the document. */
-      readonly container: ContainerID
-    }
-  | {
-      readonly shape: 'node-location'
-      readonly chars: number
-      readonly nodeId: string
-      readonly container: ContainerID
-    }
-  | {
-      readonly shape: 'label'
-      readonly chars: number
-      readonly elementId: string
-      readonly container: ContainerID
-    }
-  | {
-      readonly shape: 'comment-message'
-      readonly chars: number
-      readonly messageId: string
-      readonly container: ContainerID
-    }
-  | {
-      readonly shape: 'tags'
-      /** Which bound: how many tags, or the longest one's length. */
-      readonly measure: 'count' | 'chars'
-      readonly amount: number
-      /** The node or edge carrying them, or `null` for the board's own. */
-      readonly elementId: string | null
-      readonly container: ContainerID
-    }
+  | ValueBreach
   | {
       readonly shape: 'container-name'
       /** The name's length, or the key's for a child a peer's op id names, which a copy names by it. */
@@ -165,6 +118,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   tags: 'tags_too_large',
   'container-name': 'container_name_too_long',
   'canvas-size': 'too_many_nodes_or_edges',
+  'thread-anchor': 'comment_anchor_too_large',
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
   'content-root': 'invalid_document_root',
@@ -196,101 +150,7 @@ type LongValue = { container: ContainerID; key: string; bound: BoundedValue }
 type Run = { counter: number; pos: number; units: number }
 
 /**
- * Whether `container` is a thread's message map — under a document's root or
- * a workspace-tree node, `threads` > thread > `messages`.
- */
-function isThreadMessages(doc: LoroDoc, container: ContainerID): boolean {
-  const path = doc.getPathToContainer(container)
-  if (path?.at(-1) !== 'messages' || path.at(-3) !== THREADS_KEY) return false
-  return path.length === 3 || (path.length === 5 && path[0] === WORKSPACE_TREE_KEY)
-}
-
-/**
- * Text a write bound holds that lives in a map VALUE rather than a text
- * container — a node, an edge, a line, a message is each one value — so no
- * insert run ever sees it. Each says how long a value's text is, which maps
- * hold such values, and how a breach of it is named.
- */
-interface BoundedValue {
-  readonly max: number
-  readonly length: (value: unknown) => number
-  readonly holds: (doc: LoroDoc, container: ContainerID, key: string) => boolean
-  readonly breach: (amount: number, key: string, container: ContainerID) => SyncTextBreach
-}
-
-/**
- * Both tag bounds, for one place tags sit: how many, and the longest. Where
- * the board's tags sit, the value under the key IS the list; on a node or an
- * edge it is the element, carrying its list in `tags`.
- */
-function tagBounds(
-  holds: BoundedValue['holds'],
-  elementOf: (key: string) => string | null,
-): BoundedValue[] {
-  const measured = (measure: 'count' | 'chars', max: number, length: BoundedValue['length']) => ({
-    max,
-    length,
-    holds,
-    breach: (amount: number, key: string, container: ContainerID): SyncTextBreach => ({
-      shape: 'tags',
-      measure,
-      amount,
-      elementId: elementOf(key),
-      container,
-    }),
-  })
-  return [
-    measured('count', TAGS_PER_ELEMENT_MAX, (value) => tagsIn(value).length),
-    measured('chars', TAG_MAX_CHARS, longestTag),
-  ]
-}
-
-const BOUNDED_VALUES: readonly BoundedValue[] = [
-  {
-    max: NODE_TEXT_MAX_CHARS,
-    length: nodeTextLength,
-    holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
-    breach: (chars, nodeId, container) => ({ shape: 'node-text', chars, nodeId, container }),
-  },
-  {
-    max: NODE_LOCATION_MAX_CHARS,
-    length: nodeLocationLength,
-    holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
-    breach: (chars, nodeId, container) => ({ shape: 'node-location', chars, nodeId, container }),
-  },
-  {
-    // A group's label is a node field; an edge's and a line's their own.
-    max: LABEL_MAX_CHARS,
-    length: (value) => fieldLength(value, 'label'),
-    holds: (doc, container) =>
-      [NODES_KEY, EDGES_KEY, LINES_KEY].some((key) => isContentContainer(doc, container, key)),
-    breach: (chars, elementId, container) => ({ shape: 'label', chars, elementId, container }),
-  },
-  {
-    max: COMMENT_MESSAGE_MAX_CHARS,
-    length: (value) => fieldLength(value, 'body'),
-    holds: isThreadMessages,
-    breach: (chars, messageId, container) => ({
-      shape: 'comment-message',
-      chars,
-      messageId,
-      container,
-    }),
-  },
-  ...tagBounds(
-    (doc, container) =>
-      [NODES_KEY, EDGES_KEY].some((key) => isContentContainer(doc, container, key)),
-    (elementId) => elementId,
-  ),
-  ...tagBounds(
-    (doc, container, key) =>
-      key === CANVAS_TAGS_FIELD && isContentContainer(doc, container, CANVAS_KEY),
-    () => null,
-  ),
-]
-
-/**
- * No update this short can breach any bound above, nor name a container past
+ * No update this short can breach any of `BOUNDED_VALUES`' bounds, nor name a container past
  * `CONTAINER_NAME_MAX_CHARS` or nest one under a key past it: the bytes carry
  * the name or key whole (`sync-text-limits.container-names.test.ts` pins that
  * encoding).
@@ -426,16 +286,6 @@ function readTextWrite(writes: UpdateWrites, runs: Map<string, Run>, peer: strin
   grow(scalarLength(content.text))
 }
 
-/**
- * Whether `container` is the content container `key` names: at a document's
- * root, or under a workspace-tree node.
- */
-function isContentContainer(doc: LoroDoc, container: ContainerID, key: string): boolean {
-  const path = doc.getPathToContainer(container)
-  if (path?.at(-1) !== key) return false
-  return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
-}
-
 /** The bounded text of the value a map holds at `key` in the doc's current state; 0 when there is none. */
 function lengthIn(doc: LoroDoc, { container, key, bound }: LongValue): number {
   try {
@@ -455,7 +305,7 @@ function valueBreach(
     if (!value.bound.holds(doc, value.container, value.key)) continue
     const length = lengthIn(doc, value)
     if (growsPast(value.bound.max, before.get(id) ?? 0, length)) {
-      return value.bound.breach(length, value.key, value.container)
+      return value.bound.breach(length, value.key, value.container, doc)
     }
   }
   return null
@@ -721,8 +571,9 @@ const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
  * An update's bytes hold every string it writes uncompressed, and a UTF-16
  * unit never takes less than one byte, so no insert, body growth, node text,
  * label, message or tag it carries is longer than its byte length, nor does
- * it carry more tags than bytes (`sync-text-limits.test.ts` and
- * `sync-text-limits.tags.test.ts` pin that encoding). An update short
+ * it carry more tags, or name more anchor nodes, than bytes
+ * (`sync-text-limits.test.ts`, `sync-text-limits.tags.test.ts` and
+ * `sync-text-limits.thread-anchors.test.ts` pin that encoding). An update short
  * enough that no limit can be reached — no longer than the smallest bound,
  * a label's, and not enough to take the longest body past its own, nor the
  * largest board past a node or edge-and-line bound, nor any document past an

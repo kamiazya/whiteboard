@@ -162,7 +162,7 @@ describe('what the tool table costs to read', () => {
         // `ExtensionFacets` registration meets a scene that now echoes a tag
         // list too, and the registration pays for itself on every node and
         // every edge the answer repeats. +28: the bends cap's `maxItems`, twice.
-        wireBytes: 20746,
+        wireBytes: 20762, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns
         descriptionWords: 39,
         parameters: 3,
         undescribed: 2,
@@ -490,7 +490,7 @@ describe('what the tool table costs to read', () => {
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
         // wire, -16 visible); this row is where it is paid. +174: facetsRaw described.
-        wireBytes: 20512,
+        wireBytes: 20528, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns
         descriptionWords: 115,
         parameters: 4,
         undescribed: 2,
@@ -692,10 +692,10 @@ describe('what the tool table costs to read', () => {
         // status, every message with author and time) where it was a count,
         // so "Returns every thread the document holds" is true. The
         // description now names the read that writes nothing.
-        visibleBytes: 3684, // +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 3700, // +16 both: a node-set anchor's `maxItems` 2000 at thread.add; +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 6363,
+        wireBytes: 6395, // +16 more: the node-set `maxItems` again, on the threads it returns
         descriptionWords: 138,
         parameters: 32,
         undescribed: 24,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 42755, // +96 wb_document_get's trim sentence (see that row); +16 the per-canvas ceiling on wb_viewport_set's elementIds; +48 the per-canvas ceiling on wb_canvas_edit's tidy and region.set lists; +15 the op ceiling on wb_workspace_edit; +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's)
+      visibleBytes: 42771, // +16 the node-set anchor ceiling on wb_thread_edit's thread.add; +96 wb_document_get's trim sentence (see that row); +16 the per-canvas ceiling on wb_viewport_set's elementIds; +48 the per-canvas ceiling on wb_canvas_edit's tidy and region.set lists; +15 the op ceiling on wb_workspace_edit; +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's)
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, then +767, each the same bytes as visible.
-      wireBytes: 134327, // +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
+      wireBytes: 134391, // +64 the node-set anchor ceiling: thread.add's input, and the threads wb_canvas_view, wb_document_get and wb_thread_edit return; +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

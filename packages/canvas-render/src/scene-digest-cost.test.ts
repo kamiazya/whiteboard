@@ -72,4 +72,18 @@ describe('sceneDigest cost', () => {
     // of every entry. Measured 18.5ms, 0.00007ms, through the prefix sum.
     expect(elapsed / (entries + cells)).toBeLessThan(0.001)
   })
+
+  it('caps the free regions a tall, empty board reports', () => {
+    // Two 20px boxes 5_000_000px apart in one column: a 1 x 250_000 grid,
+    // inside the cell budget, whose every row but two is its own one-cell
+    // run. Uncapped that is 249_998 regions, 8_444_383 chars of JSON,
+    // which wb_canvas_snapshot then returns twice.
+    const box = (y: number) => ({ kind: 'thematicBreak' as const, bbox: { x: 0, y, w: 20, h: 20 } })
+    const digest = sceneDigest({ nodes: [box(0), box(4_999_980)] })
+
+    // The subject is present: the grid was built, not refused.
+    expect(digest.freeRegions.length).toBeGreaterThan(0)
+    expect(JSON.stringify(digest.freeRegions).length).toBeLessThanOrEqual(100_000)
+    expect(digest.partial).toBe(true)
+  })
 })

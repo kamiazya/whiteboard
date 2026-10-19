@@ -10,6 +10,7 @@ import {
   workspaceEntrySchema,
 } from '../index.js'
 import { describeRefusedInput } from './document-index-input-conformance.js'
+import { describeRenameHeldBy } from './document-index-rename-held-conformance.js'
 
 type SeedWorkspace = (entry: WorkspaceEntry) => Promise<void>
 
@@ -702,10 +703,7 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
   describe('renameWorkspace', () => {
     it('gives a workspace a display name it did not have', async () => {
       await withIndex(async (index) => {
-        const renamed = await index.renameWorkspace({
-          workspaceId: WS,
-          displayName: 'Design team',
-        })
+        const renamed = await index.renameWorkspace({ workspaceId: WS, displayName: 'Design team' })
 
         expect(renamed.displayName).toBe('Design team')
         const listed = (await index.listWorkspaces()).find((w) => w.workspaceId === WS)
@@ -717,10 +715,7 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
       await withIndex(async (index, seedWorkspace) => {
         await seedWorkspace({ workspaceId: 'ws-moving', segment: 'before' })
 
-        const renamed = await index.renameWorkspace({
-          workspaceId: 'ws-moving',
-          segment: 'after',
-        })
+        const renamed = await index.renameWorkspace({ workspaceId: 'ws-moving', segment: 'after' })
 
         expect(renamed.segment).toBe('after')
         expect((await index.resolveWorkspace('after'))?.workspaceId).toBe('ws-moving')
@@ -792,5 +787,7 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
         ).rejects.toThrow(WorkspaceNotFoundError)
       })
     })
+
+    describeRenameHeldBy(withIndex)
   })
 }

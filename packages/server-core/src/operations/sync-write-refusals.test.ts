@@ -1,5 +1,7 @@
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  ANCHOR_NODES_LIMIT_PHRASE,
+  annotationAnchorInputSchema,
   CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
@@ -87,6 +89,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     textBreachRefusal({ shape: 'container-name', chars: 70_000, container: MAP }),
   'canvas-size': () =>
     textBreachRefusal({ shape: 'canvas-size', measure: 'nodes', count: 2_001, container: MAP }),
+  'thread-anchor': () =>
+    textBreachRefusal({ shape: 'thread-anchor', count: 2_001, threadId: 't1', container: MAP }),
   'open-threads': () => textBreachRefusal({ shape: 'open-threads', count: 501, container: MAP }),
   'open-changes': () => textBreachRefusal({ shape: 'open-changes', count: 1_001, container: MAP }),
   'content-root': () => textBreachRefusal({ shape: 'content-root', key: 'nodes', container: MAP }),
@@ -215,6 +219,21 @@ describe('a refused text bound', () => {
     expect(tail(syncRefusal, `, past ${phrase}`)).toBe(`, past ${phrase}`)
     const toolRefusal = schema.safeParse('x'.repeat(max + 1)).error?.issues[0]?.message
     expect(tail(toolRefusal, ` is longer than ${phrase}`)).toBe(` is longer than ${phrase}`)
+  })
+})
+
+describe('a refused comment anchor', () => {
+  it('names the thread, and ends on the node-set bound as the tool input does', () => {
+    expect(TEXT_SAMPLES['thread-anchor']().message).toBe(
+      `This update would leave comment thread "t1" anchored to 2001 nodes, past ${ANCHOR_NODES_LIMIT_PHRASE}`,
+    )
+    const tool = annotationAnchorInputSchema.safeParse({
+      kind: 'spatial',
+      nodeIds: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`),
+      x: 0,
+      y: 0,
+    }).error?.issues[0]?.message
+    expect(tool?.endsWith(ANCHOR_NODES_LIMIT_PHRASE)).toBe(true)
   })
 })
 

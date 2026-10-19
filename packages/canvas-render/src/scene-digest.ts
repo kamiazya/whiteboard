@@ -77,6 +77,14 @@ const FREE_REGION_GRID_PX = 20
  */
 const FREE_REGION_MAX_CELLS = 250_000
 /**
+ * Upper bound on the free regions reported. The cell budget bounds the GRID,
+ * not its output: every row's free run is a region of its own, so a grid
+ * one cell wide and 250_000 tall is 250_000 regions, megabytes of JSON. Past
+ * this many the LARGEST are kept and the digest is `partial`, since a
+ * reader looking for room to place something wants the widest gaps first.
+ */
+const FREE_REGION_MAX_REGIONS = 1_000
+/**
  * Upper bound on the entry count fed into the pairwise O(n^2)
  * overlap/containment/cluster derivation below. Scene node counts are
  * caller-supplied and unbounded, so past this bound each of the three
@@ -348,14 +356,29 @@ function freeRunsIn(
   return regions
 }
 
-/** Maximal empty axis-aligned rectangles over the union bounding box, on a fixed grid. */
-function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
-  if (entries.length === 0) return []
+const byPosition = (a: BoundingBox, b: BoundingBox): number =>
+  a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y
+
+/**
+ * Maximal empty axis-aligned rectangles over the union bounding box, on a
+ * fixed grid, and whether a guard dropped any: the grid's cell budget, or
+ * the region cap, which keeps the largest.
+ */
+function computeFreeRegions(entries: readonly DigestEntry[]): {
+  readonly regions: BoundingBox[]
+  readonly capped: boolean
+} {
+  if (entries.length === 0) return { regions: [], capped: false }
   const grid = freeRegionGrid(entries)
-  if (grid === null) return []
-  return freeRunsIn(occupiedCells(entries, grid), grid).sort((a, b) =>
-    a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y,
-  )
+  if (grid === null) return { regions: [], capped: true }
+  const regions = freeRunsIn(occupiedCells(entries, grid), grid)
+  if (regions.length <= FREE_REGION_MAX_REGIONS) {
+    return { regions: regions.sort(byPosition), capped: false }
+  }
+  const largest = regions
+    .sort((a, b) => area(b) - area(a) || byPosition(a, b))
+    .slice(0, FREE_REGION_MAX_REGIONS)
+  return { regions: largest.sort(byPosition), capped: true }
 }
 
 /**
@@ -433,14 +456,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
     overlaps: overlaps.pairs,
     containment: computeContainment(entries),
     clusters: computeClusters(entries),
-    freeRegions,
-    // The pairwise guard is a node count and can be re-tested directly. The
-    // grid guard depends on the scene's extent, so it is inferred from its
-    // one observable effect: no free regions on a scene that HAS nodes, which
-    // a real layout never produces (a board of boxes always leaves gaps).
-    partial:
-      entries.length > PAIRWISE_MAX_ENTRIES ||
-      overlaps.capped ||
-      (entries.length > 0 && freeRegions.length === 0),
+    freeRegions: freeRegions.regions,
+    partial: entries.length > PAIRWISE_MAX_ENTRIES || overlaps.capped || freeRegions.capped,
   }
 }

@@ -238,7 +238,10 @@ still read, and still take a change that does not add to them.
 A text anchor's `prefix` and `suffix` — the context either side of a quoted
 passage — each carry at most **32 characters**. They tell one occurrence of a
 repeated passage from another, and finding the passage compares them against
-every occurrence, so their length is paid once per occurrence. `wb_thread_edit`
+each occurrence, so their length is paid once per occurrence. Only the
+**1,024 occurrences** nearest where the passage last was are compared: a
+passage quoted that often is placed among those, and one further away is
+not considered. `wb_thread_edit`
 refuses a longer one on `thread.add`, and `wb_body_edit` on `body.replace`,
 with "a text anchor's context is longer than the 32-character limit"; keep the
 characters nearest the passage. The editor writes 16. An anchor stored with a
@@ -371,6 +374,17 @@ storing nothing; a browser-kept workspace refuses it the same way it refuses a
 board past its size, with a notice. A document stored past a limit before it
 existed still reads, and still takes any change that opens nothing.
 
+A comment anchored to several nodes at once names at most **2,000** of them —
+a whole canvas's worth. Every render looks each named node up, resolved
+threads included, so this is held whether the thread is open or not.
+`wb_thread_edit` refuses a `thread.add` naming more ("a node set names more
+nodes than the 2000-node limit for one comment anchor, a whole canvas's
+worth"), and the daemon's sync routes refuse an update that would leave an
+anchor naming more with `413` and `{"error":"comment_anchor_too_large"}`,
+storing nothing. A thread stored with a larger set before this limit existed
+is left out when the document is read; the document and its other threads
+read as before.
+
 ## How many ops one call may carry
 
 One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit`,
@@ -428,6 +442,14 @@ stored: a `document.set` or `document.create` op and `POST
 allowed in OKF frontmatter". OKF gives them no meaning, and an
 alias makes a few bytes stand for a value of any size. Write the value out
 each time it is needed; this server writes a repeated value out in full too.
+
+**Frontmatter nests at most 32 levels.** The root mapping is one level, and
+every mapping or list inside it one more. A deeper frontmatter is not stored:
+the same write paths answer "OKF frontmatter may nest at most 32 levels of
+mappings and lists". Each level is written two spaces further in, so a value
+nested hundreds deep exports as hundreds of times its size. A document stored
+with deeper frontmatter before this limit still reads and exports in full; it
+is re-importing that export which is refused.
 
 ## Who wrote a document
 

@@ -259,8 +259,46 @@ describe('sceneDigest', () => {
     const digest = sceneDigest(
       scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 10_000_000, y: 10_000_000, w: 10, h: 10 }),
     )
-    // Degrades to no free regions rather than allocating an unbounded grid.
+    // Degrades to no free regions rather than allocating an unbounded grid,
+    // and says so.
     expect(digest.freeRegions).toEqual([])
+    expect(digest.partial).toBe(true)
+  })
+
+  it('is not partial when one box leaves no free cell at all', () => {
+    const digest = sceneDigest(scene({ x: 0, y: 0, w: 20, h: 20 }))
+    expect(digest.freeRegions).toEqual([])
+    expect(digest.partial).toBe(false)
+  })
+
+  describe('free region cap', () => {
+    // A box filling column 2 for `rows` rows, and two filling column 0 at
+    // rows 0 and 500: those two rows leave one 20px run each, every other
+    // row a 40px one, so the board has exactly `rows` regions.
+    const tall = (rows: number): Scene =>
+      scene(
+        { x: 40, y: 0, w: 20, h: rows * 20 },
+        { x: 0, y: 0, w: 20, h: 20 },
+        { x: 0, y: 500 * 20, w: 20, h: 20 },
+      )
+
+    it('reports every region, not partial, at exactly the cap', () => {
+      const digest = sceneDigest(tall(1000))
+      expect(digest.freeRegions).toHaveLength(1000)
+      expect(digest.freeRegions[0]).toEqual({ x: 20, y: 0, w: 20, h: 20 })
+      expect(digest.partial).toBe(false)
+    })
+
+    it('keeps the largest regions, in position order, one past the cap', () => {
+      const digest = sceneDigest(tall(1001))
+      expect(digest.freeRegions).toHaveLength(1000)
+      // A 20px run is the one dropped — the later of the two, as ties keep
+      // position order — and the kept one still reads first.
+      expect(digest.freeRegions.filter((r) => r.w === 20)).toEqual([{ x: 20, y: 0, w: 20, h: 20 }])
+      expect(digest.freeRegions[0]).toEqual({ x: 20, y: 0, w: 20, h: 20 })
+      expect(digest.freeRegions[999]).toEqual({ x: 0, y: 20_000, w: 40, h: 20 })
+      expect(digest.partial).toBe(true)
+    })
   })
 
   it('round-trips through sceneDigestSchema', () => {

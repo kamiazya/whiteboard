@@ -126,7 +126,16 @@ function isDigit(code: number): boolean {
   return code >= 48 && code <= 57
 }
 
-/** Takes a workspace held in `me` into its oldest owner's namespace, once it has one. */
+/**
+ * Takes a workspace held in `me` into its oldest owner's namespace, once it
+ * has one.
+ *
+ * A workspace nobody else is in — a single-person keeper's, restored here —
+ * keeps its segment: whoever chose it, nobody but its new holder reads what
+ * that name reaches. One that still has other people in it, parked in `me`
+ * when its owners went, carries a segment one of them may have chosen, and
+ * is a hand-over like any other.
+ */
 export async function homeWithItsOwner(db: TenantScoped, workspaceId: string): Promise<void> {
   await inTenantTransaction(db, async (trx) => {
     const workspace = await trx
@@ -135,6 +144,14 @@ export async function homeWithItsOwner(db: TenantScoped, workspaceId: string): P
       .where('id', '=', workspaceId)
       .executeTakeFirst()
     if (workspace?.namespace !== SINGLE_PERSON_NAMESPACE) return
-    await moveIntoNamespace(trx, workspace, await oldestOwnerNamespace(trx, workspaceId))
+    const namespace = await oldestOwnerNamespace(trx, workspaceId)
+    const someoneElse = await trx
+      .selectFrom('workspaceMemberships')
+      .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
+      .select('workspaceMemberships.profileId')
+      .where('workspaceMemberships.workspaceId', '=', workspaceId)
+      .where('memberProfiles.handle', '!=', namespace)
+      .executeTakeFirst()
+    await moveIntoNamespace(trx, workspace, namespace, { handedOver: someoneElse !== undefined })
   })
 }

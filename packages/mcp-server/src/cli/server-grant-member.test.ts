@@ -97,6 +97,30 @@ describe('grantMember', () => {
     expect(row).toEqual({ namespace: ada.handle, segment: 'plans-2' })
   })
 
+  // A workspace parked in `me` with people still in it carries a segment
+  // somebody else chose; kept bare, the recipient's own `journal` would reach
+  // a workspace those people read.
+  it("tails the segment of a workspace others are in as it moves to the owner's", async () => {
+    const id = '01HXPARKED00000000000ZQ7W4'
+    await upsertWorkspaceRow(handle.db, id, { namespace: 'me', segment: 'journal' })
+    const mallory = await userNamed('Mallory', 'mallory-1')
+    await handle.db
+      .insertInto('workspaceMemberships')
+      .values({ workspaceId: id, profileId: mallory.id, createdAt: Date.now(), role: 'member' })
+      .execute()
+    const bob = await userNamed('Bob', 'bob-1')
+
+    await grantMember(handle.db, { workspaceId: id, user: bob.id })
+
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow()
+    expect(await members.membershipRole(id, bob.id)).toBe('owner')
+    expect(row).toEqual({ namespace: bob.handle, segment: 'journal-000zq7w4' })
+  })
+
   it('moves only a workspace held in `me`, never one another namespace holds', async () => {
     await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')

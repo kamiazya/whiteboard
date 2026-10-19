@@ -22,6 +22,7 @@ import {
   hasDocumentDuplicates,
   isDatabaseBusy,
   isWorkspaceNotFoundError,
+  isWorkspaceNotHeldError,
   NoRoomForCopyError,
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
@@ -92,10 +93,24 @@ async function countDocuments(index: DocumentIndex, workspaceId: string): Promis
 }
 
 // The refusal the owner-only people routes answer, in the same shape.
+// One answer for a plain member and for an owner whose namespace does not
+// hold the workspace (ADR-0053 decision 3, as corrected): neither may change
+// the segment, and neither reaches the collision check.
 const SEGMENT_NOT_OWNED = {
   error: 'not_an_owner',
-  message: 'only an owner of this workspace can change its segment',
+  message: 'only the owner whose namespace holds this workspace can change its segment',
 } as const satisfies WorkspacePeopleRefusal
+
+// The precondition only a segment change carries; a display name stays any
+// member's to change.
+function heldByCaller(c: Context, segment: string | undefined): { heldBy?: string } {
+  return segment === undefined ? {} : { heldBy: callerNamespaceOf(c) }
+}
+
+function renameRefusal(err: unknown) {
+  if (isWorkspaceNotHeldError(err)) return { status: 403 as const, body: SEGMENT_NOT_OWNED }
+  return firstOwned(err, [segmentTaken, workspaceNotFound, corruptStored])
+}
 
 function renamedSummary(renamed: WorkspaceEntry): WorkspaceSummary {
   return {
@@ -331,10 +346,17 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       if (parsed.data.segment !== undefined && !(await owns(c, workspaceId))) {
         return c.json(SEGMENT_NOT_OWNED, 403)
       }
-      const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
+      // Only the holder changes a segment, decided by the write itself: a
+      // co-owner left behind by a hand-over could otherwise rename the tailed
+      // segment back to its recipient's bare name. Never refuses on `me`.
+      const renamed = await deps.documentIndex.renameWorkspace({
+        workspaceId,
+        ...parsed.data,
+        ...heldByCaller(c, parsed.data.segment),
+      })
       return c.json(renamedSummary(renamed))
     } catch (err) {
-      const owned = firstOwned(err, [segmentTaken, workspaceNotFound, corruptStored])
+      const owned = renameRefusal(err)
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }

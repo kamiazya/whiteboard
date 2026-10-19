@@ -1,4 +1,4 @@
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { CANVAS_MAX_NODES, type CommentThread } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import {
@@ -88,6 +88,24 @@ describe('comment threads storage', () => {
     writeCommentThread(doc, { ...THREAD, id: 't2' })
     const broken = doc.getMap('threads').get('t2') as LoroMap
     broken.set('anchor', { kind: 'spatial', x: 1.5, y: 0 })
+    doc.commit()
+    expect(readCommentThreads(doc).map((t) => t.id)).toEqual(['t1'])
+  })
+
+  it('drops a thread stored with a node set past the canvas bound, and keeps its siblings', () => {
+    // Stored before the bound, or by a writer that skipped it: every layout
+    // would look each id up, so the read costs that thread rather than
+    // carrying the cost on, and the document still reads.
+    const doc = new LoroDoc()
+    writeCommentThread(doc, THREAD)
+    writeCommentThread(doc, { ...THREAD, id: 't2' })
+    const broken = doc.getMap('threads').get('t2') as LoroMap
+    broken.set('anchor', {
+      kind: 'spatial',
+      nodeIds: Array.from({ length: CANVAS_MAX_NODES + 1 }, (_, i) => `n${i}`),
+      x: 0,
+      y: 0,
+    })
     doc.commit()
     expect(readCommentThreads(doc).map((t) => t.id)).toEqual(['t1'])
   })

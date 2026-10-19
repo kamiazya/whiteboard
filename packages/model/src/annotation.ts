@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { boundsOf } from './bounds.js'
+import { CANVAS_MAX_NODES } from './canvas-size.js'
 import { compareCodeUnit } from './compare.js'
 import { ID_LIMIT_PHRASE, ID_MAX_CHARS, nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
@@ -122,13 +123,25 @@ export const textAnchorInputSchema = textAnchorOver(textQuoteSelector(quoteConte
 
 export type TextAnchor = z.infer<typeof textAnchorSchema>
 
+/** The node-set bound as every refusal of it ends: a board's worth of nodes. */
+export const ANCHOR_NODES_LIMIT_PHRASE = `the ${CANVAS_MAX_NODES}-node limit for one comment anchor, a whole canvas's worth`
+
 const spatialAnchorSchema = z
   .object({
     kind: z.literal('spatial'),
     nodeId: nodeIdSchema.optional(),
     edgeId: nodeIdSchema.optional(),
-    /** Several nodes the conversation is about at once — a selection, not a single object. */
-    nodeIds: z.array(nodeIdSchema).min(2, 'a node set names at least two nodes').optional(),
+    /**
+     * Several nodes the conversation is about at once — a selection, not a
+     * single object. At most a board's worth: every layout looks each id up,
+     * resolved threads included, so an unbounded set is a cost every render
+     * pays. A thread stored past it fails this schema and is dropped on read.
+     */
+    nodeIds: z
+      .array(nodeIdSchema)
+      .min(2, 'a node set names at least two nodes')
+      .max(CANVAS_MAX_NODES, `a node set names more nodes than ${ANCHOR_NODES_LIMIT_PHRASE}`)
+      .optional(),
     // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
     // fractional anchor taken from a zoomed viewport survives the session
     // and then vanishes, because the next read drops what fails the schema.

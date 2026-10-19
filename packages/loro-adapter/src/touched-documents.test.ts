@@ -3,8 +3,9 @@
  * operations, and the edit stamp a keeper puts on the ones whose CONTENT it
  * changed. Driven through a replica's update, the shape every keeper takes.
  */
-import { LoroDoc, LoroText } from 'loro-crdt'
+import { LoroDoc, LoroList, LoroMap, LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { writeCommentThread } from './comment-threads.js'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { writeDocumentKind } from './document-envelope.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -65,6 +66,54 @@ function imported(workspace: LoroDoc, edit: (replica: LoroDoc) => void) {
 
 const type = (documentId: string, text: string) => (replica: LoroDoc) => {
   documentContainers(replica, documentId).getText(MARKDOWN_BODY_KEY).insert(0, text)
+}
+
+const nodeIdOf = (workspace: LoroDoc, documentId: string) => {
+  const node = workspace
+    .getTree('tree')
+    .getNodes()
+    .find((each) => each.data.get('documentId') === documentId)
+  if (node === undefined) throw new Error(`no node for ${documentId}`)
+  return node.id
+}
+
+// Containers whose path reads like the workspace tree's — they sit under a
+// ROOT that is also named `tree`, only of another kind — seeded on the keeper
+// so the import writes inside them alone. The map one is keyed by a real
+// node's id and holds a `body`, so its path is a real document's body path.
+const DECOYS: Readonly<Record<string, (workspace: LoroDoc) => void>> = {
+  nodeKeyedMap: (workspace) => {
+    workspace
+      .getMap('tree')
+      .setContainer(nodeIdOf(workspace, NOTE), new LoroMap())
+      .setContainer(MARKDOWN_BODY_KEY, new LoroText())
+  },
+  listEntry: (workspace) => {
+    workspace
+      .getList('tree')
+      .insertContainer(0, new LoroMap())
+      .setContainer(MARKDOWN_BODY_KEY, new LoroText())
+  },
+}
+
+/** The `body` text a decoy holds, found the way each decoy seeded it. */
+function decoyBody(replica: LoroDoc, decoy: string): LoroText {
+  const holder =
+    decoy === 'nodeKeyedMap'
+      ? replica.getMap('tree').get(nodeIdOf(replica, NOTE))
+      : replica.getList('tree').get(0)
+  const body = holder instanceof LoroMap ? holder.get(MARKDOWN_BODY_KEY) : undefined
+  if (!(body instanceof LoroText)) throw new Error(`no ${decoy} body`)
+  return body
+}
+
+/** A keeper holding `decoy`, and the version before an import that types into its body. */
+function decoyTyped(decoy: string) {
+  const workspace = keeper()
+  DECOYS[decoy]?.(workspace)
+  workspace.commit()
+  const since = imported(workspace, (replica) => decoyBody(replica, decoy).insert(0, 'x'))
+  return { workspace, since }
 }
 
 const updatedAtOf = (workspace: LoroDoc, documentId: string) =>
@@ -138,6 +187,14 @@ describe('documentsTouchedSince', () => {
     ])
   })
 
+  it.each(
+    Object.keys(DECOYS),
+  )('answers nothing for a write under a %s outside the tree', (decoy) => {
+    const { workspace, since } = decoyTyped(decoy)
+
+    expect(documentsTouchedSince(workspace, since)).toEqual([])
+  })
+
   it('passes over a document the same import deleted', () => {
     const workspace = keeper()
     const since = imported(workspace, (replica) => {
@@ -183,6 +240,15 @@ const CONTENT_EDITS: Readonly<Record<string, Edit>> = {
   typeNote: type(NOTE, 'hello'),
   envelopeKind: (replica) => writeDocumentKind(documentContainers(replica, OTHER), 'markdown'),
   typeOther: type(OTHER, 'there'),
+  // A thread's containers are mergeable ones, whose ids start `cid:root-`
+  // though they sit below the node.
+  commentOther: (replica) =>
+    writeCommentThread(documentContainers(replica, OTHER), {
+      id: 't1',
+      anchor: { kind: 'spatial', nodeId: 'n1', x: 40, y: 50 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'tighten this' }],
+    }),
   nameNote: (replica) => setWorkspaceDocumentName(replica, { documentId: NOTE, name: 'Weekly' }),
   stampOther: (replica) => {
     updateWorkspaceDocumentMeta(replica, OTHER, { updatedAt: 9_000 })
@@ -232,6 +298,32 @@ const ORGANISATION_EDITS: Readonly<Record<string, Edit>> = {
   strayRoot: (replica) => {
     replica.getMap('stray').set('k', 'v')
   },
+  // Roots that share the tree's NAME but not its kind: their path reads
+  // `['tree', …]`, the same first segment a document's content has.
+  treeNamedMap: (replica) => {
+    replica.getMap('tree').set('x', 1)
+  },
+  treeNamedMapPlacementKey: (replica) => {
+    replica.getMap('tree').set('segment', 'x')
+  },
+  treeNamedMapChild: (replica) => {
+    replica.getMap('tree').setContainer('x', new LoroText()).insert(0, 'x')
+  },
+  treeNamedText: (replica) => {
+    replica.getText('tree').insert(0, 'x')
+  },
+  treeNamedList: (replica) => {
+    replica.getList('tree').insert(0, 'x')
+  },
+  treeNamedListChild: (replica) => {
+    replica.getList('tree').insertContainer(0, new LoroList()).insert(0, 'x')
+  },
+  treeNamedMovableList: (replica) => {
+    replica.getMovableList('tree').insert(0, 'x')
+  },
+  treeNamedCounter: (replica) => {
+    replica.getCounter('tree').increment(1)
+  },
 }
 
 describe('organisationChangedSince', () => {
@@ -272,6 +364,14 @@ describe('organisationChangedSince', () => {
       if (!(held instanceof LoroText)) throw new Error(`no ${key} container`)
       held.insert(held.length, '/..')
     })
+
+    expect(organisationChangedSince(workspace, since)).toBe(true)
+  })
+
+  // Only the write INSIDE the decoy is imported, so nothing but the
+  // container's root says it is not a document's.
+  it.each(Object.keys(DECOYS))('answers true for a write under a %s outside the tree', (decoy) => {
+    const { workspace, since } = decoyTyped(decoy)
 
     expect(organisationChangedSince(workspace, since)).toBe(true)
   })

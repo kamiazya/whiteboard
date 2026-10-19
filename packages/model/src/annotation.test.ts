@@ -20,6 +20,7 @@ import {
   TEXT_ANCHOR_CONTEXT_MAX_CHARS,
   threadFromCanvasComment,
 } from './annotation.js'
+import { CANVAS_MAX_NODES } from './canvas-size.js'
 import type { CanvasComment } from './spatial.js'
 import { annotationAnchorArbitrary } from './test-utils/arbitraries.js'
 import { fc } from './test-utils/fast-check.js'
@@ -61,6 +62,25 @@ describe('annotationAnchorSchema', () => {
     expect(ok({ kind: 'spatial', x: 0, y: 0, width: 10 })).toBe(false)
     // The document arm carries nothing: a position on it would be a lie.
     expect(ok({ kind: 'document', x: 0, y: 0 })).toBe(false)
+  })
+
+  it('refuses a node set naming more nodes than one canvas may hold', () => {
+    // Every layout looks each id up, resolved threads included, so the set is
+    // held to the board it can be about rather than left unbounded.
+    const set = (count: number) => ({
+      kind: 'spatial',
+      nodeIds: Array.from({ length: count }, (_, i) => `n${i}`),
+      x: 0,
+      y: 0,
+    })
+    expect(annotationAnchorSchema.safeParse(set(CANVAS_MAX_NODES)).success).toBe(true)
+    expect(annotationAnchorSchema.safeParse(set(CANVAS_MAX_NODES + 1)).success).toBe(false)
+    expect(annotationAnchorInputSchema.safeParse(set(CANVAS_MAX_NODES + 1)).success).toBe(false)
+    // A thread stored past it fails the thread schema, so a reader drops that
+    // thread alone rather than failing the document.
+    expect(
+      commentThreadSchema.safeParse(thread({ anchor: set(CANVAS_MAX_NODES + 1) })).success,
+    ).toBe(false)
   })
 
   it('requires integer spatial coordinates, because a reader drops a comment that fails the schema', () => {

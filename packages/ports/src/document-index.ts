@@ -247,6 +247,14 @@ export function resolveWorkspaceHandle(
 export const renameWorkspaceInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
+    /**
+     * A precondition, never a move: the rename lands only while this
+     * namespace holds the workspace, and fails `WorkspaceNotHeldError`
+     * otherwise. Decided by the write itself, so a hand-over landing between
+     * an authorization check and the rename cannot carry a segment chosen
+     * for one namespace into another (ADR-0053 decision 3's correction).
+     */
+    heldBy: namespaceHandleSchema.optional(),
     segment: workspaceSegmentSchema.optional(),
     displayName: workspaceDisplayNameSchema.optional(),
   })
@@ -404,6 +412,32 @@ export class WorkspaceSegmentTakenError extends Error {
     )
     this.name = 'WorkspaceSegmentTakenError'
   }
+}
+
+/**
+ * Thrown when a `renameWorkspace` names a `heldBy` namespace that does not
+ * hold the workspace. The workspace exists; the caller is not the one who
+ * may change its address.
+ */
+export class WorkspaceNotHeldError extends Error {
+  constructor(
+    readonly workspaceId: string,
+    readonly namespace: string,
+  ) {
+    super(`Workspace "${workspaceId}" is not held in namespace "${namespace}"`)
+    this.name = 'WorkspaceNotHeldError'
+  }
+}
+
+/**
+ * Cross-realm-safe guard for `WorkspaceNotHeldError`, on the same reasoning
+ * as `isWorkspaceNotFoundError` above.
+ */
+export function isWorkspaceNotHeldError(error: unknown): error is WorkspaceNotHeldError {
+  return (
+    error instanceof WorkspaceNotHeldError ||
+    (error instanceof Error && error.name === 'WorkspaceNotHeldError')
+  )
 }
 
 /**

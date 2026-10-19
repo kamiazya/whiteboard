@@ -5,6 +5,7 @@
 import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
 import { isNodeMetaContainer } from './node-meta-containers.js'
 import { WORKSPACE_TREE_KEY, workspaceNodeMetaSchema } from './workspace-tree.js'
+import { descendsFromWorkspaceTree } from './workspace-tree-descent.js'
 
 /** A document an import wrote to. */
 export interface TouchedDocument {
@@ -33,6 +34,26 @@ function pathOf(node: LoroTreeNode): string | null {
 }
 
 /**
+ * Where a container sits, judged once per container: `outside` for anything
+ * not below the real workspace tree, else its path (`undefined` under a node
+ * a delete took).
+ */
+function placesOf(workspace: LoroDoc) {
+  const places = new Map<ContainerID, readonly (string | number)[] | undefined | 'outside'>()
+  return (container: ContainerID) => {
+    if (!places.has(container)) {
+      places.set(
+        container,
+        descendsFromWorkspaceTree(workspace, container)
+          ? workspace.getPathToContainer(container)
+          : 'outside',
+      )
+    }
+    return places.get(container)
+  }
+}
+
+/**
  * The tree node each operation after `since` landed under, and whether any of
  * them wrote its content. A node's own map sits at `[tree, <node>]` and every
  * content container one level further down; anything else in the record is no
@@ -40,15 +61,12 @@ function pathOf(node: LoroTreeNode): string | null {
  */
 function nodesWritten(workspace: LoroDoc, since: VersionVector): Map<TreeID, boolean> {
   const content = new Map<TreeID, boolean>()
-  const paths = new Map<ContainerID, readonly (string | number)[] | undefined>()
-  const pathTo = (container: ContainerID) => {
-    if (!paths.has(container)) paths.set(container, workspace.getPathToContainer(container))
-    return paths.get(container)
-  }
+  const placeOf = placesOf(workspace)
   const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
   for (const op of changes.flatMap((change) => change.ops)) {
-    const path = pathTo(op.container)
-    if (path === undefined || path.length < 2 || path[0] !== WORKSPACE_TREE_KEY) continue
+    const path = placeOf(op.container)
+    if (path === 'outside' || path === undefined || path.length < 2) continue
+    // Below the real tree, the second segment is always a node's id.
     const node = path[1] as TreeID
     content.set(node, content.get(node) === true || path.length > 2)
   }
@@ -105,20 +123,16 @@ const PLACEMENT_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'k
  */
 export function organisationChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
-  const paths = new Map<ContainerID, readonly (string | number)[] | undefined>()
-  const pathTo = (container: ContainerID) => {
-    if (!paths.has(container)) paths.set(container, workspace.getPathToContainer(container))
-    return paths.get(container)
-  }
+  const placeOf = placesOf(workspace)
   const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
   return changes
     .flatMap((change) => change.ops)
     .some((op) => {
       if (op.container === tree) return true
-      const path = pathTo(op.container)
+      const path = placeOf(op.container)
+      if (path === 'outside') return true
       // No path at all is a container under a node a delete took: judged as
       // the tree's, by the placement keys below, as it always was.
-      if (path !== undefined && path[0] !== WORKSPACE_TREE_KEY) return true
       // Inside a container held at a meta key: a reader refuses the node, and
       // an edit there could rename or re-place it from below the node's map.
       if (path !== undefined && path.length > 2 && isNodeMetaContainer(path, op.container)) {

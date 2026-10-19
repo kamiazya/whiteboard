@@ -243,7 +243,6 @@ const FOREIGN_NAMES: Readonly<Record<string, readonly string[]>> = {
   ],
   'loro-crdt, zod/JSON Schema, Lucene, Node, pnpm and browser-API names': [
     'LoroTree',
-    'LoroList',
     'ensureMergeableText',
     'skipWaiting',
     'unevaluatedProperties',

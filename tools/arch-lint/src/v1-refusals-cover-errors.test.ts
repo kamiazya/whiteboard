@@ -68,6 +68,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
   UnjudgedImportError:
     'a judge that threw rather than answered, which is the keeper failing and not the caller; it reaches /api/v1 only through a trash restore and is answered as the 500 it is',
+  WorkspaceNotHeldError:
+    'raised only by a rename carrying heldBy, which is the daemon PATCH /api/workspaces route; /api/v1 renames no workspace',
   NoRoomForCopyError:
     'raised only by duplicating a document, which is the /api/workspaces duplicate route; /api/v1 has no duplicate',
   DocumentMoveIntoSelfError:
@@ -122,6 +124,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and bounds every id it is handed before a write',
   CanvasTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and creates a spatial document empty, and wb_canvas_edit refuses the same growth as a CanvasEditError',
+  CommentAnchorTooLargeError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit refuses the same anchor through annotationAnchorInputSchema',
   TooManyOpenThreadsError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit / wb_canvas_edit refuse the same growth as their own op errors',
   TooManyOpenChangesError:
@@ -137,7 +141,7 @@ const EXEMPT: Readonly<Record<string, string>> = {
   SyncWriteRefusalError:
     'the abstract base of the sync write refusals below and of TooManyDocumentsError; raised only as one of them, never bare',
   TextBreachRefusalError:
-    'the abstract base of the twelve sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
+    'the abstract base of the thirteen sync breach refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:

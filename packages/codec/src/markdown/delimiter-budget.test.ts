@@ -43,7 +43,23 @@ describe('parseMarkdownBody delimiter budget', () => {
   })
 
   it('charges strikethrough and label ends to the same budget', () => {
-    expect(countNodes(parseMarkdownBody(`${'a~ '.repeat(1_000)}[l](u)`), 'link')).toBe(1)
-    expect(countNodes(parseMarkdownBody(`${'a] '.repeat(1_100)}[l](u)`), 'link')).toBe(0)
+    // One run of 1,000 tildes is one walk, so only the count can run out.
+    // Not at the start of a line, where it would open a code fence.
+    const tildes = `a${'~'.repeat(1_000)}`
+    expect(countNodes(parseMarkdownBody(`${tildes} ${'a] '.repeat(20)}[l](u)`), 'link')).toBe(1)
+    expect(countNodes(parseMarkdownBody(`${tildes} ${'a] '.repeat(30)}[l](u)`), 'link')).toBe(0)
+  })
+
+  // Each delimiter is also charged the events it may walk back over, and a
+  // run's walks are capped: here an escape writes six, so a delimiter after
+  // these 30,000 is charged about 180,000 and the cap holds five.
+  const escapes = '\\*'.repeat(30_000)
+
+  it('keeps the emphasis of a run whose walks fit the cap', () => {
+    expect(countNodes(parseMarkdownBody(`${escapes}${' a*'.repeat(2)} *a*`), 'emphasis')).toBe(1)
+  })
+
+  it('reads the delimiters past the walk cap as text', () => {
+    expect(countNodes(parseMarkdownBody(`${escapes}${' a*'.repeat(8)} *a*`), 'emphasis')).toBe(0)
   })
 })

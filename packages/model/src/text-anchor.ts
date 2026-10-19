@@ -22,7 +22,9 @@
  * 2. the only occurrence of the quote elsewhere;
  * 3. among several occurrences, the one whose surroundings match `prefix` and
  *    `suffix` best, and — where that still ties — the one nearest to where
- *    the anchor last was;
+ *    the anchor last was. Only the `SCORED_OCCURRENCES_MAX` occurrences
+ *    nearest that position are scored, so a quote that occurs everywhere
+ *    costs a bounded amount to place;
  * 4. nothing: the passage is gone, and the thread is orphaned (ADR-0026
  *    decision 4 — deleting the subject must not delete the conversation).
  *
@@ -138,6 +140,96 @@ export function sharedContext(
   return shared
 }
 
+/**
+ * The most occurrences of one quote that resolution scores: the ones nearest
+ * where the anchor last was.
+ *
+ * Without it, placing an anchor whose offsets missed collected and scored
+ * EVERY occurrence, so a one-character quote in a 256 Ki body was 128 Ki
+ * occurrences, each read for up to 66 characters of context — and a writer
+ * re-places every open passage of a proposal it continues, up to
+ * `DOCUMENT_MAX_OPEN_CHANGES` of them, under the workspace's write lock.
+ * Measured through `wb_body_edit` on a periodic 256 Ki body with 999 open
+ * changes: 127 s for one call, and 1.7 s with the bound.
+ *
+ * A quote with at most this many occurrences is placed exactly as without
+ * the bound. Past it, the occurrences further away lose only to a nearer one,
+ * which is the evidence that survives best anyway: a quote that common says
+ * little on its own, and the far ones are reached only by an edit moving the
+ * passage by thousands of its own occurrences. High enough that the existing
+ * bodies of every property in `text-anchor-context.property.test.ts` stay
+ * under it.
+ */
+const SCORED_OCCURRENCES_MAX = 1024
+
+/**
+ * Start positions searched per step outward from the anchor. Each step
+ * collects every occurrence inside it, so this bounds how far past the
+ * scored ones a search can collect; a quote longer than this steps by its
+ * own length, which keeps the re-read overlap at each step's edge from
+ * costing more than the step.
+ */
+const OUTWARD_STEP_CHARS = 4096
+
+/**
+ * The occurrences of `exact` nearest `around`, nearest first: all of them
+ * when there are at most `max`, otherwise the `max` nearest. Of two equally
+ * near, the lower comes first and is the one kept at the cut — the order
+ * resolution's own tiebreak prefers, so scoring in this order picks what
+ * scoring in body order would.
+ *
+ * Searched outward from `around` a step at a time on each side, stopping a
+ * side once it holds `max`: any occurrence past that is further than `max`
+ * others on its own side, so it cannot be among the nearest `max`. A dense
+ * quote therefore costs a few steps, and a sparse one the single pass over
+ * the body it always cost.
+ */
+function nearestOccurrences(body: string, exact: string, around: number, max: number): number[] {
+  const lastStart = body.length - exact.length
+  if (lastStart < 0) return []
+  const centre = Math.min(around, lastStart + 1)
+  const step = Math.max(OUTWARD_STEP_CHARS, exact.length)
+  // Starts in [from, to): the slice runs on by the quote's length less one so
+  // an occurrence starting just before `to` is whole in it, and no further,
+  // so the next step never finds it a second time.
+  const startsWithin = (from: number, to: number): number[] =>
+    textOccurrences(body.slice(from, to + exact.length - 1), exact).map((at) => at + from)
+
+  const before: number[] = []
+  for (let to = centre; to > 0 && before.length < max; to -= step) {
+    const found = startsWithin(Math.max(0, to - step), to)
+    for (let i = found.length - 1; i >= 0; i -= 1) before.push(found[i] as number)
+  }
+  const after: number[] = []
+  for (let from = centre; from <= lastStart && after.length < max; from += step) {
+    for (const at of startsWithin(from, Math.min(lastStart + 1, from + step))) after.push(at)
+  }
+  return nearestFirst(before, after, around, max)
+}
+
+/**
+ * The `max` nearest of two runs that each move away from `around` — `before`
+ * downward, `after` upward — merged nearest first, the lower of two equally
+ * near taken first.
+ */
+function nearestFirst(before: number[], after: number[], around: number, max: number): number[] {
+  const nearest: number[] = []
+  let b = 0
+  let a = 0
+  while (nearest.length < max && (b < before.length || a < after.length)) {
+    const left = before[b]
+    const right = after[a]
+    if (right === undefined || (left !== undefined && around - left <= right - around)) {
+      nearest.push(left as number)
+      b += 1
+    } else {
+      nearest.push(right)
+      a += 1
+    }
+  }
+  return nearest
+}
+
 const matchedBefore = (body: string, at: number, prefix: string): number =>
   sharedContext(prefix, 'before', (k) => body[at - 1 - k])
 
@@ -199,7 +291,7 @@ export function resolveTextAnchor(
     return { kind: 'placed', start: anchor.start, end: anchor.end }
   }
 
-  const candidates = textOccurrences(body, exact)
+  const candidates = nearestOccurrences(body, exact, anchor.start, SCORED_OCCURRENCES_MAX)
   if (candidates.length === 0) return ORPHANED
   const at = candidates[0] as number
   if (candidates.length === 1) return { kind: 'placed', start: at, end: at + exact.length }

@@ -142,10 +142,15 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
       // `createWorkspace`, and this registry is reached only through it. A
       // second parse would be a guard no test can reach — one was written,
       // and its mutation check stayed green.
-      const updated = await renameWorkspaceRow(await scope.db(), input.workspaceId, {
-        ...(input.segment === undefined ? {} : { segment: input.segment }),
-        ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
-      })
+      const updated = await renameWorkspaceRow(
+        await scope.db(),
+        input.workspaceId,
+        {
+          ...(input.segment === undefined ? {} : { segment: input.segment }),
+          ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+        },
+        input.heldBy,
+      )
       // No row updated means no such workspace. Distinguished here rather
       // than by a preceding SELECT, which would be a second statement
       // another writer could land a delete between.

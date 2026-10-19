@@ -17,7 +17,8 @@ import { openMergeableMap } from './mergeable-containers.js'
 
 /** The nested map of messages inside one thread's container. */
 const MESSAGES_KEY = 'messages'
-const ANCHOR_FIELD = 'anchor'
+/** The key a thread's anchor sits under in its own map; the sync judge bounds it. */
+export const ANCHOR_FIELD = 'anchor'
 const STATUS_FIELD = 'status'
 const CREATED_AT_FIELD = 'createdAt'
 

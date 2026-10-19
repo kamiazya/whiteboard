@@ -262,7 +262,8 @@ describe('fragmentIsEmbeddable reads through a namespace prefix', () => {
 
 // The `url(` check reads raw text, and CSS lets `u\72l(` spell the same
 // function and `@import "…"` load a sheet with no `url(` at all. Neither
-// engine writes a backslash into a style attribute or an `@import` anywhere.
+// engine writes a backslash into CSS — a style attribute or a `<style>`
+// element — or an `@import` anywhere.
 describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
   it.each([
     '<svg><rect style="fill: u\\72l(https://evil.example/x)"/></svg>',
@@ -270,6 +271,9 @@ describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
     '<svg><rect style="@import \'https://evil.example/x.css\'"/></svg>',
     '<svg><style>@import "https://evil.example/x.css";</style></svg>',
     '<svg><style>@IMPORT "//evil.example/x.css";</style></svg>',
+    '<svg><style>g{background:u\\72l(https://evil.example/x)}</style></svg>',
+    '<svg><STYLE type="text/css">.a{fill:\\75rl(//evil.example)}</STYLE></svg>',
+    '<svg><svg:style>g{background:u\\72l(//evil.example)}</svg:style></svg>',
   ])('refuses %j', (svg) => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
