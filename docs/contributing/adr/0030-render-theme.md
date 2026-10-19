@@ -259,6 +259,17 @@ vertical edge disappears. The glow's reach is the style's declared bounds
 constant. A resting glow is soft; a stronger glow on selection is editor
 chrome and is not part of the theme.
 
+**Correction (2026-10-19): the region is per element, not scene-sized.** A
+rasteriser allocates and blurs a layer the size of the filter region for
+every element that references it, so a scene-sized region made a PNG export
+cost (glowing elements) × (scene area): a 200-node `visual.neon` board did
+not finish in 240s under resvg. Each glowing element now declares its OWN
+`userSpaceOnUse` region — its extent (an edge's wings and hops included,
+sketch reach for pencilled ink) padded by half its stroke and the glow's
+reach — which keeps the measured requirement above, since a padded
+user-space box has area on both axes even for a straight edge. The same
+board exports in about 2s, and the exported pixels are byte-identical.
+
 ### 9. Fonts: a theme names a family and nothing more
 
 `fontFamily` is a family name. Whether a face for it exists on a surface is

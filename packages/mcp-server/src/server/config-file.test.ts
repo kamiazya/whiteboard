@@ -1,6 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyConfigFileToEnv,
@@ -484,4 +486,131 @@ describe('loadConfigFile refuses a file whose root is not an object', () => {
       /expected an object at the root/,
     )
   })
+})
+
+// A file in the working directory is read and parsed before any key of ours
+// is looked at, and a parse error quotes what it read. A link there lets a
+// repo's author choose which of the user's files is opened; a FIFO or a
+// device would block the synchronous read and hang startup. The home config,
+// the user's own, keeps following links.
+describe('loadConfigFile refuses a working-directory config that is not a regular file', () => {
+  const SENTINEL = 'sentinel-private-content-7f3a'
+
+  function privateTarget(): string {
+    const target = join(emptyHome, 'private.txt')
+    writeFileSync(target, `{ "${SENTINEL}": [unterminated`)
+    return target
+  }
+
+  function thrownBy(fn: () => unknown): string {
+    try {
+      fn()
+    } catch (err) {
+      return String(err)
+    }
+    return '(nothing thrown)'
+  }
+
+  it.each([
+    '.whiteboardrc',
+    '.whiteboardrc.json',
+    '.whiteboardrc.yaml',
+    'whiteboard.config.json',
+    'package.json',
+  ])('refuses a symlinked %s without reading what it points at', (name) => {
+    symlinkSync(privateTarget(), join(dir, name))
+    const message = thrownBy(() => loadConfigFile(dir, { homeDir: emptyHome }))
+    expect(message).not.toContain(SENTINEL)
+    expect(message).toContain(join(dir, name))
+    expect(message).toMatch(/not a regular file/)
+    expect(message).toContain('honoured only in ~/.whiteboard/config.yaml')
+  })
+
+  it('refuses a symlinked .whiteboard directory', () => {
+    const elsewhere = mkdtempSync(join(tmpdir(), 'whiteboard-config-elsewhere-'))
+    try {
+      writeFileSync(join(elsewhere, 'config.yaml'), `${SENTINEL}: [unterminated\n`)
+      symlinkSync(elsewhere, join(dir, '.whiteboard'))
+      const message = thrownBy(() => loadConfigFile(dir, { homeDir: emptyHome }))
+      expect(message).not.toContain(SENTINEL)
+      expect(message).toContain(join(dir, '.whiteboard'))
+      expect(message).toMatch(/not a directory/)
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a symlinked .whiteboard/config.yaml', () => {
+    mkdirSync(join(dir, '.whiteboard'))
+    symlinkSync(privateTarget(), join(dir, '.whiteboard', 'config.yaml'))
+    const message = thrownBy(() => loadConfigFile(dir, { homeDir: emptyHome }))
+    expect(message).not.toContain(SENTINEL)
+    expect(message).toMatch(/not a regular file/)
+  })
+
+  it('refuses an oversize working-directory config without parsing it', () => {
+    writeFileSync(
+      join(dir, '.whiteboardrc.json'),
+      `{ "${SENTINEL}": "${'x'.repeat(2 * 1024 * 1024)}" [`,
+    )
+    const message = thrownBy(() => loadConfigFile(dir, { homeDir: emptyHome }))
+    expect(message).not.toContain(SENTINEL)
+    expect(message).toMatch(/larger than/)
+  })
+
+  it('still follows a symlinked home config', () => {
+    const elsewhere = mkdtempSync(join(tmpdir(), 'whiteboard-config-dotfiles-'))
+    try {
+      writeFileSync(join(elsewhere, 'config.yaml'), 'dataDir: /data\n')
+      symlinkSync(elsewhere, join(emptyHome, '.whiteboard'))
+      expect(loadConfigFile(dir, { homeDir: emptyHome })?.config).toEqual({ dataDir: '/data' })
+      expect(loadConfigFile(emptyHome, { homeDir: emptyHome })?.config).toEqual({
+        dataDir: '/data',
+      })
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * Whether this platform can make a FIFO. PROBED: a missing `mkfifo` binary or
+ * a filesystem that refuses one is a premise the test cannot establish, which
+ * is a skip, not a failure — and Windows has neither.
+ */
+function canMakeFifo(): boolean {
+  if (process.platform === 'win32') return false
+  const probeDir = mkdtempSync(join(tmpdir(), 'wb-fifo-probe-'))
+  try {
+    return spawnSync('mkfifo', [join(probeDir, 'p')]).status === 0
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true })
+  }
+}
+const CAN_MAKE_FIFO = canMakeFifo()
+const MCP_SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+
+// The read is synchronous, so a refusal that fails here would hang the worker
+// rather than fail the test: it runs in a child with a deadline.
+describe.skipIf(!CAN_MAKE_FIFO)('loadConfigFile and a FIFO in the working directory', () => {
+  it('refuses a FIFO planted as .whiteboardrc.json instead of waiting on it', () => {
+    expect(spawnSync('mkfifo', [join(dir, '.whiteboardrc.json')]).status).toBe(0)
+    const module = pathToFileURL(join(MCP_SERVER_DIR, 'src/server/config-file.ts')).href
+    const child = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx/esm',
+        '--input-type=module',
+        '--eval',
+        `const { loadConfigFile } = await import(${JSON.stringify(module)})
+try { loadConfigFile(${JSON.stringify(dir)}, { homeDir: ${JSON.stringify(emptyHome)} }); process.stdout.write('loaded') }
+catch (err) { process.stdout.write(String(err)) }`,
+      ],
+      { cwd: MCP_SERVER_DIR, encoding: 'utf8', timeout: 20_000 },
+    )
+    expect(child.signal, 'the read blocked on the FIFO').toBeNull()
+    expect(child.status, child.stderr).toBe(0)
+    expect(child.stdout).toMatch(/not a regular file/)
+  }, 30_000)
 })

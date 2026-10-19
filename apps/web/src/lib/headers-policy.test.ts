@@ -1,5 +1,9 @@
 // @vitest-environment node
-import { FONT_SOURCE_ORIGIN } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import {
+  FONT_CATALOGUE,
+  FONT_SOURCE_ORIGIN,
+  fontDownloadUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { describe, expect, it } from 'vitest'
 import appsWebPkgRaw from '../../package.json?raw'
 import headersContent from '../../public/_headers?raw'
@@ -73,17 +77,33 @@ describe('Content-Security-Policy directives', () => {
     }
   })
 
-  it('connect-src admits the font catalogue source, and no other third-party origin', () => {
+  function connectSources(): string[] {
+    const csp = extractCsp(headersContent)
+    return (/connect-src\s+([^;]*)/.exec(csp)?.[1] ?? '').trim().split(/\s+/)
+  }
+
+  it('connect-src admits the font catalogue source, and no other third-party source', () => {
     // The web app fetches a theme's family from the catalogue's pinned source
     // when no daemon holds it (ADR-0012, 2026-09-09). The origin is read off
     // the catalogue constant rather than spelled here, so the policy and the
-    // fetch cannot drift apart — and it is the ONLY origin admitted besides
-    // this one (see the next test).
-    const csp = extractCsp(headersContent)
-    const connectSrcMatch = /connect-src\s+([^;]*)/.exec(csp)
-    const tokens = connectSrcMatch?.[1]?.trim().split(/\s+/) ?? []
-    expect(tokens).toContain(FONT_SOURCE_ORIGIN)
-    expect(tokens.filter((t) => t.startsWith('https://'))).toEqual([FONT_SOURCE_ORIGIN])
+    // fetch cannot drift apart — and it is the ONLY third-party source.
+    const thirdParty = connectSources().filter((t) => t.startsWith('https://'))
+    expect(thirdParty).toHaveLength(1)
+    expect(new URL(thirdParty[0] ?? '').origin).toBe(FONT_SOURCE_ORIGIN)
+  })
+
+  it('connect-src scopes the font source to the catalogue path, not the whole origin', () => {
+    // The origin serves every public repository on GitHub, so admitting it
+    // whole lets injected script read or beacon through any of them. A source
+    // ending in `/` matches by path prefix; after a redirect CSP matches the
+    // origin alone, so a path scope never breaks a redirected download.
+    const source = connectSources().find((t) => t.startsWith('https://')) ?? ''
+    expect(source.endsWith('/')).toBe(true)
+    expect(new URL(source).pathname).not.toBe('/')
+    expect(FONT_CATALOGUE.length).toBeGreaterThan(0)
+    for (const entry of FONT_CATALOGUE) {
+      expect(fontDownloadUrl(entry).startsWith(source), entry.id).toBe(true)
+    }
   })
 
   it('connect-src admits no loopback origin: a hosted page reaches the daemon through the extension', () => {
@@ -92,9 +112,10 @@ describe('Content-Security-Policy directives', () => {
     // request), so the page never needs a loopback http/ws connect target. A
     // loopback source here would only let injected script probe whatever
     // listens on the visitor's machine.
-    const csp = extractCsp(headersContent)
-    const tokens = (/connect-src\s+([^;]*)/.exec(csp)?.[1] ?? '').trim().split(/\s+/)
-    expect(tokens).toEqual(["'self'", FONT_SOURCE_ORIGIN])
+    const tokens = connectSources()
+    expect(tokens).toHaveLength(2)
+    expect(tokens[0]).toBe("'self'")
+    expect(new URL(tokens[1] ?? '').origin).toBe(FONT_SOURCE_ORIGIN)
   })
 
   it('connect-src does not contain preview-origin wildcard patterns', () => {

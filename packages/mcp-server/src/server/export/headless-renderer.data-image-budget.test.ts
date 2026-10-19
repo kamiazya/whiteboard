@@ -4,6 +4,7 @@
 // resvg an image it has not sized. These tests stop at the constructor seam:
 // a refused image must never reach a real decoder in this process.
 
+import { gzipSync } from 'node:zlib'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -305,6 +306,67 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
     ['an image of its own', '<image href="data:image/png;base64,AA"/>'],
   ])('drops one carrying %s', (_name, body) => {
     const out = boundedDataImages(imageSvg(svgImage(body)))
+    expect(out).toContain('<image x="0"/>')
+    expect(out).not.toContain('href=')
+  })
+
+  // A prefix is any XML name, not only an ASCII one: the element half of the
+  // pattern has to see a filter under one without the attribute half's help.
+  it.each([
+    [
+      'a filter under a non-ASCII prefix',
+      '<é:filter xmlns:é="http://www.w3.org/2000/svg" id="f"/>',
+    ],
+    [
+      'a filter primitive under a non-ASCII prefix',
+      '<é:feMorphology xmlns:é="http://www.w3.org/2000/svg" radius="999"/>',
+    ],
+    [
+      'an image under a non-ASCII prefix',
+      '<名:image xmlns:名="http://www.w3.org/2000/svg" href="x"/>',
+    ],
+  ])('drops one carrying %s', (_name, body) => {
+    const href = `data:image/svg+xml;base64,${Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${body}</svg>`,
+    ).toString('base64')}`
+    const out = boundedDataImages(imageSvg(href))
+    expect(out).toContain('<image x="0"/>')
+    expect(out).not.toContain('href=')
+  })
+
+  // resvg reads a gzip-compressed SVG and a UTF-16 one, while the filter scan
+  // reads UTF-8 text: neither may be drawn, filter or not, since nothing here
+  // has seen what it asks for.
+  const FILTERED =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"><feMorphology radius="999"/></filter><rect width="10" height="10" filter="url(#f)"/></svg>'
+
+  // Compressed bytes are arbitrary, so one may happen to hold a `<` or `\`
+  // the scan refuses on sight, and the case would pass without reaching the
+  // sizer at all. Padding the comment until no such byte appears makes the
+  // sizer the only thing that can drop it.
+  const svgzTheScanCannotRead = (): number[] => {
+    for (let pad = 0; pad < 200; pad++) {
+      const bytes = gzipSync(`<!--${'x'.repeat(pad)}-->${FILTERED}`)
+      if (
+        !bytes.includes(0x3c) &&
+        !bytes.includes(0x5c) &&
+        !/filter/i.test(bytes.toString('latin1'))
+      ) {
+        return [...bytes]
+      }
+    }
+    throw new Error('no padding gave compressed bytes free of < and \\')
+  }
+
+  it.each([
+    ['gzip-compressed (svgz)', svgzTheScanCannotRead],
+    ['UTF-16LE with a byte-order mark', () => [...Buffer.from(`\uFEFF${FILTERED}`, 'utf16le')]],
+    [
+      'UTF-16BE with a byte-order mark',
+      () => [...Buffer.from(`\uFEFF${FILTERED}`, 'utf16le').swap16()],
+    ],
+  ])('drops a filtered SVG encoded %s', (_name, encoded) => {
+    const out = boundedDataImages(imageSvg(dataUrl('image/svg+xml', encoded())))
     expect(out).toContain('<image x="0"/>')
     expect(out).not.toContain('href=')
   })

@@ -16,7 +16,7 @@ import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
 import { formatCoord } from './format.js'
 import { appearanceAttrs, idToken, PRESENTATION, pointsAttr } from './paint.js'
-import { glowOf, type ResolveTables, renderSketchEdge } from './shapes.js'
+import { edgeGlowExtent, glowOf, renderSketchEdge } from './shapes.js'
 import { el, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 type EdgePoint = { readonly x: number; readonly y: number }
@@ -119,8 +119,8 @@ function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
   }
 }
 
-export function renderEdge(node: ResolvedEdgeNode, tables?: ResolveTables): SvgChild {
-  if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink, tables)
+export function renderEdge(node: ResolvedEdgeNode): SvgChild {
+  if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink)
   const appearance = appearanceAttrs(node.appearance)
   // `fill="none"` is not decoration. SVG's initial fill is black and a
   // <polyline> fills the region its points enclose, so a bent edge would
@@ -176,7 +176,7 @@ export function renderEdge(node: ResolvedEdgeNode, tables?: ResolveTables): SvgC
             ...markers,
             role: PRESENTATION,
           })
-  const glow = glowOf(node.appearance, tables)
+  const glow = glowOf(node.appearance, edgeGlowExtent(node))
   const defs = [
     ...(startDef === undefined ? [] : [startDef]),
     ...(endDef === undefined ? [] : [endDef]),

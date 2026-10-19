@@ -370,6 +370,18 @@ describe('promoteWorkspace', () => {
       at: 'notes/roadmap',
       write: (doc: Board) => doc.getText('body').insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
     },
+    runs: {
+      at: 'notes/roadmap',
+      // Two runs each within the limit, scattered so they never join, then
+      // cut back so the body itself is short: only their cost refuses them.
+      write: (doc: Board) => {
+        const piece = 'x'.repeat((MARKDOWN_MAX_CHARS * 3) / 4)
+        const body = doc.getText('body')
+        body.insert(0, piece)
+        body.insert(0, piece)
+        body.delete(0, 2 * piece.length)
+      },
+    },
     body: {
       at: 'notes/roadmap',
       // Pieces that never join into one run (each lands before the last),

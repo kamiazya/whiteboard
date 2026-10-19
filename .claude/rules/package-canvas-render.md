@@ -884,14 +884,14 @@ the table alone.
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the
     element's OWN paint and no flood colour is invented. The filter's
-    region is declared `userSpaceOnUse` over the scene bounds, one
-    definition per (radius, region) with the id derived from both — a
-    region relative to the element's box drops an AXIS-ALIGNED STRAIGHT
-    EDGE entirely, because its box has zero area; measured on resvg 2.6.2
-    and the specification's behaviour, so a browser does the same.
-    `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
-    for a glowing node and what sizes the region, one constant with two
-    readers. The theme mapping puts the halo on node chrome and edges ONLY
+    region is `userSpaceOnUse` over the element's own extent plus its
+    reach, the id derived from (radius, region) — an `objectBoundingBox`
+    region drops an AXIS-ALIGNED STRAIGHT EDGE, whose box has zero area
+    (resvg 2.6.2 and the spec). Never the scene bounds: resvg blurs a layer
+    the region's size per element, so 200 neon boxes took over 240s
+    (`glow-region-cost.test.ts`). `glowReachPx` (three deviations, rounded
+    up) is what `sceneBounds` adds for a glowing node and what pads the
+    region. The theme mapping puts the halo on node chrome and edges ONLY
     (`theme-asset.ts`): a label blurred at three deviations thickened into a
     smudge over the halo pill it already sits on, and a group frame was the
     largest and least informative bloom on the board.

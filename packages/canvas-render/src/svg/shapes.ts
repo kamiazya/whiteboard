@@ -15,8 +15,14 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { edgeArrowPolygons } from '../edge-arrows.js'
 import { isFiniteBox } from '../finite-box.js'
-import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
-import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
+import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
+import { GLOW_STD_DEVIATION_RATIO, glowReachPx } from '../layout/ink/glow.js'
+import {
+  SKETCH_INK_REACH_PX,
+  SKETCH_PASSES,
+  sketchEdge,
+  sketchShape,
+} from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import { formatCoord } from './format.js'
 import type { IconTable } from './icon.js'
@@ -42,30 +48,95 @@ import { el, type SvgChild, type SvgDef, type SvgVNode, withDefs } from './vnode
 export interface ResolveTables {
   readonly icons?: IconTable
   readonly shapes?: ShapeTable
-  /**
-   * The user-space region every glow filter in this document declares —
-   * the scene's bounds, which already include each halo's reach. Lazy,
-   * because most scenes glow nowhere and the walk should cost them nothing.
-   */
-  readonly glowRegion?: () => BoundingBox
+}
+
+/**
+ * The box a glowing element's own ink occupies, in its own user space —
+ * min/max normalised, and widened by `reachPx` when the ink is pencilled
+ * and may leave its geometry. Null when nothing finite is left to glow.
+ */
+function glowExtent(
+  points: ReadonlyArray<{ readonly x: number; readonly y: number }>,
+  reachPx: number,
+): BoundingBox | null {
+  const finite = points.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+  if (finite.length === 0) return null
+  const xs = finite.map((p) => p.x)
+  const ys = finite.map((p) => p.y)
+  const x0 = Math.min(...xs) - reachPx
+  const y0 = Math.min(...ys) - reachPx
+  return {
+    x: x0,
+    y: y0,
+    w: Math.max(...xs) + reachPx - x0,
+    h: Math.max(...ys) + reachPx - y0,
+  }
+}
+
+const inkReachPx = (ink: SceneInk | undefined): number =>
+  ink?.style === 'sketch' ? SKETCH_INK_REACH_PX : 0
+
+/** A boxed element's glow extent: its bbox's corners, so a negative w/h normalises too. */
+export function boxGlowExtent(box: BoundingBox, ink?: SceneInk): BoundingBox | null {
+  return glowExtent(
+    [
+      { x: box.x, y: box.y },
+      { x: box.x + box.w, y: box.y + box.h },
+    ],
+    inkReachPx(ink),
+  )
+}
+
+/**
+ * An edge's glow extent: its polyline, the arrowhead wings that reach past
+ * it, and every hop's half-circle, which bulges off the line by the jump
+ * radius (on a straight edge, the only ink off its zero-height axis).
+ */
+export function edgeGlowExtent(node: ResolvedEdgeNode): BoundingBox | null {
+  const hops = (node.jumps ?? []).flatMap((jump) => [
+    { x: jump.x - EDGE_JUMP_RADIUS_PX, y: jump.y - EDGE_JUMP_RADIUS_PX },
+    { x: jump.x + EDGE_JUMP_RADIUS_PX, y: jump.y + EDGE_JUMP_RADIUS_PX },
+  ])
+  const wings = edgeArrowPolygons(node).flatMap((arrow) => arrow.points)
+  return glowExtent([...node.path, ...wings, ...hops], inkReachPx(node.ink))
 }
 
 /**
  * The filter a glowing element references, and its definition: a Gaussian
  * blur of the element merged twice under the element itself (twice, so the
  * halo has body without a flood colour — it is the element's own paint).
+ *
+ * The region is the element's OWN extent, padded by half its stroke and the
+ * halo's reach, in user space. Two constraints shape it:
+ * - A rasteriser allocates and blurs a layer the size of the region for every
+ *   element that references it, so a region that grows with the scene makes
+ *   export cost (glowing elements) × (scene area). Per-element, it is bounded
+ *   by what each element draws.
+ * - It is `userSpaceOnUse`, never `objectBoundingBox`: an axis-aligned
+ *   straight edge has a zero-width or zero-height box, and a box-relative
+ *   region over it has zero area, so the specification (and resvg) drop the
+ *   element entirely. A padded user-space box has area on both axes.
+ *
  * One definition per (radius, region); the id derives from both, so a
  * repeated id across inline-injected SVGs is byte-identical by construction.
  */
 export function glowOf(
   appearance: Appearance | undefined,
-  tables: ResolveTables | undefined,
+  extent: BoundingBox | null,
 ): { readonly filter?: string; readonly defs: ReadonlyArray<SvgDef> } {
   const radius = appearance?.glow?.radiusPx
-  if (!isNonNegativeLength(radius) || radius === 0 || tables?.glowRegion === undefined) {
+  if (!isNonNegativeLength(radius) || radius === 0 || extent === null || !isFiniteBox(extent)) {
     return { defs: [] }
   }
-  const region = tables.glowRegion()
+  const strokeWidth = appearance?.strokeWidth
+  const halfStroke = isNonNegativeLength(strokeWidth) ? strokeWidth / 2 : 0
+  const pad = Math.ceil(glowReachPx(radius) + halfStroke)
+  const region = {
+    x: extent.x - pad,
+    y: extent.y - pad,
+    w: extent.w + 2 * pad,
+    h: extent.h + 2 * pad,
+  }
   const regionKey = [region.x, region.y, region.w, region.h].map(formatCoord).join(',')
   const id = `wb-glow-${formatCoord(radius)}-${idToken(regionKey)}`
   const def: SvgDef = {
@@ -164,7 +235,7 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
             }),
           ),
         )
-  const underlay: SvgChild = [tint, hatch]
+  const glow = glowOf(node.appearance, boxGlowExtent(node.bbox, ink))
   const outlineStrokes = el(
     'g',
     { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
@@ -172,7 +243,7 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
       el('path', { d, ...strokeAttrs, 'stroke-opacity': passOpacity(pass, strokeAttrs) }),
     ),
   )
-  return [underlay, withGlow(outlineStrokes, glowOf(node.appearance, tables))]
+  return [[tint, hatch], withGlow(outlineStrokes, glow)]
 }
 
 const HATCH_STROKE_WIDTH = 0.9
@@ -205,8 +276,8 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
     // its rect. Drawing NOTHING was correct while ids came from a closed
     // union and null meant a degenerate box; once a document can name a
     // shape this build does not carry, it made the node disappear.
-    if (outline === null) return renderChromeRect(node, tables)
-    const glow = glowOf(node.appearance, tables)
+    if (outline === null) return renderChromeRect(node)
+    const glow = glowOf(node.appearance, boxGlowExtent(node.bbox))
     switch (outline.kind) {
       case 'ellipse':
         return withGlow(
@@ -261,7 +332,7 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
       }
     }
   }
-  return renderChromeRect(node, tables)
+  return renderChromeRect(node)
 }
 
 /**
@@ -270,11 +341,7 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
  * each arrowhead as two wing strokes — no marker, since a crisp triangle on
  * a pencil line is the one thing that reads as two styles at once.
  */
-export function renderSketchEdge(
-  node: ResolvedEdgeNode,
-  ink: SceneInk,
-  tables?: ResolveTables,
-): SvgChild {
+export function renderSketchEdge(node: ResolvedEdgeNode, ink: SceneInk): SvgChild {
   const strokes = sketchEdge(node.path, ink.seed, {
     arrows: edgeArrowPolygons(node),
     rounded: node.rounded === true,
@@ -297,14 +364,14 @@ export function renderSketchEdge(
         }),
       ),
     ),
-    glowOf(node.appearance, tables),
+    glowOf(node.appearance, edgeGlowExtent(node)),
   )
 }
 
 /** The historic rect, byte-for-byte — also what a node falls back to when its
  *  shape id resolves to nothing. */
-function renderChromeRect(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
-  const glow = glowOf(node.appearance, tables)
+function renderChromeRect(node: ShapeSceneNode): SvgChild {
+  const glow = glowOf(node.appearance, boxGlowExtent(node.bbox))
   const rect = el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,

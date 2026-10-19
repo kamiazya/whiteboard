@@ -136,8 +136,16 @@ config loader's key for pulling in another file): it would make the command
 read and parse any file you can read, before any key is checked. Such a file
 stops the command the same way, before the file it names is opened.
 `~/.whiteboard/config.yaml` may still use `$import`.
+Likewise, every file in the list above that exists in the current directory
+must be a regular file of at most 1 MiB, and `.whiteboard` there must be a
+real directory: a symbolic link, a FIFO or a device in any of those places
+stops the command before anything is read. A link would let the
+repository choose which of your files gets parsed — and a parse error quotes
+what it read — and a FIFO would hang startup. Every listed place is checked,
+not only the one that would win. `~/.whiteboard/config.yaml` may still be a
+link (or live in a linked `~/.whiteboard`), as a dotfile manager leaves it.
 When the current directory IS your home directory, that file is found there
-and keeps its trust. A current-directory file that sets only `logLevel`
+and keeps its trust, and the files there are not held to this check. A current-directory file that sets only `logLevel`
 therefore changes the log level and nothing else: your home `dataDir` and
 `token` still apply. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately

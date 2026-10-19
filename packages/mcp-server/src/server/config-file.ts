@@ -22,13 +22,13 @@
 // project's daemon. The cwd itself is no more trusted than its ancestors (an
 // MCP client starts the stdio server in whatever repo is open), so a config
 // found there may tune logLevel/openBrowser but is refused if it sets
-// `dataDir` or `token`, or names a `$import`; only the home-directory config
-// may do those.
+// `dataDir` or `token`, names a `$import`, or is a link, a special file or
+// oversize; only the home-directory config may do those.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
 
-import { statSync } from 'node:fs'
+import { lstatSync, type Stats, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 import { cosmiconfigSync, defaultLoadersSync, type LoadersSync } from 'cosmiconfig'
@@ -215,6 +215,63 @@ function isHomeConfig(filepath: string, homeDir: string): boolean {
   }
 }
 
+// cosmiconfig reads a working-directory file whole and a parse error quotes
+// it, so what it would open is judged by lstat BEFORE `search()` runs: a link
+// there lets a repo's author choose which of the user's files is read, and a
+// FIFO or device blocks the synchronous read and hangs startup. Every place is
+// checked, not only the first that exists, because an empty file is skipped
+// and the search moves on to the next. lstat-then-read leaves a window; a
+// repo's files are static, so it is not the author's to exploit.
+const WORKING_DIRECTORY_CONFIG_DIR = '.whiteboard'
+const MAX_WORKING_DIRECTORY_CONFIG_BYTES = 1024 * 1024
+
+function lstatIfPresent(path: string): Stats | null {
+  try {
+    return lstatSync(path)
+  } catch {
+    // Absent or unreachable: cosmiconfig treats both as "not here" too.
+    return null
+  }
+}
+
+function refuseNonRegularPlace(path: string, problem: string): never {
+  throw new Error(
+    `Refusing whiteboard config at ${path}: ${problem}; a linked or special file is honoured only in ~/${HOME_CONFIG_FILE_RELATIVE_PATH}, not in a config found in the working directory.`,
+  )
+}
+
+function refuseUnsafeWorkingDirectoryPlaces(cwd: string): void {
+  const configDir = join(cwd, WORKING_DIRECTORY_CONFIG_DIR)
+  const dirStat = lstatIfPresent(configDir)
+  if (dirStat !== null && !dirStat.isDirectory()) {
+    refuseNonRegularPlace(configDir, 'it is not a directory')
+  }
+  for (const place of CONFIG_FILE_SEARCH_PLACES) {
+    const path = join(cwd, place)
+    const stat = lstatIfPresent(path)
+    if (stat === null) continue
+    if (!stat.isFile()) refuseNonRegularPlace(path, 'it is not a regular file')
+    if (stat.size > MAX_WORKING_DIRECTORY_CONFIG_BYTES) {
+      throw new Error(
+        `Refusing whiteboard config at ${path}: it is larger than ${MAX_WORKING_DIRECTORY_CONFIG_BYTES} bytes.`,
+      )
+    }
+  }
+}
+
+// The home directory's own files are the user's, links included (a dotfile
+// manager links them), so a working directory that IS the home directory is
+// not held to the lstat check. Compared by identity, so a linked home matches.
+function isHomeDirectory(cwd: string, homeDir: string): boolean {
+  try {
+    const a = statSync(cwd)
+    const b = statSync(homeDir)
+    return a.dev === b.dev && a.ino === b.ino
+  } catch {
+    return false
+  }
+}
+
 // Loads the home-directory config (`~/.whiteboard/config.yaml`) and a config
 // file from `cwd` itself (no ancestor walk-up), the cwd file's keys layered
 // over the home file's. A cwd file therefore tunes what it may set without
@@ -239,6 +296,7 @@ export function loadConfigFile(
     loaders: workingDirectoryLoaders(homeDir),
   })
 
+  if (!isHomeDirectory(cwd, homeDir)) refuseUnsafeWorkingDirectoryPlaces(cwd)
   const found = explorer.search(cwd)
   const cwdFile = found && !found.isEmpty ? found : null
   if (cwdFile !== null && isHomeConfig(cwdFile.filepath, homeDir)) {

@@ -29,7 +29,7 @@ import {
 } from './paint.js'
 import { renderEdge } from './render-edge.js'
 import { serializeSvg } from './serialize.js'
-import { glowOf, type ResolveTables, renderShape } from './shapes.js'
+import { boxGlowExtent, glowOf, type ResolveTables, renderShape } from './shapes.js'
 import { applyOptimizationPasses } from './transform.js'
 import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
@@ -181,7 +181,7 @@ const PAINT_BY_KIND = {
       run.bbox,
       run.appearance,
       tables?.icons,
-      glowOf(run.appearance, tables),
+      glowOf(run.appearance, boxGlowExtent(run.bbox)),
       run.appearance?.fill ?? 'currentColor',
     ),
 } satisfies PaintFns
@@ -190,7 +190,7 @@ function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
   const painted = run.paints === undefined ? undefined : paintRun(run, run.paints, tables)
   if (painted !== undefined) return painted
   const halo = run.appearance?.halo
-  const glow = glowOf(run.appearance, tables)
+  const glow = glowOf(run.appearance, boxGlowExtent(run.bbox))
   // A surface-colored pill under the whole text box (a glyph-outline halo
   // leaves the crossed line peeking through word spaces), so a label
   // sitting ON an edge stays readable end to end.
@@ -447,7 +447,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         node.children.map((child) => renderNode(child, tables)),
       )
     case 'edge':
-      return renderEdge(node, tables)
+      return renderEdge(node)
     case 'shape':
       return renderShape(node, tables)
     case 'icon':
@@ -457,7 +457,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
           node.bbox,
           node.appearance,
           tables?.icons,
-          glowOf(node.appearance, tables),
+          glowOf(node.appearance, boxGlowExtent(node.bbox)),
         ) ?? []
       )
     case 'glyph':
@@ -585,15 +585,7 @@ export function buildSvgDocumentParts(
   // they preserve `defs` declarations on rebuilt nodes, so the order is not
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
-  let region: BoundingBox | undefined
-  const tables: ResolveTables = {
-    icons: options?.icons,
-    shapes: options?.shapes,
-    glowRegion: () => {
-      region ??= sceneBounds(scene)
-      return region
-    },
-  }
+  const tables: ResolveTables = { icons: options?.icons, shapes: options?.shapes }
   const body = scene.nodes
     .map((node) => renderNode(node, tables))
     .map((node) => applyOptimizationPasses(node))

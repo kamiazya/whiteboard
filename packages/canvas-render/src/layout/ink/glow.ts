@@ -5,7 +5,8 @@
  * deviations — so the reach is 1.5 radii, rounded up to whole pixels. It is
  * declared here, beside the sketch reach, because `sceneBounds` adds it for
  * a glowing node (a derived viewBox must never clip a halo) and the backend
- * sizes the filter region from those same bounds: one constant, two readers.
+ * pads each glowing element's own filter region by it: one constant, two
+ * readers.
  */
 export const GLOW_STD_DEVIATION_RATIO = 0.5
 
