@@ -14,7 +14,11 @@ import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { layoutMdastBlocks } from './markdown-body.js'
-import { NESTED_ELEMENT_BUDGET, NESTED_LAYOUT_BUDGET } from './nodes/embed-budget.js'
+import {
+  createNestedLayoutBudget,
+  NESTED_ELEMENT_BUDGET,
+  NESTED_LAYOUT_BUDGET,
+} from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
@@ -188,7 +192,11 @@ describe('nested layout budget', () => {
       }),
       resolveEmbed: () => ({ root: { type: 'root', children: [] } }),
       contentCache: cache,
-      nestedLayoutBudget: { remaining, elementsRemaining: NESTED_ELEMENT_BUDGET, refused: 0 },
+      nestedLayoutBudget: {
+        ...createNestedLayoutBudget(),
+        remaining,
+        elementsRemaining: NESTED_ELEMENT_BUDGET,
+      },
     })
     const canvas: SpatialCanvas = {
       nodes: [textNode({ id: 't', x: 0, y: 0, width: 260, height: 200, text: 'body' })],
@@ -363,7 +371,7 @@ describe('nested element budget', () => {
         }),
         resolveEmbed: () => ({ canvas: board(2, 0) }),
         contentCache: cache,
-        nestedLayoutBudget: { remaining: NESTED_LAYOUT_BUDGET, elementsRemaining: 1, refused: 0 },
+        nestedLayoutBudget: { ...createNestedLayoutBudget(), elementsRemaining: 1 },
       },
     )
     expect(count(scene.nodes, 'embedPlaceholder', 'budget')).toBe(1)

@@ -11,6 +11,7 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines, CodeTokenRole } from '../../highlight/code-token.js'
+import type { TokenizerBudget } from '../../highlight/tokenizer-budget.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
@@ -134,8 +135,17 @@ export interface MdastLayoutOptions {
    * line count that disagrees with the source all fall back to plain code.
    * The source is the authority on how many lines a fence has, because that
    * is what the block's height is computed from.
+   *
+   * `budget` is the render's tokeniser account, shared by every fence the
+   * render lays out, embeds included: the default spends each fence's priced
+   * cost from it and renders plain once it is spent. A substitute tokeniser
+   * may ignore it.
    */
-  readonly highlightCode?: (lang: string, value: string) => CodeTokenLines | undefined
+  readonly highlightCode?: (
+    lang: string,
+    value: string,
+    budget: TokenizerBudget,
+  ) => CodeTokenLines | undefined
   /** The fill for each token role. Absent, a tokenised run paints as body text. */
   readonly syntax?: Partial<Readonly<Record<CodeTokenRole, string>>>
   /**
