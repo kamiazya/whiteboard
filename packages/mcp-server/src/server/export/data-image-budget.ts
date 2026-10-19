@@ -56,15 +56,21 @@ const decodeDataUrl = (href: string): { mime: string; bytes: Uint8Array } | unde
  * scale 8, and every further primitive adds as much again
  * (`scripts/measure/nested-svg-filter-cost.mjs`; masks, patterns and `<use>`
  * fan-out measured flat). So every way of ASKING for a filter refuses — a
- * `<filter>` or `fe*` element under any prefix, a `filter` attribute or CSS
- * property (a comment may sit before its `:`) — read after XML character
- * references are decoded, as does a CSS escape that could spell one, an
- * entity that could expand into one, and a nested `<image>`, which resvg
- * does not draw today, so refusing one costs nothing it would show. The bare
- * word in a label asks for nothing and is kept.
+ * `<filter>` or `fe*` element under any prefix (an XML name, which need not
+ * be ASCII, so the prefix class is what a name cannot contain), a `filter`
+ * attribute or CSS property (a comment may sit before its `:`) — read after
+ * XML character references are decoded, as does a CSS escape that could
+ * spell one, an entity that could expand into one, and a nested `<image>`,
+ * which resvg does not draw today, so refusing one costs nothing it would
+ * show. The bare word in a label asks for nothing and is kept.
+ *
+ * The scan reads the bytes as UTF-8. resvg also reads a gzip-compressed
+ * (svgz) and a UTF-16 SVG, which this scan cannot see into; those are dropped
+ * because the sizer reads its root as UTF-8 too and finds none. Teaching the
+ * sizer either encoding means teaching this scan the same one first.
  */
 const UNBOUNDED_SVG_WORK =
-  /<(?:[\w.-]+:)?(?:filter\b|fe[a-z]|image\b)|\bfilter\s*(?:[:=]|\/\*)|<!entity|\\/i
+  /<(?:[^\s<>/:="']+:)?(?:filter\b|fe[a-z]|image\b)|\bfilter\s*(?:[:=]|\/\*)|<!entity|\\/i
 
 const asksForUnboundedWork = (mime: string, bytes: Uint8Array): boolean =>
   mime === 'image/svg+xml' &&
