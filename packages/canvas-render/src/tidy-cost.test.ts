@@ -9,6 +9,12 @@ const overlapChecks = vi.hoisted(() => ({ count: 0 }))
 // call count is the same kind of exact, load-independent measure for the
 // nesting walk.
 const containmentChecks = vi.hoisted(() => ({ count: 0 }))
+// Each level of the nesting walk does work in proportion to the nodes it
+// holds — its units are built from them, and its margin and its grow read
+// them — so the nodes handed to `buildUnits`, summed over every level, are
+// the walk's own measure. A chain has a level per frame, each holding every
+// frame inside it.
+const levelVisits = vi.hoisted(() => ({ count: 0 }))
 // The deepest stack either question was asked at, read by `deepestStackFor`.
 const STACK_SAMPLE_EVERY = 997
 const stackDepth = vi.hoisted(() => ({
@@ -41,6 +47,10 @@ vi.mock('./tidy-units.js', async (importOriginal) => {
       overlapChecks.count++
       stackDepth.sample(STACK_SAMPLE_EVERY)
       return actual.overlapsWithMargin(...args)
+    },
+    buildUnits: (...args: Parameters<typeof actual.buildUnits>) => {
+      levelVisits.count += args[0].length
+      return actual.buildUnits(...args)
     },
   }
 })
@@ -108,6 +118,31 @@ describe('tidyNodes cost on nested frames', () => {
     expect(containmentChecks.count).toBeLessThanOrEqual(4 * n * n)
   }, 120_000)
 
+  // 2000 identical frames nest too: the document-order tie-break puts each
+  // inside every one before it, so they cost what a chain does.
+  it.each([
+    ['a chain of nested frames', nestedChain],
+    ['identical frames', identicalFrames],
+  ])(
+    'bounds the walk over %s as deep as a canvas holds',
+    (_, board) => {
+      const n = 2000
+      containmentChecks.count = 0
+      levelVisits.count = 0
+      tidyNodes(board(n))
+      // The subject is present: the walk went deep rather than stopping at
+      // the top level.
+      expect(levelVisits.count).toBeGreaterThan(100 * n)
+      // Two settling passes, each asking every frame about every other and
+      // opening a level per frame: 1.2e7 containment checks (1.4e7 for
+      // identical frames) and 4_002_000 level visits: 3.8s of wall time on
+      // the chain with these mocks off.
+      expect(containmentChecks.count).toBeLessThanOrEqual(4 * n * n)
+      expect(levelVisits.count).toBeLessThanOrEqual(n * (n + 1))
+    },
+    120_000,
+  )
+
   it('walks the nesting without spending call stack per level', () => {
     // A canvas chooses how deep its frames go, so the stack the walk needs
     // must not grow with the depth. Measured as a frame COUNT at the deepest
@@ -126,6 +161,18 @@ describe('tidyNodes cost on nested frames', () => {
     expect(recursiveGrowth).toBeGreaterThan(150)
   }, 120_000)
 })
+
+/** `n` frames on one box, which nest by document order alone. */
+function identicalFrames(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `f${String(i).padStart(4, '0')}`,
+    frame: true,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+  }))
+}
 
 /** Frames a deeper chain may add without the walk recursing per level. */
 const STACK_SLACK_FRAMES = 10
