@@ -296,6 +296,31 @@ describe('fragmentIsEmbeddable refuses CSS the url( check cannot read', () => {
     expect(fragmentIsEmbeddable(svg)).toBe(false)
   })
 
+  // SVG2 parses a presentation attribute as a CSS value, so one that takes a
+  // `url()` is CSS too, and the same escapes and references reach it.
+  it.each([
+    '<svg><rect fill="u\\72l(https://evil.example/x)"/></svg>',
+    '<svg><rect stroke="&#117;rl(//evil.example)"/></svg>',
+    '<svg><g filter="u&#92;72l(//evil.example)"/></svg>',
+    '<svg><g mask="&#x75;rl(//evil.example)"/></svg>',
+    '<svg><g clip-path="url&lpar;//evil.example)"/></svg>',
+    '<svg><path marker-start="u\\72l(//evil.example)"/></svg>',
+    '<svg><path marker-mid="&#117;rl(//evil.example)"/></svg>',
+    '<svg><path marker-end="&#117;rl(//evil.example)"/></svg>',
+    '<svg><path marker="&#117;rl(//evil.example)"/></svg>',
+    "<svg><g cursor='&#117;rl(//evil.example), auto'/></svg>",
+  ])('refuses the presentation attribute in %j', (svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it('accepts a presentation attribute naming a local url() or a plain colour', () => {
+    expect(
+      fragmentIsEmbeddable(
+        '<svg><path fill="#333" stroke="currentColor" marker-end="url(#arrow)" clip-path="url(#c)"/><text aria-label="a &amp; b">x</text></svg>',
+      ),
+    ).toBe(true)
+  })
+
   it("accepts XML's predefined references in CSS, and a reference in label text", () => {
     expect(
       fragmentIsEmbeddable(
