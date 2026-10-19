@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { tidyNodes as recursiveTidyNodes } from './test-utils/tidy-reference/tidy.js'
 import { tidyNodes } from './tidy.js'
 
 // Work, not wall time: every collision test tidy makes goes through
@@ -101,15 +100,16 @@ describe('tidyNodes cost on nested frames', () => {
     // HERE rather than assumed: how much stack one tidy uses depends on the
     // engine, on instrumentation (Stryker) and on what else shares the
     // worker, and a fixed headroom that held on one machine overflowed on CI.
-    // What holds everywhere is the comparison — twenty times the depth, the
-    // same headroom — while the recursive reference, two frames a level,
-    // needs about a frame per level more.
+    // What holds everywhere is the comparison: twenty times the depth, the
+    // same headroom.
     const shallow = headroomFor(() => tidyNodes(nestedChain(50)))
     const deep = headroomFor(() => tidyNodes(nestedChain(1000)))
     expect(deep).toBeLessThanOrEqual(2 * shallow)
-    const recursiveShallow = headroomFor(() => recursiveTidyNodes(nestedChain(50)))
-    const recursiveDeep = headroomFor(() => recursiveTidyNodes(nestedChain(300)))
-    expect(recursiveDeep).toBeGreaterThan(recursiveShallow + 250)
+    // The instrument can see a walk that spends a frame per level: a plain
+    // recursion 5000 deep needs far more headroom than one 50 deep. Measured
+    // against a recursion of known depth rather than the reference tidy,
+    // whose frame size changes with instrumentation.
+    expect(headroomFor(() => recurse(5000))).toBeGreaterThan(2 * headroomFor(() => recurse(50)))
   }, 120_000)
 })
 
@@ -118,6 +118,11 @@ describe('tidyNodes cost on nested frames', () => {
  * two: found by running it ever deeper in a probed stack rather than by
  * assuming a stack size, so it means the same thing under any engine.
  */
+/** A recursion exactly `depth` frames deep. */
+function recurse(depth: number): number {
+  return depth === 0 ? 0 : 1 + recurse(depth - 1)
+}
+
 function headroomFor(fn: () => unknown): number {
   for (let spare = 25; spare < 1 << 20; spare *= 2) {
     try {
