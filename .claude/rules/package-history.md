@@ -25,7 +25,7 @@ history.
 
 ## What belongs here
 
-Three modules, and `src/index.ts` is the whole published surface:
+Four modules, and `src/index.ts` is the whole published surface:
 
 - `checkpoints/scheduler.ts`: the trailing debounce with a ceiling, over an
   injected `save`. `CHECKPOINT_QUIET_MS` (5min) is the cadence both keepers
@@ -33,7 +33,12 @@ Three modules, and `src/index.ts` is the whole published surface:
   ceiling is the scheduler's own default and is not exported.
 - `checkpoints/retention.ts`: which automatic checkpoints may go —
   `autoVersionsOverCap` over `MAX_AUTO_PER_DOCUMENT` sparing lineage, and
-  `sandwichedAutoVersionIds` for the run between two manual saves.
+  `sandwichedAutoVersionIds` for the run between two manual saves;
+  `carriedAutoVersionsOverCap` makes room for adopted rows from those rows
+  alone, so a promote never evicts the keeper's own autos.
+- `compaction-cut.ts`: where compaction may cut — the point every version
+  descends from (per-peer minimum of their version vectors), never by date.
+  `null` means fold nothing.
 - `frontiers-base64.ts`: frontiers as text, through `model`'s base64 codec so
   no keeper reaches for `Buffer`.
 

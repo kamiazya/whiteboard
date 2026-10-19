@@ -96,8 +96,8 @@ The default is the bundled plugin's set, NOT an opt-in, for the lowlight
 reason recorded in `architecture-map.md`: a resolution step four call sites
 have to remember is one a call site forgets, and the surface that forgets does
 not fall back to the same picture — it silently draws less. Highlighting is
-budgeted (`highlight/lowlight.ts`): highlight.js is quadratic in a long word
-run, so a fence past 4096² summed squared run lengths renders plain.
+budgeted (`highlight/`): highlight.js is quadratic in a long word run, so a
+fence past 4096² summed squared runs, or a layout past 4× that, renders plain.
 
 Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
 never stored whole, so nothing migrates and a plugin cannot name another

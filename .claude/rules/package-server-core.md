@@ -244,6 +244,9 @@ does (`seedNameFromTitle`), and every document whose content the update wrote
 takes a fresh `updatedAt` (`stampEditedDocuments`) — except under
 `origin: 'transfer'` (promotion), which keeps the arriving clocks. The edited
 documents are answered as `edited`, which the daemon's route checkpoints.
+A document the update REMOVES is evacuated first (`evacuateRemoved`, over
+loro-adapter's `documentsRemovedSince`): its blob and a trash entry are written
+before the save, so a sync delete stays restorable like a route delete.
 `applyDocumentUpdate`
 does not seed itself; the per-document save goes through loro-adapter's
 `writeDocumentContentAndName`, which does.
