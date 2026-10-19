@@ -47,6 +47,24 @@ describe('glow under resvg', () => {
     expect(lr).toBeGreaterThan(200)
   })
 
+  it('paints a halo beside a vertical edge, whose box has zero width', () => {
+    const vertical: Scene = {
+      nodes: [
+        {
+          ...edge,
+          path: [
+            { x: 120, y: 10 },
+            { x: 120, y: 110 },
+          ],
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(vertical, { width: 240, height: 120, background: BACKGROUND })
+    const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
+    const [r] = pixelAt(image.pixels, image.width, 120 - 5, 60)
+    expect(r - 0x03).toBeGreaterThan(20)
+  })
+
   it('the same edge without glow leaves the ground untouched five pixels off the line', () => {
     const { glow: _glow, ...plain } = edge.appearance ?? {}
     const crisp: Scene = { nodes: [{ ...edge, appearance: plain }] }

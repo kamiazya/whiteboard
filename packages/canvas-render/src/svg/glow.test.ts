@@ -1,9 +1,11 @@
 // Glow is an SVG filter (ADR-0030 decision 8): a Gaussian blur of the
 // element merged under itself, so the halo is the element's own colour. The
-// filter REGION is declared in user space over the whole scene — a region
-// relative to the element's bounding box drops an axis-aligned straight
-// edge entirely, because its box has zero area (measured on resvg 2.6.2;
-// it is the specification's behaviour, so a browser does the same).
+// filter REGION is declared in user space over the element's own extent,
+// padded by half its stroke and the halo's reach — a region relative to the
+// element's bounding box drops an axis-aligned straight edge entirely,
+// because its box has zero area (measured on resvg 2.6.2; it is the
+// specification's behaviour, so a browser does the same), and a region over
+// the whole scene makes every glowing element rasterise the whole board.
 
 import type {
   ResolvedEdgeNode,
@@ -12,6 +14,7 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { glowReachPx } from '../layout/ink/glow.js'
 import { sceneBounds } from '../scene-bounds.js'
 import { isWellFormedXmlFragment } from '../test-utils/xml-well-formed.js'
@@ -48,7 +51,7 @@ const label: TextRunNode = {
 }
 
 describe('glow in the SVG backend', () => {
-  it('a glowing rect references one filter declared in user space over the scene', () => {
+  it('a glowing rect references one filter declared in user space', () => {
     const svg = renderSceneToSvg({ nodes: [rect] })
     expect(isWellFormedXmlFragment(svg)).toBe(true)
     expect(svg).toMatch(/<filter id="wb-glow-[^"]*" filterUnits="userSpaceOnUse" x="/)
@@ -61,21 +64,33 @@ describe('glow in the SVG backend', () => {
     const svg = renderSceneToSvg({ nodes: [rect, horizontal, label] })
     expect(svg).toMatch(/<polyline [^>]*filter="url\(#wb-glow-/)
     expect(svg).toMatch(/<text [^>]*filter="url\(#wb-glow-/)
-    expect(svg.match(/<filter /g)?.length).toBe(2)
+    // One region per element: the rect and the edge share a radius, not a box.
+    expect(svg.match(/<filter /g)?.length).toBe(3)
   })
 
-  it('the filter region covers the scene bounds, which already include the glow reach', () => {
-    const svg = renderSceneToSvg({ nodes: [horizontal] })
-    const bounds = sceneBounds({ nodes: [horizontal] })
-    const region = svg.match(
-      /<filter [^>]*x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/,
-    )
-    expect(region).not.toBeNull()
-    const [, x, y, w, h] = region!.map(Number)
-    expect(x).toBeLessThanOrEqual(bounds.x)
-    expect(y).toBeLessThanOrEqual(bounds.y)
-    expect(x! + w!).toBeGreaterThanOrEqual(bounds.x + bounds.w)
-    expect(y! + h!).toBeGreaterThanOrEqual(bounds.y + bounds.h)
+  it("an axis-aligned edge's region spans its own line padded by the halo, not the scene", () => {
+    const svg = renderSceneToSvg({ nodes: [rect, horizontal] })
+    const regions = [
+      ...svg.matchAll(/<filter [^>]*x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/g),
+    ].map(([, x, y, w, h]) => ({ x: Number(x), y: Number(y), w: Number(w), h: Number(h) }))
+    const pad = Math.ceil(glowReachPx(6) + 1.8 / 2)
+    // The line runs 0..200 at y=120; only its arrowhead's wings widen it.
+    const line = regions.find((r) => r.w >= 200)
+    expect(line).toBeDefined()
+    expect(line!.x).toBe(0 - pad)
+    expect(line!.y).toBeLessThanOrEqual(120 - pad)
+    expect(line!.y + line!.h).toBeGreaterThanOrEqual(120 + pad)
+    expect(line!.h).toBeLessThan(4 * pad)
+    const box = regions.find((r) => r !== line)
+    expect(box).toEqual({ x: 20 - pad, y: 20 - pad, w: 100 + 2 * pad, h: 60 + 2 * pad })
+  })
+
+  it("a hop's half-circle widens a straight edge's region by the jump radius", () => {
+    const plain: ResolvedEdgeNode = { ...horizontal, toEnd: 'none' }
+    const hopped: ResolvedEdgeNode = { ...plain, jumps: [{ segment: 0, x: 100, y: 120 }] }
+    const height = (edge: ResolvedEdgeNode) =>
+      Number(renderSceneToSvg({ nodes: [edge] }).match(/<filter [^>]* height="([^"]+)"/)![1])
+    expect(height(hopped) - height(plain)).toBe(2 * EDGE_JUMP_RADIUS_PX)
   })
 
   it('renders byte-identically twice and unchanged without glow', () => {
