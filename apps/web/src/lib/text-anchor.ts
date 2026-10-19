@@ -11,6 +11,7 @@
 
 import type { AnnotationAnchor, LivePassage } from '@kamiazya/whiteboard-model'
 import { resolveTextAnchor } from '@kamiazya/whiteboard-model'
+import { type QuoteMemory, resolveRemembering } from './quote-occurrences.js'
 
 export type { LivePassage, TextAnchor } from '@kamiazya/whiteboard-model'
 export { resolveTextAnchor } from '@kamiazya/whiteboard-model'
@@ -27,10 +28,15 @@ export { resolveTextAnchor } from '@kamiazya/whiteboard-model'
  * same as a passage being gone: answering `orphaned` there would mark every
  * thread as lost for the moment before the body arrives, and a reader would
  * see the badges appear and then vanish.
+ *
+ * `memory`, when given, is where the quotes were last found — a
+ * `quoteMemoryFor` this body — so a row asked again after a keystroke does
+ * not search the whole body for its quote.
  */
 export function markdownAnchorResolver(
   body: string | null,
   marks?: ReadonlyMap<string, LivePassage>,
+  memory?: QuoteMemory,
 ):
   | ((thread: { readonly id: string; readonly anchor: AnnotationAnchor }) => 'placed' | 'orphaned')
   | undefined {
@@ -42,7 +48,11 @@ export function markdownAnchorResolver(
     // tell you about".
     if (thread.anchor.kind !== 'text') return 'placed'
     const live = marks?.get(thread.id)
-    return resolveTextAnchor(body, thread.anchor, live).kind === 'placed' ? 'placed' : 'orphaned'
+    const resolved =
+      memory?.body === body
+        ? resolveRemembering(body, thread.anchor, live, memory.known, memory.learnt)
+        : resolveTextAnchor(body, thread.anchor, live)
+    return resolved.kind === 'placed' ? 'placed' : 'orphaned'
   }
 }
 

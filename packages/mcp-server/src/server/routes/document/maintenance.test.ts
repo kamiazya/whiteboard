@@ -52,7 +52,7 @@ describe('maintenance router', () => {
 
 describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt record)', () => {
   const createVersionStoreMock = () =>
-    versionStoreMock({ earliestWorkspaceFrontiers: vi.fn().mockResolvedValue([]) })
+    versionStoreMock({ workspaceVersionFrontiers: vi.fn().mockResolvedValue([[]]) })
 
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
@@ -127,7 +127,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     expect(json.beforeBytes).toBeGreaterThan(0)
     expect(json.afterBytes).toBe(json.beforeBytes)
     // One fold: the cut is looked up once per compaction.
-    expect(versionStore.earliestWorkspaceFrontiers).toHaveBeenCalledTimes(1)
+    expect(versionStore.workspaceVersionFrontiers).toHaveBeenCalledTimes(1)
   })
 
   it('answers no-file for a workspace with nothing stored', async () => {

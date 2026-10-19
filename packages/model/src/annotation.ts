@@ -47,6 +47,26 @@ export const annotationIdInputSchema = annotationIdSchema.max(
 export const TEXT_ANCHOR_CONTEXT_MAX_CHARS = 32
 
 /**
+ * The most characters of `exact` a tool or a sync write accepts: the
+ * passage one anchor names.
+ *
+ * Every surface that draws a passage re-finds it after each edit, and what an
+ * edit costs it grows with the quote — the web carries where each quote
+ * occurs across a keystroke and searches about three quotes' length around
+ * the change. Measured with a document holding every open thread and change
+ * it may (1500 anchors) and each quote absent, one keystroke in a 256 Ki
+ * body: 17 ms at 256 characters, 91 ms at 1 Ki, 0.48 s at 4 Ki and 0.95 s at
+ * 8 Ki (1.2 s on a body of one repeated character), on a shared and loaded
+ * machine, so read the ratios. 1 Ki is a long
+ * paragraph; a conversation about more anchors to its start, and a longer
+ * replacement splits across changes.
+ */
+export const TEXT_ANCHOR_QUOTE_MAX_CHARS = 1024
+
+/** The quote bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a node's text. */
+export const TEXT_ANCHOR_QUOTE_LIMIT_PHRASE = `the ${TEXT_ANCHOR_QUOTE_MAX_CHARS}-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes`
+
+/**
  * A quote-based text selector, after the W3C Web Annotation Data Model's
  * `TextQuoteSelector`: the exact string the annotation is about, plus enough
  * surrounding context to disambiguate a repeated phrase.
@@ -55,14 +75,13 @@ export const TEXT_ANCHOR_CONTEXT_MAX_CHARS = 32
  * anchor at the very start or end of a body); `exact` is not, because it is
  * the only part that can re-find the passage after an edit.
  */
-function textQuoteSelector(context: z.ZodString) {
+function textQuoteSelector(context: z.ZodString, exact: z.ZodString) {
   return z
     .object({
       prefix: context
         .optional()
         .describe('Text just before the passage, to tell it from a repeat.'),
-      exact: z
-        .string()
+      exact: exact
         .min(1, 'a text anchor must quote at least one character')
         .describe('The passage, quoted exactly as the body has it.'),
       suffix: context.optional().describe('Text just after the passage, to tell it from a repeat.'),
@@ -70,19 +89,26 @@ function textQuoteSelector(context: z.ZodString) {
     .strict()
 }
 
-const textQuoteSelectorSchema = textQuoteSelector(z.string())
+const textQuoteSelectorSchema = textQuoteSelector(z.string(), z.string())
 
 /**
  * A quote's context as a tool accepts it. What is STORED stays unbounded: an
  * anchor written before the limit must still read, and resolution judges it
- * on its nearest characters anyway. `exact` has no bound of its own — one
- * longer than the body it names can never match.
+ * on its nearest characters anyway.
  */
 const quoteContextInputSchema = z
   .string()
   .max(
     TEXT_ANCHOR_CONTEXT_MAX_CHARS,
     `a text anchor's context is longer than the ${TEXT_ANCHOR_CONTEXT_MAX_CHARS}-character limit; keep the characters nearest the passage`,
+  )
+
+/** A quote's passage as a tool accepts it; stored quotes stay unbounded, as context does. */
+const quoteExactInputSchema = z
+  .string()
+  .max(
+    TEXT_ANCHOR_QUOTE_MAX_CHARS,
+    `a text anchor's quote is longer than ${TEXT_ANCHOR_QUOTE_LIMIT_PHRASE}`,
   )
 
 export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
@@ -118,8 +144,10 @@ function textAnchorOver(quote: ReturnType<typeof textQuoteSelector>) {
 
 export const textAnchorSchema = textAnchorOver(textQuoteSelectorSchema)
 
-/** The text arm as a tool accepts it: its context bounded, see `quoteContextInputSchema`. */
-export const textAnchorInputSchema = textAnchorOver(textQuoteSelector(quoteContextInputSchema))
+/** The text arm as a tool accepts it: its context and its quote bounded. */
+export const textAnchorInputSchema = textAnchorOver(
+  textQuoteSelector(quoteContextInputSchema, quoteExactInputSchema),
+)
 
 export type TextAnchor = z.infer<typeof textAnchorSchema>
 

@@ -2,6 +2,7 @@ import type {
   CompactWorkspaceResult,
   DocumentSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { compactionCut } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -589,8 +590,8 @@ export async function compactWorkspace(
     const beforeBytes =
       manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
 
-    const earliestVersion = await versionStore.earliestWorkspaceFrontiers(workspaceId)
-    if (!earliestVersion) {
+    const points = await versionStore.workspaceVersionFrontiers(workspaceId)
+    if (points.length === 0) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
     }
 
@@ -599,11 +600,10 @@ export async function compactWorkspace(
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId, scope)
 
-    // The earliest version row is the whole cut: it is the oldest point any
-    // reader can still ask to see. No version row still means no compaction
-    // at all, which is the guard above.
-    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: earliestVersion })
-    if (shallow.byteLength >= beforeBytes) {
+    // Causal, never by date: a carried row may date itself before its point.
+    const cut = compactionCut(doc, points)
+    const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    if (shallow === null || shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }
     const { manifest: fresh, chunks } = chunkSnapshot(

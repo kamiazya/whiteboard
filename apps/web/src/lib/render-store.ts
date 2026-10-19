@@ -5,7 +5,9 @@
  * Addressed by the key's own path, so invalidation is the path rather than a
  * policy — a document that changed names a different file, and retiring a
  * build's whole cache is removing one directory. `renderKeyPath` builds it
- * and encodes every component the keeper supplied.
+ * and encodes every component the keeper supplied. The file a changed
+ * document no longer names is removed when its successor is written, so the
+ * store holds at most one entry per document per pipeline.
  *
  * TOTAL BY CONTRACT, in both directions. A cache that cannot read answers
  * "not there" and the caller renders; a cache that cannot write loses the
@@ -128,6 +130,35 @@ async function sweepOtherBuilds(root: FileSystemDirectoryHandle, keep: string): 
   }
 }
 
+/** A directory's entry names, or none on a browser that cannot list one. */
+async function entryNames(dir: FileSystemDirectoryHandle): Promise<string[]> {
+  const keys = (dir as unknown as { keys?: () => AsyncIterable<string> }).keys
+  if (typeof keys !== 'function') return []
+  const names: string[] = []
+  for await (const name of keys.call(dir)) names.push(name)
+  return names
+}
+
+/**
+ * Removes every entry beside `keep` in one document's directory.
+ *
+ * The leaf is the document's content digest, so each edit names a new file
+ * and nothing ever reads the old one again — a stream of small edits to a
+ * shared note would otherwise grow this origin's storage without bound, and
+ * OPFS draws on the same quota as the browser keeper's IndexedDB, so a full
+ * render cache is a workspace that stops saving. One entry per document per
+ * (build, pipeline, kind) is enough: the pipeline and kind are directories of
+ * their own, so a thumbnail and an outline never evict each other. What it
+ * costs is one re-render when the same document is asked for under two leaves
+ * in turn (a spatial board after a theme toggle and back).
+ */
+async function evictSiblings(dir: FileSystemDirectoryHandle, keep: string): Promise<void> {
+  for (const name of await entryNames(dir)) {
+    if (name === keep) continue
+    await dir.removeEntry(name, { recursive: true }).catch(() => undefined)
+  }
+}
+
 /** Stores `value` under `path`, or does nothing if it cannot. */
 export async function writeRenderEntry(path: string, value: unknown): Promise<void> {
   const parts = split(path)
@@ -141,6 +172,7 @@ export async function writeRenderEntry(path: string, value: unknown): Promise<vo
     const writable = await handle.createWritable()
     await writable.write(JSON.stringify(value))
     await writable.close()
+    await evictSiblings(dir, parts.name)
     const build = parts.dirs[0]
     if (build !== undefined) await sweepOtherBuilds(root, build)
   } catch {

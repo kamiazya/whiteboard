@@ -82,6 +82,29 @@ export function autoVersionsOverCap(
     .map((r) => r.id)
 }
 
+/**
+ * The carried automatic checkpoints to remove so a document is back within
+ * the cap after rows from another keeper arrive — taken from the carried rows
+ * alone, oldest first. A carried row dated later than this keeper's own would
+ * otherwise outrank them in the newest-first cap and evict every genuine
+ * checkpoint, so room is made from what arrived, never from what was here.
+ * Lineage is spared as in the cap pass, so the document can stay over the cap
+ * by however many carried rows are lineage.
+ */
+export function carriedAutoVersionsOverCap(
+  autosNewestFirst: readonly LineageCandidate[],
+  carried: ReadonlySet<string>,
+  referenced: ReadonlySet<string>,
+  cap: number = MAX_AUTO_PER_DOCUMENT,
+): string[] {
+  const excess = autosNewestFirst.length - cap
+  if (excess <= 0) return []
+  return autosNewestFirst
+    .filter((r) => carried.has(r.id) && !isLineage(r, referenced))
+    .slice(-excess)
+    .map((r) => r.id)
+}
+
 export interface SandwichCandidate extends LineageCandidate {
   readonly auto: boolean
 }

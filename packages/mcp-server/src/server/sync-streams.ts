@@ -64,6 +64,14 @@ export interface SyncStream {
    * daemon), and then a broadcast is sent at once.
    */
   admits?: (workspaceId: string) => Promise<boolean>
+  /**
+   * The sign-in session that opened it, by the hash its token is stored
+   * under (`sessionKeyOf`), so the registry never holds a live credential;
+   * absent for a stream opened on any other grant. The membership
+   * re-check cannot see a session end — the person is still a member — so
+   * ending the session ends its streams by this (`endSyncStreamsOfSession`).
+   */
+  session?: string
   end: () => void
 }
 
@@ -434,6 +442,21 @@ export function endSyncStreamsOf(userId: string, workspaceId?: string): void {
     forget(streamId)
     stream.end()
     log.info({ streamId, workspaceId }, 'sync stream ended: its user lost access')
+  }
+}
+
+/**
+ * Ends the streams a sign-in session opened, when that session ends —
+ * signed out, or replaced by a new sign-in in the same browser. Only this
+ * instance's: a stream held by another runs until the session's expiry
+ * (`grantExpiresAt`), or until its client reconnects and is refused.
+ */
+export function endSyncStreamsOfSession(session: string): void {
+  for (const [streamId, stream] of streams) {
+    if (stream.session !== session) continue
+    forget(streamId)
+    stream.end()
+    log.info({ streamId }, 'sync stream ended: the session that opened it ended')
   }
 }
 

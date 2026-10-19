@@ -39,12 +39,13 @@ import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-pa
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
 import type { SignInAttemptStore } from '../security/sign-in-attempt-store.js'
 import { providerAuthenticator, type TrustedHeaderProvider } from '../security/sign-in-config.js'
-import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
+import { SESSION_COOKIE, sessionKeyOf } from '../security/sign-in-session-store.js'
 import {
   createTrustedIdentityReader,
   type TrustedHeaderRequest,
   type TrustedIdentity,
 } from '../security/trusted-header-identity.js'
+import { endSyncStreamsOfSession } from '../sync-streams.js'
 import { readJsonBody } from './read-json-body.js'
 
 const log = getLogger('sign-in')
@@ -303,7 +304,7 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
   // The cookie set below overwrites the one this browser held, and a session
   // nobody can name any more is one only a thief of the old cookie can use.
   const previous = getCookie(c, SESSION_COOKIE)
-  if (previous !== undefined) await deps.signIn.sessions.end(previous)
+  if (previous !== undefined) await endSession(deps, previous)
   setCookie(c, SESSION_COOKIE, done.sessionToken, {
     ...cookieOptions,
     maxAge: Math.floor(deps.signIn.sessionTtlMs / 1000),
@@ -361,9 +362,17 @@ async function signOut(c: Context, deps: SignInRoutesDeps) {
     return c.json(errorBody('forbidden', 'Sign out from this server’s own pages.'), 403)
   }
   const session = getCookie(c, SESSION_COOKIE)
-  if (session !== undefined) await deps.signIn.sessions.end(session)
+  if (session !== undefined) await endSession(deps, session)
   deleteCookie(c, SESSION_COOKIE, cookieOptions)
   return c.body(null, 204)
+}
+
+// The membership re-check before each broadcast cannot see a session end —
+// the person is still a member — so the streams it opened are ended here,
+// rather than delivering until the session's original expiry.
+async function endSession(deps: SignInRoutesDeps, token: string): Promise<void> {
+  await deps.signIn.sessions.end(token)
+  endSyncStreamsOfSession(sessionKeyOf(token))
 }
 
 // A request the Node adapter did not serve — `app.request`, another runtime —

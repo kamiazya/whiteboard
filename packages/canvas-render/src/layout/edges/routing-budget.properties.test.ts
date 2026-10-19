@@ -86,24 +86,31 @@ function layout(
   return { anchors, paths }
 }
 
-const reached = { grid: 0, pairs: 0, runs: 0 }
+const reached = { grid: 0, pairs: 0, trials: 0, repairs: 0, runs: 0 }
 
 describe('routing budget', () => {
   fcTest.prop([boardArbitrary], withDefaults({ numRuns: 80 }))(
     'an account holding exactly what a layout spends lays it out unchanged',
     ({ nodes, edges, style }) => {
-      const measured = { grid: AMPLE, pairs: AMPLE }
+      const measured = { grid: AMPLE, pairs: AMPLE, trials: AMPLE, repairs: AMPLE }
       const ample = layout(nodes, edges, style, measured)
-      const spent = { grid: AMPLE - measured.grid, pairs: AMPLE - measured.pairs }
+      const spent = {
+        grid: AMPLE - measured.grid,
+        pairs: AMPLE - measured.pairs,
+        trials: AMPLE - measured.trials,
+        repairs: AMPLE - measured.repairs,
+      }
 
       const exact = { ...spent }
       expect(layout(nodes, edges, style, exact)).toEqual(ample)
-      expect(exact).toEqual({ grid: 0, pairs: 0 })
+      expect(exact).toEqual({ grid: 0, pairs: 0, trials: 0, repairs: 0 })
       expect(layout(nodes, edges, style)).toEqual(ample)
 
       reached.runs++
       if (spent.grid > 0) reached.grid++
       if (spent.pairs > 0) reached.pairs++
+      if (spent.trials > 0) reached.trials++
+      if (spent.repairs > 0) reached.repairs++
     },
   )
 
@@ -114,6 +121,45 @@ describe('routing budget', () => {
     expect(reached.runs).toBeGreaterThan(0)
     expect(reached.grid / reached.runs).toBeGreaterThan(0.1)
     expect(reached.pairs / reached.runs).toBeGreaterThan(0.5)
+    // The trial account: 72 of 80. The repair account is reached by no
+    // generated board — it needs boxes stacked flush — so the example below
+    // holds it instead.
+    expect(reached.trials / reached.runs).toBeGreaterThan(0.5)
+  })
+
+  it('an account holding exactly what the coincident-ends repair spends repairs the same edges', () => {
+    // Two boxes of one width stacked flush, no side named: every edge's ends
+    // meet on the shared border, so every one goes through the repair.
+    const nodes = [
+      textNode({ id: 'A', x: 0, y: 0, width: 200, height: 100, text: '' }),
+      textNode({ id: 'B', x: 0, y: 100, width: 200, height: 100, text: '' }),
+    ]
+    const edges: CanvasEdge[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `e${i}`,
+      from: { node: 'A' },
+      to: { node: 'B' },
+    }))
+    const collided = (anchors: ReturnType<typeof assignEdgeAnchors>) =>
+      [...anchors.values()].filter(
+        (a) =>
+          a.from !== undefined && a.to !== undefined && a.from.x === a.to.x && a.from.y === a.to.y,
+      ).length
+    const measured = { grid: AMPLE, pairs: AMPLE, trials: AMPLE, repairs: AMPLE }
+    const ample = assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, measured)
+    const spent = AMPLE - measured.repairs
+    // The subject is present: the repair ran and left no edge collided.
+    expect(spent).toBeGreaterThan(0)
+    expect(collided(ample)).toBe(0)
+
+    const exact = { grid: AMPLE, pairs: AMPLE, trials: AMPLE, repairs: spent }
+    expect(assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, exact)).toEqual(ample)
+    expect(exact.repairs).toBe(0)
+    // One visit short, the last candidate is refused and the repair stops:
+    // the edge it was on keeps its collided pair.
+    const short = { grid: AMPLE, pairs: AMPLE, trials: AMPLE, repairs: spent - 1 }
+    expect(
+      collided(assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, short)),
+    ).toBeGreaterThan(0)
   })
 
   it('adopts no trial it could price only in part', () => {
@@ -135,9 +181,14 @@ describe('routing budget', () => {
       { id: 'e1', from: { node: 'n2' }, to: { node: 'n0' } },
     ]
     const sides = (pairs: number) =>
-      [...assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, { grid: AMPLE, pairs })].map(
-        ([id, a]) => [id, a.fromSide, a.toSide],
-      )
+      [
+        ...assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, {
+          grid: AMPLE,
+          pairs,
+          trials: AMPLE,
+          repairs: AMPLE,
+        }),
+      ].map(([id, a]) => [id, a.fromSide, a.toSide])
     // The subject is present: given the budget, the search does re-side.
     expect(sides(AMPLE)).not.toEqual(sides(0))
     expect(sides(14)).toEqual(sides(0))
@@ -161,9 +212,14 @@ describe('routing budget', () => {
       { id: 'e2', from: { node: 'n0' }, to: { node: 'n3' } },
     ]
     const sides = (pairs: number) =>
-      [...assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, { grid: AMPLE, pairs })].map(
-        ([id, a]) => [id, a.fromSide, a.toSide],
-      )
+      [
+        ...assignEdgeAnchors(nodes, edges, 'orthogonal', undefined, {
+          grid: AMPLE,
+          pairs,
+          trials: AMPLE,
+          repairs: AMPLE,
+        }),
+      ].map(([id, a]) => [id, a.fromSide, a.toSide])
     const firstGuess = [...initialSideChoices(nodes, edges)].map(([id, p]) => [
       id,
       p.fromSide,

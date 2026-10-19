@@ -245,3 +245,36 @@ export function rectAtEnd(nodes: readonly SpatialNode[], end: LineEnd | EdgeEnd)
   const node = nodes.find((n) => n.id === end.node)
   return node === undefined ? undefined : rectOf(node)
 }
+
+/**
+ * The extent of `midpoints`, skipping any non-finite one: each span is at
+ * least 1 and the origin 0 when none is finite, so a coordinate normalised
+ * against it is always finite. The side-choice search computes its regions'
+ * Morton keys against it, and a degenerate extent — every point on one, or
+ * none finite — leaves every key 0, so the sort falls back to document
+ * order, still a total, deterministic grouping.
+ */
+export function midpointExtent(midpoints: readonly Point[]): {
+  spanX: number
+  spanY: number
+  originX: number
+  originY: number
+} {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const m of midpoints) {
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue
+    minX = Math.min(minX, m.x)
+    minY = Math.min(minY, m.y)
+    maxX = Math.max(maxX, m.x)
+    maxY = Math.max(maxY, m.y)
+  }
+  return {
+    spanX: Number.isFinite(minX) ? Math.max(maxX - minX, 1) : 1,
+    spanY: Number.isFinite(minY) ? Math.max(maxY - minY, 1) : 1,
+    originX: Number.isFinite(minX) ? minX : 0,
+    originY: Number.isFinite(minY) ? minY : 0,
+  }
+}

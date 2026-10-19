@@ -93,13 +93,16 @@ describe('grid routing cost per layout', () => {
     })
 
     // The subject is present: every edge is drawn, and the board drove the
-    // grid search far more often than once per edge.
+    // grid search far more often than once per edge. The side-choice search
+    // stops at its share of the trial account (routing-budget.ts) after 958
+    // of them here; the grid account still binds first.
     expect(scene.filter((n) => n.kind === 'edge')).toHaveLength(30)
-    expect(grid.calls).toBeGreaterThan(1000)
+    expect(grid.calls).toBeGreaterThan(500)
     // Unbounded, this board reads 3.9e9 coordinates over 1376 searches (90s
     // on a dev machine), 3.7e8 over 297 at a third of the edges: the work
     // tracks grid lines times obstacles, which the cell cap does not see,
-    // and the search count grows faster than the edges. Bounded, 1.9e8.
+    // and the search count grows faster than the edges. Bounded, 1.8e8; with
+    // the grid account lifted, 2.8e9 still over the same 958 searches.
     expect(grid.reads).toBeLessThanOrEqual(250_000_000)
   }, 300_000)
 })

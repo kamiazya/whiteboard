@@ -3,6 +3,7 @@ import {
   CANVAS_MAX_NODES,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
+import { createTokenizerBudget, type TokenizerBudget } from '../../highlight/tokenizer-budget.js'
 
 /**
  * How many NESTED documents one render may lay out, across every embed kind:
@@ -50,16 +51,24 @@ export const NESTED_ELEMENT_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LIN
  * left. Created by each entry point and shared by every nesting level below
  * it — across the canvas/markdown boundary too, so neither kind of embed can
  * be used to spend around it.
+ *
+ * It carries the render's TOKENISER account as well, for the same reason: a
+ * fence inside an embedded document is tokenised by the same render, so it
+ * spends from the same pool. `refused` counts a fence that account declined
+ * as well as an embed, since either leaves a body degraded only because THIS
+ * render ran out.
  */
-export interface NestedLayoutBudget {
+export interface NestedLayoutBudget extends TokenizerBudget {
   remaining: number
   elementsRemaining: number
-  /** Embeds refused so far, so a cache can tell a body this render degraded. */
-  refused: number
 }
 
 export function createNestedLayoutBudget(): NestedLayoutBudget {
-  return { remaining: NESTED_LAYOUT_BUDGET, elementsRemaining: NESTED_ELEMENT_BUDGET, refused: 0 }
+  return {
+    ...createTokenizerBudget(),
+    remaining: NESTED_LAYOUT_BUDGET,
+    elementsRemaining: NESTED_ELEMENT_BUDGET,
+  }
 }
 
 /** What a nested canvas charges the element budget: everything it lays out; a body, 0. */

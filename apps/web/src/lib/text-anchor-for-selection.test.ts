@@ -6,6 +6,7 @@
  * so the quote and its surroundings are the whole contract. An editor can be
  * swapped; a badly-shaped anchor is stored forever.
  */
+import { TEXT_ANCHOR_QUOTE_MAX_CHARS, textAnchorInputSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { resolveTextAnchor } from './text-anchor.js'
 import { textAnchorForSelection } from './text-anchor-for-selection.js'
@@ -88,5 +89,24 @@ describe('textAnchorForSelection', () => {
       start: at,
       end: at + 'the draft'.length,
     })
+  })
+
+  it('anchors a passage longer than one quote may be to its start', () => {
+    // A caret in a long block quotes the whole block; the write would be
+    // refused past the bound, so the anchor covers as much as it may.
+    const block = 'word '.repeat(TEXT_ANCHOR_QUOTE_MAX_CHARS)
+    const body = `Intro.\n${block}\nOutro.`
+    const from = body.indexOf(block)
+    const anchor = textAnchorForSelection(body, from, from + block.length)
+    expect(anchor?.start).toBe(from)
+    expect(anchor?.end).toBe(from + TEXT_ANCHOR_QUOTE_MAX_CHARS)
+    expect(anchor?.quote.exact).toBe(block.slice(0, TEXT_ANCHOR_QUOTE_MAX_CHARS))
+    expect(textAnchorInputSchema.safeParse(anchor).success).toBe(true)
+  })
+
+  it('does not end a clipped quote between the halves of a surrogate pair', () => {
+    const block = `${'a'.repeat(TEXT_ANCHOR_QUOTE_MAX_CHARS - 1)}😀 tail`
+    const anchor = textAnchorForSelection(block, 0, block.length)
+    expect(anchor?.end).toBe(TEXT_ANCHOR_QUOTE_MAX_CHARS - 1)
   })
 })

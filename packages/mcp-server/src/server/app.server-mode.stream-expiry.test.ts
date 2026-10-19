@@ -152,4 +152,23 @@ describe('server mode — a sync stream ends when its grant expires', () => {
     expect(await next(lasting)).toMatch(/^event: update/)
     expect(openSyncStreamCount()).toBe(1)
   })
+
+  it('treats a non-finite bearer expiry as no bound rather than ending the stream', async () => {
+    const owner = await signedIn('ada', 60_000)
+    const created = await app.request(`${PUBLIC_URL}/api/workspaces`, {
+      method: 'POST',
+      headers: { ...owner, 'content-type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Plans' }),
+    })
+    const { workspaceId } = (await created.json()) as { workspaceId: string }
+    const unbounded = await followed({ authorization: 'Bearer ada not-a-number' }, workspaceId)
+    // A stream armed later with a later expiry: once it has ended, any timer
+    // a NaN expiry armed (setTimeout coerces NaN to 1ms) has fired too.
+    const marker = await followed({ authorization: `Bearer ada ${Date.now() + 500}` }, workspaceId)
+
+    expect(await next(marker)).toBe('closed')
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
+
+    expect(await next(unbounded)).toMatch(/^event: update/)
+  })
 })

@@ -5,26 +5,17 @@ import {
   createServer as createDocumentServer,
 } from '@kamiazya/whiteboard-server-core'
 import { createMcpHandler } from '@modelcontextprotocol/server'
-import { type Context, Hono, type MiddlewareHandler } from 'hono'
+import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { getCookie } from 'hono/cookie'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
-import {
-  armContentSlots,
-  CONTENT_REQUEST_CAPS,
-  createContentSlots,
-  takeContentSlot,
-} from './content-slots.js'
+import { armContentSlots, CONTENT_REQUEST_CAPS, createContentSlots } from './content-slots.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
-import {
-  capListenStreams,
-  isEventStream,
-  isListenRequest,
-  MCP_LISTEN_STREAM_CAPS,
-  releasedWhenDone,
-} from './mcp-listen-streams.js'
+import { mcpBatchSlots, mcpContentSlot } from './mcp-content-slots.js'
+import { capListenStreams, MCP_LISTEN_STREAM_CAPS } from './mcp-listen-streams.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
@@ -72,6 +63,7 @@ import {
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
 import { createServerModeStoredDataRedaction } from './security/server-mode-redaction.js'
+import { SESSION_COOKIE, sessionKeyOf } from './security/sign-in-session-store.js'
 import { holdV1CreateBodyToScope } from './security/v1-create-body-scope.js'
 import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
@@ -220,41 +212,7 @@ function mountMcpMiddleware(
         ),
     }),
   )
-}
-
-// A JSON-RPC body may be as large as `/mcp`'s 4 MiB ceiling, and is read
-// whole before any tool runs, so it is held to the same content slots as
-// `/api`'s content-sized bodies (`content-slots.ts`): taken after the caller is
-// known and before the body limit reads, held until the call is answered.
-//
-// "Answered" is not "the handler returned": a modern-era call that sends
-// anything before its result (an in-call log record, progress) is answered
-// as an event stream handed back while the tool still runs, so the slot
-// rides that stream and is released when it ends, errors or is cancelled.
-// A `subscriptions/listen` stream is the exception — it carries no call, is
-// open for as long as the client likes, and holding a slot for it would let
-// a few listeners lock every content-sized request out; it is counted by
-// `capListenStreams` instead. The SDK refuses a request whose `Mcp-Method`
-// header disagrees with its body, so the header names what the stream is.
-function mcpContentSlot(): MiddlewareHandler {
-  return async (c, next) => {
-    if (c.req.method.toUpperCase() !== 'POST') return next()
-    const slot = await takeContentSlot(c, (refused, message) =>
-      refused.json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null }, 429),
-    )
-    if (slot instanceof Response) return slot
-    let riding = false
-    try {
-      await next()
-      const body = c.res.body
-      if (body !== null && isEventStream(c.res) && !isListenRequest(c)) {
-        c.res = new Response(releasedWhenDone(body, slot), c.res)
-        riding = true
-      }
-    } finally {
-      if (!riding) slot()
-    }
-  }
+  if (options.authMode === 'server-mode') app.use('/mcp', mcpBatchSlots())
 }
 
 // The people store a composition keeps, where it keeps one: what lets a
@@ -272,6 +230,12 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
             members.holdsAccess(workspaceId, userId),
           streamCaps: SYNC_STREAM_CAPS,
           grantExpiresAt: (c: Context) => callerGrant(c)?.expiresAt,
+          sessionOf: (c: Context) => {
+            const token = getCookie(c, SESSION_COOKIE)
+            return callerGrant(c)?.kind === 'signed-in' && token !== undefined
+              ? sessionKeyOf(token)
+              : undefined
+          },
         }),
   }
 }

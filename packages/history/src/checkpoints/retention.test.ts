@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   autoVersionsOverCap,
+  carriedAutoVersionsOverCap,
   MAX_AUTO_PER_DOCUMENT,
   restorePointOptions,
   sandwichedAutoVersionIds,
@@ -87,5 +88,28 @@ describe('sandwichedAutoVersionIds', () => {
 describe('restorePointOptions', () => {
   it('records a restore point as automatic, naming what it restored', () => {
     expect(restorePointOptions('v-past')).toEqual({ auto: true, restoredFrom: 'v-past' })
+  })
+})
+
+describe('carriedAutoVersionsOverCap', () => {
+  const row = (id: string, restoredFrom: string | null = null) => ({ id, restoredFrom })
+
+  it('makes room from the oldest carried rows, however new they are against the own ones', () => {
+    // Newest first: two carried rows outrank both of the keeper's own.
+    const autos = [row('c2'), row('c1'), row('own2'), row('own1')]
+    expect(carriedAutoVersionsOverCap(autos, new Set(['c1', 'c2']), new Set(), 3)).toEqual(['c1'])
+  })
+
+  it('removes no own row, even when the carried ones cannot make up the excess', () => {
+    const autos = [row('c1'), row('own3'), row('own2'), row('own1')]
+    expect(carriedAutoVersionsOverCap(autos, new Set(['c1']), new Set(), 2)).toEqual(['c1'])
+  })
+
+  it('removes nothing within the cap, and spares carried lineage', () => {
+    expect(carriedAutoVersionsOverCap([row('c1')], new Set(['c1']), new Set(), 1)).toEqual([])
+    const autos = [row('c2', 'own1'), row('c1'), row('own1')]
+    expect(carriedAutoVersionsOverCap(autos, new Set(['c1', 'c2']), new Set(['own1']), 1)).toEqual([
+      'c1',
+    ])
   })
 })

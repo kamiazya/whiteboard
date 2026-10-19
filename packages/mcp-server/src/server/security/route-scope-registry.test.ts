@@ -51,38 +51,71 @@ const alwaysDeny: AsyncAuthStrategy = {
   },
 }
 
+function serverModeApp() {
+  return createApp({
+    authMode: 'server-mode',
+    publicBaseUrl: 'https://example.com',
+    allowedOrigins: ['https://example.com'],
+    authStrategy: alwaysDeny,
+    people,
+    touch: () => {},
+    getStatus: () => ({
+      ok: true,
+      pid: 1,
+      host: '0.0.0.0',
+      port: 3099,
+      baseUrl: 'https://example.com',
+      version: '0.0.0',
+      startedAt: new Date().toISOString(),
+      uptimeMs: 0,
+      idleForMs: 0,
+      auth: { mode: 'local-token', hasToken: true },
+      storage: { dataDir: tempDir, dataDirWritable: true },
+      app: { served: true, buildPresent: true, ui: 'server-placeholder' },
+      mcp: { httpEnabled: true, endpoint: 'https://example.com/mcp' },
+      clients: { connected: 0, ready: 0 },
+    }),
+    // Without this /api/v1 is not mounted, so the walk below never sees a
+    // single v1 route and the whole surface is exempt from the guard by
+    // accident. The in-memory container is enough: this test inspects
+    // `app.routes` and never issues a request.
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
+    dataLayout: testDataLayout(),
+  })
+}
+
+function localDaemonApp() {
+  return createApp({
+    authMode: 'local-daemon',
+    touch: () => {},
+    getStatus: () => ({
+      ok: true,
+      pid: 1,
+      host: '127.0.0.1',
+      port: 3099,
+      baseUrl: 'http://127.0.0.1:3099',
+      version: '0.0.0',
+      startedAt: new Date().toISOString(),
+      uptimeMs: 0,
+      idleForMs: 0,
+      auth: { mode: 'local-token', hasToken: false },
+      storage: { dataDir: tempDir, dataDirWritable: true },
+      app: { served: true, buildPresent: true, ui: 'server-placeholder' },
+      mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+      clients: { connected: 0, ready: 0 },
+    }),
+    // Without this /api/v1 is not mounted, so the walk below never sees a
+    // single v1 route and the whole surface is exempt from the guard by
+    // accident. The in-memory container is enough: this test inspects
+    // `app.routes` and never issues a request.
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
+    dataLayout: testDataLayout(),
+  })
+}
+
 describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* routes', () => {
   it('every /api/* route mounted on the server-mode app resolves to a scope decision', async () => {
-    const app = createApp({
-      authMode: 'server-mode',
-      publicBaseUrl: 'https://example.com',
-      allowedOrigins: ['https://example.com'],
-      authStrategy: alwaysDeny,
-      people,
-      touch: () => {},
-      getStatus: () => ({
-        ok: true,
-        pid: 1,
-        host: '0.0.0.0',
-        port: 3099,
-        baseUrl: 'https://example.com',
-        version: '0.0.0',
-        startedAt: new Date().toISOString(),
-        uptimeMs: 0,
-        idleForMs: 0,
-        auth: { mode: 'local-token', hasToken: true },
-        storage: { dataDir: tempDir, dataDirWritable: true },
-        app: { served: true, buildPresent: true, ui: 'server-placeholder' },
-        mcp: { httpEnabled: true, endpoint: 'https://example.com/mcp' },
-        clients: { connected: 0, ready: 0 },
-      }),
-      // Without this /api/v1 is not mounted, so the walk below never sees a
-      // single v1 route and the whole surface is exempt from the guard by
-      // accident. The in-memory container is enough: this test inspects
-      // `app.routes` and never issues a request.
-      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
-      dataLayout: testDataLayout(),
-    })
+    const app = serverModeApp()
 
     // `app.routes` conflates middleware mounts (`app.use('/api/*', ...)`,
     // method 'ALL') with real endpoint handlers registered via `app.all(...)`
@@ -121,32 +154,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     // app.ts), so the server-mode walk above never sees them — a
     // local-daemon app is built here too, or a newly local-daemon-only route
     // could ship with a registry gap the guard above would never catch.
-    const app = createApp({
-      authMode: 'local-daemon',
-      touch: () => {},
-      getStatus: () => ({
-        ok: true,
-        pid: 1,
-        host: '127.0.0.1',
-        port: 3099,
-        baseUrl: 'http://127.0.0.1:3099',
-        version: '0.0.0',
-        startedAt: new Date().toISOString(),
-        uptimeMs: 0,
-        idleForMs: 0,
-        auth: { mode: 'local-token', hasToken: false },
-        storage: { dataDir: tempDir, dataDirWritable: true },
-        app: { served: true, buildPresent: true, ui: 'server-placeholder' },
-        mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
-        clients: { connected: 0, ready: 0 },
-      }),
-      // Without this /api/v1 is not mounted, so the walk below never sees a
-      // single v1 route and the whole surface is exempt from the guard by
-      // accident. The in-memory container is enough: this test inspects
-      // `app.routes` and never issues a request.
-      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
-      dataLayout: testDataLayout(),
-    })
+    const app = localDaemonApp()
 
     const apiRoutes = app.routes.filter(
       (route) => route.path.startsWith('/api/') && !route.path.endsWith('*'),
@@ -627,5 +635,72 @@ describe('S8: the membership-gate partition covers every rule', () => {
     expect(gatedWorkspaceHandle('GET', '/api/workspaces/%E0%A4%A')).toEqual({
       kind: 'undecodable',
     })
+  })
+})
+
+// A GET (and HEAD, Hono's GET without the body) must change nothing. The
+// session cookie is SameSite=Lax, and Lax rides a cross-site top-level GET —
+// a link, a redirect — in the browsers that send no Sec-Fetch-Site for the
+// origin check to refuse it by. A rule that asks a write scope of a read
+// verb either guards a GET with a side effect, or invites one to be mounted
+// under a bar that reads as safe. `runtime:admin` is the runtime family's
+// write tier, so it counts with the `:write` scopes.
+const WRITE_TIER = (scope: string) => scope.endsWith(':write') || scope === 'runtime:admin'
+const READ_VERBS = ['GET', 'HEAD'] as const
+// The rules whose `claims` name a write verb, so no GET or HEAD reaches them.
+const WRITE_VERB_ONLY: readonly string[] = [
+  'workspace-document/promote',
+  'document update/export',
+  'files/purge-dangling',
+  'documents/optimize-all',
+  'workspace replica-key',
+  'workspace replica-key rotate',
+  'workspace replica-tier',
+]
+
+/** A mounted route pattern as a concrete request path: each `:param` and wildcard tail filled in. */
+const concrete = (pattern: string) =>
+  pattern.replace(/:[A-Za-z]+(\{[^}]*\})?/g, 'ws1').replace(/\/\*$/, '/d1')
+
+/**
+ * Every path the registry is asked about anywhere in this file, plus every
+ * route both compositions mount — so a rule claiming GET is met by at least
+ * one sample, whatever it was written for.
+ */
+function readSamples(): string[] {
+  const mounted = [serverModeApp(), localDaemonApp()].flatMap((app) =>
+    app.routes
+      .filter((route) => route.path.startsWith('/api/'))
+      .filter((route) => ['GET', 'HEAD', 'ALL'].includes(route.method.toUpperCase()))
+      .map((route) => concrete(route.path)),
+  )
+  const asked = [
+    ...SCOPE_DECISIONS.map(([, , path]) => path),
+    ...Object.values(CLAIMED_BY).map(([, path]) => path),
+  ]
+  return [...new Set([...mounted, ...asked])]
+}
+
+describe('no rule decides a write scope for a read verb', () => {
+  it('asks a GET and a HEAD of every sampled path, and none needs a write scope', () => {
+    const samples = readSamples()
+    const reached = new Set<string>()
+    const offending: string[] = []
+    for (const path of samples) {
+      for (const method of READ_VERBS) {
+        const rule = ruleClaiming(method, path)
+        if (rule !== null) reached.add(rule)
+        const decision = resolveApiRouteScope(method, path)
+        if (decision?.kind === 'scoped' && decision.scopes.some(WRITE_TIER)) {
+          offending.push(`${method} ${path} (${rule}) -> ${decision.scopes.join(', ')}`)
+        }
+      }
+    }
+    // The sample has to reach the table, not merely pass over it: every rule
+    // is met by a read verb except those that claim write verbs alone.
+    const readReachable = API_ROUTE_RULE_NAMES.filter((name) => !WRITE_VERB_ONLY.includes(name))
+    expect(readReachable.length).toBeGreaterThan(15)
+    expect([...reached].sort()).toEqual([...readReachable].sort())
+    expect(offending, offending.join('\n')).toEqual([])
   })
 })

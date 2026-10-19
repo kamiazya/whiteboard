@@ -1,6 +1,8 @@
 import {
+  documentsRemovedSince,
   documentsTouchedSince,
   organisationChangedSince,
+  recordTrashEntry,
   seedNamesFromTitles,
   stampEditedDocuments,
   type TouchedDocument,
@@ -101,7 +103,7 @@ function refusePlacement(
  * back over this import on its next save.
  */
 export async function applyWorkspaceDocumentUpdate(
-  deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments'>,
+  deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'blobStore'>,
   input: ApplyWorkspaceDocumentUpdateInput,
 ): Promise<ApplyWorkspaceDocumentUpdateResult> {
   const { workspaceId, update } = input
@@ -155,9 +157,38 @@ function droppableRecord(
   }
 }
 
-/** The placement check, the naming and stamping, and the save, over a record holding the update. */
+/**
+ * Puts every document the update removed in the trash, as the keeper's own
+ * delete does: its bytes as they stood before the update, stored first, then
+ * the row naming them — all before the save. The order is the guarantee: a
+ * failed store throws, the record is dropped unsaved, and the document is
+ * still there. Saved the other way round, a removed node cannot be revived
+ * and the next compaction drops its content, leaving its saved versions
+ * reachable by no path.
+ */
+async function evacuateRemoved(
+  blobStore: ServerDeps['blobStore'],
+  doc: LoroDoc,
+  since: VersionVector,
+  target: Parameters<typeof runEvictingOnEngineTrap>[0],
+): Promise<void> {
+  const removed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
+    documentsRemovedSince(doc, since),
+  )
+  const deletedAt = Date.now()
+  for (const { documentId, path, bytes } of removed) {
+    const { ref } = await blobStore.put({
+      // Copied so the DTO's narrow buffer type is satisfied without a cast.
+      bytes: new Uint8Array(bytes),
+      contentType: 'application/octet-stream',
+    })
+    recordTrashEntry(doc, { documentId, path, deletedAt, blob: ref })
+  }
+}
+
+/** The placement check, the trash, the naming and stamping, and the save, over a record holding the update. */
 async function keepImported(
-  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  deps: Pick<ServerDeps, 'workspaceDocuments' | 'blobStore'>,
   input: ApplyWorkspaceDocumentUpdateInput,
   doc: LoroDoc,
   since: VersionVector,
@@ -166,6 +197,7 @@ async function keepImported(
   if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
     return { kind: 'placement-refused' }
   }
+  await evacuateRemoved(deps.blobStore, doc, since, target)
   // Before the save, so the name and the stamp ride the same write and its
   // fan-out hands them back to the replica that made the edit.
   const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {

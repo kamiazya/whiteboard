@@ -300,7 +300,7 @@ the boundary described above.
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
 - **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today), and each tool it calls would still need the scope its `/api` twin does — a macaroon scoped `mcp:call` and `canvas:read` is refused a write tool with `insufficient_scope`, as server mode refuses a bearer. A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
-- **Security headers**: every response carries `frame-ancestors 'none'` (unless the route sets its own CSP), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
+- **Security headers**: every response carries `frame-ancestors 'none'` (a route that sets its own CSP — the server-mode web app, an uploaded SVG — repeats it in that policy), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 - **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 10s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
 
@@ -484,7 +484,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   entry, change which documents are pinned, or write anything else in the
   workspace record outside its documents, or that addresses a path no
   document holds, is refused with `403` unless the grant also holds
-  `workspace:write`, and nothing of it is kept. A document's own update
+  `workspace:write`, and nothing of it is kept. One the grant does allow
+  to remove a document still cannot destroy it: the daemon puts each
+  document the update removes in the trash, as its own delete does, before
+  keeping the update, so the content stays restorable and its saved versions
+  stay reachable. A document's own update
   cannot reach its place in the workspace either: one that adds a part named
   after the document's id, segment, kind, name or timestamps, or a part of
   the wrong kind under a name the document already uses, is refused with
@@ -553,14 +557,21 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   also ends when the grant that opened it expires — the sign-in session's
   expiry, or a bearer token's `exp` — even if nothing is sent down it; the
   web app then reconnects, and the new stream needs a grant that is still
-  valid. The limits
+  valid. A stream opened on a sign-in session also ends when that session
+  does: signing out, or signing in again in the same browser, ends the
+  previous session's streams on the instance that handled it. A stream that
+  another instance holds keeps running until the session's expiry. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
   update, a promote, an upload, a document created from its content or a
   JSON-RPC request to `/mcp` is read whole before it is applied, so the
   bodies in flight are capped per user and per instance, and the next one is
-  refused before it is read. Callers whose grant names no user on the
-  instance share one user's allowance. The limits are
+  refused before it is read. A JSON-RPC batch to `/mcp`, which clients on
+  the 2025-03-26 protocol revision may send, counts once for each request in
+  it, because each runs at the same time as the others: a batch holding more
+  requests than the caller has room for is refused whole, before any of it
+  runs. Callers whose grant names no user on the instance share one user's
+  allowance. The limits are
   [Large request limits](../reference/configuration.md#large-request-limits).
 - **A restore from the trash is held to the bounds of any other write.** A
   trash entry syncs with the workspace and a move carries the bytes it names,
@@ -649,7 +660,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   daemon never draws them; a reader who asks the web app to show resolved
   comments lays all of them out in their own browser. What every render
   does read of every thread, resolved ones included, is a node-set anchor,
-  so one anchor names at most 2000 nodes (`comment_anchor_too_large`). What
+  so one anchor names at most 2000 nodes (`comment_anchor_too_large`); and
+  every reader of a note re-finds each thread's and change's passage after
+  each edit, so a passage quote is at most 1024 characters
+  (`anchor_quote_too_long`). What
   is still NOT bounded is how long the largest permitted board takes to lay
   out — several seconds on a typical machine — and that work blocks the loop
   while it runs. All of it is in

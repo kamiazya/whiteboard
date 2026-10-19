@@ -18,6 +18,8 @@ import {
   type SpatialAnchor,
   spatialAnchorRect,
   TEXT_ANCHOR_CONTEXT_MAX_CHARS,
+  TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
+  TEXT_ANCHOR_QUOTE_MAX_CHARS,
   threadFromCanvasComment,
 } from './annotation.js'
 import { CANVAS_MAX_NODES } from './canvas-size.js'
@@ -171,6 +173,28 @@ describe("a text anchor's context bound", () => {
     ).toBe(false)
     expect(
       annotationAnchorInputSchema.safeParse(withPrefix(TEXT_ANCHOR_CONTEXT_MAX_CHARS)).success,
+    ).toBe(true)
+  })
+})
+
+describe("a text anchor's quote bound", () => {
+  const quoting = (length: number): AnnotationAnchor => ({
+    kind: 'text',
+    quote: { exact: 'q'.repeat(length) },
+    start: 0,
+    end: length,
+  })
+
+  it('is a write contract: a stored anchor past it still reads', () => {
+    expect(annotationAnchorSchema.safeParse(quoting(10_000)).success).toBe(true)
+  })
+
+  it('is refused on the way in past it, and accepted at it', () => {
+    const refused = annotationAnchorInputSchema.safeParse(quoting(TEXT_ANCHOR_QUOTE_MAX_CHARS + 1))
+    expect(refused.success).toBe(false)
+    expect(refused.error?.issues[0]?.message).toContain(TEXT_ANCHOR_QUOTE_LIMIT_PHRASE)
+    expect(
+      annotationAnchorInputSchema.safeParse(quoting(TEXT_ANCHOR_QUOTE_MAX_CHARS)).success,
     ).toBe(true)
   })
 })

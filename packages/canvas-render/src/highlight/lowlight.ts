@@ -31,6 +31,7 @@ import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { createLowlight } from 'lowlight'
 import type { CodeTokenLines, CodeTokenRole } from './code-token.js'
+import { spendTokenizer, type TokenizerBudget } from './tokenizer-budget.js'
 
 // Registered eagerly and never on demand: a fence's language is only known
 // mid-layout, and layout is synchronous — an await there would either block
@@ -161,25 +162,38 @@ const LINE_RUN_BUDGET = 8192 * 8192
 /** Grammars whose cost is quadratic in a whole LINE, not just in a word. */
 const LINE_PRICED = new Set(['yaml'])
 
-function withinBudget(value: string, run: RegExp, budget: number): boolean {
+/**
+ * The summed squared length of `value`'s runs, stopping as soon as it passes
+ * `cap` — so a pathological fence is priced in the time it takes to find it
+ * over budget, not in the time it takes to count all of it.
+ */
+function runCost(value: string, run: RegExp, cap: number): number {
   let total = 0
   for (const match of value.matchAll(run)) {
     total += match[0].length ** 2
-    if (total > budget) return false
+    if (total > cap) return total
   }
-  return true
+  return total
 }
 
 /**
  * canvas-render's `highlightCode` seam. Total: an unregistered language, a
- * fence over the tokeniser's cost budget, or anything lowlight throws returns
- * `undefined`, and the fence renders plain.
+ * fence over the tokeniser's cost budget, a fence the layout's `budget`
+ * cannot cover, or anything lowlight throws returns `undefined`, and the
+ * fence renders plain.
  */
-export function highlightCode(lang: string, value: string): CodeTokenLines | undefined {
+export function highlightCode(
+  lang: string,
+  value: string,
+  budget?: TokenizerBudget,
+): CodeTokenLines | undefined {
   const name = ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()
   if (name === '' || !lowlight.registered(name)) return undefined
-  if (!withinBudget(value, WORD_RUN, WORD_RUN_BUDGET)) return undefined
-  if (LINE_PRICED.has(name) && !withinBudget(value, LINE_RUN, LINE_RUN_BUDGET)) return undefined
+  const words = runCost(value, WORD_RUN, WORD_RUN_BUDGET)
+  if (words > WORD_RUN_BUDGET) return undefined
+  const lines = LINE_PRICED.has(name) ? runCost(value, LINE_RUN, LINE_RUN_BUDGET) : 0
+  if (lines > LINE_RUN_BUDGET) return undefined
+  if (budget !== undefined && !spendTokenizer(budget, words, lines)) return undefined
   try {
     return toLines(lowlight.highlight(name, value) as unknown as HastNode)
   } catch {

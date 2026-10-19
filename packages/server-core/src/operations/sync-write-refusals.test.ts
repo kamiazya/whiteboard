@@ -92,6 +92,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     textBreachRefusal({ shape: 'canvas-size', measure: 'nodes', count: 2_001, container: MAP }),
   'thread-anchor': () =>
     textBreachRefusal({ shape: 'thread-anchor', count: 2_001, threadId: 't1', container: MAP }),
+  'anchor-quote': () =>
+    textBreachRefusal({ shape: 'anchor-quote', chars: 2_000, elementId: 't1', container: MAP }),
   'open-threads': () => textBreachRefusal({ shape: 'open-threads', count: 501, container: MAP }),
   'open-changes': () => textBreachRefusal({ shape: 'open-changes', count: 1_001, container: MAP }),
   'content-root': () => textBreachRefusal({ shape: 'content-root', key: 'nodes', container: MAP }),

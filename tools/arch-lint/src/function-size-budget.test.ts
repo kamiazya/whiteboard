@@ -288,7 +288,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
-  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 187,
+  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 188,
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
@@ -593,7 +593,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 75,
   'packages/mcp-server/src/shared/test-utils/tool-surface-metrics.ts#parameterCoverage': 63,
   'packages/model/src/test-utils/zod-arbitrary.ts#walkShape': 132,
-  'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
   // A conformance suite is a table of cases, so each describe's size is its

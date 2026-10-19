@@ -299,10 +299,10 @@ describe('compactWorkspace', () => {
     // window instead of trivially serializing before it.
     const delayedStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await new Promise((r) => setTimeout(r, 60))
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -530,16 +530,16 @@ describe('auto-compact disposal', () => {
   // just the cut lookup — an await compactWorkspace makes early on — so tests
   // can deterministically observe the in-flight window instead of depending
   // on real-clock luck.
-  function withDelayedEarliestFrontiers(
+  function withDelayedVersionFrontiers(
     store: InstanceType<typeof FileVersionStore>,
     delayMs: number,
   ): InstanceType<typeof FileVersionStore> {
     return new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await new Promise((r) => setTimeout(r, delayMs))
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -556,7 +556,7 @@ describe('auto-compact disposal', () => {
     const { store } = await buildCompactableCanvas('idle-seam')
 
     // Held open by a GATE the test releases, not by a sleep. The first draft
-    // used `withDelayedEarliestFrontiers(store, 100)` and read the stamp
+    // used `withDelayedVersionFrontiers(store, 100)` and read the stamp
     // before waiting, and CI's 5x stress of the changed file failed it once
     // in five with `expected null not to be null` — a message that names
     // neither of the two things that produce it (the compaction never ran, or
@@ -569,10 +569,10 @@ describe('auto-compact disposal', () => {
     })
     const gatedStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await gate
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -621,10 +621,10 @@ describe('auto-compact disposal', () => {
     })
     const gatedStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await gate
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -712,7 +712,7 @@ describe('auto-compact disposal', () => {
   it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
     const { store } = await buildCompactableCanvas('cached')
 
-    scheduleAutoCompact('session1', withDelayedEarliestFrontiers(store, 100), {
+    scheduleAutoCompact('session1', withDelayedVersionFrontiers(store, 100), {
       debounceMs: 1,
     })
     await _awaitAutoCompactFiredForTests()
@@ -743,10 +743,10 @@ describe('auto-compact disposal', () => {
     let timersAfterReschedule: number | null = null
     const countingStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             rescheduleCallCount.count += 1
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -754,12 +754,12 @@ describe('auto-compact disposal', () => {
     })
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await rescheduleGate
             scheduleAutoCompact('session1', countingStore, { debounceMs: 0 })
             timersAfterReschedule = _autoCompactTimerCountForTests()
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -796,13 +796,13 @@ describe('auto-compact disposal', () => {
 
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestWorkspaceFrontiers') {
+        if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await new Promise((r) => setTimeout(r, 100))
             // Mirrors a compaction resuming and touching the DB again
             // (e.g. via loadDocument()) while teardown is draining hooks.
             reentrantDb = await getDb(tempDir)
-            return target.earliestWorkspaceFrontiers(workspaceId)
+            return target.workspaceVersionFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -838,7 +838,7 @@ describe('auto-compact disposal', () => {
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
     const { store } = await buildCompactableCanvas('composed')
 
-    scheduleAutoCompact('session1', withDelayedEarliestFrontiers(store, 100), {
+    scheduleAutoCompact('session1', withDelayedVersionFrontiers(store, 100), {
       debounceMs: 1,
     })
     await _awaitAutoCompactFiredForTests()

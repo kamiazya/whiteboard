@@ -121,8 +121,8 @@ it('stores a render that cost more than storing it does', async () => {
 // browser can answer: that a COSTLY render survives the round trip into OPFS,
 // and that a keyless request is never remembered.
 
-// The write-time sweep is the persistent tier's only eviction (ADR-0027
-// decision 5), so it is pinned against the store directly: an entry the old
+// The write-time build sweep (ADR-0027 decision 5) is one of the persistent
+// tier's two evictions, so it is pinned against the store directly: an entry the old
 // build left must be gone once a new build stores its first one, or every
 // deploy keeps its whole cache in the origin's quota.
 it('a new build storing its first entry removes the previous build’s entries', async () => {
@@ -135,6 +135,32 @@ it('a new build storing its first entry removes the previous build’s entries',
 
   expect(await readRenderEntry(newKey)).toEqual({ from: 'new' })
   expect(await readRenderEntry(oldKey)).toBeNull()
+})
+
+// A document's content digest is its leaf, so every edit names a new file.
+// Another member typing into a shared note would otherwise leave one entry
+// per version in this origin's quota — the quota the browser keeper's own
+// IndexedDB shares — so a write keeps only the entry it just stored.
+it('keeps one stored entry per document, the latest', async () => {
+  const docDir = ['~build-test', 'svg', 'markdown', '~edited']
+  const keyFor = (v: number): string => `${docDir.join('/')}/~v${v}.json`
+  for (let v = 0; v < 6; v++) await writeRenderEntry(keyFor(v), { v })
+  const neighbour = '~build-test/svg/markdown/~other/~v0.json'
+  await writeRenderEntry(neighbour, { other: true })
+
+  let dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('render')
+  for (const segment of docDir) dir = await dir.getDirectoryHandle(segment)
+  const names: string[] = []
+  for await (const name of (dir as unknown as { keys(): AsyncIterable<string> }).keys()) {
+    names.push(name)
+  }
+
+  expect(names).toEqual(['~v5.json'])
+  expect(await readRenderEntry(keyFor(5))).toEqual({ v: 5 })
+  expect(await readRenderEntry(keyFor(4))).toBeNull()
+  expect(await readRenderEntry(neighbour), 'another document lost its entry').toEqual({
+    other: true,
+  })
 })
 
 // A request with no cache key is the honest state of a document whose keeper

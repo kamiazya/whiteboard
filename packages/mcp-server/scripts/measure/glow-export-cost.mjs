@@ -34,6 +34,10 @@ import { fileURLToPath } from 'node:url'
 
 const DEFAULT_COUNTS = [10, 50, 200]
 const PITCH = 220
+// Read once here: a row's child process inherits the env, so the timeout
+// row the parent writes names the same board as the row it gave up on.
+const SHAPE = process.env.BOARD ?? 'grid'
+const SCALE = Number(process.env.SCALE ?? 1)
 
 /** Summed filter-region area in megapixels, read off the SVG itself. */
 function filterMpx(svg, scale) {
@@ -65,8 +69,8 @@ async function row(count) {
   const { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } = await import(
     '../../src/server/export/headless-renderer.ts'
   )
-  const shape = process.env.BOARD ?? 'grid'
-  const scale = Number(process.env.SCALE ?? 1)
+  const shape = SHAPE
+  const scale = SCALE
   const base = shape === 'grid' ? count : 200
   const columns = Math.ceil(Math.sqrt(base))
   const nodes = Array.from({ length: base }, (_, i) => ({
@@ -83,7 +87,7 @@ async function row(count) {
     from: { node: nodes[i].id },
     to: { node: node.id },
   }))
-  const last = nodes[nodes.length - 1]
+  const last = nodes.at(-1)
   const side = columns * PITCH
   const extra = Array.from({ length: shape === 'grid' ? 0 : count }, (_, i) => i)
   const corners =
@@ -145,7 +149,7 @@ if (process.argv[2] === '--row') {
       timeout: deadline,
     })
     if (run.error?.code === 'ETIMEDOUT' || run.signal === 'SIGTERM') {
-      const timedOut = { count, ms: `>${deadline}` }
+      const timedOut = { shape: SHAPE, count, scale: SCALE, ms: `>${deadline}` }
       process.stdout.write(`${JSON.stringify(timedOut)}\n`)
     } else if (run.status !== 0) {
       process.stdout.write(

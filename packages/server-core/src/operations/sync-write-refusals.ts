@@ -21,6 +21,7 @@ import {
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
+  TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
 } from '@kamiazya/whiteboard-model'
 import { SyncWriteRefusalError } from '@kamiazya/whiteboard-ports'
 import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-io.js'
@@ -299,6 +300,27 @@ class CommentAnchorTooLargeError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A thread or a proposed passage anchored by a quote longer than
+ * `TEXT_ANCHOR_QUOTE_MAX_CHARS` — every reader of the body re-finds each
+ * passage by its quote after each edit. One stored past it still takes an
+ * edit that does not grow it.
+ */
+class AnchorQuoteTooLongError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['anchor-quote']
+
+  constructor(
+    readonly breach: BreachOf<'anchor-quote'>,
+    readonly at?: RefusedIn,
+  ) {
+    const anchor = `${JSON.stringify(breach.elementId)} an anchor quoting ${breach.chars} characters`
+    super(
+      valueRefusalMessage(at, `give ${anchor}`, `gives ${anchor}`, TEXT_ANCHOR_QUOTE_LIMIT_PHRASE),
+    )
+    this.name = 'AnchorQuoteTooLongError'
+  }
+}
+
 function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
   return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
 }
@@ -410,6 +432,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new CanvasTooLargeError(breach, at)
     case 'thread-anchor':
       return new CommentAnchorTooLargeError(breach, at)
+    case 'anchor-quote':
+      return new AnchorQuoteTooLongError(breach, at)
     case 'open-threads':
       return new TooManyOpenThreadsError(breach, at)
     case 'open-changes':

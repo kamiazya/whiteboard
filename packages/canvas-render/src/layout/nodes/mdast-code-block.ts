@@ -35,7 +35,7 @@ function tokenizeCode(
   if (options.highlightCode === undefined) return plain
   let tokenized: CodeTokenLines | undefined
   try {
-    tokenized = options.highlightCode(lang, value)
+    tokenized = options.highlightCode(lang, value, options.nestedLayoutBudget)
   } catch {
     return plain
   }

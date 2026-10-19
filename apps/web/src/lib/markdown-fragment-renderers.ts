@@ -156,21 +156,23 @@ function fragmentHrefsAreLocal(svg: string): boolean {
 
 // Each element pattern admits a namespace prefix: an exported SVG opened on
 // its own is parsed as XML, where `<s:script>` under a prefix bound to the
-// SVG namespace is the same element as `<script>`.
-const SCRIPT_ELEMENT = /<(?:[\w.-]+:)?script\b/i
+// SVG namespace is the same element as `<script>`. The prefix is any run of
+// name characters, not ASCII word characters: an XML name may start with any
+// letter, so `<é:script>` is a script element too.
+const SCRIPT_ELEMENT = /<(?:[^\s<>/:="']+:)?script\b/i
 /**
  * Live HTML inside an SVG: a `<foreignObject>` carries arbitrary XHTML (a
  * form, a button) that works in the app-origin preview and in an exported
  * SVG opened on its own.
  */
-const HTML_ISLAND_ELEMENT = /<(?:[\w.-]+:)?(?:foreignObject|form)\b/i
+const HTML_ISLAND_ELEMENT = /<(?:[^\s<>/:="']+:)?(?:foreignObject|form)\b/i
 /**
  * SMIL animation rewrites an attribute after every check here has read it —
  * `<set attributeName="href" to="javascript:…">` turns a local link into a
  * script one in an exported SVG, which has no CSP. Neither engine animates.
  */
 const ANIMATION_ELEMENT =
-  /<(?:[\w.-]+:)?(?:animate|animateMotion|animateTransform|animateColor|set)[\s/>]/i
+  /<(?:[^\s<>/:="']+:)?(?:animate|animateMotion|animateTransform|animateColor|set)[\s/>]/i
 /**
  * Any `url(` whose target is not a fragment-local `#id` (CSS or attribute),
  * and any `image-set(` (`-webkit-` included), which loads from a quoted
@@ -187,8 +189,8 @@ const NON_LOCAL_URL = /url\((?!\s*(?:['"]\s*)?#)|image-set\(/i
  * or presentation attribute, or a `<style>` element — or an `@import` anywhere.
  */
 const UNREADABLE_CSS = /\\|@import|&(?!(?:amp|lt|gt|quot|apos);)/i
-const STYLE_ELEMENT_OPEN = /<(?:[\w.-]+:)?style\b/gi
-const STYLE_ELEMENT_CLOSE = /<\/(?:[\w.-]+:)?style\b/i
+const STYLE_ELEMENT_OPEN = /<(?:[^\s<>/:="']+:)?style\b/gi
+const STYLE_ELEMENT_CLOSE = /<\/(?:[^\s<>/:="']+:)?style\b/i
 const FORM_ATTRIBUTE = /^(?:form)?action$/i
 const WHITESPACE = /\s/
 const TAG_NAME_END = /[\s/>]/
@@ -234,7 +236,7 @@ const CSS_VALUED_ATTRIBUTE =
   /^(?:style|fill|stroke|filter|mask|clip-path|marker|marker-start|marker-mid|marker-end|cursor)$/i
 
 /** `src`, and `href` under any prefix — XML binds `x:href` to xlink as readily as `xlink:href`. */
-const LINK_ATTRIBUTE = /^(?:src|(?:[\w.-]+:)?href)$/i
+const LINK_ATTRIBUTE = /^(?:src|(?:[^\s<>/:="']+:)?href)$/i
 
 /**
  * An attribute that runs script (`on<event>`), submits a form

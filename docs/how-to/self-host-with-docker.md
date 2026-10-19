@@ -244,7 +244,10 @@ with `POST /api/workspaces/<workspace>/invitations`. The response carries a
 link to this keeper's `/invite` page, valid for seven days and usable once.
 Whoever signs in through it becomes a user, if they are not one already, and
 a member of that workspace. The token is in the link's fragment, so the
-browser never sends it to a server and it does not appear in a `Referer`.
+browser never sends it to a server and it does not appear in a `Referer`;
+once the page has read it, it removes the fragment from the address bar and
+the history entry — so reloading that page shows the plain sign-in page, and
+the link has to be opened again to accept.
 The link is the secret, and it is shown only in that response.
 
 Accepting is a click on that page, which sends the invitation to

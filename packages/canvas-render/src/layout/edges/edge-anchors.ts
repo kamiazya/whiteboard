@@ -157,6 +157,10 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
     point: sidePointAt(end.rect, end.side, (i + 1) / (ordered.length + 1)),
     t: tangentCoordinate(end.side, sidePointAt(end.rect, end.side, (i + 1) / (ordered.length + 1))),
   }))
+  // Ranks are counted by binary search over the sorted coordinates, not by
+  // scanning the group per member: a group holds every end on one side, so a
+  // board can put thousands in one and a scan per member is quadratic in it.
+  const sortedT = placed.map((p) => p.t).sort((a, b) => a - b)
   for (const member of placed) {
     // Depth by SWEEP RANK, not list index: a corridor travelling toward
     // its far endpoint passes every anchor between its own and that
@@ -169,7 +173,12 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
     const rank =
       dir === 0
         ? 0
-        : placed.filter((other) => (dir > 0 ? other.t > member.t : other.t < member.t)).length
+        : dir > 0
+          ? sortedT.length - firstIndexWhere(sortedT, (t) => t > member.t)
+          : // A non-finite box compares below nothing, as the scan it replaced did.
+            Number.isNaN(member.t)
+            ? 0
+            : firstIndexWhere(sortedT, (t) => t >= member.t)
     const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
     const entry = entries.get(member.end.edgeId) ?? {}
     entries.set(
@@ -179,6 +188,18 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
         : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
     )
   }
+}
+
+/** The first index of ascending `sorted` whose value satisfies a monotone `holds`, or its length. */
+function firstIndexWhere(sorted: readonly number[], holds: (value: number) => boolean): number {
+  let lo = 0
+  let hi = sorted.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (holds(sorted[mid] as number)) hi = mid
+    else lo = mid + 1
+  }
+  return lo
 }
 
 /** The whole partition, placed. */
@@ -262,6 +283,42 @@ export function patchAnchorGroups(
     if (group !== undefined) placeAnchorGroup(group, entries)
   }
   return { groups, entries }
+}
+
+/**
+ * How many group members `patchAnchorGroups(ctx, base, sides, edgeIndex)`
+ * would re-place, answered without placing any: the sizes of the groups the
+ * edge leaves and joins, as they will be. A caller spending a budget on
+ * trials asks this first, because those groups are the part of a trial that
+ * grows with the board — one side can hold every end there is.
+ */
+export function patchWork(
+  ctx: AnchorContext,
+  base: AnchorGroups,
+  sides: ReadonlyMap<string, SidePair>,
+  edgeIndex: number,
+): number {
+  const edge = ctx.edges[edgeIndex]
+  const next = endsOfEdge(ctx, edgeIndex, sides)
+  if (edge === undefined || next === undefined) return 0
+  const sizes = new Map<string, number>()
+  const sizeOf = (key: string): number => sizes.get(key) ?? base.groups.get(key)?.length ?? 0
+  const previous = base.entries.get(edge.id)
+  for (const [role, side] of [
+    ['from', previous?.fromSide],
+    ['to', previous?.toSide],
+  ] as const) {
+    if (side === undefined) continue
+    const key = groupKeyFor(edge, role, side)
+    sizes.set(key, Math.max(0, sizeOf(key) - 1))
+  }
+  for (const end of next) {
+    const key = groupKeyFor(edge, end.role, end.side)
+    sizes.set(key, sizeOf(key) + 1)
+  }
+  let members = 0
+  for (const size of sizes.values()) members += size
+  return members
 }
 
 /**

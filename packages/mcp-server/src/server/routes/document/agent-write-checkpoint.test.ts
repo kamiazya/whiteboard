@@ -96,11 +96,11 @@ describe('an agent-only workspace', () => {
       }
 
       const versions = new FileVersionStore()
-      expect(await versions.earliestWorkspaceFrontiers(workspaceId)).toBeNull()
+      expect(await versions.workspaceVersionFrontiers(workspaceId)).toEqual([])
 
       await trigger?.flush()
 
-      expect(await versions.earliestWorkspaceFrontiers(workspaceId)).not.toBeNull()
+      expect(await versions.workspaceVersionFrontiers(workspaceId)).not.toEqual([])
       const compaction = await compactWorkspace(workspaceId, versions)
       expect(compaction.reason).not.toBe('no-versions')
     } finally {

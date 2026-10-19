@@ -252,7 +252,9 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   {
     name: 'versions/prune-sandwiched',
     claims: matching(/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/),
-    decide: always('versions:write'),
+    // Only a POST is mounted; a read verb is read-level like every other
+    // rule's, so no GET is ever guarded as though it changed something.
+    decide: byAccess('versions:write', 'versions:read'),
     workspace: workspacesHandle,
   },
 

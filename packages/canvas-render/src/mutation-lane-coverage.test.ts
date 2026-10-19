@@ -343,9 +343,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // reads the sum off the SVG with its own parser, and its budget, shadow
     // weight, raster scale, clip, largest-first order and definition removal
     // were each mutation-checked by hand against it.
+    //
+    // 114 with `highlight/tokenizer-budget.ts`, the per-layout tokeniser
+    // account every fence the default highlighter colours spends from.
+    // Outside the lane, as `embed-budget.ts` is: a constructor and one spend,
+    // and `highlight-layout-budget.test.ts` pins both accounts, the refusal
+    // count a cache reads, and a fresh account per layout — each
+    // mutation-checked by hand against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 113,
+      production: 114,
     })
   })
 

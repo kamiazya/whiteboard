@@ -294,7 +294,7 @@ export function resolveTextAnchor(
   // existed. That is a reason to ask the quote, never a reason to orphan.
   if (live !== undefined) return { kind: 'placed', start: live.start, end: live.end }
 
-  const { exact, prefix = '', suffix = '' } = anchor.quote
+  const { exact } = anchor.quote
   // The stored offsets first. This is a COST shortcut, not a rule about which
   // answer is right: on consistent data the search below reproduces it (the
   // stored site is at distance 0 from itself, so it wins the tiebreak), and
@@ -316,20 +316,46 @@ export function resolveTextAnchor(
   // once a quote and its offsets are written by different paths; observed as
   // `Index out of bound. The given pos is 20, but the length is 19` thrown
   // from inside Loro by `markThreadPassages`, and swallowed by a catch.
-  if (anchor.end <= body.length && body.slice(anchor.start, anchor.end) === exact) {
+  if (textAnchorOffsetsHold(body, anchor)) {
     return { kind: 'placed', start: anchor.start, end: anchor.end }
   }
+  return placeAmong(
+    body,
+    anchor,
+    nearestOccurrences(body, exact, anchor.start, SCORED_OCCURRENCES_MAX),
+  )
+}
 
-  const candidates = nearestOccurrences(body, exact, anchor.start, SCORED_OCCURRENCES_MAX)
+/**
+ * Whether the stored offsets still select the quote — `resolveTextAnchor`'s
+ * shortcut, and the one answer it gives without searching. Exported for a
+ * caller deciding whether a resolution will search at all.
+ */
+export function textAnchorOffsetsHold(body: string, anchor: TextAnchor): boolean {
+  return anchor.end <= body.length && body.slice(anchor.start, anchor.end) === anchor.quote.exact
+}
+
+/**
+ * The occurrence among `candidates` resolution places the anchor at, or
+ * orphaned when there are none.
+ *
+ * Score by how much of the remembered surroundings each candidate still has,
+ * and break the remaining ties by distance from where the anchor last was.
+ * Distance is the tiebreak rather than the score because it is the weaker
+ * evidence: an edit above the passage moves every offset, so a candidate can
+ * be far from `start` and still be the right one. Of two candidates equal on
+ * both, the first wins — the lower, whether `candidates` runs nearest first
+ * or in body order, since the lower of two equally near comes first in both.
+ */
+function placeAmong(
+  body: string,
+  anchor: TextAnchor,
+  candidates: readonly number[],
+): ResolvedTextAnchor {
+  const { exact, prefix = '', suffix = '' } = anchor.quote
   if (candidates.length === 0) return ORPHANED
   const at = candidates[0] as number
   if (candidates.length === 1) return { kind: 'placed', start: at, end: at + exact.length }
-
-  // Score by how much of the remembered surroundings each candidate still
-  // has, and break the remaining ties by distance from where the anchor last
-  // was. Distance is the tiebreak rather than the score because it is the
-  // weaker evidence: an edit above the passage moves every offset, so a
-  // candidate can be far from `start` and still be the right one.
   let best = at
   let bestScore = -1
   let bestDistance = Number.POSITIVE_INFINITY
@@ -344,6 +370,26 @@ export function resolveTextAnchor(
     }
   }
   return { kind: 'placed', start: best, end: best + exact.length }
+}
+
+/**
+ * `resolveTextAnchor` without a live mark, for a caller that already knows
+ * where the quote occurs: `occurrences` is EVERY start of `anchor.quote.exact`
+ * in `body`, ascending, as `textOccurrences` lists them. The same answer,
+ * without searching the body — the search is the part a caller holding the
+ * occurrences across edits can skip, and `scoredOccurrenceRange` picks from
+ * them the ones the search would have collected.
+ */
+export function resolveTextAnchorAmong(
+  body: string,
+  anchor: TextAnchor,
+  occurrences: readonly number[],
+): ResolvedTextAnchor {
+  if (textAnchorOffsetsHold(body, anchor)) {
+    return { kind: 'placed', start: anchor.start, end: anchor.end }
+  }
+  const { from, to } = scoredOccurrenceRange(occurrences, anchor.start)
+  return placeAmong(body, anchor, occurrences.slice(from, to))
 }
 
 /**

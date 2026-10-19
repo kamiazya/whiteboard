@@ -126,6 +126,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and creates a spatial document empty, and wb_canvas_edit refuses the same growth as a CanvasEditError',
   CommentAnchorTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit refuses the same anchor through annotationAnchorInputSchema',
+  AnchorQuoteTooLongError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no anchor, and wb_thread_edit / wb_body_edit refuse the same quote through textAnchorInputSchema',
   TooManyOpenThreadsError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit / wb_canvas_edit refuse the same growth as their own op errors',
   TooManyOpenChangesError:

@@ -23,10 +23,11 @@ import {
   buildAnchorGroups,
   computeAnchorsFor,
   patchAnchorGroups,
+  patchWork,
 } from './edge-anchors.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import type { Point, Rect } from './edge-geometry.js'
-import { boundingBoxOf, centerOf, pathLength, rectOf } from './edge-geometry.js'
+import { boundingBoxOf, centerOf, midpointExtent, pathLength, rectOf } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import {
   accumulateCost,
@@ -46,7 +47,7 @@ import {
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
 import { initialSideChoices, rankedSidePairs } from './edge-sides.js'
 import type { RoutingBudget } from './routing-budget.js'
-import { createRoutingBudget } from './routing-budget.js'
+import { createRoutingBudget, PAIR_LOOKUP_VISITS, searchShare, spend } from './routing-budget.js'
 
 /** An arrowhead's own length: a final segment shorter than this paints an
  * arrow with no line under it (see edge-arrows.ts's ARROW_LENGTH). */
@@ -150,12 +151,6 @@ function quantizedSegments(path: readonly Point[]): Int32Array {
 }
 
 /**
- * What a trial costs when the layout's budget could not price all of it:
- * worse than any real configuration, so it is never adopted on a partial sum.
- */
-const UNPRICED: ConfigCost = zeroPenalty().map(() => Number.POSITIVE_INFINITY)
-
-/**
  * Hard edge-count gate for the improvement pass. The initial matrix build
  * is a sweep-and-prune (edge-crossing-sweep.ts, ~3ms at 200 edges); the
  * remaining cost is the TRIAL loop, bounded above FULL_OPT_MAX_EDGES by
@@ -242,6 +237,18 @@ function sideCandidatesFor(
     })
 }
 
+/** One evaluated trial: its cost and everything adopting it carries over. */
+interface Trial {
+  cost: ConfigCost
+  anchors: ReadonlyMap<string, EdgeAnchorPair>
+  placement: AnchorGroups
+  paths: (readonly Point[])[]
+  bounds: Rect[]
+  touched: number[]
+  updates: Map<number, ConfigCost>
+  selfUpdates: Map<number, ConfigCost>
+}
+
 /**
  * The search's incremental configuration score: per-edge routed paths, the
  * pairwise score matrix, and the aggregate cost, kept patchable because a
@@ -278,12 +285,6 @@ function createConfigScore(
     a?.fromSide === b?.fromSide &&
     a?.toSide === b?.toSide
 
-  // Incremental state: per-edge routed paths, the pairwise score matrix,
-  // and the aggregate cost. A trial re-sides ONE edge; only the edges
-  // whose anchor entries actually changed (the trial edge plus members of
-  // the anchor groups it left and joined) re-route and re-score their
-  // pairs — everything else is carried over. This is what keeps a trial
-  // O(affected * E) instead of O(E^2).
   // Same edge, same anchors, same obstacles -> same path. A trial re-sides
   // ONE edge, but that recomputes the anchor groups it leaves and joins, so
   // the same (edge, anchor) combination comes back around repeatedly:
@@ -385,7 +386,9 @@ function createConfigScore(
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
-  // Set when the budget refuses one of a trial's pairs (see UNPRICED).
+  const chargeTrial = searchShare(budget)
+  // Set when the budget refuses one of a trial's pairs: such a trial has no
+  // price, never a partial sum, so it is never adopted.
   let unpriced = false
   /**
    * Re-score every touched edge against ITS OWN boxes and borders, swapping
@@ -428,6 +431,7 @@ function createConfigScore(
     trialBounds: Rect[],
     updates: Map<number, ConfigCost>,
   ): void => {
+    if (unpriced) return
     if (!boundsOverlap(trialBounds[lo]!, trialBounds[hi]!)) {
       const prior = matrix.get(key)
       if (prior !== undefined) {
@@ -486,41 +490,39 @@ function createConfigScore(
     return updates
   }
 
+  // `undefined` when the `trials` account cannot cover the work, each part
+  // charged before it is done (routing-budget.ts).
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
     // Which edge `trialSides` re-sided. Every trial here differs from the
     // incumbent in exactly one edge, which is what makes the partition
     // patchable instead of rebuilt.
     reSidedIndex: number,
-  ): {
-    cost: ConfigCost
-    anchors: ReadonlyMap<string, EdgeAnchorPair>
-    placement: AnchorGroups
-    paths: (readonly Point[])[]
-    bounds: Rect[]
-    touched: number[]
-    updates: Map<number, ConfigCost>
-    selfUpdates: Map<number, ConfigCost>
-  } => {
+  ): Trial | undefined => {
+    if (!chargeTrial(patchWork(ctx, placement, trialSides, reSidedIndex) + edges.length)) return
     const trialPlacement = patchAnchorGroups(ctx, placement, trialSides, reSidedIndex)
     const trialAnchors = computeAnchorsFor(ctx, trialSides, align, pins, trialPlacement)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
     }
+    if (!chargeTrial(touched.length * (nodes.length + PAIR_LOOKUP_VISITS * edges.length))) return
     const trialPaths = paths.slice()
     const trialBounds = bounds.slice()
+    let scoring = 0
     for (const i of touched) {
       trialPaths[i] = routeCached(edges[i]!, i, trialAnchors.get(edges[i]!.id))
       trialBounds[i] = boundingBoxOf(trialPaths[i]!)
+      scoring += Math.max(0, trialPaths[i]!.length - 1) * nodes.length
     }
+    if (!chargeTrial(scoring)) return
     // Summed in place into a scratch copy: every term below is added exactly once.
     const cost = currentCost.slice()
     const selfUpdates = applySelfCosts(cost, touched, trialPaths)
     const updates = applyPairCosts(cost, touched, trialPaths, trialBounds)
-
+    if (unpriced) return
     return {
-      cost: unpriced ? UNPRICED : cost,
+      cost,
       anchors: trialAnchors,
       placement: trialPlacement,
       paths: trialPaths,
@@ -541,10 +543,7 @@ function createConfigScore(
     return cost
   }
 
-  const adopt = (
-    trialSides: Map<string, SidePair>,
-    evaluated: ReturnType<typeof evaluateTrial>,
-  ): void => {
+  const adopt = (trialSides: Map<string, SidePair>, evaluated: Trial): void => {
     current = trialSides
     currentCost = evaluated.cost
     anchors = evaluated.anchors
@@ -568,6 +567,39 @@ function createConfigScore(
         diagonalInkThrough(paths[i] ?? [], endpointRectsFor[i] ?? []) >
       0,
   }
+}
+
+/**
+ * The edges one pass of the search tries candidates for. Above the
+ * full-optimization size, only the WORST OFFENDERS — the edges contributing
+ * the most cost right now — so trial work stays bounded at any canvas size
+ * while the edges that actually look bad still improve. At or under the full
+ * size every edge iterates in document order, bit-identical to the unbounded
+ * loop.
+ */
+function trialEdgesFor(
+  edges: readonly RoutableElement[],
+  align: boolean,
+  contribution: (i: number) => ConfigCost,
+): readonly RoutableElement[] {
+  // The aligned run is a REPAIR pass over an already-settled
+  // configuration, so it always takes the ranked-and-filtered list at
+  // every size: an edge with nothing wrong with it has nothing for this
+  // pass to fix, and trying candidates for it is the whole of the pass's
+  // cost with none of its benefit.
+  if (!align && edges.length <= FULL_OPT_MAX_EDGES) return edges
+  const ranked = edges
+    .map((edge, i) => ({ edge, i, cost: contribution(i) }))
+    // An edge with no overlap, no illegibility, and no crossings has
+    // nothing to repair — reshuffling it to shave bends is churn, the
+    // same judgement the whole-config short-circuit makes
+    // (hasRepairableProblem, edge-rules.ts).
+    .filter((r) => hasRepairableProblem(r.cost))
+    .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
+    .slice(0, TRIAL_BUDGET_EDGES)
+    // Document order within the budget keeps adoption sequencing stable.
+    .sort((a, b) => a.i - b.i)
+  return ranked.map((r) => r.edge)
 }
 
 /**
@@ -620,32 +652,6 @@ function optimizeSideChoices(
   // churn, not repair.
   if (!hasRepairableProblem(score.cost())) return score.sides()
 
-  // Above the full-optimization size, each pass tries candidates only for
-  // the WORST OFFENDERS — the edges contributing the most cost right now —
-  // so trial work stays bounded at any canvas size while the edges that
-  // actually look bad still improve. At or under the full size every edge
-  // iterates in document order, bit-identical to the unbounded loop.
-  const trialEdgesForPass = (): readonly RoutableElement[] => {
-    // The aligned run is a REPAIR pass over an already-settled
-    // configuration, so it always takes the ranked-and-filtered list at
-    // every size: an edge with nothing wrong with it has nothing for this
-    // pass to fix, and trying candidates for it is the whole of the pass's
-    // cost with none of its benefit.
-    if (!align && edges.length <= FULL_OPT_MAX_EDGES) return edges
-    const ranked = edges
-      .map((edge, i) => ({ edge, i, cost: score.contribution(i) }))
-      // An edge with no overlap, no illegibility, and no crossings has
-      // nothing to repair — reshuffling it to shave bends is churn, the
-      // same judgement the whole-config short-circuit makes
-      // (hasRepairableProblem, edge-rules.ts).
-      .filter((r) => hasRepairableProblem(r.cost))
-      .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
-      .slice(0, TRIAL_BUDGET_EDGES)
-      // Document order within the budget keeps adoption sequencing stable.
-      .sort((a, b) => a.i - b.i)
-    return ranked.map((r) => r.edge)
-  }
-
   /**
    * Try every candidate side pair for one edge, adopting the first that is a
    * STRICT improvement.
@@ -653,31 +659,37 @@ function optimizeSideChoices(
    * Incumbent-wins-ties (edge-rules.ts), so a tie never triggers churn and
    * the lexicographic loop cannot oscillate.
    */
-  const improveEdge = (edge: RoutableElement): boolean => {
+  const candidatesOf = (edge: RoutableElement, index: number): SidePair[] => {
+    const named = endSide(edge.from) !== undefined && endSide(edge.to) !== undefined
+    return sideCandidatesFor(edge, byId, named && score.selfThrough(index))
+  }
+  // `exhausted` once the account refuses a trial: a refused trial is never
+  // adopted, so the search ends on the sides it has rather than building
+  // each remaining candidate only to discard it.
+  const improveEdge = (edge: RoutableElement): 'adopted' | 'kept' | 'exhausted' => {
     const chosen = score.sideOf(edge.id)
-    if (chosen === undefined) return false
+    if (chosen === undefined) return 'kept'
     const index = edgeIndexById.get(edge.id) ?? -1
-    const forced =
-      endSide(edge.from) !== undefined && endSide(edge.to) !== undefined && score.selfThrough(index)
-    for (const candidate of sideCandidatesFor(edge, byId, forced)) {
+    for (const candidate of candidatesOf(edge, index)) {
       if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
       const trial = new Map(score.sides())
       trial.set(edge.id, candidate)
       const evaluated = score.evaluateTrial(trial, index)
+      if (evaluated === undefined) return 'exhausted'
       if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
         score.adopt(trial, evaluated)
-        return true
+        return 'adopted'
       }
     }
-    return false
+    return 'kept'
   }
 
   for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
     let improved = false
-    for (const edge of trialEdgesForPass()) {
-      if (locked?.has(edge.id)) continue
-      if (improveEdge(edge)) improved = true
-      if (!hasRepairableProblem(score.cost())) return score.sides()
+    for (const edge of trialEdgesFor(edges, align, score.contribution)) {
+      const outcome = locked?.has(edge.id) ? 'kept' : improveEdge(edge)
+      if (outcome === 'exhausted' || !hasRepairableProblem(score.cost())) return score.sides()
+      improved ||= outcome === 'adopted'
     }
     if (!improved) break
   }
@@ -711,9 +723,11 @@ function bestRepairedPair(
   candidates: readonly SidePair[],
   ctx: {
     edge: RoutableElement
+    edgeIndex: number
     nodes: readonly SpatialNode[]
     ctx: AnchorContext
     repaired: ReadonlyMap<string, SidePair>
+    placement: AnchorGroups
     align: boolean
     pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined
     styleOf: EdgeStyleOf
@@ -722,9 +736,10 @@ function bestRepairedPair(
     coincides: (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string) => boolean
     budget: RoutingBudget
   },
-): RepairScore | undefined {
-  const { edge, nodes, repaired, align, pins, styleOf, fromRect, toRect, coincides, budget } = ctx
-  let best: RepairScore | undefined
+): (RepairScore & { placement: AnchorGroups }) | 'exhausted' | undefined {
+  const { edge, edgeIndex, nodes, repaired, placement, align, pins, styleOf } = ctx
+  const { fromRect, toRect, coincides, budget } = ctx
+  let best: (RepairScore & { placement: AnchorGroups }) | undefined
   for (const pair of candidates) {
     const sided: SidePair = {
       fromSide: endSide(edge.from) ?? pair.fromSide,
@@ -732,12 +747,18 @@ function bestRepairedPair(
     }
     const trial = new Map(repaired)
     trial.set(edge.id, sided)
-    const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins)
+    // Patched, not rebuilt: where every edge collided one side holds them all.
+    const work = patchWork(ctx.ctx, placement, trial, edgeIndex) + ctx.ctx.edges.length
+    if (!spend(budget, 'repairs', work + nodes.length)) return 'exhausted'
+    const trialPlacement = patchAnchorGroups(ctx.ctx, placement, trial, edgeIndex)
+    const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins, trialPlacement)
     if (coincides(trialAnchors, edge.id)) continue
     const anchors = trialAnchors.get(edge.id)
     const { path } = routeEdge(nodes, edge, styleOf(edge), anchors, undefined, budget)
     const scored = scoreRepairedRoute(sided, path, fromRect, toRect)
-    if (best === undefined || betterRepair(scored, best)) best = scored
+    if (best === undefined || betterRepair(scored, best)) {
+      best = { ...scored, placement: trialPlacement }
+    }
   }
   return best
 }
@@ -808,7 +829,8 @@ function anchorsWithoutCoincidentEnds(
     return a?.from !== undefined && a.to !== undefined && a.from.x === a.to.x && a.from.y === a.to.y
   }
   const ctx = anchorContext(nodes, edges)
-  const anchors = computeAnchorsFor(ctx, sides, align, pins)
+  let placement = buildAnchorGroups(ctx, sides)
+  const anchors = computeAnchorsFor(ctx, sides, align, pins, placement)
   const collided = edges.filter(
     (edge) =>
       !isSelfLoop(edge) &&
@@ -818,6 +840,7 @@ function anchorsWithoutCoincidentEnds(
   if (collided.length === 0) return anchors
 
   const byId = new Map(nodes.map((n) => [n.id, n]))
+  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   const repaired = new Map(sides)
   for (const edge of collided) {
     const fromNode = nodeAtEnd(edge.from, byId)
@@ -834,22 +857,13 @@ function anchorsWithoutCoincidentEnds(
       toRect,
       () => 0,
     )
-    // Every candidate is scored, not just the first that qualifies. Two
-    // predicates are needed and neither alone is enough: "not coincident"
-    // alone accepted a pair that reached the far side straight THROUGH the
-    // target, and "first clean one" alone accepted a four-bend loop around
-    // both boxes when a short hop up the shared side was available. Clean is
-    // the requirement; shortest-and-straightest picks among the clean.
-    // Three tiers, because they are not equally important and treating them
-    // as one filter made an edge vanish: a candidate that is clean AND has
-    // runway is best, a clean one without runway still beats an ugly one, and
-    // ANY visible route beats the collided pair. Visibility is the
-    // requirement; the rest is preference.
     const best = bestRepairedPair(candidates, {
       edge,
+      edgeIndex: edgeIndexById.get(edge.id) ?? -1,
       nodes,
       ctx,
       repaired,
+      placement,
       align,
       pins,
       styleOf,
@@ -858,44 +872,17 @@ function anchorsWithoutCoincidentEnds(
       coincides,
       budget,
     })
-    if (best !== undefined) repaired.set(edge.id, best.pair)
+    // The `repairs` account is spent: the rest keep their collided pairs.
+    if (best === 'exhausted') break
+    if (best !== undefined) {
+      repaired.set(edge.id, best.pair)
+      placement = best.placement
+    }
     // No candidate reaches it cleanly: keep the collided pair. routeOrthogonal
     // draws the shared point rather than a spike, so the worst case is an
     // invisible edge, never a wrong one.
   }
   return computeAnchorsFor(ctx, repaired, align, pins)
-}
-
-/**
- * The extent the Morton keys are computed against.
- *
- * A degenerate extent — every midpoint on one point, or none finite — leaves
- * every key 0; the sort then falls back to document order, which is still a
- * total, deterministic grouping.
- */
-function midpointExtent(midpoints: readonly Point[]): {
-  spanX: number
-  spanY: number
-  originX: number
-  originY: number
-} {
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  for (const m of midpoints) {
-    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue
-    minX = Math.min(minX, m.x)
-    minY = Math.min(minY, m.y)
-    maxX = Math.max(maxX, m.x)
-    maxY = Math.max(maxY, m.y)
-  }
-  return {
-    spanX: Number.isFinite(minX) ? Math.max(maxX - minX, 1) : 1,
-    spanY: Number.isFinite(minY) ? Math.max(maxY - minY, 1) : 1,
-    originX: Number.isFinite(minX) ? minX : 0,
-    originY: Number.isFinite(minY) ? minY : 0,
-  }
 }
 
 /**

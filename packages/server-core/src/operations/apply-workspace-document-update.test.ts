@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import { setLogSink } from '../log.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
@@ -127,7 +128,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
   it('imports a valid update, saves, and evicts projections before the lock releases', async () => {
     const fake = fakes()
     const result = await applyWorkspaceDocumentUpdate(
-      { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        blobStore: unusedBlobStore(),
+      },
       { workspaceId: WS, update: workspaceUpdateBytes('canvas-a') },
     )
     expect(result).toMatchObject({ kind: 'applied' })
@@ -148,7 +153,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
   it('answers malformed-update for garbage bytes, saving and evicting NOTHING', async () => {
     const fake = fakes()
     const result = await applyWorkspaceDocumentUpdate(
-      { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        blobStore: unusedBlobStore(),
+      },
       { workspaceId: WS, update: new Uint8Array([1, 2, 3, 4]) },
     )
     expect(result).toEqual({ kind: 'malformed-update' })
@@ -168,7 +177,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
     })
 
     const failure = await applyWorkspaceDocumentUpdate(
-      { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        blobStore: unusedBlobStore(),
+      },
       { workspaceId: WS, update: workspaceUpdateBytes('canvas-a') },
     ).catch((err: unknown) => err)
 
@@ -188,7 +201,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
     const fake = cachingWorkspaceDocuments()
     const cached = await fake.workspaceDocuments.get(WS)
     const result = await applyWorkspaceDocumentUpdate(
-      { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        blobStore: unusedBlobStore(),
+      },
       { workspaceId: WS, update: new Uint8Array([1, 2, 3, 4]) },
     )
     expect(result).toEqual({ kind: 'malformed-update' })
@@ -200,7 +217,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
     it('refuses an update that adds a document, keeping nothing of it', async () => {
       const fake = cachingWorkspaceDocuments()
       const result = await applyWorkspaceDocumentUpdate(
-        { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+        {
+          liveDocuments: fake.live,
+          workspaceDocuments: fake.workspaceDocuments,
+          blobStore: unusedBlobStore(),
+        },
         { workspaceId: WS, update: workspaceUpdateBytes('canvas-a'), mayPlaceDocuments: false },
       )
 
@@ -223,7 +244,11 @@ describe('applyWorkspaceDocumentUpdate', () => {
       replica.commit()
 
       const result = await applyWorkspaceDocumentUpdate(
-        { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+        {
+          liveDocuments: fake.live,
+          workspaceDocuments: fake.workspaceDocuments,
+          blobStore: unusedBlobStore(),
+        },
         {
           workspaceId: WS,
           update: replica.export({ mode: 'update', from }),
