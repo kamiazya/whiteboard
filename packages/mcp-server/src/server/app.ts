@@ -7,6 +7,7 @@ import {
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { getCookie } from 'hono/cookie'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
@@ -72,6 +73,7 @@ import {
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
 import { createServerModeStoredDataRedaction } from './security/server-mode-redaction.js'
+import { SESSION_COOKIE, sessionKeyOf } from './security/sign-in-session-store.js'
 import { holdV1CreateBodyToScope } from './security/v1-create-body-scope.js'
 import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
@@ -272,6 +274,12 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
             members.holdsAccess(workspaceId, userId),
           streamCaps: SYNC_STREAM_CAPS,
           grantExpiresAt: (c: Context) => callerGrant(c)?.expiresAt,
+          sessionOf: (c: Context) => {
+            const token = getCookie(c, SESSION_COOKIE)
+            return callerGrant(c)?.kind === 'signed-in' && token !== undefined
+              ? sessionKeyOf(token)
+              : undefined
+          },
         }),
   }
 }

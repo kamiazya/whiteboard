@@ -17,6 +17,11 @@ import type { AuthenticatorBinding } from './member-profile-store.js'
 /** Host-only (`__Host-`): the browser sends it back to exactly this origin. */
 export const SESSION_COOKIE = '__Host-wb_session'
 
+/** What a session is stored and named under: its token's hash, never the token. */
+export function sessionKeyOf(token: string): string {
+  return sha256Hex(token)
+}
+
 /** A live session: whose it is, and when their provider last authenticated
  *  them (ADR-0051), or null when the provider did not say. */
 interface OpenSession {
@@ -54,7 +59,7 @@ async function openSession(db: TenantDatabase, token: string, now: number) {
   const row = await db
     .selectFrom('signInSessions')
     .select(['authenticator', 'subject', 'authenticatedAt', 'expiresAt'])
-    .where('tokenHash', '=', sha256Hex(token))
+    .where('tokenHash', '=', sessionKeyOf(token))
     .where('expiresAt', '>', now)
     .executeTakeFirst()
   if (row === undefined) return null
@@ -77,7 +82,7 @@ async function insertSession(
   await db
     .insertInto('signInSessions')
     .values({
-      tokenHash: sha256Hex(token),
+      tokenHash: sessionKeyOf(token),
       authenticator: person.authenticator,
       subject: person.subject,
       createdAt: now,
@@ -116,7 +121,7 @@ export function createSignInSessionStore(db: TenantDatabase): SignInSessionStore
     async end(token) {
       const deleted = await db
         .deleteFrom('signInSessions')
-        .where('tokenHash', '=', sha256Hex(token))
+        .where('tokenHash', '=', sessionKeyOf(token))
         .returning('tokenHash')
         .execute()
       return deleted.length > 0

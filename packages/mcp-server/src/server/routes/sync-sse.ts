@@ -120,6 +120,10 @@ export interface SyncSseRouterOptions {
    *  re-check before a broadcast cannot see an expiry. Absent: no grant here
    *  expires (the local daemon's token). */
   grantExpiresAt?: (c: Context) => number | undefined
+  /** The sign-in session the stream was opened on, as the hash its token is
+   *  stored under, so ending that session ends the stream; undefined for any
+   *  other grant. Absent: no sessions here (the local daemon). */
+  sessionOf?: (c: Context) => string | undefined
   /** How many streams one user, and everyone, may hold open. Absent: no cap
    *  (the local daemon, whose one person's tabs must never be refused). */
   streamCaps?: SyncStreamCaps
@@ -333,6 +337,7 @@ function streamEntry(
   streamId: string,
   userId: string | null,
   options: Pick<SyncSseRouterOptions, 'holdsAccess' | 'queueBudget'>,
+  session: string | undefined,
 ): SyncStream {
   const { holdsAccess } = options
   // What has been written and not yet taken by the reader: a write settles
@@ -360,6 +365,7 @@ function streamEntry(
     ...(userId === null || holdsAccess === undefined
       ? {}
       : { admits: (workspaceId: string) => holdsAccess(userId, workspaceId) }),
+    ...(session === undefined ? {} : { session }),
     end: () => stream.abort(),
   }
 }
@@ -400,8 +406,9 @@ async function holdStream(
   userId: string | null,
   options: SyncSseRouterOptions,
   expiresAt: number | undefined,
+  session: string | undefined,
 ): Promise<void> {
-  registerSyncStream(streamId, streamEntry(stream, streamId, userId, options))
+  registerSyncStream(streamId, streamEntry(stream, streamId, userId, options, session))
   const disarm = expiresAt === undefined ? () => {} : endAtExpiry(stream, streamId, expiresAt)
   // Listening before the first await: an abort that lands while the ready
   // frame is written fires no listener added after it, which would leave
@@ -451,7 +458,10 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     c.header('X-Accel-Buffering', 'no')
 
     const expiresAt = options.grantExpiresAt?.(c)
-    return streamSSE(c, (stream) => holdStream(stream, streamId, userId, options, expiresAt))
+    const session = options.sessionOf?.(c)
+    return streamSSE(c, (stream) =>
+      holdStream(stream, streamId, userId, options, expiresAt, session),
+    )
   })
 
   app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))

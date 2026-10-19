@@ -553,7 +553,10 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   also ends when the grant that opened it expires — the sign-in session's
   expiry, or a bearer token's `exp` — even if nothing is sent down it; the
   web app then reconnects, and the new stream needs a grant that is still
-  valid. The limits
+  valid. A stream opened on a sign-in session also ends when that session
+  does: signing out, or signing in again in the same browser, ends the
+  previous session's streams on the instance that handled it. A stream that
+  another instance holds keeps running until the session's expiry. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
   update, a promote, an upload, a document created from its content or a
