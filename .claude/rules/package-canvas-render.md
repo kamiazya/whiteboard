@@ -95,7 +95,9 @@ neither.
 The default is the bundled plugin's set, NOT an opt-in, for the lowlight
 reason recorded in `architecture-map.md`: a resolution step four call sites
 have to remember is one a call site forgets, and the surface that forgets does
-not fall back to the same picture — it silently draws less.
+not fall back to the same picture — it silently draws less. Highlighting is
+budgeted (`highlight/lowlight.ts`): highlight.js is quadratic in a long word
+run, so a fence past 4096² summed squared run lengths renders plain.
 
 Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
 never stored whole, so nothing migrates and a plugin cannot name another
@@ -183,18 +185,16 @@ the table alone.
 
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
-  `parseBody`; every consumer already bundled it to pass that same function
-  in), `@kamiazya/whiteboard-scene` (the scene vocabulary),
+  `parseBody`), `@kamiazya/whiteboard-scene` (the scene vocabulary),
   `@kamiazya/whiteboard-plugin-visual` (the default render contribution),
   `@kamiazya/whiteboard-facet-engine` (the theme token contract, zod-only),
   `css-line-break` (UAX #14 break opportunities), `lowlight` + `highlight.js`
-  (the default code tokeniser and its grammars) and `zod` (via `catalog:`),
+  (the default tokeniser) and `zod` (via `catalog:`),
   for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
-  captures every production source at build time via `import.meta.glob`
-  (`?raw`) rather than reading files at runtime, so the guard itself never
-  imports a `node:*` API.
+  reads every source via `import.meta.glob` (`?raw`), so it imports no
+  `node:*` API itself.
 
 ## Resolved design decisions (do not re-litigate without a new gate)
 
@@ -887,14 +887,14 @@ the table alone.
     region is `userSpaceOnUse` over the element's own extent plus its
     reach, the id derived from (radius, region) — an `objectBoundingBox`
     region drops an AXIS-ALIGNED STRAIGHT EDGE, whose box has zero area
-    (resvg 2.6.2 and the spec). Never the scene bounds: resvg blurs a layer
-    the region's size per element, so 200 neon boxes took over 240s
-    (`glow-region-cost.test.ts`). `glowReachPx` (three deviations, rounded
-    up) is what `sceneBounds` adds for a glowing node and what pads the
-    region. The theme mapping puts the halo on node chrome and edges ONLY
-    (`theme-asset.ts`): a label blurred at three deviations thickened into a
-    smudge over the halo pill it already sits on, and a group frame was the
-    largest and least informative bloom on the board.
+    (resvg 2.6.2 and the spec). resvg blurs a layer the region's size per
+    element, so the SUM is budgeted too: `svg/filter-budget.ts` adds every
+    glow and drop-shadow region (a shadow pixel twice) clipped to the drawn
+    box at the PNG's scale, and past 8M px strips the largest first.
+    `glowReachPx` (three deviations) is what `sceneBounds` adds and what pads
+    the region. The theme mapping puts the halo on node chrome and edges ONLY
+    (`theme-asset.ts`): a blurred label smudged its halo pill, and a group
+    frame was the largest, least informative bloom.
     `filter` is a paint attribute on every painted element (a path,
     a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
     it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
