@@ -637,7 +637,7 @@ function tidyLevel(
   const settled = new Map<string, Rect>(top.nodes.map((n) => [n.id, rectOf(n)]))
   const stack = [openLevel(top, options, nesting, settled)]
   for (;;) {
-    const level = stack[stack.length - 1]
+    const level = stack.at(-1)
     if (level === undefined) return settled
     const unit = level.units[level.next]
     if (unit !== undefined) {
@@ -650,7 +650,7 @@ function tidyLevel(
     }
     closeLevel(level, options)
     stack.pop()
-    const parent = stack[stack.length - 1]
+    const parent = stack.at(-1)
     if (parent?.descended !== undefined) {
       absorbInner(parent, parent.descended, level.input.nodes)
       parent.descended = undefined

@@ -184,10 +184,9 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
       dy: 0,
     })
   }
-  for (const [index, node] of nodes.entries()) {
+  for (const node of nodes) {
     if (claimed.has(node.id)) continue
     if (node.frame && isRoot(node, groups.indexOf(node))) {
-      void index
       const members = nodes.filter(
         (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),
       )
