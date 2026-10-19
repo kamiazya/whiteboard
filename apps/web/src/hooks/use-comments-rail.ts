@@ -57,6 +57,22 @@ export interface CommentsRail {
 }
 
 /**
+ * The rail's judge of a markdown document's text anchors. Where each quote
+ * was found in the last body is carried to the next, so a keystroke does not
+ * cost every row a search of the whole body — a cache, not state: nothing
+ * renders from it, and losing it costs only the search.
+ */
+function useMarkdownAnchorResolver(
+  body: string | null,
+  marks: ReadonlyMap<string, PassageRange> | undefined,
+): ReturnType<typeof markdownAnchorResolver> {
+  const memory = useRef<QuoteMemory | null>(null)
+  if (body !== null) memory.current = quoteMemoryFor(memory.current, body)
+  const quotes = body === null ? undefined : (memory.current ?? undefined)
+  return useMemo(() => markdownAnchorResolver(body, marks, quotes), [body, marks, quotes])
+}
+
+/**
  * Remembers whatever holds focus right now, as the place to hand it back to.
  *
  * Read from `activeElement` rather than named by each caller because four
@@ -177,22 +193,14 @@ export function useCommentsRail(args: {
    * answers `undefined` — "this host cannot tell", which the panel renders
    * as neither placed nor orphaned.
    */
-  // Where each quote was found in the last body, carried to the next so a
-  // keystroke does not cost every row a search of the whole body. A cache,
-  // not state: nothing renders from it, and losing it costs only the search.
-  const quoteMemoryRef = useRef<QuoteMemory | null>(null)
+  const markdownResolver = useMarkdownAnchorResolver(markdownBody, threadMarks)
   const resolveAnchor = useMemo(() => {
-    if (documentKind === 'markdown') {
-      const memory =
-        markdownBody === null ? undefined : quoteMemoryFor(quoteMemoryRef.current, markdownBody)
-      if (memory !== undefined) quoteMemoryRef.current = memory
-      return markdownAnchorResolver(markdownBody, threadMarks, memory)
-    }
+    if (documentKind === 'markdown') return markdownResolver
     if (documentKind !== 'spatial' || canvas === null) return undefined
     // Every reference a canvas anchor can carry — a node, an edge, a node
     // set, a passage of a node's text — judged by one reader.
     return anchorResolverFor({ kind: 'spatial', canvas })
-  }, [documentKind, canvas, markdownBody, threadMarks])
+  }, [documentKind, canvas, markdownResolver])
 
   /**
    * Opens the conversation the compose box collected, whole. Built HERE

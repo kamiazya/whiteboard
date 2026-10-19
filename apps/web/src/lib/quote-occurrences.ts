@@ -130,7 +130,7 @@ export function advanceKnownQuotes(
 }
 
 /** The one edit that turns `before` into `after`: what lies between their common prefix and suffix. */
-export function editBetween(before: string, after: string): readonly TextEdit[] {
+function editBetween(before: string, after: string): readonly TextEdit[] {
   if (before === after) return []
   const shorter = Math.min(before.length, after.length)
   let prefix = 0

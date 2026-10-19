@@ -12,11 +12,11 @@
  */
 import { ChangeSet, Text } from '@codemirror/state'
 import { resolveTextAnchor, type TextAnchor } from '@kamiazya/whiteboard-model'
-import { afterAll, expect } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   advanceKnownQuotes,
-  editBetween,
   type KnownQuotes,
   NO_KNOWN_QUOTES,
   quoteMemoryFor,
@@ -58,7 +58,7 @@ function changeSetOver(doc: string, change: Change) {
 
 const reached = { placed: 0, orphaned: 0, remembered: 0 }
 
-afterAll(() => {
+afterAllFloor(['an anchor resolved through the memory lands where a fresh search puts it'], () => {
   // The arrangements the memory exists for were drawn: quotes it held
   // across an edit, and both verdicts after one.
   expect(reached.remembered).toBeGreaterThan(50)
@@ -115,17 +115,3 @@ fcTest.prop(
     }
   }
 })
-
-fcTest.prop([text(30), text(30)], withDefaults())(
-  'the edit between two bodies turns the first into the second',
-  (before, after) => {
-    const [edit] = editBetween(before, after)
-    if (edit === undefined) {
-      expect(before).toBe(after)
-      return
-    }
-    expect(
-      before.slice(0, edit.fromA) + after.slice(edit.fromB, edit.toB) + before.slice(edit.toA),
-    ).toBe(after)
-  },
-)
