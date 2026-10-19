@@ -134,11 +134,15 @@ function iconGlyph(name: string): HTMLElement {
  * Passed to each host's `autocompletion()` rather than installed as an
  * extension of its own: `completionConfig` is not exported, and a second
  * `autocompletion()` call beside the first would replace its `override`.
+ *
+ * That also hands it every OTHER source's rows — a wiki-link row is a
+ * document name, which may well start `icon-` — so it draws only on a row
+ * carrying this module's own section object, which no other source holds.
  */
 export const shortcodeOptionRenderers = [
   {
     render: (completion: Completion): Node | null =>
-      completion.label.startsWith(ICON_PREFIX)
+      completion.section === ICON_SECTION && completion.label.startsWith(ICON_PREFIX)
         ? iconGlyph(completion.label.slice(ICON_PREFIX.length))
         : null,
     position: 30,
