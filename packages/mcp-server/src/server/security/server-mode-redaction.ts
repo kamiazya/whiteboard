@@ -28,6 +28,15 @@ const PUBLIC_MESSAGES: ReadonlyMap<string, { status: number; message: string }> 
     },
   ],
   [
+    'stored_document_unsupported_version',
+    {
+      status: 500,
+      message:
+        'This document was stored in a format newer than this server can read. ' +
+        'The server log names it.',
+    },
+  ],
+  [
     'document_serialize_failed',
     {
       status: 409,
