@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sanitizeHref } from './format.js'
 import { serializeSvg, serializeSvgChunks } from './serialize.js'
-import { el, rawXml } from './vnode.js'
+import { el, rawXml, type SvgVNode } from './vnode.js'
 
 const box = { y: 0, width: 1, height: 1 }
 
@@ -66,16 +66,21 @@ describe('serializeSvg', () => {
   it('drops an attribute whose name is not an XML Name, keeping the rest in order', () => {
     // A name is written raw (only values are escaped), so a name carrying a
     // quote, space, `=` or `>` would open a second attribute or end the tag.
-    const node = el('g', {
-      fill: 'red',
-      'x" onload="alert(1)': 'y',
-      'a b': '1',
-      '1st': '1',
-      '': '1',
-      'x>': '1',
-      'xlink:href': '#ok',
-      'data-k_1.v': '2',
-    })
+    // Built as a bare VNode: `el`'s typed table refuses these names, but data
+    // spread into an attrs object (a contributed icon's paint) is not typed.
+    const node: SvgVNode = {
+      tag: 'g',
+      attrs: {
+        fill: 'red',
+        'x" onload="alert(1)': 'y',
+        'a b': '1',
+        '1st': '1',
+        '': '1',
+        'x>': '1',
+        'xlink:href': '#ok',
+        'data-k_1.v': '2',
+      },
+    }
     expect(serializeSvg(node)).toBe('<g fill="red" xlink:href="#ok" data-k_1.v="2"/>')
   })
 
