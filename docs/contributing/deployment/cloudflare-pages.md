@@ -10,7 +10,7 @@
 |---|---|
 | Build output goes to `apps/web/dist/` | `wrangler.toml` `pages_build_output_dir` |
 | Security headers (CSP, X-Frame-Options, …) are served on every route | `apps/web/public/_headers` → copied into `dist/` at build time |
-| CSP has no wildcard sources; `script-src` and `default-src` are `'self'`; `connect-src` admits only `'self'` and the font catalogue's pinned origin (a hosted page reaches a local daemon through the extension, never over loopback) | `headers-policy.test.ts` + `smoke-artifact.mjs` |
+| CSP has no wildcard sources; `script-src` and `default-src` are `'self'`; `connect-src` admits only `'self'` and the font catalogue's pinned path, `https://raw.githubusercontent.com/google/fonts/main/`, rather than that whole origin (a hosted page reaches a local daemon through the extension, never over loopback) | `headers-policy.test.ts` + `smoke-artifact.mjs` |
 | Cloudflare Pages preview deploys (`*.kamiazya-whiteboard.pages.dev`) run with the browser keeper but never connect to a daemon, and no runtime config may name a non-production `publicOrigin` | `App.tsx` passes `window.location.origin` to `resolveHostedProviderStateFromRaw`, which refuses a daemon on a preview origin; `resolveHostedRuntimeConfig` refuses the `publicOrigin` |
 | No Cloudflare API tokens or account IDs in the repo | `web-app-boundary.test.ts` CF secrets drift guard |
 
