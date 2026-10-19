@@ -95,4 +95,21 @@ describe('createServerModeOriginMiddleware', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('https://wb.test')
     expect(varies(res)).toEqual(expect.arrayContaining(['accept', 'origin']))
   })
+
+  it.each([
+    'Origin',
+    '*',
+  ])('adds no Origin to a Vary of %j the handler already set', async (vary) => {
+    const app = new Hono()
+    app.use('/mcp', createServerModeOriginMiddleware(['https://wb.test']))
+    app.all('/mcp', (c) => {
+      c.header('Vary', vary)
+      return c.text('ok')
+    })
+    const res = await app.request('/mcp', {
+      method: 'POST',
+      headers: { origin: 'https://wb.test' },
+    })
+    expect(varies(res)).toEqual([vary.toLowerCase()])
+  })
 })

@@ -347,8 +347,8 @@ export function createServerModeOriginMiddleware(
  * one origin's answer to another.
  */
 function varyOnOrigin(headers: Headers): Headers {
-  const named = (headers.get('vary') ?? '').split(',').map((v) => v.trim().toLowerCase())
-  if (!named.includes('origin') && !named.includes('*')) headers.append('Vary', 'Origin')
+  const named = new Set((headers.get('vary') ?? '').split(',').map((v) => v.trim().toLowerCase()))
+  if (!named.has('origin') && !named.has('*')) headers.append('Vary', 'Origin')
   return headers
 }
 

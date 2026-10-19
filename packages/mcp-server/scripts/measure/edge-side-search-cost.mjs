@@ -76,7 +76,7 @@ function board(shape, count, routing, bystanders) {
     }
     const columns = Math.ceil(Math.sqrt(bystanders))
     for (let i = 0; i < bystanders; i++) {
-      nodes.push(box(`b${i}`, 10_000 + (i % columns) * 200, (Math.floor(i / columns) * 200) | 0))
+      nodes.push(box(`b${i}`, 10_000 + (i % columns) * 200, Math.floor(i / columns) * 200))
     }
   } else if (shape === 'flush') {
     nodes.push(box('A', 0, 0, 200, 100), box('B', 0, 100, 200, 100))
