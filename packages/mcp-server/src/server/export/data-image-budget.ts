@@ -53,12 +53,16 @@ const decodeDataUrl = (href: string): { mime: string; bytes: Uint8Array } | unde
  * SVG text that asks resvg for work its declared size does not bound. A
  * filter is rasterised at device resolution, synchronously: one feMorphology
  * of radius 10 over a 100px image costs 46ms at export scale 1 and 17.7s at
- * scale 8, and every further primitive adds as much again
- * (`scripts/measure/nested-svg-filter-cost.mjs`; masks, patterns and `<use>`
- * fan-out measured flat). So every way of ASKING for a filter refuses — a
- * `<filter>` or `fe*` element under any prefix (an XML name, which need not
- * be ASCII, so the prefix class is what a name cannot contain), a `filter`
- * attribute or CSS property (a comment may sit before its `:`) — read after
+ * scale 8, and every further primitive adds as much again. A mask costs no
+ * time but is sized from its CONTENT's bounding box, not the declared root:
+ * a root declaring 1x1 masking 1e7px of content, drawn at 1024px, reserves a
+ * pixmap the kernel refuses and resvg aborts the whole process
+ * (`scripts/measure/nested-svg-filter-cost.mjs`, `maskwide`; patterns and
+ * `<use>` fan-out measured flat). So every way of ASKING for either refuses
+ * — a `<filter>`, `fe*` or `<mask>` element under any prefix (an XML name,
+ * which need not be ASCII, so the prefix class is what a name cannot
+ * contain), a `filter` or `mask` attribute or CSS property, `mask-*`
+ * longhands included (a comment may sit before its `:`) — read after
  * XML character references are decoded, as does a CSS escape that could
  * spell one, an entity that could expand into one, and a nested `<image>`,
  * which resvg does not draw today, so refusing one costs nothing it would
@@ -70,7 +74,7 @@ const decodeDataUrl = (href: string): { mime: string; bytes: Uint8Array } | unde
  * sizer either encoding means teaching this scan the same one first.
  */
 const UNBOUNDED_SVG_WORK =
-  /<(?:[^\s<>/:="']+:)?(?:filter\b|fe[a-z]|image\b)|\bfilter\s*(?:[:=]|\/\*)|<!entity|\\/i
+  /<(?:[^\s<>/:="']+:)?(?:filter\b|fe[a-z]|image\b|mask\b)|\b(?:filter|mask(?:-[a-z]+)*)\s*(?:[:=]|\/\*)|<!entity|\\/i
 
 const asksForUnboundedWork = (mime: string, bytes: Uint8Array): boolean =>
   mime === 'image/svg+xml' &&
@@ -86,8 +90,8 @@ const pixelsOf = (href: string): number | undefined => {
 /**
  * The SVG with every image resvg would read from outside it dropped, and
  * every inline `data:` image it could not size dropped too — an unknown type,
- * an unreadable header, an ambiguous encoding, an SVG asking for filter work
- * its size does not bound. Throws `ExportTooLargeError`
+ * an unreadable header, an ambiguous encoding, an SVG asking for filter or
+ * mask work its size does not bound. Throws `ExportTooLargeError`
  * when the images left declare more pixels between them than the export
  * budget, since resvg decodes each at the size its header declares, on the
  * serving loop, however few bytes encoded it.

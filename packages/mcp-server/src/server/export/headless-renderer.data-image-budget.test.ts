@@ -304,6 +304,14 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
     ['a filter spelled with a CSS escape', '<style>rect{f\\69lter:blur(9px)}</style><rect/>'],
     ['an entity that could expand into one', '<!DOCTYPE svg [<!ENTITY f "x">]><rect/>'],
     ['an image of its own', '<image href="data:image/png;base64,AA"/>'],
+    ['a mask element', '<mask id="m"><rect width="10" height="10" fill="white"/></mask>'],
+    ['a namespaced mask', '<s:mask xmlns:s="http://www.w3.org/2000/svg" id="m"/>'],
+    ['a mask attribute', '<g mask="url(#m)"><rect width="10" height="10"/></g>'],
+    ['a spaced mask attribute', '<g mask = "url(#m)"><rect width="10" height="10"/></g>'],
+    ['a CSS mask in a style attribute', '<g style="mask: url(#m)"><rect/></g>'],
+    ['a CSS mask-image', '<style>g{mask-image:url(#m)}</style><g><rect/></g>'],
+    ['a CSS mask with a comment before its colon', '<style>g{mask/**/:url(#m)}</style>'],
+    ['a mask spelled with a character reference', '<g style="m&#97;sk:url(#m)"><rect/></g>'],
   ])('drops one carrying %s', (_name, body) => {
     const out = boundedDataImages(imageSvg(svgImage(body)))
     expect(out).toContain('<image x="0"/>')
@@ -325,6 +333,7 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
       'an image under a non-ASCII prefix',
       '<名:image xmlns:名="http://www.w3.org/2000/svg" href="x"/>',
     ],
+    ['a mask under a non-ASCII prefix', '<é:mask xmlns:é="http://www.w3.org/2000/svg" id="m"/>'],
   ])('drops one carrying %s', (_name, body) => {
     const href = `data:image/svg+xml;base64,${Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${body}</svg>`,
@@ -382,6 +391,8 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
     ['a label naming the word', '<text x="0" y="9">Filter</text>'],
     ['a title naming the word', '<title>filter results</title><rect width="10" height="10"/>'],
     ['an id naming the word', '<rect id="filtered" width="10" height="10"/>'],
+    ['a label naming a mask', '<text x="0" y="9">Mask</text>'],
+    ['an id naming a mask', '<rect id="masked" width="10" height="10"/>'],
   ])('keeps one carrying %s', (_name, body) => {
     const kept = svgImage(body)
     expect(boundedDataImages(imageSvg(kept))).toContain(`href="${kept}"`)
@@ -390,6 +401,24 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
   it('keeps a plain SVG within the budget', () => {
     const plain = svgImage('<rect width="10" height="10" fill="red"/>')
     expect(boundedDataImages(imageSvg(plain))).toContain(`href="${plain}"`)
+  })
+
+  // The refusal reads inside data images only: the export's own document
+  // may mask (canvas-render's fades do), and that is drawn.
+  it('keeps a mask in the document around a kept image', () => {
+    const outer = `<svg width="100" height="100"><mask id="fade"><rect width="100" height="100" fill="white"/></mask><g mask="url(#fade)"><image x="0" href="${ONE_PIXEL_PNG}"/></g></svg>`
+    expect(boundedDataImages(outer)).toBe(outer)
+  })
+
+  it('hands resvg no masked SVG from a text node body', async () => {
+    const masked = svgImage(
+      '<mask id="m"><rect width="10000000" height="10000000" fill="white"/></mask><g mask="url(#m)"><rect width="10000000" height="10000000"/></g>',
+      'width="1" height="1"',
+    )
+    await renderSpatialCanvasToPng(canvasNaming(masked), FONTS_DIR)
+    expect(constructed.svgs).toHaveLength(1)
+    expect(constructed.svgs[0]).toContain('<image')
+    expect(constructed.svgs[0]).not.toContain(masked)
   })
 
   it('hands resvg no filtered SVG from a text node body', async () => {

@@ -47,9 +47,10 @@ the daemon's host, and never fetches a remote one. Of those it draws only PNG,
 JPEG, GIF, WebP and SVG, written as `data:<type>,…` or `data:<type>;base64,…`
 with no other parameter, and only when it can read the image's size from its
 header. An SVG image that asks for filter effects (a `<filter>`, a filter
-primitive, or a `filter` attribute or style), declares an XML entity, or holds
-an image of its own also draws nothing in a PNG: its drawing time is not bounded
-by its size. Any other image draws nothing.
+primitive, or a `filter` attribute or style), uses a mask (a `<mask>`, or a
+`mask` attribute, or a `mask` or `mask-*` style), declares an XML entity, or
+holds an image of its own also draws nothing in a PNG: the time or memory its
+drawing takes is not bounded by its size. Any other image draws nothing.
 
 ## How large a markdown document may be
 
