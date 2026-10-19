@@ -79,15 +79,18 @@ import {
 import { alignBands } from './tidy-bands.js'
 import {
   buildUnits,
+  createTidyBudget,
   type FrameNesting,
   frameNesting,
   overlapsWithMargin,
   type Point,
   type Rect,
   rectOf,
+  spendTidy,
   TIDY_BAND_PX,
   TIDY_GRID_PX,
   TIDY_MARGIN_PX,
+  type TidyBudget,
   type TidyNode,
   type TidyOptions,
   type Unit,
@@ -633,6 +636,7 @@ function tidyLevel(
   top: LevelInput,
   options: TidyOptions,
   nesting: FrameNesting,
+  budget: TidyBudget,
 ): Map<string, Rect> {
   const settled = new Map<string, Rect>(top.nodes.map((n) => [n.id, rectOf(n)]))
   const stack = [openLevel(top, options, nesting, settled)]
@@ -643,7 +647,9 @@ function tidyLevel(
     if (unit !== undefined) {
       level.next++
       const inner = descendInto(level, unit)
-      if (inner === undefined) continue
+      // A frame the budget cannot open keeps its members as drawn, and
+      // they travel with it as one unit.
+      if (inner === undefined || !spendTidy(budget, 'levels', inner.nodes.length)) continue
       level.descended = unit
       stack.push(openLevel(inner, options, nesting, settled))
       continue
@@ -659,11 +665,23 @@ function tidyLevel(
 }
 
 /** Rounded, because that is the state a caller applies and re-enters with. */
-function settleOnce(nodes: readonly TidyNode[], options: TidyOptions): TidyNode[] {
+function settleOnce(
+  nodes: readonly TidyNode[],
+  options: TidyOptions,
+  budget: TidyBudget,
+): readonly TidyNode[] {
+  const frames = nodes.filter((n) => n.frame).length
+  if (
+    !spendTidy(budget, 'nesting', frames * frames) ||
+    !spendTidy(budget, 'levels', nodes.length)
+  ) {
+    return nodes
+  }
   const settled = tidyLevel(
     { nodes, outside: { x: [], y: [] }, origin: { x: 0, y: 0 } },
     options,
     frameNesting(nodes),
+    budget,
   )
   return nodes.map((node) => {
     const rect = settled.get(node.id)
@@ -717,11 +735,12 @@ export function tidyNodes(
   if (clean.length < 2) return []
   const positions = (ns: readonly TidyNode[]) =>
     ns.map((n) => `${n.x} ${n.y} ${n.width} ${n.height}`).join('|')
-  let current = clean
+  let current: readonly TidyNode[] = clean
   const seen = new Set<string>()
+  const budget = createTidyBudget()
   for (let i = 0; i < TIDY_MAX_SETTLE_PASSES; i++) {
     seen.add(positions(current))
-    current = settleOnce(current, options)
+    current = settleOnce(current, options, budget)
     if (seen.has(positions(current))) break
   }
   const settled = new Map(current.map((n) => [n.id, { x: n.x, y: n.y, w: n.width, h: n.height }]))

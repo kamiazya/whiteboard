@@ -110,38 +110,63 @@ describe('tidyNodes cost on nested frames', () => {
     }
   })
 
-  it('tidies the deepest chain a canvas can hold in quadratic containment checks', () => {
-    const n = 2000
-    containmentChecks.count = 0
-    tidyNodes(nestedChain(n))
-    // Was 323s of wall time on one tidy; 3.3s after, with these mocks off.
-    expect(containmentChecks.count).toBeLessThanOrEqual(4 * n * n)
-  }, 120_000)
-
   // 2000 identical frames nest too: the document-order tie-break puts each
   // inside every one before it, so they cost what a chain does.
   it.each([
-    ['a chain of nested frames', nestedChain],
-    ['identical frames', identicalFrames],
-  ])(
+    // The chain lists its innermost frame first; identical frames nest the
+    // other way, the first in document order enclosing every later one.
+    ['a chain of nested frames', nestedChain, 0],
+    ['identical frames', identicalFrames, -100],
+  ] as const)(
     'bounds the walk over %s as deep as a canvas holds',
-    (_, board) => {
+    (_, board, innermostAt) => {
       const n = 2000
       containmentChecks.count = 0
       levelVisits.count = 0
-      tidyNodes(board(n))
+      const nodes = board(n)
+      const moves = tidyNodes(nodes)
       // The subject is present: the walk went deep rather than stopping at
       // the top level.
       expect(levelVisits.count).toBeGreaterThan(100 * n)
-      // Two settling passes, each asking every frame about every other and
-      // opening a level per frame: 1.2e7 containment checks (1.4e7 for
-      // identical frames) and 4_002_000 level visits: 3.8s of wall time on
-      // the chain with these mocks off.
-      expect(containmentChecks.count).toBeLessThanOrEqual(4 * n * n)
-      expect(levelVisits.count).toBeLessThanOrEqual(n * (n + 1))
+      // Was two settling passes, each asking every frame about every other
+      // and opening a level per frame: 1.2e7 containment checks (1.4e7 for
+      // identical frames) and 4_002_000 level visits, 3.8s of wall time on
+      // the chain with these mocks off (323s before the nesting was asked
+      // once per pass). The tidy's work budget stops the walk at 5e5 level
+      // visits and the pass after it at once.
+      expect(containmentChecks.count).toBeLessThanOrEqual(2 * n * n)
+      expect(levelVisits.count).toBeLessThanOrEqual(500_000)
+      // What the walk did not reach keeps its arrangement: the innermost
+      // frames are neither tidied nor grown, and travel by the one offset
+      // the frame holding them took.
+      const moved = new Map(moves.map((m) => [m.id, m]))
+      const innermost = nodes.slice(innermostAt, innermostAt + 100 || undefined).map((f) => {
+        const m = moved.get(f.id)
+        return { dx: (m?.x ?? f.x) - f.x, dy: (m?.y ?? f.y) - f.y, grew: m?.width !== undefined }
+      })
+      expect(innermost.some((f) => f.grew)).toBe(false)
+      expect(new Set(innermost.map((f) => `${f.dx} ${f.dy}`)).size).toBe(1)
     },
     120_000,
   )
+
+  it('refuses a settling pass whose frame nesting it cannot afford', () => {
+    // Past the canvas cap, so only the nesting account can refuse: 4001
+    // frames side by side, each off the grid, are 1.6e7 pairs to compare.
+    const frames = Array.from({ length: 4001 }, (_, i) => ({
+      id: `f${String(i).padStart(4, '0')}`,
+      frame: true,
+      x: (i % 64) * 200 + 3,
+      y: Math.floor(i / 64) * 200 + 5,
+      width: 150,
+      height: 150,
+    }))
+    containmentChecks.count = 0
+    expect(tidyNodes(frames)).toEqual([])
+    expect(containmentChecks.count).toBe(0)
+    // The subject is present: a board this shape within the account is moved.
+    expect(tidyNodes(frames.slice(0, 200)).length).toBeGreaterThan(0)
+  })
 
   it('walks the nesting without spending call stack per level', () => {
     // A canvas chooses how deep its frames go, so the stack the walk needs
