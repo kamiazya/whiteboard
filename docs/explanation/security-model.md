@@ -583,7 +583,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   produces, and the pixels the inline images it carries declare between them,
   read from each image's own header. An export past either budget is
   refused. An image whose type the exporter does not draw, or whose header it
-  cannot read, is left out rather than trusted to be small. An inline
+  cannot read, is left out rather than trusted to be small, and so is an SVG
+  image asking for filter effects, whose drawing time its size does not
+  bound. An inline
   Markdown image draws in a PNG only from a `data:` URL — the exporter never
   reads a file the URL names on the server, nor fetches a remote one. What is
   NOT bounded is time: the drawing itself runs in the serving process with

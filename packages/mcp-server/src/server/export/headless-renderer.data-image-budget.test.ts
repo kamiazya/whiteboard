@@ -280,3 +280,52 @@ describe('a data: image the exporter cannot size', () => {
     expect(constructed.svgs[0]).not.toContain('data:image/png;base64,AA')
   })
 })
+
+// resvg rasterises a nested SVG's filters at device resolution, synchronously:
+// one feMorphology of radius 10 over a 100px image took 17.7s at export
+// scale 8 (`scripts/measure/nested-svg-filter-cost.mjs`). The declared size
+// says nothing about that work, so an SVG that asks for it is not drawn.
+describe('a data: SVG image that asks resvg for work its size does not bound', () => {
+  const svgImage = (body: string, root = 'width="10" height="10"'): string =>
+    dataUrl('image/svg+xml', ascii(`<svg xmlns="http://www.w3.org/2000/svg" ${root}>${body}</svg>`))
+
+  it.each([
+    ['a filter element', '<filter id="f"><feMorphology radius="999"/></filter>'],
+    ['a filter primitive outside a filter', '<feGaussianBlur stdDeviation="9"/>'],
+    ['a namespaced filter', '<s:filter xmlns:s="http://www.w3.org/2000/svg" id="f"/>'],
+    ['a namespaced filter primitive', '<s:feFlood xmlns:s="http://www.w3.org/2000/svg"/>'],
+    ['a filter attribute', '<rect width="10" height="10" filter="url(#f)"/>'],
+    ['a CSS filter in a style attribute', '<rect style="filter: blur(9px)"/>'],
+    ['a CSS filter in a style element', '<style>rect{filter:blur(9px)}</style><rect/>'],
+    ['a filter spelled with a character reference', '<rect style="f&#105;lter:blur(9px)"/>'],
+    ['a filter spelled with a CSS escape', '<style>rect{f\\69lter:blur(9px)}</style><rect/>'],
+    ['an entity that could expand into one', '<!DOCTYPE svg [<!ENTITY f "x">]><rect/>'],
+    ['an image of its own', '<image href="data:image/png;base64,AA"/>'],
+  ])('drops one carrying %s', (_name, body) => {
+    const out = boundedDataImages(imageSvg(svgImage(body)))
+    expect(out).toContain('<image x="0"/>')
+    expect(out).not.toContain('href=')
+  })
+
+  it('drops one whose filter is percent-encoded', () => {
+    const svg = encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"/></svg>',
+    )
+    expect(boundedDataImages(imageSvg(`data:image/svg+xml,${svg}`))).not.toContain('href=')
+  })
+
+  it('keeps a plain SVG within the budget', () => {
+    const plain = svgImage('<rect width="10" height="10" fill="red"/>')
+    expect(boundedDataImages(imageSvg(plain))).toContain(`href="${plain}"`)
+  })
+
+  it('hands resvg no filtered SVG from a text node body', async () => {
+    const filtered = svgImage(
+      '<filter id="f"><feMorphology radius="1"/></filter><rect width="10" height="10" filter="url(#f)"/>',
+    )
+    await renderSpatialCanvasToPng(canvasNaming(filtered), FONTS_DIR)
+    expect(constructed.svgs).toHaveLength(1)
+    expect(constructed.svgs[0]).toContain('<image')
+    expect(constructed.svgs[0]).not.toContain(filtered)
+  })
+})
