@@ -104,6 +104,14 @@ overrides:
   # stryker, and nobody runs that dev server; pinned anyway because the fix
   # is a patch within the same range vite already accepts.
   "esbuild@>=0.27.3 <0.28.1": ^0.28.1
+  # GHSA-j3f2-48v5-ccww (moderate): an infinite loop parsing a .proto option,
+  # cleared at 8.6.6 (and GHSA-jfj6-75fj-8934, cleared at 8.6.5, below it).
+  # Reached via @grpc/proto-loader <- @grpc/grpc-js <- the OTLP gRPC
+  # exporters under @opentelemetry/sdk-node — a CROSS-MAJOR override: the
+  # proto-loader asks for ^7.5.3, so a published install gets 7.x and never
+  # this floor. 7.x cleared the same loop at 7.6.5, and `pnpm
+  # audit:published` audits what that install resolves
+  # (published-overrides.test.ts ledgers every such edge).
   protobufjs@<8.6.6: ^8.6.6
   # GHSA-hrr3-gc8f-f4qj (moderate): cleared at 3.1.8. Reached via ajv <-
   # @modelcontextprotocol/sdk, inside ajv's own ^3 range.
@@ -120,6 +128,8 @@ overrides:
   # runtime loaded the OLD one, and its musl prebuild is what failed to load on
   # Alpine (`fcntl64: symbol not found`). @libsql/client@0.17.3 depends on
   # libsql@0.5.29 — the version this manifest's devDependency already names.
+  # Overrides are not published, so an npm install of the package still
+  # nests @libsql/client 0.8.x and libsql 0.3.19 under kysely-libsql.
   "@libsql/client@<0.17.3": ^0.17.3
   uuid@<11.1.1: ^11.1.1
   # GHSA-x5fp-wj9c-mxmx + GHSA-4mjr-xmp4-gh2g: both cleared at 6.16.0 (reaches
@@ -141,6 +151,9 @@ overrides:
   # GHSA-h3mg-xc3c-68pw (moderate x4): all cleared at 10.7.1. Reached via
   # express-rate-limit <- @modelcontextprotocol/sdk; one entry covers every
   # earlier ip-address advisory too.
+  # The locked express-rate-limit pins 10.1.0 exactly, so this one is
+  # cross-range; a fresh npm resolution picks a later express-rate-limit
+  # that asks for ^10.2.0 and lands on a fixed version without it.
   ip-address@<10.7.1: ^10.7.1
   # GHSA-2883-xcg3-v3hh (high): unbounded CPU on empty merge sources,
   # cleared at 4.3.2. Reaches the published runtime via
