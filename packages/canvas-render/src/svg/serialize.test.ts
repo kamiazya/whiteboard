@@ -63,6 +63,22 @@ describe('serializeSvg', () => {
     expect([...serializeSvgChunks(node)].join('')).toBe(serializeSvg(node))
   })
 
+  it('drops an attribute whose name is not an XML Name, keeping the rest in order', () => {
+    // A name is written raw (only values are escaped), so a name carrying a
+    // quote, space, `=` or `>` would open a second attribute or end the tag.
+    const node = el('g', {
+      fill: 'red',
+      'x" onload="alert(1)': 'y',
+      'a b': '1',
+      '1st': '1',
+      '': '1',
+      'x>': '1',
+      'xlink:href': '#ok',
+      'data-k_1.v': '2',
+    })
+    expect(serializeSvg(node)).toBe('<g fill="red" xlink:href="#ok" data-k_1.v="2"/>')
+  })
+
   it('throws on a non-finite number attribute (formatCoord contract: a layout bug, not a serializer one)', () => {
     expect(() => serializeSvg(el('rect', { x: Number.NaN, ...box }))).toThrow(RangeError)
   })

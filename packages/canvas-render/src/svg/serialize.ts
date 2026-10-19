@@ -18,11 +18,22 @@ function isRawXml(child: SvgChild): child is RawXmlChild {
   return typeof child === 'object' && child !== null && 'raw' in child
 }
 
+/**
+ * The ASCII subset of the XML `Name` production. Attribute names are written
+ * raw — only values are escaped — and some arrive from data rather than code
+ * (a contributed icon set's `paint` keys), so a name outside this subset could
+ * open a second attribute or close the tag. Such a name is DROPPED rather than
+ * thrown on: the renderer is total, and one bad key in a contributed table
+ * must not refuse the whole render. Every name the renderer itself writes
+ * matches, so dropping changes no byte of a legitimate render.
+ */
+const XML_ATTR_NAME = /^[A-Za-z_:][A-Za-z0-9_.:-]*$/
+
 function openTag(node: SvgVNode, selfClose: boolean): string {
   let out = `<${node.tag}`
   if (node.attrs !== undefined) {
     for (const [name, value] of Object.entries(node.attrs)) {
-      if (value === undefined) continue
+      if (value === undefined || !XML_ATTR_NAME.test(name)) continue
       out += ` ${name}="${typeof value === 'number' ? formatCoord(value) : escapeXmlAttr(value)}"`
     }
   }

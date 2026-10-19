@@ -40,6 +40,19 @@ describe('a contributed icon', () => {
     expect(svg).not.toContain('fill="none"')
   })
 
+  it('cannot add an attribute through a paint key that is not an attribute name', () => {
+    const svg = renderSceneToSvg(sceneWith('demo.box'), {
+      icons: {
+        'demo.box': {
+          geometry: SQUARE,
+          paint: { fill: 'currentColor', 'x" onload="alert(1)': 'y' },
+        },
+      },
+    })
+    expect(svg).toContain('fill="currentColor"')
+    expect(svg).not.toContain('onload')
+  })
+
   it('falls back to the renderer’s own space when a set declares none', () => {
     // A table that says nothing still has to draw something, and 24x24
     // stroke-only is what every icon in this repo is authored for.
