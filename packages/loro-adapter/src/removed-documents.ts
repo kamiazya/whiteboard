@@ -92,12 +92,12 @@ export function documentsRemovedSince(workspace: LoroDoc, since: VersionVector):
   const was = readPlacedWorkspaceDocuments(before)
   const removed = was.filter((each) => !alive.has(each.documentId))
   if (removed.length === 0) return []
-  // A removed document rides an ancestor's bytes when the nearest document
-  // above it is a removed one: a survivor nearer would sit between them, and
-  // one farther up cannot.
-  const index = pathIndex(was)
+  // A removed document rides an ancestor's bytes when the nearest document on
+  // its parent chain is a removed one: a survivor nearer would sit between
+  // them, and one farther up cannot. Read off the chain, not the path, since a
+  // document on another branch may sit at the path above it and hold nothing.
   const rides = (placed: PlacedWorkspaceDocument) =>
-    nearestAncestorDocuments(index, placed.path).some((each) => !alive.has(each.documentId))
+    placed.above !== undefined && !alive.has(placed.above)
   return exportDeepestFirst(
     before,
     was,
@@ -115,11 +115,10 @@ function treeChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
 /**
  * Each evacuee's subtree, exported from the scratch fork `before` by the node
  * the walk found it on, which is trimmed as it goes so an export carries only
- * what it should: survivors below an evacuee are cut, and so is a document
- * ahead of it in tree order at the same path (one a concurrent create
- * shadowed it with), so no shallower export carries that one either. Deepest
- * first, so a cut never takes something not yet exported; at one depth in
- * tree order, so an owner is exported before the shadowed one cuts it.
+ * what it should: survivors below an evacuee are cut. That is the whole cut —
+ * an evacuee below another sits under a survivor, since one under a removed
+ * document rides it, so cutting the survivor leaves it out of the shallower
+ * export. Deepest first, so a cut never takes something not yet exported.
  */
 function exportDeepestFirst(
   before: LoroDoc,
@@ -129,21 +128,10 @@ function exportDeepestFirst(
 ): RemovedDocument[] {
   const depth = (path: string) => path.split('/').length
   const order = [...evacuees].sort((left, right) => depth(right.path) - depth(left.path))
-  const { below, atPath } = cutsByEvacuee(was, evacuees, alive)
-  // How far each path's shadowing cut has got: evacuees at one path come in
-  // tree order, so each resumes where the one before it stopped.
-  const cutUpTo = new Map<string, number>()
+  const below = survivorsByEvacuee(was, evacuees, alive)
   const out: RemovedDocument[] = []
   for (const evacuee of order) {
     for (const id of below.get(evacuee.path) ?? []) deleteWorkspaceNode(before, id)
-    const sharing = atPath.get(evacuee.path) ?? []
-    let next = cutUpTo.get(evacuee.path) ?? 0
-    for (; next < sharing.length; next++) {
-      const ahead = sharing[next] as PlacedWorkspaceDocument
-      if (ahead.documentId === evacuee.documentId) break
-      deleteWorkspaceNode(before, ahead.id)
-    }
-    cutUpTo.set(evacuee.path, next)
     const bytes = exportWorkspaceNodeSubtree(before, evacuee.id)
     if (bytes !== null) out.push({ documentId: evacuee.documentId, path: evacuee.path, bytes })
   }
@@ -151,30 +139,26 @@ function exportDeepestFirst(
 }
 
 /**
- * What exporting each evacuee path has to cut first, indexed in one pass:
- * every survivor below it, filed under the DEEPEST evacuee path above it —
- * the first export to reach it, since deeper ones run first — and every
- * document at the path, in tree order, for the shadowing cut.
+ * Every survivor below an evacuee, indexed in one pass under the DEEPEST
+ * evacuee path above it — the first export to reach it, since deeper ones run
+ * first. A path is enough here, where it is not for riding: a path above a
+ * survivor that belongs to another branch only cuts it early, and every
+ * evacuee inside the survivor's subtree is deeper still, so already exported.
  */
-function cutsByEvacuee(
+function survivorsByEvacuee(
   was: readonly PlacedWorkspaceDocument[],
   evacuees: readonly PlacedWorkspaceDocument[],
   alive: ReadonlySet<string>,
-) {
-  const evacueePaths = new Set(evacuees.map((each) => each.path))
+): Map<string, TreeID[]> {
   const evacueeIndex = pathIndex(evacuees)
   const below = new Map<string, TreeID[]>()
-  const atPath = new Map<string, PlacedWorkspaceDocument[]>()
-  const fileUnder = <T>(index: Map<string, T[]>, key: string, value: T) => {
-    const list = index.get(key)
-    if (list === undefined) index.set(key, [value])
-    else list.push(value)
-  }
   for (const each of was) {
-    if (evacueePaths.has(each.path)) fileUnder(atPath, each.path, each)
     if (!alive.has(each.documentId)) continue
     const deepest = nearestAncestorDocuments(evacueeIndex, each.path)[0]
-    if (deepest !== undefined) fileUnder(below, deepest.path, each.id)
+    if (deepest === undefined) continue
+    const list = below.get(deepest.path)
+    if (list === undefined) below.set(deepest.path, [each.id])
+    else list.push(each.id)
   }
-  return { below, atPath }
+  return below
 }

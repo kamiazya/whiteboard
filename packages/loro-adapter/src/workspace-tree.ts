@@ -210,6 +210,8 @@ interface Walked {
   readonly node: LoroTreeNode
   readonly read: Read
   readonly path: string
+  /** The nearest DOCUMENT on its parent chain — not at a path, which another branch may share. */
+  readonly above: string | undefined
 }
 
 /**
@@ -228,10 +230,10 @@ function pushChildren<T>(
 
 function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
-  const stack: Array<{ readonly node: LoroTreeNode; readonly prefix: string }> = []
-  pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '' }))
+  const stack: Array<{ node: LoroTreeNode; prefix: string; above: string | undefined }> = []
+  pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '', above: undefined }))
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    const { node, prefix } = next
+    const { node, prefix, above } = next
     const read = readMeta(node)
     // A node whose meta this build cannot read is skipped rather than thrown
     // on: it is one node of a workspace, and refusing the whole listing over
@@ -244,8 +246,10 @@ function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked
     }
     const segment = read.type === 'document' ? read.meta.segment : read.segment
     const path = prefix === '' ? segment : `${prefix}/${segment}`
-    out.push({ node, read, path })
-    pushChildren(stack, node.children() ?? [], (child) => ({ node: child, prefix: path }))
+    out.push({ node, read, path, above })
+    const up = read.type === 'document' ? read.meta.documentId : above
+    const children = node.children() ?? []
+    pushChildren(stack, children, (child) => ({ node: child, prefix: path, above: up }))
   }
   return out
 }
@@ -401,6 +405,8 @@ export interface PlacedWorkspaceDocument {
   readonly documentId: string
   readonly path: string
   readonly id: TreeID
+  /** The documentId of the nearest document on its parent chain, if any. */
+  readonly above: string | undefined
 }
 
 /**
@@ -409,8 +415,8 @@ export interface PlacedWorkspaceDocument {
  * otherwise pay a walk, or a path resolution from the root, for each.
  */
 export function readPlacedWorkspaceDocuments(doc: LoroDoc): PlacedWorkspaceDocument[] {
-  return walk(doc).flatMap(({ node, read, path }) =>
-    read.type === 'document' ? [{ documentId: read.meta.documentId, path, id: node.id }] : [],
+  return walk(doc).flatMap(({ node: { id }, read, path, above }) =>
+    read.type === 'document' ? [{ documentId: read.meta.documentId, path, id, above }] : [],
   )
 }
 
@@ -606,7 +612,7 @@ export function deleteWorkspaceNode(doc: LoroDoc, id: TreeID): void {
  * rule `resolveWorkspaceDocument` follows, so a caller cannot end up with the
  * shadowed one from one lookup and the owner from another.
  */
-function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
+function nodeAtPath(doc: LoroDoc, path: string): Omit<Walked, 'above'> | null {
   return nodesAlong(doc, path).get(path) ?? null
 }
 
@@ -623,8 +629,8 @@ function nodeAtPath(doc: LoroDoc, path: string): Walked | null {
  * the way a walk derives one, so a segment that itself holds a `/` is found
  * where a walk finds it.
  */
-function nodesAlong(doc: LoroDoc, path: string): Map<string, Walked> {
-  const found = new Map<string, Walked>()
+function nodesAlong(doc: LoroDoc, path: string): Map<string, Omit<Walked, 'above'>> {
+  const found = new Map<string, Omit<Walked, 'above'>>()
   const stack: Array<{ readonly node: LoroTreeNode; readonly path: string }> = []
   const pushToward = (children: readonly LoroTreeNode[], prefix: string): void => {
     for (let i = children.length - 1; i >= 0; i--) {
