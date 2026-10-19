@@ -22,8 +22,8 @@
  * library defines no schema. Every stencil in it is payload under
  * `stencilAssetSchema`, registered at distribution time like any other, and
  * each of its facet payloads is validated against the schema its own plugin
- * registered — by `createFacetRegistry`, on the way in, exactly as a bundled
- * stencil is. The blast radius is a colour string and some already-validated
+ * registered — by the same checks `createFacetRegistry` runs on a bundled
+ * stencil, on the way in. The blast radius is a colour string and some already-validated
  * facet values: not code, not a new contract, and nothing the registry has
  * not already agreed to accept. That is the escape valve decision 3 named
  * when it forbade runtime facets — *runtime-variable vocabulary is payload of
@@ -34,6 +34,7 @@ import {
   defineWorkspaceStencilPlugin,
   type FacetRegistry,
   WORKSPACE_PLUGIN_ID,
+  workspaceStencilRefusal,
 } from './registry.js'
 import type { StencilAssetInput } from './stencil.js'
 
@@ -82,29 +83,27 @@ export function composeWorkspaceStencils(
   // `workspace` plugins, which it refuses. Dropping first also makes the
   // empty case mean what it says: no library, whatever was composed before.
   const deployment = base.plugins.filter((plugin) => plugin.id !== WORKSPACE_PLUGIN_ID)
-  const entries = Object.entries(stencils)
-  if (entries.length === 0) {
-    const registry =
-      deployment.length === base.plugins.length ? base : createFacetRegistry(deployment)
-    return { registry, dropped: [] }
-  }
-  const whole = tryCompose(deployment, stencils)
-  if (whole.ok) return { registry: whole.registry, dropped: [] }
 
-  // The slow path runs only for a library the registry refused, so the
-  // common one costs a single build. Each stencil is tried on its own
-  // because the registry names only the FIRST bad one.
+  // Each stencil is judged on its own, because one refused entry must not
+  // take the rest with it — and judged WITHOUT a registry build, because a
+  // library's size is whatever was written and it is recomposed on every
+  // read. One build follows, of what was kept.
+  const refusalOf = workspaceStencilRefusal(deployment)
   const kept: Record<string, StencilAssetInput> = {}
   const dropped: DroppedWorkspaceStencil[] = []
-  for (const [name, stencil] of entries) {
-    const alone = tryCompose(deployment, { [name]: stencil })
-    if (alone.ok) kept[name] = stencil
-    else dropped.push({ name, message: alone.message })
+  for (const [name, stencil] of Object.entries(stencils)) {
+    const message = refusalOf(name, stencil)
+    if (message === undefined) kept[name] = stencil
+    else dropped.push({ name, message })
+  }
+  if (Object.keys(kept).length > 0) {
+    return {
+      registry: createFacetRegistry([...deployment, defineWorkspaceStencilPlugin(kept)]),
+      dropped,
+    }
   }
   const registry =
-    Object.keys(kept).length === 0
-      ? createFacetRegistry(deployment)
-      : createFacetRegistry([...deployment, defineWorkspaceStencilPlugin(kept)])
+    deployment.length === base.plugins.length ? base : createFacetRegistry(deployment)
   return { registry, dropped }
 }
 
@@ -113,19 +112,4 @@ export function withWorkspaceStencils(
   stencils: WorkspaceStencils,
 ): FacetRegistry {
   return composeWorkspaceStencils(base, stencils).registry
-}
-
-function tryCompose(
-  deployment: FacetRegistry['plugins'],
-  stencils: WorkspaceStencils,
-): { ok: true; registry: FacetRegistry } | { ok: false; message: string } {
-  try {
-    return {
-      ok: true,
-      registry: createFacetRegistry([...deployment, defineWorkspaceStencilPlugin(stencils)]),
-    }
-  } catch (error) {
-    // Not model's describeThrown: this package depends on zod alone.
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
-  }
 }

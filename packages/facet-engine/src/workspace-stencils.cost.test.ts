@@ -45,7 +45,7 @@ describe('composing a refused workspace stencil library', () => {
     builds.count = 0
   })
 
-  it('builds the registry once however many entries are refused', () => {
+  it('builds no registry when every entry is refused, however many there are', () => {
     const registry = createFacetRegistry([base])
     const bad = library(200, () => ({ displayName: 'x', facets: { 'nope.nothing/v0': {} } }))
     builds.count = 0
@@ -53,7 +53,7 @@ describe('composing a refused workspace stencil library', () => {
     const { dropped } = composeWorkspaceStencils(registry, bad)
 
     expect(dropped).toHaveLength(200)
-    expect(builds.count).toBe(1)
+    expect(builds.count).toBe(0)
   })
 
   it('builds once for a library that mixes kept and refused entries', () => {
