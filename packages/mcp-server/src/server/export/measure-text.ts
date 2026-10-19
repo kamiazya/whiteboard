@@ -57,6 +57,20 @@ const SEGMENT_CODE_POINTS = 64
 const JOINS_PRECEDING = /[\p{M}\p{Cf}]/u
 
 /**
+ * The ceiling on a segment, which holds even where no cut is safe. A run whose
+ * tail is ALL joining code points — one base under thousands of combining
+ * marks — offers no cut above, and would otherwise reach opentype whole:
+ * 2.8s for one 8 Ki-code-point node text. Past this many code points the run
+ * is cut regardless, measuring the marks after the cut apart from their base,
+ * which can move the sum by a sub-pixel amount at each forced cut on a face
+ * whose substitutions reach that far back (the vendored face's do not; its
+ * ccmp only changes the first mark's base). No real grapheme cluster
+ * approaches this length, so ordinary text never reaches it and measures
+ * exactly as before.
+ */
+const SEGMENT_CODE_POINTS_MAX = 256
+
+/**
  * One call into the font for a short run, bounded segments summed for a long
  * one. Kerning is off, which is what makes the sum exact (see
  * `measureWithFont`).
@@ -68,7 +82,9 @@ function measureCarriedRun(font: opentype.Font, run: string, sizePx: number): nu
   let advance = 0
   let start = 0
   for (let i = SEGMENT_CODE_POINTS; i < codePoints.length; i++) {
-    if (i - start < SEGMENT_CODE_POINTS || JOINS_PRECEDING.test(codePoints[i] ?? '')) continue
+    const length = i - start
+    if (length < SEGMENT_CODE_POINTS) continue
+    if (length < SEGMENT_CODE_POINTS_MAX && JOINS_PRECEDING.test(codePoints[i] ?? '')) continue
     advance += advanceOf(codePoints.slice(start, i).join(''))
     start = i
   }

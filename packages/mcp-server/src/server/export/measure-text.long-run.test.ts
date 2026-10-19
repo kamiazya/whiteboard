@@ -65,6 +65,19 @@ describe('a paragraph far longer than a line', () => {
     expect(Math.max(...lengths)).toBeLessThanOrEqual(256)
     expect(lengths.reduce((sum, length) => sum + length, 0)).toBe(cluster.length)
   })
+
+  it('measures a capped cluster as one whole-run call does', async () => {
+    const path = (await resolveExportFontFaces()).regular
+    if (path === null) throw new Error('the vendored Regular face did not resolve')
+    const font = opentypeApi.parse((await readFile(path)).buffer)
+    const measure = await opentypeMeasureText()
+    // The forced cuts land deep in the mark tail, where this face's ccmp no
+    // longer reaches back to the dotted base, so the sum stays exact here.
+    const cluster = `i${String.fromCodePoint(0x307).repeat(1023)}`
+    const whole = font.getAdvanceWidth(cluster, 16, { kerning: false })
+
+    expect(measure(cluster, descriptor(16)).advanceWidth).toBeCloseTo(whole, 9)
+  })
 })
 
 /**
