@@ -312,9 +312,17 @@ function SignInPage({
 }
 
 // The token rides the fragment, which the browser never sends to a server
-// or puts in a Referer.
+// or puts in a Referer. Once read it is held here and the fragment is
+// replaced away, so the address bar, a Back step and a copied URL no longer
+// carry it.
 function InvitePage({ fetchFn, goTo }: Readonly<{ fetchFn: Fetch; goTo: GoTo }>) {
-  const token = inviteTokenOf(useLocation().hash)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [token] = useState(() => inviteTokenOf(location.hash))
+  useEffect(() => {
+    if (inviteTokenOf(location.hash) === undefined) return
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true })
+  }, [location.hash, location.pathname, location.search, navigate])
   return (
     <SignInPage
       fetchFn={fetchFn}
