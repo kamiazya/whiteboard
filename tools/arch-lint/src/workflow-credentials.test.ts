@@ -196,6 +196,32 @@ describe('workflows — a job holding a deploy or publish secret runs no reposit
     expect(keys.filter((key) => /executable|exepath/i.test(key))).toEqual([])
   })
 
+  // The scanner reads sonar-project.properties from the checked-out tree with
+  // SONAR_TOKEN in its environment, so where the token goes must not be
+  // something the tree decides: a command-line `-D` outranks the file.
+  it('pins where the SonarQube scanner sends its token, outside the tree', () => {
+    const scan = credentialJobs.find(({ site }) => site === 'sonarqube.yml:scan')?.job
+    const scanner = (scan?.steps ?? []).find((step) =>
+      (step.uses ?? '').startsWith('SonarSource/sonarqube-scan-action@'),
+    )
+    expect(scanner).toBeDefined()
+    const args = Object.fromEntries(
+      [...String(scanner?.with?.args ?? '').matchAll(/-D([\w.-]+)=(\S+)/g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    )
+    expect(args['sonar.host.url']).toBe('https://sonarcloud.io')
+    expect(args['sonar.scanner.apiBaseUrl']).toBe('https://api.sonarcloud.io')
+    const properties = readFileSync(join(REPO_ROOT, 'sonar-project.properties'), 'utf-8')
+    const fileValue = (key: string): string | undefined =>
+      new RegExp(`^\\s*${key.replace(/\./g, '\\.')}\\s*[=:]\\s*(\\S+)`, 'm').exec(properties)?.[1]
+    for (const key of ['sonar.organization', 'sonar.projectKey']) {
+      expect(args[key], key).toBeDefined()
+      expect(args[key], `${key} matches sonar-project.properties`).toBe(fileValue(key))
+    }
+  })
+
   it('flags an install planted in the SonarQube scan job', () => {
     const scan = credentialJobs.find(({ site }) => site === 'sonarqube.yml:scan')?.job
     expect(scan).toBeDefined()
