@@ -549,7 +549,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A live-sync stream belongs to the user who opened it.** Only that user
   may subscribe it to a workspace, the instance re-checks membership and
   deactivation before sending each update and ends the stream when either
-  fails, and open streams are capped per user and per instance. The limits
+  fails, and open streams are capped per user and per instance. A stream
+  also ends when the grant that opened it expires — the sign-in session's
+  expiry, or a bearer token's `exp` — even if nothing is sent down it; the
+  web app then reconnects, and the new stream needs a grant that is still
+  valid. The limits
   are [Live-sync stream limits](../reference/configuration.md#live-sync-stream-limits).
 - **Server mode reads a bounded number of large bodies at once.** A sync
   update, a promote, an upload, a document created from its content or a

@@ -114,6 +114,12 @@ export interface SyncSseRouterOptions {
   /** Whether a user still reaches a workspace — re-asked before a broadcast
    *  goes down their stream. Absent: nobody can lose access. */
   holdsAccess?: (userId: string, workspaceId: string) => Promise<boolean>
+  /** When the grant that opened a stream stops being valid, epoch
+   *  milliseconds; undefined for a grant with no bound. The stream ends there:
+   *  every later request on that grant is refused, and the membership
+   *  re-check before a broadcast cannot see an expiry. Absent: no grant here
+   *  expires (the local daemon's token). */
+  grantExpiresAt?: (c: Context) => number | undefined
   /** How many streams one user, and everyone, may hold open. Absent: no cap
    *  (the local daemon, whose one person's tabs must never be refused). */
   streamCaps?: SyncStreamCaps
@@ -358,19 +364,51 @@ function streamEntry(
   }
 }
 
+// setTimeout's longest delay; a later expiry is reached in steps of it.
+const LONGEST_TIMER_MS = 2 ** 31 - 1
+
+/**
+ * Ends `stream` at `expiresAt`. The timer lives exactly as long as the stream
+ * — cleared when it closes for any reason — so it is part of serving one
+ * request, not work the keeper does on its own.
+ */
+function endAtExpiry(stream: SSEStreamingApi, streamId: string, expiresAt: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const arm = () => {
+    const left = expiresAt - Date.now()
+    if (left > LONGEST_TIMER_MS) {
+      timer = setTimeout(arm, LONGEST_TIMER_MS)
+      return
+    }
+    timer = setTimeout(
+      () => {
+        unregisterSyncStream(streamId)
+        log.info({ streamId }, 'sync stream ended: the grant that opened it expired')
+        stream.abort()
+      },
+      Math.max(0, left),
+    )
+  }
+  arm()
+  return () => clearTimeout(timer)
+}
+
 /** Registers an opened stream, sends its id, and holds it open until it ends. */
 async function holdStream(
   stream: SSEStreamingApi,
   streamId: string,
   userId: string | null,
   options: SyncSseRouterOptions,
+  expiresAt: number | undefined,
 ): Promise<void> {
   registerSyncStream(streamId, streamEntry(stream, streamId, userId, options))
+  const disarm = expiresAt === undefined ? () => {} : endAtExpiry(stream, streamId, expiresAt)
   // Listening before the first await: an abort that lands while the ready
   // frame is written fires no listener added after it, which would leave
   // the stream registered and this callback waiting forever.
   const closed = new Promise<void>((resolve) => {
     stream.onAbort(() => {
+      disarm()
       unregisterSyncStream(streamId)
       log.info({ streamId }, 'sync stream closed')
       resolve()
@@ -379,6 +417,7 @@ async function holdStream(
   const ready: SyncReadyEvent = { streamId }
   await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
   if (stream.aborted) {
+    disarm()
     unregisterSyncStream(streamId)
     return
   }
@@ -411,7 +450,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
-    return streamSSE(c, (stream) => holdStream(stream, streamId, userId, options))
+    const expiresAt = options.grantExpiresAt?.(c)
+    return streamSSE(c, (stream) => holdStream(stream, streamId, userId, options, expiresAt))
   })
 
   app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options))

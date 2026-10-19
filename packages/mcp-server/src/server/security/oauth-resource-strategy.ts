@@ -70,6 +70,7 @@ export type OAuthResourceTokenValidationResult =
       issuer: string
       audience: string | readonly string[]
       scopes: readonly AuthScope[]
+      /** The token's `exp`, in SECONDS as JWT carries it (RFC 7519 §4.1.4). */
       expiresAt?: number
       /** The verified payload, for deciding whether its person may become a user. */
       claims?: VerifiedClaims
@@ -152,6 +153,7 @@ function grantedDecision(
     // the person's email, and a decision that is logged or serialised
     // must carry neither.
     bearer: () => ({ claims: result.claims ?? {}, typed: result.typed === true }),
+    ...(result.expiresAt === undefined ? {} : { expiresAt: result.expiresAt * 1000 }),
   }
 }
 

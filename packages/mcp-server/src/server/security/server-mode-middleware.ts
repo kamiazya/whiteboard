@@ -134,8 +134,10 @@ async function sessionGrant(
   if (requiredScopes.some((scope) => !SESSION_SCOPES.includes(scope))) {
     return { refusal: { status: 403, code: 'auth.forbidden' } }
   }
-  const { person, authenticatedAt } = open
-  return { grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person, authenticatedAt } }
+  const { person, authenticatedAt, expiresAt } = open
+  return {
+    grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person, authenticatedAt, expiresAt },
+  }
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -173,7 +175,7 @@ async function bearerGrant(
     requiredScopes,
   })
   if (!decision.ok) return { refusal: decision }
-  const { context, person, bearer } = decision
+  const { context, person, bearer, expiresAt } = decision
   if (person !== undefined) {
     // ADR-0049 decision 4, before anything else: a deactivated user is nobody
     // to `profileForBinding`, so past here they would be taken for a
@@ -186,7 +188,14 @@ async function bearerGrant(
     if (refused !== undefined) return { refusal: refused }
   }
   const scopes = 'scopes' in context ? context.scopes : ALL_AUTH_SCOPES
-  return { grant: { kind: 'external-bearer', scopes, ...(person === undefined ? {} : { person }) } }
+  return {
+    grant: {
+      kind: 'external-bearer',
+      scopes,
+      ...(person === undefined ? {} : { person }),
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    },
+  }
 }
 
 // A person with a user proceeds untouched; one without is admitted or refused

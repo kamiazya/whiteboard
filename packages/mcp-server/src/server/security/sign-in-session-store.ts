@@ -22,6 +22,8 @@ export const SESSION_COOKIE = '__Host-wb_session'
 interface OpenSession {
   readonly person: AuthenticatorBinding
   readonly authenticatedAt: number | null
+  /** When the session stops opening, epoch milliseconds. */
+  readonly expiresAt: number
 }
 
 export interface SignInSessionStore {
@@ -51,13 +53,13 @@ export interface SignInSessionStore {
 async function openSession(db: TenantDatabase, token: string, now: number) {
   const row = await db
     .selectFrom('signInSessions')
-    .select(['authenticator', 'subject', 'authenticatedAt'])
+    .select(['authenticator', 'subject', 'authenticatedAt', 'expiresAt'])
     .where('tokenHash', '=', sha256Hex(token))
     .where('expiresAt', '>', now)
     .executeTakeFirst()
   if (row === undefined) return null
-  const { authenticatedAt, ...person } = row
-  return { person, authenticatedAt }
+  const { authenticatedAt, expiresAt, ...person } = row
+  return { person, authenticatedAt, expiresAt }
 }
 
 async function insertSession(

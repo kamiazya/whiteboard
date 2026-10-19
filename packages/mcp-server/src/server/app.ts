@@ -271,6 +271,7 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
           holdsAccess: (userId: string, workspaceId: string) =>
             members.holdsAccess(workspaceId, userId),
           streamCaps: SYNC_STREAM_CAPS,
+          grantExpiresAt: (c: Context) => callerGrant(c)?.expiresAt,
         }),
   }
 }

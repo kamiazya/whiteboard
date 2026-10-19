@@ -51,6 +51,11 @@ export interface ResolvedGrant {
   /** A `signed-in` grant only: when the person's provider last authenticated
    *  them (ADR-0051), null when it did not say. Administration reads it. */
   readonly authenticatedAt?: number | null
+  /** When this grant stops being valid, epoch milliseconds: a session's
+   *  expiry, a bearer's `exp`. Absent for a grant with no bound. Checked when
+   *  each request arrives; a sync stream, which outlives its request, ends
+   *  there itself. */
+  readonly expiresAt?: number
 }
 
 interface PresentedCredential {
