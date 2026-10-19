@@ -7,8 +7,10 @@
  * the daemon's route and the browser's hub import, is what lets the two ends
  * use the same declaration.
  */
+import { DOCUMENT_PATH_MAX_LENGTH, WORKSPACE_SEGMENT_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { clientTextMessageSchema } from './sync-frames.js'
+import { workspaceHandleOfSyncKey } from './sync-key.js'
 
 // These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in
 // this codebase. The producer is a locally-installed daemon and the consumer is
@@ -66,15 +68,38 @@ export type SyncMessageEvent = z.infer<typeof syncMessageEventSchema>
  */
 export const MAX_DOCS_PER_STREAM = 256
 
+/**
+ * The longest doc key a client writes. A key is `workspace:<id>` (the
+ * workspace document, the only key binary frames travel on) or
+ * `${handle}/${path}` (one document's text messages); a handle is a segment
+ * or a canonical id, and a segment is the longer, so the per-document form
+ * at both limits is the longest a real client sends. Every stream holds its
+ * keys for as long as it lives, and every broadcast walks them, so a key
+ * bounded only by the request body would let one stream hold hundreds of
+ * MiB.
+ */
+const SYNC_DOC_KEY_MAX_LENGTH = WORKSPACE_SEGMENT_MAX_LENGTH + 1 + DOCUMENT_PATH_MAX_LENGTH
+
+/**
+ * A doc key a request names: within the bound and addressing a workspace.
+ * A key naming none is no key the client writes, and the membership gate
+ * could decide nothing for it, so it is refused here rather than held.
+ */
+const syncDocKeySchema = z
+  .string()
+  .min(1)
+  .max(SYNC_DOC_KEY_MAX_LENGTH)
+  .refine((key) => workspaceHandleOfSyncKey(key) !== null, {
+    message: 'a doc key is `workspace:<id>` or `<handle>/<path>`',
+  })
+
 export const syncSubscribeRequestSchema = z
   .object({
     streamId: z.string().min(1),
-    // Doc keys are `workspace:<id>` (the workspace document, the only key
-    // binary frames travel on) or `${handle}/${path}` (one document's text
-    // messages), matching the connection registry once the daemon has
-    // resolved the handle to an id.
-    subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
-    unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
+    // Matching the connection registry once the daemon has resolved the
+    // handle to an id.
+    subscribe: z.array(syncDocKeySchema).max(MAX_DOCS_PER_STREAM).optional(),
+    unsubscribe: z.array(syncDocKeySchema).max(MAX_DOCS_PER_STREAM).optional(),
   })
   .strict()
 
@@ -100,7 +125,7 @@ export type SyncSubscribeResponse = z.infer<typeof syncSubscribeResponseSchema>
 export const syncClientMessageRequestSchema = z
   .object({
     streamId: z.string().min(1),
-    doc: z.string().min(1),
+    doc: syncDocKeySchema,
     // The client-message union the browser writes against.
     message: clientTextMessageSchema,
   })

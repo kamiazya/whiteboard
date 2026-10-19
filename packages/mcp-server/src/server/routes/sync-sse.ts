@@ -174,14 +174,22 @@ function applySubscriptions(
   return [...docs.keys()].sort()
 }
 
-function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
-  const entry = stream.docs.get(doc.as) ?? { ready: false, key: doc.key }
+/**
+ * Record readiness, adding the document when the stream does not hold it yet
+ * — the same admission a subscribe gives it, cap included, since an upsert
+ * is a subscription by another door. `false` when the stream is full.
+ */
+function markReady(stream: SyncStream, doc: { key: string; as: string }): boolean {
+  const held = stream.docs.get(doc.as)
+  if (held === undefined && stream.docs.size >= MAX_DOCS_PER_STREAM) return false
+  const entry = held ?? { ready: false, key: doc.key }
   entry.ready = true
   stream.docs.set(doc.as, entry)
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
   const cached = cachedViewportRequest(doc.key)
   if (cached !== undefined) stream.send({ event: 'message', data: { doc: doc.as, raw: cached } })
+  return true
 }
 
 const SYNC_BODY: ReadJsonBodyOptions = { voice: 'code', refuseShape: invalidRequestBody }
@@ -285,7 +293,7 @@ async function handleMessage(c: Context, options: SyncSseRouterOptions) {
   // and dropping readiness that arrived first would withhold the viewport
   // request for good. Declaring readiness is a statement of interest in the
   // document either way.
-  markReady(stream, doc)
+  if (!markReady(stream, doc)) return c.json({ error: 'too_many_subscriptions' }, 400)
   return c.json({ ok: true })
 }
 

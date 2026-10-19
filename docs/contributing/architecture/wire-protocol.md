@@ -31,8 +31,11 @@ itself is one-way.
 | `POST /api/sync/message` | browser to daemon | One client message for one document, addressed by the stream id. |
 
 A document is addressed by its doc key, `${workspaceId}/${path}`, or by
-`workspace:${workspaceId}` for the workspace record as a whole. A request that
-names a stream the daemon does not hold answers `404 unknown_stream`.
+`workspace:${workspaceId}` for the workspace record as a whole. A key is at
+most 1,225 characters, the longest those two forms can be (a 200-character
+workspace segment, a slash and a 1,024-character path); a request naming a
+longer key, or a key in neither form, answers `400 invalid_request`. A request
+that names a stream the daemon does not hold answers `404 unknown_stream`.
 
 The daemon decides a subscribe as a whole: it answers `403` for the whole
 request when any workspace in it is one the credential may not enter, and
@@ -72,7 +75,10 @@ Server to client:
 Client to server, through `POST /api/sync/message`:
 
 - `client_ready`: the page has the document and can apply a viewport. It is the
-  only client message today.
+  only client message today. It may arrive before the subscribe for the same
+  document, so a `client_ready` for a document the stream does not follow yet
+  adds it, under the same 256-document limit: past it the message answers
+  `400 too_many_subscriptions`.
 
 ## Payload shape
 
