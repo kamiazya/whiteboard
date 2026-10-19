@@ -79,7 +79,11 @@ not:
   document's `update` and `promote` — answer `413` with
   `{"error":"markdown_too_large"}` and store nothing. They also refuse, in
   milliseconds, an update that inserts more than 262,144 characters in one
-  piece, before applying it. A promoted workspace is judged by its whole
+  piece, before applying it, and the same for an update of several separate
+  inserts that together cost more to apply than one of that size: the cost of
+  an insert grows with the square of its length, so two inserts of 200,000
+  characters are refused while any number of the short inserts an editor
+  sends are not. A promoted workspace is judged by its whole
   history: if a note once took one paste past the limit, even one cut back
   since, a workspace that already holds documents refuses it, naming the
   document, while a workspace with no documents yet takes it whole, since
