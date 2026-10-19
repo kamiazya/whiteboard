@@ -15,7 +15,7 @@ import {
 import { readCanvasComments } from './annotations.js'
 import {
   migrateCanvasCommentsToThreads,
-  readCommentThreads,
+  readCommentThread,
   writeThreadInto,
 } from './comment-threads.js'
 import {
@@ -356,7 +356,7 @@ function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void
   assertWritableComment(comment)
   migrateCanvasCommentsToThreads(doc)
   const incoming = threadFromCanvasComment(comment)
-  const held = readCommentThreads(doc).find((thread) => thread.id === comment.id)
+  const held = readCommentThread(doc, comment.id)
   if (held === undefined) {
     writeThreadInto(doc, incoming)
     return
@@ -399,7 +399,7 @@ function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean 
   // comment this call closed.
   migrateCanvasCommentsToThreads(doc)
   const threadsMap = doc.getMap(THREADS_KEY)
-  if (!threadsMap.keys().includes(commentId)) return false
+  if (threadsMap.get(commentId) === undefined) return false
   threadsMap.delete(commentId)
   return true
 }
