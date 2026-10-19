@@ -2,7 +2,10 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import type { MemberProfileStore } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
+import {
+  createServerModeApiAuthMiddleware,
+  createServerModeOriginMiddleware,
+} from './server-mode-middleware.js'
 import type { SignInSessionStore } from './sign-in-session-store.js'
 
 // route-scope-registry.ts returns null for any /api/* path no rule claims,
@@ -54,5 +57,42 @@ describe('createServerModeApiAuthMiddleware', () => {
     const res = await app.request('/api/debug')
     expect(res.status).toBe(403)
     await expect(res.json()).resolves.toEqual({ error: 'forbidden' })
+  })
+})
+
+// A response reflecting the request's Origin (or omitting it, for a request
+// that sent none) differs by that header, so a shared cache that is not told
+// so may hand one origin's CORS answer to another.
+describe('createServerModeOriginMiddleware', () => {
+  function originApp() {
+    const app = new Hono()
+    app.use('/mcp', createServerModeOriginMiddleware(['https://wb.test']))
+    app.all('/mcp', (c) => {
+      c.header('Vary', 'Accept')
+      return c.text('ok')
+    })
+    return app
+  }
+
+  const varies = (res: Response) =>
+    (res.headers.get('vary') ?? '').split(',').map((v) => v.trim().toLowerCase())
+
+  it.each([
+    ['an admitted origin', { origin: 'https://wb.test' }, 'POST'],
+    ['an admitted preflight', { origin: 'https://wb.test' }, 'OPTIONS'],
+    ['a refused origin', { origin: 'https://evil.test' }, 'POST'],
+    ['no origin', {}, 'POST'],
+  ])('answers %s with Vary: Origin', async (_name, headers, method) => {
+    const res = await originApp().request('/mcp', { method, headers })
+    expect(varies(res)).toContain('origin')
+  })
+
+  it('keeps a Vary the handler set beside Origin', async () => {
+    const res = await originApp().request('/mcp', {
+      method: 'POST',
+      headers: { origin: 'https://wb.test' },
+    })
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://wb.test')
+    expect(varies(res)).toEqual(expect.arrayContaining(['accept', 'origin']))
   })
 })

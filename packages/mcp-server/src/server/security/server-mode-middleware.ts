@@ -317,36 +317,51 @@ export function createServerModeOriginMiddleware(
   return async (c, next) => {
     const origin = c.req.header('origin')
     if (!origin) {
-      if (c.req.method.toUpperCase() === 'OPTIONS') return new Response(null, { status: 204 })
-      return next()
+      if (c.req.method.toUpperCase() === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: varyOnOrigin(new Headers()) })
+      }
+      await next()
+      varyOnOrigin(c.res.headers)
+      return
     }
     if (!matchOrigin(patterns, origin)) {
-      return Response.json(
+      const refused = Response.json(
         { jsonrpc: '2.0', error: { code: -32000, message: 'forbidden origin' }, id: null },
         { status: 403 },
       )
+      varyOnOrigin(refused.headers)
+      return refused
     }
-    c.res.headers.set('Access-Control-Allow-Origin', origin)
-    c.res.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-    )
-    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-    c.res.headers.set('Access-Control-Max-Age', '86400')
     if (c.req.method.toUpperCase() === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: c.res.headers })
+      return new Response(null, { status: 204, headers: allowOrigin(new Headers(), origin) })
     }
     await next()
-    c.res.headers.set('Access-Control-Allow-Origin', origin)
-    c.res.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-    )
-    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-    c.res.headers.set('Access-Control-Max-Age', '86400')
+    allowOrigin(c.res.headers, origin)
   }
+}
+
+/**
+ * Marks a response as differing by the request's Origin. Every answer here
+ * does — the allowed origin is reflected, and a request with none or a
+ * refused one gets no CORS grant — so without it a shared cache could serve
+ * one origin's answer to another.
+ */
+function varyOnOrigin(headers: Headers): Headers {
+  const named = (headers.get('vary') ?? '').split(',').map((v) => v.trim().toLowerCase())
+  if (!named.includes('origin') && !named.includes('*')) headers.append('Vary', 'Origin')
+  return headers
+}
+
+function allowOrigin(headers: Headers, origin: string): Headers {
+  headers.set('Access-Control-Allow-Origin', origin)
+  headers.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+  )
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+  headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
+  headers.set('Access-Control-Max-Age', '86400')
+  return varyOnOrigin(headers)
 }
 
 export function sanitizeServerModeStatus(
