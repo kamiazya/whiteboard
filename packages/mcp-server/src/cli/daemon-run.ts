@@ -47,6 +47,9 @@ export type DaemonRunOutcome =
 
 type DaemonStopReason = 'idle' | 'signal'
 
+/** The length of a token this daemon mints, and the floor below which a configured one is warned about. */
+const MINTED_TOKEN_LENGTH = 32
+
 export interface DaemonRunOptions {
   dataDir?: string
   tokenStdin: boolean
@@ -168,7 +171,7 @@ async function resolveStartupToken(
         outcome: { kind: 'input-error', message: 'WHITEBOARD_DAEMON_TOKEN is set but empty.' },
       }
     }
-    return { token: fromEnv ?? nanoid(32) }
+    return { token: fromEnv ?? nanoid(MINTED_TOKEN_LENGTH) }
   }
   let token: string
   try {
@@ -180,6 +183,18 @@ async function resolveStartupToken(
     return { outcome: { kind: 'input-error', message: 'Token read from stdin was empty.' } }
   }
   return { token }
+}
+
+// `GET /api/runtime/proof` answers HMAC(token, label||nonce) to anyone who
+// reaches the socket, so the proof doubles as an offline oracle against the
+// token. A minted token is never short; an operator-chosen one (env or
+// stdin) may be, and only its length is ever logged.
+function warnWhenTokenIsShort(token: string): void {
+  if (token.length >= MINTED_TOKEN_LENGTH) return
+  getLogger('daemon-startup').warning(
+    { length: token.length, minimumLength: MINTED_TOKEN_LENGTH },
+    'the configured daemon token is shorter than the minted default and can be guessed offline from the proof route; use at least 32 random characters',
+  )
 }
 
 // A daemon.json that outlived its daemon can name a pid a later process took;
@@ -228,6 +243,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   const resolved = await resolveStartupToken(options)
   if ('outcome' in resolved) return resolved.outcome
   const token = resolved.token
+  warnWhenTokenIsShort(token)
 
   return await withDaemonStartupLock(dataDir, async () => {
     // Read once here, after the startup-issue gate above already validated
