@@ -79,7 +79,36 @@ export function documentMissingBody(workspaceId: string, path: string): ApiError
  */
 function defaultExportPath(exportsDir: string, path: string, extension: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  return join(exportsDir, `${path}-${timestamp}-${nanoid(6)}.${extension}`)
+  const suffix = `-${timestamp}-${nanoid(6)}.${extension}`
+  const segments = path.split('/')
+  const leaf = segments.pop() ?? ''
+  const fitted = [
+    ...segments.map((segment) => truncateUtf8(segment, NAME_MAX_BYTES)),
+    truncateUtf8(leaf, NAME_MAX_BYTES - Buffer.byteLength(suffix)) + suffix,
+  ]
+  return join(exportsDir, ...fitted)
+}
+
+/**
+ * The longest name one path component may have on the filesystems an exports
+ * directory lives on (NAME_MAX). A document path admits one segment far past
+ * it, so the default name is cut to fit rather than answering ENAMETOOLONG;
+ * the timestamp and random suffix are what keep it unique, so they are kept.
+ */
+const NAME_MAX_BYTES = 255
+
+/** The longest prefix of `text` within `maxBytes` of UTF-8, never splitting a code point. */
+function truncateUtf8(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text) <= maxBytes) return text
+  let bytes = 0
+  let end = 0
+  for (const char of text) {
+    const size = Buffer.byteLength(char)
+    if (bytes + size > maxBytes) break
+    bytes += size
+    end += char.length
+  }
+  return text.slice(0, end)
 }
 
 // The suffix makes a collision rare, not impossible, so the default path is

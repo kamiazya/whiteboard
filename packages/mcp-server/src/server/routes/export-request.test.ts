@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import { unknownStyleRefusal } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
@@ -190,6 +190,34 @@ describe('writeExportAnswer', () => {
     expect(a).not.toBe(b)
     await expect(readFile(a, 'utf-8')).resolves.toBe('first')
     await expect(readFile(b, 'utf-8')).resolves.toBe('second')
+  })
+
+  // A filesystem refuses a name past 255 bytes (NAME_MAX), and a document path
+  // may run to 1024 characters in one segment: the default name has to fit.
+  it.each([
+    ['one long leaf segment', 'a'.repeat(1000)],
+    ['a long directory segment', `${'d'.repeat(600)}/board`],
+    ['a leaf of multi-byte characters', 'é'.repeat(300)],
+  ])('keeps every default-path segment within 255 bytes for %s', async (_name, path) => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
+
+    const written = await writeExportFile('<svg/>', {
+      outputPath: undefined,
+      layout: exportsAt(dir),
+      workspaceId: 'ws',
+      path,
+      extension: 'svg',
+    })
+
+    const segments = relative(dir, written).split(sep)
+    for (const segment of segments) {
+      expect(Buffer.byteLength(segment)).toBeLessThanOrEqual(255)
+      expect(segment).not.toContain('\uFFFD')
+    }
+    expect(segments.at(-1)).toMatch(/-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z-[\w-]{6}\.svg$/)
+    expect(segments.at(-1)?.startsWith(path.split('/').at(-1)?.slice(0, 20) ?? '')).toBe(true)
+    await expect(readFile(written, 'utf-8')).resolves.toBe('<svg/>')
   })
 
   it('writes a caller-chosen path as it is, creating its directory', async () => {
