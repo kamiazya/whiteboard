@@ -93,12 +93,13 @@ export interface VersionStore extends VersionHistory {
    * document's history — without listing the history to find out.
    */
   belongsTo(workspaceId: string, path: string, versionId: string): Promise<boolean>
-  // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
-  // workspace — the earliest point any version checkout still needs from the
-  // workspace record's history, so the safe cut for compacting that record.
-  // Null when the workspace has no scoped versions (compacting would then
-  // risk history nothing has measured the need for).
-  earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null>
+  /**
+   * The frontiers of every version in the workspace — the points a version
+   * checkout still needs from the workspace record's history, which is what
+   * compaction's cut must lie before (`compactionCut`). Empty when the
+   * workspace has no versions.
+   */
+  workspaceVersionFrontiers(workspaceId: string): Promise<Frontiers[]>
   /**
    * One copy of the workspace record, checked out at each version asked for —
    * for a caller walking many versions, which would otherwise copy the whole
@@ -657,26 +658,24 @@ export class FileVersionStore implements VersionStore {
     return row.contentDigest === entry.contentDigest
   }
 
-  async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {
+  async workspaceVersionFrontiers(workspaceId: string): Promise<Frontiers[]> {
     validateWorkspaceId(workspaceId)
     const db = await this.scope.db()
-    const row = await db
+    const rows = await db
       .selectFrom('versions')
-      .select(['frontiers'])
+      .select(['id', 'frontiers'])
       .where('workspaceId', '=', workspaceId)
-      .orderBy('createdAt', 'asc')
-      .orderBy('id', 'asc')
-      .limit(1)
-      .executeTakeFirst()
-    if (!row) return null
-    try {
-      return frontiersFromBase64(row.frontiers)
-    } catch (error) {
-      throw corruptStoredData(
-        `versions/${workspaceId}`,
-        `frontiers could not be decoded (${messageOf(error)})`,
-      )
-    }
+      .execute()
+    return rows.map((row) => {
+      try {
+        return frontiersFromBase64(row.frontiers)
+      } catch (error) {
+        throw corruptStoredData(
+          `versions/${row.id}`,
+          `frontiers could not be decoded (${messageOf(error)})`,
+        )
+      }
+    })
   }
 
   /** The record is the address book: a path resolves in its tree. */

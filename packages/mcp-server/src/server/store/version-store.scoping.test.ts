@@ -316,7 +316,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     })
   })
 
-  describe('earliestWorkspaceFrontiers', () => {
+  describe('workspaceVersionFrontiers', () => {
     // The stored column, read straight off the row: it is the encoding the
     // store's answer has to agree with.
     async function frontiersOf(id: string): Promise<string | undefined> {
@@ -328,32 +328,24 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       return row?.frontiers
     }
 
-    it('is the OLDEST version in the workspace: the point compaction may cut to', async () => {
+    it("is every version's point in this workspace, however old another workspace's are", async () => {
+      await edit('ws-b', 'b')
+      await at(500, () => store.save('ws-b', 'doc', new LoroDoc(), { auto: false }))
       await edit('ws-a', 'one')
       const first = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
       await edit('ws-a', 'two')
-      await at(2_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
+      const second = await at(2_000, () =>
+        store.save('ws-a', 'doc', new LoroDoc(), { auto: false }),
+      )
 
-      const earliest = await store.earliestWorkspaceFrontiers('ws-a')
-      expect(earliest).not.toBeNull()
-      if (earliest === null) return
-      expect(frontiersToBase64(earliest)).toBe(await frontiersOf(first.id))
+      const points = (await store.workspaceVersionFrontiers('ws-a')).map(frontiersToBase64)
+      expect(points.sort()).toEqual(
+        [await frontiersOf(first.id), await frontiersOf(second.id)].sort(),
+      )
     })
 
-    it("reads only this workspace, however old another workspace's versions are", async () => {
-      await edit('ws-b', 'b')
-      await at(500, () => store.save('ws-b', 'doc', new LoroDoc(), { auto: false }))
-      await edit('ws-a', 'a')
-      const own = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
-
-      const earliest = await store.earliestWorkspaceFrontiers('ws-a')
-      expect(earliest).not.toBeNull()
-      if (earliest === null) return
-      expect(frontiersToBase64(earliest)).toBe(await frontiersOf(own.id))
-    })
-
-    it('is null for a workspace with no versions', async () => {
-      await expect(store.earliestWorkspaceFrontiers('ws-a')).resolves.toBeNull()
+    it('is empty for a workspace with no versions', async () => {
+      await expect(store.workspaceVersionFrontiers('ws-a')).resolves.toEqual([])
     })
   })
 })

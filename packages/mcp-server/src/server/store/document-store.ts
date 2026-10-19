@@ -2,6 +2,7 @@ import type {
   CompactWorkspaceResult,
   DocumentSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { compactionCut } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -589,8 +590,8 @@ export async function compactWorkspace(
     const beforeBytes =
       manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
 
-    const earliestVersion = await versionStore.earliestWorkspaceFrontiers(workspaceId)
-    if (!earliestVersion) {
+    const points = await versionStore.workspaceVersionFrontiers(workspaceId)
+    if (points.length === 0) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
     }
 
@@ -599,10 +600,15 @@ export async function compactWorkspace(
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId, scope)
 
-    // The earliest version row is the whole cut: it is the oldest point any
-    // reader can still ask to see. No version row still means no compaction
-    // at all, which is the guard above.
-    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: earliestVersion })
+    // The cut is the point every version descends from — never the version
+    // with the oldest date, which a carried row can claim while standing at
+    // the head. No such point means nothing can be folded without losing a
+    // version's past, which reads to the caller as nothing to gain.
+    const cut = compactionCut(doc, points)
+    if (cut === null) {
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
+    }
+    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
     if (shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }

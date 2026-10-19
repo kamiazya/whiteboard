@@ -7,4 +7,5 @@ export {
   sandwichedAutoVersionIds,
 } from './checkpoints/retention.js'
 export { type CheckpointScheduler, createCheckpointScheduler } from './checkpoints/scheduler.js'
+export { compactionCut } from './compaction-cut.js'
 export { frontiersFromBase64, frontiersToBase64 } from './frontiers-base64.js'

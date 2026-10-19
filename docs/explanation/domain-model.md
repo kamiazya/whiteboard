@@ -190,11 +190,14 @@ addenda of
 - The workspace record accumulates every edit's history, and the daemon
   periodically **compacts** it: history older than anything still reachable
   is folded into the snapshot. What stays reachable is exactly what your
-  saved versions point at — the record keeps history back to the oldest
-  version and nothing before that, counting the versions of a document in
-  the trash until it is deleted permanently. Deleting old versions (or the automatic
+  saved versions point at — the record keeps history back to the point every
+  version descends from and nothing before that, counting the versions of a
+  document in the trash until it is deleted permanently. That point is found
+  in the history itself, never from a version's date, so a version carried
+  in by a workspace move with an earlier date than its place in the history
+  cannot cut the others away. Deleting old versions (or the automatic
   version pruning) is therefore what lets compaction reclaim space; the
-  oldest version is the whole answer.
+  earliest point in the history a version stands at is the whole answer.
 - Documents kept in the browser cross to a daemon by an explicit,
   user-initiated **move of the whole workspace** (Settings → Connections →
   "This workspace"): the browser's workspace record merges into the chosen
