@@ -1,11 +1,12 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type { HonoRequest } from 'hono'
 import type { ServerDeps } from '../server-deps.js'
 
 /** Whose namespace a bare segment means for this call: the deps' answer, else `me`. */
 export async function callerNamespaceOf(
   deps: Pick<ServerDeps, 'callerNamespace'>,
-  request?: Request,
+  request?: HonoRequest,
 ): Promise<string> {
   return (await deps.callerNamespace?.(request)) ?? SINGLE_PERSON_NAMESPACE
 }
@@ -18,7 +19,7 @@ export async function callerNamespaceOf(
 export async function resolveWorkspaceFor(
   deps: Pick<ServerDeps, 'documentIndex' | 'callerNamespace'>,
   handle: string,
-  request?: Request,
+  request?: HonoRequest,
 ): Promise<WorkspaceEntry | null> {
   return deps.documentIndex.resolveWorkspace(handle, await callerNamespaceOf(deps, request))
 }

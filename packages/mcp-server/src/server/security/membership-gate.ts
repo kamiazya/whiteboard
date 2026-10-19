@@ -6,7 +6,7 @@
  * themselves (the workspace list, the SSE transport).
  */
 import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
-import type { Context } from 'hono'
+import type { Context, HonoRequest } from 'hono'
 import { getLogger } from '../log.js'
 import {
   NO_NAMESPACE,
@@ -27,15 +27,16 @@ const log = getLogger('membership-gate')
 
 /** The one per-request memo of "which grant authenticated this request" —
  *  same idiom as `workspace-handle.ts`'s memo, and for the same reason: a
- *  later handler has no other way to reach the grant. */
-const grantMemo = new WeakMap<Request, ResolvedGrant>()
+ *  later handler has no other way to reach the grant. Keyed on the
+ *  HonoRequest, which `hono/body-limit` keeps while it replaces `c.req.raw`. */
+const grantMemo = new WeakMap<HonoRequest, ResolvedGrant>()
 
 export function rememberGrant(c: Context, grant: ResolvedGrant): void {
-  grantMemo.set(c.req.raw, grant)
+  grantMemo.set(c.req, grant)
 }
 
 function grantOf(c: Context): ResolvedGrant | undefined {
-  return grantMemo.get(c.req.raw)
+  return grantMemo.get(c.req)
 }
 
 /**

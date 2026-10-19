@@ -2,6 +2,7 @@ import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
+import type { HonoRequest } from 'hono'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { AgentActivityTouched } from './agent-activity-touched.js'
 import type { Embedder } from './search/embedder.js'
@@ -141,15 +142,17 @@ export interface ServerDeps {
    * Whose namespace a BARE segment means for the call being served
    * (ADR-0053): a single-person keeper's `me`, or the signed-in user's handle
    * on a keeper many people share. `request` is the `/api/v1` request when
-   * there is one; a tool call has none, and the composition root knows its
-   * caller another way.
+   * there is one — the HonoRequest, not its raw `Request`, because a
+   * body-limit middleware replaces the raw one mid-chain and a record keyed
+   * on it would no longer be found; a tool call has none, and the
+   * composition root knows its caller another way.
    *
    * Asked rather than assumed because resolution here runs AFTER a keeper's
    * own gate resolved the same address: answering in another namespace than
    * the gate did would hand a request a workspace nobody authorised it for.
    * Absent is `me`, the right answer for every single-person composition.
    */
-  callerNamespace?: (request?: Request) => Promise<string>
+  callerNamespace?: (request?: HonoRequest) => Promise<string>
   /**
    * How a tool quotes a fault it REPORTS in a successful answer rather than
    * throws — a follow pass that could not run, a document that could not be
