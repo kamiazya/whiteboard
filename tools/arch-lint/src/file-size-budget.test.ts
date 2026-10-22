@@ -157,7 +157,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the rationale beside that wiring buys lines at the price of what the
   // lines were for, so it is not met that way.
   // +2: `tagLibrary`, so a board the preview embeds is coloured by intent.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 897,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 904,
   // The ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it. The next
   // shrink is the PREFERENCE half (candidate generation, from

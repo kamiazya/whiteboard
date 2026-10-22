@@ -317,6 +317,7 @@ function markdownPaneProps({
     linkTargets: files.pickerTargets,
     onOpenDocument: model.openDocument,
     ...(files.createLinkTarget === undefined ? {} : { onCreateLinkTarget: files.createLinkTarget }),
+    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
     selectedThreadId: commentsRail.selectedThreadId,

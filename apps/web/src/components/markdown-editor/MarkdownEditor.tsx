@@ -128,6 +128,8 @@ export interface MarkdownEditorProps {
    * cannot make documents on its own.
    */
   onCreateLinkTarget?: LinkTargetCreator
+  /** The open document's own path: a `[[` naming it is a self-link, never a Create row. */
+  ownPath?: string
   /**
    * Injection seam for tests: the async engines behind math blocks and
    * diagram fences. Defaults to the real dynamically-imported
@@ -277,6 +279,7 @@ export function MarkdownEditor({
   linkTargets,
   onOpenDocument,
   onCreateLinkTarget,
+  ownPath,
   fragmentLoaders,
   sourceExtensions,
   threads,
@@ -292,13 +295,17 @@ export function MarkdownEditor({
   // at view creation, while the document list keeps refreshing under it.
   const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
   linkTargetsRef.current = linkTargets ?? []
-  const linkFollow = useLinkFollow({ linkTargetsRef, onOpenDocument, onCreateLinkTarget })
+  const linkFollow = useLinkFollow({ linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath })
   const completionExtension = useMemo(() => {
     // Both sources in ONE `autocompletion()`: `override` replaces the whole
     // list, so a second call beside this would kill the `[[` one. The Enter
     // keymap asks the same pair whether a drawn list is still live.
     const sources = [
-      wikiLinkCompletionSource(() => linkTargetsRef.current, linkFollow.getCreate),
+      wikiLinkCompletionSource(
+        () => linkTargetsRef.current,
+        linkFollow.getCreate,
+        linkFollow.getOwnPath,
+      ),
       shortcodeCompletionSource,
     ]
     return [
@@ -321,7 +328,7 @@ export function MarkdownEditor({
       completionPopupTheme,
       completionTouchAccept,
     ]
-  }, [linkFollow.getCreate])
+  }, [linkFollow.getCreate, linkFollow.getOwnPath])
   // Read through a ref for the same reason the completion source is: the
   // extension is installed once at view creation, while the handler the host
   // passes is a fresh closure on every render.

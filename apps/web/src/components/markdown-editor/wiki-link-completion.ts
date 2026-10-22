@@ -28,6 +28,7 @@ import { type LinkTarget, linkMarkupFor, rankLinkTargets } from '../../lib/link-
 export function wikiLinkCompletionSource(
   getTargets: () => readonly LinkTarget[],
   getCreate: () => LinkTargetCreator | undefined = () => undefined,
+  getOwnPath: () => string | undefined = () => undefined,
 ) {
   return (context: CompletionContext): CompletionResult | null => {
     // The open [[ with whatever partial query follows it. `matchBefore` only
@@ -41,7 +42,7 @@ export function wikiLinkCompletionSource(
     const targets = getTargets()
     const create = getCreate()
     const query = match.text.slice(2)
-    const wanted = createRowPath(query, targets)
+    const wanted = createRowPath(query, targets, getOwnPath())
     if (targets.length === 0 && (create === undefined || wanted === null)) return null
     const ranked = rankLinkTargets(targets, query)
     // Only when nothing matches: a Create row beside real matches reads as
@@ -80,11 +81,19 @@ export type LinkTargetCreator = (path: string) => void | Promise<void>
 /**
  * The path a Create row would make for `query`, or null when none should be
  * offered: nothing typed, or the text already IS a target's path (a row
- * making a duplicate would only fail).
+ * making a duplicate would only fail). The open document is not among the
+ * targets, so its own path is asked for separately: a self-link is a link,
+ * not a document to make.
  */
-function createRowPath(query: string, targets: readonly LinkTarget[]): string | null {
+function createRowPath(
+  query: string,
+  targets: readonly LinkTarget[],
+  ownPath: string | undefined,
+): string | null {
   const path = query.trim()
-  if (path === '' || targets.some((target) => target.path === path)) return null
+  if (path === '' || path === ownPath || targets.some((target) => target.path === path)) {
+    return null
+  }
   return path
 }
 

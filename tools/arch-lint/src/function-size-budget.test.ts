@@ -113,7 +113,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // (measured: lifting a slot moves the complexity by about one, because the
   // condition that decides whether to render it stays).
   // +2: `tagLibrary`, handed to the preview column.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 635,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 640,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.

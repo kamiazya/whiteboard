@@ -16,8 +16,12 @@ export function useLinkFollow(options: {
   readonly linkTargetsRef: { readonly current: readonly LinkTarget[] }
   readonly onOpenDocument: ((documentId: string) => void) | undefined
   readonly onCreateLinkTarget: LinkTargetCreator | undefined
+  /** The open document's path, which the Create row must never offer to make. */
+  readonly ownPath: string | undefined
 }) {
-  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget } = options
+  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath } = options
+  const ownPathRef = useRef(ownPath)
+  ownPathRef.current = ownPath
   const openRef = useRef(onOpenDocument)
   openRef.current = onOpenDocument
   const createRef = useRef(onCreateLinkTarget)
@@ -31,6 +35,7 @@ export function useLinkFollow(options: {
     [linkTargetsRef],
   )
   const getCreate = useMemo(() => () => createRef.current, [])
+  const getOwnPath = useMemo(() => () => ownPathRef.current, [])
 
   /** The catalog rows for the reference under `caret` in `value`, if any. */
   const catalogLinkRows = (
@@ -48,5 +53,5 @@ export function useLinkFollow(options: {
       ? {}
       : { createLinkTarget: { path: found.path, run: () => void create(found.path) } }
   }
-  return { extension, getCreate, catalogLinkRows }
+  return { extension, getCreate, getOwnPath, catalogLinkRows }
 }

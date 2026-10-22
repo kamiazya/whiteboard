@@ -149,6 +149,18 @@ describe('wikiLinkCompletionSource create row', () => {
     expect(withCreate('[[release-plan')).toBeNull()
   })
 
+  it("offers no Create row for the open document's own path", () => {
+    const source = wikiLinkCompletionSource(
+      () => TARGETS,
+      () => (path: string) => {
+        created.push(path)
+      },
+      () => 'weekly-sync',
+    )
+    const doc = '[[weekly-sync'
+    expect(source(new CompletionContext(EditorState.create({ doc }), doc.length, false))).toBeNull()
+  })
+
   it('offers no Create row while any target matches the typed text', () => {
     const labels = withCreate('[[Re')?.options.map((o) => o.label)
     expect(labels?.[0]).toBe('Release plan')
