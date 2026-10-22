@@ -144,7 +144,7 @@ type SourcePaneVariant = 'document' | 'compact'
  * the body) and the column is given back. In the editor's theme because the
  * stylesheet's gutter rules sit in a layer this unlayered theme outranks.
  */
-function narrowScreenTheme(variant: SourcePaneVariant) {
+function narrowScreenTheme(variant: SourcePaneVariant): Parameters<typeof EditorView.theme>[0] {
   if (variant !== 'document') return {}
   return {
     '@media (max-width: 479px)': {

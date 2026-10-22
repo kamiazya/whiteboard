@@ -22,15 +22,11 @@ const lastValue = (onChange: ReturnType<typeof vi.fn>) =>
 async function mount(onChange = vi.fn()) {
   render(
     <div style={{ height: 400 }}>
-      <MarkdownEditor
-        theme="light"
-        value="milk"
-        onChange={onChange}
-        autoFocus
-        initialViewMode="write"
-      />
+      <MarkdownEditor theme="light" value="milk" onChange={onChange} initialViewMode="write" />
     </div>,
   )
+  // An existing note is not focused on open, so the reader puts the caret in it.
+  ;(document.querySelector('.cm-content') as HTMLElement).focus()
   await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
   return onChange
 }

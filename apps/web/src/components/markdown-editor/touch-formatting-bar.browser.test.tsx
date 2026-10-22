@@ -218,7 +218,7 @@ it('follows the document editor too, and leaves when that editor unmounts', asyn
       <div style={{ height: 300 }}>
         <MarkdownEditor
           theme="light"
-          value="# Title"
+          value=""
           onChange={vi.fn()}
           autoFocus
           initialViewMode="write"
