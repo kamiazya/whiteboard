@@ -4,12 +4,19 @@ import {
   History,
   Info,
   MessageSquare,
+  PanelRight,
   SlidersHorizontal,
   Waypoints,
 } from 'lucide-react'
 import type { JSX } from 'react'
 import { INSPECTOR_CHROME, INSPECTOR_ORDER, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu.js'
 import { HEADER_WIDE_TOGGLE_CLASS } from '../ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -88,7 +95,61 @@ function accessibleName(kind: InspectorKind, count: number | null | undefined): 
   return `${label} (${count})`
 }
 
-export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps): JSX.Element {
+/**
+ * Below `sm` the members fold into ONE menu. Five 44px touch targets plus the
+ * title floor and the act menu do not fit a 390px screen, and the cluster is
+ * `shrink-0`, so the act menu — the last thing in the row — was laid out past
+ * the right edge. Both forms stay in the tree and CSS picks one, so the fold
+ * follows the viewport rather than a pointer guess.
+ */
+function InspectorFold({ open, onToggle, tabs }: InspectorSegmentProps): JSX.Element {
+  const kinds = INSPECTOR_ORDER.filter((kind) => tabs[kind] !== undefined)
+  return (
+    <div className="sm:hidden">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Inspect this document"
+            aria-pressed={open !== null}
+            className={HEADER_WIDE_TOGGLE_CLASS}
+          >
+            <PanelRight aria-hidden="true" className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {kinds.map((kind) => {
+            const { count } = tabs[kind] as InspectorTabState
+            const Glyph = GLYPHS[kind]
+            return (
+              <DropdownMenuItem
+                key={kind}
+                disabled={count === null}
+                aria-current={open === kind ? 'true' : undefined}
+                onSelect={() => onToggle(kind)}
+                className="gap-2"
+              >
+                <Glyph aria-hidden="true" className="size-3.5" />
+                {accessibleName(kind, count)}
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+export function InspectorSegment(props: InspectorSegmentProps): JSX.Element {
+  return (
+    <>
+      <InspectorFold {...props} />
+      <InspectorButtons {...props} />
+    </>
+  )
+}
+
+function InspectorButtons({ open, onToggle, tabs }: InspectorSegmentProps): JSX.Element {
   return (
     // biome-ignore lint/a11y/useSemanticElements: <fieldset> groups form controls under a <legend>; these are toggle buttons, and the only role that fits a button cluster, "toolbar", promises roving-tabindex arrow navigation this segment does not implement — declaring it would be an a11y lie.
     <div
@@ -113,7 +174,7 @@ export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps
       // So the group spends no ink at all. What still says these belong
       // together is that they touch (`gap-0.5`) while the divider beside
       // them does not, plus the `role="group"` a reader hears.
-      className="flex shrink-0 items-center gap-0.5"
+      className="flex shrink-0 items-center gap-0.5 max-sm:hidden"
     >
       {INSPECTOR_ORDER.filter((kind) => tabs[kind] !== undefined).map((kind) => {
         const { count } = tabs[kind] as InspectorTabState
