@@ -27,6 +27,23 @@ export interface LockPolicyInputs {
   applySelection: (event: SelectionEvent) => void
 }
 
+/**
+ * The ids the layout draws a padlock on: only where the lock binds (an
+ * unlock is wired), and a sorted array so the layout's memo keys stay stable.
+ */
+export function useLockBadgeIds(
+  lockedNodeIds: ReadonlySet<string> | undefined,
+  lockBinds: boolean,
+): readonly string[] | undefined {
+  return useMemo(
+    () =>
+      !lockBinds || lockedNodeIds === undefined || lockedNodeIds.size === 0
+        ? undefined
+        : [...lockedNodeIds].sort(),
+    [lockBinds, lockedNodeIds],
+  )
+}
+
 export function useLockPolicy({
   boxes,
   lockedNodeIds,

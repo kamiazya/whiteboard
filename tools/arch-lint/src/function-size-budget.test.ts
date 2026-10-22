@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1662,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1664,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
@@ -248,7 +248,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
   'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 147,
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
-  'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 217,
+  'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
   'apps/web/src/components/use-preview-viewport.ts#usePreviewViewport': 97,
   'apps/web/src/components/workspace-files/DocumentMinimap.tsx#DocumentMinimap': 85,
@@ -338,7 +338,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
-  'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
+  'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
   'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 270,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.

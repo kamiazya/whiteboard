@@ -167,7 +167,7 @@ import { useFileSeamScene } from './use-file-seam-scene.js'
 import { useImageIntake } from './use-image-intake.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
-import { useLockPolicy } from './use-lock-policy.js'
+import { useLockBadgeIds, useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
@@ -532,16 +532,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
-    // The padlock is drawn only where the lock binds (an unlock is wired),
-    // and as a sorted array so the layout's memo keys stay stable.
-    const lockBinds = onToggleNodeLock !== undefined
-    const badgedLockedNodeIds = useMemo(
-      () =>
-        !lockBinds || lockedNodeIds === undefined || lockedNodeIds.size === 0
-          ? undefined
-          : [...lockedNodeIds].sort(),
-      [lockBinds, lockedNodeIds],
-    )
+    const badgedLockedNodeIds = useLockBadgeIds(lockedNodeIds, onToggleNodeLock !== undefined)
     // Whatever text entry has focus inside the root — a node's editor, the
     // comment compose bubble, a label, the thread card's reply box — stays
     // above the virtual keyboard: the keyboard overlays the page without
