@@ -3,6 +3,7 @@ import type {
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardContent } from '../components/ui/card.js'
@@ -498,12 +499,13 @@ export default function VersionTimeline({
                   filtered, so an empty one means there is nothing anywhere. */}
               No versions yet.
               <br />
-              {/* No interval in the copy. A number here is a second place
-                  the trigger's timing lives, and the one nothing updates —
-                  it read "~30s" through the whole life of the five-minute
-                  pause that replaced it. */}
-              A checkpoint is saved a little after you stop editing. Bookmark this point with the
-              button above, or ⌘/Ctrl+S.
+              {/* Derived from the scheduler's constant so the copy cannot drift
+                  from the trigger. "While the document is open" is the
+                  honest limit: a tab closed inside the quiet period is
+                  covered only by the page-exit flush. */}
+              A checkpoint is saved about {CHECKPOINT_QUIET_MS / 60_000} minutes after you stop
+              editing, while the document is open. Bookmark this point with the button above, or
+              ⌘/Ctrl+S.
             </div>
           ) : (
             versions.map((v) => (

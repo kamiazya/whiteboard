@@ -10,6 +10,8 @@ Guides:
   them back through the Connections chip.
 - **[comment-on-a-document](comment-on-a-document.md)** — leave feedback anchored to a passage
   or a node, and read the conversations already on a document.
+- **[review-proposals-and-restore-versions](review-proposals-and-restore-versions.md)** — adopt
+  or dismiss an agent's proposed changes, and find or restore a saved version.
 - **[find-documents-from-chat](find-documents-from-chat.md)** — full-text document search
   through the MCP tool, CJK included.
 - **[organize-with-tags](organize-with-tags.md)** — tag documents and filter the document
