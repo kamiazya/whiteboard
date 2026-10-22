@@ -11,6 +11,7 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { REFERENCE_ELEMENTS_BUDGET } from '../references/content-budget.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { layoutMdastBlocks } from './markdown-body.js'
@@ -263,6 +264,12 @@ function hubNaming(count: number): SpatialCanvas {
 }
 
 describe('nested element budget', () => {
+  it('is the figure a reference walk loads canvases up to', () => {
+    // A walk that loads more than the layout draws buys nothing; one that
+    // loads less leaves a drawable board as its card.
+    expect(REFERENCE_ELEMENTS_BUDGET).toBe(NESTED_ELEMENT_BUDGET)
+  })
+
   it('charges a repeated large board by what it lays out, not once per embed', () => {
     const big = board(1000, 0)
     const scene = layoutSpatialCanvas(hubNaming(NESTED_LAYOUT_BUDGET), {

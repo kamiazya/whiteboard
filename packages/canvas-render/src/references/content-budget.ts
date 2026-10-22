@@ -1,5 +1,10 @@
-import { MARKDOWN_MAX_CHARS, nodeText, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { canvasElementCount, NESTED_ELEMENT_BUDGET } from '../layout/nodes/embed-budget.js'
+import {
+  CANVAS_MAX_EDGES_AND_LINES,
+  CANVAS_MAX_NODES,
+  MARKDOWN_MAX_CHARS,
+  nodeText,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import type { LoadedReference } from './loaded-reference.js'
 
 /**
@@ -15,11 +20,19 @@ import type { LoadedReference } from './loaded-reference.js'
 export const REFERENCE_CHARS_BUDGET = 4 * MARKDOWN_MAX_CHARS
 
 /**
- * How many canvas elements the referenced canvases of one walk may load —
- * the layout's own `NESTED_ELEMENT_BUDGET`, because loading a board the
- * layout will refuse to draw buys nothing.
+ * How many canvas elements the referenced canvases of one walk may load:
+ * one maximal board's worth, the same figure as the layout's
+ * `NESTED_ELEMENT_BUDGET`, because loading a board the layout will refuse
+ * to draw buys nothing. Spelled from the model here because references sit
+ * below the layout; `embed-budget.test.ts` holds the two equal.
  */
-export const REFERENCE_ELEMENTS_BUDGET = NESTED_ELEMENT_BUDGET
+export const REFERENCE_ELEMENTS_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LINES
+
+/** What a canvas charges an element budget: everything it lays out; a body, 0. */
+export function canvasElementCount(canvas: SpatialCanvas | undefined): number {
+  if (canvas === undefined) return 0
+  return canvas.nodes.length + canvas.edges.length + (canvas.lines?.length ?? 0)
+}
 
 /** What one loaded reference charges the account. */
 function referenceContentCost(entry: LoadedReference): {
