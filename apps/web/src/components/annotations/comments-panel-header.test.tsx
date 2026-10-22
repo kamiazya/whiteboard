@@ -50,3 +50,27 @@ it('says Resolved on a resolved row and not on an open one', () => {
   )
   expect(container.querySelector('[data-testid="thread-resolved-t-lone"]')).toBeNull()
 })
+
+const ON_NODE: CommentThread = {
+  id: 't-node',
+  anchor: { kind: 'spatial', nodeId: 'n1', x: 0, y: 0 },
+  status: 'open',
+  messages: [{ id: 'm1', body: 'about the form', createdAt: '2026-09-03T00:00:00.000Z' }],
+}
+
+it('names the anchor in a chip on the row, so two rows can be told apart', () => {
+  const { container } = render(
+    <CommentsPanel
+      threads={[ON_NODE, LONE]}
+      anchorLabelOf={(anchor) =>
+        anchor.kind === 'document' ? 'whole document' : 'on Sign-up form'
+      }
+    />,
+  )
+  expect(container.querySelector('[data-testid="thread-about-t-node"]')?.textContent).toBe(
+    'on Sign-up form',
+  )
+  expect(container.querySelector('[data-testid="thread-about-t-lone"]')?.textContent).toBe(
+    'whole document',
+  )
+})

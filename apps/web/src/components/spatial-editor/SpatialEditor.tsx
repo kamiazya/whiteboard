@@ -123,6 +123,7 @@ import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
+import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -155,6 +156,7 @@ import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPale
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
+import { useCommentReveal } from './use-comment-reveal.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
 import { useEditSessionState } from './use-edit-session-state.js'
@@ -617,6 +619,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
     )
+    const { revealThread, pulse: revealPulse } = useCommentReveal({
+      threads,
+      canvas,
+      edgePathOf,
+      viewport,
+      setViewport,
+      rootRef,
+      containerSizeOf,
+    })
     // Named for the TYPE it holds rather than for the state that keys it:
     // `selectedEdgeId` may name a relation or a stroke, because the scene
     // hands both out as the same kind of node. Looking in `canvas.edges`
@@ -762,6 +773,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setOpenProposalId(proposalId)
           return true
         },
+        revealThread,
       }),
       [boxes, proposalChromeBoxes],
     )
@@ -1904,6 +1916,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onLostPointerCapture={handleLostPointerCapture}
           onKeyDown={handleKeyDown}
         >
+          {revealPulse === null ? null : (
+            <CommentRevealPulse
+              pulse={revealPulse}
+              viewport={viewport}
+              color={palette.comment.pin.stroke}
+            />
+          )}
           {(() => {
             // Drawn only when the threads plane can answer for it: the
             // canvas comment alone holds one message, and a card that

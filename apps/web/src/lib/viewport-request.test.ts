@@ -17,6 +17,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ mode: 'fit', elementIds: ['a', 'b'] }), handle)
     expect(handle.fitToContent).toHaveBeenCalledWith(['a', 'b'])
@@ -28,6 +29,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ mode: 'move', scrollX: 10, scrollY: 20, zoom: 2 }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 2 })
@@ -43,6 +45,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ elementIds: ['a'] }), handle)
     expect(handle.fitToContent).toHaveBeenCalledWith(['a'])
@@ -56,6 +59,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ scrollX: 400, scrollY: 300, zoom: 0.5 }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 400, y: 300, zoom: 0.5 })
@@ -67,6 +71,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ zoom: 2 }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 2 })
@@ -77,6 +82,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ elementIds: ['a'], zoom: 2 }), handle)
     expect(handle.fitToContent).toHaveBeenCalledWith(['a'])
@@ -88,6 +94,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload(), handle)
     expect(handle.fitToContent).toHaveBeenCalledWith(undefined)
@@ -99,6 +106,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ mode: 'move' }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 1 })
@@ -112,6 +120,7 @@ describe('applyViewportRequest', () => {
     setViewport: vi.fn(),
     fitToContent: vi.fn(),
     openProposal: vi.fn(),
+    revealThread: vi.fn(),
   })
 
   it.each<[Overrides, string[] | undefined]>([
@@ -163,6 +172,7 @@ describe('applyViewportRequest', () => {
       setViewport: vi.fn(),
       fitToContent: vi.fn(),
       openProposal: vi.fn(),
+      revealThread: vi.fn(),
     }
     applyViewportRequest(payload({ mode: 'move', scrollX: 5, scrollY: 6, zoom }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 5, y: 6, zoom: expected })

@@ -151,6 +151,7 @@ function glideMovedRows(
 export function CommentsPanel({
   threads,
   resolveAnchor,
+  anchorLabelOf,
   onSelect,
   onReply,
   revealThreadId = null,
@@ -454,6 +455,7 @@ export function CommentsPanel({
               toggle={toggle}
               resolveWithBeat={resolveWithBeat}
               resolveAnchor={resolveAnchor}
+              anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
               onReply={onReply}
               onEditMessage={onEditMessage}

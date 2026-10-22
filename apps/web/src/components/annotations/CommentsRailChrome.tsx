@@ -37,6 +37,7 @@ export function CommentsRailAside({
         <CommentsPanel
           threads={threads}
           resolveAnchor={rail.resolveAnchor}
+          anchorLabelOf={rail.anchorLabelOf}
           revealThreadId={rail.selectedThreadId}
           onSelect={(thread) => rail.selectThread(thread.id)}
           onReply={writable ? rail.reply : undefined}

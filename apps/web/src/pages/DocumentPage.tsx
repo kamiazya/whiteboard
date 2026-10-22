@@ -470,6 +470,12 @@ function DocumentPageBody({
     canvas: threads.railCanvas,
     write: threads.write,
   })
+  // Picking a conversation in the rail takes the canvas to its anchor; a
+  // note has no handle, and its marker already sits beside the passage.
+  const { revealRequest } = commentsRail
+  useEffect(() => {
+    if (revealRequest !== null) spatialHandle.current?.revealThread(revealRequest.threadId)
+  }, [revealRequest, spatialHandle])
 
   /**
    * A passage decided from the body (ADR-0029 decision 6). The same command

@@ -242,6 +242,7 @@ export function ThreadRow({
   toggle,
   resolveWithBeat,
   resolveAnchor,
+  anchorLabelOf,
   onResolve,
   onReply,
   onEditMessage,
@@ -260,6 +261,7 @@ export function ThreadRow({
   toggle: (thread: CommentThread) => void
   resolveWithBeat: (thread: CommentThread) => void
   resolveAnchor: CommentsPanelProps['resolveAnchor']
+  anchorLabelOf: CommentsPanelProps['anchorLabelOf']
   onResolve: CommentsPanelProps['onResolve']
   onReply: CommentsPanelProps['onReply']
   onEditMessage: CommentsPanelProps['onEditMessage']
@@ -272,6 +274,7 @@ export function ThreadRow({
   // Held, and no longer belonging in this list: the row that gets
   // the leave animation. Under `all` nothing leaves, so the
   // crossing is the whole transition and this stays false.
+  const about = anchorLabelOf?.(thread.anchor) ?? anchorLabel(thread.anchor)
   const leaving = pending.has(thread.id) && filter !== 'all' && status !== filter
   return (
     <li
@@ -349,8 +352,13 @@ export function ThreadRow({
                 Resolved
               </span>
             ) : null}
-            {anchorLabel(thread.anchor) === undefined ? null : (
-              <span data-testid={`thread-about-${thread.id}`}>{anchorLabel(thread.anchor)}</span>
+            {about === undefined ? null : (
+              <span
+                data-testid={`thread-about-${thread.id}`}
+                className="max-w-full truncate rounded bg-muted px-1.5 text-muted-foreground"
+              >
+                {about}
+              </span>
             )}
             {/* Exactly one of these draws, by construction:
                 `ThreadActivity` is silent on a lone remark, whose

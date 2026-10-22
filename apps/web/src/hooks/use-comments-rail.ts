@@ -20,6 +20,7 @@ import type {
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { anchorChipLabel } from '../lib/anchor-chip-label.js'
 import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import { type QuoteMemory, quoteMemoryFor } from '../lib/quote-occurrences.js'
@@ -34,6 +35,14 @@ export interface CommentsRail {
   readonly selectThread: (threadId: string | null) => void
   /** A passage waiting for its first message; null when nothing is composing. */
   readonly composeAnchor: AnnotationAnchor | null
+  /**
+   * The conversation the reader just asked to be taken to, as a fresh object
+   * per request so choosing the same row twice is two requests. A surface
+   * that can show an anchor (the spatial canvas) answers it by moving there.
+   */
+  readonly revealRequest: { readonly threadId: string } | null
+  /** A few words naming what an anchor is about, for a list row's chip. */
+  readonly anchorLabelOf: (anchor: AnnotationAnchor) => string
   /** Opens the rail on one conversation — what a gutter marker press means. */
   readonly revealThread: (threadId: string) => void
   /** Opens the rail with the compose box on a passage. */
@@ -128,6 +137,7 @@ export function useCommentsRail(args: {
     args
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
+  const [revealRequest, setRevealRequest] = useState<{ readonly threadId: string } | null>(null)
 
   // The door customises WHERE a write goes, not WHICH write this is — held
   // in a ref so pages can pass an inline object without churning callbacks.
@@ -138,11 +148,13 @@ export function useCommentsRail(args: {
   useEffect(() => {
     setSelectedThreadId(null)
     setComposeAnchor(null)
+    setRevealRequest(null)
   }, [scopeKey])
 
   const toggle = useCallback(() => onOpenChange(!open), [open, onOpenChange])
   const selectThread = useCallback((threadId: string | null) => {
     setSelectedThreadId(threadId)
+    setRevealRequest(threadId === null ? null : { threadId })
   }, [])
   // Deliberately not written by `selectThread`: choosing another
   // conversation from inside the rail is not an entry, and re-capturing
@@ -163,6 +175,7 @@ export function useCommentsRail(args: {
       captureFocusInto(returnTargetRef)
       onOpenChange(true)
       setSelectedThreadId(threadId)
+      setRevealRequest({ threadId })
     },
     [onOpenChange],
   )
@@ -178,6 +191,11 @@ export function useCommentsRail(args: {
     [onOpenChange],
   )
   const cancelCompose = useCallback(() => setComposeAnchor(null), [])
+
+  const anchorLabelOf = useCallback(
+    (anchor: AnnotationAnchor) => anchorChipLabel(anchor, canvas),
+    [canvas],
+  )
 
   const openThreadCount = useMemo(
     () => threads.filter((thread) => thread.status === 'open').length,
@@ -265,6 +283,8 @@ export function useCommentsRail(args: {
     toggle,
     selectedThreadId,
     selectThread,
+    revealRequest,
+    anchorLabelOf,
     composeAnchor,
     revealThread,
     composeThread,
