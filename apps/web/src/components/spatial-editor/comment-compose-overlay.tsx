@@ -10,6 +10,7 @@ import {
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { useEffect, useRef, useState } from 'react'
 import { commentMessageLengthLimit } from '../../lib/comment-message-limit.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -21,6 +22,29 @@ import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
  * so committing reads as the draft settling rather than jumping. */
 const COMMENT_COMPOSE_WIDTH_PX = 216
 const COMMENT_COMPOSE_HEIGHT_PX = 64
+
+/** The editor's own default gap between a box and the hint under it. */
+const EXIT_HINT_GAP_PX = 6
+
+/**
+ * The bubble's height as laid out, never less than the opening height. Read
+ * from the element because only layout knows how many lines the text wrapped
+ * to; layout px are canvas units here, since the bubble sits inside the
+ * zoom transform.
+ */
+function useGrownHeight(wrapperRef: React.RefObject<HTMLDivElement | null>, floor: number): number {
+  const [height, setHeight] = useState(floor)
+  useEffect(() => {
+    const host = wrapperRef.current?.querySelector<HTMLElement>('[data-testid="comment-compose"]')
+    if (host === null || host === undefined) return
+    const measure = () => setHeight(Math.max(floor, host.offsetHeight))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [wrapperRef, floor])
+  return Math.max(floor, height)
+}
 
 /**
  * Where the draft opens: placed by canvas-render's own bubble placer over
@@ -114,77 +138,86 @@ export function CommentComposeOverlay({
   readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
   readonly onClose: () => void
 }) {
+  const box = commentDraftBox(
+    // An edge comment opens ON the routed path, where the layer
+    // will pin it — one producer for the geometry.
+    compose.targetEdgeId === undefined
+      ? compose.point
+      : commentAnchor(
+          {
+            id: '',
+            text: ' ',
+            x: compose.point.x,
+            y: compose.point.y,
+            targetEdgeId: compose.targetEdgeId,
+          },
+          canvas,
+          edgePathOf,
+        ),
+    obstacles,
+  )
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const grownHeight = useGrownHeight(wrapperRef, box.height)
   return (
-    <MarkdownNodeEditor
-      exitHintScale={1 / zoom}
-      box={commentDraftBox(
-        // An edge comment opens ON the routed path, where the layer
-        // will pin it — one producer for the geometry.
-        compose.targetEdgeId === undefined
-          ? compose.point
-          : commentAnchor(
-              {
-                id: '',
-                text: ' ',
-                x: compose.point.x,
-                y: compose.point.y,
-                targetEdgeId: compose.targetEdgeId,
-              },
-              canvas,
-              edgePathOf,
-            ),
-        obstacles,
-      )}
-      initialText=""
-      testId="comment-compose"
-      style={commentComposeStyle(palette)}
-      lengthLimit={commentMessageLengthLimit}
-      onCommit={(draft) => {
-        const text = draft.trim()
-        if (text.length > 0 && compose.threadAnchor !== undefined) {
-          const id = (createId ?? defaultCreateId)()
-          const createdAt = new Date().toISOString()
-          applyResult({
-            state: { kind: 'idle' },
-            commands: [
-              {
-                kind: 'create-thread',
-                thread: {
-                  id,
-                  anchor: compose.threadAnchor,
-                  status: 'open',
-                  createdAt,
-                  messages: [{ id: `${id}-m1`, body: text, createdAt }],
-                },
-              } as const,
-            ],
-          })
-        } else if (text.length > 0) {
-          const { point, targetNodeId, targetEdgeId } = compose
-          applyResult({
-            state: { kind: 'idle' },
-            commands: [
-              {
-                kind: 'create-comment',
-                comment: {
-                  id: (createId ?? defaultCreateId)(),
-                  // Rounded for the same reason the pin drag rounds:
-                  // an integer by schema, and a fractional anchor
-                  // is dropped on read rather than rejected here.
-                  x: Math.round(point.x),
-                  y: Math.round(point.y),
-                  text,
-                  createdAt: new Date().toISOString(),
-                  ...(targetNodeId === undefined ? {} : { targetNodeId }),
-                  ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
-                },
-              } as const,
-            ],
-          })
-        }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
+    <div ref={wrapperRef} style={{ display: 'contents' }}>
+      <MarkdownNodeEditor
+        exitHintScale={1 / zoom}
+        // The bubble grows with its text (its style sets `height: auto`) while
+        // the box handed to the editor stays the opening size, so the hint
+        // hung from that box would sit over the lines the bubble has grown to.
+        exitHintTop={box.y + grownHeight + EXIT_HINT_GAP_PX}
+        box={box}
+        initialText=""
+        testId="comment-compose"
+        style={commentComposeStyle(palette)}
+        lengthLimit={commentMessageLengthLimit}
+        onCommit={(draft) => {
+          const text = draft.trim()
+          if (text.length > 0 && compose.threadAnchor !== undefined) {
+            const id = (createId ?? defaultCreateId)()
+            const createdAt = new Date().toISOString()
+            applyResult({
+              state: { kind: 'idle' },
+              commands: [
+                {
+                  kind: 'create-thread',
+                  thread: {
+                    id,
+                    anchor: compose.threadAnchor,
+                    status: 'open',
+                    createdAt,
+                    messages: [{ id: `${id}-m1`, body: text, createdAt }],
+                  },
+                } as const,
+              ],
+            })
+          } else if (text.length > 0) {
+            const { point, targetNodeId, targetEdgeId } = compose
+            applyResult({
+              state: { kind: 'idle' },
+              commands: [
+                {
+                  kind: 'create-comment',
+                  comment: {
+                    id: (createId ?? defaultCreateId)(),
+                    // Rounded for the same reason the pin drag rounds:
+                    // an integer by schema, and a fractional anchor
+                    // is dropped on read rather than rejected here.
+                    x: Math.round(point.x),
+                    y: Math.round(point.y),
+                    text,
+                    createdAt: new Date().toISOString(),
+                    ...(targetNodeId === undefined ? {} : { targetNodeId }),
+                    ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
+                  },
+                } as const,
+              ],
+            })
+          }
+          onClose()
+        }}
+        onCancel={onClose}
+      />
+    </div>
   )
 }
