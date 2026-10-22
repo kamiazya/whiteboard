@@ -33,6 +33,27 @@ export function hasOkfFrontmatter(text: string): boolean {
 const RESERVED = new Set<string>(RESERVED_ROOT_KEYS)
 
 /**
+ * The frontmatter's YAML as a plain value, refused when it holds the reserved
+ * key — before any routing or schema parse, since a stored record holding it
+ * reads back with a replaced prototype that no later read can serialise.
+ */
+function readFrontmatter(yamlText: string): CodecParseResult<unknown> {
+  let value: unknown
+  try {
+    value = parseYamlKeepingWrittenIntegers(yamlText)
+  } catch (error) {
+    return codecFailure('yaml', `malformed YAML frontmatter: ${(error as Error).message}`)
+  }
+  if (holdsReservedKey(value)) {
+    return codecFailure(
+      'frontmatter-schema',
+      `frontmatter holds a key named "${RESERVED_MAP_KEY}", which no document may hold`,
+    )
+  }
+  return codecSuccess(value)
+}
+
+/**
  * OKF §4.1: consumers SHOULD preserve unknown frontmatter keys when
  * round-tripping. Every root key this package does not model is therefore
  * collected into `facetsRaw` rather than dropped — which is what a plain
@@ -83,22 +104,9 @@ export function parseOkf(text: string): CodecParseResult<OkfMarkdownDocument> {
   }
   const [, yamlText, body] = match
 
-  let rawFrontmatter: unknown
-  try {
-    rawFrontmatter = parseYamlKeepingWrittenIntegers(yamlText)
-  } catch (error) {
-    return codecFailure('yaml', `malformed YAML frontmatter: ${(error as Error).message}`)
-  }
-
-  // Refused before any routing or schema parse: a stored record holding the
-  // key reads back with a replaced prototype, which no later read of the
-  // document can serialise.
-  if (holdsReservedKey(rawFrontmatter)) {
-    return codecFailure(
-      'frontmatter-schema',
-      `frontmatter holds a key named "${RESERVED_MAP_KEY}", which no document may hold`,
-    )
-  }
+  const read = readFrontmatter(yamlText)
+  if (!read.ok) return read
+  const rawFrontmatter = read.value
 
   // A non-object frontmatter (a scalar, a list, null) is passed through
   // unchanged so the schema reports it, rather than being routed into a

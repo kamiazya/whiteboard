@@ -25,14 +25,6 @@ import { workspaceAddressArgSchema } from './workspace-address-arg.js'
 const MAX_DOCUMENTS = 50
 
 /**
- * Tags are OKF core frontmatter, and "tag this note" is the thing a caller
- * is usually doing when it reaches for this tool — so the shape is the
- * errand's (add these, drop those, keep the rest), not the storage's (the
- * whole list, replaced). The whole-list shape would make ONE payload over
- * many documents clobber each document's own tags, which is exactly the
- * batch this tool exists for.
- */
-/**
  * A tag named to find what is stored, so held to no grammar — only to the
  * length a tag is written under, since no longer one can be matched.
  */
@@ -41,6 +33,14 @@ const storedTagNameSchema = z
   .min(1)
   .max(TAG_MAX_CHARS, `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`)
 
+/**
+ * Tags are OKF core frontmatter, and "tag this note" is the thing a caller
+ * is usually doing when it reaches for this tool — so the shape is the
+ * errand's (add these, drop those, keep the rest), not the storage's (the
+ * whole list, replaced). The whole-list shape would make ONE payload over
+ * many documents clobber each document's own tags, which is exactly the
+ * batch this tool exists for.
+ */
 const tagsChangeSchema = z
   .object({
     // The scoped-tag grammar (ADR-0040 decision 1) is checked HERE, where a
