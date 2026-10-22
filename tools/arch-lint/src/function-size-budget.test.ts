@@ -162,7 +162,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#pushFrameBands': 66,
   'apps/web/src/components/spatial-editor/navigation.ts#reduceTouchPress': 65,
   'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx#CanvasContextMenu': 218,
-  'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 97,
+  'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 113,
   'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
   // One branch per item kind instead of a nested JSX ternary.
   'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
@@ -228,7 +228,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
   'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 124,
   'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 357,
-  'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 125,
+  'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 130,
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 528,

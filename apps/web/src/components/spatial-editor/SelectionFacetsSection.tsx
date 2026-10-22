@@ -44,6 +44,18 @@ export function SelectionFacetsSection({
   const subject = inspectorSubject(canvas, selection.selectedId, selection.selectedEdgeId)
   if (subject === undefined) return null
   const extraIds = new Set(selection.extraIds)
+  const tagCommands = (after: readonly string[]) =>
+    tagWriteCommands(currentCanvas(), subject, selection.selectedId, extraIds, after)
+  const facetCommands = (key: string, payload: unknown) =>
+    facetWriteCommands(
+      currentCanvas(),
+      subject,
+      selection.selectedId,
+      extraIds,
+      key,
+      payload,
+      facetRegistry,
+    )
   const count = subject.kind === 'node' ? 1 + selection.extraIds.length : 1
   return (
     <section
@@ -51,10 +63,7 @@ export function SelectionFacetsSection({
       aria-label="Selection"
       className="flex flex-col gap-2 pb-3"
     >
-      <div className="flex items-baseline justify-between">
-        <span className="text-xs font-medium">{subject.kind === 'node' ? 'Node' : 'Edge'}</span>
-        {count > 1 && <span className="text-xs text-muted-foreground">{count} selected</span>}
-      </div>
+      <SelectionHeading kind={subject.kind} count={count} />
       <FacetFormPanel
         subject={subject}
         registry={facetRegistry}
@@ -62,39 +71,35 @@ export function SelectionFacetsSection({
         suggestions={collectFieldSuggestions(canvas.nodes, facetRegistry)}
         tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
         {...(tagLibrary === undefined ? {} : { tagLibrary })}
-        onTagsChange={(after) =>
-          runAll(
-            tagWriteCommands(currentCanvas(), subject, selection.selectedId, extraIds, after),
-            run,
-          )
-        }
-        onWrite={(key, payload) =>
-          runAll(
-            facetWriteCommands(
-              currentCanvas(),
-              subject,
-              selection.selectedId,
-              extraIds,
-              key,
-              payload,
-              facetRegistry,
-            ),
-            run,
-          )
-        }
+        onTagsChange={(after) => runAll(tagCommands(after), run)}
+        onWrite={(key, payload) => runAll(facetCommands(key, payload), run)}
       />
     </section>
   )
 }
 
+const SelectionHeading = ({ kind, count }: { kind: 'node' | 'edge'; count: number }) => (
+  <div className="flex items-baseline justify-between">
+    <span className="text-xs font-medium">{kind === 'node' ? 'Node' : 'Edge'}</span>
+    {count > 1 && <span className="text-xs text-muted-foreground">{count} selected</span>}
+  </div>
+)
+
 /** One undo step per pick, however many nodes the selection fans it out to. */
 const runAll = (commands: readonly EditorCommand[], run: (c: EditorCommand) => void) => {
-  const leaves = commands.flatMap((c) => (c.kind === 'batch' ? c.commands : [c]))
+  const leaves: EditorLeafCommand[] = []
+  for (const c of commands) {
+    if (c.kind === 'batch') leaves.push(...c.commands)
+    else if (isLeaf(c)) leaves.push(c)
+  }
   const [only] = leaves
   if (only === undefined) return
-  run(leaves.length === 1 ? only : { kind: 'batch', commands: leaves.filter(isLeaf) })
+  run(leaves.length === 1 ? only : { kind: 'batch', commands: leaves })
 }
 
 // A selection write never carries the body, core-facet or proposal commands.
 const isLeaf = (c: EditorCommand): c is EditorLeafCommand =>
-  !['batch', 'set-body', 'set-facets', 'decide-proposal'].includes(c.kind)
+  c.kind !== 'batch' &&
+  c.kind !== 'set-body' &&
+  c.kind !== 'set-facets' &&
+  c.kind !== 'decide-proposal'

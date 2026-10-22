@@ -50,8 +50,8 @@ import type { SelectionSource } from '../../lib/spatial/editor-handle.js'
 import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import { cn } from '../../lib/utils.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
-import { SelectionFacetsSection } from './SelectionFacetsSection.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
+import { SelectionFacetsSection } from './SelectionFacetsSection.js'
 
 export interface CanvasDisplaySettingsProps {
   readonly canvas: SpatialCanvas
