@@ -167,6 +167,17 @@ export interface SessionDeps {
    * before the edit lands bookmarks the state without it.
    */
   checkpoints?: { readonly signal: () => void; readonly flush: () => void }
+  /**
+   * The content state the document is in right after the person's OWN edit
+   * was written to it. Never called for a change that arrived through an
+   * import (a peer, an agent, the daemon): the person did not watch that one
+   * being made, so a surface treating this state as "seen" must not be told.
+   *
+   * Fires even while the session is being torn down, because the final
+   * debounced edit commits during dispose and is exactly the one a person
+   * leaves the page right after.
+   */
+  onOwnEditContentState?: (state: string) => void
 }
 
 export interface DocumentSyncSession {
@@ -392,6 +403,10 @@ export function createDocumentSyncSession(
     await Promise.resolve()
     await Promise.resolve()
     persistence.settle()
+  }
+
+  function announceOwnEdit(changed: LoroDoc, by: string): void {
+    if (by !== 'import' && !removed) deps.onOwnEditContentState?.(contentStateOf(changed))
   }
 
   function isStale(): boolean {
@@ -886,6 +901,7 @@ export function createDocumentSyncSession(
         })
 
         newDoc.subscribe((e) => {
+          announceOwnEdit(newDoc, e.by)
           if (isStale() || (e.by === 'import' ? documentRemoved(newDoc) : removed)) return
           // Fires for both a local commit (onChange -> doc.commit()) and a
           // remote import (onRemoteUpdate), matching MCP-app parity for

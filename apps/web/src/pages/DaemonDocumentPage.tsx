@@ -50,6 +50,7 @@ import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useListFollowsRecord } from './use-follow-workspace-writes.js'
+import { useDaemonOwnEditBaseline } from './use-own-edit-baseline.js'
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -174,7 +175,15 @@ function useDaemonDocument(
   // outline lapse on their own, so a crashed agent leaves nothing behind.
   const { state: agentActivity, report: reportAgentActivity } = useAgentActivity()
 
+  const ownEditBaseline = useDaemonOwnEditBaseline(
+    daemonBaseUrl,
+    controller.workspaceId,
+    controller.path,
+    contentDocumentId,
+    controller.documents,
+  )
   const sync = useDocumentSync(backend, {
+    ...ownEditBaseline,
     ...(contentDocumentId === undefined ? {} : { contentDocumentId }),
     onAuthError: reportAuthError,
     // Any version_created broadcast — this page's own save, MCP tool saves,

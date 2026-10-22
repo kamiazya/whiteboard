@@ -393,6 +393,9 @@ export function useDocumentSync(
       ...(optionsRef.current.checkpoints === undefined
         ? {}
         : { checkpoints: optionsRef.current.checkpoints }),
+      ...(optionsRef.current.onOwnEditContentState === undefined
+        ? {}
+        : { onOwnEditContentState: optionsRef.current.onOwnEditContentState }),
     })
     sessionRef.current = session
     const unsubscribe = session.subscribe((next, origin) => {

@@ -77,6 +77,12 @@ export interface UseDocumentSyncOptions {
    * this backend serves.
    */
   checkpoints?: { readonly signal: () => void; readonly flush: () => void }
+  /**
+   * See SessionDeps.onOwnEditContentState. Captured when the session is
+   * constructed, like `checkpoints`: it is bound to the document this backend
+   * serves, and teardown flushes the last edit after the page has moved on.
+   */
+  onOwnEditContentState?: (state: string) => void
 }
 
 // Dispatches a window event carrying { workspaceId, path } as detail, but only
