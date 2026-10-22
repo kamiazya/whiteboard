@@ -21,6 +21,7 @@ import { useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { LinkTarget } from '../../lib/link-target.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
 import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
@@ -223,7 +224,11 @@ function isViewMode(value: unknown): value is MarkdownViewMode {
 
 function readStoredViewMode(): MarkdownViewMode {
   const stored = safeGetItem(VIEW_MODE_STORAGE_KEY)
-  return isViewMode(stored) ? stored : 'split'
+  if (isViewMode(stored)) return stored
+  // Unchosen, a finger-driven screen starts in Write: its portrait width
+  // cannot hold Split, and a default of Split would flip the note to two
+  // panes the moment the phone rotates, without anyone having asked.
+  return hasCoarsePointer() ? 'write' : 'split'
 }
 
 function countWords(value: string): number {
