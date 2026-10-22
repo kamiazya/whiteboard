@@ -48,10 +48,18 @@ export interface BrowserDocumentController {
    */
   followRecordedName(name: string | null): void
   /**
-   * Resolves once the document is gone and what is left is open (a fresh
-   * document when nothing is), or when there is nothing to delete; REJECTS
-   * with the sentence to show when it refused and kept the document — the
-   * shape `use-document-actions.tsx` reads, the same as the daemon keeper's.
+   * True once a URL named a document that is not there AND the workspace
+   * holds none to fall back to. The page leaves for the list then: seeding a
+   * document at the requested path would turn a dead link into an empty
+   * canvas.
+   */
+  workspaceEmpty: boolean
+  /**
+   * Resolves once the document is gone, or when there is nothing to delete;
+   * opens nothing in its place — where to go next is the page's (it leaves
+   * for the list). REJECTS with the sentence to show when it refused and kept
+   * the document — the shape `use-document-actions.tsx` reads, the same as
+   * the daemon keeper's.
    */
   deleteDocument(): Promise<void>
   startFresh(): Promise<void>
@@ -155,8 +163,7 @@ async function openDeepLink(
 /**
  * The document the pointer names, seeding a new one when it names nothing.
  *
- * A pointer naming a document the index no longer has opens what is left,
- * as a delete does. It is not unreadable data — the pointer outlived its
+ * A pointer naming a document the index no longer has opens what is left. It is not unreadable data — the pointer outlived its
  * document (a delete whose repoint had not landed, another tab's delete) —
  * and an error screen there is a dead end with nothing to recover.
  */
@@ -180,22 +187,16 @@ async function openPointedAt(
 }
 
 /**
- * What a delete leaves open: the first document still listed, as the daemon
- * keeper does, or a fresh one when none is — this keeper's first-visit answer
- * to an empty workspace, where the daemon has an empty state instead.
+ * What a pointer naming a missing document opens: the first document still
+ * listed, as the daemon keeper does, or a fresh one when none is — this
+ * keeper's first-visit answer to an empty workspace, where the daemon has an
+ * empty state instead.
  *
- * `alive` stops an OPEN that the page abandoned from seeding or repointing;
- * a delete passes none, since its repoint must land whether or not the page
- * is still there to show the result.
+ * `alive` stops an OPEN that the page abandoned from seeding or repointing.
  */
-function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot>
-function openWhatIsLeft(
-  stores: OpeningStores,
-  alive: StillMounted,
-): Promise<DocumentSnapshot | null>
 async function openWhatIsLeft(
   stores: OpeningStores,
-  alive: StillMounted = () => true,
+  alive: StillMounted,
 ): Promise<DocumentSnapshot | null> {
   const [next] = await listBrowserDocuments(stores.index, stores.clock)
   if (!alive()) return null
@@ -216,6 +217,7 @@ export function useBrowserDocumentController(
     clock = defaultClock,
   } = deps
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
+  const [workspaceEmpty, setWorkspaceEmpty] = useState(false)
   const [persistence, setPersistence] = useState<BrowserPersistenceState>({
     kind: 'saved',
     lastSavedAt: null,
@@ -326,6 +328,14 @@ export function useBrowserDocumentController(
       const deepLinked =
         initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
       if (!alive()) return
+      if (
+        deepLinked === null &&
+        initialPath !== undefined &&
+        (await listBrowserDocuments(stores.index, stores.clock)).length === 0
+      ) {
+        if (alive()) setWorkspaceEmpty(true)
+        return
+      }
       const opened = deepLinked ?? (await openPointedAt(stores, alive))
       if (!alive() || opened === null) return
       setSnapshot(opened)
@@ -434,27 +444,6 @@ export function useBrowserDocumentController(
     if (!removed) return
     // A switch in flight was aimed at a page that no longer holds this document.
     switchGenerationRef.current++
-    try {
-      const opened = await openWhatIsLeft({
-        index: indexRef.current,
-        pointer: pointerRef.current,
-        clock: clockRef.current,
-        loro: loroRef.current,
-      })
-      snapshotRef.current = opened
-      setSnapshot(opened)
-    } catch {
-      // The delete stands; only the next open failed, so the page offers the
-      // load-failed recovery rather than claiming the delete was refused.
-      snapshotRef.current = null
-      setSnapshot(null)
-      setPersistenceRef.current({
-        kind: 'degraded',
-        reason: 'load-failed',
-        message: 'The next document could not be opened.',
-        lastSavedAt: null,
-      })
-    }
   }, [flushSave])
 
   const startFresh = useCallback(async () => {
@@ -586,6 +575,7 @@ export function useBrowserDocumentController(
   return {
     loro: loroRef.current,
     snapshot,
+    workspaceEmpty,
     persistence,
     renameDocument,
     followRecordedName,

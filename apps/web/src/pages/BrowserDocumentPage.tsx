@@ -17,7 +17,12 @@ import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
-import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
+import {
+  documentPath as documentRoutePath,
+  indexPath,
+  workspaceFolderPath,
+  workspacePath,
+} from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
@@ -116,6 +121,7 @@ function useBrowserDocument(
   const {
     loro: resolvedLoro,
     snapshot,
+    workspaceEmpty,
     persistence,
     deleteDocument,
     startFresh,
@@ -131,6 +137,14 @@ function useBrowserDocument(
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // A link to a document that is gone, in a workspace with nothing else:
+  // the list's first-run screen answers it.
+  useEffect(() => {
+    if (!workspaceEmpty) return
+    const handle = browserWorkspaceHandleOrNull()
+    navigate(handle === null ? indexPath() : workspacePath(handle), { replace: true })
+  }, [workspaceEmpty, navigate])
 
   const pageState = derivePageState({ snapshot, persistence })
 
@@ -445,6 +459,13 @@ function useBrowserDocument(
     canvas: documentKind === 'spatial' ? canvas : null,
     duplicateDocument,
     deleteDocument,
+    // To the list, in the folder the document was in: a sibling would read as
+    // the deleted note turning into another document, and a fresh canvas
+    // (the old answer to an emptied workspace) as turning into a canvas.
+    onDeleted: () => {
+      const handle = browserWorkspaceHandleOrNull()
+      navigate(handle === null ? indexPath() : workspaceFolderPath(handle, snapshot?.path ?? ''))
+    },
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)

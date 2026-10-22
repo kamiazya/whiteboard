@@ -37,12 +37,15 @@ export interface UseDeleteDocumentOptions {
   readonly documentKind: DocumentKind
   /** Rejects on refusal; resolves once the document is gone. */
   readonly deleteDocument: () => Promise<void>
+  /** Called once the keeper has deleted it — the page leaves for the list here. */
+  readonly onDeleted?: () => void
 }
 
 export function useDeleteDocument({
   documentId,
   documentKind,
   deleteDocument,
+  onDeleted,
 }: UseDeleteDocumentOptions): DeleteDocumentState {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -65,7 +68,9 @@ export function useDeleteDocument({
       await deleteDocument()
     } catch (err) {
       setDeleteError(messageOf(err, `Failed to delete ${kindNoun(documentKind)}.`))
+      return
     }
+    onDeleted?.()
   }
 
   return { confirmDelete, setConfirmDelete, deleteError, handleDelete }

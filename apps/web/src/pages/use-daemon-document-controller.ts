@@ -281,10 +281,9 @@ export function useDaemonDocumentController(
       throw new Error('No document is open to delete.')
     }
     await deleteDocumentApi(daemonFetch, daemonBaseUrl, workspaceId, path)
-    const refreshed = await relist(workspaceId)
-    // Whatever is left, or nothing — the page's empty state is what answers
-    // an emptied workspace, and it already does (`replaceEditor`).
-    setPath(refreshed[0]?.path ?? null)
+    // The page leaves for the workspace list; picking a sibling to show here
+    // would make a delete read as the document turning into another one.
+    await relist(workspaceId)
   }, [daemonFetch, daemonBaseUrl, workspaceId, path, relist])
 
   return {

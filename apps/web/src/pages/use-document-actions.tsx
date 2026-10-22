@@ -31,6 +31,8 @@ export interface UseDocumentActionsOptions {
   readonly duplicateDocument: () => Promise<unknown>
   /** Resolves once the document is gone, or rejects. */
   readonly deleteDocument: () => Promise<void>
+  /** Runs once the delete resolved; the page leaves the document it showed. */
+  readonly onDeleted?: () => void
   /**
    * The decoded canvas, when this document HAS one — what the JSON Canvas row
    * copies. Null for a markdown document, and for a board whose bytes have
@@ -53,6 +55,7 @@ export function useDocumentActions({
   canvas,
   duplicateDocument,
   deleteDocument,
+  onDeleted,
 }: UseDocumentActionsOptions): DocumentActionSlots {
   // The document on screen NOW, for an async handler that started under a
   // different one: a page switches documents in place rather than remounting,
@@ -71,6 +74,7 @@ export function useDocumentActions({
     documentId,
     documentKind,
     deleteDocument,
+    ...(onDeleted === undefined ? {} : { onDeleted }),
   })
 
   return {

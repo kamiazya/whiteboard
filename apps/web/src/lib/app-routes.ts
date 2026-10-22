@@ -41,6 +41,17 @@ export function workspacePath(workspace: string): string {
 // which is why it is derived here instead of written out at the two form
 // sites: a literal `/w/${w}/d/` in a component keeps looking right for as
 // long as it takes somebody to move the grammar.
+// The workspace list opened on the folder a document lives in — where a page
+// goes when the document it showed is gone. A root-level document has no
+// folder, so it gets the plain workspace address. `folder` is the list's own
+// query parameter (useRoutedFolder).
+export function workspaceFolderPath(workspace: string, documentPathInWorkspace: string): string {
+  const cut = documentPathInWorkspace.lastIndexOf('/')
+  if (cut < 0) return workspacePath(workspace)
+  const folder = documentPathInWorkspace.slice(0, cut)
+  return `${workspacePath(workspace)}?${new URLSearchParams({ folder }).toString()}`
+}
+
 export function documentPathPrefix(workspace: string): string {
   return `${workspacePath(workspace)}/d/`
 }
