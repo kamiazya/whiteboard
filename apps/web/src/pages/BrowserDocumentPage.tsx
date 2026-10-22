@@ -76,6 +76,7 @@ import { connectionsStamp } from './use-connections.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { useBrowserOwnEditBaseline } from './use-own-edit-baseline.js'
+import { useBrowserRememberOpen } from './use-remember-open.js'
 import { versionsSlot } from './versions-slot.js'
 
 export interface BrowserDocumentPageProps {
@@ -304,6 +305,7 @@ function useBrowserDocument(
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
   const ownEditBaseline = useBrowserOwnEditBaseline(documentId)
+  useBrowserRememberOpen(store, documentId)
   const sync = useDocumentSync(backend, {
     ...ownEditBaseline,
     // The backend delivers the WORKSPACE document; this scopes the session's

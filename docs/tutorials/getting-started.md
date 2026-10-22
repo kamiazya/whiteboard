@@ -26,9 +26,11 @@ touch screen, tap a card to open the document, and press and hold for its
 actions (open, pin, rename, delete). With a mouse, a click previews a card
 in the pane beside the list, and a double-click — or Enter on a focused
 card — opens it. A **Recent** strip above the cards lists the documents you
-opened last, and appears only once there are more documents than fit in the
+opened last — however you opened them: a card, a link, a reload, search or
+**Create** — and appears only once there are more documents than fit in the
 first row of cards — before that it would show every card twice. Use the
-toolbar to search everything or move a document to a new path.
+toolbar to search everything or move a document to a new path. **Back to
+documents** returns you to the folder the document was in.
 
 **New** in that toolbar opens the same two choices — **Canvas** or **Markdown
 note** — and creates one in whichever folder you are standing in. A kind
