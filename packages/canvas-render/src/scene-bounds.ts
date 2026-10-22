@@ -4,6 +4,7 @@ import { glowReachPx } from './layout/ink/glow.js'
 import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 import { LEGEND_MARGIN_PX, legendPanelSize } from './legend/legend-geometry.js'
 import { type SceneWalkNode, sceneChildrenOf } from './scene-children.js'
+import { TEXT_HALO_PAD_PX } from './theme/text-halo.js'
 
 /**
  * The minimum extent (px) any axis of a `sceneBounds` result is clamped to.
@@ -77,13 +78,15 @@ const inkReach = (ink: SceneInk | undefined): number =>
 /**
  * How far a node's DECORATION reaches beyond its own geometry: ink is
  * bounded by a declared constant (ADR-0038 decision #10) and a glow by its
- * radius, so an inked or glowing node widens the envelope by exactly that
- * much and a derived viewBox never clips either. Nothing else moves.
+ * radius, and a text run's halo pill by its pad, so an inked, glowing or
+ * haloed node widens the envelope by exactly that much and a derived viewBox
+ * never clips it. Nothing else moves.
  */
 function decorationReachPx(node: SceneWalkNode): number {
   return Math.max(
     node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
     'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
+    node.kind === 'textRun' && (node.appearance?.halo?.length ?? 0) > 0 ? TEXT_HALO_PAD_PX : 0,
   )
 }
 

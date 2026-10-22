@@ -65,7 +65,7 @@ describe('drawing quality across the corpus', () => {
         bends: 6,
         edgeLengthPx: 3208,
         unevenGaps: 0,
-        envelopePx: { w: 800, h: 860 },
+        envelopePx: { w: 802, h: 862 },
         // Even the reference: the router draws the two same-row edges inside
         // the Services frame as loops — down from the box's bottom, along,
         // back up — one reversal on api->auth and two on api->search, which
@@ -113,7 +113,7 @@ describe('drawing quality across the corpus', () => {
         // The Clients row's gaps differ by 14px; the Services row has an
         // overlap where a gap should be.
         unevenGaps: 2,
-        envelopePx: { w: 840, h: 750 },
+        envelopePx: { w: 842, h: 752 },
         // Only api->auth loops; api->search is drawn straight, because Auth
         // moved onto API gateway and the line starts inside it.
         reversals: 1,
@@ -175,7 +175,7 @@ describe('drawing quality across the corpus', () => {
         // One more gap that is not like its neighbours, paid for the above:
         // the frame that grew is wider than the two it sits between.
         unevenGaps: 3,
-        envelopePx: { w: 872, h: 772 },
+        envelopePx: { w: 874, h: 774 },
         reversals: 0,
         flow: 'down',
         againstFlow: 0,
@@ -281,7 +281,7 @@ describe('drawing quality across the corpus', () => {
         bends: 0,
         edgeLengthPx: 620,
         unevenGaps: 0,
-        envelopePx: { w: 1000, h: 900 },
+        envelopePx: { w: 1002, h: 900 },
         reversals: 0,
         flow: 'right',
         againstFlow: 0,
@@ -309,7 +309,7 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 2957,
         // The layers sit 300 and 280 apart.
         unevenGaps: 2,
-        envelopePx: { w: 820, h: 800 },
+        envelopePx: { w: 822, h: 802 },
         // The two loops under API gateway: each dips and comes back up, and
         // one also doubles back along the row.
         reversals: 2,
@@ -340,7 +340,7 @@ describe('drawing quality across the corpus', () => {
         // what a corpus is for.
         edgeLengthPx: 1893,
         unevenGaps: 4,
-        envelopePx: { w: 820, h: 804 },
+        envelopePx: { w: 822, h: 806 },
         reversals: 0,
         flow: 'down',
         againstFlow: 0,
@@ -364,7 +364,7 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 470,
         // The row's gaps: 200 between Browser and Daemon, 25 after it.
         unevenGaps: 1,
-        envelopePx: { w: 1000, h: 916 },
+        envelopePx: { w: 1002, h: 918 },
         reversals: 0,
         flow: 'right',
         againstFlow: 0,
@@ -385,7 +385,7 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 520,
         // 200 between Browser and Daemon, 50 after it, twice.
         unevenGaps: 1,
-        envelopePx: { w: 1100, h: 916 },
+        envelopePx: { w: 1102, h: 918 },
         reversals: 0,
         flow: 'right',
         againstFlow: 0,
