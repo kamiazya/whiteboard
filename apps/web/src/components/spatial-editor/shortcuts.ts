@@ -33,9 +33,16 @@ export type ShortcutId =
   | 'cancel'
   | 'space-pan'
   | 'nudge-selection'
+  | 'show-shortcuts'
+
+/** The headings the help sheet groups the catalog under, in display order. */
+export const SHORTCUT_SECTIONS = ['Edit', 'Arrange', 'View', 'Text', 'Help'] as const
+type ShortcutSection = (typeof SHORTCUT_SECTIONS)[number]
 
 export interface ShortcutSpec {
   readonly id: ShortcutId
+  /** The help sheet's group — required, so a new row must choose one. */
+  readonly section: ShortcutSection
   /**
    * Physical-key match (`KeyboardEvent.code`) — used for punctuation keys
    * like the brackets, whose `key` value shifts with layout and modifiers.
@@ -66,6 +73,7 @@ export interface ShortcutSpec {
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   {
     id: 'toggle-lock',
+    section: 'Edit',
     keys: ['l'],
     mod: true,
     shift: true,
@@ -77,6 +85,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // never mode-gated.
   {
     id: 'zoom-to-fit',
+    section: 'View',
     codes: ['Digit1'],
     shift: true,
     display: 'Shift+1',
@@ -90,18 +99,21 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // which is a different function and not ours to take.
   {
     id: 'zoom-in',
+    section: 'View',
     keys: ['+', '='],
     display: '+',
     description: 'Zoom in',
   },
   {
     id: 'zoom-out',
+    section: 'View',
     keys: ['-'],
     display: '-',
     description: 'Zoom out',
   },
   {
     id: 'zoom-to-selection',
+    section: 'View',
     codes: ['Digit2'],
     shift: true,
     display: 'Shift+2',
@@ -112,6 +124,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // page, so a handled no-op still consumes it.
   {
     id: 'select-all',
+    section: 'Edit',
     keys: ['a'],
     mod: true,
     display: 'Cmd+A',
@@ -125,6 +138,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // degrade into a note.
   {
     id: 'copy-selection',
+    section: 'Edit',
     keys: ['c'],
     mod: true,
     display: 'Cmd+C',
@@ -134,6 +148,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'cut-selection',
+    section: 'Edit',
     keys: ['x'],
     mod: true,
     display: 'Cmd+X',
@@ -143,6 +158,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'paste-clipboard',
+    section: 'Edit',
     keys: ['v'],
     mod: true,
     display: 'Cmd+V',
@@ -152,6 +168,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'duplicate-selection',
+    section: 'Edit',
     keys: ['d'],
     mod: true,
     display: 'Cmd+D',
@@ -161,6 +178,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // Z-order (tldraw parity). Array order is z-order, last = topmost.
   {
     id: 'reorder-forward',
+    section: 'Arrange',
     codes: ['BracketRight'],
     shift: false,
     display: ']',
@@ -169,6 +187,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'reorder-backward',
+    section: 'Arrange',
     codes: ['BracketLeft'],
     shift: false,
     display: '[',
@@ -177,6 +196,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'reorder-front',
+    section: 'Arrange',
     codes: ['BracketRight'],
     shift: true,
     display: 'Shift+]',
@@ -185,6 +205,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'reorder-back',
+    section: 'Arrange',
     codes: ['BracketLeft'],
     shift: true,
     display: 'Shift+[',
@@ -204,6 +225,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // above.
   {
     id: 'commit-text-edit',
+    section: 'Text',
     keys: ['Enter'],
     mod: true,
     display: 'Cmd+Enter',
@@ -212,6 +234,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'delete-selection',
+    section: 'Edit',
     keys: ['Delete', 'Backspace'],
     display: 'Delete',
     description: 'Delete the selected node(s) or edge',
@@ -226,6 +249,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   // as the empty box someone sketching a layout meant to leave.
   {
     id: 'cancel',
+    section: 'Edit',
     keys: ['Escape'],
     display: 'Esc',
     description: 'Cancel the gesture, discarding text being edited',
@@ -233,6 +257,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'space-pan',
+    section: 'View',
     keys: [' '],
     display: 'Space+drag',
     description: 'Pan while held',
@@ -240,10 +265,21 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
   },
   {
     id: 'nudge-selection',
+    section: 'Arrange',
     keys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
     display: 'Arrows',
     description: 'Nudge the selected node (Shift: larger step)',
     handledInline: true,
+  },
+  // Matched by `findShortcut` like any table row; the editor root opens the
+  // sheet, since the sheet's open state belongs to the host of the dock's
+  // Help button, not to the gesture hook.
+  {
+    id: 'show-shortcuts',
+    section: 'Help',
+    keys: ['?'],
+    display: '?',
+    description: 'Show keyboard shortcuts',
   },
 ]
 

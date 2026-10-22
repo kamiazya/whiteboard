@@ -26,6 +26,7 @@
  * ignore presses originating here (see SpatialEditor's isOverlayEvent).
  */
 import {
+  CircleHelp,
   FileBox,
   Focus,
   Frame,
@@ -46,6 +47,9 @@ import { cn } from '../../lib/utils.js'
 import { useActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
 import { CREATION_LABELS } from './creation-labels.js'
+import { ShortcutHelpSheet } from './ShortcutHelpSheet.js'
+import { shortcutAriaKeysFor, withShortcut } from './shortcut-labels.js'
+import type { ShortcutHelpControl } from './use-shortcut-help.js'
 
 /**
  * Drag payload for placing a creation where it is dropped: the kind travels
@@ -84,6 +88,8 @@ interface ToolPaletteProps {
   readonly onToolChange: (tool: EditorTool) => void
   /** Frames every node in the viewport — the touch equivalent of Shift+1. */
   readonly onZoomToFit: () => void
+  /** The shortcut sheet's open state; absent hides the dock's Help button. */
+  readonly shortcutHelp?: ShortcutHelpControl
 }
 
 /**
@@ -98,6 +104,24 @@ export const DOCK_OCCLUSION_PX = 70
 
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
 
+/**
+ * The entry a menu key moves focus to (Up/Down wrap, Home/End jump), or null
+ * for a key that does not move it.
+ */
+function menuFocusTarget(
+  key: string,
+  items: readonly HTMLElement[],
+  active: Element | null,
+): HTMLElement | null {
+  if (items.length === 0) return null
+  const at = items.findIndex((item) => item === active)
+  if (key === 'Home') return items[0] ?? null
+  if (key === 'End') return items[items.length - 1] ?? null
+  if (key === 'ArrowDown') return items[(at + 1) % items.length] ?? null
+  if (key === 'ArrowUp') return items[(at <= 0 ? items.length : at) - 1] ?? null
+  return null
+}
+
 interface AddMenuEntry {
   readonly label: string
   readonly icon: ReactNode
@@ -110,6 +134,69 @@ interface AddMenuEntry {
   readonly drag?: DraggableCreation
 }
 
+function ZoomFitButton({ onZoomToFit }: { readonly onZoomToFit: () => void }) {
+  // The only view control in the dock. People ask to "see everything" or to
+  // "get closer"; the magnification between those two is an implementation
+  // coordinate, so no percentage is offered and there is nothing to reset to.
+  // Getting closer is a double press in hand mode (and the wheel/pinch), which
+  // needs no chrome at all.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-testid="zoom-fit-button"
+          aria-label="Zoom to fit"
+          aria-keyshortcuts={shortcutAriaKeysFor('zoom-to-fit')}
+          // Wrapped: a bare handler reference hands React's click event to
+          // the callback, and this one takes an optional id set.
+          onClick={() => onZoomToFit()}
+          className={TOOL_BUTTON_CLASS}
+        >
+          <Focus aria-hidden="true" className="size-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{withShortcut('Zoom to fit', 'zoom-to-fit')}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * The Help button, and the sheet it opens. A corner of its own rather than a
+ * dock slot: one more dock button widens the dock into the minimap at tablet
+ * widths, and the bottom edge has no spare room at phone widths. Hidden on
+ * touch, where there is no keyboard to learn.
+ */
+function ShortcutsButton({ open, onOpenChange }: ShortcutHelpControl) {
+  return (
+    <div
+      data-editor-overlay
+      className="absolute top-3 left-3 z-10 hidden rounded-lg border bg-background p-1 shadow-md pointer-fine:block"
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="shortcuts-button"
+            aria-label="Keyboard shortcuts"
+            aria-keyshortcuts="?"
+            aria-haspopup="dialog"
+            onClick={() => onOpenChange(true)}
+            className={TOOL_BUTTON_CLASS}
+          >
+            {/* No <rect> in this glyph: editor tests find the node chrome as the
+                first `svg rect` in the container, and a rect-bearing icon ahead
+                of the scene would answer for it. */}
+            <CircleHelp aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{withShortcut('Keyboard shortcuts', 'show-shortcuts')}</TooltipContent>
+      </Tooltip>
+      <ShortcutHelpSheet open={open} onOpenChange={onOpenChange} />
+    </div>
+  )
+}
+
 export function ToolPalette({
   leading,
   onCreateNode,
@@ -120,6 +207,7 @@ export function ToolPalette({
   tool,
   onToolChange,
   onZoomToFit,
+  shortcutHelp,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
   const dockRef = useRef<HTMLDivElement | null>(null)
@@ -190,190 +278,183 @@ export function ToolPalette({
   ]
 
   return (
-    <div
-      ref={dockRef}
-      data-editor-overlay
-      data-testid="tool-palette"
-      role="toolbar"
-      aria-label="Canvas tools"
-      className={cn(
-        'absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md',
-        yieldsToFormattingBar && 'hidden',
-      )}
-    >
-      {leading !== undefined && (
-        <>
-          {leading}
-          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-        </>
-      )}
-      {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
+    <>
+      <div
+        ref={dockRef}
+        data-editor-overlay
+        data-testid="tool-palette"
+        role="toolbar"
+        aria-label="Canvas tools"
+        className={cn(
+          'absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md',
+          yieldsToFormattingBar && 'hidden',
+        )}
+      >
+        {leading !== undefined && (
+          <>
+            {leading}
+            <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+          </>
+        )}
+        {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
           user decision 2026-08-08), so it sits leftmost where the active
           mode reads first. */}
-      {/* The TOOLS scroll, and nothing else does. The dock is capped to the
+        {/* The TOOLS scroll, and nothing else does. The dock is capped to the
           editor's width, so something has to give on a phone; a tool that has
           scrolled out of view is still reachable, where a dock hanging off
           the screen edge is not. The scroller wraps only this group so the
           "+" menu — which opens upward, inside this same container — is not
           clipped by an overflow it never needed. */}
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-testid="hand-tool-button"
-              aria-pressed={tool === 'hand'}
-              aria-label="Hand (pan)"
-              onClick={() => onToolChange('hand')}
-              className={TOOL_BUTTON_CLASS}
-            >
-              <Hand aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Hand — drag to pan</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-testid="select-tool-button"
-              aria-pressed={tool === 'select'}
-              aria-label="Select"
-              onClick={() => onToolChange('select')}
-              className={TOOL_BUTTON_CLASS}
-            >
-              <MousePointer2 aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Select</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-testid="connect-tool-button"
-              aria-pressed={tool === 'connect'}
-              aria-label="Connect"
-              onClick={() => onToolChange('connect')}
-              className={TOOL_BUTTON_CLASS}
-            >
-              <Spline aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Connect nodes</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-testid="draw-tool-button"
-              aria-pressed={tool === 'draw'}
-              aria-label="Draw"
-              onClick={() => onToolChange('draw')}
-              className={TOOL_BUTTON_CLASS}
-            >
-              <Pencil aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Draw — freehand ink</TooltipContent>
-        </Tooltip>
-      </div>
-      <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            ref={addButtonRef}
-            type="button"
-            data-testid="add-button"
-            aria-label="Add"
-            aria-haspopup="menu"
-            aria-expanded={addOpen}
-            onClick={() => setAddOpen((open) => !open)}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Plus aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Add</TooltipContent>
-      </Tooltip>
-      <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-      {/* The only view control in the dock. People ask to "see everything" or
-          to "get closer"; the magnification between those two is an
-          implementation coordinate, so no percentage is offered and there is
-          nothing to reset to. Getting closer is a double press in hand mode
-          (and the wheel/pinch), which needs no chrome at all. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="zoom-fit-button"
-            aria-label="Zoom to fit"
-            // Wrapped: a bare handler reference hands React's click event to
-            // the callback, and this one takes an optional id set.
-            onClick={() => onZoomToFit()}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Focus aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Zoom to fit</TooltipContent>
-      </Tooltip>
-      {addOpen && (
-        <div
-          ref={addMenuRef}
-          data-testid="add-menu"
-          role="menu"
-          aria-label="Add"
-          // Opens UPWARD from the dock, origin-aware at the bottom edge
-          // (never scale(0) — see DESIGN.md Motion). Right-anchored so the
-          // menu hugs the "+" end of the dock.
-          className="absolute right-0 bottom-[calc(100%+6px)] min-w-40 origin-bottom-right animate-in rounded-md border bg-background py-1 shadow-lg fade-in-0 zoom-in-[0.98] duration-(--motion-duration-normal) ease-(--motion-ease-out)"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation()
-              setAddOpen(false)
-              // Closing unmounts the focused entry; without an explicit
-              // hand-back, focus falls to <body> and the keyboard user
-              // loses their place.
-              addButtonRef.current?.focus()
-            }
-          }}
-        >
-          {entries.map((entry) => (
-            <button
-              key={entry.label}
-              type="button"
-              role="menuitem"
-              aria-label={entry.label}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-              // Tapping keeps the viewport-center placement; dragging hands
-              // the choice of place to the person making the thing, which is
-              // what stops the view jumping to wherever the center happened
-              // to be. Both paths stay — a drag is not reachable one-handed
-              // on every device, and the keyboard has only the tap.
-              draggable={entry.drag !== undefined}
-              onDragStart={(e) => {
-                if (entry.drag === undefined) return
-                e.dataTransfer.setData(`${CREATE_DRAG_MIME_PREFIX}${entry.drag}`, entry.drag)
-                e.dataTransfer.effectAllowed = 'copy'
-              }}
-              // Closed on dragEND, not dragstart: removing the source element
-              // mid-drag tears down the drag session in Chromium, so closing
-              // early makes the drag never reach a drop.
-              onDragEnd={() => setAddOpen(false)}
-              onClick={() => {
-                setAddOpen(false)
-                entry.onSelect()
-              }}
-            >
-              <span aria-hidden="true" className="text-muted-foreground">
-                {entry.icon}
-              </span>
-              {entry.label}
-            </button>
-          ))}
+        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                data-testid="hand-tool-button"
+                aria-pressed={tool === 'hand'}
+                aria-label="Hand (pan)"
+                onClick={() => onToolChange('hand')}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <Hand aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Hand — drag to pan</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                data-testid="select-tool-button"
+                aria-pressed={tool === 'select'}
+                aria-label="Select"
+                onClick={() => onToolChange('select')}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <MousePointer2 aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Select</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                data-testid="connect-tool-button"
+                aria-pressed={tool === 'connect'}
+                aria-label="Connect"
+                onClick={() => onToolChange('connect')}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <Spline aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Connect nodes</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                data-testid="draw-tool-button"
+                aria-pressed={tool === 'draw'}
+                aria-label="Draw"
+                onClick={() => onToolChange('draw')}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <Pencil aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Draw — freehand ink</TooltipContent>
+          </Tooltip>
         </div>
-      )}
-    </div>
+        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              ref={addButtonRef}
+              type="button"
+              data-testid="add-button"
+              aria-label="Add"
+              aria-haspopup="menu"
+              aria-expanded={addOpen}
+              onClick={() => setAddOpen((open) => !open)}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Plus aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Add</TooltipContent>
+        </Tooltip>
+        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        <ZoomFitButton onZoomToFit={onZoomToFit} />
+        {addOpen && (
+          <div
+            ref={addMenuRef}
+            data-testid="add-menu"
+            role="menu"
+            aria-label="Add"
+            // Opens UPWARD from the dock, origin-aware at the bottom edge
+            // (never scale(0) — see DESIGN.md Motion). Right-anchored so the
+            // menu hugs the "+" end of the dock.
+            className="absolute right-0 bottom-[calc(100%+6px)] min-w-40 origin-bottom-right animate-in rounded-md border bg-background py-1 shadow-lg fade-in-0 zoom-in-[0.98] duration-(--motion-duration-normal) ease-(--motion-ease-out)"
+            onKeyDown={(e) => {
+              const step = menuFocusTarget(
+                e.key,
+                [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')],
+                document.activeElement,
+              )
+              if (step !== null) {
+                e.preventDefault()
+                step.focus()
+                return
+              }
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                setAddOpen(false)
+                // Closing unmounts the focused entry; without an explicit
+                // hand-back, focus falls to <body> and the keyboard user
+                // loses their place.
+                addButtonRef.current?.focus()
+              }
+            }}
+          >
+            {entries.map((entry) => (
+              <button
+                key={entry.label}
+                type="button"
+                role="menuitem"
+                aria-label={entry.label}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                // Tapping keeps the viewport-center placement; dragging hands
+                // the choice of place to the person making the thing, which is
+                // what stops the view jumping to wherever the center happened
+                // to be. Both paths stay — a drag is not reachable one-handed
+                // on every device, and the keyboard has only the tap.
+                draggable={entry.drag !== undefined}
+                onDragStart={(e) => {
+                  if (entry.drag === undefined) return
+                  e.dataTransfer.setData(`${CREATE_DRAG_MIME_PREFIX}${entry.drag}`, entry.drag)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                // Closed on dragEND, not dragstart: removing the source element
+                // mid-drag tears down the drag session in Chromium, so closing
+                // early makes the drag never reach a drop.
+                onDragEnd={() => setAddOpen(false)}
+                onClick={() => {
+                  setAddOpen(false)
+                  entry.onSelect()
+                }}
+              >
+                <span aria-hidden="true" className="text-muted-foreground">
+                  {entry.icon}
+                </span>
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {shortcutHelp !== undefined && <ShortcutsButton {...shortcutHelp} />}
+    </>
   )
 }

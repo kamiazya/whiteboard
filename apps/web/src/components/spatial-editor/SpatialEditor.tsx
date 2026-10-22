@@ -173,6 +173,7 @@ import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
 import { useSceneProjection } from './use-scene-projection.js'
+import { useShortcutHelp } from './use-shortcut-help.js'
 import { useToolState } from './use-tool-state.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
@@ -1167,6 +1168,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameContent,
       frameSelection,
     })
+    const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
     /** Places one of the directly-creatable kinds at a canvas-space point. */
     const createAt = (kind: DraggableCreation, point: Point) => {
@@ -1537,6 +1539,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the one view control (zoom to fit) is always in the same place.
           leading={paletteLeading}
           onZoomToFit={frameContent}
+          shortcutHelp={shortcutHelp.palette}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
@@ -1916,7 +1919,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
           onLostPointerCapture={handleLostPointerCapture}
-          onKeyDown={handleKeyDown}
+          onKeyDown={shortcutHelp.onKeyDown}
         >
           {revealPulse === null ? null : (
             <CommentRevealPulse

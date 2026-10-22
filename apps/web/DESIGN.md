@@ -1263,6 +1263,13 @@ Z-order uses the tldraw combos: `]` / `[` step forward/backward,
 mutates the canvas also has a touch path (the context menu's Order row,
 here) — a shortcut is an accelerator, never the only way.
 
+The catalog is also what a person reads: every row carries a `section`, and
+`ShortcutHelpSheet` renders the table grouped by it — opened by `?` on the
+canvas or by the Help button in the editor's top-left corner (hidden on
+touch). Key labels (⌘⇧L / Ctrl+Shift+L) are derived from `display` in
+`src/components/spatial-editor/shortcut-labels.ts`, as are a dock tooltip's accelerator suffix and its
+`aria-keyshortcuts`; none is hand-written at a call site.
+
 Bindings today: `Cmd/Ctrl+A` select all, `Cmd/Ctrl+C/X/V` copy/cut/paste,
 `Cmd/Ctrl+D` duplicate, `]`/`[`/`Shift+]`/`Shift+[` z-order,
 `Shift+1`/`Shift+2` zoom to fit / to selection, plus the inline-handled

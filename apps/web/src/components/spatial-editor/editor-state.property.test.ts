@@ -461,6 +461,7 @@ const SHORTCUT_COVERAGE = {
   'zoom-to-fit': 'not modelled: viewport only',
   'zoom-to-selection': 'not modelled: viewport only',
   'space-pan': 'not modelled: viewport only',
+  'show-shortcuts': 'not modelled: opens a dialog — covered by shortcut-help.browser.test.tsx',
 } satisfies Record<ShortcutId, SurfaceCoverage>
 
 interface Stats {

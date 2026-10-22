@@ -116,4 +116,17 @@ selection**; it frames every selected node, not only the one you pressed.
 One action is one undo step: pasting twenty nodes, duplicating a
 selection, or nudging several nodes each undo in a single press.
 
+## Help
+
+| Shortcut | Action |
+|---|---|
+| `?` | Open the keyboard shortcut sheet |
+
+The sheet lists every shortcut above for your platform (`⌘` on macOS,
+`Ctrl` elsewhere), grouped as Edit, Arrange, View, Text and Help. It also
+opens from the **Keyboard shortcuts** button in the bottom dock, which is the
+way in without a keyboard. Press `Esc` to close it; focus returns to where it
+was. The dock's buttons show their shortcut in the tooltip where they have
+one, as **Zoom to fit** does.
+
 ← Back to [reference](README.md)
