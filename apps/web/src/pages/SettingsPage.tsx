@@ -35,6 +35,7 @@ import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/Se
 import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '../lib/app-routes.js'
 import { celebrate } from '../lib/celebrate.js'
@@ -528,6 +529,9 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
 
   const [daemonStorageBytes, setDaemonStorageBytes] = useState<number | null>(null)
   const daemonBaseUrl = daemon?.baseUrl
+  // The step the gear's dot points at lives in Data & app; the phone's section
+  // list is the next screen the gear opens, so the row carries the dot on.
+  const setupWaiting = useSettingsNudge(daemon !== undefined)
   useEffect(() => {
     if (daemonBaseUrl === undefined) {
       setDaemonStorageBytes(null)
@@ -635,6 +639,16 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
                 >
                   <Icon className="size-4 text-muted-foreground" />
                   <span className="flex-1">{label}</span>
+                  {section === 'data' && setupWaiting && (
+                    <>
+                      <span
+                        data-testid="settings-nav-nudge"
+                        aria-hidden="true"
+                        className="size-2 rounded-full bg-[#3b6ecc]"
+                      />
+                      <span className="sr-only">a setup step is waiting</span>
+                    </>
+                  )}
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </Link>
               ))}
