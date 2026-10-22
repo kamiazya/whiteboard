@@ -42,12 +42,12 @@ function makeCreateBackend() {
   return (workspaceId: string, path: string) => new FakeBackend(workspaceId, path)
 }
 
-// Switching document from inside the editor is the Connections chip's job:
+// Switching document from inside the editor is the Linked from chip's job:
 // the header's own switcher was retired (finding a document is the document
 // browser's work), and a backlink row opening its source is the remaining
 // document-to-document path a user has without leaving the canvas.
 async function switchDocumentViaConnections(name: string) {
-  fireEvent.click(await screen.findByRole('button', { name: /connections/i }))
+  fireEvent.click(await screen.findByRole('button', { name: /linked from/i }))
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(name, 'i') }))
 }
 
@@ -227,7 +227,7 @@ describe('DaemonDocumentPage', () => {
     expect(await screen.findByRole('button', { name: 'Display' })).toBeTruthy()
   })
 
-  it('shows the Connections chip with the backlink count and switches to a source on click', async () => {
+  it('shows the Linked from chip with the backlink count and switches to a source on click', async () => {
     mockGetDocumentBacklinks.mockResolvedValue({
       backlinks: [
         {
@@ -246,7 +246,7 @@ describe('DaemonDocumentPage', () => {
         { container: document.body },
       )
     })
-    const chip = await screen.findByRole('button', { name: /connections \(1\)/i })
+    const chip = await screen.findByRole('button', { name: /linked from \(1\)/i })
     expect(mockGetDocumentBacklinks).toHaveBeenCalledWith(
       expect.anything(),
       DAEMON_BASE_URL,

@@ -1,5 +1,5 @@
 /**
- * The Connections chip on a BROWSER-kept document, over real IndexedDB: the
+ * The Linked from chip on a BROWSER-kept document, over real IndexedDB: the
  * same count and the same "open the source" the daemon page has pinned, now
  * answered from this browser's own documents.
  */
@@ -50,7 +50,7 @@ async function note(index: FoldingBrowserIndex, path: string, name: string, body
   ).toBe(true)
 }
 
-it('shows the Connections chip with the backlink count and opens the source', async () => {
+it('shows the Linked from chip with the backlink count and opens the source', async () => {
   const index = new FoldingBrowserIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId(), segment: 'default' })
   await note(index, 'beta', 'Beta', 'The target.')
@@ -65,7 +65,7 @@ it('shows the Connections chip with the backlink count and opens the source', as
 
   const chip = await screen.findByRole(
     'button',
-    { name: /connections \(1\)/i },
+    { name: /linked from \(1\)/i },
     { timeout: 15_000 },
   )
   await userEvent.click(chip)
@@ -90,10 +90,10 @@ it('links a mention from the panel, and the source moves to the backlinks', asyn
   )
 
   await userEvent.click(
-    await screen.findByRole('button', { name: /connections \(0\)/i }, { timeout: 15_000 }),
+    await screen.findByRole('button', { name: /linked from \(0\)/i }, { timeout: 15_000 }),
   )
   await userEvent.click(await screen.findByRole('button', { name: /link it/i }))
 
-  await screen.findByRole('button', { name: /connections \(1\)/i }, { timeout: 15_000 })
+  await screen.findByRole('button', { name: /linked from \(1\)/i }, { timeout: 15_000 })
   await waitFor(() => expect(screen.queryByRole('button', { name: /link it/i })).toBeNull())
 })
