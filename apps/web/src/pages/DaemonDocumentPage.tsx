@@ -17,6 +17,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { faviconStatusOf } from '../lib/favicon.js'
+import type { WorkspaceFilesSource } from '../lib/files-source.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
@@ -79,6 +80,18 @@ const pathOf = (document: { readonly path: string }): string => document.path
  */
 const buildsNoSession = (state: DaemonPageState): boolean =>
   state.kind === 'membership-refused' || state.kind === 'load-degraded'
+
+/**
+ * The `[[` completion's "Create" row needs a creator that makes a markdown
+ * note and stays on the page being written; no source yet means no row.
+ */
+function linkTargetCreator(
+  source: WorkspaceFilesSource | null,
+): { createLinkTarget: (path: string) => Promise<void> } | Record<string, never> {
+  return source === null
+    ? {}
+    : { createLinkTarget: (path: string) => source.createDocument(path, 'markdown') }
+}
 
 /**
  * The daemon keeper: the controller over the daemon's REST routes, the sync
@@ -491,9 +504,7 @@ function useDaemonDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
-      ...(tagsSource === null
-        ? {}
-        : { createLinkTarget: (path: string) => tagsSource.createDocument(path, 'markdown') }),
+      ...linkTargetCreator(tagsSource),
       loadReference,
     },
     openDocument,
