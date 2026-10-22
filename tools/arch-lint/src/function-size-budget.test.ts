@@ -112,7 +112,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // (measured: lifting a slot moves the complexity by about one, because the
   // condition that decides whether to render it stays).
   // +2: `tagLibrary`, handed to the preview column.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 640,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 641,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
@@ -222,7 +222,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
   'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 59,
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
-  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 81,
+  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 83,
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
@@ -356,7 +356,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 452,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 454,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity

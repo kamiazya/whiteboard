@@ -5,7 +5,10 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { IconSceneNode, Scene } from '@kamiazya/whiteboard-scene'
+import type { Scene } from '@kamiazya/whiteboard-scene'
+
+type IconSceneNode = Extract<Scene['nodes'][number], { kind: 'icon' }>
+
 import { describe, expect, it } from 'vitest'
 import { sceneBounds } from '../scene-bounds.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

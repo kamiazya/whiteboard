@@ -91,10 +91,11 @@ export type ContextMenuItem =
 
 export interface ContextMenuProps {
   /**
-   * Accessible name of the menu. The default names the spatial surface;
-   * object menus (a document card's) pass their own.
+   * Accessible name of the menu. Required: a default named the spatial
+   * surface, and the markdown note's sheet shipped announced as
+   * "Canvas actions" until a listener heard it.
    */
-  readonly label?: string
+  readonly label: string
   /** Screen position relative to the editor root. */
   readonly x: number
   readonly y: number
@@ -173,14 +174,7 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({
-  x,
-  y,
-  items,
-  onClose,
-  variant = 'list',
-  label = 'Canvas actions',
-}: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
   // A menu opened near the editor's right/bottom edge would clip outside it,

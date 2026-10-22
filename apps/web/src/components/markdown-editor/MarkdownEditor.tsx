@@ -886,6 +886,7 @@ export function MarkdownEditor({
       )}
       {catalog !== null && (
         <ContextMenu
+          label="Editing actions"
           x={catalog.x}
           y={catalog.y}
           variant={catalog.variant}

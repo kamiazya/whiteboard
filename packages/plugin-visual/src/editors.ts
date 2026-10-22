@@ -44,16 +44,6 @@ export const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
 ]
 
 /**
- * The vendored icons as the catalog's first band.
- *
- * Derived from the vendored set rather than written out, so an icon added
- * to `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
- * put a name in one place and not the other cannot happen. It is built HERE
- * rather than in `emoji/sections.ts` because it is this build's own
- * geometry rather than Unicode's data, and it costs no bytes worth
- * deferring.
- */
-/**
  * Other words for what each vendored icon depicts, so a search by the
  * concept a person has in mind ("storage", "secure") finds the picture. Only
  * honest synonyms: a word with no icon behind it finds nothing rather than
@@ -68,6 +58,16 @@ const ICON_ALIASES: Readonly<Record<string, readonly string[]>> = {
   star: ['favorite', 'favourite', 'bookmark', 'rating'],
 }
 
+/**
+ * The vendored icons as the catalog's first band.
+ *
+ * Derived from the vendored set rather than written out, so an icon added
+ * to `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
+ * put a name in one place and not the other cannot happen. It is built HERE
+ * rather than in `emoji/sections.ts` because it is this build's own
+ * geometry rather than Unicode's data, and it costs no bytes worth
+ * deferring.
+ */
 const ICON_SECTION: FacetPickerCatalogSection = {
   label: 'Icons',
   glyph: { kind: 'asset', id: 'visual.category-icons' },

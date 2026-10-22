@@ -314,6 +314,7 @@ export function CanvasContextMenu({
   const items: readonly ContextMenuItem[] = nonContentItems() ?? contentItems()
   return (
     <ContextMenu
+      label="Canvas actions"
       x={contextMenu.x}
       y={contextMenu.y}
       variant={contextMenu.variant}

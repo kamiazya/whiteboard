@@ -71,16 +71,6 @@ export interface SearchResultsProps {
 }
 
 /**
- * One result, in either layout. The two differ in exactly three things — the
- * button's own class, the thumbnail's size, and nothing else — so they are
- * one card with a `layout` rather than two trees that have to be kept
- * saying the same thing. They had already drifted: the grid carried a
- * comment the list did not, and every other line was duplicated verbatim.
- *
- * The path stays on the card in BOTH forms. Dropping it from the grid would
- * reintroduce the Finder/Figma gap the list avoids.
- */
-/**
  * Why a row is here when its title and path do not say: that it matched by
  * meaning, and the content excerpt around the match.
  */
@@ -128,6 +118,16 @@ function MatchReason({
   )
 }
 
+/**
+ * One result, in either layout. The two differ in exactly three things — the
+ * button's own class, the thumbnail's size, and nothing else — so they are
+ * one card with a `layout` rather than two trees that have to be kept
+ * saying the same thing. They had already drifted: the grid carried a
+ * comment the list did not, and every other line was duplicated verbatim.
+ *
+ * The path stays on the card in BOTH forms. Dropping it from the grid would
+ * reintroduce the Finder/Figma gap the list avoids.
+ */
 function SearchResultCard({
   row: { document: entry, contexts, lexicalRank, semanticRank },
   layout,

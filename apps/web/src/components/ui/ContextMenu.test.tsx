@@ -38,7 +38,15 @@ function openCustomColor(): HTMLElement {
 
 describe('ContextMenu custom colour', () => {
   it('opens the picker from the row and closes it on a second press', () => {
-    render(<ContextMenu x={0} y={0} items={[colorRow(vi.fn())]} onClose={vi.fn()} />)
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={[colorRow(vi.fn())]}
+        onClose={vi.fn()}
+      />,
+    )
     const trigger = screen.getByRole('menuitemradio', { name: 'Custom color' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByTestId('custom-color-panel')).toBeNull()
@@ -53,6 +61,7 @@ describe('ContextMenu custom colour', () => {
   it('draws a selected custom colour as its own swatch, an unselected one as the hue wheel', () => {
     const { unmount } = render(
       <ContextMenu
+        label="Canvas actions"
         x={0}
         y={0}
         items={[colorRow(vi.fn(), { value: '#ff0000', selected: true })]}
@@ -68,6 +77,7 @@ describe('ContextMenu custom colour', () => {
     unmount()
     render(
       <ContextMenu
+        label="Canvas actions"
         x={0}
         y={0}
         items={[colorRow(vi.fn(), { value: '#ff0000', selected: false })]}
@@ -79,7 +89,15 @@ describe('ContextMenu custom colour', () => {
 
   it('commits each valid six-digit hex typed into the field', () => {
     const onPick = vi.fn()
-    render(<ContextMenu x={0} y={0} items={[colorRow(onPick)]} onClose={vi.fn()} />)
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={[colorRow(onPick)]}
+        onClose={vi.fn()}
+      />,
+    )
     openCustomColor()
     fireEvent.change(screen.getByLabelText('Hex color'), { target: { value: '#00ff00' } })
     expect(onPick).toHaveBeenCalledExactlyOnceWith('#00ff00')
@@ -87,7 +105,15 @@ describe('ContextMenu custom colour', () => {
 
   it('never commits three-digit shorthand, from the field or on release', () => {
     const onPick = vi.fn()
-    render(<ContextMenu x={0} y={0} items={[colorRow(onPick)]} onClose={vi.fn()} />)
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={[colorRow(onPick)]}
+        onClose={vi.fn()}
+      />,
+    )
     const panel = openCustomColor()
     fireEvent.change(screen.getByLabelText('Hex color'), { target: { value: '#abc' } })
     fireEvent.pointerUp(panel)
@@ -96,7 +122,15 @@ describe('ContextMenu custom colour', () => {
 
   it('commits the draft on release only when it differs from the current colour', () => {
     const onPick = vi.fn()
-    render(<ContextMenu x={0} y={0} items={[colorRow(onPick)]} onClose={vi.fn()} />)
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={[colorRow(onPick)]}
+        onClose={vi.fn()}
+      />,
+    )
     const panel = openCustomColor()
     // Untouched draft: releasing over the panel is not an edit.
     fireEvent.pointerUp(panel)
@@ -112,6 +146,7 @@ describe('ContextMenu options row', () => {
     const onSelect = vi.fn()
     render(
       <ContextMenu
+        label="Canvas actions"
         x={0}
         y={0}
         items={[
@@ -146,6 +181,7 @@ describe('ContextMenu dismissal', () => {
       <>
         <div data-testid="outside" />
         <ContextMenu
+          label="Canvas actions"
           x={0}
           y={0}
           items={[{ label: 'Edit', onSelect: () => {} }]}
@@ -178,6 +214,7 @@ describe('ContextMenu edge clamp', () => {
     layOut({ width: 300, height: 200 }, { width: 100.4, height: 50.2 })
     render(
       <ContextMenu
+        label="Canvas actions"
         x={280}
         y={190}
         items={[{ label: 'Edit', onSelect: () => {} }]}
@@ -194,6 +231,7 @@ describe('ContextMenu edge clamp', () => {
     layOut({ width: 300, height: 200 }, { width: 100, height: 50 })
     const { rerender } = render(
       <ContextMenu
+        label="Canvas actions"
         x={40}
         y={30}
         items={[{ label: 'Edit', onSelect: () => {} }]}
@@ -204,6 +242,7 @@ describe('ContextMenu edge clamp', () => {
     expect([menu.style.left, menu.style.top]).toEqual(['40px', '30px'])
     rerender(
       <ContextMenu
+        label="Canvas actions"
         x={-20}
         y={-5}
         items={[{ label: 'Edit', onSelect: () => {} }]}
@@ -228,7 +267,16 @@ describe('ContextMenu grid vessel', () => {
       },
       { label: 'Delete', danger: true, onSelect: () => {} },
     ]
-    render(<ContextMenu x={0} y={0} items={items} onClose={vi.fn()} variant="grid" />)
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={items}
+        onClose={vi.fn()}
+        variant="grid"
+      />,
+    )
     const menu = screen.getByTestId('context-menu')
     const children = [...menu.children]
     // Edit+Duplicate share one row; the separator, heading and options row
