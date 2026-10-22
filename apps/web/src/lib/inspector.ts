@@ -79,6 +79,6 @@ export const INSPECTOR_CHROME = {
   display: { label: 'Display', testId: 'display-panel' },
   comments: { label: 'Comments', testId: 'comments-rail' },
   proposals: { label: 'Proposals', testId: 'proposals-panel' },
-  connections: { label: 'Connections', testId: 'connections-panel' },
+  connections: { label: 'Linked from', testId: 'connections-panel' },
   history: { label: 'History', testId: 'history-panel' },
 } as const satisfies Record<InspectorKind, { label: string; testId: string }>

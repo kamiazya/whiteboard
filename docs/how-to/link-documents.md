@@ -56,7 +56,7 @@ a muted "Loading…" line; the content replaces it when it arrives. A target
 that cannot be found shows its name as a link instead.
 
 An `![[...]]` mixed into a sentence behaves like a `[[...]]` link labelled
-with the target's name. An embed counts as a link for the Connections chip
+with the target's name. An embed counts as a link for the Linked from chip
 below, so the embedded document lists this one as linking to it.
 
 ### Embed part of a document
@@ -111,7 +111,7 @@ repeating the name does not print it a second time under the header.
 
 ## See what links back
 
-Every document's header carries a Connections chip (the waypoints icon)
+Every document's header carries a Linked from chip (the waypoints icon)
 showing how many documents link here. Click it to open the list — each
 entry shows the linking document and a snippet of the text around the
 reference (or the canvas relationship). Click an entry to jump to it.

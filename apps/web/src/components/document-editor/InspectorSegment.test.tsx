@@ -65,7 +65,7 @@ describe('InspectorSegment', () => {
       'Display',
       'Comments',
       'Proposals',
-      'Connections',
+      'Linked from',
       'History',
     ])
     expect(names).toHaveLength(INSPECTOR_ORDER.length)
@@ -115,7 +115,7 @@ describe('InspectorSegment', () => {
 
     const opener = inGroup().getByRole('button')
     expect(opener.textContent).toContain('0')
-    expect(opener.getAttribute('aria-label')).toBe('Connections (0)')
+    expect(opener.getAttribute('aria-label')).toBe('Linked from (0)')
   })
 
   it('says how many proposals are open, the way Comments says its threads', () => {
@@ -173,14 +173,14 @@ describe('InspectorSegment', () => {
     )
 
     expect(inGroup().getByRole('button', { name: 'Comments, 3 open' }).textContent).toContain('3')
-    expect(inGroup().getByRole('button', { name: 'Connections (0)' })).toBeTruthy()
+    expect(inGroup().getByRole('button', { name: 'Linked from (0)' })).toBeTruthy()
   })
 
   // Connections waits for its fetch rather than claiming zero.
   it('disables a member whose count has not arrived', () => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ connections: { count: null } }} />)
 
-    const button = inGroup().getByRole('button', { name: 'Connections' })
+    const button = inGroup().getByRole('button', { name: 'Linked from' })
     expect(button.hasAttribute('disabled')).toBe(true)
   })
 

@@ -181,7 +181,7 @@ describe('DaemonDocumentPage document list follows the record', () => {
 
   it('counts a backlink an agent creates while the document is open', async () => {
     await openMain()
-    await waitFor(() => screen.getByRole('button', { name: 'Connections (0)' }))
+    await waitFor(() => screen.getByRole('button', { name: 'Linked from (0)' }))
 
     vi.mocked(daemonApiClient.getDocumentBacklinks).mockResolvedValue({
       backlinks: [{ documentId: PLAN, path: 'plan', contexts: ['see [[main]]'] }],
@@ -190,7 +190,7 @@ describe('DaemonDocumentPage document list follows the record', () => {
     daemonLists([mainRow, planRow('2026-01-02')])
     act(() => daemonWrites(createsPlan))
 
-    await waitFor(() => screen.getByRole('button', { name: 'Connections (1)' }))
+    await waitFor(() => screen.getByRole('button', { name: 'Linked from (1)' }))
   })
 
   it('keeps the newest list when an earlier read answers last', async () => {

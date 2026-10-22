@@ -133,7 +133,7 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
 
   it('counts a backlink another tab saves while the document is open', async () => {
     await openMain()
-    await waitFor(() => screen.getByRole('button', { name: 'Connections (0)' }))
+    await waitFor(() => screen.getByRole('button', { name: 'Linked from (0)' }))
 
     graph.answer = {
       backlinks: [{ documentId: PLAN, path: 'plan', contexts: ['see [[main]]'] }],
@@ -149,6 +149,6 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
     })
     announceDocumentCreated(getBrowserWorkspaceId(), 'plan')
 
-    await waitFor(() => screen.getByRole('button', { name: 'Connections (1)' }))
+    await waitFor(() => screen.getByRole('button', { name: 'Linked from (1)' }))
   })
 })
