@@ -62,6 +62,27 @@ export interface PointerReleaseContext {
 }
 
 /**
+ * Gives the editor root keyboard focus after a press selected something.
+ * Node shapes carry no tabIndex, so without it the selection shortcuts
+ * (Delete, nudges, duplicate, lock, zoom) would land on <body>. It happens at
+ * the RELEASE because the browser's default mousedown focus handling runs
+ * after the pointerdown listener and undoes a focus taken there. A text
+ * editor (or any other editable) the press opened keeps its focus.
+ */
+function focusRootUnlessEditing(root: HTMLElement): void {
+  const active = document.activeElement
+  if (
+    active instanceof HTMLElement &&
+    root.contains(active) &&
+    active !== root &&
+    (active.isContentEditable || active.matches('input, textarea, select'))
+  ) {
+    return
+  }
+  root.focus({ preventScroll: true })
+}
+
+/**
  * A band that was drawn, or a stationary empty press that was not: the
  * zero-move case is where a double press mints a node and a pending cut is
  * answered by a tap.
@@ -316,8 +337,10 @@ export function commitRelease(
       })
     if (followerMoves.length > 0) {
       applyResult({ ...result, commands: [...result.commands, ...followerMoves] })
+      focusRootUnlessEditing(e.currentTarget)
       return
     }
   }
   applyResult(result)
+  focusRootUnlessEditing(e.currentTarget)
 }
