@@ -17,6 +17,9 @@ daemon's PNG and SVG routes use the theme's surface for the mode they were asked
 
 1. Press **Display** in the document's toolbar — the sliders icon, beside the comments and
    history buttons. The settings open next to the canvas, or as a sheet over it on a phone.
+   With a box or edge selected, its own facets (shape, stencil, colour, symbol) lead the
+   panel and the settings for the whole canvas follow below; with several boxes selected a
+   pick applies to all of them. Click empty canvas to see only the canvas settings.
 2. Under **Theme**, pick **Sketch** or **Neon**. Each option draws the whiteboard's own
    signature mark the way that theme draws it — plain, hand-drawn, or lit — so you can see
    the look before you take it. The canvas redraws at once; the panel stays open so you can
