@@ -4,13 +4,14 @@ import {
   projectWorkspaceDocument,
   readWorkspaceNodes,
   reconcileDocContent,
+  statedKindSplit,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
-import { textBreachRefusal } from './sync-write-refusals.js'
+import { DocumentKindChangedError, textBreachRefusal } from './sync-write-refusals.js'
 
 export interface RestoreVersionInput {
   readonly workspaceId: string
@@ -166,6 +167,7 @@ async function restoreInPlace(
   const changed = await reconcileAndSave(live, workspaceId, path, doc, past, {
     label,
     kind: null,
+    recorded: await live.kind(workspaceId, path),
     progress,
   })
   if (changed) await recordMerge(versions, workspaceId, path, doc, versionId)
@@ -196,6 +198,7 @@ async function restoreOntoExisting(
   const changed = await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
     label,
     kind: targetKind === null ? sourceKind : null,
+    recorded: targetKind ?? sourceKind,
     progress,
   })
   if (changed) await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
@@ -233,9 +236,9 @@ async function restoreToTarget(
   // there is nothing to reconcile against. The restored content is
   // whatever the source stores, so the new row carries the source's own
   // kind rather than the store default.
-  withinSyncLimits(past, targetPath)
+  const sourceKind = await live.kind(workspaceId, path)
+  withinSyncLimits(past, targetPath, sourceKind)
   try {
-    const sourceKind = await live.kind(workspaceId, path)
     await live.save(workspaceId, targetPath, past, {
       overwrite: false,
       ...(sourceKind !== null ? { kind: sourceKind } : {}),
@@ -302,7 +305,7 @@ function judgedPastSubtree(pastWorkspace: LoroDoc, inSubtree: (path: string) => 
     const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
     return pastDoc === null ? [] : [{ node, pastDoc }]
   })
-  for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path)
+  for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path, node.meta.kind)
   return { pastDocs, restoring }
 }
 
@@ -402,11 +405,21 @@ function sameFrontiers(a: Frontiers, b: Frontiers): boolean {
 /**
  * Throws the sync surface's refusal when `past`, written whole, breaks a limit
  * that surface enforces — the same judgement, by `judgeStateWithinTextLimits`,
- * so a restore cannot store what no sync write could.
+ * so a restore cannot store what no sync write could. That includes an
+ * envelope stating another kind than the target records (`recorded`): the
+ * restore writes the envelope back, and readers take its word over the node's.
+ * Refused rather than restored without it, since a version that says it is
+ * another kind is not the version the caller chose with one field changed.
  */
-function withinSyncLimits(past: LoroDoc, path: string): void {
+function withinSyncLimits(
+  past: LoroDoc,
+  path: string,
+  recorded: DocumentKind | null | undefined,
+): void {
   const breach = judgeStateWithinTextLimits(past)
   if (breach !== null) throw textBreachRefusal(breach, { path })
+  const split = statedKindSplit(past, recorded)
+  if (split !== null) throw new DocumentKindChangedError(split.recorded, split.kind)
 }
 
 /**
@@ -447,10 +460,12 @@ async function reconcileAndSave(
   options: {
     label: string | undefined
     kind: DocumentKind | null
+    /** The kind the target will record once saved, which the past envelope is held to. */
+    recorded: DocumentKind | null
     progress: RestoreProgress
   },
 ): Promise<boolean> {
-  const { label, kind, progress } = options
+  const { label, kind, recorded, progress } = options
   await progress({
     workspaceId,
     path: targetPath,
@@ -459,7 +474,7 @@ async function reconcileAndSave(
   })
   try {
     try {
-      withinSyncLimits(past, targetPath)
+      withinSyncLimits(past, targetPath, recorded)
       const before = doc.frontiers()
       reconcileDocContent(doc, past)
       await live.save(workspaceId, targetPath, doc, {

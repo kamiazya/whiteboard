@@ -605,7 +605,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `too_many_nodes_or_edges`, …) — when one holds a body, node text, label or
   board past its limit. A restore judges the state it is about to write the
   same way, in every mode, and refuses with that error before writing
-  anything.
+  anything. A version whose own record of its kind says something other
+  than the kind the document it is restored into records — a split that only
+  an earlier writer outside the sync checks could have stored — is refused
+  the same way, by the move and by every restore mode, with
+  `400 {"error":"document_kind_changed"}`.
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.

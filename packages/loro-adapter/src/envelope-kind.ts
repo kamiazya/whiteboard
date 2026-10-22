@@ -115,3 +115,22 @@ function writtenEnvelopeBreach(
     ...(record.documentId === undefined ? {} : { documentId: record.documentId }),
   }
 }
+
+/**
+ * A standalone document whose envelope STATES a kind other than `recorded` —
+ * for a state written back whole, such as a restored version, rather than an
+ * update: an envelope stating nothing defers to the record and is no split.
+ * A document with no envelope is not given one by asking.
+ */
+export function statedKindSplit(
+  doc: LoroDoc,
+  recorded: DocumentKind | null | undefined,
+): EnvelopeKindBreach | null {
+  if (recorded === null || recorded === undefined) return null
+  if (!Object.hasOwn(doc.getShallowValue(), DOCUMENT_KEY)) return null
+  const envelope = doc.getMap(DOCUMENT_KEY)
+  const stated: unknown = envelope.get('kind')
+  if (stated === undefined) return null
+  const kind = parsedKind(stated)
+  return kind === recorded ? null : { container: envelope.id, recorded, kind }
+}

@@ -13,6 +13,7 @@ import {
   readMarkdownBody,
   readTrashEntries,
   recordTrashEntry,
+  writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -342,6 +343,37 @@ describe('promoteWorkspace, a carried version past a sync limit', () => {
     expect(target.saves()).toBe(0)
     expect(target.deps.versions.adopted.size).toBe(0)
   })
+})
+
+it('refuses a carried version whose envelope names another kind than its node, merging nothing', async () => {
+  // A restore writes the version's envelope back onto the node, so the split
+  // it names would come back with it.
+  const target = daemon()
+  const build = recordWithOversizedPast(
+    (doc) => {
+      createWorkspaceDocumentAtPath(doc, {
+        path: 'roadmap',
+        documentId: ROADMAP_ID,
+        kind: 'spatial',
+      })
+      writeDocumentKind(documentContainers(doc, ROADMAP_ID), 'markdown')
+      doc.commit()
+    },
+    (doc) => {
+      writeDocumentKind(documentContainers(doc, ROADMAP_ID), 'spatial')
+      doc.commit()
+    },
+  )
+
+  const refused = await promoteWorkspace(target.deps, {
+    workspaceId: WS,
+    operator,
+    ...build,
+  }).catch((err: unknown) => err)
+
+  expect(refused).toMatchObject({ code: 'document_kind_changed', status: 400 })
+  expect(target.saves()).toBe(0)
+  expect(target.deps.versions.adopted.size).toBe(0)
 })
 
 /**

@@ -16,6 +16,8 @@ import {
   projectWorkspaceDocument,
   readTrashEntries,
   readWorkspaceDocuments,
+  resolveWorkspaceDocumentById,
+  statedKindSplit,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
@@ -26,7 +28,7 @@ import {
   type PromotedTrashBytes,
   type PromotedVersion,
 } from '../versions/version-entry.js'
-import { textBreachRefusal } from './sync-write-refusals.js'
+import { DocumentKindChangedError, textBreachRefusal } from './sync-write-refusals.js'
 
 /** One trash entry's evacuated bytes, decoded. */
 export type CarriedTrashBytes = Readonly<
@@ -146,6 +148,13 @@ function judgeDocumentAt(
   if (breach !== null) {
     const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)
     throw textBreachRefusal(breach, at === undefined ? undefined : { path: at.path })
+  }
+  // A restore writes the envelope back, so one stating another kind than its
+  // node records at that point would bring the split with it.
+  const recorded = resolveWorkspaceDocumentById(past, version.documentId)?.kind
+  const split = statedKindSplit(content, recorded)
+  if (split !== null) {
+    throw new DocumentKindChangedError(split.recorded, split.kind, version.documentId)
   }
   return {
     elementCount: countSpatialNodes(content),
