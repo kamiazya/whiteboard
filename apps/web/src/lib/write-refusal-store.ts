@@ -44,6 +44,8 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would leave documents in this workspace that could not be read, hiding them.',
   invalid_document_root:
     'It would add a part to a document under a name the workspace keeps for itself, or of a kind that name cannot hold.',
+  reserved_map_key:
+    'It would add a part to a document under the name "__proto__", which no document may hold.',
   document_kind_changed:
     'It would change what kind of document this is. A board stays a board and a note stays a note; make a new document of the other kind instead.',
   too_many_documents:

@@ -414,6 +414,30 @@ class UnattachedContainerError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A write naming `__proto__` as a map key, a root container or a key inside a
+ * value. Every JSON projection of the record takes such a key as the object's
+ * prototype, so readers would see keys the document does not hold.
+ */
+class ReservedMapKeyError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['reserved-map-key']
+  override readonly status = 400
+
+  constructor(
+    readonly breach: BreachOf<'reserved-map-key'>,
+    readonly at?: RefusedIn,
+  ) {
+    const what =
+      at === undefined
+        ? 'This update writes'
+        : `The document at ${JSON.stringify(at.path)} holds in its history a write of`
+    super(
+      `${what} a key named "__proto__" (in ${breach.container}), which no document may hold, so nothing of it was kept`,
+    )
+    this.name = 'ReservedMapKeyError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -443,6 +467,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new ContentRootKindError(breach, at)
     case 'unattached-container':
       return new UnattachedContainerError(breach, at)
+    case 'reserved-map-key':
+      return new ReservedMapKeyError(breach, at)
     case 'run':
     case 'runs':
     case 'body':

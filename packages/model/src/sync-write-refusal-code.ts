@@ -23,6 +23,7 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'too_many_open_changes',
   'unreadable_document_meta',
   'invalid_document_root',
+  'reserved_map_key',
   'document_kind_changed',
   'document_name_too_long',
   'invalid_path',

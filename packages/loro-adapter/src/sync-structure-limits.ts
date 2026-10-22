@@ -33,6 +33,22 @@ export type UnattachedContainerBreach = {
   readonly container: ContainerID
 }
 
+/**
+ * A write naming `__proto__` as a map key, a root container, or a key inside
+ * a value. Every JSON projection — `toJSON()`, the JSON form an update is read
+ * through — ASSIGNS such a key, which replaces the object's prototype instead
+ * of adding a key, so a reader's `key in obj` answers for keys nobody wrote.
+ * No writer here mints one.
+ */
+export type ReservedMapKeyBreach = {
+  readonly shape: 'reserved-map-key'
+  /** The container written into. */
+  readonly container: ContainerID
+}
+
+/** The one key a projection cannot hold as a key. */
+export const RESERVED_MAP_KEY = '__proto__'
+
 type Change = JsonSchema['changes'][number]
 
 /** The Loro kind each content key's container is declared as. */
@@ -133,6 +149,53 @@ export function contentRootBreach(
       if (containerKind(map.get(key)) !== CONTENT_KIND.get(key)) {
         return { shape: 'content-root', key, container }
       }
+    }
+  }
+  return null
+}
+
+/**
+ * Whether `value` holds, at any depth, an object a projection gave a
+ * prototype other than its own — the trace a `__proto__` key leaves, since
+ * the key itself never survives into the JSON. A `__proto__` of `null` or of
+ * a scalar leaves no chain to follow, and needs no answer.
+ */
+function holdsReplacedPrototype(value: unknown): boolean {
+  const pending: unknown[] = [value]
+  while (pending.length > 0) {
+    const next = pending.pop()
+    if (typeof next !== 'object' || next === null) continue
+    if (Array.isArray(next)) {
+      pending.push(...next)
+      continue
+    }
+    const prototype: unknown = Object.getPrototypeOf(next)
+    if (prototype !== Object.prototype && prototype !== null) return true
+    pending.push(...Object.values(next))
+  }
+  return false
+}
+
+/**
+ * The first op in `json` writing a `__proto__` key: setting one in a map,
+ * writing into a root container of that name, or carrying one inside a value
+ * (a map entry, a list item, a text mark). A DELETE of one is let through —
+ * it is how a record holding one is repaired.
+ */
+export function reservedKeyBreach(json: JsonSchema): ReservedMapKeyBreach | null {
+  for (const change of json.changes) {
+    for (const op of change.ops) {
+      const content = op.content as {
+        readonly type?: unknown
+        readonly key?: unknown
+        readonly value?: unknown
+      }
+      if (content.type === 'delete') continue
+      const writes =
+        op.container.startsWith(`cid:root-${RESERVED_MAP_KEY}:`) ||
+        content.key === RESERVED_MAP_KEY ||
+        holdsReplacedPrototype(content.value)
+      if (writes) return { shape: 'reserved-map-key', container: op.container }
     }
   }
   return null

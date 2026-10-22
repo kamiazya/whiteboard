@@ -503,7 +503,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   or giving an unkinded document another kind — is refused from any caller
   with `400 {"error":"document_kind_changed"}`, so an edit grant cannot make
   a board read as a note and have someone's next note edit replace its
-  nodes. A
+  nodes. An update that writes a key named `__proto__` anywhere — a map
+  entry, a part of a document, or a key inside a stored value — is refused
+  from any caller with `400 {"error":"reserved_map_key"}`: every reader takes
+  such a key as the record's prototype rather than as a key, so it could lend
+  a document content nobody wrote. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,
