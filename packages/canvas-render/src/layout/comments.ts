@@ -17,7 +17,7 @@
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { commentCornerOf, isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
-import type { Appearance, BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Appearance, BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
@@ -286,15 +286,23 @@ function collapseResolvedBody(
   return [...body, label]
 }
 
+// Through `layoutCommentBody`, which is the ONE producer of a comment's
+// prose — so the card and rail that draw this same body in the web app
+// cannot pick different metrics for it.
 function bubbleBody(
   comment: CanvasComment,
-  nodes: readonly SceneNode[],
   options: ResolvedLayoutOptions,
+  bodyLayout: BodyLayoutSeam,
   chrome: SpatialCommentAppearance | undefined,
-): readonly SceneNode[] {
-  return comment.resolved === true
-    ? collapseResolvedBody(nodes, options, chrome?.resolvedOverlay.text)
-    : nodes
+): Scene {
+  const laid = layoutCommentBody(comment.text, {
+    ...bodyLayout(COMMENT_TEXT_MAX_WIDTH_PX, options),
+    parseBody: options.parseBody,
+    onParseFailure: (err) =>
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err }),
+  })
+  if (comment.resolved !== true) return laid
+  return { ...laid, nodes: collapseResolvedBody(laid.nodes, options, chrome?.resolvedOverlay.text) }
 }
 
 /**
@@ -353,17 +361,8 @@ export function composeComments(
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
     const anchor = anchorOf(comment)
 
-    // Through `layoutCommentBody`, which is the ONE producer of a comment's
-    // prose — so the card and rail that draw this same body in the web app
-    // cannot pick different metrics for it.
-    const laid = layoutCommentBody(comment.text, {
-      ...bodyLayout(COMMENT_TEXT_MAX_WIDTH_PX, options),
-      parseBody: options.parseBody,
-      onParseFailure: (err) =>
-        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err }),
-    })
-    const bodyNodes = bubbleBody(comment, laid.nodes, options, chrome)
-    const { right: contentRight, bottom: contentBottom } = contentExtent(bodyNodes)
+    const laid = bubbleBody(comment, options, bodyLayout, chrome)
+    const { right: contentRight, bottom: contentBottom } = contentExtent(laid.nodes)
     const bubble = placeCommentBubble(
       anchor,
       {
@@ -420,7 +419,7 @@ export function composeComments(
     })
     out.push(
       ...translateScene(
-        { ...laid, nodes: bodyNodes },
+        laid,
         bubble.x + COMMENT_BUBBLE_PADDING_PX,
         bubble.y + COMMENT_BUBBLE_PADDING_PX,
       ).nodes,

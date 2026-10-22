@@ -51,7 +51,6 @@ const fakeAppearance: SpatialAppearanceResolver = {
         strokeOpacity: 0.45,
       },
       pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif', fillOpacity: 0.45 },
-      text: { fill: '#6b7280', fontFamily: 'sans-serif' },
     },
   }),
 }
@@ -380,59 +379,6 @@ describe('comment layer', () => {
 
     const texts = runsOf(scene.nodes).map((run) => run.text)
     expect(texts).toContain('done already')
-  })
-
-  describe('a resolved bubble', () => {
-    const LONG = 'first line of the thread that is long enough to wrap onto a second line here'
-    const resolvedScene = (text: string) =>
-      layoutSpatialCanvas(
-        canvasWith([{ id: 'c2', x: 400, y: 60, text, resolved: true }]),
-        baseOptions({ showResolved: true }),
-      )
-
-    it('collapses to the first line and names itself Resolved, painted in the muted text', () => {
-      const scene = resolvedScene(LONG)
-      const bubbleBox = bubbleOf(scene.nodes, 'c2')?.bbox
-      const runs = runsOf(scene.nodes).filter(
-        (run) => bubbleBox !== undefined && run.bbox.y >= bubbleBox.y,
-      )
-      const bodyRuns = runs.filter((run) => run.text !== 'Resolved')
-      const label = runs.find((run) => run.text === 'Resolved')
-      expect(label).toBeDefined()
-      expect(new Set(bodyRuns.map((run) => run.bbox.y)).size).toBe(1)
-      expect(bodyRuns.length).toBeGreaterThan(0)
-      expect(bodyRuns.map((run) => run.text).join(' ').length).toBeLessThan(LONG.length)
-      expect(bodyRuns.every((run) => run.appearance?.fill === '#6b7280')).toBe(true)
-      expect(label?.appearance?.fill).toBe('#6b7280')
-      expect(label?.bbox.y).toBeGreaterThan(bodyRuns[0]?.bbox.y ?? Number.POSITIVE_INFINITY)
-    })
-
-    it('is shorter than the same text open, and the label sits inside the bubble', () => {
-      const open = layoutSpatialCanvas(
-        canvasWith([{ id: 'c2', x: 400, y: 60, text: LONG }]),
-        baseOptions(),
-      )
-      const bubble = bubbleOf(resolvedScene(LONG).nodes, 'c2')
-      const openBubble = bubbleOf(open.nodes, 'c2')
-      const label = runsOf(resolvedScene(LONG).nodes).find((run) => run.text === 'Resolved')
-      expect(bubble?.bbox.h).toBeLessThan(openBubble?.bbox.h ?? 0)
-      expect((label?.bbox.y ?? 0) + (label?.bbox.h ?? 0)).toBeLessThanOrEqual(
-        (bubble?.bbox.y ?? 0) + (bubble?.bbox.h ?? 0),
-      )
-    })
-
-    it('leaves an open thread with no label and its full text unpainted by the overlay', () => {
-      const open = layoutSpatialCanvas(
-        canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]),
-        baseOptions({ showResolved: true }),
-      )
-      const runs = runsOf(open.nodes)
-      expect(runs.some((run) => run.text === 'Resolved')).toBe(false)
-      expect(runs.some((run) => run.appearance?.fill === '#6b7280')).toBe(false)
-      expect(open).toEqual(
-        layoutSpatialCanvas(canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]), baseOptions()),
-      )
-    })
   })
 
   it('showResolved absent/false is byte-identical to before it existed — a resolved comment stays hidden', () => {

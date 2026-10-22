@@ -165,8 +165,7 @@ function buildTheme(palette: SpatialPalette, mode: SpatialThemeMode): SpatialApp
       // highlight reads as the same object as the pin beside it. The same
       // 22% the note's source pane paints its passages with.
       const passage: Appearance = { fill: palette.comment.pin.fill, fillOpacity: 0.22 }
-      // A dashed outline in the pin's amber, unfilled: it says "these" without
-      // covering them, the way the leader says "this one" without joining.
+      // Dashed amber and unfilled: says "these" without covering them.
       const region: Appearance = {
         fill: 'none',
         stroke: palette.comment.pin.fill,
