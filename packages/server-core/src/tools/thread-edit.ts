@@ -16,6 +16,7 @@ import {
   commentMessageInputSchema,
   commentThreadSchema,
   documentIdSchema,
+  growsPast,
   nodeText,
   OPS_PER_CALL_LIMIT_PHRASE,
   OPS_PER_CALL_MAX,
@@ -24,6 +25,8 @@ import {
   type SpatialAnchor,
   type SpatialCanvas,
   type TextAnchor,
+  THREAD_MAX_MESSAGES,
+  THREAD_MESSAGES_LIMIT_PHRASE,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -337,7 +340,17 @@ const THREAD_EDIT_HANDLERS: {
     let suffix = taken.size + 1
     while (taken.has(`${op.threadId}-m${suffix}`)) suffix += 1
     const id = `${op.threadId}-m${suffix}`
-    ctx.tally.messageIds.set(op.threadId, new Set([...taken, id]))
+    if (growsPast(THREAD_MAX_MESSAGES, taken.size, taken.size + 1)) {
+      throw new ThreadEditError(
+        index,
+        op.op,
+        `thread "${op.threadId}" would hold ${taken.size + 1} messages, past ${THREAD_MESSAGES_LIMIT_PHRASE}`,
+      )
+    }
+    // In place: the set is this batch's own, and copying it per reply costs
+    // the whole thread again on every op, under the workspace write lock.
+    taken.add(id)
+    ctx.tally.messageIds.set(op.threadId, taken)
     writeThreadMessage(doc, op.threadId, {
       id,
       body: op.body,
