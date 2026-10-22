@@ -47,7 +47,9 @@ middle ones and leaves the outermost two anchoring the span. Both align to
 the selection's own bounding box, so the result does not depend on which
 node you clicked first, and each is a single undo step.
 
-A locked node or edge cannot be selected, moved, restyled, or deleted, and
+A locked node shows a small padlock in its top-right corner so you can tell it
+from one that is simply unresponsive; the padlock appears in the editor only
+and never in an export. A locked node or edge cannot be selected, moved, restyled, or deleted, and
 MCP tools refuse to patch, tag, or set facets on it too. Right-click it and choose **Unlock** to
 release it. Nodes and edges lock independently: locking a node does not
 lock the edges attached to it, and an edge between two locked nodes stays
