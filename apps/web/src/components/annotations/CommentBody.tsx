@@ -75,7 +75,10 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     const scene = layoutCommentBody(body, {
       measure: resolvedMeasure,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
-      maxWidth: width ?? UNMEASURED_WIDTH_PX,
+      // The SVG is padded on both sides, so the text's measure is the box
+      // less that padding — otherwise the drawing is wider than the column it
+      // was measured from and the last glyphs are clipped by whatever scrolls.
+      maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
       // What `compact` has always claimed and, until this, did not do: it
       // set a `text-xs` class the SVG never reads, so a rail whose chrome
       // runs at 11-12px drew its prose at the bubble's 16px — the largest

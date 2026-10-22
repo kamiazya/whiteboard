@@ -88,6 +88,7 @@ function ThreadMessages({
           key={message.id}
           message={message}
           compact
+          unsignedAs="You"
           action={
             onEditMessage === undefined || editing?.messageId === message.id ? null : (
               <button
@@ -198,7 +199,10 @@ function ThreadConversation({
     // token resolves to `oklch(1 0 0 / 0.1)` in the dark theme,
     // which on this ground is invisible — a connector nobody
     // can see is not one.
-    <div id={`thread-${thread.id}`} className="mt-1 ml-[44px] flex flex-col gap-3 border-l-2 pl-2">
+    <div
+      id={`thread-${thread.id}`}
+      className="mt-1 ml-[44px] flex min-w-0 flex-col gap-3 border-l-2 pl-2"
+    >
       {/* Every message, drawn the same way. The first one
             used to be built here by hand and the rest by
             a replies-only component, which is why only the
@@ -347,7 +351,9 @@ export function ThreadRow({
                 here and whether it moved lately — and leaves the
                 opening stamp to the first entry of the column one
                 tap away. Both at once wrapped the row at 390px. */}
-            {thread.messages.length <= 1 ? <MessageBy message={thread.messages[0]} /> : null}
+            {thread.messages.length <= 1 && !expanded ? (
+              <MessageBy message={thread.messages[0]} unsignedAs="You" />
+            ) : null}
             <ThreadActivity thread={thread} />
             {resolveAnchor?.(thread) === 'orphaned' ? (
               <span data-testid={`thread-orphaned-${thread.id}`}>
