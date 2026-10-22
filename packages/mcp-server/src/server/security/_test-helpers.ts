@@ -76,7 +76,7 @@ export const DENY_ALL_STRATEGY: AsyncAuthStrategy = {
  * A provider anyone can join, so a test can make a user the way a stranger
  * does: by signing in with whatever claims their own identity provider issues.
  */
-export const OPEN_SIGN_IN_PROVIDER: OidcProvider = (() => {
+const OPEN_SIGN_IN_PROVIDER: OidcProvider = (() => {
   const [provider] = oidcProviders(
     signInConfigSchema.parse({
       providers: [
