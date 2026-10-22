@@ -87,7 +87,7 @@ function StepButton({
           type="button"
           aria-label={label}
           onClick={onPress}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex h-6 w-6 items-center justify-center rounded-md pointer-coarse:size-11 transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <Icon aria-hidden className="size-3.5" />
         </button>
@@ -153,7 +153,7 @@ export function EditorToolbar({
   // outside the editor), so the swap loses nothing.
   const dockedBarHasTheVerbs = touchFormattingBarShown()
   return (
-    <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
+    <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2 pointer-coarse:h-12">
       {dockedBarHasTheVerbs ? (
         <div className="flex flex-1 items-center gap-1">
           {onComment !== undefined && (
@@ -170,7 +170,7 @@ export function EditorToolbar({
                   onClick={() => {
                     if (commentAvailable) onComment()
                   }}
-                  className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:opacity-40"
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2 pointer-coarse:h-11 text-xs transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:opacity-40"
                 >
                   <MessageSquarePlus aria-hidden className="size-4" />
                   Comment
@@ -203,7 +203,7 @@ export function EditorToolbar({
           {wordCount === 1 ? '1 word' : `${wordCount} words`}
         </span>
         <fieldset
-          className="bg-muted flex items-center gap-0.5 rounded-lg p-0.5"
+          className="bg-muted flex items-center gap-0.5 rounded-lg p-0.5 pointer-coarse:p-0"
           aria-label="View mode"
         >
           {MODE_OPTIONS.map(({ mode: option, label, icon: Icon }) => {
@@ -218,7 +218,7 @@ export function EditorToolbar({
                     aria-pressed={active}
                     onClick={() => onModeChange(option)}
                     className={cn(
-                      'focus-visible:ring-ring inline-flex h-6 items-center justify-center rounded-md px-2 transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none',
+                      'focus-visible:ring-ring inline-flex h-6 items-center justify-center rounded-md px-2 pointer-coarse:h-11 pointer-coarse:min-w-11 transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none',
                       // A segmented control: its selected segment is RAISED
                       // rather than accent-filled, so it derives its own look
                       // from the attribute instead of wearing the shared one.
@@ -250,7 +250,7 @@ export function EditorToolbar({
                   const rect = event.currentTarget.getBoundingClientRect()
                   onOpenCatalog({ x: rect.left, y: rect.bottom })
                 }}
-                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
+                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md pointer-coarse:size-11 transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
               >
                 <MoreHorizontal aria-hidden className="size-4" />
               </button>

@@ -17,6 +17,12 @@ function render(ui: ReactElement, options?: Parameters<typeof rtlRender>[1]) {
 afterEach(cleanup)
 
 describe('ConnectionStatus chip', () => {
+  it('steps up to the 44px touch floor on a coarse pointer', () => {
+    render(<ConnectionStatus state={null} />, { container: document.body })
+    expect(screen.getByTestId('shell-mark-trigger').className).toContain('pointer-coarse:min-h-11')
+    expect(screen.getByTestId('shell-mark-trigger').className).toContain('pointer-coarse:min-w-11')
+  })
+
   // Management belongs in Settings, recovery belongs here. Disconnecting is
   // something you go looking for with an intent; sync dropping is not, and
   // sending someone to Settings mid-failure adds a step at the worst moment.
