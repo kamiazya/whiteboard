@@ -78,6 +78,20 @@ function referenceRequests(
   }))
 }
 
+/**
+ * Asked for by this body and not yet answered. A terminal answer, even
+ * "nothing here", occupies its cache slot, so only a load still in flight
+ * (or waiting out a retry) reads as pending.
+ */
+function pendingTargets(
+  body: string,
+  cache: ReadonlyMap<string, LoadedReference | null>,
+): ReadonlySet<string> {
+  const loaded = new Map<string, LoadedReference>()
+  for (const [key, value] of cache) if (value !== null) loaded.set(key, value)
+  return new Set(referenceTargets({ bodies: [body], loaded }).filter((t) => !cache.has(t)))
+}
+
 export function useReferenceSeams({
   body,
   resolveAlias,
@@ -131,6 +145,7 @@ export function useReferenceSeams({
   return useMemo(
     () =>
       referenceSeams(cache, {
+        pending: pendingTargets(body, cache),
         ...(resolveAlias !== undefined ? { resolveAlias } : {}),
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
         extra: (ref) => {
@@ -138,6 +153,6 @@ export function useReferenceSeams({
           return href === undefined ? undefined : { image: { href } }
         },
       }),
-    [cache, imageUrls, resolveAlias, resolveTitle],
+    [body, cache, imageUrls, resolveAlias, resolveTitle],
   )
 }

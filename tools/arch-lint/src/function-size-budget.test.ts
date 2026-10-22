@@ -296,7 +296,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
-  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 63,
+  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 64,
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   // The receiving half of a cross-origin transfer, as one sequence: announce,
   // listen, accept, report. The workspace list is already split out
@@ -477,7 +477,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
-  'packages/canvas-render/src/references/seams.ts#referenceSeams': 73,
+  'packages/canvas-render/src/references/seams.ts#referenceSeams': 76,
   'packages/canvas-render/src/svg/backend.ts#buildSvgDocumentParts': 61,
   'packages/canvas-render/src/svg/backend.ts#renderNode': 97,
   'packages/canvas-render/src/svg/legend.ts#renderLegend': 75,

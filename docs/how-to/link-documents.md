@@ -51,6 +51,10 @@ so type `![[` and pick the document:
   opens the canvas. File nodes inside the miniature keep their card form;
   only the canvas you open expands them.
 
+While the target is still loading, the embed shows its name in a frame with
+a muted "Loading…" line; the content replaces it when it arrives. A target
+that cannot be found shows its name as a link instead.
+
 An `![[...]]` mixed into a sentence behaves like a `[[...]]` link labelled
 with the target's name. An embed counts as a link for the Connections chip
 below, so the embedded document lists this one as linking to it.

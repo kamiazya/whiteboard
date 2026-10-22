@@ -30,7 +30,6 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import { clampAdvance } from '../../measure.js'
-import type { EmbeddedDocument } from '../../references/resolved.js'
 import { type ReferenceSeams, referenceFor, withReferenceSeams } from '../../references/seams.js'
 import { type SceneWalkNode, sceneChildrenOf } from '../../scene-children.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
@@ -41,6 +40,13 @@ import { canvasElementCount, createNestedLayoutBudget, spendNestedLayout } from 
 import { createInlineJunction, headCharacter } from './inline-junction.js'
 import { longestFittingCount } from './longest-fit.js'
 import { layoutCodeBlock } from './mdast-code-block.js'
+import {
+  embedTitle,
+  layoutPendingEmbed,
+  tryIsEmbedPending,
+  tryResolveEmbed,
+  tryResolveTitle,
+} from './mdast-embed-pending.js'
 import {
   baselineIn,
   bodyFont,
@@ -105,27 +111,6 @@ const EMBED_DEPTH_CAP = 3
  */
 function referenceLabel(title: string, fragment: string | undefined): string {
   return fragment === undefined ? title : `${title} › ${fragment}`
-}
-
-/** `resolveTitle` guarded to the never-throw rule. */
-function tryResolveTitle(options: ResolvedMdastOptions, documentId: string): string | undefined {
-  try {
-    return options.resolveTitle?.(documentId)
-  } catch {
-    return undefined
-  }
-}
-
-/** `resolveEmbed` guarded to the never-throw rule. */
-function tryResolveEmbed(
-  options: ResolvedMdastOptions,
-  documentId: string,
-): EmbeddedDocument | undefined {
-  try {
-    return options.resolveEmbed?.(documentId)
-  } catch {
-    return undefined
-  }
 }
 
 /**
@@ -619,10 +604,7 @@ function layoutPhrasing(
     currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
     emit(
-      referenceLabel(
-        tryResolveEmbed(options, child.documentId)?.title ?? child.documentId,
-        child.fragment,
-      ),
+      referenceLabel(embedTitle(options, child.documentId), child.fragment),
       {
         link: {
           kind: 'embed',
@@ -1033,7 +1015,9 @@ function layoutEmbedBlock(
   }
   if (embedPath.includes(documentId)) return placeholder('cycle')
   if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
-  if (resolved === undefined) return placeholder('unresolvable')
+  if (resolved === undefined) {
+    return layoutUnansweredEmbed(documentId, fragment, cursor, options, placeholder)
+  }
   // A fragment narrows the document to the part it names. One the document
   // does not hold is unresolvable in the same way a missing document is:
   // the reader sees the address, linked, and nothing is invented.
@@ -1058,6 +1042,19 @@ function layoutEmbedBlock(
     documentId,
     children,
   }
+}
+
+/** No content for the target: still loading, or answered with nothing. */
+function layoutUnansweredEmbed(
+  documentId: string,
+  fragment: string | undefined,
+  cursor: Cursor,
+  options: ResolvedMdastOptions,
+  placeholder: (reason: EmbedPlaceholderNode['reason']) => EmbedPlaceholderNode,
+): EmbedResolvedNode | EmbedPlaceholderNode {
+  return tryIsEmbedPending(options, documentId)
+    ? layoutPendingEmbed(options, documentId, fragment, cursor, layoutPhrasing)
+    : placeholder('unresolvable')
 }
 
 /**
