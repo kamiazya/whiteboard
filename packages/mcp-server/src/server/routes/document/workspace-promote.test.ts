@@ -13,7 +13,11 @@ import {
   PROMOTE_MAX_VERSIONS,
   promoteWorkspaceResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
+import {
+  MAX_AUTO_PER_DOCUMENT,
+  MAX_MANUAL_PER_DOCUMENT,
+  MAX_RESTORE_POINTS_PER_DOCUMENT,
+} from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
@@ -35,7 +39,9 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { apiErrorBodySchema, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/version-entry'
+import { PROMOTE_MAX_JUDGED_ELEMENTS } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
@@ -48,6 +54,18 @@ let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
 // isolated data dir.
 let serverDeps: ServerDeps
+// The judgement budget is reached in a test by lowering it, not by projecting
+// a hundred million characters.
+let judgedBudget: number | undefined
+vi.mock('@kamiazya/whiteboard-server-core/versions/version-entry', async (importOriginal) => {
+  const real = await importOriginal<typeof versionEntry>()
+  return {
+    ...real,
+    get PROMOTE_MAX_JUDGED_ELEMENTS() {
+      return judgedBudget ?? real.PROMOTE_MAX_JUDGED_ELEMENTS
+    },
+  }
+})
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
     return tempDir
@@ -73,6 +91,7 @@ beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
+  judgedBudget = undefined
   await handle.dispose()
   await rm(tempDir, { recursive: true, force: true })
 })
@@ -255,6 +274,23 @@ it('carries every automatic checkpoint a browser at the document ceiling can hol
     MAX_AUTO_PER_DOCUMENT * WORKSPACE_MAX_DOCUMENTS,
   )
   expect(PROMOTE_MAX_TRASH).toBe(WORKSPACE_MAX_DOCUMENTS)
+})
+
+it('judges every version a browser can hold of one document at the largest body', () => {
+  const perDocument =
+    MAX_AUTO_PER_DOCUMENT + MAX_MANUAL_PER_DOCUMENT + MAX_RESTORE_POINTS_PER_DOCUMENT
+  expect(PROMOTE_MAX_JUDGED_ELEMENTS).toBeGreaterThanOrEqual(perDocument * MARKDOWN_MAX_CHARS)
+})
+
+it('refuses saved versions that cost more to check than one move allows with 413, merging nothing', async () => {
+  const { promote, documents } = harness()
+  judgedBudget = 1
+  const res = await promote(browserRecordWithTrashAndVersion())
+  expect(res.status).toBe(413)
+  const body = apiErrorBodySchema.parse(await res.json())
+  expect(body).toMatchObject({ error: 'promote_too_many_carried' })
+  expect('message' in body && body.message).toContain('at most 1 characters')
+  expect(await documents()).toEqual([])
 })
 
 it('answers 404 for a workspace the daemon never registered', async () => {

@@ -656,8 +656,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   (`promote_too_many_documents`, `promote_too_many_carried`). Each saved
   version is checked against the record before the merge, and rows naming
   the same document at the same point are checked once, so repeating one row
-  costs almost nothing. So one request cannot make the daemon write, or
-  check, an unbounded number of saved versions.
+  costs almost nothing. Rows naming different points cannot each buy a check
+  without limit either: checking a version reads the whole document as it
+  stood, so the checks one move makes may read at most 117,964,800
+  characters between them — every version a browser keeps of one document
+  (450) at the largest body (256 KiB) — and a move past that is refused
+  whole with `promote_too_many_carried`. The versions are checked in history
+  order, so the check walks the history once however the rows were sent. So
+  one request cannot make the daemon write, or check, an unbounded number of
+  saved versions, or spend an unbounded time checking them.
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is

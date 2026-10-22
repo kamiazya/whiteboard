@@ -41,6 +41,8 @@ export const promoteWorkspaceRequestSchema = z
     // Counted before any row is judged, so a request cannot repeat rows
     // until the body ceiling; the daemon answers past either 413
     // `promote_too_many_carried`, and the sender leaves the rest behind.
+    // The same code answers versions whose states cost more to judge than
+    // server-core's PROMOTE_MAX_JUDGED_ELEMENTS, which no row count bounds.
     trash: z.array(promotedTrashBytesRequestSchema).max(PROMOTE_MAX_TRASH).optional(),
     versions: z.array(promotedVersionRequestSchema).max(PROMOTE_MAX_VERSIONS).optional(),
   })

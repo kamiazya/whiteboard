@@ -233,6 +233,16 @@ function answerPromoted(
       return c.json(errorBody('unmatched_carried', result.reason), 400)
     case 'too-many-carried':
       return c.json(tooManyCarriedBody(result.plane, result.limit), 413)
+    case 'carried-over-budget':
+      // The same code as a count past the cap: the sender's way out is the same.
+      return c.json(
+        errorBody(
+          'promote_too_many_carried',
+          `Checking the saved versions one move carries may read at most ${result.limit} characters of their documents; ` +
+            'carry fewer saved versions, leaving the oldest behind.',
+        ),
+        413,
+      )
     case 'too-many-documents':
       // The message names the count, the limit and the way out, for whoever reads it.
       return c.json(

@@ -1,4 +1,5 @@
 import {
+  MARKDOWN_MAX_CHARS,
   okfActorSchema,
   versionLabelSchema,
   WORKSPACE_ID_PATTERN,
@@ -148,6 +149,27 @@ export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
  * this package cannot import the history package.
  */
 export const PROMOTE_MAX_VERSIONS = 120_000
+
+/**
+ * The most a promotion's carried versions may cost to judge, counted in the
+ * elements projected — one per character, map entry or list element of each
+ * document state a row names, every distinct (point, document) once. The row
+ * cap does not bound it: a row is a few hundred bytes, the state it names is
+ * up to a document's limit, and each distinct state is projected and judged
+ * on the serving loop — measured at roughly 3-4 M characters a second, so
+ * 120,000 rows over full-size bodies is hours.
+ *
+ * Sized from what a browser keeper can hold of ONE document: 450 versions
+ * (50 automatic checkpoints, `@kamiazya/whiteboard-history`'s
+ * `MAX_AUTO_PER_DOCUMENT`, plus at most 200 manual saves and 200 restore
+ * points, its two ceilings) each at `MARKDOWN_MAX_CHARS`. So a document's
+ * whole history at the largest body always passes, as does any workspace whose
+ * carried history projects no more than that in total — about half a minute
+ * of judging, against the hours the row cap alone admits. mcp-server's
+ * promote route test holds the figure to that product, since this package
+ * cannot import the history package.
+ */
+export const PROMOTE_MAX_JUDGED_ELEMENTS = 450 * MARKDOWN_MAX_CHARS
 
 /**
  * The most trashed documents one promotion carries the bytes of: the most
