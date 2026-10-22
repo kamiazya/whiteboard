@@ -524,21 +524,33 @@ export function WorkspaceFilesPanel({
     [source, readList],
   )
 
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
+
   /**
    * Move a document and re-read the list.
    *
    * A move is the one action here that changes what every pane is showing —
    * a subtree lands somewhere else entirely — so the list is re-read rather
-   * than patched. The selection follows the document to its new path,
-   * because losing it would leave the preview blank right when someone wants
-   * to see that the move landed.
+   * than patched. When the moved document is the one in the preview, the
+   * selection follows it to its new path, because losing it would leave the
+   * preview blank right when someone wants to see that the move landed.
    *
    * The rejection is re-thrown: the pane that asked owns the message, and
    * this is the only place that knows it was the server's words.
    */
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
+      const previewed = selectedRef.current
       await source.renameDocumentPath(entry.path, newPath)
+      // Moving a document is not moving the person: only the document in the
+      // preview is followed to where it landed, since the preview must sit in
+      // the folder the contents pane shows. Any other move leaves them where
+      // they stood, with the preview they had.
+      if (previewed?.path !== entry.path) {
+        await refreshAndSelect(previewed?.path ?? '')
+        return
+      }
       await refreshAndSelect(newPath)
       const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
       setFolder(landedIn)
@@ -615,7 +627,6 @@ export function WorkspaceFilesPanel({
           onRequestDelete,
           onRequestDeleteMany,
           setPeek,
-          setSelected,
           setSelection,
           togglePinned,
           openRename: rename.open,
