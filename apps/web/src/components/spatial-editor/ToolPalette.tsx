@@ -42,6 +42,9 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { cn } from '../../lib/utils.js'
+import { useActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
+import { touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
 import { CREATION_LABELS } from './creation-labels.js'
 
 /**
@@ -122,6 +125,11 @@ export function ToolPalette({
   const dockRef = useRef<HTMLDivElement | null>(null)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
   const addButtonRef = useRef<HTMLButtonElement | null>(null)
+  // The keyboard-docked formatting bar takes the window's bottom edge while a
+  // markdown editor holds the caret; two bars there would overlap. Hidden
+  // rather than unmounted so the dock's open menu and refs survive the edit.
+  useActiveMarkdownEditor()
+  const yieldsToFormattingBar = touchFormattingBarShown()
 
   // Menu convention: opening moves focus to the first entry, so the
   // keyboard path is + → Enter → Enter without a mouse detour.
@@ -188,7 +196,10 @@ export function ToolPalette({
       data-testid="tool-palette"
       role="toolbar"
       aria-label="Canvas tools"
-      className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
+      className={cn(
+        'absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md',
+        yieldsToFormattingBar && 'hidden',
+      )}
     >
       {leading !== undefined && (
         <>
