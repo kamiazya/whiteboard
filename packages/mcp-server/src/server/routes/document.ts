@@ -5,7 +5,7 @@ import type {
   CallerName,
   FirstMember,
   OwnerChange,
-  WorkspaceAdmit,
+  WorkspaceVisibility,
 } from '../security/membership-gate.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto-version.js'
 import type { StoreScope } from '../store/store-scope.js'
@@ -81,7 +81,7 @@ export interface DocumentRouterOptions {
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
-  admit?: WorkspaceAdmit
+  visibleWorkspaces?: WorkspaceVisibility
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
   firstMember?: FirstMember
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
@@ -119,7 +119,9 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
   return {
     serverDeps: options.serverDeps,
     ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
-    ...(options.admit === undefined ? {} : { admit: options.admit }),
+    ...(options.visibleWorkspaces === undefined
+      ? {}
+      : { visibleWorkspaces: options.visibleWorkspaces }),
     ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
     ...(options.ownerChange === undefined ? {} : { ownerChange: options.ownerChange }),
   }

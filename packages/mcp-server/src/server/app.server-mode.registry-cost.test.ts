@@ -153,7 +153,7 @@ describe('server mode — one request costs what the caller has, not what the te
     expect(registryRows.count).toBeLessThanOrEqual(6)
   })
 
-  it.fails('lists workspaces with a bounded number of membership lookups', async () => {
+  it('lists workspaces with a bounded number of membership lookups', async () => {
     const own = await adaOwnsDesign()
     memberCalls.clear()
 
@@ -163,6 +163,8 @@ describe('server mode — one request costs what the caller has, not what the te
     const { workspaces } = (await res.json()) as { workspaces: { workspaceId: string }[] }
     // The subject is present: the caller's one workspace, none of the strangers'.
     expect(workspaces.map((w) => w.workspaceId)).toEqual([own])
-    expect(membershipLookups()).toBeLessThanOrEqual(4)
+    // The request's own sign-in checks, then one person lookup and one read
+    // of their memberships — never a pair per tenant workspace.
+    expect(membershipLookups()).toBeLessThanOrEqual(6)
   })
 })

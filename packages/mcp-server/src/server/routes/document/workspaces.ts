@@ -41,7 +41,7 @@ import type {
   FirstMember,
   OwnerChange,
   OwnerChangeRefusal,
-  WorkspaceAdmit,
+  WorkspaceVisibility,
 } from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath } from '../../validators.js'
@@ -138,12 +138,13 @@ export interface WorkspacesRouterOptions {
    *  this from `options.replicaKeys?.effectiveTier` only when a replica-key
    *  store was supplied. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
-  /** The membership gate GET /api/workspaces filters the listing
-   *  through, rather than refusing the whole request — a name is a leak to a
-   *  non-member the way its content is. Server mode always wires it; absent
-   *  — the local daemon, whose one person is in everything — means no
-   *  filtering. */
-  admit?: WorkspaceAdmit
+  /** Which workspaces GET /api/workspaces may name, filtering the listing
+   *  rather than refusing the whole request — a name is a leak to a
+   *  non-member the way its content is. Decided once per request from the
+   *  caller's memberships, so the listing does not ask about every workspace
+   *  the tenant holds. Server mode always wires it; absent — the local
+   *  daemon, whose one person is in everything — means no filtering. */
+  visibleWorkspaces?: WorkspaceVisibility
   /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
    *  on the local daemon, where an unclaimed workspace is open by design. */
   firstMember?: FirstMember
@@ -272,19 +273,13 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // daemon — 11 workspaces, 38 documents — best of 7 is 4.2ms, on a
       // control a person opens by clicking. Revisit if this list ever feeds
       // something that polls.
+      const visible =
+        options.visibleWorkspaces === undefined ? 'all' : await options.visibleWorkspaces(c)
       const counted = []
       for (const row of workspaces) {
-        // ponytail: N x (profileForBinding + isWorkspaceMember) per list — two
-        // lookups a row, the first answering the same person every time; a
-        // batched membership query is the upgrade path if this shows up in a
-        // profile. Checked
-        // before the per-row documentCount read, so a filtered-out row costs no tree open.
-        if (
-          options.admit !== undefined &&
-          (await options.admit(c, row.workspaceId)) !== 'admitted'
-        ) {
-          continue
-        }
+        // Before the per-row documentCount read, so a filtered-out row costs
+        // no tree open.
+        if (visible !== 'all' && !visible.has(row.workspaceId)) continue
         // Awaited IN the loop, never gathered: see the note above.
         counted.push(await summarizeWorkspace(deps, options, row))
       }

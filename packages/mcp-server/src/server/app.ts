@@ -50,8 +50,10 @@ import {
   creatorAsFirstMember,
   type FirstMember,
   membershipAdmit,
+  membershipVisibility,
   type OwnerChange,
   type WorkspaceAdmit,
+  type WorkspaceVisibility,
 } from './security/membership-gate.js'
 import { createWorkspacePeopleAdministration } from './security/people-administration.js'
 import { ownerChangeRefusal, serverModePeopleKeeper } from './security/people-keepers.js'
@@ -103,15 +105,23 @@ if (shouldLogMcpHttpDebug()) {
  */
 function membershipWiring(options: AppOptions): {
   admit: WorkspaceAdmit | undefined
+  visibleWorkspaces: WorkspaceVisibility | undefined
   firstMember: FirstMember | undefined
   ownerChange: OwnerChange | undefined
   callerName: CallerName | undefined
 } {
   const members = options.authMode === 'server-mode' ? options.people.members : undefined
   return members === undefined
-    ? { admit: undefined, firstMember: undefined, ownerChange: undefined, callerName: undefined }
+    ? {
+        admit: undefined,
+        visibleWorkspaces: undefined,
+        firstMember: undefined,
+        ownerChange: undefined,
+        callerName: undefined,
+      }
     : {
         admit: membershipAdmit(members),
+        visibleWorkspaces: membershipVisibility(members),
         firstMember: creatorAsFirstMember(members),
         ownerChange: (c, workspaceId) => ownerChangeRefusal(c, members, workspaceId),
         callerName: callerDisplayName(members),
@@ -122,7 +132,9 @@ function membershipWiring(options: AppOptions): {
 // exactly as it did before membership existed.
 function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>) {
   return {
-    ...(membership.admit === undefined ? {} : { admit: membership.admit }),
+    ...(membership.visibleWorkspaces === undefined
+      ? {}
+      : { visibleWorkspaces: membership.visibleWorkspaces }),
     ...(membership.firstMember === undefined ? {} : { firstMember: membership.firstMember }),
     ...(membership.ownerChange === undefined ? {} : { ownerChange: membership.ownerChange }),
     ...(membership.callerName === undefined ? {} : { callerName: membership.callerName }),

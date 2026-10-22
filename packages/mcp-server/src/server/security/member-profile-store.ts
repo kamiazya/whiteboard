@@ -108,6 +108,10 @@ export interface MemberProfileStore {
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
+  /** Every workspace this user is a member of, in one read — what a listing
+   *  filters by, so it costs the caller's memberships and not the tenant's
+   *  workspaces. */
+  workspacesOf(profileId: string): Promise<string[]>
   /** This user's role in the workspace, or null when they are not a member. */
   membershipRole(workspaceId: string, profileId: string): Promise<WorkspaceRole | null>
   /** True while this user exists, is not deactivated, and is a member of the
@@ -314,6 +318,15 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       (await roleIn(db, workspaceId, profileId)) === null ? 'not-a-member' : 'member',
 
     membershipRole: (workspaceId, profileId) => roleIn(db, workspaceId, profileId),
+
+    async workspacesOf(profileId) {
+      const rows = await db
+        .selectFrom('workspaceMemberships')
+        .select('workspaceId')
+        .where('profileId', '=', profileId)
+        .execute()
+      return rows.map((row) => row.workspaceId)
+    },
 
     async holdsAccess(workspaceId, profileId) {
       const row = await db
