@@ -152,6 +152,26 @@ describe('a workspace-document update writing a document envelope kind', () => {
     expect(store.saves).toBe(0)
   })
 
+  it("refuses a node's own kind rewritten under an unkinded envelope as placement", async () => {
+    const store = seed(null)
+    const update = updateFrom(store.get(), (client) => {
+      const node = client
+        .getTree('tree')
+        .getNodes()
+        .find((each) => each.data.get('documentId') === BOARD)
+      node?.data.set('kind', 'markdown')
+    })
+
+    const result = await applyWorkspaceDocumentUpdate(deps(store), {
+      workspaceId: WS,
+      update,
+      mayPlaceDocuments: false,
+    })
+
+    expect(result.kind).toBe('placement-refused')
+    expect(store.saves).toBe(0)
+  })
+
   it("claims an unkinded document as its node's kind", async () => {
     const store = seed(null)
 
