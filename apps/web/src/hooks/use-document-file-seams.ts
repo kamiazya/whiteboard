@@ -177,10 +177,8 @@ export function useDocumentFileSeams({
   // A rejection is the adapter's "could not read" (see `DocumentFileAdapter`),
   // so it is asked again; `undefined` is "nothing here", terminal until the
   // stamp moves.
-  //
-  // ponytail: every stamp a target has had stays cached for the page's life;
-  // evict superseded keys in `usePrefetchedEntries` if a long session's
-  // memory says it matters.
+  const stampRef = useRef(stampOf)
+  stampRef.current = stampOf
   const cache = usePrefetchedEntries<LoadedFileDocument>(
     useCallback(
       (loaded) => {
@@ -196,6 +194,15 @@ export function useDocumentFileSeams({
       },
       [bodies, canvas, recordFor, stampOf],
     ),
+    // One answer per reference: the current stamp's once it has landed, and
+    // until then the latest earlier one, so the embed stays drawn while its
+    // new revision loads. Every other revision is memory the page never reads.
+    useCallback((landed: string, entries: ReadonlyMap<string, unknown>) => {
+      const ref = refOf(landed)
+      const current = keyOf(ref, stampRef.current.get(ref) ?? '')
+      const keep = entries.has(current) ? current : landed
+      return [...entries.keys()].filter((key) => key !== keep && refOf(key) === ref)
+    }, []),
   )
   // `null` is the terminal "nothing here" slot, kept so the seams answer
   // without the layout retrying. A document with facets but no canvas is

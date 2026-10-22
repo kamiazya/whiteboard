@@ -75,14 +75,30 @@ export interface PrefetchRequest<V> {
  *   possible (an embedded body referencing further documents). Called
  *   inside the effect, so it must be stable — wrap it in `useCallback` over
  *   the inputs it reads.
+ * @param superseded The keys an answer that just landed under `landed` makes
+ *   worth forgetting, given the cache with it in. Without one nothing is ever
+ *   evicted, which is right for a key space that does not grow by itself;
+ *   one keyed by revision grows with every edit made elsewhere. Read at the
+ *   moment of landing, so it need not be stable.
  */
 export function usePrefetchedEntries<V>(
   collect: (loaded: ReadonlyMap<string, V>) => readonly PrefetchRequest<V>[],
+  superseded?: (landed: string, cache: ReadonlyMap<string, V | null>) => Iterable<string>,
 ): ReadonlyMap<string, V | null> {
   const [cache, setCache] = useState<ReadonlyMap<string, V | null>>(new Map())
   const inflight = useRef<Set<string>>(new Set())
   const attempts = useRef<Map<string, number>>(new Map())
   const unmounted = useRef(false)
+  const supersededRef = useRef(superseded)
+  supersededRef.current = superseded
+  const land = (prev: ReadonlyMap<string, V | null>, key: string, value: V | null) => {
+    const next = new Map(prev).set(key, value)
+    for (const stale of supersededRef.current?.(key, next) ?? []) {
+      next.delete(stale)
+      attempts.current.delete(stale)
+    }
+    return next
+  }
   useEffect(() => {
     unmounted.current = false
     return () => {
@@ -100,7 +116,7 @@ export function usePrefetchedEntries<V>(
         (value) => {
           inflight.current.delete(key)
           if (unmounted.current) return
-          setCache((prev) => new Map(prev).set(key, value ?? null))
+          setCache((prev) => land(prev, key, value ?? null))
         },
         () => {
           inflight.current.delete(key)
@@ -110,7 +126,7 @@ export function usePrefetchedEntries<V>(
           // A fresh map with the same entries: the effect keys on the cache's
           // IDENTITY, so this is what asks again without writing an answer
           // this load never gave.
-          setCache((prev) => (tried >= allowed ? new Map(prev).set(key, null) : new Map(prev)))
+          setCache((prev) => (tried >= allowed ? land(prev, key, null) : new Map(prev)))
         },
       )
     }
