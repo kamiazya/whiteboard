@@ -44,4 +44,15 @@ describe('the legend panel', () => {
     for (const gap of gaps) expect(gap).toBe(gaps[0])
     expect(Math.max(...ys)).toBeLessThanOrEqual(panelHeight)
   })
+
+  it('a legend listing no key is neither drawn nor given a band', () => {
+    const uncarriedOnly: Scene = {
+      nodes: scene.nodes,
+      legend: { keys: [], uncarried: { boxes: true, edges: true } },
+    }
+    const svg = renderSceneToSvg(uncarriedOnly, { padding: 0 })
+    expect(svg).not.toContain('data-wb-legend')
+    expect(svg).not.toContain('no key carries it')
+    expect(svg).toContain('viewBox="100 200 100 10"')
+  })
 })

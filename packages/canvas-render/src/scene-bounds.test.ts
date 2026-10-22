@@ -622,6 +622,10 @@ describe('sceneDocumentBounds', () => {
   // The producer never attaches a legend with nothing to say, but the type
   // admits one, and a panel of no rows must reserve no band — not the bare
   // margins around an empty box, which the guard's removal would leave.
+  it('reserves no band for a legend that only says colour is uncarried', () => {
+    const legend = { keys: [], uncarried: { boxes: true, edges: true } }
+    expect(sceneDocumentBounds({ nodes, legend })).toEqual(sceneBounds({ nodes }))
+  })
   it('reserves no band for a legend with nothing to say', () => {
     const legend = { keys: [], uncarried: { boxes: false, edges: false } }
     expect(sceneDocumentBounds({ nodes, legend })).toEqual(sceneBounds({ nodes }))
