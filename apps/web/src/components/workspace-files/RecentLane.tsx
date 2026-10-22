@@ -1,7 +1,7 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 
 export interface RecentLaneProps {
   /** The listing as loaded. Recorded ids are resolved against it. */
@@ -52,6 +52,7 @@ export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: Re
             <button
               key={entry.documentId}
               type="button"
+              aria-label={documentAccessibleName(entry, 'leaf')}
               onClick={() => onOpen(entry)}
               className="hover:bg-accent/40 flex w-28 shrink-0 flex-col overflow-hidden rounded-md border text-left md:w-32"
             >

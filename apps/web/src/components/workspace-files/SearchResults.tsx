@@ -14,10 +14,10 @@
  */
 
 import { LayoutGrid, List } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -99,10 +99,18 @@ function SearchResultCard({
   onDocumentContextMenu: SearchResultsProps['onDocumentContextMenu']
   thumbnail: (entry: WorkspaceDocumentEntry, sizeClass: string) => ReactNode
 }) {
+  const uid = useId()
+  const pathId = `${uid}-path`
+  const excerptId = `${uid}-excerpt`
+  const hasExcerpt = (contexts?.length ?? 0) > 0
   return (
     <button
       type="button"
       data-doc-path={entry.path}
+      // Label and kind are the name; where it lives and why it matched (the
+      // excerpt is body text) are the description.
+      aria-label={documentAccessibleName(entry, 'leaf')}
+      aria-describedby={hasExcerpt ? `${pathId} ${excerptId}` : pathId}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       onClick={() => onSelect(entry)}
       onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
@@ -141,7 +149,7 @@ function SearchResultCard({
         <span data-testid="result-title" className="truncate text-sm">
           <Highlighted text={titleOf(entry)} query={query} />
         </span>
-        <span className="text-muted-foreground truncate font-mono text-xs">
+        <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
           <Highlighted text={entry.path} query={query} />
         </span>
         {(entry.tags?.length ?? 0) > 0 && (
@@ -168,6 +176,7 @@ function SearchResultCard({
              nor the path shows it, so without this the row cannot say why it
              is here. */
           <span
+            id={excerptId}
             data-testid="result-excerpt"
             className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
           >

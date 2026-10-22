@@ -21,3 +21,16 @@ export function documentLabel(
   if (rule === 'path') return document.path
   return document.path.slice(document.path.lastIndexOf('/') + 1)
 }
+
+/**
+ * What a screen reader announces for a document in a list: what it is
+ * called, then what kind it is. Pictures, excerpts and badges are supporting
+ * detail a surface exposes as a description, never as the name.
+ */
+export function documentAccessibleName(
+  document: { readonly name?: string | null; readonly path: string; readonly kind?: string },
+  rule: UnnamedLabelRule,
+): string {
+  const kind = document.kind === 'spatial' ? 'Canvas' : 'Markdown note'
+  return `${documentLabel(document, rule)}, ${kind}`
+}

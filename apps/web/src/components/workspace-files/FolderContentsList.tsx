@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode, useId, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { folderContents } from './folder-contents.js'
@@ -70,7 +70,9 @@ function CardThumbnail({
   selection,
   changed,
   renderThumbnail,
+  changedId,
 }: {
+  changedId: string
   entry: WorkspaceDocumentEntry
   selection: FolderContentsListProps['selection']
   changed: FolderContentsListProps['changed']
@@ -95,6 +97,7 @@ function CardThumbnail({
            signal, and this one contributes to the card's own
            accessible name the way the kind badge already does. */
         <span
+          id={changedId}
           role="img"
           aria-label="Changed since you last opened it"
           data-testid="card-changed-dot"
@@ -158,10 +161,32 @@ function DocumentCard({
   onActivateDocument: FolderContentsListProps['onActivateDocument']
   onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu']
 }) {
+  const uid = useId()
+  const ids = {
+    changed: `${uid}-changed`,
+    conflict: `${uid}-conflict`,
+    pin: `${uid}-pin`,
+    age: `${uid}-age`,
+    tags: `${uid}-tags`,
+  }
+  const describedBy = [
+    changed?.has(entry.documentId) ? ids.changed : undefined,
+    entry.shadowed ? ids.conflict : undefined,
+    entry.pinOrder !== undefined ? ids.pin : undefined,
+    entry.updatedAt !== undefined ? ids.age : undefined,
+    (entry.tags?.length ?? 0) > 0 ? ids.tags : undefined,
+  ]
+    .filter((id) => id !== undefined)
+    .join(' ')
   return (
     <button
       type="button"
       data-doc-path={entry.path}
+      // The name is the label and kind alone; the picture, state badges, age
+      // and tags are the description, so a reader hears what the document is
+      // before anything about it.
+      aria-label={documentAccessibleName(entry, 'leaf')}
+      aria-describedby={describedBy === '' ? undefined : describedBy}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
       onClick={() => onOpen({ kind: 'document', document: entry })}
@@ -198,6 +223,7 @@ function DocumentCard({
         selection={selection}
         changed={changed}
         renderThumbnail={renderThumbnail}
+        changedId={ids.changed}
       />
       <span className="flex min-w-0 flex-col px-2 py-1.5">
         {/* The display name is the label everywhere else; the segment
@@ -210,6 +236,7 @@ function DocumentCard({
           </span>
           {entry.shadowed && (
             <span
+              id={ids.conflict}
               data-testid="card-shadowed-badge"
               title="Another document owns this path. Rename this one to resolve the conflict."
               className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
@@ -221,6 +248,7 @@ function DocumentCard({
             /* The pin is on the row, not only a sort position — state a
                  reader could not otherwise see on its object. */
             <Pin
+              id={ids.pin}
               role="img"
               aria-label="Pinned"
               className="text-muted-foreground ml-auto size-3 shrink-0"
@@ -228,12 +256,16 @@ function DocumentCard({
           )}
         </span>
         {entry.updatedAt !== undefined && (
-          <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
+          <span
+            id={ids.age}
+            data-testid="card-subtitle"
+            className="text-muted-foreground truncate text-xs"
+          >
             {formatRelative(entry.updatedAt)}
           </span>
         )}
         {(entry.tags?.length ?? 0) > 0 && (
-          <span className="text-muted-foreground truncate text-[11px]">
+          <span id={ids.tags} className="text-muted-foreground truncate text-[11px]">
             {entry.tags?.map((tag) => `#${tag}`).join(' ')}
           </span>
         )}
