@@ -6,6 +6,7 @@ import {
   fontDownloadUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { z } from 'zod'
+import { DATA_DIR_MODE, DATA_FILE_MODE } from '../../shared/data-modes.js'
 import { opentypeApi } from '../../shared/opentype.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
@@ -98,11 +99,11 @@ export async function installFont(id: string, options: InstallFontOptions): Prom
     )
   }
 
-  await mkdir(options.fontsDir, { recursive: true })
+  await mkdir(options.fontsDir, { recursive: true, mode: DATA_DIR_MODE })
   const path = join(options.fontsDir, `${entry.id}${extname(entry.path)}`)
   // Atomic, because a render running concurrently would otherwise hand resvg
   // a half-written file.
-  await writeFileAtomic(path, bytes)
+  await writeFileAtomic(path, bytes, { mode: DATA_FILE_MODE })
 
   log.notice({ id: entry.id, family: entry.family, bytes: bytes.byteLength }, 'installed font')
   return { id: entry.id, family: entry.family, path, bytes: bytes.byteLength }

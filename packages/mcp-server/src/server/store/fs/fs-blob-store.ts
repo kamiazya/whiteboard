@@ -12,9 +12,10 @@ import type {
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { DATA_DIR_MODE } from '../../../shared/data-modes.js'
 import { isMissingFileError } from '../../../shared/errno.js'
 import { sha256Hex } from '../../../shared/sha256.js'
-import { DATA_DIR_MODE, writeFileAtomicStaged } from '../../atomic-write.js'
+import { writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
 import { blobShardDir, blobShardPath } from '../../tenant/data-layout.js'
 import { corruptStoredData } from '../corrupt-stored-data.js'

@@ -8,7 +8,7 @@
 // template. Most of what is asserted below is that property holding.
 
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readdir } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import {
@@ -19,6 +19,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { opentypeApi } from '../../shared/opentype.js'
+import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { FontInstallError, installFont, MAX_FONT_BYTES } from './install-font.js'
@@ -152,6 +153,19 @@ describe('installFont', () => {
     // The whole point: the read side finds it without being told.
     expect(await installedFontFiles(fontsDir)).toContain(installed.path)
     expect(calls).toHaveLength(1)
+  })
+
+  // Held to the data dir's modes, not the umask's 0644 in 0755.
+  it.skipIf(!CHMOD_IS_OBSERVABLE)('writes the font owner-only under umask 022', async () => {
+    const previousUmask = process.umask(0o022)
+    try {
+      const { impl } = recordingFetch(syntheticFont(COVERED))
+      const installed = await installFont(known().id, { fontsDir, fetchImpl: impl })
+      expect((await stat(installed.path)).mode & 0o077).toBe(0)
+      expect((await stat(fontsDir)).mode & 0o077).toBe(0)
+    } finally {
+      process.umask(previousUmask)
+    }
   })
 
   it('requests exactly the pinned URL, refusing redirects and bounding the wait', async () => {

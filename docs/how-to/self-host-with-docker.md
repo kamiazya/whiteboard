@@ -773,10 +773,11 @@ Data written to `/data` is owned by UID 1001 (`whiteboard` user). Ensure the
 volume has the correct ownership if you pre-populate it.
 
 What the server creates there is readable by that user alone: the database,
-uploads and the trash are written `0600` in `0700` directories, whatever the
-umask, so other users on a host with a bind mount cannot read them. A
-directory that already exists keeps the mode it has, the bind-mount root
-included.
+uploads, the trash, exports and installed fonts are written `0600` in `0700`
+directories, whatever the umask, so other users on a host with a bind mount
+cannot read them. An export written to an output path you chose is created
+the same way. A file or directory that already exists keeps the mode it has,
+the bind-mount root included.
 
 ### Reclaiming unreferenced uploads
 

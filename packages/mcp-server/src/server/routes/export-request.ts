@@ -12,6 +12,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import type { ExportResponse } from '../../shared/api-contracts/export.js'
+import { DATA_DIR_MODE, DATA_FILE_MODE } from '../../shared/data-modes.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
@@ -135,8 +136,8 @@ export async function writeExportFile(
   },
 ): Promise<string> {
   if (target.outputPath !== undefined) {
-    await mkdir(dirname(target.outputPath), { recursive: true })
-    await writeFile(target.outputPath, data)
+    await mkdir(dirname(target.outputPath), { recursive: true, mode: DATA_DIR_MODE })
+    await writeFile(target.outputPath, data, { mode: DATA_FILE_MODE })
     return target.outputPath
   }
   let lastFilePath: string | undefined
@@ -147,9 +148,9 @@ export async function writeExportFile(
       target.extension,
     )
     lastFilePath = filePath
-    await mkdir(dirname(filePath), { recursive: true })
+    await mkdir(dirname(filePath), { recursive: true, mode: DATA_DIR_MODE })
     try {
-      await writeFile(filePath, data, { flag: 'wx' })
+      await writeFile(filePath, data, { flag: 'wx', mode: DATA_FILE_MODE })
       return filePath
     } catch (err) {
       if (!isErrnoCode(err, 'EEXIST')) throw err

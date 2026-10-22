@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { DATA_DIR_MODE, DATA_FILE_MODE } from '../shared/data-modes.js'
 import { commitStagedWrite } from '../shared/write-file-atomic.js'
 
 /**
@@ -17,16 +18,6 @@ import { commitStagedWrite } from '../shared/write-file-atomic.js'
  * digest or file id matches, and a copy of one resolves to nothing.
  */
 export const PENDING_WRITES_DIRNAME = '.pending-writes'
-
-/**
- * Content in the data dir is its owner's alone, as the database file is: an
- * upload or a trashed document's snapshot written under the umask lands 0644
- * in 0755 directories, which on a host bind mount every host user can read.
- * Directories that already exist keep the mode they have — an operator's
- * mount is theirs to set.
- */
-export const DATA_DIR_MODE = 0o700
-const DATA_FILE_MODE = 0o600
 
 /**
  * Write `bytes` to `targetPath` so no reader ever sees it half-written, and so
