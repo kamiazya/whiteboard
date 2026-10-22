@@ -109,7 +109,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/canvas-render/src/quality/polyline-geometry.ts#Point',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Rect',
   'packages/canvas-render/src/quality/polyline-geometry.ts#segmentLength',
-  'packages/canvas-render/src/references/targets.ts#REFERENCE_BUDGET',
   'packages/canvas-render/src/tidy-units.ts#mostlyInside',
   'packages/canvas-viewer/src/font-embedding.ts#fontBytesToDataUri',
   'packages/canvas-viewer/src/font-embedding.ts#viewerFontDataUri',
@@ -365,7 +364,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 153
+const DEBT_CEILING = 152
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

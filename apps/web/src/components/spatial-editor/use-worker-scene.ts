@@ -32,12 +32,12 @@ import {
   type FileRefLabel,
   FONT_DEGRADED,
   type LayoutRequest,
-  type LayoutResponse,
 } from '../../lib/layout-worker-protocol.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { attachThemeFaces } from '../../lib/theme-fonts.js'
+import { createLayoutChannel } from './layout-channel.js'
 
 /**
  * Below this, layout is not worth a round trip.
@@ -99,6 +99,37 @@ interface WorkerSceneWire {
   readonly fragments?: readonly FragmentEntry[]
   /** Where a worker layout's fragment misses go, to be rendered on this thread. */
   readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
+}
+
+/** What one offloaded layout is built from — the request's own fields, so the two cannot drift. */
+type SceneInputs = Pick<
+  LayoutRequest,
+  | 'theme'
+  | 'fileRefLabels'
+  | 'missingFileRefs'
+  | 'references'
+  | 'referencesRevision'
+  | 'expandedFileIds'
+  | 'fragments'
+  | 'suppressedBodyNodeIds'
+  | 'showResolved'
+  | 'threads'
+  | 'proposals'
+  | 'tagLibrary'
+  | 'style'
+> & {
+  readonly canvas: SpatialCanvas
+  /**
+   * Not sent to the worker — it asks `hasLoadedFace` itself — but a change
+   * here is what makes an OFFLOADED scene lay out again once a theme's face
+   * lands; the synchronous path re-runs off `options`.
+   */
+  readonly fontsGeneration: number | undefined
+}
+
+function layoutRequestFor(id: number, sent: SceneInputs): LayoutRequest {
+  const { fontsGeneration: _notSent, ...request } = sent
+  return { type: 'layout', id, ...request }
 }
 
 /**
@@ -178,14 +209,13 @@ export function useWorkerScene(
   /** Latched on a worker `error` event: module evaluation that failed once
    * fails identically on every reconstruction, so the session stays sync. */
   const workerDead = useRef(false)
-  const requestRef = useRef(0)
   const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
   // is merely stale is distinguishable from one that is current.
   const shownFor = useRef<unknown>(null)
 
   const inputs = useMemo(
-    () => ({
+    (): SceneInputs => ({
       canvas,
       theme: options.theme,
       fileRefLabels,
@@ -200,9 +230,6 @@ export function useWorkerScene(
       proposals: options.proposals,
       tagLibrary: options.tagLibrary,
       style: options.style,
-      // Not sent to the worker — it asks `hasLoadedFace` itself — but a
-      // change here is what makes an OFFLOADED scene lay out again once a
-      // theme's face lands; the synchronous path re-runs off `options`.
       fontsGeneration: options.fontsGeneration,
     }),
     [
@@ -228,90 +255,47 @@ export function useWorkerScene(
   // stand when it lands, not as they stood when the request went out.
   const latest = useRef({ inputs, renderNow, onFragmentsAsked: wire?.onFragmentsAsked })
   latest.current = { inputs, renderNow, onFragmentsAsked: wire?.onFragmentsAsked }
-  // One request in flight, and only the NEWEST input waiting behind it. A
-  // stream of remote edits to a large board arrives faster than it lays out,
-  // and a worker handed every one would lay out every one — each a full
-  // layout and a clone of the board — to draw only the last.
-  const inFlight = useRef<{ readonly detach: () => void } | null>(null)
-  const pending = useRef<typeof inputs | null>(null)
-
-  const post = (worker: Worker, sent: typeof inputs) => {
-    const id = ++requestRef.current
-    const detach = () => {
-      worker.removeEventListener('message', onMessage)
-      worker.removeEventListener('error', onError)
-    }
-    // The fallback lays out what is asked for NOW, so nothing is left waiting.
-    const fallBack = () => {
-      pending.current = null
-      shownFor.current = latest.current.inputs
-      setRendered(latest.current.renderNow())
-    }
-    const onMessage = (event: MessageEvent<LayoutResponse>) => {
-      const response = event.data
-      if (response.id !== id) return
-      detach()
-      inFlight.current = null
-      if (response.type === 'failed') {
-        if (response.reason === FONT_DEGRADED) {
-          fontDegraded.current = true
-          // Not a transient failure: this realm cannot measure text the way
-          // the main thread does, so every later request would be wrong the
-          // same way. Retire the worker and stay synchronous for the session.
+  const channel = useMemo(
+    () =>
+      createLayoutChannel<SceneInputs>({
+        requestFor: layoutRequestFor,
+        onReply: (response, sent, worker) => {
+          if (response.type === 'failed') {
+            if (response.reason === FONT_DEGRADED) {
+              fontDegraded.current = true
+              // Not a transient failure: this realm cannot measure text the
+              // way the main thread does, so every later request would be
+              // wrong the same way. Retire the worker and stay synchronous.
+              worker.terminate()
+              workerRef.current = null
+            }
+            shownFor.current = latest.current.inputs
+            setRendered(latest.current.renderNow())
+            return
+          }
+          // Drawn even when superseded: it is newer than what is on screen,
+          // and under a steady stream of edits no reply would ever be the
+          // newest. `sceneCurrent` says which it is.
+          shownFor.current = sent
+          if (response.type === 'laid-out') {
+            latest.current.onFragmentsAsked?.(response.fragmentsAsked ?? [])
+            setRendered(response)
+          }
+        },
+        // A worker whose MODULE fails to evaluate never throws at
+        // construction; it fires `error` and no reply ever comes. That is as
+        // permanent as a missing face, so the session stays synchronous —
+        // a degraded worker costs responsiveness, never content.
+        onWorkerError: (worker) => {
           worker.terminate()
           workerRef.current = null
-        }
-        fallBack()
-        return
-      }
-      // Drawn even when superseded: it is newer than what is on screen, and
-      // under a steady stream of edits no reply would ever be the newest.
-      // `sceneCurrent` says which it is.
-      shownFor.current = sent
-      latest.current.onFragmentsAsked?.(response.fragmentsAsked ?? [])
-      setRendered(response)
-      const next = pending.current
-      pending.current = null
-      if (next !== null && next !== sent) post(worker, next)
-    }
-    // A worker whose MODULE fails to evaluate never throws at construction —
-    // it fires this event instead, and no `message` will ever come. Without a
-    // listener the request would hang and the previous scene would stay on
-    // screen for every later edit, which breaks this file's own "a degraded
-    // worker costs responsiveness, never content" invariant. Eval failure is
-    // as permanent as a missing font face, so the worker is retired the same
-    // way and the session stays synchronous.
-    const onError = () => {
-      detach()
-      inFlight.current = null
-      worker.terminate()
-      workerRef.current = null
-      workerDead.current = true
-      fallBack()
-    }
-    worker.addEventListener('message', onMessage)
-    worker.addEventListener('error', onError)
-    inFlight.current = { detach }
-    const request: LayoutRequest = {
-      type: 'layout',
-      id,
-      canvas: sent.canvas,
-      theme: sent.theme,
-      fileRefLabels: sent.fileRefLabels,
-      missingFileRefs: sent.missingFileRefs,
-      references: sent.references,
-      referencesRevision: sent.referencesRevision,
-      expandedFileIds: sent.expandedFileIds,
-      fragments: sent.fragments,
-      suppressedBodyNodeIds: sent.suppressedBodyNodeIds,
-      showResolved: sent.showResolved,
-      threads: sent.threads,
-      proposals: sent.proposals,
-      tagLibrary: sent.tagLibrary,
-      style: sent.style,
-    }
-    worker.postMessage(request)
-  }
+          workerDead.current = true
+          shownFor.current = latest.current.inputs
+          setRendered(latest.current.renderNow())
+        },
+      }),
+    [],
+  )
 
   useEffect(() => {
     if (!offloadable) return
@@ -332,14 +316,10 @@ export function useWorkerScene(
       setRendered(renderNow())
       return
     }
-    if (inFlight.current !== null) {
-      pending.current = inputs
-      return
-    }
-    post(worker, inputs)
-    // `renderNow` and `post` close over the current inputs by design: a
-    // fallback must lay out what was asked for, not what the effect last saw.
-  }, [inputs, offloadable])
+    channel.submit(worker, inputs)
+    // `renderNow` closes over the current inputs by design: a fallback must
+    // lay out what was asked for, not what the effect last saw.
+  }, [inputs, offloadable, channel])
 
   // Started at MOUNT, not on the first edit. The worker's module load and its
   // font registration are one-time costs, and paying them inside the first
@@ -356,13 +336,11 @@ export function useWorkerScene(
     // real session, and a request left marked in flight would hold every later
     // input pending for good.
     () => () => {
-      inFlight.current?.detach()
-      inFlight.current = null
-      pending.current = null
+      channel.reset()
       workerRef.current?.terminate()
       workerRef.current = null
     },
-    [],
+    [channel],
   )
 
   // Whether the scene handed back was built from the CURRENT inputs. The

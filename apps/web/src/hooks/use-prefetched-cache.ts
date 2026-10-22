@@ -65,6 +65,24 @@ export interface PrefetchRequest<V> {
   readonly attempts?: number
 }
 
+/** The cache with `key` answered, minus what that answer supersedes. */
+function withAnswer<V>(
+  prev: ReadonlyMap<string, V | null>,
+  key: string,
+  value: V | null,
+  superseded:
+    | ((landed: string, cache: ReadonlyMap<string, V | null>) => Iterable<string>)
+    | undefined,
+  attempts: Map<string, number>,
+): ReadonlyMap<string, V | null> {
+  const next = new Map(prev).set(key, value)
+  for (const stale of superseded?.(key, next) ?? []) {
+    next.delete(stale)
+    attempts.delete(stale)
+  }
+  return next
+}
+
 /**
  * The cache itself, keyed — for a consumer that builds something over the
  * whole of what has loaded (a reference graph) rather than looking keys up
@@ -91,14 +109,8 @@ export function usePrefetchedEntries<V>(
   const unmounted = useRef(false)
   const supersededRef = useRef(superseded)
   supersededRef.current = superseded
-  const land = (prev: ReadonlyMap<string, V | null>, key: string, value: V | null) => {
-    const next = new Map(prev).set(key, value)
-    for (const stale of supersededRef.current?.(key, next) ?? []) {
-      next.delete(stale)
-      attempts.current.delete(stale)
-    }
-    return next
-  }
+  const land = (prev: ReadonlyMap<string, V | null>, key: string, value: V | null) =>
+    withAnswer(prev, key, value, supersededRef.current, attempts.current)
   useEffect(() => {
     unmounted.current = false
     return () => {
