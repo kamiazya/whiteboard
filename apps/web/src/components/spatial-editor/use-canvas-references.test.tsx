@@ -40,6 +40,7 @@ describe('useCanvasReferences', () => {
     )
     rerender({ references: grown })
     expect(result.current).toBe(first)
+    expect(result.current.revision).toBe(first.revision)
 
     const edited = referenceWire(
       new Map([['notes/plan', { documentId: NOTE_ID, body: 'the plan, revised' }]]),
@@ -49,6 +50,8 @@ describe('useCanvasReferences', () => {
     )
     rerender({ references: edited })
     expect(result.current).not.toBe(first)
+    // The worker keys its content cache on this token, so it must move with the rows.
+    expect(result.current.revision).not.toBe(first.revision)
     expect(result.current.wire?.entries[0]?.[1]?.body).toBe('the plan, revised')
   })
 

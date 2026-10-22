@@ -281,6 +281,17 @@ function omittedReferences(
     : {}
 }
 
+/**
+ * What the content cache keys a request's references by: the caller's
+ * revision where it sent one, else the wire itself. A wire never carries a
+ * lone `revision` field, so the two forms cannot name one key.
+ */
+function referencesIdentity(request: LayoutRequest): unknown {
+  return request.referencesRevision === undefined
+    ? (request.references ?? null)
+    : { revision: request.referencesRevision }
+}
+
 async function handleLayout(request: LayoutRequest): Promise<void> {
   try {
     if (!(await measurable(request.id))) return
@@ -314,7 +325,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
         // The look the request asks for is part of what its bodies ARE: a
         // theme changes their ink even where it changes no metric.
         ...(request.style === undefined ? {} : { style: request.style }),
-        wireKey: JSON.stringify([request.references ?? null, fragments.keys]),
+        wireKey: JSON.stringify([referencesIdentity(request), fragments.keys]),
       }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,

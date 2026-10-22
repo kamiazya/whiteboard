@@ -1,4 +1,4 @@
-import { scanReferences } from '@kamiazya/whiteboard-codec'
+import { findNextReference } from '@kamiazya/whiteboard-codec'
 import {
   isImageRef,
   nodeFile,
@@ -26,6 +26,105 @@ const DEPTH_CAP = 3
 export const REFERENCE_BUDGET = 256
 
 /**
+ * How many distinct targets one body or canvas contributes to a walk. Once a
+ * walk has read `REFERENCE_BUDGET` distinct targets of one list, every one of
+ * them is in its set — added, or there already — so the set is full and
+ * nothing later in the list can be added. That is what lets the scan stop.
+ */
+const CONTRIBUTION_CAP = REFERENCE_BUDGET
+
+/** Distinct non-image targets in the order written, stopping at the cap. */
+class Contribution {
+  readonly list: string[] = []
+  private readonly seen = new Set<string>()
+  get full(): boolean {
+    return this.list.length >= CONTRIBUTION_CAP
+  }
+  add(target: string): void {
+    // The one image filter, ahead of the cap, so a body or canvas full of
+    // pictures cannot crowd a document out, whichever arm names them.
+    if (this.full || isImageRef(target) || this.seen.has(target)) return
+    this.seen.add(target)
+    this.list.push(target)
+  }
+  addBody(body: string): void {
+    let cursor = 0
+    while (!this.full) {
+      const match = findNextReference(body, cursor)
+      if (match === undefined) return
+      this.add(match.target)
+      cursor = match.index + match.full.length
+    }
+  }
+}
+
+function bodyTargets(body: string): readonly string[] {
+  const out = new Contribution()
+  out.addBody(body)
+  return out.list
+}
+
+/**
+ * Remembered per object, because a keeper re-walks on every load that lands
+ * and the bodies it has already read are most of what it holds: without this,
+ * N notes landing one at a time read their bodies N times over. Sound because
+ * a canvas and a loaded record are immutable values — a new revision is a new
+ * object.
+ */
+const canvasTargetsMemo = new WeakMap<SpatialCanvas, readonly string[]>()
+const entryTargetsMemo = new WeakMap<LoadedReference, readonly string[]>()
+const canvasImagesMemo = new WeakMap<SpatialCanvas, readonly string[]>()
+const entryImagesMemo = new WeakMap<LoadedReference, readonly string[]>()
+
+function remembered<K extends object>(
+  memo: WeakMap<K, readonly string[]>,
+  key: K,
+  compute: (key: K) => readonly string[],
+): readonly string[] {
+  const known = memo.get(key)
+  if (known !== undefined) return known
+  const value = compute(key)
+  memo.set(key, value)
+  return value
+}
+
+function canvasTargets(canvas: SpatialCanvas): readonly string[] {
+  return remembered(canvasTargetsMemo, canvas, () => {
+    const out = new Contribution()
+    for (const node of canvas.nodes) {
+      if (out.full) break
+      const file = nodeFile(node)
+      const text = nodeText(node)
+      if (file !== undefined) out.add(file)
+      // A text node's body is markdown the composer lays out with the same
+      // seams a note gets, so what it embeds and links has to load too.
+      else if (text !== undefined) out.addBody(text)
+    }
+    return out.list
+  })
+}
+
+function entryTargets(entry: LoadedReference): readonly string[] {
+  return remembered(entryTargetsMemo, entry, () => {
+    if (entry.body !== undefined) return bodyTargets(entry.body)
+    if (entry.canvas !== undefined) return canvasTargets(entry.canvas)
+    return []
+  })
+}
+
+function canvasImages(canvas: SpatialCanvas): readonly string[] {
+  return remembered(canvasImagesMemo, canvas, () => storedImageRefs({ canvas }))
+}
+
+function entryImages(entry: LoadedReference): readonly string[] {
+  return remembered(entryImagesMemo, entry, () => {
+    if (entry.body !== undefined) return storedImageRefs({ body: entry.body })
+    if (entry.canvas !== undefined) return canvasImages(entry.canvas)
+    return []
+  })
+}
+
+/**
  * What a render has to load: every document its seeds point at, as written.
  *
  * The ONE definition of "what counts as a reference", so a keeper never
@@ -47,39 +146,23 @@ export function referenceTargets(seeds: {
 }): readonly string[] {
   const targets = new Set<string>()
   const queue: { readonly target: string; readonly depth: number }[] = []
-  // The one image filter, ahead of the budget, so a body or canvas full of
-  // pictures cannot crowd a document out of it, whichever arm names them.
-  const add = (target: string, depth: number) => {
-    if (isImageRef(target)) return
-    if (targets.size >= REFERENCE_BUDGET || targets.has(target)) return
-    targets.add(target)
-    queue.push({ target, depth })
-  }
-  const addBody = (body: string, depth: number) => {
-    for (const match of scanReferences(body)) add(match.target, depth)
-  }
-  const addCanvas = (canvas: SpatialCanvas, depth: number) => {
-    for (const node of canvas.nodes) {
-      const file = nodeFile(node)
-      const text = nodeText(node)
-      if (file !== undefined) add(file, depth)
-      // A text node's body is markdown the composer lays out with the same
-      // seams a note gets, so what it embeds and links has to load too.
-      else if (text !== undefined) addBody(text, depth)
+  const spent = () => targets.size >= REFERENCE_BUDGET
+  const addAll = (list: readonly string[], depth: number) => {
+    for (const target of list) {
+      if (spent()) return
+      if (targets.has(target)) continue
+      targets.add(target)
+      queue.push({ target, depth })
     }
   }
-  const addEntry = (entry: LoadedReference, depth: number) => {
-    if (entry.body !== undefined) addBody(entry.body, depth)
-    else if (entry.canvas !== undefined) addCanvas(entry.canvas, depth)
-  }
 
-  for (const body of seeds.bodies ?? []) addBody(body, 1)
-  for (const canvas of seeds.canvases ?? []) addCanvas(canvas, 1)
-  for (let i = 0; i < queue.length; i += 1) {
+  for (const body of seeds.bodies ?? []) if (!spent()) addAll(bodyTargets(body), 1)
+  for (const canvas of seeds.canvases ?? []) if (!spent()) addAll(canvasTargets(canvas), 1)
+  for (let i = 0; i < queue.length && !spent(); i += 1) {
     const { target, depth } = queue[i] as (typeof queue)[number]
     if (depth >= DEPTH_CAP) continue
     const entry = seeds.loaded?.get(target)
-    if (entry !== undefined && entry !== null) addEntry(entry, depth + 1)
+    if (entry !== undefined && entry !== null) addAll(entryTargets(entry), depth + 1)
   }
   return [...targets]
 }
@@ -108,21 +191,19 @@ export function imageTargets(seeds: {
   // bound whichever route reaches it. Sharing `referenceTargets`'s walk
   // without sharing its budget left this unbounded, and a keeper starts one
   // read per entry.
-  const add = (url: string) => {
-    if (images.size < REFERENCE_BUDGET) images.add(url)
-  }
   const addAll = (refs: readonly string[]) => {
-    for (const ref of refs) add(ref)
+    for (const ref of refs) {
+      if (images.size >= REFERENCE_BUDGET) return
+      images.add(ref)
+    }
   }
   for (const body of seeds.bodies ?? []) addAll(storedImageRefs({ body }))
-  for (const canvas of seeds.canvases ?? []) addAll(storedImageRefs({ canvas }))
+  for (const canvas of seeds.canvases ?? []) addAll(canvasImages(canvas))
   // The documents this render draws, from the same definition, so what an
   // embedded note holds is reached without a second walk of its own.
   for (const target of referenceTargets(seeds)) {
     const entry = seeds.loaded?.get(target)
-    if (entry === undefined || entry === null) continue
-    if (entry.body !== undefined) addAll(storedImageRefs({ body: entry.body }))
-    else if (entry.canvas !== undefined) addAll(storedImageRefs({ canvas: entry.canvas }))
+    if (entry !== undefined && entry !== null) addAll(entryImages(entry))
   }
   return [...images]
 }

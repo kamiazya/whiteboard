@@ -8,7 +8,8 @@
  * their total length on the main thread, and a board a member can legitimately
  * build (256 notes of 256K characters) freezes the tab while it opens.
  *
- * The instrument counts the characters the two body scanners read and the
+ * The instrument counts the characters the body scanners read (both forms
+ * of the reference scanner, and the picture scanner) and the
  * characters `JSON.stringify` produces, against the total length of the
  * bodies, so the bound states the property directly: reading what loaded is
  * linear in what loaded.
@@ -30,6 +31,13 @@ vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
     scanReferences: (value: string) => {
       scanned.references += value.length
       return actual.scanReferences(value)
+    },
+    // The incremental form reads from the cursor to the end of what it found.
+    findNextReference: (value: string, cursor: number) => {
+      const match = actual.findNextReference(value, cursor)
+      scanned.references +=
+        (match === undefined ? value.length : match.index + match.full.length) - cursor
+      return match
     },
   }
 })

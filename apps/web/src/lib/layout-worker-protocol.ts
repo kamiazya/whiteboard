@@ -98,6 +98,14 @@ export type LayoutRequest = LayoutSubject & {
    */
   readonly references?: ReferenceWire
   /**
+   * A token for `references`, sent with it by a caller that already knows
+   * when its wire changes: two requests with the same revision carry the same
+   * wire. The worker keys its content cache on it instead of on the wire's
+   * bytes, which would read every embedded body again per request. Absent,
+   * the bytes are the key.
+   */
+  readonly referencesRevision?: number
+  /**
    * File nodes the editor's LOD gate expanded THIS render — the gate reads
    * the viewport, which the worker does not have, so its decision crosses as
    * ids and the worker's `expandFileNode` is a lookup.

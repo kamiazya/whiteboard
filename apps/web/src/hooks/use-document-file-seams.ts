@@ -106,6 +106,28 @@ function loadedReferenceFor(
 }
 
 /**
+ * `loadedReferenceFor`, answering the SAME record for the same loaded
+ * document for as long as the alias table is the same. The walk remembers
+ * what it read of a record by its identity, so a record rebuilt on every load
+ * that lands is a body read again on every load that lands.
+ */
+function useLoadedReferences(
+  resolveAlias: AliasResolver | undefined,
+): (ref: string, document: LoadedFileDocument | null) => LoadedReference | null {
+  return useMemo(() => {
+    const records = new WeakMap<LoadedFileDocument, { ref: string; record: LoadedReference }>()
+    return (ref, document) => {
+      if (document === null) return null
+      const known = records.get(document)
+      if (known !== undefined && known.ref === ref) return known.record
+      const record = loadedReferenceFor(ref, document, resolveAlias)
+      if (record !== null) records.set(document, { ref, record })
+      return record
+    }
+  }, [resolveAlias])
+}
+
+/**
  * A prefetch key is the reference AND the stamp it was asked under, so a moved
  * stamp is a key never fetched and the shared hook loads it like any other.
  * NUL cannot occur in a reference or a stamp, so splitting on it is exact.
@@ -147,6 +169,7 @@ export function useDocumentFileSeams({
   // reactive state.
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
+  const recordFor = useLoadedReferences(resolveAlias)
 
   // Everything the canvas points at — its file nodes AND what its text nodes
   // embed or link, transitively through what has loaded — plus what a body
@@ -163,7 +186,7 @@ export function useDocumentFileSeams({
       (loaded) => {
         const graph = new Map<string, LoadedReference | null>()
         for (const [ref, document] of byReference(loaded, stampOf)) {
-          graph.set(ref, loadedReferenceFor(ref, document, resolveAlias))
+          graph.set(ref, recordFor(ref, document))
         }
         return referenceTargets({ canvases: [canvas], bodies, loaded: graph }).map((ref) => ({
           key: keyOf(ref, stampOf.get(ref) ?? ''),
@@ -171,7 +194,7 @@ export function useDocumentFileSeams({
           attempts: TRANSIENT_LOAD_ATTEMPTS,
         }))
       },
-      [bodies, canvas, resolveAlias, stampOf],
+      [bodies, canvas, recordFor, stampOf],
     ),
   )
   // `null` is the terminal "nothing here" slot, kept so the seams answer
@@ -184,10 +207,10 @@ export function useDocumentFileSeams({
   const graph = useMemo(() => {
     const entries = new Map<string, LoadedReference | null>()
     for (const [ref, document] of embedContent) {
-      entries.set(ref, loadedReferenceFor(ref, document, resolveAlias))
+      entries.set(ref, recordFor(ref, document))
     }
     return entries
-  }, [embedContent, resolveAlias])
+  }, [embedContent, recordFor])
 
   // Every picture this render draws, from the one definition
   // (`storedImageRefs`): a canvas's image file nodes, frame backgrounds, and

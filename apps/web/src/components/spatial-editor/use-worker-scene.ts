@@ -93,6 +93,8 @@ interface WorkerSceneWire {
   readonly fileRefLabels?: readonly FileRefLabel[]
   readonly missingFileRefs?: readonly string[]
   readonly references?: ReferenceWire
+  /** Changes exactly when `references` does (`useCanvasReferences`). */
+  readonly referencesRevision?: number
   readonly expandedFileIds?: readonly string[]
   readonly fragments?: readonly FragmentEntry[]
   /** Where a worker layout's fragment misses go, to be rendered on this thread. */
@@ -139,6 +141,7 @@ export function useWorkerScene(
   const fileRefLabels = wire?.fileRefLabels
   const missingFileRefs = wire?.missingFileRefs
   const references = wire?.references
+  const referencesRevision = wire?.referencesRevision
   const expandedFileIds = wire?.expandedFileIds
   const fragments = wire?.fragments
   const options = useMemo(
@@ -188,6 +191,7 @@ export function useWorkerScene(
       fileRefLabels,
       missingFileRefs,
       references,
+      referencesRevision,
       expandedFileIds,
       fragments,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
@@ -207,6 +211,7 @@ export function useWorkerScene(
       fileRefLabels,
       missingFileRefs,
       references,
+      referencesRevision,
       expandedFileIds,
       fragments,
       options.suppressedBodyNodeIds,
@@ -283,6 +288,7 @@ export function useWorkerScene(
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
       references: inputs.references,
+      referencesRevision: inputs.referencesRevision,
       expandedFileIds: inputs.expandedFileIds,
       fragments: inputs.fragments,
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,

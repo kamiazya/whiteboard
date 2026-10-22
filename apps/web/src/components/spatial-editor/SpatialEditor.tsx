@@ -495,7 +495,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       containerSizeOf,
     })
     // What THIS canvas can read of the host's wider wire, by identity.
-    const { wire: canvasWire, seams } = useCanvasReferences(canvas, references)
+    const {
+      wire: canvasWire,
+      seams,
+      revision: referencesRevision,
+    } = useCanvasReferences(canvas, references)
     // The file-reference seam — the LOD gate, label/missing resolution and
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
@@ -565,7 +569,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         fontsGeneration,
       },
       fileSeamOptions,
-      { ...seamWire, fileRefLabels: fileRefOptions, references: canvasWire },
+      {
+        ...seamWire,
+        fileRefLabels: fileRefOptions,
+        references: canvasWire,
+        referencesRevision,
+      },
     )
     const {
       keyed,
