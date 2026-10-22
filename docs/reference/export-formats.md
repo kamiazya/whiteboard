@@ -757,8 +757,9 @@ than linked.
 The PNG a browser export produces carries the editor's own font inside the
 image data it rasterises from, so it draws the text the editor showed rather
 than whatever font the operating system offers. A saved `.svg` names the family
-instead of carrying it — a viewer with Roboto renders it identically, and one
-without it gets a smaller file.
+instead of carrying it, as `Roboto, system-ui, sans-serif` — a viewer with Roboto
+renders it identically, and one without it falls back to its system sans-serif face
+(rather than a serif one) and gets a smaller file.
 
 **Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
 document on the clipboard as plain text — the quickest way to hand the exact
