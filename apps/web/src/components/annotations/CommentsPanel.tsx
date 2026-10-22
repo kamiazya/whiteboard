@@ -148,6 +148,29 @@ function glideMovedRows(
   return seen
 }
 
+/**
+ * Moves focus to the revealed conversation's row.
+ *
+ * The ROW's toggle rather than its reply box: it is the conversation's
+ * heading, and Tab continues from it into the verbs, the replies and the
+ * reply box in the order they are read.
+ *
+ * Also keyed on the row EXISTING: a conversation the reader has just created
+ * is named before the keeper has answered with it, and focus dropped by the
+ * unmounting draft box would otherwise stay on the body.
+ */
+function useFocusRevealedRow(
+  revealThreadId: string | null,
+  threads: readonly CommentThread[],
+  rowRefs: { readonly current: ReadonlyMap<string, HTMLButtonElement> },
+): void {
+  const rowPresent = revealThreadId !== null && threads.some((t) => t.id === revealThreadId)
+  useEffect(() => {
+    if (revealThreadId === null) return
+    rowRefs.current.get(revealThreadId)?.focus()
+  }, [revealThreadId, rowPresent, rowRefs])
+}
+
 export function CommentsPanel({
   threads,
   resolveAnchor,
@@ -189,13 +212,7 @@ export function CommentsPanel({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const composeRef = useRef<SourcePaneApi | null>(null)
 
-  // The ROW's toggle rather than its reply box: it is the conversation's
-  // heading, and Tab continues from it into the verbs, the replies and the
-  // reply box in the order they are read.
-  useEffect(() => {
-    if (revealThreadId === null) return
-    rowRefs.current.get(revealThreadId)?.focus()
-  }, [revealThreadId])
+  useFocusRevealedRow(revealThreadId, threads, rowRefs)
 
   // A new conversation has nothing to read, so the draft box is the whole
   // of what was asked for.
