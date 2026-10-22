@@ -1138,6 +1138,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applySelection({ type: 'collapse-extras' })
     }
 
+    const changeTool = (next: EditorTool) => {
+      setTool(next)
+      toolChosenByUserRef.current = true
+      onToolChosen?.(next)
+      // A context menu belongs to the mode it opened in; it must not
+      // outlive a switch (especially into view-only hand mode).
+      setContextMenu(null)
+      // Entering hand mode drops EVERY edit affordance, not just the
+      // menu: a surviving selection would keep Delete/resize/connect
+      // handles live, an open editor would keep accepting text, and an
+      // armed connect could still complete — all edits, in a mode that
+      // promises none. The gesture is cancelled like Escape.
+      if (next === 'hand') {
+        if (gestureState.kind !== 'idle') {
+          applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+        }
+        applySelection({ type: 'clear' })
+        setSelectedEdgeId(null)
+        setEdgeLabelEditId(null)
+        setGroupLabelEditId(null)
+        setMarquee(null)
+      }
+    }
+
     // The keyboard surface — shortcut dispatch plus the three keydown
     // handlers the JSX wires (canvas root, focused resize handle, connect
     // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
@@ -1169,6 +1193,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       stepZoom,
       frameContent,
       frameSelection,
+      changeTool,
+      createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
     })
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
@@ -1554,32 +1580,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               : () => openImagePicker(imagePicker, { backgroundGroupId: null, point: null })
           }
           tool={tool}
-          onToolChange={(next) => {
-            setTool(next)
-            toolChosenByUserRef.current = true
-            onToolChosen?.(next)
-            // A context menu is an edit affordance of the mode it was
-            // opened in — switching tools (especially into view-only hand
-            // mode) must not leave it floating.
-            setContextMenu(null)
-            // Entering hand mode drops EVERY edit affordance, not just the
-            // menu: a surviving selection would keep Delete/resize/connect
-            // handles live, an open editor would keep accepting text, and
-            // an armed connect could still complete — all edits in a mode
-            // whose contract is "no press can change the canvas". The
-            // in-flight gesture is cancelled like Escape (uncommitted text
-            // is discarded, not committed).
-            if (next === 'hand') {
-              if (gestureState.kind !== 'idle') {
-                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
-              }
-              applySelection({ type: 'clear' })
-              setSelectedEdgeId(null)
-              setEdgeLabelEditId(null)
-              setGroupLabelEditId(null)
-              setMarquee(null)
-            }
-          }}
+          onToolChange={changeTool}
         />
         <CanvasNotice
           testId="clipboard-notice"

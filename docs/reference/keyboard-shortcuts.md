@@ -17,13 +17,14 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| — | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you last chose on it |
-| — | Select — click to select, drag to marquee |
-| — | Connect — click one node, then another, to draw an edge |
-| — | Draw — drag across the board to leave a freehand stroke |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you last chose on it |
+| `V` | Select — click to select, drag to marquee |
+| `C` | Connect — click one node, then another, to draw an edge |
+| `D` | Draw — drag across the board to leave a freehand stroke |
+| `N` | Add a note at the centre of the view |
 | `Space` + drag | Pan from any tool, without leaving it |
 
-The four tools live in the bottom dock. On touch, two-finger drag pans and
+The four tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
 pinch zooms in every tool.
 
 ## Selection and editing

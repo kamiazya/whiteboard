@@ -168,3 +168,49 @@ describe('the overlay editors bindings are declared but never dispatched', () =>
     ).toBeUndefined()
   })
 })
+
+describe('the tool and new-note letters', () => {
+  const press = (key: string, over: Partial<KeyEventLike> = {}) =>
+    event({ key, code: `Key${key.toUpperCase()}`, ...over })
+  const LETTERS = [
+    ['v', 'tool-select'],
+    ['h', 'tool-hand'],
+    ['c', 'tool-connect'],
+    ['d', 'tool-draw'],
+    ['n', 'new-note'],
+  ] as const
+
+  it.each(LETTERS)('%s resolves to %s in every tool', (key, id) => {
+    for (const tool of ['select', 'hand', 'connect', 'draw'] as const) {
+      expect(findShortcutIn(EDITOR_SHORTCUTS, press(key), tool)?.id).toBe(id)
+    }
+  })
+
+  it('a held Cmd or Ctrl leaves the letter to the clipboard and duplicate chords', () => {
+    for (const [key] of LETTERS) {
+      for (const mod of [{ metaKey: true }, { ctrlKey: true }]) {
+        const found = findShortcutIn(EDITOR_SHORTCUTS, press(key, mod), 'select')
+        expect(found?.id.startsWith('tool-') || found?.id === 'new-note').not.toBe(true)
+      }
+    }
+  })
+
+  it('does not fire while typing in a text field', () => {
+    const input = document.createElement('input')
+    expect(
+      findShortcutIn(EDITOR_SHORTCUTS, press('v', { target: input }), 'select'),
+    ).toBeUndefined()
+  })
+
+  it('no two plain table rows answer the same press', () => {
+    for (const [key] of LETTERS) {
+      const matches = EDITOR_SHORTCUTS.filter(
+        (spec) =>
+          spec.handledInline !== true &&
+          spec.mod !== true &&
+          spec.keys?.some((k) => k.toLowerCase() === key),
+      )
+      expect(matches, key).toHaveLength(1)
+    }
+  })
+})

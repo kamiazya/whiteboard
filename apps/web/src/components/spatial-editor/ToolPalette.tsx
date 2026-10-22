@@ -313,13 +313,14 @@ export function ToolPalette({
                 data-testid="hand-tool-button"
                 aria-pressed={tool === 'hand'}
                 aria-label="Hand (pan)"
+                aria-keyshortcuts={shortcutAriaKeysFor('tool-hand')}
                 onClick={() => onToolChange('hand')}
                 className={TOOL_BUTTON_CLASS}
               >
                 <Hand aria-hidden="true" className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Hand — drag to pan</TooltipContent>
+            <TooltipContent>{withShortcut('Hand — drag to pan', 'tool-hand')}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -328,13 +329,14 @@ export function ToolPalette({
                 data-testid="select-tool-button"
                 aria-pressed={tool === 'select'}
                 aria-label="Select"
+                aria-keyshortcuts={shortcutAriaKeysFor('tool-select')}
                 onClick={() => onToolChange('select')}
                 className={TOOL_BUTTON_CLASS}
               >
                 <MousePointer2 aria-hidden="true" className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Select</TooltipContent>
+            <TooltipContent>{withShortcut('Select', 'tool-select')}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -343,13 +345,14 @@ export function ToolPalette({
                 data-testid="connect-tool-button"
                 aria-pressed={tool === 'connect'}
                 aria-label="Connect"
+                aria-keyshortcuts={shortcutAriaKeysFor('tool-connect')}
                 onClick={() => onToolChange('connect')}
                 className={TOOL_BUTTON_CLASS}
               >
                 <Spline aria-hidden="true" className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Connect nodes</TooltipContent>
+            <TooltipContent>{withShortcut('Connect nodes', 'tool-connect')}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -358,13 +361,14 @@ export function ToolPalette({
                 data-testid="draw-tool-button"
                 aria-pressed={tool === 'draw'}
                 aria-label="Draw"
+                aria-keyshortcuts={shortcutAriaKeysFor('tool-draw')}
                 onClick={() => onToolChange('draw')}
                 className={TOOL_BUTTON_CLASS}
               >
                 <Pencil aria-hidden="true" className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Draw — freehand ink</TooltipContent>
+            <TooltipContent>{withShortcut('Draw — freehand ink', 'tool-draw')}</TooltipContent>
           </Tooltip>
         </div>
         <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />

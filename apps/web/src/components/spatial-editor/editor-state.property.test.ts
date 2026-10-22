@@ -461,6 +461,13 @@ const SHORTCUT_COVERAGE = {
   'zoom-to-fit': 'not modelled: viewport only',
   'zoom-to-selection': 'not modelled: viewport only',
   'space-pan': 'not modelled: viewport only',
+  'tool-select': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'tool-hand': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'tool-connect':
+    'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'tool-draw': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'new-note':
+    'not modelled: places a note at the viewport centre — covered by tool-hotkeys.browser.test.tsx',
   'show-shortcuts': 'not modelled: opens a dialog — covered by shortcut-help.browser.test.tsx',
 } satisfies Record<ShortcutId, SurfaceCoverage>
 

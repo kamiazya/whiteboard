@@ -33,6 +33,14 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
   ArrowDown: { dx: 0, dy: 1 },
 }
 
+/** The catalog rows that arm a tool, and the tool each arms. */
+const TOOL_SHORTCUTS: Partial<Record<ShortcutId, EditorTool>> = {
+  'tool-select': 'select',
+  'tool-hand': 'hand',
+  'tool-connect': 'connect',
+  'tool-draw': 'draw',
+}
+
 export interface EditorKeyboardInputs {
   tool: EditorTool
   canvas: SpatialCanvas
@@ -63,6 +71,9 @@ export interface EditorKeyboardInputs {
   stepZoom: (factor: number) => boolean
   frameContent: () => boolean
   frameSelection: () => boolean
+  /** The full tool switch the dock performs, so a key leaves the same state a click does. */
+  changeTool: (tool: EditorTool) => void
+  createNodeAtViewportCenter: () => void
 }
 
 export function useEditorKeyboard({
@@ -93,6 +104,8 @@ export function useEditorKeyboard({
   stepZoom,
   frameContent,
   frameSelection,
+  changeTool,
+  createNodeAtViewportCenter,
 }: EditorKeyboardInputs) {
   const selectAllNodes = (): boolean => {
     const allIds = canvasRef.current.nodes.map((node) => node.id).filter((id) => !isLocked(id))
@@ -181,9 +194,15 @@ export function useEditorKeyboard({
         return reorderSelection('front')
       case 'reorder-back':
         return reorderSelection('back')
-      default:
-        // Inline-handled ids never reach here (findShortcut skips them).
-        return false
+      case 'new-note':
+        createNodeAtViewportCenter()
+        return true
+      default: {
+        const nextTool = TOOL_SHORTCUTS[id]
+        if (nextTool === undefined) return false
+        changeTool(nextTool)
+        return true
+      }
     }
   }
 
