@@ -35,6 +35,23 @@ describe('ShortcutHelpSheet', () => {
     }
   })
 
+  it('lists undo and redo, which the document pane handles', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const sheet = screen.getByTestId('shortcut-help-sheet')
+    expect(within(sheet).getByText('Undo')).toBeTruthy()
+    expect(within(sheet).getByText(/^Redo/)).toBeTruthy()
+  })
+
+  it('points to the right-click menu for the arrange actions that have no key', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const note = screen.getByTestId('shortcut-help-menu-only')
+    expect(note.textContent).toMatch(/Align/)
+    expect(note.textContent).toMatch(/Distribute/)
+    expect(note.textContent).toMatch(/Tidy/)
+    expect(note.textContent).toMatch(/Group/)
+    expect(note.textContent).toMatch(/right-click/i)
+  })
+
   it('renders nothing while closed', () => {
     render(<ShortcutHelpSheet open={false} onOpenChange={() => {}} />)
     expect(screen.queryByTestId('shortcut-help-sheet')).toBeNull()

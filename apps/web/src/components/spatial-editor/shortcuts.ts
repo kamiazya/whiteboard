@@ -43,6 +43,8 @@ export type ShortcutId =
   | 'select-previous-node'
   | 'select-adjacent-node'
   | 'edit-selected-node'
+  | 'undo'
+  | 'redo'
 
 /** The headings the help sheet groups the catalog under, in display order. */
 export const SHORTCUT_SECTIONS = [
@@ -324,6 +326,28 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     mod: true,
     display: 'Cmd+Enter',
     description: 'Save the text being edited and close the editor',
+    handledInline: true,
+  },
+  // Undo/redo are handled by the document pane's own listener (they step the
+  // whole document's history, not the canvas), so they are declared, never
+  // dispatched from here.
+  {
+    id: 'undo',
+    section: 'Edit',
+    keys: ['z'],
+    mod: true,
+    shift: false,
+    display: 'Cmd+Z',
+    description: 'Undo',
+    handledInline: true,
+  },
+  {
+    id: 'redo',
+    section: 'Edit',
+    keys: ['z', 'y'],
+    mod: true,
+    display: 'Cmd+Shift+Z',
+    description: 'Redo (also Cmd+Y)',
     handledInline: true,
   },
   {

@@ -476,6 +476,8 @@ const SHORTCUT_COVERAGE = {
     'not modelled: moves the selection to a neighbour — covered by node-keyboard-traversal.browser.test.tsx',
   'edit-selected-node':
     'not modelled: opens the in-place editor the double press opens — covered by node-keyboard-traversal.browser.test.tsx',
+  undo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
+  redo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
   'show-shortcuts': 'not modelled: opens a dialog — covered by shortcut-help.browser.test.tsx',
 } satisfies Record<ShortcutId, SurfaceCoverage>
 

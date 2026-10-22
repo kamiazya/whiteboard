@@ -3,6 +3,7 @@
  * means — the two questions keyboard-only traversal asks of node geometry.
  * Pure, so the key handler and its tests share one answer.
  */
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 
 export interface PlacedNode {
   readonly id: string
@@ -15,10 +16,8 @@ export interface PlacedNode {
 export type Direction = 'up' | 'down' | 'left' | 'right'
 
 /** Top to bottom, then left to right by box position; ties fall to the id. */
-export function readingOrder<T extends PlacedNode>(nodes: readonly T[]): T[] {
-  return [...nodes].sort(
-    (a, b) => a.y - b.y || a.x - b.x || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  )
+function readingOrder<T extends PlacedNode>(nodes: readonly T[]): T[] {
+  return [...nodes].sort((a, b) => a.y - b.y || a.x - b.x || compareCodeUnit(a.id, b.id))
 }
 
 /**
@@ -74,6 +73,6 @@ export function nearestInDirection(
     const across = Math.abs(dx * step.y) + Math.abs(dy * step.x)
     return [{ id: n.id, score: along + OFF_AXIS_WEIGHT * across }]
   })
-  scored.sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  scored.sort((a, b) => a.score - b.score || compareCodeUnit(a.id, b.id))
   return scored[0]?.id
 }

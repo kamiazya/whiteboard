@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nearestInDirection, nextInReadingOrder, readingOrder } from './reading-order.js'
+import { nearestInDirection, nextInReadingOrder } from './reading-order.js'
 
 const box = (id: string, x: number, y: number, width = 100, height = 50) => ({
   id,
@@ -9,15 +9,25 @@ const box = (id: string, x: number, y: number, width = 100, height = 50) => ({
   height,
 })
 
-describe('readingOrder', () => {
+describe('reading order', () => {
+  const walk = (nodes: ReturnType<typeof box>[]) => {
+    const seen: string[] = []
+    let at: string | null = null
+    for (let i = 0; i < nodes.length; i += 1) {
+      at = nextInReadingOrder(nodes, at, 1) ?? null
+      if (at !== null) seen.push(at)
+    }
+    return seen
+  }
+
   it('orders top to bottom, then left to right, and breaks a tie by id', () => {
     const nodes = [box('d', 0, 100), box('c', 200, 0), box('b', 0, 0), box('a', 0, 0)]
-    expect(readingOrder(nodes).map((n) => n.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(walk(nodes)).toEqual(['a', 'b', 'c', 'd'])
   })
 
   it('does not mutate its input', () => {
     const nodes = [box('b', 10, 0), box('a', 0, 0)]
-    readingOrder(nodes)
+    walk(nodes)
     expect(nodes.map((n) => n.id)).toEqual(['b', 'a'])
   })
 })

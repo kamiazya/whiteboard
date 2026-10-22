@@ -156,7 +156,9 @@ selection, or nudging several nodes each undo in a single press.
 | `?` | Open the keyboard shortcut sheet |
 
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
-`Ctrl` elsewhere), grouped as Edit, Arrange, View, Text and Help. It also
+`Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
+Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
+no key and live in the right-click menus. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
 way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have

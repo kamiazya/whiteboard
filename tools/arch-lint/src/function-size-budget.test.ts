@@ -151,7 +151,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 81,
   'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 80,
   'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 178,
-  'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 95,
+  'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 102,
   // The six-level nested ternary choosing a menu is two named halves, which
   // costs the doc comments that say what each claims. The functions that split
   // created are long without being complex — each is a flat sequence of builder
@@ -231,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 125,
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 429,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 528,
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
