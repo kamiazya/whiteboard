@@ -96,6 +96,11 @@ on screen. The same four moves sit in a node's right-click menu under
 | `Shift + 2` | Zoom to the selection |
 | `+` / `-` | Zoom in or out one step, about the middle of the view |
 | `Cmd/Ctrl` + scroll | Zoom under the pointer |
+
+The view is not remembered between visits. A canvas opens at the origin, and
+when none of its content is in view there it opens framed on the content, as
+**Zoom to fit** would. A canvas that already shows some content opens where it
+is, and later edits never move the view.
 | Scroll / two-finger drag | Pan |
 | Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
 

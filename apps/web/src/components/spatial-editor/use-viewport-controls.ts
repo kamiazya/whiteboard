@@ -6,9 +6,10 @@
 // this hook has no business holding — but they drive the same setViewport
 // returned here, so there is exactly one viewport.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import {
+  anyBoxVisible,
   type ContainerSize,
   contentBounds,
   frameViewport,
@@ -31,6 +32,41 @@ export interface ViewportControlsInputs {
   containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
 }
 
+/**
+ * A document opens on its content, not on the origin: the viewport is not
+ * persisted, so a diagram drawn around large coordinates (the centre of a
+ * fitted or panned view) would otherwise open on blank paper. Decided once
+ * per run of non-empty boxes — the arming resets when the boxes empty, which
+ * is how a different document arrives — and only while the container is
+ * measurable. A viewport that already shows some content is never moved.
+ */
+function useOpenOnContent({
+  rootRef,
+  boxes,
+  containerSizeOf,
+  viewport,
+  setViewport,
+}: Pick<ViewportControlsInputs, 'rootRef' | 'boxes' | 'containerSizeOf'> & {
+  viewport: Viewport
+  setViewport: (next: Viewport) => void
+}) {
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (boxes.length === 0) {
+      openedRef.current = false
+      return
+    }
+    if (openedRef.current) return
+    const size = containerSizeOf(rootRef.current)
+    if (size === null || size.width <= 0 || size.height <= 0) return
+    openedRef.current = true
+    if (anyBoxVisible(boxes, viewport, size)) return
+    const bounds = contentBounds(boxes)
+    if (bounds === undefined) return
+    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX))
+  })
+}
+
 export function useViewportControls({
   rootRef,
   boxes,
@@ -40,6 +76,8 @@ export function useViewportControls({
   containerSizeOf,
 }: ViewportControlsInputs) {
   const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
+
+  useOpenOnContent({ rootRef, boxes, containerSizeOf, viewport, setViewport })
 
   /** Keyboard zoom: about the viewport centre, since there is no pointer. */
   const stepZoom = (factor: number): boolean => {

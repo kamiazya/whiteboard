@@ -321,3 +321,22 @@ export function clientPointToRootLocal(
   const rect = root.getBoundingClientRect()
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
+
+/** True when at least one box overlaps the container rect at this viewport. */
+export function anyBoxVisible(
+  boxes: readonly IdentifiedBox[],
+  viewport: Viewport,
+  containerSize: ContainerSize,
+): boolean {
+  const viewWidth = containerSize.width / viewport.zoom
+  const viewHeight = containerSize.height / viewport.zoom
+  return boxes.some(({ box }) => {
+    if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) return false
+    return (
+      box.x + box.width > viewport.x &&
+      box.x < viewport.x + viewWidth &&
+      box.y + box.height > viewport.y &&
+      box.y < viewport.y + viewHeight
+    )
+  })
+}
