@@ -54,28 +54,27 @@ export function wikiLinkCompletionSource(
     if (ranked.length === 0 && createOption.length === 0) return null
     return {
       from: match.from + 2,
-      options: [
-        ...ranked.map(
-          (target): Completion => ({
-            label: target.name,
-            // Names are not unique, paths are: the secondary text is what
-            // tells two same-named documents apart. It is display only, so
-            // the filter still matches the name and the insert is unchanged.
-            detail: target.path,
-            type: 'text',
-            // Resolution is by path, so the alias only changes how the source
-            // READS: a note that said `[[untitled]]` for a document the popup
-            // showed as "Weekly sync" taught nobody what it linked.
-            apply: writeReference(linkMarkupFor(target, target.name)),
-          }),
-        ),
-        ...createOption,
-      ],
+      options: [...ranked.map(targetOption), ...createOption],
       // A growing plain query keeps this result (the plugin narrows it);
       // a ] or | changes the grammar and re-asks the source. With a Create
       // row the row NAMES the typed text, so any growth must re-ask instead.
       validFor: create === undefined ? /^[^\][|]*$/ : (text: string) => text === query,
     }
+  }
+}
+
+function targetOption(target: LinkTarget): Completion {
+  return {
+    label: target.name,
+    // Names are not unique, paths are: the secondary text is what tells two
+    // same-named documents apart. It is display only, so the filter still
+    // matches the name and the insert is unchanged.
+    detail: target.path,
+    type: 'text',
+    // Resolution is by path, so the alias only changes how the source
+    // READS: a note that said `[[untitled]]` for a document the popup
+    // showed as "Weekly sync" taught nobody what it linked.
+    apply: writeReference(linkMarkupFor(target, target.name)),
   }
 }
 

@@ -80,6 +80,54 @@ export interface SearchResultsProps {
  * The path stays on the card in BOTH forms. Dropping it from the grid would
  * reintroduce the Finder/Figma gap the list avoids.
  */
+/**
+ * Why a row is here when its title and path do not say: that it matched by
+ * meaning, and the content excerpt around the match.
+ */
+function MatchReason({
+  contexts,
+  lexicalRank,
+  semanticRank,
+  query,
+  excerptId,
+}: Pick<SearchResultRow, 'contexts' | 'lexicalRank' | 'semanticRank'> & {
+  query: string
+  excerptId: string
+}) {
+  return (
+    <>
+      {lexicalRank === undefined && semanticRank !== undefined && (
+        /* Why the row is here, when no word in it is. The excerpt below is
+           the document's opening rather than a match window, so without
+           this the row is indistinguishable from one nothing matched at
+           all. */
+        <span
+          data-testid="semantic-hit"
+          className="text-muted-foreground text-[10px] uppercase tracking-wide"
+        >
+          Matched by meaning
+        </span>
+      )}
+      {(contexts?.length ?? 0) > 0 && (
+        /* The match itself, when it was in the CONTENT: neither the title
+           nor the path shows it, so without this the row cannot say why it
+           is here. */
+        <span
+          id={excerptId}
+          data-testid="result-excerpt"
+          className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
+        >
+          {lexicalRank === undefined ? (
+            (contexts?.[0] ?? '')
+          ) : (
+            <Highlighted text={contexts?.[0] ?? ''} query={query} />
+          )}
+        </span>
+      )}
+    </>
+  )
+}
+
 function SearchResultCard({
   row: { document: entry, contexts, lexicalRank, semanticRank },
   layout,
@@ -102,7 +150,6 @@ function SearchResultCard({
   const uid = useId()
   const pathId = `${uid}-path`
   const excerptId = `${uid}-excerpt`
-  const hasExcerpt = (contexts?.length ?? 0) > 0
   return (
     <button
       type="button"
@@ -110,7 +157,7 @@ function SearchResultCard({
       // Label and kind are the name; where it lives and why it matched (the
       // excerpt is body text) are the description.
       aria-label={documentAccessibleName(entry, 'leaf')}
-      aria-describedby={hasExcerpt ? `${pathId} ${excerptId}` : pathId}
+      aria-describedby={(contexts?.length ?? 0) > 0 ? `${pathId} ${excerptId}` : pathId}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       onClick={() => onSelect(entry)}
       onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
@@ -159,34 +206,13 @@ function SearchResultCard({
             {entry.tags?.map((tag) => `#${tag}`).join(' ')}
           </span>
         )}
-        {lexicalRank === undefined && semanticRank !== undefined && (
-          /* Why the row is here, when no word in it is. The excerpt below is
-             the document's opening rather than a match window, so without
-             this the row is indistinguishable from one nothing matched at
-             all. */
-          <span
-            data-testid="semantic-hit"
-            className="text-muted-foreground text-[10px] uppercase tracking-wide"
-          >
-            Matched by meaning
-          </span>
-        )}
-        {(contexts?.length ?? 0) > 0 && (
-          /* The match itself, when it was in the CONTENT: neither the title
-             nor the path shows it, so without this the row cannot say why it
-             is here. */
-          <span
-            id={excerptId}
-            data-testid="result-excerpt"
-            className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
-          >
-            {lexicalRank === undefined ? (
-              (contexts?.[0] ?? '')
-            ) : (
-              <Highlighted text={contexts?.[0] ?? ''} query={query} />
-            )}
-          </span>
-        )}
+        <MatchReason
+          contexts={contexts}
+          lexicalRank={lexicalRank}
+          semanticRank={semanticRank}
+          query={query}
+          excerptId={excerptId}
+        />
       </span>
     </button>
   )
