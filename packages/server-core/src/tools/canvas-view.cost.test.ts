@@ -57,9 +57,7 @@ async function seedHub(store: FakeDocumentStore): Promise<void> {
 }
 
 describe('canvas_view reference cost', () => {
-  test('a hub naming large notes by id and by path: snapshot reads and characters returned', async ({
-    annotate,
-  }) => {
+  test('a hub naming large notes by id and by path: snapshot reads and characters returned', async () => {
     const store = new FakeDocumentStore()
     await seedHub(store)
     const loadSnapshot = vi.spyOn(store, 'loadSnapshot')
@@ -67,9 +65,7 @@ describe('canvas_view reference cost', () => {
       makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
     )
 
-    const started = performance.now()
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: BOARD_ID })
-    const wallMs = performance.now() - started
 
     const referenceReads = loadSnapshot.mock.calls.filter(
       ([{ docRef }]) => docRef.kind === 'document' && docRef.documentId !== BOARD_ID,
@@ -78,12 +74,6 @@ describe('canvas_view reference cost', () => {
       (sum, ref) => sum + (ref.body?.length ?? 0),
       0,
     )
-    // The measurement, for a reader comparing runs; the assertions below pin it.
-    await annotate(
-      JSON.stringify({ referenceReads, returnedChars, wallMs: Math.round(wallMs) }),
-      'measurement',
-    )
-
     // Every spelling still answers, so each node keeps its label.
     expect(Object.keys(result.references)).toHaveLength(NOTE_COUNT * 2)
     expect(Object.values(result.references).every((ref) => ref.documentId !== undefined)).toBe(true)
