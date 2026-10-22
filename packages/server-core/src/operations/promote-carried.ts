@@ -172,6 +172,19 @@ function judgeDocumentAt(
   }
 }
 
+/** How long version judging runs before handing the loop back. */
+const JUDGE_SLICE_MS = 10
+
+/**
+ * A turn of the loop for whatever else is waiting. A timer rather than
+ * `setImmediate`, which this runtime-neutral package cannot assume.
+ */
+function yieldToLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
 /** A carried row with its point decoded, and where that point sits in the record's history. */
 interface PlacedRow {
   readonly index: number
@@ -226,12 +239,19 @@ function placeRows(
  * the caller ordered them; the answer keeps the caller's order. Every
  * distinct judgement is charged to `budget`, in elements projected, so rows
  * naming distinct points cannot buy a projection each without bound.
+ *
+ * Within the budget a move may still hold hundreds of judgements, each
+ * synchronous, so the loop is handed back once a slice of
+ * `JUDGE_SLICE_MS` has been spent: the stall another request waits behind
+ * is one judgement, not the move. Nothing shared is read across the yield —
+ * the fork is this call's own, and `incoming` is the request's record,
+ * merged only after this returns.
  */
-function judgeVersions(
+async function judgeVersions(
   incoming: LoroDoc,
   versions: readonly CarriedVersion[],
   budget: number,
-): { readonly reason: string } | 'over-budget' | { readonly rows: AdoptedVersion[] } {
+): Promise<{ readonly reason: string } | 'over-budget' | { readonly rows: AdoptedVersion[] }> {
   if (versions.length === 0) return { rows: [] }
   const unheld = (id: string) => ({
     reason: `Version "${id}" names a point the record does not hold.`,
@@ -249,10 +269,15 @@ function judgeVersions(
     spent += elements
     return spent <= budget
   }
+  let sliceStarted = Date.now()
   for (const { index, version, decoded, point } of ordered) {
     const key = `${point}\u0000${version.documentId}`
     let judgement = judged.get(key)
     if (judgement === undefined) {
+      if (Date.now() - sliceStarted >= JUDGE_SLICE_MS) {
+        await yieldToLoop()
+        sliceStarted = Date.now()
+      }
       if (!reader.moveTo(point, decoded)) return unheld(version.id)
       const answer = judgeDocumentAt(reader.past, version, charge)
       if (answer === 'over-budget' || 'reason' in answer) return answer
@@ -292,7 +317,7 @@ export async function judgeCarried(
   }
   const trashRefusal = await judgeTrash(incoming, carried.trash)
   if (trashRefusal !== null) return { kind: 'refused', reason: trashRefusal }
-  const versions = judgeVersions(incoming, carried.versions, budget)
+  const versions = await judgeVersions(incoming, carried.versions, budget)
   if (versions === 'over-budget') return { kind: 'over-budget', limit: budget }
   if ('reason' in versions) return { kind: 'refused', reason: versions.reason }
   return { kind: 'admitted', trash: carried.trash, versions: versions.rows }
