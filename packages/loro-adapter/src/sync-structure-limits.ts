@@ -187,16 +187,21 @@ function holdsReplacedPrototype(value: unknown): boolean {
 export function reservedKeyBreach(json: JsonSchema): ReservedMapKeyBreach | null {
   for (const change of json.changes) {
     for (const op of change.ops) {
+      // A text mark carries its key and value as `style_key` / `style_value`.
       const content = op.content as {
         readonly type?: unknown
         readonly key?: unknown
         readonly value?: unknown
+        readonly style_key?: unknown
+        readonly style_value?: unknown
       }
       if (content.type === 'delete') continue
       const writes =
         op.container.startsWith(`cid:root-${RESERVED_MAP_KEY}:`) ||
         content.key === RESERVED_MAP_KEY ||
-        holdsReplacedPrototype(content.value)
+        content.style_key === RESERVED_MAP_KEY ||
+        holdsReplacedPrototype(content.value) ||
+        holdsReplacedPrototype(content.style_value)
       if (writes) return { shape: 'reserved-map-key', container: op.container }
     }
   }
