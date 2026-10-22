@@ -141,7 +141,7 @@ async function adaOwnsDesign(): Promise<string> {
 }
 
 describe('server mode — one request costs what the caller has, not what the tenant has', () => {
-  it.fails('resolves a bare segment reading a bounded number of registry rows', async () => {
+  it('resolves a bare segment reading a bounded number of registry rows', async () => {
     await adaOwnsDesign()
     registryRows.count = 0
 

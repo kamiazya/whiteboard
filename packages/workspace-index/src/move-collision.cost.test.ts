@@ -80,6 +80,7 @@ describe('a move in a record holding many folders', () => {
     const docs = inMemoryWorkspaceDocs()
     const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notImplemented,
     })
     await index.createWorkspace({ workspaceId: WS })

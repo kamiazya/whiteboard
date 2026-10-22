@@ -1,5 +1,5 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
-import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
+import { resolveWorkspaceHandleBy } from '@kamiazya/whiteboard-ports'
 import type { Context, HonoRequest } from 'hono'
 import { workspaceRegistry } from './store/document-store.js'
 import { validateWorkspaceId, validationErrorBody } from './validators.js'
@@ -41,8 +41,9 @@ export function callerNamespaceOfRequest(request: HonoRequest): string {
  * ADR-0019: an address carries a HANDLE, which is either a workspace's
  * `segment` or its canonical id. This is the daemon's one place that turns
  * one into the other, so no route, tool or socket can answer differently —
- * `resolveWorkspaceHandle` in ports fixes the precedence, and this fixes
- * which registry it reads.
+ * `resolveWorkspaceHandleBy` in ports fixes the precedence, and this fixes
+ * which registry it reads — through point lookups, never a listing, since
+ * every request resolves its address and a tenant's registry is shared.
  *
  * A segment is unique per namespace (ADR-0053), so a bare one is looked up in
  * `callerNamespace` alone: resolving it across the registry would answer
@@ -56,8 +57,13 @@ export async function resolveWorkspaceHandleToId(
   handle: string,
   callerNamespace: string = SINGLE_PERSON_NAMESPACE,
 ): Promise<string> {
-  const entries = await workspaceRegistry().listWorkspaces()
-  return resolveWorkspaceHandle(entries, handle, callerNamespace)?.workspaceId ?? handle
+  const registry = workspaceRegistry()
+  const found = await resolveWorkspaceHandleBy(
+    (lookup) => registry.findWorkspace(lookup),
+    handle,
+    callerNamespace,
+  )
+  return found?.workspaceId ?? handle
 }
 
 /**

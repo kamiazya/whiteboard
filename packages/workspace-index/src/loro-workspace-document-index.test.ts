@@ -16,11 +16,17 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
-import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type {
+  BlobStore,
+  RenameWorkspaceInput,
+  WorkspaceEntry,
+  WorkspaceLookup,
+} from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
   DocumentPathTakenError,
   documentEntrySchema,
+  matchesWorkspaceLookup,
   WorkspaceNotFoundError,
   WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
@@ -80,6 +86,7 @@ function renameIdentity(
  */
 function inMemoryWorkspaceDocs(): WorkspaceDocs & {
   listWorkspaces(): Promise<WorkspaceEntry[]>
+  findWorkspace(lookup: WorkspaceLookup): Promise<WorkspaceEntry | null>
   seedWorkspace(entry: WorkspaceEntry): Promise<void>
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 } {
@@ -114,6 +121,9 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     catchUp: () => Promise.reject(new Error('not implemented')),
     async listWorkspaces() {
       return [...stored.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
+    },
+    async findWorkspace(lookup) {
+      return (await docs.listWorkspaces()).find((e) => matchesWorkspaceLookup(e, lookup)) ?? null
     },
     async seedWorkspace(entry) {
       identities.set(entry.workspaceId, entry)

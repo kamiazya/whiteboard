@@ -213,22 +213,80 @@ export function resolveWorkspaceHandle(
   handle: string,
   callerNamespace: string = SINGLE_PERSON_NAMESPACE,
 ): WorkspaceEntry | null {
+  for (const lookup of workspaceHandleLookups(handle, callerNamespace)) {
+    const found = entries.find((entry) => matchesWorkspaceLookup(entry, lookup))
+    if (found !== undefined) return found
+  }
+  return null
+}
+
+/**
+ * One point lookup in a workspace registry: a row by its id, or the row
+ * holding `segment` in `namespace`. Both are unique, so either answers at
+ * most one row — which is what lets a keeper with many people answer it
+ * from an index instead of reading every row it holds.
+ */
+const workspaceLookupSchema = z.union([
+  z.object({ workspaceId: z.string() }).strict(),
+  // Not `namespaceHandleSchema`: a caller with no namespace of its own looks
+  // in one no row can hold, and must reach nothing rather than be refused.
+  z.object({ namespace: z.string(), segment: z.string() }).strict(),
+])
+export type WorkspaceLookup = z.infer<typeof workspaceLookupSchema>
+
+/**
+ * The lookups `handle` means, in the order the first match wins — the
+ * precedence `resolveWorkspaceHandle` documents, stated once so the
+ * whole-list form above and the indexed form below cannot order them
+ * differently.
+ */
+export function workspaceHandleLookups(
+  handle: string,
+  callerNamespace: string = SINGLE_PERSON_NAMESPACE,
+): readonly WorkspaceLookup[] {
   const address = parseWorkspaceAddress(handle)
-  if (address === null) return null
-  const inNamespace = (namespace: string, segment: string) =>
-    entries.find(
-      (entry) =>
-        (entry.namespace ?? SINGLE_PERSON_NAMESPACE) === namespace && entry.segment === segment,
-    )
-  const byId = (workspaceId: string) => entries.find((entry) => entry.workspaceId === workspaceId)
+  if (address === null) return []
   switch (address.form) {
     case 'id':
-      return byId(address.workspaceId) ?? null
+      return [{ workspaceId: address.workspaceId }]
     case 'qualified':
-      return inNamespace(address.namespace, address.segment) ?? null
+      return [{ namespace: address.namespace, segment: address.segment }]
     case 'bare':
-      return inNamespace(callerNamespace, address.handle) ?? byId(address.handle) ?? null
+      return [
+        { namespace: callerNamespace, segment: address.handle },
+        { workspaceId: address.handle },
+      ]
   }
+}
+
+/** Whether `entry` is the row `lookup` names. A row without a namespace sits in the single-person one. */
+export function matchesWorkspaceLookup(entry: WorkspaceEntry, lookup: WorkspaceLookup): boolean {
+  if ('workspaceId' in lookup) return entry.workspaceId === lookup.workspaceId
+  return (
+    (entry.namespace ?? SINGLE_PERSON_NAMESPACE) === lookup.namespace &&
+    entry.segment === lookup.segment
+  )
+}
+
+/**
+ * `resolveWorkspaceHandle` over a registry that answers point lookups
+ * (`find`) rather than handing over every row: the same precedence, at the
+ * cost of at most two lookups whatever the registry holds.
+ *
+ * Each answer is re-checked against its lookup, so a `find` that matched on
+ * a stored value the read schema refuses — and therefore hydrates without —
+ * cannot answer a lookup the whole-list form would not have.
+ */
+export async function resolveWorkspaceHandleBy(
+  find: (lookup: WorkspaceLookup) => Promise<WorkspaceEntry | null>,
+  handle: string,
+  callerNamespace: string = SINGLE_PERSON_NAMESPACE,
+): Promise<WorkspaceEntry | null> {
+  for (const lookup of workspaceHandleLookups(handle, callerNamespace)) {
+    const found = await find(lookup)
+    if (found !== null && matchesWorkspaceLookup(found, lookup)) return found
+  }
+  return null
 }
 
 /**
