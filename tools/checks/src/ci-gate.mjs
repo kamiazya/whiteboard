@@ -49,13 +49,44 @@ export function baseJobName(name) {
   return paren === -1 ? name : name.slice(0, paren)
 }
 
+/** The runner's own closing step; it runs after every step of the job, whatever they did. */
+const RUNNER_FINAL_STEP = 'Complete job'
+
+/**
+ * Whether a job the API still calls `in_progress` has in fact finished, read
+ * off its steps: the runner's closing step is complete and no step failed.
+ *
+ * The job record and its steps are written separately, and the record was
+ * measured lagging the steps by MINUTES — `test-jsdom (1)` read `in_progress`
+ * four minutes after its `Complete job` step had completed, long past any
+ * settle window the gate could afford. The steps say the same thing the
+ * record will say once it catches up, so the gate reads them.
+ * @param {{steps?: {name: string, status: string, conclusion: string | null}[]}} job
+ */
+export function finishedByItsSteps(job) {
+  const steps = job.steps ?? []
+  const closing = steps.find((step) => step.name === RUNNER_FINAL_STEP)
+  if (closing === undefined || closing.status !== 'completed' || closing.conclusion !== 'success') {
+    return false
+  }
+  return steps.every(
+    (step) =>
+      step.status === 'completed' &&
+      (step.conclusion === 'success' || step.conclusion === 'skipped'),
+  )
+}
+
 /**
  * What is wrong with one job's outcome, or `undefined` when it counts as a pass.
- * @param {{name: string, status: string, conclusion: string | null}} job
+ * @param {{name: string, status: string, conclusion: string | null, steps?: {name: string, status: string, conclusion: string | null}[]}} job
  * @returns {string | undefined}
  */
 function jobProblem(job) {
-  if (job.status !== 'completed') return `${job.name}: still ${job.status} when the gate ran`
+  if (job.status !== 'completed') {
+    return finishedByItsSteps(job)
+      ? undefined
+      : `${job.name}: still ${job.status} when the gate ran`
+  }
   if (job.conclusion === 'success') return undefined
   if (job.conclusion === 'skipped') {
     if (baseJobName(job.name) in SKIPPABLE_JOBS) return undefined
@@ -155,7 +186,7 @@ export function stillSettling({ jobs, needed, gateJobName }) {
   const others = jobs.filter((job) => baseJobName(job.name) !== gateJobName)
   // A verdict already in hand ends the wait, whatever else is lagging.
   if (others.some(jobCondemnsTheRun)) return false
-  if (others.some((job) => job.status !== 'completed')) return true
+  if (others.some((job) => job.status !== 'completed' && !finishedByItsSteps(job))) return true
   const present = new Set(others.map((job) => baseJobName(job.name)))
   return needed.some((name) => !present.has(name))
 }
@@ -209,7 +240,18 @@ async function fetchRunJobs(repo, runId, token) {
     if (!res.ok) throw new Error(`GET ${url} answered ${res.status}`)
     const body = await res.json()
     const batch = body.jobs ?? []
-    jobs.push(...batch.map((j) => ({ name: j.name, status: j.status, conclusion: j.conclusion })))
+    jobs.push(
+      ...batch.map((j) => ({
+        name: j.name,
+        status: j.status,
+        conclusion: j.conclusion,
+        steps: (j.steps ?? []).map((s) => ({
+          name: s.name,
+          status: s.status,
+          conclusion: s.conclusion,
+        })),
+      })),
+    )
     if (jobs.length >= (body.total_count ?? jobs.length) || batch.length === 0) break
   }
   return jobs
