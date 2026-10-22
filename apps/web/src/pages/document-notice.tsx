@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 
 /** How long a confirmation stays in the status region before it is cleared. */
-export const NOTICE_LIFETIME_MS = 4000
+const NOTICE_LIFETIME_MS = 4000
 
 /**
  * Says a one-line confirmation through the document row's polite status
