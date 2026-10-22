@@ -93,6 +93,34 @@ function nodeEditorTheme(centerContent: boolean): Extension {
   })
 }
 
+/**
+ * An explicit exit (chord or button) hands the keyboard back to the canvas
+ * the editor lives in, or Delete, arrows and undo go to <body> and do
+ * nothing until the next click. A blur-driven exit does not: focus has
+ * already gone where the person pointed it.
+ */
+function returnFocusToCanvas(host: HTMLElement | null): void {
+  host?.closest<HTMLElement>('[role="application"]')?.focus({ preventScroll: true })
+}
+
+/**
+ * The draft reaches the document only through commit, so a reload, a closed
+ * tab or a phone app switch would drop it while the save state still reads
+ * saved. `pagehide` fires on every unload path (bfcache included);
+ * `visibilitychange` covers a backgrounded tab that is never unloaded cleanly.
+ */
+function onPageHide(handler: () => void): () => void {
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') handler()
+  }
+  window.addEventListener('pagehide', handler)
+  document.addEventListener('visibilitychange', onVisibility)
+  return () => {
+    window.removeEventListener('pagehide', handler)
+    document.removeEventListener('visibilitychange', onVisibility)
+  }
+}
+
 export interface MarkdownNodeEditorProps {
   readonly box: Box
   readonly initialText: string
@@ -178,20 +206,13 @@ export function MarkdownNodeEditor({
     finishedRef.current = true
     callbacksRef.current.onCancel()
   }
-  // An explicit exit (chord or button) hands the keyboard back to the canvas
-  // the editor lives in, or Delete, arrows and undo go to <body> and do
-  // nothing until the next click. A blur-driven exit does not: focus has
-  // already gone where the person pointed it.
-  const returnFocusToCanvas = () => {
-    hostRef.current?.closest<HTMLElement>('[role="application"]')?.focus({ preventScroll: true })
-  }
   const commitAndReturn = (view: EditorView) => {
     commit(view)
-    returnFocusToCanvas()
+    returnFocusToCanvas(hostRef.current)
   }
   const cancelAndReturn = () => {
     cancel()
-    returnFocusToCanvas()
+    returnFocusToCanvas(hostRef.current)
   }
 
   // useLayoutEffect, not useEffect: passive cleanups run AFTER React has
@@ -322,21 +343,10 @@ export function MarkdownNodeEditor({
     // caret at position 0, which reads as "my text got replaced".
     view.dispatch({ selection: { anchor: view.state.doc.length } })
 
-    // The draft reaches the document only through commit, so a reload, a
-    // closed tab or a phone app switch would drop it while the save state
-    // still reads saved. `pagehide` is the one event that fires on every
-    // unload path (including bfcache); `visibilitychange` covers a
-    // backgrounded tab that is never unloaded cleanly.
-    const commitOnHide = () => {
-      if (document.visibilityState === 'hidden') commit(view)
-    }
-    const commitOnPageHide = () => commit(view)
-    window.addEventListener('pagehide', commitOnPageHide)
-    document.addEventListener('visibilitychange', commitOnHide)
+    const stopWatchingPageHide = onPageHide(() => commit(view))
 
     return () => {
-      window.removeEventListener('pagehide', commitOnPageHide)
-      document.removeEventListener('visibilitychange', commitOnHide)
+      stopWatchingPageHide()
       // BEFORE destroy: EditorView.destroy() blurs a focused content DOM,
       // and that blur must find this editor already retired.
       mountedRef.current = false
