@@ -68,11 +68,14 @@ export function LinkPickerDialog({
     const row = rows[index]
     if (row === undefined) return
     const wanted = display.trim()
-    onPick(
-      row.kind === 'url'
-        ? externalLinkMarkup(wanted === '' ? linkText : wanted, row.url)
-        : linkMarkupFor(row.target, wanted),
-    )
+    if (row.kind === 'url') {
+      onPick(externalLinkMarkup(wanted === '' ? linkText : wanted, row.url))
+      return
+    }
+    // The prose the link was made over survives as the alias; naming the
+    // document's own name would only freeze what a bare reference shows live.
+    const carried = linkText.trim() === row.target.name ? '' : linkText
+    onPick(linkMarkupFor(row.target, wanted === '' ? carried : wanted))
   }
 
   return (
@@ -143,7 +146,9 @@ export function LinkPickerDialog({
               ? linkText.trim() === ''
                 ? 'The URL itself'
                 : linkText
-              : (rows[activeIndex]?.target.name ?? 'Same as the document name')
+              : linkText.trim() === ''
+                ? (rows[activeIndex]?.target.name ?? 'Same as the document name')
+                : linkText
           }
           className="border-input focus-visible:ring-ring text-foreground min-w-0 flex-1 rounded-md border px-2 py-1 text-sm focus-visible:ring-2 focus-visible:outline-none"
         />
