@@ -251,24 +251,19 @@ const INTEGRATION_POINT_OPEN = new RegExp(
   'gi',
 )
 
-/** Where the tag opened at `from` ends: its first `>` outside a quoted value, or -1. */
-function tagEnd(svg: string, from: number): number {
-  let quote = ''
-  for (let i = from; i < svg.length; i++) {
-    const ch = svg[i]
-    if (quote !== '') {
-      if (ch === quote) quote = ''
-    } else if (ch === '"' || ch === "'") quote = ch
-    else if (ch === '>') return i
-  }
-  return -1
-}
-
+/**
+ * Whether a `title` or `desc` holds an element. Each open tag's end is found
+ * by the attribute walk `hasRefusedAttribute` uses, which reads a quote as
+ * opening a value only right after `=`, as the HTML tokenizer does — so
+ * `<title x=a'>` ends at its `>`. A tag that never ends, or carries a refused
+ * attribute, refuses the fragment: answering "no markup" there would skip
+ * every integration point after it.
+ */
 function hasMarkupInIntegrationPoint(svg: string): boolean {
   const opens = new RegExp(INTEGRATION_POINT_OPEN.source, 'gi')
   for (let open = opens.exec(svg); open; open = opens.exec(svg)) {
-    const bodyStart = tagEnd(svg, open.index)
-    if (bodyStart < 0) return false
+    const bodyStart = scanTagForRefusedAttribute(svg, scanUntil(svg, open.index + 1, TAG_NAME_END))
+    if (bodyStart === HANDLER_FOUND || bodyStart >= svg.length) return true
     const close = new RegExp(String.raw`</(?:${ELEMENT_PREFIX})?${open[1]}(?![^\s/>])`, 'gi')
     close.lastIndex = bodyStart
     const end = close.exec(svg)?.index ?? svg.length
