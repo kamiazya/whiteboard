@@ -149,10 +149,10 @@ describe('wikiLinkCompletionSource create row', () => {
     expect(withCreate('[[release-plan')).toBeNull()
   })
 
-  it('keeps the Create row last, under matching targets', () => {
+  it('offers no Create row while any target matches the typed text', () => {
     const labels = withCreate('[[Re')?.options.map((o) => o.label)
-    expect(labels?.at(-1)).toBe("Create 'Re'")
     expect(labels?.[0]).toBe('Release plan')
+    expect(labels?.some((l) => l.startsWith('Create'))).toBe(false)
   })
 
   it('accepting it creates the note at the typed path and inserts the link', () => {

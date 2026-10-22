@@ -44,8 +44,12 @@ export function wikiLinkCompletionSource(
     const wanted = createRowPath(query, targets)
     if (targets.length === 0 && (create === undefined || wanted === null)) return null
     const ranked = rankLinkTargets(targets, query)
+    // Only when nothing matches: a Create row beside real matches reads as
+    // "this note does not exist" while it does.
     const createOption =
-      create !== undefined && wanted !== null ? [createLinkOption(wanted, create)] : []
+      create !== undefined && wanted !== null && ranked.length === 0
+        ? [createLinkOption(wanted, create)]
+        : []
     if (ranked.length === 0 && createOption.length === 0) return null
     return {
       from: match.from + 2,

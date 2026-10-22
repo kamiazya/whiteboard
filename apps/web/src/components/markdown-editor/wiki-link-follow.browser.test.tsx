@@ -168,7 +168,7 @@ describe('creating a link target from [[ completion (real browser)', () => {
     expect(onCreateLinkTarget).toHaveBeenCalledWith('Nope')
   })
 
-  it('keeps the Create row below the real matches and tracks the growing text', async () => {
+  it('shows Create only once the text matches nothing, naming the current text', async () => {
     const { container } = render(
       <MarkdownEditor
         theme="light"
@@ -184,16 +184,15 @@ describe('creating a link target from [[ completion (real browser)', () => {
     )
     await userEvent.keyboard('[[[[Re')
     await vi.waitFor(() => {
-      const labels = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].map(
-        (li) => li.querySelector('.cm-completionLabel')?.textContent,
+      expect(document.querySelector('.cm-tooltip-autocomplete')?.textContent).toContain(
+        'Release plan',
       )
-      expect(labels.at(-1)).toBe("Create 'Re'")
-      expect(labels[0]).toBe('Release plan')
     })
-    await userEvent.keyboard('t')
+    expect(document.querySelector('.cm-tooltip-autocomplete')?.textContent).not.toContain('Create')
+    await userEvent.keyboard('x')
     await vi.waitFor(() => {
       expect(document.querySelector('.cm-tooltip-autocomplete')?.textContent).toContain(
-        "Create 'Ret'",
+        "Create 'Rex'",
       )
     })
   })

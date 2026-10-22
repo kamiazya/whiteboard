@@ -19,7 +19,7 @@ handles external URLs). A reference can name its target two ways:
 - `[[<document id>]]` — survives everything; what the picker inserts for
   the rare path that could be mistaken for an id.
 
-Type a name that matches no document and the completion list ends with
+Type a name that matches no document and the completion list offers
 a `Create 'name'` row: it makes a markdown note at that path and writes the link
 to it. Where the editor cannot make documents (a daemon-kept workspace,
 today) the row is not offered.
