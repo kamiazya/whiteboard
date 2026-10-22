@@ -37,6 +37,10 @@ export interface DocumentThumbnailProps {
  * from assistive technology, and `inert` so nothing drawn in it — a link in
  * a note, say — is reachable by Tab inside a span the tree is told to skip.
  */
+// `geometricPrecision` (the thumbnail's SVG class below) because the picture is
+// laid out at full size and shrunk by its viewBox: the default text rendering
+// rounds each glyph advance at the SHRUNK pixel size, which spaces a word's
+// letters apart instead of scaling the layout.
 const PICTURE_HOST = { 'data-testid': 'document-thumbnail', 'aria-hidden': true, inert: true }
 
 /**
@@ -118,7 +122,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
             as="span"
             svg={fitSvgToBox(drawn.svg)}
             onClickCapture={keepLinksInert}
-            className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
+            className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app
               before this: it unmounted in the same frame the render mounted
