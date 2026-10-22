@@ -95,7 +95,8 @@ export const DESTRUCTIVE_COPY = {
   // sentences promise they come back with a restore; this is where that
   // promise ends. Says "cannot be undone" outright, which the other delete
   // sentences must not (they move to the Trash). The subject is the
-  // document's path, as the Trash row shows it.
+  // document's display name, or its path when it had none, as the Trash row
+  // shows it.
   'purge-trash-entry': (name) =>
     `Delete "${name}" permanently? It leaves the Trash, its saved versions are deleted with it, and it cannot be restored. This cannot be undone.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>

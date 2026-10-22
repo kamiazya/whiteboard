@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { documentLabel } from '../../lib/document-label.js'
 import type { TrashRow } from '../../lib/files-source.js'
 import { PurgeTrashEntryDialog } from './PurgeTrashEntryDialog.js'
 
@@ -58,7 +59,7 @@ export function PurgeTrashEntryControl({
         Delete permanently
       </button>
       <PurgeTrashEntryDialog
-        pending={open ? row.path : null}
+        pending={open ? documentLabel(row, 'path') : null}
         busy={busy}
         error={error}
         onCancel={() => setOpen(false)}

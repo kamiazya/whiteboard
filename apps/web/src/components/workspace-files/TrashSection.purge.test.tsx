@@ -13,8 +13,11 @@ afterEach(cleanup)
 
 const ENTRY: TrashRow = { documentId: 'd1', path: 'old/plan', deletedAt: 1_700_000 }
 
-function renderSection(purgeFromTrash: ((documentId: string) => Promise<void>) | undefined) {
-  let rows: readonly TrashRow[] = [ENTRY]
+function renderSection(
+  purgeFromTrash: ((documentId: string) => Promise<void>) | undefined,
+  entry: TrashRow = ENTRY,
+) {
+  let rows: readonly TrashRow[] = [entry]
   const purge = purgeFromTrash
   render(
     <TrashSection
@@ -60,6 +63,20 @@ describe('TrashSection permanent delete', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(purge).not.toHaveBeenCalled()
     expect(screen.getByText('old/plan')).toBeTruthy()
+  })
+
+  it('names the document by its display name, and by its path only when it had none', async () => {
+    renderSection(
+      vi.fn(async () => undefined),
+      { ...ENTRY, path: 'untitled-3', name: 'Standup 22 Oct' },
+    )
+
+    const dialog = await openPurgeDialog()
+
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['purge-trash-entry']('Standup 22 Oct')),
+    ).toBeTruthy()
+    expect(within(dialog).queryByText(/untitled-3/)).toBeNull()
   })
 
   it('purges the named document on confirm, and the row leaves the section', async () => {
