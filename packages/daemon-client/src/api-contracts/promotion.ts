@@ -42,7 +42,7 @@ export const promoteWorkspaceRequestSchema = z
     // until the body ceiling; the daemon answers past either 413
     // `promote_too_many_carried`, and the sender leaves the rest behind.
     // The same code answers versions whose states cost more to judge than
-    // server-core's PROMOTE_MAX_JUDGED_ELEMENTS, which no row count bounds.
+    // server-core's PROMOTE_MAX_JUDGED_SIZE, which no row count bounds.
     trash: z.array(promotedTrashBytesRequestSchema).max(PROMOTE_MAX_TRASH).optional(),
     versions: z.array(promotedVersionRequestSchema).max(PROMOTE_MAX_VERSIONS).optional(),
   })
@@ -51,9 +51,9 @@ export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSche
 
 /**
  * The refusal of carried versions that would cost more to judge than one move
- * allows (server-core's PROMOTE_MAX_JUDGED_ELEMENTS): 413, the same code as a
- * count past the cap, plus the budget as `limit` — in elements, the unit
- * loro-adapter's `stateElementCount` counts — so the sender can carry the
+ * allows (server-core's PROMOTE_MAX_JUDGED_SIZE): 413, the same code as a
+ * count past the cap, plus the budget as `limit` — in the unit
+ * loro-adapter's `stateSize` counts — so the sender can carry the
  * newest versions that fit and move again. A count refusal carries no
  * `limit`, so this schema tells the two apart.
  */

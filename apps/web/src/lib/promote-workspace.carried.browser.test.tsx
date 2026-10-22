@@ -6,11 +6,7 @@
  */
 
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import {
-  MARKDOWN_BODY_KEY,
-  readTrashEntries,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readTrashEntries, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -211,17 +207,8 @@ describe('promoteWorkspace, what travels beside the record', () => {
   })
 
   it('re-sends without the saved versions past the daemon check budget, counting them', async () => {
-    const index = new FoldingBrowserIndex()
-    await ensureBrowserWorkspace(index)
-    const workspaceId = getBrowserWorkspaceId()
-    const note = await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
-    const body = new LoroDoc()
-    body.getText(MARKDOWN_BODY_KEY).insert(0, 'a long enough body')
-    body.commit()
-    const bytes = new Uint8Array(body.export({ mode: 'snapshot' }))
-    expect(await seedWorkspaceDocumentContent(note.documentId, bytes)).toBe(true)
-    const docs = new BrowserWorkspaceDocs()
-    await new BrowserVersionStore({ docs, index }).save(workspaceId, 'note', { label: 'one' })
+    // A board's version: a board is charged for what its nodes carry, so even one costs more than 1.
+    await seedWorkspace()
     const daemon = daemonStub({ confirms: true, judgedLimit: 1 })
     const result = await promoteWorkspace({
       fetch: daemon.fetch,

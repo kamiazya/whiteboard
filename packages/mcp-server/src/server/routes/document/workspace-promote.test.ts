@@ -24,17 +24,21 @@ import {
   deleteWorkspaceNodeAtPath,
   documentContainers,
   exportWorkspaceSubtree,
+  projectWorkspaceDocument,
   readMarkdownBody,
   readSpatialCanvas,
   recordTrashEntry,
   resolveWorkspaceDocumentById,
+  stateSize,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
+  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
@@ -42,7 +46,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import { apiErrorBodySchema, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/version-entry'
-import { PROMOTE_MAX_JUDGED_ELEMENTS } from '@kamiazya/whiteboard-server-core/versions/version-entry'
+import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
@@ -62,8 +66,8 @@ vi.mock('@kamiazya/whiteboard-server-core/versions/version-entry', async (import
   const real = await importOriginal<typeof versionEntry>()
   return {
     ...real,
-    get PROMOTE_MAX_JUDGED_ELEMENTS() {
-      return judgedBudget ?? real.PROMOTE_MAX_JUDGED_ELEMENTS
+    get PROMOTE_MAX_JUDGED_SIZE() {
+      return judgedBudget ?? real.PROMOTE_MAX_JUDGED_SIZE
     },
   }
 })
@@ -277,11 +281,45 @@ it('carries every automatic checkpoint a browser at the document ceiling can hol
   expect(PROMOTE_MAX_TRASH).toBe(WORKSPACE_MAX_DOCUMENTS)
 })
 
-it('judges every version a browser can hold of one document at the largest body', () => {
+/** A record holding the largest board and the largest note the limits admit. */
+function largestDocuments(): { board: LoroDoc; note: LoroDoc } {
+  const doc = new LoroDoc()
+  createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: SKETCH_ID, kind: 'spatial' })
+  createWorkspaceDocumentAtPath(doc, { path: 'note', documentId: ROADMAP_ID, kind: 'markdown' })
+  const nodes = Array.from({ length: CANVAS_MAX_NODES }, (_unused, i) =>
+    textNode({
+      id: `node-${i}`,
+      x: i,
+      y: i,
+      width: 200,
+      height: 80,
+      text: 'x'.repeat(NODE_TEXT_MAX_CHARS),
+    }),
+  )
+  const edges = Array.from({ length: CANVAS_MAX_EDGES_AND_LINES }, (_unused, i) => ({
+    id: `edge-${i}`,
+    from: { node: `node-${i % CANVAS_MAX_NODES}` },
+    to: { node: `node-${(i + 1) % CANVAS_MAX_NODES}` },
+    label: 'y'.repeat(LABEL_MAX_CHARS),
+  }))
+  writeSpatialCanvas(documentContainers(doc, SKETCH_ID), { nodes, edges })
+  writeMarkdownBody(documentContainers(doc, ROADMAP_ID), 'a'.repeat(MARKDOWN_MAX_CHARS))
+  doc.commit()
+  const board = projectWorkspaceDocument(doc, SKETCH_ID)
+  const note = projectWorkspaceDocument(doc, ROADMAP_ID)
+  if (board === null || note === null) throw new Error('not projected')
+  return { board, note }
+}
+
+it('judges every version a browser can hold of one document at its largest, board or note', () => {
   const perDocument =
     MAX_AUTO_PER_DOCUMENT + MAX_MANUAL_PER_DOCUMENT + MAX_RESTORE_POINTS_PER_DOCUMENT
-  expect(PROMOTE_MAX_JUDGED_ELEMENTS).toBeGreaterThanOrEqual(perDocument * MARKDOWN_MAX_CHARS)
-})
+  const { board, note } = largestDocuments()
+  // Reached: the board really is the text-heavy one, so the guard measures it.
+  expect(stateSize(board)).toBeGreaterThan(CANVAS_MAX_NODES * NODE_TEXT_MAX_CHARS)
+  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(perDocument * stateSize(board))
+  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(perDocument * stateSize(note))
+}, 60_000)
 
 it('refuses saved versions that cost more to check than one move allows with 413, merging nothing', async () => {
   const { promote, documents } = harness()

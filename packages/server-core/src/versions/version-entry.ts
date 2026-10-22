@@ -1,5 +1,9 @@
 import {
+  CANVAS_MAX_EDGES_AND_LINES,
+  CANVAS_MAX_NODES,
+  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
   okfActorSchema,
   versionLabelSchema,
   WORKSPACE_ID_PATTERN,
@@ -151,25 +155,41 @@ export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 export const PROMOTE_MAX_VERSIONS = 120_000
 
 /**
- * The most a promotion's carried versions may cost to judge, counted in the
- * elements projected — one per character, map entry or list element of each
- * document state a row names, every distinct (point, document) once. The row
- * cap does not bound it: a row is a few hundred bytes, the state it names is
- * up to a document's limit, and each distinct state is projected and judged
- * on the serving loop — measured at roughly 3-4 M characters a second, so
- * 120,000 rows over full-size bodies is hours.
+ * The largest state one document can hold, in loro-adapter's `stateSize`
+ * unit: the larger of a note at `MARKDOWN_MAX_CHARS` and a board at every
+ * node and edge limit with each node's text and each edge's label full,
+ * plus a quarter for each element's own fields (ids, geometry, tags).
+ * Measured: the largest note is 262,158, the largest board 18,520,904 —
+ * 22 per element over its text — against an allowance of 23,040,000.
+ */
+const LARGEST_DOCUMENT_STATE = Math.max(
+  MARKDOWN_MAX_CHARS,
+  ((CANVAS_MAX_NODES * NODE_TEXT_MAX_CHARS + CANVAS_MAX_EDGES_AND_LINES * LABEL_MAX_CHARS) * 5) / 4,
+)
+
+/**
+ * The most a promotion's carried versions may cost to judge, in
+ * loro-adapter's `stateSize` unit — one per map entry and list element and
+ * one per character of every string, of each document state a row names,
+ * every distinct (point, document) once. The row cap does not bound it: a
+ * row is a few hundred bytes, the state it names is up to a document's
+ * limit, and each distinct state is projected and judged on the serving
+ * loop.
  *
  * Sized from what a browser keeper can hold of ONE document: 450 versions
  * (50 automatic checkpoints, `@kamiazya/whiteboard-history`'s
  * `MAX_AUTO_PER_DOCUMENT`, plus at most 200 manual saves and 200 restore
- * points, its two ceilings) each at `MARKDOWN_MAX_CHARS`. So a document's
- * whole history at the largest body always passes, as does any workspace whose
- * carried history projects no more than that in total — about half a minute
- * of judging, against the hours the row cap alone admits. mcp-server's
- * promote route test holds the figure to that product, since this package
- * cannot import the history package.
+ * points, its two ceilings) each at `LARGEST_DOCUMENT_STATE`. So any one
+ * document's whole history at its largest legal size passes, board or note.
+ * Measured at the largest board, one judgement is ~1.1 s (projection 274 ms,
+ * size judgement 481 ms, digest 262 ms) — about 17 M a second, so the
+ * budget is some ten minutes of judging, handed back to the loop between
+ * judgements, against the unbounded hours the row cap alone admits.
+ * mcp-server's promote route test builds the largest board and note and
+ * holds the figure to 450 of each, since this package cannot import the
+ * history package.
  */
-export const PROMOTE_MAX_JUDGED_ELEMENTS = 450 * MARKDOWN_MAX_CHARS
+export const PROMOTE_MAX_JUDGED_SIZE = 450 * LARGEST_DOCUMENT_STATE
 
 /**
  * The most trashed documents one promotion carries the bytes of: the most

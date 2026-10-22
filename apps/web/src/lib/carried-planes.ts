@@ -26,7 +26,7 @@ import {
   readTrashEntries,
   readWorkspaceDocuments,
   scanFileReferences,
-  stateElementCount,
+  stateSize,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   base64UrlToBytes,
@@ -245,7 +245,7 @@ export function unconfirmedPlanes(
 
 /**
  * What judging each version costs the keeper, in its unit: the elements of
- * the document's state at the version's point (`stateElementCount` of the
+ * the document's state at the version's point (`stateSize` of the
  * projection), each distinct (point, document) once — the keeper's charge,
  * computed the keeper's way over this browser's copy of the same record. A
  * point this record cannot reach costs nothing here; the keeper refuses it
@@ -266,7 +266,7 @@ function judgedCost(record: LoroDoc): (version: PromotedVersion) => number {
       return 0
     }
     const content = projectWorkspaceDocument(past, version.documentId)
-    return content === null ? 0 : stateElementCount(content)
+    return content === null ? 0 : stateSize(content)
   }
 }
 

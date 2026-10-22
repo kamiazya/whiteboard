@@ -17,7 +17,7 @@ import { decodeFrontiers, encodeFrontiers, type Frontiers, LoroDoc } from 'loro-
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { judgeCarried } from './promote-carried.js'
 
-const tally = { projections: 0, charsProjected: 0, elementsJudged: 0 }
+const tally = { projections: 0, charsProjected: 0, sizeCharged: 0 }
 
 vi.mock('@kamiazya/whiteboard-loro-adapter', async (importOriginal) => {
   const real = await importOriginal<typeof loroAdapter>()
@@ -28,10 +28,14 @@ vi.mock('@kamiazya/whiteboard-loro-adapter', async (importOriginal) => {
       if (content !== null) {
         tally.projections += 1
         tally.charsProjected += content.getText(real.MARKDOWN_BODY_KEY).length
-        // A fresh copy's oplog is its state: one op per character, entry or element.
-        for (const count of content.oplogVersion().toJSON().values()) tally.elementsJudged += count
       }
       return content
+    },
+    // What each judgement was charged, in the unit loro-adapter's own tests define.
+    stateSize: (content: Parameters<typeof real.stateSize>[0]) => {
+      const size = real.stateSize(content)
+      tally.sizeCharged += size
+      return size
     },
   }
 })
@@ -87,7 +91,7 @@ function opsUpTo(doc: LoroDoc, frontiers: Frontiers): number {
 afterEach(() => {
   tally.projections = 0
   tally.charsProjected = 0
-  tally.elementsJudged = 0
+  tally.sizeCharged = 0
   vi.restoreAllMocks()
 })
 
@@ -150,8 +154,8 @@ describe('judgeCarried, rows at distinct points', () => {
     const rows = alternatingRows(points).slice(0, 4)
     const exact = await judgeCarried(incoming, { trash: [], versions: rows })
     if (exact.kind !== 'admitted') throw new Error(`not admitted: ${exact.kind}`)
-    const projected = tally.elementsJudged
-    tally.elementsJudged = 0
+    const projected = tally.sizeCharged
+    tally.sizeCharged = 0
     const judged = await judgeCarried(incoming, { trash: [], versions: rows }, projected)
     expect(judged.kind).toBe('admitted')
     const refused = await judgeCarried(incoming, { trash: [], versions: rows }, projected - 1)

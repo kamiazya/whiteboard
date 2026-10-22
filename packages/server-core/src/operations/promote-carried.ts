@@ -18,14 +18,14 @@ import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   statedKindSplit,
-  stateElementCount,
+  stateSize,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
 import {
-  PROMOTE_MAX_JUDGED_ELEMENTS,
+  PROMOTE_MAX_JUDGED_SIZE,
   PROMOTE_MAX_TRASH,
   PROMOTE_MAX_VERSIONS,
   type PromotedTrashBytes,
@@ -145,7 +145,7 @@ function pastReader(incoming: LoroDoc) {
 function judgeDocumentAt(
   past: LoroDoc,
   version: Pick<CarriedVersion, 'id' | 'documentId'>,
-  charge: (elements: number) => boolean,
+  charge: (size: number) => boolean,
 ): PointJudgement | { readonly reason: string } | 'over-budget' {
   const content = projectWorkspaceDocument(past, version.documentId)
   if (content === null) {
@@ -153,7 +153,7 @@ function judgeDocumentAt(
       reason: `Version "${version.id}" names a document the record did not hold at that point.`,
     }
   }
-  if (!charge(stateElementCount(content))) return 'over-budget'
+  if (!charge(stateSize(content))) return 'over-budget'
   const breach = judgeStateWithinTextLimits(content)
   if (breach !== null) {
     const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)
@@ -237,7 +237,7 @@ function placeRows(
  * A document at a point is judged once, however many rows name it, and rows
  * are judged in history order, so the fork crosses the history once however
  * the caller ordered them; the answer keeps the caller's order. Every
- * distinct judgement is charged to `budget`, in elements projected, so rows
+ * distinct judgement is charged to `budget`, in `stateSize` of each projection, so rows
  * naming distinct points cannot buy a projection each without bound.
  *
  * Within the budget a move may still hold hundreds of judgements, each
@@ -265,8 +265,8 @@ async function judgeVersions(
   const judged = new Map<string, PointJudgement>()
   const rows: AdoptedVersion[] = new Array(versions.length)
   let spent = 0
-  const charge = (elements: number): boolean => {
-    spent += elements
+  const charge = (size: number): boolean => {
+    spent += size
     return spent <= budget
   }
   let sliceStarted = Date.now()
@@ -295,8 +295,8 @@ export async function judgeCarried(
     readonly trash: readonly CarriedTrashBytes[]
     readonly versions: readonly CarriedVersion[]
   },
-  /** Elements the version judgements may project; a parameter so a test can reach it cheaply. */
-  budget: number = PROMOTE_MAX_JUDGED_ELEMENTS,
+  /** The `stateSize` the version judgements may charge; a parameter so a test can reach it cheaply. */
+  budget: number = PROMOTE_MAX_JUDGED_SIZE,
 ): Promise<CarriedJudgement> {
   // Counted before any row is judged, so past either cap nothing is.
   if (carried.versions.length > PROMOTE_MAX_VERSIONS) {
