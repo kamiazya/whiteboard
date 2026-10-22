@@ -18,7 +18,11 @@ an explicitly lossy projection rather than a way to read the stored content
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code
 block. Inline `$…$` math is drawn as its source text everywhere, the web app
-included. In the web app, the note preview, the canvas editor, a past version
+included. Fenced code blocks are syntax-coloured for the languages the layout
+knows (the note preview, the daemon's renders and the exports alike), in the
+light or dark palette of the surface they are drawn on. Footnotes are not
+supported: `[^1]` stays in the text as written and its `[^1]: …` definition
+is drawn as an ordinary paragraph where it was written. In the web app, the note preview, the canvas editor, a past version
 opened from version history, and the SVG/PNG exports of either kind (see
 [Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
 diagrams — in the document's own text, in a note or board it embeds with

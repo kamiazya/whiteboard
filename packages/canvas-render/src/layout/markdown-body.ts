@@ -1,5 +1,6 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { highlightCode } from '../highlight/lowlight.js'
 import { withReferenceSeams } from '../references/seams.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
@@ -64,12 +65,13 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
   // Opened here rather than in the typesetter so the canvases this note
   // embeds spend from the same account as the note's own embeds.
   const nestedLayoutBudget = options.nestedLayoutBudget ?? createNestedLayoutBudget()
+  const appearance = canvasAppearance ?? createSpatialTheme({ mode: 'light' })
   return typesetMdastBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
       fitSceneIntoBox(
         layoutSpatialCanvas(canvas, {
           measure: options.measure,
-          appearance: canvasAppearance ?? createSpatialTheme({ mode: 'light' }),
+          appearance,
           embedPath: box.embedPath,
           nestedLayoutBudget,
           ...pickKeys(options, FORWARDED_TO_EMBEDDED_CANVAS),
@@ -78,6 +80,11 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
       ),
     ...rest,
     nestedLayoutBudget,
+    // The tokeniser and its palette are defaults for the lowlight reason
+    // (architecture-map.md); the palette follows the mode an embedded canvas
+    // is drawn in, so a fence matches the page around it.
+    highlightCode: rest.highlightCode ?? highlightCode,
+    syntax: rest.syntax ?? appearance.resolveSyntax?.(),
   })
 }
 
