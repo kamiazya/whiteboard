@@ -5,8 +5,9 @@
 // covered end to end by `scripts/smoke/mcp-e2e-smoke.mjs`.
 
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
-import { createMcpRouter, type McpRouterDeps } from './mcp.js'
+import { createMcpRouter, type McpRouterDeps, refuseUnservedMcpMethods } from './mcp.js'
 
 // Only the legacy era answers from the root's deps, and every request here is
 // modern, so a read of them means a request was routed to the wrong era.
@@ -19,12 +20,11 @@ const LEGACY_ERA_ONLY = new Proxy(
   },
 ) as ServerDeps
 
-function routerWith(fetchImpl: (request: Request) => Promise<Response>, standaloneStream = true) {
+function routerWith(fetchImpl: (request: Request) => Promise<Response>) {
   const fetch = vi.fn(fetchImpl)
   const deps = {
     modernMcpHandler: { fetch } as unknown as McpRouterDeps['modernMcpHandler'],
     serverDeps: LEGACY_ERA_ONLY,
-    standaloneStream,
   } satisfies McpRouterDeps
   return { router: createMcpRouter(deps), fetch }
 }
@@ -78,15 +78,45 @@ describe('the /mcp router', () => {
   })
 })
 
-describe('the /mcp router without a standalone stream', () => {
-  it('answers a GET with 405 and builds no server for it', async () => {
-    const { router, fetch } = routerWith(async () => new Response('unreached'), false)
-    const res = await router.request('http://d/mcp', {
-      method: 'GET',
-      headers: { accept: 'text/event-stream' },
-    })
+describe('the /mcp method guard', () => {
+  function guarded(standaloneStream: boolean) {
+    const reached = vi.fn(() => new Response('reached'))
+    const app = new Hono()
+    app.use('/mcp', refuseUnservedMcpMethods({ standaloneStream }))
+    app.all('/mcp', reached)
+    return { app, reached }
+  }
+
+  it.each([
+    ['GET', 'POST, DELETE'],
+    ['HEAD', 'POST, DELETE'],
+    ['OPTIONS', 'POST, DELETE'],
+  ])('without a standalone stream answers %s with 405 and Allow %s', async (method, allow) => {
+    const { app, reached } = guarded(false)
+    const res = await app.request('http://d/mcp', { method })
     expect(res.status).toBe(405)
-    expect(res.headers.get('allow')).toBe('POST')
-    expect(fetch).not.toHaveBeenCalled()
+    expect(res.headers.get('allow')).toBe(allow)
+    expect(reached).not.toHaveBeenCalled()
+  })
+
+  it.each(['HEAD', 'PUT', 'PATCH'])('with a standalone stream still refuses %s', async (method) => {
+    const { app, reached } = guarded(true)
+    const res = await app.request('http://d/mcp', { method })
+    expect(res.status).toBe(405)
+    expect(res.headers.get('allow')).toBe('GET, POST, DELETE')
+    expect(reached).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [false, 'POST'],
+    [false, 'DELETE'],
+    [true, 'GET'],
+    [true, 'POST'],
+    [true, 'DELETE'],
+  ])('with standaloneStream=%s passes %s on', async (standaloneStream, method) => {
+    const { app, reached } = guarded(standaloneStream)
+    const res = await app.request('http://d/mcp', { method })
+    expect(res.status).toBe(200)
+    expect(reached).toHaveBeenCalledTimes(1)
   })
 })
