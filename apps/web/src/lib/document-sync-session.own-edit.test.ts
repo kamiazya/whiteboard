@@ -5,7 +5,12 @@
  * not look at it being made.
  */
 
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  resolveWorkspaceDocumentById,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -59,6 +64,44 @@ describe('the content state of the person’s own edit', () => {
 
     expect(s.session.getContentState()).not.toBeNull()
     expect(states).toEqual([])
+    s.session.dispose()
+  })
+})
+
+/**
+ * The list compares a recorded state with the digest the workspace index
+ * derives for the document's tree node. A workspace-scoped session holds the
+ * whole workspace record, so digesting the record's own roots would announce
+ * a state no listing ever shows.
+ */
+describe('the content state announced by a workspace-scoped session', () => {
+  const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+  function workspaceSnapshot(): Uint8Array {
+    const record = new LoroDoc()
+    createWorkspaceDocumentAtPath(record, { path: 'design', documentId: DOC, kind: 'spatial' })
+    writeSpatialCanvas(documentContainers(record, DOC), canvas)
+    record.commit()
+    return record.export({ mode: 'snapshot' })
+  }
+
+  it('is the digest the workspace listing derives for that document', async () => {
+    vi.useFakeTimers()
+    const states: string[] = []
+    const s = openTestSession({
+      snapshot: workspaceSnapshot(),
+      deps: { contentDocumentId: DOC, onOwnEditContentState: (state) => states.push(state) },
+    })
+
+    await editAndPush(s.session, canvas, MOVE)
+
+    const exported = s.session.exportSnapshot()
+    expect(exported).not.toBeNull()
+    const record = new LoroDoc()
+    record.import(exported as Uint8Array)
+    const listed = resolveWorkspaceDocumentById(record, DOC)?.contentDigest
+    expect(listed).toBeDefined()
+    expect(states.at(-1)).toBe(listed)
     s.session.dispose()
   })
 })
