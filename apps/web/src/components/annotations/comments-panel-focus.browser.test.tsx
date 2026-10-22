@@ -18,6 +18,7 @@
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
@@ -122,4 +123,22 @@ it('leaves Escape alone for a host that gave it nowhere to hand focus back to', 
   // Still here, still focused: no host answer is not a reason to drop the
   // reader somewhere unnamed.
   await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
+})
+
+it('keeps the draft box focused when it appears in a panel that was already mounted', async () => {
+  // Under StrictMode the box's own effects are replayed (view destroyed and
+  // rebuilt) after the panel's focus effect ran, and the panel's effect is
+  // not replayed because the panel itself was already there. The rebuilt
+  // view has to claim focus by itself.
+  const { rerender } = render(
+    <StrictMode>
+      <CommentsPanel threads={[OPEN]} onCreateThread={vi.fn()} />
+    </StrictMode>,
+  )
+  rerender(
+    <StrictMode>
+      <CommentsPanel threads={[OPEN]} composeAnchor={PASSAGE} onCreateThread={vi.fn()} />
+    </StrictMode>,
+  )
+  await expect.element(page.getByRole('textbox', { name: 'Comment' })).toHaveFocus()
 })

@@ -398,6 +398,12 @@ export function CommentsPanel({
           <div className="flex items-end gap-1">
             <CommentComposer
               apiRef={composeRef}
+              // Also on mount, beside the effect above: a box that appears in
+              // a panel already mounted can have its editor view rebuilt
+              // after that effect ran (a StrictMode replay), and the effect
+              // does not run again. autoFocus only takes from the body or a
+              // closing menu, never from a real focus holder.
+              autoFocus
               label="Comment"
               value={composeDraft}
               onChange={setComposeDraft}
