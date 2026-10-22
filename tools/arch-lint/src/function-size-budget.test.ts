@@ -97,7 +97,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
   'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 139,
-  'apps/web/src/components/document-editor/InspectorSegment.tsx#InspectorSegment': 56,
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
@@ -113,7 +112,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // (measured: lifting a slot moves the complexity by about one, because the
   // condition that decides whether to render it stays).
   // +2: `tagLibrary`, handed to the preview column.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 640,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 641,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
@@ -197,11 +196,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1662,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1664,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 100,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 67,
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
@@ -223,7 +222,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
   'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 59,
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
-  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 81,
+  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 83,
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
@@ -232,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 125,
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 421,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 429,
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
@@ -249,7 +248,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
   'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 147,
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
-  'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 217,
+  'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
   'apps/web/src/components/use-preview-viewport.ts#usePreviewViewport': 97,
   'apps/web/src/components/workspace-files/DocumentMinimap.tsx#DocumentMinimap': 85,
@@ -260,11 +259,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // A document's card, and the picture with the two things drawn ON it, are
   // their own components. The two below are those.
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
-  'apps/web/src/components/workspace-files/FolderContentsList.tsx#CardThumbnail': 68,
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 102,
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx#NewDocumentDialog': 165,
   'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 139,
-  'apps/web/src/components/workspace-files/RecentLane.tsx#RecentLane': 53,
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
   // The two layouts are ONE card with a `layout`. The entry below is that card
   // — the whole of what both layouts draw, counted once.
@@ -279,12 +276,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 790,
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 793,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 92,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 84,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
@@ -296,7 +293,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
-  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 63,
+  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 64,
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   // The receiving half of a cross-origin transfer, as one sequence: announce,
   // listen, accept, report. The workspace list is already split out
@@ -309,7 +306,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   // Raised by two: the session's refused-write report and its teardown.
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 336,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 339,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -328,18 +325,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
   // Raised by two more for a trash restore bringing it back, which resumes it.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 894,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 901,
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the
   // document, which is the same delete rather than unreadable bytes.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 194,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 89,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 195,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 90,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
-  'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
+  'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
   'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 270,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
@@ -359,7 +356,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 454,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
@@ -368,13 +365,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 342,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 351,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
+  // The row's controls in one JSX run; the notice prop is one more spread.
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 52,
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
@@ -477,7 +476,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
-  'packages/canvas-render/src/references/seams.ts#referenceSeams': 73,
+  'packages/canvas-render/src/references/seams.ts#referenceSeams': 76,
   'packages/canvas-render/src/svg/backend.ts#buildSvgDocumentParts': 61,
   'packages/canvas-render/src/svg/backend.ts#renderNode': 97,
   'packages/canvas-render/src/svg/legend.ts#renderLegend': 75,

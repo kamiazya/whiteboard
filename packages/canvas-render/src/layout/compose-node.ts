@@ -214,7 +214,42 @@ const COMPOSE_BY_KIND = {
   link: composeLinkNode,
 } satisfies Record<NodeKind, NodeComposer>
 
+/** Side of the padlock, and its inset from the node's top-right corner. */
+const LOCK_BADGE_PX = 12
+const LOCK_BADGE_INSET_PX = 4
+
+/**
+ * The padlock marking a locked node, in the corner of its box. Document
+ * canvas only: inside a miniature it would be a mark on something the user
+ * cannot lock from there. Its paint is the node's own resolved stroke, so the
+ * theme assigns it and a locked node needs no colour of its own.
+ */
+function lockBadge(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  if (options.embedDepth > 0 || options.lockedNodeIds?.includes(node.id) !== true) return []
+  const stroke = options.appearance.resolveNode(node).appearance?.stroke
+  return [
+    {
+      kind: 'icon',
+      icon: 'lock',
+      bbox: {
+        x: node.x + node.width - LOCK_BADGE_INSET_PX - LOCK_BADGE_PX,
+        y: node.y + LOCK_BADGE_INSET_PX,
+        w: LOCK_BADGE_PX,
+        h: LOCK_BADGE_PX,
+      },
+      ...(stroke === undefined ? {} : { appearance: { stroke } }),
+    },
+  ]
+}
+
 export function composeNode(
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] {
+  return [...composeNodeContent(node, options), ...lockBadge(node, options)]
+}
+
+function composeNodeContent(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {

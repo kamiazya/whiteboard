@@ -24,6 +24,30 @@ describe('useReferenceSeams', () => {
     expect(load).toHaveBeenCalledTimes(1)
   })
 
+  it('reports a target pending while its load is in flight, then neither pending nor missing', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const load = vi.fn<ReferenceLoader>(async () => {
+      await gate
+      return { documentId: B, body: 'embedded body', name: 'Note B' }
+    })
+    const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
+    expect(result.current.isLoading?.(B)).toBe(true)
+    release?.()
+    await waitFor(() => expect(result.current.resolveEmbed(B)).toBeDefined())
+    expect(result.current.isLoading?.(B) ?? false).toBe(false)
+  })
+
+  it('does not report a target pending once it answered that nothing is there', async () => {
+    const { result } = renderHook(() =>
+      useReferenceSeams({ body: `![[${B}]]`, load: async () => undefined }),
+    )
+    await waitFor(() => expect(result.current.isLoading?.(B) ?? false).toBe(false))
+    expect(result.current.resolveEmbed(B)).toBeUndefined()
+  })
+
   it('asks a rejected load again, so one failed store read does not blank an embed for good', async () => {
     // The flake this closes: a transient IndexedDB read threw, the loader
     // reported it as "this document has no content", and the prefetch cached

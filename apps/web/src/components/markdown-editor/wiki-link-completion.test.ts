@@ -72,6 +72,13 @@ describe('wikiLinkCompletionSource', () => {
     expect(accept(doc, result!, index)).toBe('[[dup|Dup]]')
   })
 
+  it("tells two same-named documents apart by showing each one's path beside the name", () => {
+    const doc = '[[Du'
+    const result = complete(doc, doc.length)
+    const dups = result!.options.filter((o) => o.label === 'Dup')
+    expect(dups.map((o) => o.detail).sort()).toEqual(['dup', 'dup-2'])
+  })
+
   it('inserts at the CURRENT bracket position even after the document changed above it', () => {
     // The mobile desync shape: the result opens, then the document shifts
     // under it before the user accepts — an autocorrect elsewhere, a CRDT

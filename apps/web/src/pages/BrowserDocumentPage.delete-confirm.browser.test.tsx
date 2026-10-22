@@ -17,21 +17,18 @@ claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
 /**
- * The deleted rows are gone and the page is on the one left in their place:
- * with nothing else in the store, that is a fresh canvas.
+ * The deleted rows are gone and nothing took their place: the page leaves
+ * for the list, so no fresh canvas is seeded behind it.
  */
-async function expectReplacedBy(store: FoldingBrowserIndex, beforeIds: string[]): Promise<void> {
+async function expectDeleted(store: FoldingBrowserIndex, beforeIds: string[]): Promise<void> {
   await waitFor(
     async () => {
       const afterIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
       for (const id of beforeIds) expect(afterIds).not.toContain(id)
-      expect(afterIds).toHaveLength(1)
     },
     { timeout: 5000 },
   )
-  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
-    timeout: 5000,
-  })
+  expect(await listBrowserDocuments(store)).toHaveLength(0)
 }
 
 async function renderLoaded(
@@ -93,11 +90,11 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     await openDeleteDialog()
 
-    // Not yet deleted: the same rows, not a fresh one standing in for them.
+    // Not yet deleted: the same rows.
     expect((await listBrowserDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 
-  it('confirming deletion removes the canvas row and opens a fresh canvas', async () => {
+  it('confirming deletion removes the canvas row and opens nothing in its place', async () => {
     const store = await renderLoaded()
     const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     expect(beforeIds.length).toBeGreaterThan(0)
@@ -107,7 +104,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       .getByRole('button', { name: /^delete$/i })
       .click()
 
-    await expectReplacedBy(store, beforeIds)
+    await expectDeleted(store, beforeIds)
   })
 
   it('cancelling via the Cancel button keeps the canvas intact', async () => {
@@ -180,7 +177,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       .getByRole('button', { name: /^delete$/i })
       .click()
 
-    await expectReplacedBy(store, beforeIds)
+    await expectDeleted(store, beforeIds)
   })
 
   it('a refused delete says so in the row and keeps the document open', async () => {

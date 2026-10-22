@@ -122,4 +122,27 @@ describe('useSceneExport', () => {
     })
     expect(result.current.exportError).toBeNull()
   })
+
+  it('says what it exported once the file has gone out, and nothing on failure', async () => {
+    stubDownloads()
+    const onExported = vi.fn()
+    const ok = renderHook(() =>
+      useSceneExport({
+        onExport: vi.fn().mockResolvedValue(new Blob(['x'])),
+        filenameBase: 'c',
+        onExported,
+      }),
+    )
+    const empty = renderHook(() =>
+      useSceneExport({ onExport: vi.fn().mockResolvedValue(null), filenameBase: 'c', onExported }),
+    )
+    await act(async () => {
+      await empty.result.current.handleExport('svg')
+    })
+    expect(onExported).not.toHaveBeenCalled()
+    await act(async () => {
+      await ok.result.current.handleExport('png')
+    })
+    expect(onExported).toHaveBeenCalledExactlyOnceWith('Exported as PNG')
+  })
 })

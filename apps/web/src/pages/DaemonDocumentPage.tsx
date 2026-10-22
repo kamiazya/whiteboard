@@ -17,6 +17,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { faviconStatusOf } from '../lib/favicon.js'
+import type { WorkspaceFilesSource } from '../lib/files-source.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
@@ -50,6 +51,7 @@ import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useListFollowsRecord } from './use-follow-workspace-writes.js'
+import { useDaemonOwnEditBaseline } from './use-own-edit-baseline.js'
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -78,6 +80,18 @@ const pathOf = (document: { readonly path: string }): string => document.path
  */
 const buildsNoSession = (state: DaemonPageState): boolean =>
   state.kind === 'membership-refused' || state.kind === 'load-degraded'
+
+/**
+ * The `[[` completion's "Create" row needs a creator that makes a markdown
+ * note and stays on the page being written; no source yet means no row.
+ */
+function linkTargetCreator(
+  source: WorkspaceFilesSource | null,
+): { createLinkTarget: (path: string) => Promise<void> } | Record<string, never> {
+  return source === null
+    ? {}
+    : { createLinkTarget: (path: string) => source.createDocument(path, 'markdown') }
+}
 
 /**
  * The daemon keeper: the controller over the daemon's REST routes, the sync
@@ -174,7 +188,15 @@ function useDaemonDocument(
   // outline lapse on their own, so a crashed agent leaves nothing behind.
   const { state: agentActivity, report: reportAgentActivity } = useAgentActivity()
 
+  const ownEditBaseline = useDaemonOwnEditBaseline(
+    daemonBaseUrl,
+    controller.workspaceId,
+    controller.path,
+    contentDocumentId,
+    controller.documents,
+  )
   const sync = useDocumentSync(backend, {
+    ...ownEditBaseline,
     ...(contentDocumentId === undefined ? {} : { contentDocumentId }),
     onAuthError: reportAuthError,
     // Any version_created broadcast — this page's own save, MCP tool saves,
@@ -278,6 +300,7 @@ function useDaemonDocument(
     canvas: documentKind === 'spatial' ? canvasValue : null,
     duplicateDocument: controller.duplicateDocument,
     deleteDocument: controller.deleteDocument,
+    onDeleted: onNavigateBack,
   })
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
@@ -481,6 +504,7 @@ function useDaemonDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
+      ...linkTargetCreator(tagsSource),
       loadReference,
     },
     openDocument,

@@ -4,7 +4,7 @@
  * decision 6): what the LAYOUT attached to the scene, drawn as the editor's
  * own overlay — the same `SceneLegend` the SVG backend draws into an export,
  * so the reader of the screen and the reader of the PNG are told the same
- * thing. Shown only when the board has something to say; collapsible to its
+ * thing. Shown only when a key carries a colour; collapsible to its
  * title, since a legend is for reading and not for editing.
  *
  * Positioned divs rather than an `<svg>`, for the reason the minimap gives:
@@ -18,8 +18,23 @@ import { legendValueLabel, type SceneLegend } from '@kamiazya/whiteboard-canvas-
 import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 
+function UncarriedNotes({ uncarried }: { readonly uncarried: SceneLegend['uncarried'] }) {
+  return (
+    <>
+      {uncarried.boxes && (
+        <span className="text-muted-foreground">box colour: no key carries it</span>
+      )}
+      {uncarried.edges && (
+        <span className="text-muted-foreground">edge colour: no key carries it</span>
+      )}
+    </>
+  )
+}
+
 export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
   const [open, setOpen] = useState(true)
+  // Colour no key carries stays a fact of the score; on its own it is not drawn.
+  if (legend.keys.length === 0) return null
   return (
     <aside
       data-editor-overlay
@@ -80,12 +95,7 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
               ))}
             </div>
           ))}
-          {legend.uncarried.boxes && (
-            <span className="text-muted-foreground">box colour: no key carries it</span>
-          )}
-          {legend.uncarried.edges && (
-            <span className="text-muted-foreground">edge colour: no key carries it</span>
-          )}
+          <UncarriedNotes uncarried={legend.uncarried} />
         </div>
       )}
     </aside>

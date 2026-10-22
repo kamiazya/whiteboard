@@ -48,10 +48,18 @@ export interface BrowserDocumentController {
    */
   followRecordedName(name: string | null): void
   /**
-   * Resolves once the document is gone and what is left is open (a fresh
-   * document when nothing is), or when there is nothing to delete; REJECTS
-   * with the sentence to show when it refused and kept the document — the
-   * shape `use-document-actions.tsx` reads, the same as the daemon keeper's.
+   * True once a URL named a document that is not there AND the workspace
+   * holds none to fall back to. The page leaves for the list then: seeding a
+   * document at the requested path would turn a dead link into an empty
+   * canvas.
+   */
+  workspaceEmpty: boolean
+  /**
+   * Resolves once the document is gone, or when there is nothing to delete;
+   * opens nothing in its place — where to go next is the page's (it leaves
+   * for the list). REJECTS with the sentence to show when it refused and kept
+   * the document — the shape `use-document-actions.tsx` reads, the same as
+   * the daemon keeper's.
    */
   deleteDocument(): Promise<void>
   startFresh(): Promise<void>
@@ -155,8 +163,7 @@ async function openDeepLink(
 /**
  * The document the pointer names, seeding a new one when it names nothing.
  *
- * A pointer naming a document the index no longer has opens what is left,
- * as a delete does. It is not unreadable data — the pointer outlived its
+ * A pointer naming a document the index no longer has opens what is left. It is not unreadable data — the pointer outlived its
  * document (a delete whose repoint had not landed, another tab's delete) —
  * and an error screen there is a dead end with nothing to recover.
  */
@@ -180,22 +187,16 @@ async function openPointedAt(
 }
 
 /**
- * What a delete leaves open: the first document still listed, as the daemon
- * keeper does, or a fresh one when none is — this keeper's first-visit answer
- * to an empty workspace, where the daemon has an empty state instead.
+ * What a pointer naming a missing document opens: the first document still
+ * listed, as the daemon keeper does, or a fresh one when none is — this
+ * keeper's first-visit answer to an empty workspace, where the daemon has an
+ * empty state instead.
  *
- * `alive` stops an OPEN that the page abandoned from seeding or repointing;
- * a delete passes none, since its repoint must land whether or not the page
- * is still there to show the result.
+ * `alive` stops an OPEN that the page abandoned from seeding or repointing.
  */
-function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot>
-function openWhatIsLeft(
-  stores: OpeningStores,
-  alive: StillMounted,
-): Promise<DocumentSnapshot | null>
 async function openWhatIsLeft(
   stores: OpeningStores,
-  alive: StillMounted = () => true,
+  alive: StillMounted,
 ): Promise<DocumentSnapshot | null> {
   const [next] = await listBrowserDocuments(stores.index, stores.clock)
   if (!alive()) return null
@@ -203,6 +204,31 @@ async function openWhatIsLeft(
   if (!alive()) return null
   await stores.pointer.set(opened.documentId)
   return opened
+}
+
+/**
+ * What a mount opens. A deep link that resolves to nothing falls through to
+ * the normal default-document flow rather than showing a degraded banner — a
+ * stale bookmark must not dead-end the user — unless the workspace holds
+ * nothing to fall back to: seeding there would put an empty canvas at the
+ * dead link's path.
+ */
+async function openOnMount(
+  stores: OpeningStores,
+  initialPath: string | undefined,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | 'workspace-empty' | null> {
+  const deepLinked =
+    initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
+  if (!alive()) return null
+  if (deepLinked !== null) return deepLinked
+  if (
+    initialPath !== undefined &&
+    (await listBrowserDocuments(stores.index, stores.clock)).length === 0
+  ) {
+    return 'workspace-empty'
+  }
+  return openPointedAt(stores, alive)
 }
 
 export function useBrowserDocumentController(
@@ -216,6 +242,7 @@ export function useBrowserDocumentController(
     clock = defaultClock,
   } = deps
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
+  const [workspaceEmpty, setWorkspaceEmpty] = useState(false)
   const [persistence, setPersistence] = useState<BrowserPersistenceState>({
     kind: 'saved',
     lastSavedAt: null,
@@ -242,6 +269,8 @@ export function useBrowserDocumentController(
   // requested one when its async load settles is allowed to commit state, so
   // an earlier call resolving after a later one can never clobber it.
   const switchGenerationRef = useRef(0)
+  // The id the last confirmed delete removed; a later edit aimed at it is dropped.
+  const deletedIdRef = useRef<string | null>(null)
   // Tracks the currently in-flight flush so overlapping callers (renameDocument's
   // fire-and-forget flush racing with switchDocument's own awaited flush) serialize
   // on the real outcome instead of the second caller observing an already-cleared
@@ -320,14 +349,13 @@ export function useBrowserDocumentController(
         clock: clockRef.current,
         loro: loroRef.current,
       }
-      // A deep link that resolves to nothing falls through to the normal
-      // default-document flow rather than showing a degraded banner — a stale
-      // bookmark must not dead-end the user.
-      const deepLinked =
-        initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
+      const opened = await openOnMount(stores, initialPath, alive)
       if (!alive()) return
-      const opened = deepLinked ?? (await openPointedAt(stores, alive))
-      if (!alive() || opened === null) return
+      if (opened === 'workspace-empty') {
+        setWorkspaceEmpty(true)
+        return
+      }
+      if (opened === null) return
       setSnapshot(opened)
     }
 
@@ -357,6 +385,10 @@ export function useBrowserDocumentController(
       // current before the immediate flushSave below reads it.
       const base = pendingSnapshotRef.current ?? snapshotRef.current
       if (base === null) return Promise.resolve()
+      // The page keeps showing the deleted document until it navigates away; a
+      // rename in that window has no row to land on and would degrade
+      // persistence for a document nobody can reach.
+      if (base.documentId === deletedIdRef.current) return Promise.resolve()
       // A cleared name becomes null, not an 'untitled' sentinel or the path:
       // the index stores an unnamed document by omitting `name`, and either
       // stand-in would make a name somebody typed equal to it read as none.
@@ -432,29 +464,9 @@ export function useBrowserDocumentController(
       throw new Error(`The ${noun} could not be removed. Your copy has been kept.`)
     }
     if (!removed) return
+    deletedIdRef.current = id
     // A switch in flight was aimed at a page that no longer holds this document.
     switchGenerationRef.current++
-    try {
-      const opened = await openWhatIsLeft({
-        index: indexRef.current,
-        pointer: pointerRef.current,
-        clock: clockRef.current,
-        loro: loroRef.current,
-      })
-      snapshotRef.current = opened
-      setSnapshot(opened)
-    } catch {
-      // The delete stands; only the next open failed, so the page offers the
-      // load-failed recovery rather than claiming the delete was refused.
-      snapshotRef.current = null
-      setSnapshot(null)
-      setPersistenceRef.current({
-        kind: 'degraded',
-        reason: 'load-failed',
-        message: 'The next document could not be opened.',
-        lastSavedAt: null,
-      })
-    }
   }, [flushSave])
 
   const startFresh = useCallback(async () => {
@@ -586,6 +598,7 @@ export function useBrowserDocumentController(
   return {
     loro: loroRef.current,
     snapshot,
+    workspaceEmpty,
     persistence,
     renameDocument,
     followRecordedName,

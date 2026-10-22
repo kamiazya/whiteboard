@@ -2,7 +2,7 @@ import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
 
 export interface PurgeTrashEntryDialogProps {
-  /** The path of the trashed document pending deletion, or null when closed. */
+  /** The label of the trashed document pending deletion (its name, else its path), or null when closed. */
   pending: string | null
   busy: boolean
   error: string | null

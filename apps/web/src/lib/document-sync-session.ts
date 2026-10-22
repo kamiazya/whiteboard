@@ -167,6 +167,17 @@ export interface SessionDeps {
    * before the edit lands bookmarks the state without it.
    */
   checkpoints?: { readonly signal: () => void; readonly flush: () => void }
+  /**
+   * The content state the document is in right after the person's OWN edit
+   * was written to it. Never called for a change that arrived through an
+   * import (a peer, an agent, the daemon): the person did not watch that one
+   * being made, so a surface treating this state as "seen" must not be told.
+   *
+   * Fires even while the session is being torn down, because the final
+   * debounced edit commits during dispose and is exactly the one a person
+   * leaves the page right after.
+   */
+  onOwnEditContentState?: (state: string) => void
 }
 
 export interface DocumentSyncSession {
@@ -329,6 +340,20 @@ export interface DocumentSyncSession {
 }
 
 /**
+ * The state a LISTING names the document by. A workspace-scoped session holds
+ * the whole workspace record, whose own roots hold none of the document's
+ * content, so digesting the record would name a state no list ever shows; the
+ * tree node's digest is the one the index compares.
+ */
+function listedContentState(
+  changed: LoroDoc,
+  contentDocumentId: string | undefined,
+): string | null {
+  if (contentDocumentId === undefined) return contentStateOf(changed)
+  return resolveWorkspaceDocumentById(changed, contentDocumentId)?.contentDigest ?? null
+}
+
+/**
  * One DocumentSyncSession = one live connection to one DocumentBackend. Owns
  * every piece of state that only makes sense for the lifetime of that single
  * connection (the LoroDoc, its UndoManager, the debounced commit pipeline,
@@ -392,6 +417,12 @@ export function createDocumentSyncSession(
     await Promise.resolve()
     await Promise.resolve()
     persistence.settle()
+  }
+
+  function announceOwnEdit(changed: LoroDoc, by: string): void {
+    if (by === 'import' || removed || deps.onOwnEditContentState === undefined) return
+    const state = listedContentState(changed, deps.contentDocumentId)
+    if (state !== null) deps.onOwnEditContentState(state)
   }
 
   function isStale(): boolean {
@@ -886,6 +917,7 @@ export function createDocumentSyncSession(
         })
 
         newDoc.subscribe((e) => {
+          announceOwnEdit(newDoc, e.by)
           if (isStale() || (e.by === 'import' ? documentRemoved(newDoc) : removed)) return
           // Fires for both a local commit (onChange -> doc.commit()) and a
           // remote import (onRemoteUpdate), matching MCP-app parity for

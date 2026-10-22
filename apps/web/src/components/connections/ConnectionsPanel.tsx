@@ -29,7 +29,7 @@ export function ConnectionsPanel({
   onLinkify,
 }: ConnectionsPanelProps) {
   return (
-    <section aria-label="Connections" className="px-3 py-2">
+    <section aria-label="Linked from" className="px-3 py-2">
       <p className="text-muted-foreground mb-1 text-[11px] font-semibold uppercase tracking-wide">
         Linked from {backlinks.length}
       </p>

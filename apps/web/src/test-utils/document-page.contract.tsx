@@ -46,6 +46,12 @@ export interface DocumentPageFixture {
   labelOf(doc: ContractDocument): string
   /** Resolves once the page has opened the document at `path`, however this keeper does that. */
   expectOpened(path: string): Promise<void>
+  /**
+   * Resolves once the page has handed off to the workspace list (a route on
+   * the browser, `onNavigateBack` on the daemon), and fails if it opened
+   * `sibling` on the way there.
+   */
+  expectLeftForList(sibling: ContractDocument): Promise<void>
   /** Makes this keeper's next delete REFUSE, however its store refuses one. */
   failNextDelete(): void
 }
@@ -143,7 +149,7 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
       await fixture.expectOpened(HERE.path)
     })
 
-    it('a confirmed delete opens what is left', async () => {
+    it('a confirmed delete leaves for the list and opens no other document', async () => {
       await fixture.mount([HERE, TARGET])
       const menu = await openDocumentOpsMenu()
       await act(async () => {
@@ -153,7 +159,7 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
       await act(async () => {
         fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }))
       })
-      await fixture.expectOpened(TARGET.path)
+      await fixture.expectLeftForList(TARGET)
       expect(screen.queryByRole('alertdialog')).toBeNull()
     })
   })

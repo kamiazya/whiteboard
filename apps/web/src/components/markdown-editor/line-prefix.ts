@@ -280,9 +280,9 @@ function outdentToParent(
  * keeps its shape.
  */
 export function changeIndent(direction: 1 | -1): StateCommand {
-  return (target) => {
-    const { state } = target
-    const first = targetLines(state)[0]
+  return ({ state, dispatch }) => {
+    const targets = targetLines(state)
+    const first = targets[0]
     const parsed = parseLinePrefix(first.text)
     const to =
       parsed.marker === 'none'
@@ -293,9 +293,127 @@ export function changeIndent(direction: 1 | -1): StateCommand {
     if (to === null) return false
     const delta = to - parsed.indent.length
     if (delta === 0) return false
-    return rewritePrefixes((line) => ({
-      ...line,
-      indent: ' '.repeat(Math.max(0, line.indent.length + delta)),
-    }))(target)
+    const before = Array.from({ length: state.doc.lines }, (_, i) => state.doc.line(i + 1).text)
+    const after = [...before]
+    const moved = targets.map((line) => line.number - 1)
+    for (const index of moved) {
+      const line = parseLinePrefix(before[index])
+      after[index] = renderLinePrefix({
+        ...line,
+        indent: ' '.repeat(Math.max(0, line.indent.length + delta)),
+      })
+    }
+    renumberAround(after, moved, parsed.indent.length)
+    const changes: { from: number; to: number; insert: string }[] = []
+    after.forEach((text, index) => {
+      if (text === before[index]) return
+      const line = state.doc.line(index + 1)
+      const body = parseLinePrefix(line.text).text
+      changes.push({
+        from: line.from,
+        to: line.from + line.text.length - body.length,
+        insert: text.slice(0, text.length - body.length),
+      })
+    })
+    if (changes.length === 0) return false
+    const changeSet = state.changes(changes)
+    dispatch(
+      state.update({
+        changes: changeSet,
+        selection: state.selection.map(changeSet, 1),
+        scrollIntoView: true,
+        userEvent: 'input',
+      }),
+    )
+    return true
+  }
+}
+
+/**
+ * The lines of the ordered run `index` belongs to: same quote, same indent,
+ * numbered, contiguous in one list. Deeper lines (children) and blank lines
+ * are walked through; a shallower line, a bullet at this depth or a
+ * non-list line ends the run.
+ */
+function orderedRun(lines: readonly string[], index: number): number[] {
+  const base = parseLinePrefix(lines[index])
+  const run = [index]
+  for (const step of [-1, 1] as const) {
+    for (let n = index + step; n >= 0 && n < lines.length; n += step) {
+      const verdict = siblingVerdict(lines[n], base)
+      if (verdict === 'end') break
+      if (verdict === 'member') {
+        if (step < 0) run.unshift(n)
+        else run.push(n)
+      }
+    }
+  }
+  return run
+}
+
+function siblingVerdict(text: string, base: LinePrefix): 'member' | 'pass' | 'end' {
+  if (text.trim() === '') return 'pass'
+  const other = parseLinePrefix(text)
+  if (other.marker === 'none' || other.quote !== base.quote) return 'end'
+  if (other.indent.length > base.indent.length) return 'pass'
+  return other.indent.length === base.indent.length && other.marker === 'ordered' ? 'member' : 'end'
+}
+
+/**
+ * Sets the numbers of an ordered run after a move. When the lines that did
+ * not move count upward (1, 2, 3 — the author numbers by hand) the whole run
+ * is numbered in sequence, from 1 when its first item is `restart`ed and
+ * from the number it carries otherwise. A run that does not count upward
+ * (`1. 1. 1.` is a legitimate way to write a list) keeps its numbers, and
+ * only a restarted first item is set to 1. Nothing is written where it would
+ * change a marker's width: children sit at the parent's content column, and
+ * this rewrite touches only the marker line.
+ */
+function renumberRun(
+  lines: string[],
+  run: readonly number[],
+  moved: readonly number[],
+  restart: boolean,
+): void {
+  const numbers = run.map((index) => parseLinePrefix(lines[index]).number)
+  const stayed = run.flatMap((index, k) => (moved.includes(index) ? [] : [numbers[k]]))
+  const counts = stayed.length >= 2 && stayed.every((n, k) => k === 0 || n > stayed[k - 1])
+  const start = restart ? 1 : numbers[0]
+  const wanted = counts
+    ? numbers.map((_, k) => start + k)
+    : numbers.map((n, k) => (k === 0 ? start : n))
+  if (wanted.some((n, k) => String(n).length !== String(numbers[k]).length)) return
+  run.forEach((index, k) => {
+    lines[index] = renderLinePrefix({ ...parseLinePrefix(lines[index]), number: wanted[k] })
+  })
+}
+
+/**
+ * Keeps ordered numbering truthful after lines moved: the run each moved
+ * line now sits in (a first item restarts at 1), and the run its old depth
+ * left a gap in. Only the runs a move touched are renumbered, so a list
+ * that deliberately starts at 5 elsewhere keeps its start.
+ */
+function renumberAround(lines: string[], moved: readonly number[], oldDepth: number): void {
+  const done = new Set<number>()
+  // A run whose first item is a line that just arrived, or that the move
+  // just left first, starts again at 1.
+  const visit = (index: number, orphaned: boolean) => {
+    if (done.has(index) || parseLinePrefix(lines[index]).marker !== 'ordered') return
+    const run = orderedRun(lines, index)
+    for (const member of run) done.add(member)
+    renumberRun(lines, run, moved, moved.includes(run[0]) || (orphaned && run[0] === index))
+  }
+  for (const index of moved) visit(index, false)
+  const last = moved[moved.length - 1]
+  // Only an ordered line leaves an ordered gap behind.
+  if (parseLinePrefix(lines[last]).marker !== 'ordered') return
+  for (let n = last + 1; n < lines.length; n++) {
+    if (lines[n].trim() === '') continue
+    const other = parseLinePrefix(lines[n])
+    if (other.marker === 'none') return
+    if (other.indent.length > oldDepth) continue
+    if (other.indent.length === oldDepth) visit(n, true)
+    return
   }
 }

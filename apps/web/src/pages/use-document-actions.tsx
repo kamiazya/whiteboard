@@ -20,6 +20,7 @@ import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { DeleteOpenDocumentDialog } from '../components/document-editor/DeleteOpenDocumentDialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import { useAnnounceNotice } from './document-notice.js'
 import { useDeleteDocument } from './use-delete-document.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 
@@ -31,6 +32,8 @@ export interface UseDocumentActionsOptions {
   readonly duplicateDocument: () => Promise<unknown>
   /** Resolves once the document is gone, or rejects. */
   readonly deleteDocument: () => Promise<void>
+  /** Runs once the delete resolved; the page leaves the document it showed. */
+  readonly onDeleted?: (() => void) | undefined
   /**
    * The decoded canvas, when this document HAS one — what the JSON Canvas row
    * copies. Null for a markdown document, and for a board whose bytes have
@@ -47,12 +50,46 @@ export interface DocumentActionSlots {
   readonly rowAlerts?: ReactNode
 }
 
+/**
+ * Text on the clipboard survives any chat/paste channel intact, which a
+ * binary download cannot — the phone-friendly way to hand the exact canvas
+ * (coordinates included) to a debugger. An image is written as a reference
+ * to the workspace's file, so the confirmation says it is not in the text.
+ */
+function CopyAsJsonCanvasItem({ canvas }: { canvas: SpatialCanvas }) {
+  // Read here, below the page's provider: the hook that builds this item runs
+  // in the keeper page, above it.
+  const announce = useAnnounceNotice()
+  return (
+    <DropdownMenuItem
+      onSelect={() => {
+        const json = serializeSpatial(canvas, 'extended')
+        announce(null)
+        void navigator.clipboard
+          ?.writeText(json)
+          .then(() =>
+            announce(
+              json.includes('asset:')
+                ? 'Copied as JSON Canvas — images are referenced, not embedded'
+                : 'Copied as JSON Canvas',
+            ),
+          )
+          .catch(() => {})
+      }}
+    >
+      <Braces aria-hidden="true" className="size-3.5" />
+      Copy as JSON Canvas
+    </DropdownMenuItem>
+  )
+}
+
 export function useDocumentActions({
   documentId,
   documentKind,
   canvas,
   duplicateDocument,
   deleteDocument,
+  onDeleted,
 }: UseDocumentActionsOptions): DocumentActionSlots {
   // The document on screen NOW, for an async handler that started under a
   // different one: a page switches documents in place rather than remounting,
@@ -71,27 +108,14 @@ export function useDocumentActions({
     documentId,
     documentKind,
     deleteDocument,
+    onDeleted,
   })
 
   return {
     menuTriggerRef: documentOpsButtonRef,
     menuItems: (
       <>
-        {canvas !== null && (
-          <DropdownMenuItem
-            onSelect={() => {
-              // Text on the clipboard survives any chat/paste channel intact,
-              // which a binary download cannot — the phone-friendly way to
-              // hand the exact canvas (coordinates included) to a debugger.
-              void navigator.clipboard
-                ?.writeText(serializeSpatial(canvas, 'extended'))
-                .catch(() => {})
-            }}
-          >
-            <Braces aria-hidden="true" className="size-3.5" />
-            Copy as JSON Canvas
-          </DropdownMenuItem>
-        )}
+        {canvas !== null && <CopyAsJsonCanvasItem canvas={canvas} />}
         <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
           <Copy aria-hidden="true" className="size-3.5" />
           Duplicate

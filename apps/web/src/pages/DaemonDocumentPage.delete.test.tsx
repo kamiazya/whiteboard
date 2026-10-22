@@ -98,14 +98,16 @@ describe('deleting a daemon-kept document from its own page', () => {
     vi.clearAllMocks()
   })
 
-  it('deletes through the daemon and moves to what is left', async () => {
+  it('deletes through the daemon and leaves for the workspace list, not a sibling', async () => {
     mockListDocuments.mockResolvedValue({ documents: [SOURCE, SIBLING] })
+    const onNavigateBack = vi.fn()
     await act(async () => {
       render(
         <DaemonDocumentPage
           daemonBaseUrl="http://127.0.0.1:3099"
           workspaceId="w1"
           path="agent-note"
+          onNavigateBack={onNavigateBack}
         />,
       )
     })
@@ -122,8 +124,8 @@ describe('deleting a daemon-kept document from its own page', () => {
     // delete keeps the saved versions for a restore, as a browser one does.
     expect(dialog.textContent).toContain(DESTRUCTIVE_COPY['delete-document']('note'))
 
-    // Once it is gone the list holds only the sibling, which is where the
-    // page has to land — a document page has nothing to show otherwise.
+    // A sibling opened in its place would read as the deleted note turning
+    // into another document; the list is where the page goes.
     mockListDocuments.mockResolvedValue({ documents: [SIBLING] })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
@@ -137,7 +139,8 @@ describe('deleting a daemon-kept document from its own page', () => {
         'agent-note',
       ),
     )
-    await waitFor(() => expect(constructed.at(-1)?.path).toBe('other-note'))
+    await waitFor(() => expect(onNavigateBack).toHaveBeenCalledTimes(1))
+    expect(constructed.map((c) => c.path)).not.toContain('other-note')
   })
 
   it('does not let a dialog opened for one document outlive it', async () => {

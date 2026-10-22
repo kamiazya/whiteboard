@@ -16,7 +16,7 @@
  * the only thing a kind decides is which members it offers.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { INSPECTOR_CHROME, INSPECTOR_ORDER } from '../../lib/inspector.js'
 import { InspectorSegment } from './InspectorSegment'
@@ -24,6 +24,10 @@ import { InspectorSegment } from './InspectorSegment'
 afterEach(cleanup)
 
 const noop = () => {}
+
+// The wide members only: below `sm` the same members fold into one menu whose
+// trigger shares the group's name, and jsdom applies no media queries.
+const inGroup = () => within(screen.getByRole('group', { name: 'Inspect this document' }))
 
 describe('InspectorSegment', () => {
   it('draws the members it is offered, in the declared order, whatever order they arrive in', () => {
@@ -48,18 +52,20 @@ describe('InspectorSegment', () => {
       />,
     )
 
-    const names = screen.getAllByRole('button').map((b) =>
-      b
-        .getAttribute('aria-label')
-        ?.replace(/[,(].*$/, '')
-        .trim(),
-    )
+    const names = inGroup()
+      .getAllByRole('button')
+      .map((b) =>
+        b
+          .getAttribute('aria-label')
+          ?.replace(/[,(].*$/, '')
+          .trim(),
+      )
     expect(names).toEqual([
       'Properties',
       'Display',
       'Comments',
       'Proposals',
-      'Connections',
+      'Linked from',
       'History',
     ])
     expect(names).toHaveLength(INSPECTOR_ORDER.length)
@@ -78,7 +84,7 @@ describe('InspectorSegment', () => {
       />,
     )
 
-    const proposals = screen.getByRole('button', { name: /^Proposals/ })
+    const proposals = inGroup().getByRole('button', { name: /^Proposals/ })
     expect(proposals.hasAttribute('disabled')).toBe(false)
     // A conversation anyone can start says just "Comments" at nought; a
     // proposal nobody can start says the same, because the opener's job at
@@ -97,7 +103,7 @@ describe('InspectorSegment', () => {
   ] as const)('draws no digit for %s at nought, matching what it says', (kind) => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ [kind]: { count: 0 } }} />)
 
-    const opener = screen.getByRole('button')
+    const opener = inGroup().getByRole('button')
     expect(opener.textContent ?? '').not.toMatch(/\d/)
     expect(opener.getAttribute('aria-label')).toBe(INSPECTOR_CHROME[kind].label)
   })
@@ -107,23 +113,23 @@ describe('InspectorSegment', () => {
   it('keeps drawing a size at nought — connections is not a backlog', () => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ connections: { count: 0 } }} />)
 
-    const opener = screen.getByRole('button')
+    const opener = inGroup().getByRole('button')
     expect(opener.textContent).toContain('0')
-    expect(opener.getAttribute('aria-label')).toBe('Connections (0)')
+    expect(opener.getAttribute('aria-label')).toBe('Linked from (0)')
   })
 
   it('says how many proposals are open, the way Comments says its threads', () => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ proposals: { count: 3 } }} />)
 
-    expect(screen.getByRole('button', { name: 'Proposals, 3 open' })).not.toBeNull()
+    expect(inGroup().getByRole('button', { name: 'Proposals, 3 open' })).not.toBeNull()
   })
 
   it('offers only what the document has — a canvas has no frontmatter, a browser keeper no backlinks', () => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ comments: {}, history: {} }} />)
 
-    expect(screen.queryByRole('button', { name: /^Properties/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /^Connections/ })).toBeNull()
-    expect(screen.getAllByRole('button')).toHaveLength(2)
+    expect(inGroup().queryByRole('button', { name: /^Properties/ })).toBeNull()
+    expect(inGroup().queryByRole('button', { name: /^Connections/ })).toBeNull()
+    expect(inGroup().getAllByRole('button')).toHaveLength(2)
   })
 
   // The exclusivity is already structural (one state), so what this pins is
@@ -137,7 +143,7 @@ describe('InspectorSegment', () => {
       />,
     )
 
-    const pressed = screen
+    const pressed = inGroup()
       .getAllByRole('button')
       .filter((b) => b.getAttribute('aria-pressed') === 'true')
       .map((b) => b.getAttribute('aria-label'))
@@ -150,7 +156,7 @@ describe('InspectorSegment', () => {
       <InspectorSegment open={null} onToggle={onToggle} tabs={{ comments: {}, history: {} }} />,
     )
 
-    screen.getByRole('button', { name: 'History' }).click()
+    inGroup().getByRole('button', { name: 'History' }).click()
     expect(onToggle).toHaveBeenCalledWith('history')
   })
 
@@ -166,15 +172,15 @@ describe('InspectorSegment', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Comments, 3 open' }).textContent).toContain('3')
-    expect(screen.getByRole('button', { name: 'Connections (0)' })).toBeTruthy()
+    expect(inGroup().getByRole('button', { name: 'Comments, 3 open' }).textContent).toContain('3')
+    expect(inGroup().getByRole('button', { name: 'Linked from (0)' })).toBeTruthy()
   })
 
   // Connections waits for its fetch rather than claiming zero.
   it('disables a member whose count has not arrived', () => {
     render(<InspectorSegment open={null} onToggle={noop} tabs={{ connections: { count: null } }} />)
 
-    const button = screen.getByRole('button', { name: 'Connections' })
+    const button = inGroup().getByRole('button', { name: 'Linked from' })
     expect(button.hasAttribute('disabled')).toBe(true)
   })
 

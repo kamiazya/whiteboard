@@ -7,7 +7,7 @@ Guides:
 
 - **[self-host-with-docker](self-host-with-docker.md)** — run Whiteboard in server mode for a team.
 - **[link-documents](link-documents.md)** — write `[[references]]` between documents and read
-  them back through the Connections chip.
+  them back through the Linked from chip.
 - **[comment-on-a-document](comment-on-a-document.md)** — leave feedback anchored to a passage
   or a node, and read the conversations already on a document.
 - **[review-proposals-and-restore-versions](review-proposals-and-restore-versions.md)** — adopt

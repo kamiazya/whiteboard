@@ -50,6 +50,12 @@ describe('LegendOverlay', () => {
     expect(screen.queryByText('box colour: no key carries it')).toBeNull()
   })
 
+  it('is not drawn when no key carries a colour, however much colour is spent', () => {
+    render(<LegendOverlay legend={{ keys: [], uncarried: { boxes: true, edges: true } }} />)
+    expect(screen.queryByTestId('legend-overlay')).toBeNull()
+    expect(screen.queryByText('box colour: no key carries it')).toBeNull()
+  })
+
   it('collapses to its title and expands again', () => {
     render(<LegendOverlay legend={legend} />)
     const toggle = screen.getByRole('button', { name: 'Toggle legend' })

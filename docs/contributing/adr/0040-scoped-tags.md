@@ -279,6 +279,17 @@ against it, which is increment 5b's.
   `#tag` filter matches either (decision 3), while a card still shows only
   a document's own tags (decision 2).*
 
+  *Addendum (2026-10-22): a legend that would list no key is not drawn and
+  not exported.* The lone "box colour: no key carries it" line appeared the
+  moment one box was coloured, and first-time users read it as a defect in
+  their board rather than a fact about its colour. The legend now appears
+  only when at least one scoped-tag key carries a population's colour; the
+  muted `uncarried` lines still annotate a legend that has a key. The fact
+  itself stays in `SceneLegend.uncarried` and in the facet score, so
+  nothing that reads colour-spent-without-meaning loses it; only the
+  drawing — the SVG/PNG panel, the band `sceneDocumentBounds` reserves for
+  it, and the editor's overlay — skips an empty legend.
+
 ### 7. The tool surface is measured, not assumed
 
 Two changes reach what a model reads and each runs ADR-0031's ladder:

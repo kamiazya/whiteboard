@@ -124,6 +124,27 @@ describe('SourcePane markdown ergonomics (real browser)', () => {
     expect(lastValue(onChange)).toBe('- one\nafter')
   })
 
+  it('Enter on an empty quote line leaves the quote', async () => {
+    const { onChange, editable } = mountEditor()
+    await focusEditable(editable)
+    await userEvent.keyboard('> said{Enter}{Enter}after')
+    expect(lastValue(onChange)).toBe('> said\nafter')
+  })
+
+  it('Backspace on an empty list marker removes it without leaving spaces', async () => {
+    const { onChange, editable } = mountEditor()
+    await focusEditable(editable)
+    await userEvent.keyboard('- one{Enter}{Backspace}x')
+    expect(lastValue(onChange)).toBe('- one\nx')
+  })
+
+  it('typing the marker again over an auto-continued one does not double it', async () => {
+    const { onChange, editable } = mountEditor()
+    await focusEditable(editable)
+    await userEvent.keyboard('- one{Enter}- two')
+    expect(lastValue(onChange)).toBe('- one\n- two')
+  })
+
   it('Mod-Enter toggles a task checkbox on the caret line', async () => {
     const { onChange, editable } = mountEditor()
     await focusEditable(editable)

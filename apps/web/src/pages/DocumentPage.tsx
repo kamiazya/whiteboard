@@ -43,6 +43,7 @@ import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
+import { AnnounceNoticeProvider, useTransientNotice } from './document-notice.js'
 import {
   DocumentInspectorSegment,
   DocumentRowActions,
@@ -532,6 +533,7 @@ function DocumentPageBody({
     loadImage: (ref) => files.adapter.loadImageUrl(ref),
   })
 
+  const [notice, setNotice] = useTransientNotice()
   const { exportError, handleExport } = useSceneExport({
     onExport: (format) =>
       sync.exportScene(
@@ -539,6 +541,7 @@ function DocumentPageBody({
         exportOptions({ documentKind, references, fileSeams, threads, model }),
       ),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
+    onExported: setNotice,
     log,
   })
 
@@ -574,14 +577,21 @@ function DocumentPageBody({
   )
 
   const rowActions = (
-    <DocumentRowActions
-      inspectorSegment={inspectorSegment}
-      model={model}
-      exportError={exportError}
-      onExport={handleExport}
-      onBookmark={requestBookmark}
-      versionsEnabled={versions.enabled}
-    />
+    <AnnounceNoticeProvider value={setNotice}>
+      <DocumentRowActions
+        inspectorSegment={inspectorSegment}
+        model={model}
+        exportError={exportError}
+        notice={notice}
+        onExport={(format) => {
+          // Cleared first so a second export of the same kind speaks again.
+          setNotice(null)
+          return handleExport(format)
+        }}
+        onBookmark={requestBookmark}
+        versionsEnabled={versions.enabled}
+      />
+    </AnnounceNoticeProvider>
   )
 
   const topBar = model.topBar

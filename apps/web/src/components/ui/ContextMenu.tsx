@@ -24,6 +24,7 @@ import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { useRestoreFocus } from '../../hooks/use-restore-focus.js'
 import { cn } from '../../lib/utils.js'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
@@ -90,10 +91,11 @@ export type ContextMenuItem =
 
 export interface ContextMenuProps {
   /**
-   * Accessible name of the menu. The default names the spatial surface;
-   * object menus (a document card's) pass their own.
+   * Accessible name of the menu. Required: a default named the spatial
+   * surface, and the markdown note's sheet shipped announced as
+   * "Canvas actions" until a listener heard it.
    */
-  readonly label?: string
+  readonly label: string
   /** Screen position relative to the editor root. */
   readonly x: number
   readonly y: number
@@ -172,18 +174,11 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({
-  x,
-  y,
-  items,
-  onClose,
-  variant = 'list',
-  label = 'Canvas actions',
-}: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
+  useRestoreFocus()
   // A menu opened near the editor's right/bottom edge would clip outside it,
-  // so the requested position is nudged back inside once the real menu size
-  // is measurable. useLayoutEffect corrects before paint — no visible jump.
+  // so it is nudged back inside once measurable, before paint (no visible jump).
   const [pos, setPos] = useState({ x, y })
   const sheet = variant === 'sheet'
   useLayoutEffect(() => {

@@ -9,9 +9,19 @@ import { STORAGE_KEY } from '../../lib/recent-documents.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
-const entries = [
+const few = [
   { documentId: 'd1', path: 'meeting-notes', name: 'Meeting notes', kind: 'markdown' as const },
   { documentId: 'd2', path: 'roadmap', name: 'Roadmap', kind: 'spatial' as const },
+]
+// More documents than any grid row holds, so the lane has something to short-cut.
+const entries = [
+  ...few,
+  ...Array.from({ length: 10 }, (_, i) => ({
+    documentId: `f${i}`,
+    path: `filler-${i}`,
+    name: `Filler ${i}`,
+    kind: 'markdown' as const,
+  })),
 ]
 
 beforeEach(() => localStorage.removeItem(STORAGE_KEY))
@@ -23,8 +33,8 @@ afterEach(() => {
 // No default parameter: a default fires on an EXPLICIT undefined too, so
 // `renderPanel(undefined)` would have rendered the 'space' workspace and the
 // no-scope case would have tested nothing.
-function renderPanel(memoryScope: string | undefined) {
-  const source = fakeFilesSource({ listDocuments: async () => entries })
+function renderPanel(memoryScope: string | undefined, listed: typeof entries = entries) {
+  const source = fakeFilesSource({ listDocuments: async () => listed })
   render(
     <WorkspaceFilesPanel source={source} memoryScope={memoryScope} onOpenDocument={() => {}} />,
   )
@@ -80,6 +90,17 @@ describe('recently opened lane', () => {
     const strip = await screen.findByTestId('recent-lane')
     await waitFor(() => expect(within(strip).getAllByRole('button')).toHaveLength(2))
     expect(within(strip).getAllByRole('button')[0]?.textContent).toBe('Roadmap')
+  })
+
+  it("stays out of the way while every document fits in the grid's first row", async () => {
+    const only = few.slice(1)
+    renderPanel('space', only)
+    await openCard('Roadmap')
+    cleanup()
+
+    renderPanel('space', only)
+    await screen.findByText('Roadmap')
+    expect(lane()).toBeNull()
   })
 
   it('steps aside while a search is showing its own answer', async () => {

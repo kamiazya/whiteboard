@@ -91,7 +91,6 @@ import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { firstImageFile } from '../../lib/image-upload-policy.js'
-import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
@@ -168,7 +167,7 @@ import { useFileSeamScene } from './use-file-seam-scene.js'
 import { useImageIntake } from './use-image-intake.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
-import { useLockPolicy } from './use-lock-policy.js'
+import { useLockBadgeIds, useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
@@ -237,6 +236,8 @@ export interface SpatialEditorProps {
    * change the mode someone is working in.
    */
   readonly initialTool?: EditorTool
+  /** Reports a tool the user picked with the palette, so the host can remember it. */
+  readonly onToolChosen?: (tool: EditorTool) => void
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -412,6 +413,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme,
       defaultTool = 'hand',
       initialTool,
+      onToolChosen,
       lockedNodeIds,
       lockedEdgeIds,
       agentTouchedNodeIds,
@@ -530,6 +532,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
+    const badgedLockedNodeIds = useLockBadgeIds(lockedNodeIds, onToggleNodeLock !== undefined)
     // Whatever text entry has focus inside the root — a node's editor, the
     // comment compose bubble, a label, the thread card's reply box — stays
     // above the virtual keyboard: the keyboard overlays the page without
@@ -566,6 +569,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         measure: resolvedMeasure,
         theme,
         suppressedBodyNodeIds,
+        lockedNodeIds: badgedLockedNodeIds,
         showResolved: showResolvedComments,
         threads,
         proposals,
@@ -1136,6 +1140,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applySelection({ type: 'collapse-extras' })
     }
 
+    const changeTool = (next: EditorTool) => {
+      setTool(next)
+      toolChosenByUserRef.current = true
+      onToolChosen?.(next)
+      // A context menu belongs to the mode it opened in; it must not
+      // outlive a switch (especially into view-only hand mode).
+      setContextMenu(null)
+      // Entering hand mode drops EVERY edit affordance, not just the
+      // menu: a surviving selection would keep Delete/resize/connect
+      // handles live, an open editor would keep accepting text, and an
+      // armed connect could still complete — all edits, in a mode that
+      // promises none. The gesture is cancelled like Escape.
+      if (next === 'hand') {
+        if (gestureState.kind !== 'idle') {
+          applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+        }
+        applySelection({ type: 'clear' })
+        setSelectedEdgeId(null)
+        setEdgeLabelEditId(null)
+        setGroupLabelEditId(null)
+        setMarquee(null)
+      }
+    }
+
     // The keyboard surface — shortcut dispatch plus the three keydown
     // handlers the JSX wires (canvas root, focused resize handle, connect
     // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
@@ -1167,6 +1195,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       stepZoom,
       frameContent,
       frameSelection,
+      changeTool,
+      createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
     })
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
@@ -1552,34 +1582,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               : () => openImagePicker(imagePicker, { backgroundGroupId: null, point: null })
           }
           tool={tool}
-          onToolChange={(next) => {
-            setTool(next)
-            toolChosenByUserRef.current = true
-            // A stated preference outranks the canvas-shape guess on the
-            // next open in this tab.
-            writeLastTool(next)
-            // A context menu is an edit affordance of the mode it was
-            // opened in — switching tools (especially into view-only hand
-            // mode) must not leave it floating.
-            setContextMenu(null)
-            // Entering hand mode drops EVERY edit affordance, not just the
-            // menu: a surviving selection would keep Delete/resize/connect
-            // handles live, an open editor would keep accepting text, and
-            // an armed connect could still complete — all edits in a mode
-            // whose contract is "no press can change the canvas". The
-            // in-flight gesture is cancelled like Escape (uncommitted text
-            // is discarded, not committed).
-            if (next === 'hand') {
-              if (gestureState.kind !== 'idle') {
-                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
-              }
-              applySelection({ type: 'clear' })
-              setSelectedEdgeId(null)
-              setEdgeLabelEditId(null)
-              setGroupLabelEditId(null)
-              setMarquee(null)
-            }
-          }}
+          onToolChange={changeTool}
         />
         <CanvasNotice
           testId="clipboard-notice"

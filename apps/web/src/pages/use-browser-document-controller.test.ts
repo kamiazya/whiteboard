@@ -565,7 +565,7 @@ describe('useBrowserDocumentController', () => {
     expect(loaded?.name).toBe(snap.name)
   })
 
-  it('renameDocument after a delete names the document now open, never the deleted one', async () => {
+  it('renameDocument after a delete is a no-op, never a save against the deleted row', async () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -580,12 +580,11 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    const opened = result.current.snapshot?.documentId
     await act(async () => {
       await result.current.renameDocument('After delete')
     })
-    expect(result.current.snapshot?.documentId).toBe(opened)
-    expect(result.current.snapshot?.name).toBe('After delete')
+    expect(result.current.persistence.kind).not.toBe('degraded')
+    expect(result.current.snapshot?.name).not.toBe('After delete')
     expect(await store.load(C1)).toBeNull()
   })
 

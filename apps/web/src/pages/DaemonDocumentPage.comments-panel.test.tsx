@@ -327,7 +327,7 @@ describe('DaemonDocumentPage comments panel', () => {
     )
   })
 
-  it('Connections takes the same slot: opening it closes the rail, and its list is a column, not a band', async () => {
+  it('Linked from takes the same slot: opening it closes the rail, and its list is a column, not a band', async () => {
     mockGetDocumentBacklinks.mockResolvedValue({
       backlinks: [
         {
@@ -344,7 +344,7 @@ describe('DaemonDocumentPage comments panel', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^comments/i }))
     await screen.findByTestId('comments-panel')
 
-    fireEvent.click(await screen.findByRole('button', { name: /connections \(1\)/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /linked from \(1\)/i }))
     const panel = await screen.findByTestId('connections-panel')
     expect(within(panel).getByText('Source board')).toBeTruthy()
     expect(screen.queryByTestId('comments-panel')).toBeNull()

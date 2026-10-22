@@ -23,6 +23,8 @@ export interface ReferenceSeams {
   readonly resolveAlias: AliasResolver
   readonly resolveTitle: (documentId: string) => string | undefined
   readonly resolveEmbed: (documentId: string) => EmbeddedDocument | undefined
+  /** A target asked for and not yet answered; absent when the keeper has nothing in flight. */
+  readonly isLoading?: (documentId: string) => boolean
   readonly resolveReference: (ref: string) => ResolvedReference | undefined
 }
 
@@ -36,6 +38,13 @@ export interface ReferenceSeamsOptions {
   readonly resolveAlias?: AliasResolver
   /** Same for names: the list a page already holds, ahead of any load. */
   readonly resolveTitle?: (documentId: string) => string | undefined
+  /**
+   * Targets, as written, that a keeper has asked for and not yet answered.
+   * Distinct from a `null` graph entry ("looked up, nothing there"): the
+   * layout draws a loading frame for the first and the unresolvable
+   * placeholder for the second.
+   */
+  readonly pending?: ReadonlySet<string>
   /**
    * What a surface knows about a file reference beyond its document — an
    * image asset's URL, a facet card. Merged over the shared fields, and the
@@ -133,7 +142,30 @@ export function referenceSeams(
     return Object.keys(resolved).length === 0 ? undefined : resolved
   }
 
-  return { resolveAlias, resolveTitle, resolveEmbed, resolveReference }
+  return withLoading(
+    { resolveAlias, resolveTitle, resolveEmbed, resolveReference },
+    options.pending,
+  )
+}
+
+/**
+ * The seams plus a loading check. An embed names a resolved document id while
+ * a keeper asks by the target as written, so a pending path counts for the id
+ * it resolves to as well. No check is attached when nothing is in flight,
+ * which keeps the seams exactly as they were for a host that loads nothing
+ * asynchronously.
+ */
+function withLoading(
+  seams: ReferenceSeams,
+  pending: ReadonlySet<string> | undefined,
+): ReferenceSeams {
+  if (pending === undefined || pending.size === 0) return seams
+  const isLoading = (documentId: string): boolean => {
+    if (pending.has(documentId)) return true
+    for (const target of pending) if (seams.resolveAlias(target) === documentId) return true
+    return false
+  }
+  return { ...seams, isLoading }
 }
 
 /**
@@ -181,6 +213,7 @@ export function withReferenceSeams<
     readonly references?: ReferenceSeams
     readonly resolveEmbed?: ReferenceSeams['resolveEmbed']
     readonly resolveTitle?: ReferenceSeams['resolveTitle']
+    readonly isEmbedPending?: ReferenceSeams['isLoading']
   },
 >(options: T): T {
   const seams = options.references
@@ -189,6 +222,7 @@ export function withReferenceSeams<
     ...options,
     resolveEmbed: options.resolveEmbed ?? seams.resolveEmbed,
     resolveTitle: options.resolveTitle ?? seams.resolveTitle,
+    isEmbedPending: options.isEmbedPending ?? seams.isLoading,
   }
 }
 

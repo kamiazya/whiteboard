@@ -27,9 +27,6 @@ function pressed(name: string): string | null {
 }
 
 beforeEach(async () => {
-  // Only the key this suite is about: storages are origin-shared across
-  // parallel test files, and clear() wipes the neighbours' state too.
-  sessionStorage.removeItem('wb.lastTool')
   await clearWhiteboardDb()
 })
 
@@ -64,5 +61,27 @@ describe('initial tool follows the canvas shape (real browser)', () => {
     cleanup()
     await mountLoaded()
     await waitFor(() => expect(pressed('Hand (pan)')).toBe('true'), { timeout: 5000 })
+  })
+
+  it('reopens a canvas in the tool the person last chose on it, even with content', async () => {
+    await mountLoaded()
+    await waitFor(() => expect(pressed('Select')).toBe('true'), { timeout: 5000 })
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
+    await userEvent.click(screen.getByTestId('spatial-editor-container'))
+    await waitFor(
+      () => {
+        const fact = screen.getByTestId('persistence-state')
+        expect(fact.getAttribute('data-save-state')).toBe('saved')
+        expect(fact.getAttribute('data-last-saved-at')).toBeTruthy()
+      },
+      { timeout: 5000 },
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Select' }))
+    await waitFor(() => expect(pressed('Select')).toBe('true'))
+
+    cleanup()
+    await mountLoaded()
+    await waitFor(() => expect(pressed('Select')).toBe('true'), { timeout: 5000 })
   })
 })

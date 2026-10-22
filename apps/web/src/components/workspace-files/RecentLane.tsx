@@ -1,7 +1,7 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 
 export interface RecentLaneProps {
   /** The listing as loaded. Recorded ids are resolved against it. */
@@ -10,6 +10,42 @@ export interface RecentLaneProps {
   recentIds: readonly string[]
   onOpen: (entry: WorkspaceDocumentEntry) => void
   renderThumbnail?: (entry: WorkspaceDocumentEntry) => ReactNode
+  /**
+   * Columns in the grid below at its current width, when there is one. A lane
+   * over documents that all fit in the grid's first row would show every card
+   * twice, so it stays out of the way until the grid has something to scroll.
+   */
+  gridColumns?: number | undefined
+}
+
+function RecentTile({
+  entry,
+  onOpen,
+  renderThumbnail,
+}: Pick<RecentLaneProps, 'onOpen' | 'renderThumbnail'> & { entry: WorkspaceDocumentEntry }) {
+  const KindIcon = entry.kind === 'spatial' ? LayoutGrid : FileText
+  return (
+    <button
+      type="button"
+      aria-label={documentAccessibleName(entry, 'leaf')}
+      onClick={() => onOpen(entry)}
+      className="hover:bg-accent/40 flex w-28 shrink-0 flex-col overflow-hidden rounded-md border text-left md:w-32"
+    >
+      <span className="bg-muted/40 flex aspect-video w-full items-center justify-center overflow-hidden">
+        {renderThumbnail?.(entry) ?? (
+          <KindIcon
+            role="img"
+            aria-label={entry.kind ?? 'markdown'}
+            className="text-muted-foreground size-4"
+          />
+        )}
+      </span>
+      {/* The display name, with the path's last segment as the label
+                for a document nobody named — never a name invented from the
+                path, which is the same rule the cards below follow. */}
+      <span className="truncate px-2 py-1 text-xs">{documentLabel(entry, 'leaf')}</span>
+    </button>
+  )
 }
 
 /**
@@ -24,7 +60,13 @@ export interface RecentLaneProps {
  * document falls out on its own — the lane needs no reconciliation pass, and
  * a stale id costs nothing but its own absence.
  */
-export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: RecentLaneProps) {
+export function RecentLane({
+  documents,
+  recentIds,
+  onOpen,
+  renderThumbnail,
+  gridColumns,
+}: RecentLaneProps) {
   const entries = recentIds
     .map((id) => documents.find((each) => each.documentId === id))
     .filter((each): each is WorkspaceDocumentEntry => each !== undefined)
@@ -34,6 +76,7 @@ export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: Re
   // that there is nothing to show, which is the wordiness this redesign is
   // removing everywhere else.
   if (entries.length === 0) return null
+  if (gridColumns !== undefined && documents.length <= gridColumns) return null
 
   return (
     <section aria-label="Recently opened" data-testid="recent-lane" className="px-2 pb-2">
@@ -46,31 +89,14 @@ export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: Re
       {/* Its own scroller: a phone fits two tiles, and the page body must
           never scroll sideways to reach the third. */}
       <div className="flex gap-2 overflow-x-auto">
-        {entries.map((entry) => {
-          const KindIcon = entry.kind === 'spatial' ? LayoutGrid : FileText
-          return (
-            <button
-              key={entry.documentId}
-              type="button"
-              onClick={() => onOpen(entry)}
-              className="hover:bg-accent/40 flex w-28 shrink-0 flex-col overflow-hidden rounded-md border text-left md:w-32"
-            >
-              <span className="bg-muted/40 flex aspect-video w-full items-center justify-center overflow-hidden">
-                {renderThumbnail?.(entry) ?? (
-                  <KindIcon
-                    role="img"
-                    aria-label={entry.kind ?? 'markdown'}
-                    className="text-muted-foreground size-4"
-                  />
-                )}
-              </span>
-              {/* The display name, with the path's last segment as the label
-                for a document nobody named — never a name invented from the
-                path, which is the same rule the cards below follow. */}
-              <span className="truncate px-2 py-1 text-xs">{documentLabel(entry, 'leaf')}</span>
-            </button>
-          )
-        })}
+        {entries.map((entry) => (
+          <RecentTile
+            key={entry.documentId}
+            entry={entry}
+            onOpen={onOpen}
+            renderThumbnail={renderThumbnail}
+          />
+        ))}
       </div>
     </section>
   )

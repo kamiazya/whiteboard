@@ -146,7 +146,7 @@ not:
   characters of a body and the 8,192 of a text node. Each link is longer than
   the name it replaces, and a moved document's new path can be longer than
   its old one, so either rewrite can grow a text. Link mentions (the
-  Connections panel's Link, `POST /api/v1/workspaces/{id}/documents/{documentId}/linkify-mentions`)
+  Linked from panel's Link, `POST /api/v1/workspaces/{id}/documents/{documentId}/linkify-mentions`)
   that would carry the body or a node past its ceiling write nothing: the
   route answers `413` with `{"error":"markdown_too_large"}` or
   `{"error":"node_text_too_large"}`, and the mention stays listed. When a move

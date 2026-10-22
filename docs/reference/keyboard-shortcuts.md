@@ -17,13 +17,14 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| — | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas opened later in the same tab keeps whichever of the two you last chose |
-| — | Select — click to select, drag to marquee |
-| — | Connect — click one node, then another, to draw an edge |
-| — | Draw — drag across the board to leave a freehand stroke |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you last chose on it |
+| `V` | Select — click to select, drag to marquee |
+| `C` | Connect — click one node, then another, to draw an edge |
+| `D` | Draw — drag across the board to leave a freehand stroke |
+| `N` | Add a note at the centre of the view |
 | `Space` + drag | Pan from any tool, without leaving it |
 
-The four tools live in the bottom dock. On touch, two-finger drag pans and
+The four tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
 pinch zooms in every tool.
 
 ## Selection and editing
@@ -47,7 +48,9 @@ middle ones and leaves the outermost two anchoring the span. Both align to
 the selection's own bounding box, so the result does not depend on which
 node you clicked first, and each is a single undo step.
 
-A locked node or edge cannot be selected, moved, restyled, or deleted, and
+A locked node shows a small padlock in its top-right corner so you can tell it
+from one that is simply unresponsive; the padlock appears in the editor only
+and never in an export. A locked node or edge cannot be selected, moved, restyled, or deleted, and
 MCP tools refuse to patch, tag, or set facets on it too. Right-click it and choose **Unlock** to
 release it. Nodes and edges lock independently: locking a node does not
 lock the edges attached to it, and an edge between two locked nodes stays
@@ -94,6 +97,11 @@ on screen. The same four moves sit in a node's right-click menu under
 | `Shift + 2` | Zoom to the selection |
 | `+` / `-` | Zoom in or out one step, about the middle of the view |
 | `Cmd/Ctrl` + scroll | Zoom under the pointer |
+
+The view is not remembered between visits. A canvas opens at the origin, and
+when none of its content is in view there it opens framed on the content, as
+**Zoom to fit** would. A canvas that already shows some content opens where it
+is, and later edits never move the view.
 | Scroll / two-finger drag | Pan |
 | Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
 
@@ -128,5 +136,21 @@ opens from the **Keyboard shortcuts** button in the bottom dock, which is the
 way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
 one, as **Zoom to fit** does.
+
+## Writing in a markdown document
+
+These keys work in a markdown document's source and in a canvas node's text
+editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
+
+| Shortcut | Action |
+|---|---|
+| `Cmd/Ctrl + B` | Bold the selection, or the word at the caret |
+| `Cmd/Ctrl + I` | Italicise the selection, or the word at the caret |
+| `Cmd/Ctrl + E` | Mark the selection, or the word at the caret, as code |
+| `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
+| `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
+| `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
+| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
+| `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 
 ← Back to [reference](README.md)

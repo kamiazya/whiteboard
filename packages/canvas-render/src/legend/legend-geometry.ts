@@ -26,8 +26,14 @@ export interface LegendRow {
   readonly key?: true
 }
 
-/** The panel's lines in order: each key, its values, then the muted notes. */
+/**
+ * The panel's lines in order: each key, its values, then the muted notes.
+ * A legend listing no key has no rows at all: "no key carries it" alone read
+ * as a defect to a first-time reader (ADR-0040 decision 6, 2026-10-22
+ * addendum), so the notes only ever annotate a panel that already has a key.
+ */
 export function legendRows(legend: SceneLegend): LegendRow[] {
+  if (legend.keys.length === 0) return []
   const out: LegendRow[] = []
   for (const key of legend.keys) {
     out.push({ text: key.key, key: true })

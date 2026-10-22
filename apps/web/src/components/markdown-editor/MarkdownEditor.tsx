@@ -23,7 +23,7 @@ import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
-import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
+import { safeSetItem } from '../../lib/safe-local-storage.js'
 import { openSceneLink } from '../../lib/scene-link.js'
 import { toggleTaskLine } from '../../lib/task-toggle.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
@@ -60,6 +60,7 @@ import { useLinkFollow } from './use-link-follow.js'
 import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
+import { readStoredViewMode, VIEW_MODE_STORAGE_KEY } from './view-mode-storage.js'
 import { type LinkTargetCreator, wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
@@ -84,7 +85,11 @@ export interface MarkdownEditorProps {
   initialViewMode?: MarkdownViewMode
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
-  /** Focus the source pane on mount (fresh-note flows). */
+  /**
+   * Focus the source pane on mount (fresh-note flows). Honoured only for an
+   * empty note: focusing an existing one traps a keyboard user, since Tab
+   * indents there.
+   */
   autoFocus?: boolean
   /** Resolved app theme; drives the preview's text fill. Required: dark-on-dark is unreadable. */
   theme: ResolvedTheme
@@ -215,17 +220,6 @@ const LENGTH_LIMIT = markdownLengthLimit()
  * thumb reach, not screen size) the spatial canvas uses for its own ⋯.
  */
 const CATALOG_SHEET_MAX_WIDTH = 768
-const VIEW_MODE_STORAGE_KEY = 'whiteboard.markdown-view-mode'
-
-function isViewMode(value: unknown): value is MarkdownViewMode {
-  return value === 'write' || value === 'split' || value === 'read'
-}
-
-function readStoredViewMode(): MarkdownViewMode {
-  const stored = safeGetItem(VIEW_MODE_STORAGE_KEY)
-  return isViewMode(stored) ? stored : 'split'
-}
-
 function countWords(value: string): number {
   return (value.match(/[\p{L}\p{N}]+/gu) ?? []).length
 }
@@ -792,7 +786,7 @@ export function MarkdownEditor({
         <SourceColumn
           value={value}
           onChange={onChange}
-          autoFocus={autoFocus}
+          autoFocus={autoFocus && value === ''}
           mode={effectiveMode}
           splitRatio={splitRatio}
           linkTargets={linkTargets}
@@ -892,6 +886,7 @@ export function MarkdownEditor({
       )}
       {catalog !== null && (
         <ContextMenu
+          label="Editing actions"
           x={catalog.x}
           y={catalog.y}
           variant={catalog.variant}

@@ -1,4 +1,6 @@
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { newImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -30,7 +32,7 @@ const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-function boardSnapshot(): Uint8Array {
+function boardSnapshot(extraNodes: SpatialCanvas['nodes'] = []): Uint8Array {
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'spatial')
   writeSpatialCanvas(doc, {
@@ -43,6 +45,7 @@ function boardSnapshot(): Uint8Array {
         height: 60,
         resource: { mimeType: 'text/markdown', content: 'on the board' },
       },
+      ...extraNodes,
     ],
     edges: [],
   })
@@ -114,6 +117,42 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
     expect(JSON.parse(written)).toMatchObject({
       nodes: [expect.objectContaining({ id: 'the-node', x: 12, y: 34 })],
     })
+  })
+
+  it('says it copied, in the status region', async () => {
+    await mountPage('board', boardSnapshot)
+    await openDocumentOpsMenu()
+    const copy = await screen.findByRole('menuitem', { name: /copy as json canvas/i })
+    await act(async () => {
+      fireEvent.pointerUp(copy)
+    })
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Copied as JSON Canvas', { selector: '[role="status"]' }),
+      ).toBeTruthy(),
+    )
+  })
+
+  it('says images are referenced, not embedded, when the board holds one', async () => {
+    const withImage = () =>
+      boardSnapshot([
+        fileNode({ id: 'pic', x: 0, y: 0, width: 50, height: 50, file: newImageRef('01ABC') }),
+      ])
+    await mountPage('board', withImage)
+    await openDocumentOpsMenu()
+    const copy = await screen.findByRole('menuitem', { name: /copy as json canvas/i })
+    await act(async () => {
+      fireEvent.pointerUp(copy)
+    })
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Copied as JSON Canvas — images are referenced, not embedded', {
+          selector: '[role="status"]',
+        }),
+      ).toBeTruthy(),
+    )
   })
 
   it('offers no such row on a note, which has no canvas to copy', async () => {

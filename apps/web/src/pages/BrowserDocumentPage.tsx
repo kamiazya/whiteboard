@@ -17,7 +17,12 @@ import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
-import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
+import {
+  documentPath as documentRoutePath,
+  indexPath,
+  workspaceFolderPath,
+  workspacePath,
+} from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
@@ -70,6 +75,7 @@ import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
+import { useBrowserOwnEditBaseline } from './use-own-edit-baseline.js'
 import { versionsSlot } from './versions-slot.js'
 
 export interface BrowserDocumentPageProps {
@@ -115,6 +121,7 @@ function useBrowserDocument(
   const {
     loro: resolvedLoro,
     snapshot,
+    workspaceEmpty,
     persistence,
     deleteDocument,
     startFresh,
@@ -130,6 +137,14 @@ function useBrowserDocument(
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // A link to a document that is gone, in a workspace with nothing else:
+  // the list's first-run screen answers it.
+  useEffect(() => {
+    if (!workspaceEmpty) return
+    const handle = browserWorkspaceHandleOrNull()
+    navigate(handle === null ? indexPath() : workspacePath(handle), { replace: true })
+  }, [workspaceEmpty, navigate])
 
   const pageState = derivePageState({ snapshot, persistence })
 
@@ -288,7 +303,9 @@ function useBrowserDocument(
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
+  const ownEditBaseline = useBrowserOwnEditBaseline(documentId)
   const sync = useDocumentSync(backend, {
+    ...ownEditBaseline,
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
@@ -442,6 +459,13 @@ function useBrowserDocument(
     canvas: documentKind === 'spatial' ? canvas : null,
     duplicateDocument,
     deleteDocument,
+    // To the list, in the folder the document was in: a sibling would read as
+    // the deleted note turning into another document, and a fresh canvas
+    // (the old answer to an emptied workspace) as turning into a canvas.
+    onDeleted: () => {
+      const handle = browserWorkspaceHandleOrNull()
+      navigate(handle === null ? indexPath() : workspaceFolderPath(handle, snapshot?.path ?? ''))
+    },
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)

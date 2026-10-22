@@ -236,11 +236,17 @@ describe('createSpatialTheme', () => {
         fillOpacity: 0.45,
         strokeOpacity: 0.45,
       })
+      // The settled bubble's border and words take the palette's muted slate
+      // (the one syntax comments use), not the open conversation's amber.
       expect(overlay?.bubble).toEqual({
         fill: palette.comment.bubble.fill,
-        stroke: palette.comment.bubble.stroke,
+        stroke: palette.syntax.comment,
         fillOpacity: 0.45,
         strokeOpacity: 0.45,
+      })
+      expect(overlay?.text).toEqual({
+        fill: palette.syntax.comment,
+        fontFamily: SPATIAL_THEME_FONT_FAMILY,
       })
       expect(overlay?.leader).toEqual({
         stroke: palette.comment.bubble.stroke,

@@ -24,9 +24,10 @@ import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
 import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
+import { AnnouncerRegion, useAnnouncer } from './announcer.js'
 import { CommentComposer } from './CommentComposer.js'
 import type { CommentsPanelProps, ThreadFilter } from './comments-panel-props.js'
-import { anchorLabel, type ThreadEdit, ThreadRow } from './thread-row.js'
+import { ComposeAbout, type ThreadEdit, ThreadRow } from './thread-row.js'
 
 const FILTERS: readonly { readonly value: ThreadFilter; readonly label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -148,6 +149,29 @@ function glideMovedRows(
   return seen
 }
 
+/**
+ * Moves focus to the revealed conversation's row.
+ *
+ * The ROW's toggle rather than its reply box: it is the conversation's
+ * heading, and Tab continues from it into the verbs, the replies and the
+ * reply box in the order they are read.
+ *
+ * Also keyed on the row EXISTING: a conversation the reader has just created
+ * is named before the keeper has answered with it, and focus dropped by the
+ * unmounting draft box would otherwise stay on the body.
+ */
+function useFocusRevealedRow(
+  revealThreadId: string | null,
+  threads: readonly CommentThread[],
+  rowRefs: { readonly current: ReadonlyMap<string, HTMLButtonElement> },
+): void {
+  const rowPresent = revealThreadId !== null && threads.some((t) => t.id === revealThreadId)
+  useEffect(() => {
+    if (revealThreadId === null) return
+    rowRefs.current.get(revealThreadId)?.focus()
+  }, [revealThreadId, rowPresent, rowRefs])
+}
+
 export function CommentsPanel({
   threads,
   resolveAnchor,
@@ -189,13 +213,8 @@ export function CommentsPanel({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const composeRef = useRef<SourcePaneApi | null>(null)
 
-  // The ROW's toggle rather than its reply box: it is the conversation's
-  // heading, and Tab continues from it into the verbs, the replies and the
-  // reply box in the order they are read.
-  useEffect(() => {
-    if (revealThreadId === null) return
-    rowRefs.current.get(revealThreadId)?.focus()
-  }, [revealThreadId])
+  useFocusRevealedRow(revealThreadId, threads, rowRefs)
+  const { announcement, announce, announcing } = useAnnouncer()
 
   // A new conversation has nothing to read, so the draft box is the whole
   // of what was asked for.
@@ -213,6 +232,7 @@ export function CommentsPanel({
     const body = composeDraft.trim()
     if (body === '' || composeAnchor === null || onCreateThread === undefined) return
     onCreateThread(composeAnchor, body)
+    announce('Comment posted')
     setComposeDraft('')
   }
 
@@ -293,6 +313,7 @@ export function CommentsPanel({
     if (onResolve === undefined) return
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
+    announce(next === 'resolved' ? 'Conversation resolved' : 'Conversation reopened')
     setPending((prev) => new Map(prev).set(thread.id, next))
     window.setTimeout(() => {
       setPending((prev) => {
@@ -344,6 +365,10 @@ export function CommentsPanel({
       onKeyDown={onEscape}
       className="flex flex-col gap-2"
     >
+      {/* Mounted before it speaks and `sr-only` rather than hidden: a live
+          region inserted already carrying its text is missed by several
+          screen readers. */}
+      <AnnouncerRegion text={announcement} />
       {composeAnchor === null && onComposeDocument !== undefined ? (
         <button
           type="button"
@@ -384,18 +409,7 @@ export function CommentsPanel({
             submitCompose()
           }}
         >
-          {composeAnchor.kind === 'text' ? (
-            // Quoted back because by the time the reader is typing here,
-            // their selection in the body is no longer what they are looking
-            // at — and a comment about the wrong passage is worse than none.
-            <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
-              {composeAnchor.quote.exact}
-            </p>
-          ) : anchorLabel(composeAnchor) === undefined ? null : (
-            <p data-testid="comments-panel-compose-about" className="text-xs text-neutral-500">
-              About the {anchorLabel(composeAnchor)}
-            </p>
-          )}
+          <ComposeAbout anchor={composeAnchor} />
           <div className="flex items-end gap-1">
             <CommentComposer
               apiRef={composeRef}
@@ -454,7 +468,7 @@ export function CommentsPanel({
               resolveAnchor={resolveAnchor}
               anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
-              onReply={onReply}
+              onReply={announcing(onReply, 'Reply sent')}
               onEditMessage={onEditMessage}
               rowRefs={rowRefs}
             />

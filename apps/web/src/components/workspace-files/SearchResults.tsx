@@ -14,10 +14,10 @@
  */
 
 import { LayoutGrid, List } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -71,6 +71,54 @@ export interface SearchResultsProps {
 }
 
 /**
+ * Why a row is here when its title and path do not say: that it matched by
+ * meaning, and the content excerpt around the match.
+ */
+function MatchReason({
+  contexts,
+  lexicalRank,
+  semanticRank,
+  query,
+  excerptId,
+}: Pick<SearchResultRow, 'contexts' | 'lexicalRank' | 'semanticRank'> & {
+  query: string
+  excerptId: string
+}) {
+  return (
+    <>
+      {lexicalRank === undefined && semanticRank !== undefined && (
+        /* Why the row is here, when no word in it is. The excerpt below is
+           the document's opening rather than a match window, so without
+           this the row is indistinguishable from one nothing matched at
+           all. */
+        <span
+          data-testid="semantic-hit"
+          className="text-muted-foreground text-[10px] uppercase tracking-wide"
+        >
+          Matched by meaning
+        </span>
+      )}
+      {(contexts?.length ?? 0) > 0 && (
+        /* The match itself, when it was in the CONTENT: neither the title
+           nor the path shows it, so without this the row cannot say why it
+           is here. */
+        <span
+          id={excerptId}
+          data-testid="result-excerpt"
+          className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
+        >
+          {lexicalRank === undefined ? (
+            (contexts?.[0] ?? '')
+          ) : (
+            <Highlighted text={contexts?.[0] ?? ''} query={query} />
+          )}
+        </span>
+      )}
+    </>
+  )
+}
+
+/**
  * One result, in either layout. The two differ in exactly three things — the
  * button's own class, the thumbnail's size, and nothing else — so they are
  * one card with a `layout` rather than two trees that have to be kept
@@ -99,10 +147,17 @@ function SearchResultCard({
   onDocumentContextMenu: SearchResultsProps['onDocumentContextMenu']
   thumbnail: (entry: WorkspaceDocumentEntry, sizeClass: string) => ReactNode
 }) {
+  const uid = useId()
+  const pathId = `${uid}-path`
+  const excerptId = `${uid}-excerpt`
   return (
     <button
       type="button"
       data-doc-path={entry.path}
+      // Label and kind are the name; where it lives and why it matched (the
+      // excerpt is body text) are the description.
+      aria-label={documentAccessibleName(entry, 'leaf')}
+      aria-describedby={(contexts?.length ?? 0) > 0 ? `${pathId} ${excerptId}` : pathId}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       onClick={() => onSelect(entry)}
       onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
@@ -141,7 +196,7 @@ function SearchResultCard({
         <span data-testid="result-title" className="truncate text-sm">
           <Highlighted text={titleOf(entry)} query={query} />
         </span>
-        <span className="text-muted-foreground truncate font-mono text-xs">
+        <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
           <Highlighted text={entry.path} query={query} />
         </span>
         {(entry.tags?.length ?? 0) > 0 && (
@@ -151,33 +206,13 @@ function SearchResultCard({
             {entry.tags?.map((tag) => `#${tag}`).join(' ')}
           </span>
         )}
-        {lexicalRank === undefined && semanticRank !== undefined && (
-          /* Why the row is here, when no word in it is. The excerpt below is
-             the document's opening rather than a match window, so without
-             this the row is indistinguishable from one nothing matched at
-             all. */
-          <span
-            data-testid="semantic-hit"
-            className="text-muted-foreground text-[10px] uppercase tracking-wide"
-          >
-            Matched by meaning
-          </span>
-        )}
-        {(contexts?.length ?? 0) > 0 && (
-          /* The match itself, when it was in the CONTENT: neither the title
-             nor the path shows it, so without this the row cannot say why it
-             is here. */
-          <span
-            data-testid="result-excerpt"
-            className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
-          >
-            {lexicalRank === undefined ? (
-              (contexts?.[0] ?? '')
-            ) : (
-              <Highlighted text={contexts?.[0] ?? ''} query={query} />
-            )}
-          </span>
-        )}
+        <MatchReason
+          contexts={contexts}
+          lexicalRank={lexicalRank}
+          semanticRank={semanticRank}
+          query={query}
+          excerptId={excerptId}
+        />
       </span>
     </button>
   )

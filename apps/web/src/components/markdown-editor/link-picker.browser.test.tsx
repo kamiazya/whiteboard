@@ -90,13 +90,13 @@ describe('the link picker (real browser)', () => {
     expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     await userEvent.keyboard('{Enter}')
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[reviews/weekly]] notes')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[reviews/weekly|weekly]] notes')
   })
 
   it('narrows as you type and links what you pick', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -116,7 +116,7 @@ describe('the link picker (real browser)', () => {
   it('writes each path when two documents share a name', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -173,7 +173,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.keyboard('{Control>}{End}{/Control}')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[reviews/weekly]] beta')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[reviews/weekly|weekly]] beta')
   })
 
   // Pinning an offset is not enough: text typed BEFORE it shifts every later
@@ -194,13 +194,13 @@ describe('the link picker (real browser)', () => {
     await userEvent.keyboard('SEE ')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('SEE [[reviews/weekly]] beta')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('SEE [[reviews/weekly|weekly]] beta')
   })
 
   it('moves the highlight with the arrow keys and commits the active row', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -220,7 +220,7 @@ describe('the link picker (real browser)', () => {
   it('says so when nothing matches, and Enter does nothing', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -249,11 +249,11 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 6) // inside "weekly"
 
     const picker = await openPicker(container, getByRole)
-    // Empty by default — its placeholder shows what will be used instead, so
-    // leaving it alone reproduces the pre-field behaviour.
+    // Empty by default — its placeholder shows what will be used instead (the
+    // text the link is made over), so leaving it alone keeps that text.
     const display = picker.querySelector('#link-picker-text') as HTMLInputElement
     expect(display.value).toBe('')
-    expect(display.placeholder).toBe('Weekly review')
+    expect(display.placeholder).toBe('weekly')
 
     await userEvent.fill(display, 'last week')
     await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
@@ -296,6 +296,27 @@ describe('the link picker (real browser)', () => {
 
     const display = picker.querySelector('#link-picker-text') as HTMLInputElement
     expect(display.placeholder).toBe('The URL itself')
+  })
+
+  it('opens from the keyboard with Mod-k, seeded with the word at the caret', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <MarkdownEditor
+        theme="light"
+        value="see weekly notes"
+        onChange={onChange}
+        linkTargets={targets}
+      />,
+    )
+    await caretInto(container, 6) // inside "weekly"
+
+    const mod = navigator.platform.toUpperCase().includes('MAC') ? 'Meta' : 'Control'
+    await userEvent.keyboard(`{${mod}>}k{/${mod}}`)
+
+    const picker = container.querySelector('[data-testid="link-picker"]') as HTMLElement
+    expect(picker).not.toBeNull()
+    expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('closes on Escape without touching the document', async () => {

@@ -20,6 +20,16 @@ import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { changeIndent } from './line-prefix.js'
 
+/**
+ * Where a line sits is what the pair restores. What an ordered item is
+ * NUMBERED is the one thing a move rewrites (it restarts at 1 when it opens
+ * a nested list), and that rewrite is pinned as examples in
+ * `line-prefix.test.ts`; here every number reads as `1.`.
+ */
+function withoutNumbers(doc: string): string {
+  return doc.replace(/^(\s*)\d+\. /gm, '$11. ')
+}
+
 const indent = changeIndent(1)
 const outdent = changeIndent(-1)
 
@@ -88,7 +98,7 @@ describe('indent and outdent compose', () => {
       const grew =
         indented.split('\n')[lineNumber - 1]!.length - doc.split('\n')[lineNumber - 1]!.length
       const back = run(outdent, indented, caret + grew)
-      expect(back).toBe(doc)
+      expect(back === null ? back : withoutNumbers(back)).toBe(withoutNumbers(doc))
     },
   )
 })

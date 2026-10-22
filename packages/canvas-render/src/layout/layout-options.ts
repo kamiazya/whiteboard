@@ -138,6 +138,15 @@ export interface SpatialLayoutOptions {
    */
   readonly suppressedBodyNodeIds?: readonly string[]
   /**
+   * Nodes the editor holds locked. A lock is editor state, not canvas
+   * content (it never reaches a stored canvas, an export or the MCP scene),
+   * so the caller says which ids it is and the top-level canvas marks each
+   * with a small padlock. Plain data, like `suppressedBodyNodeIds`, so it
+   * crosses a worker boundary. Absent or empty draws exactly what an
+   * unlocked canvas draws.
+   */
+  readonly lockedNodeIds?: readonly string[]
+  /**
    * What plugins contribute to rendering: silhouettes, how they read the
    * facets that select them, where they want a node's text, and what they
    * draw on top. Defaults to the bundled `visual` plugin's.

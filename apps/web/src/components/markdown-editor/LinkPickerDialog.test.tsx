@@ -8,14 +8,14 @@ afterEach(cleanup)
 const alpha: LinkTarget = { id: '01A', path: 'alpha', name: 'Alpha', kind: 'markdown' }
 const beta: LinkTarget = { id: '01B', path: 'beta', name: 'Beta', kind: 'markdown' }
 
-function mount(initialQuery = '') {
+function mount(initialQuery = '', linkText = '') {
   const onPick = vi.fn<(markup: string) => void>()
   const onCancel = vi.fn()
   const view = render(
     <LinkPickerDialog
       targets={[alpha, beta]}
       initialQuery={initialQuery}
-      linkText=""
+      linkText={linkText}
       onPick={onPick}
       onCancel={onCancel}
     />,
@@ -114,4 +114,36 @@ it('trims the display text of an external link', () => {
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: '  Notes  ' } })
   key('Enter')
   expect(picked()).toEqual(['[Notes](https://example.com/x)'])
+})
+
+/**
+ * The text a link was made over is the author's prose: a document link
+ * written over a selection keeps it as the alias, the way an external link
+ * always has, instead of replacing it with the document's own name.
+ */
+describe('a document link made over text keeps that text', () => {
+  it('writes the selected text as the alias', () => {
+    const { key, picked } = mount('al', 'the first one')
+    key('Enter')
+    expect(picked()).toEqual(['[[alpha|the first one]]'])
+  })
+
+  it('lets the Text field override the selection', () => {
+    const { key, picked } = mount('al', 'the first one')
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'instead' } })
+    key('Enter')
+    expect(picked()).toEqual(['[[alpha|instead]]'])
+  })
+
+  it('writes the bare reference when the text is the document name', () => {
+    const { key, picked } = mount('al', 'Alpha')
+    key('Enter')
+    expect(picked()).toEqual(['[[alpha]]'])
+  })
+
+  it('writes the bare reference when there is no text', () => {
+    const { key, picked } = mount('al', '')
+    key('Enter')
+    expect(picked()).toEqual(['[[alpha]]'])
+  })
 })

@@ -39,8 +39,10 @@ every `health:failing` box red — a **legend** appears in the board's
 top-left corner listing that key's values with the swatch each is drawn
 in, boxes and edges each in their own kind of swatch. It is part of the
 board, so an SVG or PNG export carries it too; in the editor it collapses
-to its title. When colour is used but no key explains it, the legend says
-so in one line instead of guessing.
+to its title. A board whose colours follow no key has no legend: colour
+you chose by hand is yours, and nothing is drawn to say a key does not
+explain it. When the legend is there and some other colour is not
+explained by a key, one muted line says so.
 
 ## Declare the vocabulary
 

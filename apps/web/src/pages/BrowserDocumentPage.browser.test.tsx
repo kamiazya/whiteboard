@@ -126,7 +126,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     )
   })
 
-  it('delete: the last canvas gives way to a fresh one, which survives a remount', async () => {
+  it('delete: the last canvas is removed and nothing is created in its place', async () => {
     const store = new FoldingBrowserIndex()
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(
@@ -135,7 +135,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
-    const deletedIds = (await listBrowserDocuments(store)).map((doc) => doc.documentId)
+    expect(await listBrowserDocuments(store)).toHaveLength(1)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
@@ -143,35 +143,14 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       .getByRole('button', { name: /^delete$/i })
       .click()
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
-    // The editor stays on screen through the switch, so it proves nothing. The
-    // delete clears the pointer, removes the row, then creates the fresh row
-    // and repoints, so the row appearing is NOT the end: the pointer naming
-    // that row is. A remount that reads in between finds no pointer and seeds
-    // a second document of its own.
+    // The delete clears the pointer and removes the row; the page then leaves
+    // for the list, which is what shows the first-run screen. A seeded
+    // replacement would read as the deleted note turning into a canvas.
     const pointer = new IdbDefaultDocumentPointer()
-    await waitFor(
-      async () => {
-        const ids = (await listBrowserDocuments(store)).map((doc) => doc.documentId)
-        expect(ids).toHaveLength(1)
-        expect(deletedIds).not.toContain(ids[0])
-        expect(await pointer.get()).toBe(ids[0])
-      },
-      { timeout: 5000 },
-    )
-    const [fresh] = await listBrowserDocuments(store)
-    cleanup()
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
-    // The remount opened the fresh document rather than seeding another one.
-    expect((await listBrowserDocuments(store)).map((doc) => doc.documentId)).toEqual([
-      fresh?.documentId,
-    ])
-    expect(await pointer.get()).toBe(fresh?.documentId)
+    await waitFor(async () => expect(await listBrowserDocuments(store)).toHaveLength(0), {
+      timeout: 5000,
+    })
+    expect(await pointer.get()).toBeNull()
   })
 
   // A pointer outliving its document — a delete whose repoint had not landed,

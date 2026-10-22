@@ -56,12 +56,12 @@ function Connections({
 describe('the connections opener', () => {
   it('shows the backlink count and opens the panel with sources and contexts', () => {
     render(<Connections backlinks={TWO} onOpen={() => {}} />)
-    const chip = screen.getByRole('button', { name: /connections/i })
+    const chip = screen.getByRole('button', { name: /linked from/i })
     expect(chip.textContent).toContain('2')
-    expect(screen.queryByRole('region', { name: /connections/i })).toBeNull()
+    expect(screen.queryByRole('region', { name: /linked from/i })).toBeNull()
 
     fireEvent.click(chip)
-    const panel = screen.getByRole('region', { name: /connections/i })
+    const panel = screen.getByRole('region', { name: /linked from/i })
     expect(panel.textContent).toContain('Sprint notes')
     // The unnamed source falls back to its path.
     expect(panel.textContent).toContain('board')
@@ -85,8 +85,8 @@ describe('the connections opener', () => {
         onOpen={onOpen}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
-    const panel = screen.getByRole('region', { name: /connections/i })
+    fireEvent.click(screen.getByRole('button', { name: /linked from/i }))
+    const panel = screen.getByRole('region', { name: /linked from/i })
     expect(panel.textContent).toContain('Mentioned, not linked')
     expect(panel.textContent).toContain('Standup memo')
     fireEvent.click(screen.getByRole('button', { name: /standup memo/i }))
@@ -105,20 +105,20 @@ describe('the connections opener', () => {
     const { unmount } = render(
       <Connections backlinks={TWO} mentions={[mention]} onOpen={() => {}} onLinkify={onLinkify} />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    fireEvent.click(screen.getByRole('button', { name: /linked from/i }))
     fireEvent.click(screen.getByRole('button', { name: /link it/i }))
     expect(onLinkify).toHaveBeenCalledWith(expect.objectContaining({ path: 'standup' }))
     unmount()
 
     render(<Connections backlinks={TWO} mentions={[mention]} onOpen={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    fireEvent.click(screen.getByRole('button', { name: /linked from/i }))
     expect(screen.queryByRole('button', { name: /link it/i })).toBeNull()
   })
 
   it('hides the mentions section when there are none', () => {
     render(<Connections backlinks={TWO} mentions={[]} onOpen={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
-    expect(screen.getByRole('region', { name: /connections/i }).textContent).not.toContain(
+    fireEvent.click(screen.getByRole('button', { name: /linked from/i }))
+    expect(screen.getByRole('region', { name: /linked from/i }).textContent).not.toContain(
       'Mentioned, not linked',
     )
   })
@@ -126,14 +126,14 @@ describe('the connections opener', () => {
   it('navigates to the source document when its row is clicked', () => {
     const onOpen = vi.fn()
     render(<Connections backlinks={TWO} onOpen={onOpen} />)
-    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    fireEvent.click(screen.getByRole('button', { name: /linked from/i }))
     fireEvent.click(screen.getByRole('button', { name: /sprint notes/i }))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'notes' }))
   })
 
   it('renders a zero count rather than hiding — the empty state is the invitation', () => {
     render(<Connections backlinks={[]} onOpen={() => {}} />)
-    expect(screen.getByRole('button', { name: /connections/i }).textContent).toContain('0')
+    expect(screen.getByRole('button', { name: /linked from/i }).textContent).toContain('0')
   })
 
   it('shows a repeated excerpt once, and the next distinct one beside it', () => {
@@ -154,7 +154,7 @@ describe('the connections opener', () => {
           onOpen={() => {}}
         />,
       )
-      const panel = screen.getByRole('region', { name: /connections/i })
+      const panel = screen.getByRole('region', { name: /linked from/i })
       expect(panel.textContent?.split('see [[plan]]').length).toBe(2)
       expect(panel.textContent).toContain('and [[plan]] again')
       expect(error).not.toHaveBeenCalled()
@@ -165,6 +165,6 @@ describe('the connections opener', () => {
 
   it('stays quiet while backlinks are not loaded yet', () => {
     render(<Connections backlinks={null} onOpen={() => {}} />)
-    expect(screen.getByRole('button', { name: /connections/i }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: /linked from/i }).hasAttribute('disabled')).toBe(true)
   })
 })

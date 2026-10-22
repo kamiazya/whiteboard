@@ -1,4 +1,5 @@
 import { EditorSelection, type StateCommand } from '@codemirror/state'
+import { getActiveMarkdownEditor } from './active-markdown-editor.js'
 import { insertCodeBlock, insertRule, insertTable } from './block-inserts.js'
 import {
   changeIndent,
@@ -216,8 +217,9 @@ export interface MarkdownVerbSpec {
   /**
    * The key that runs it inside the source pane, in CodeMirror's notation.
    * Absent means the verb is reachable only from the catalog — which is a
-   * decision, not an oversight: `heading` is a band of four and `link` opens
-   * a picker, and neither survives being flattened onto one chord.
+   * decision, not an oversight: `heading` is a band of four and does not
+   * survive being flattened onto one chord. An `interactive` verb's chord
+   * opens its dialog on the focused host and degrades to its wrap.
    */
   readonly key?: string
   readonly action: MarkdownVerbAction
@@ -286,6 +288,7 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     id: 'link',
     label: 'Link',
     band: 'inline',
+    key: 'Mod-k',
     action: { kind: 'interactive', fallback: { open: '[[', close: ']]' } },
   },
   { id: 'math', label: 'Math', band: 'inline', action: { kind: 'wrap', open: '$' } },
@@ -430,7 +433,15 @@ export const markdownStyleKeymap = [
   ...MARKDOWN_EDITOR_VERBS.flatMap((spec) => {
     if (spec.key === undefined) return []
     const command = selfContainedCommand(spec)
-    return command === null ? [] : [{ key: spec.key, run: command }]
+    if (command === null) return []
+    if (spec.action.kind !== 'interactive') return [{ key: spec.key, run: command }]
+    // The dialog belongs to whichever host holds the caret, which registers
+    // itself as the active editor; a host with no picker, or none to pick
+    // from, gets the verb's plain wrap — the same degradation its button has.
+    const degraded = command
+    const run: StateCommand = (target) =>
+      getActiveMarkdownEditor()?.openLinkPicker?.() === true || degraded(target)
+    return [{ key: spec.key, run }]
   }),
   // Tab stays in the editor even when there is nothing to indent — a
   // Shift-Tab at the margin must not walk focus out of the text. Escape

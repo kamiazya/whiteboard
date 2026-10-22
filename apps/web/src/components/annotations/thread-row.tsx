@@ -59,12 +59,34 @@ function RowSubject({ body, expanded }: { body: string; expanded: boolean }) {
  * to say it for them: the document, a node set, a region. A pin, a passage
  * highlight or an edge comment is found by its place; these are found here.
  */
-export function anchorLabel(anchor: AnnotationAnchor): string | undefined {
+function anchorLabel(anchor: AnnotationAnchor): string | undefined {
   if (anchor.kind === 'document') return 'whole document'
   if (anchor.kind !== 'spatial') return undefined
   if (anchor.nodeIds !== undefined) return `${anchor.nodeIds.length} nodes`
   if (anchor.width !== undefined) return 'region'
   return undefined
+}
+
+/**
+ * What the compose box is about. A passage is quoted back because by the time
+ * the reader is typing, their selection in the body is no longer what they
+ * are looking at — and a comment about the wrong passage is worse than none.
+ */
+export function ComposeAbout({ anchor }: { anchor: AnnotationAnchor }) {
+  if (anchor.kind === 'text') {
+    return (
+      <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
+        {anchor.quote.exact}
+      </p>
+    )
+  }
+  const label = anchorLabel(anchor)
+  if (label === undefined) return null
+  return (
+    <p data-testid="comments-panel-compose-about" className="text-xs text-neutral-500">
+      About the {label}
+    </p>
+  )
 }
 
 /** Every message in the conversation, each one editable in place. */

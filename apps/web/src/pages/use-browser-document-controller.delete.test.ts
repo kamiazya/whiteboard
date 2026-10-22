@@ -1,6 +1,7 @@
 /**
- * What a confirmed delete leaves open, and the order it writes in. Split from
- * the controller's main file, which is at its size budget.
+ * What a confirmed delete writes, and the order it writes in. It opens nothing:
+ * the page leaves for the workspace list. Split from the controller's main
+ * file, which is at its size budget.
  */
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,10 +30,16 @@ describe('useBrowserDocumentController delete', () => {
     vi.useRealTimers()
   })
 
-  it('deleteDocument flushes pending save, deletes, and opens a fresh document when none is left', async () => {
+  it('deleteDocument flushes the pending save, deletes, and opens nothing in its place', async () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
+    const renames: string[] = []
+    const setName = store.index.setDocumentName.bind(store.index)
+    store.index.setDocumentName = async (input) => {
+      renames.push(`${input.documentId}:${input.name ?? ''}`)
+      await setName(input)
+    }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
         loro: store.loro,
@@ -47,12 +54,11 @@ describe('useBrowserDocumentController delete', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    // Nothing was left, so the page is on a fresh document — this keeper's
-    // first-visit answer — and the pointer names it rather than the deleted one.
-    const opened = result.current.snapshot
-    expect(opened).not.toBeNull()
-    expect(opened?.documentId).not.toBe(C1)
-    expect(await store.getDefaultDocumentId()).toBe(opened?.documentId)
+    // The rename reached the index before the row went, and no fresh document
+    // was seeded: the pointer names nothing and the workspace holds nothing.
+    expect(renames).toEqual([`${C1}:Renamed before cleanup`])
+    expect(await store.getDefaultDocumentId()).toBeNull()
+    expect(await store.index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
     expect(
       await store.index.resolveDocumentById({
         workspaceId: getBrowserWorkspaceId(),
@@ -88,7 +94,7 @@ describe('useBrowserDocumentController delete', () => {
     expect(pointerWhenRowGoes).toEqual([null])
   })
 
-  it('deleteDocument opens the document that is left', async () => {
+  it('deleteDocument leaves the sibling alone and does not repoint at it', async () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -104,14 +110,14 @@ describe('useBrowserDocumentController delete', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    expect(result.current.snapshot?.documentId).toBe(C2)
-    expect(await store.getDefaultDocumentId()).toBe(C2)
+    expect(await store.getDefaultDocumentId()).toBeNull()
+    const left = await store.index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+    expect(left.map((d) => d.documentId)).toEqual([C2])
   })
 
-  it('a delete whose next open fails leaves the screen, not the deleted document', async () => {
-    // The delete stands, so the recovery the page offers is load-failed; a
-    // snapshot still naming the removed document would keep editing a row
-    // that no longer exists.
+  it('a delete does not depend on listing the index, so a failing listing cannot fail it', async () => {
+    // Nothing opens after a delete, so an index that cannot be listed must not
+    // turn a stood delete into an error the person sees.
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -131,8 +137,7 @@ describe('useBrowserDocumentController delete', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    expect(result.current.snapshot).toBeNull()
-    expect(result.current.persistence).toMatchObject({ kind: 'degraded', reason: 'load-failed' })
+    expect(result.current.persistence.kind).not.toBe('degraded')
     expect(
       await store.index.resolveDocumentById({
         workspaceId: getBrowserWorkspaceId(),
@@ -183,7 +188,12 @@ describe('useBrowserDocumentController delete', () => {
       switched = await pending
     })
     expect(switched).toBe(false)
-    expect(result.current.snapshot?.documentId).toBe(C2)
-    expect(await store.getDefaultDocumentId()).toBe(C2)
+    expect(await store.getDefaultDocumentId()).toBeNull()
+    expect(
+      await store.index.resolveDocumentById({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId: C1,
+      }),
+    ).toBeNull()
   })
 })

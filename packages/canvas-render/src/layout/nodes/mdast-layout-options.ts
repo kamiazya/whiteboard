@@ -183,6 +183,14 @@ export interface MdastLayoutOptions {
    */
   readonly resolveEmbed?: (documentId: string) => EmbeddedDocument | undefined
   /**
+   * Whether an embed target has been asked for and not yet answered, as
+   * opposed to answered with nothing. A pending block embed is drawn as a
+   * framed title with a loading line; one that resolves to nothing keeps
+   * the unresolvable placeholder. Absent, nothing is pending, so a host
+   * that loads nothing asynchronously renders exactly as before.
+   */
+  readonly isEmbedPending?: (documentId: string) => boolean
+  /**
    * Every reference seam at once, built by `referenceSeams` from what a
    * keeper loaded. The form a composition root passes: the individual
    * seams above stay for a caller probing one in isolation, but a root

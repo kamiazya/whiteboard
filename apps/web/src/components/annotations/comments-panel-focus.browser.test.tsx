@@ -18,7 +18,7 @@
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
@@ -141,4 +141,40 @@ it('keeps the draft box focused when it appears in a panel that was already moun
     </StrictMode>,
   )
   await expect.element(page.getByRole('textbox', { name: 'Comment' })).toHaveFocus()
+})
+
+function PostingHost() {
+  const [threads, setThreads] = useState<readonly CommentThread[]>([OPEN])
+  const [compose, setCompose] = useState<AnnotationAnchor | null>(PASSAGE)
+  const [selected, setSelected] = useState<string | null>(null)
+  return (
+    <CommentsPanel
+      threads={threads}
+      composeAnchor={compose}
+      revealThreadId={selected}
+      onCreateThread={(anchor, body) => {
+        setCompose(null)
+        setSelected('t-new')
+        // The keeper answers a beat after the press, as the daemon's write
+        // door does: the row does not exist in the commit that unmounts the box.
+        window.setTimeout(() => {
+          setThreads((prev) => [
+            ...prev,
+            { id: 't-new', anchor, status: 'open', messages: [{ id: 'm-new', body }] },
+          ])
+        }, 30)
+      }}
+      onCancelCompose={() => setCompose(null)}
+    />
+  )
+}
+
+it('lands on the conversation just posted when Ctrl+Enter sends from the draft box', async () => {
+  render(<PostingHost />)
+  await expect.element(page.getByRole('textbox', { name: 'Comment' })).toHaveFocus()
+  await userEvent.keyboard('hello there')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+  await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
+  expect(document.activeElement?.textContent).toContain('hello there')
 })

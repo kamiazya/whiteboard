@@ -16,6 +16,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
+import { writeLastTool } from '../lib/initial-tool.js'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 
@@ -55,7 +56,7 @@ function seededSnapshot(): Uint8Array {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
-  sessionStorage.removeItem('wb.lastTool')
+  sessionStorage.removeItem(`wb.lastTool:w1/board`)
 })
 
 /** A press on the bubble, found by the words it draws rather than by a guessed viewport. */
@@ -71,7 +72,7 @@ function pressBubble(root: HTMLElement, pointerId: number) {
 }
 
 it('a press on a bubble opens the card, Close shuts it, and a reply joins the conversation', async () => {
-  sessionStorage.setItem('wb.lastTool', 'select')
+  writeLastTool('w1/board', 'select')
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => jsonResponse({}, 404)),

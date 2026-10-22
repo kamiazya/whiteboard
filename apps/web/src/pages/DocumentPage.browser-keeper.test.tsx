@@ -78,6 +78,12 @@ const browserFixture: DocumentPageFixture = {
       expect(router?.state.location.pathname).toBe(`/w/me/default/d/${path}`)
     })
   },
+  async expectLeftForList(sibling) {
+    await waitFor(() => {
+      expect(router?.state.location.pathname).toBe('/w/me/default')
+    })
+    expect(router?.state.location.pathname).not.toContain(sibling.path)
+  },
   failNextDelete() {
     const index = store?.index
     if (index === undefined) throw new Error('failNextDelete before mount')

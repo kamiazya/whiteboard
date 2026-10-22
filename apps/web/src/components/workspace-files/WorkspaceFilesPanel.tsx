@@ -128,6 +128,7 @@ export function WorkspaceFilesPanel({
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
   const { columns, chooseColumns } = useBrowserColumns()
+  const [gridColumns, setGridColumns] = useState<number | undefined>(undefined)
   const {
     recentIds,
     changed,
@@ -724,6 +725,7 @@ export function WorkspaceFilesPanel({
             toggleSelected={toggleSelected}
             openCardMenu={openCardMenu}
             loadRender={loadRender}
+            onGridColumns={setGridColumns}
           />
         )
       default: {
@@ -792,6 +794,7 @@ export function WorkspaceFilesPanel({
         <RecentLane
           documents={documents}
           recentIds={recentIds}
+          gridColumns={gridColumns}
           onOpen={openEntry}
           renderThumbnail={(entry) => (
             <DocumentThumbnail

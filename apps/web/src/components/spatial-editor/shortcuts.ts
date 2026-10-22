@@ -34,9 +34,14 @@ export type ShortcutId =
   | 'space-pan'
   | 'nudge-selection'
   | 'show-shortcuts'
+  | 'tool-select'
+  | 'tool-hand'
+  | 'tool-connect'
+  | 'tool-draw'
+  | 'new-note'
 
 /** The headings the help sheet groups the catalog under, in display order. */
-export const SHORTCUT_SECTIONS = ['Edit', 'Arrange', 'View', 'Text', 'Help'] as const
+export const SHORTCUT_SECTIONS = ['Tools', 'Edit', 'Arrange', 'View', 'Text', 'Help'] as const
 type ShortcutSection = (typeof SHORTCUT_SECTIONS)[number]
 
 export interface ShortcutSpec {
@@ -71,6 +76,45 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  // Single unmodified letters: `matchesSpec` compares `mod` exactly, so these
+  // never answer Cmd+C / Cmd+V / Cmd+D, which stay the clipboard and
+  // duplicate chords. Live in every tool — switching away from a tool must
+  // work from inside it.
+  {
+    id: 'tool-select',
+    section: 'Tools',
+    keys: ['v'],
+    display: 'V',
+    description: 'Select tool',
+  },
+  {
+    id: 'tool-hand',
+    section: 'Tools',
+    keys: ['h'],
+    display: 'H',
+    description: 'Hand tool (pan)',
+  },
+  {
+    id: 'tool-connect',
+    section: 'Tools',
+    keys: ['c'],
+    display: 'C',
+    description: 'Connect tool',
+  },
+  {
+    id: 'tool-draw',
+    section: 'Tools',
+    keys: ['d'],
+    display: 'D',
+    description: 'Draw tool',
+  },
+  {
+    id: 'new-note',
+    section: 'Tools',
+    keys: ['n'],
+    display: 'N',
+    description: 'Add a note at the centre of the view',
+  },
   {
     id: 'toggle-lock',
     section: 'Edit',

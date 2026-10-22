@@ -93,4 +93,31 @@ describe('RecentLane', () => {
     expect(screen.getByTestId('thumb-d1')).toBeTruthy()
     expect(screen.getByTestId('thumb-d2')).toBeTruthy()
   })
+
+  // The lane is a shortcut to what the grid would make you look for; when
+  // every document already sits in the grid's first row it shows each card
+  // twice and shortcuts nothing.
+  it("is absent while every document fits in the grid's first row", () => {
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d1', 'd2']}
+        gridColumns={3}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.queryByTestId('recent-lane')).toBeNull()
+  })
+
+  it("appears once the documents outnumber the grid's columns", () => {
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d1', 'd2']}
+        gridColumns={2}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('recent-lane')).toBeTruthy()
+  })
 })

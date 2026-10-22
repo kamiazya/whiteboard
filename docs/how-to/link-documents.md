@@ -7,10 +7,15 @@ side. Works the same whether the browser or the daemon keeps the workspace.
 
 In a **markdown document**, type `[[` — a completion list of the
 workspace's documents opens as you type, ranked by match; Enter inserts the
-link. The toolbar's Link action offers the same list as a dialog (and also
-handles external URLs). A reference can name its target two ways:
+link. Each row shows the document's path beside its name, so two documents with
+the same name stay distinguishable. The toolbar's Link action — or `Ctrl + K`
+(`Cmd + K` on a Mac) while you are writing — offers the same list as a dialog
+(and also handles external URLs). Select some text first and the link keeps it:
+a document link written over a selection is `[[path|selected text]]`, the way an
+external link always carried its text. A reference can name its target two ways:
 
-- `[[path]]` — what the picker inserts. The link is shown with the
+- `[[path]]` — what the picker inserts when no text was selected. The link is
+  shown with the
   target's **current display name**, so it always reads naturally, and
   moving the document rewrites references to the old path for you. The `[[`
   completion inserts `[[path|Name]]` instead, so the source reads as the
@@ -51,8 +56,12 @@ so type `![[` and pick the document:
   opens the canvas. File nodes inside the miniature keep their card form;
   only the canvas you open expands them.
 
+While the target is still loading, the embed shows its name in a frame with
+a muted "Loading…" line; the content replaces it when it arrives. A target
+that cannot be found shows its name as a link instead.
+
 An `![[...]]` mixed into a sentence behaves like a `[[...]]` link labelled
-with the target's name. An embed counts as a link for the Connections chip
+with the target's name. An embed counts as a link for the Linked from chip
 below, so the embedded document lists this one as linking to it.
 
 ### Embed part of a document
@@ -107,7 +116,7 @@ repeating the name does not print it a second time under the header.
 
 ## See what links back
 
-Every document's header carries a Connections chip (the waypoints icon)
+Every document's header carries a Linked from chip (the waypoints icon)
 showing how many documents link here. Click it to open the list — each
 entry shows the linking document and a snippet of the text around the
 reference (or the canvas relationship). Click an entry to jump to it.

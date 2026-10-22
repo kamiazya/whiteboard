@@ -1,10 +1,11 @@
 import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
-import { type ReactNode, useMemo } from 'react'
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentLabel } from '../../lib/document-label.js'
+import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { folderContents } from './folder-contents.js'
+import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 /**
@@ -54,6 +55,42 @@ export interface FolderContentsListProps {
    */
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
+  /** How many columns the grid has at its current width; undefined once it is gone. */
+  onColumnCount?: (count: number | undefined) => void
+}
+
+/**
+ * Binary, and in the corner opposite the selection check so the two never
+ * collide. `role="img"` with a name rather than a bare colour: a dot nobody
+ * can see or hear is not a signal, and the card describes itself with it.
+ */
+function ChangedDot({ id }: { id: string }) {
+  return (
+    <span
+      id={id}
+      role="img"
+      aria-label="Changed since you last opened it"
+      data-testid="card-changed-dot"
+      // The SAME badge as the settings nudge, deliberately.
+      // BRAND.md reserves `#3b6ecc` as the blue spark, the AI's
+      // hand — and says the favicon's syncing dot reuses that hue
+      // because "the system is at work" is the same semantic
+      // family as the AI acting. A document rewritten while the
+      // person was elsewhere is that family: in this product the
+      // thing that rewrote it is usually an agent.
+      //
+      // Not `--primary`, which is chroma zero here and drew this
+      // as ink. Not amber, which the conflict badge below already
+      // spends on this same card. Not a second blue of my own:
+      // `badge-colour-surface.test.ts` holds every badge to one
+      // literal, because that is exactly what went wrong.
+      //
+      // Fixed across themes on purpose — a brand hue is chosen to
+      // read on both grounds — with the ring carrying it over a
+      // thumbnail of any colour.
+      className="absolute top-1 right-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+    />
+  )
 }
 
 /**
@@ -70,7 +107,9 @@ function CardThumbnail({
   selection,
   changed,
   renderThumbnail,
+  changedId,
 }: {
+  changedId: string
   entry: WorkspaceDocumentEntry
   selection: FolderContentsListProps['selection']
   changed: FolderContentsListProps['changed']
@@ -88,36 +127,7 @@ function CardThumbnail({
           cannot disagree with what is announced. Presence is gated on
           the MODE, which is a different question from the state.
           `aria-hidden` because the button already says it. */}
-      {changed?.has(entry.documentId) && (
-        /* Binary, and in the corner opposite the selection check so
-           the two never collide. `role="img"` with a name rather
-           than a bare colour: a dot nobody can see or hear is not a
-           signal, and this one contributes to the card's own
-           accessible name the way the kind badge already does. */
-        <span
-          role="img"
-          aria-label="Changed since you last opened it"
-          data-testid="card-changed-dot"
-          // The SAME badge as the settings nudge, deliberately.
-          // BRAND.md reserves `#3b6ecc` as the blue spark, the AI's
-          // hand — and says the favicon's syncing dot reuses that hue
-          // because "the system is at work" is the same semantic
-          // family as the AI acting. A document rewritten while the
-          // person was elsewhere is that family: in this product the
-          // thing that rewrote it is usually an agent.
-          //
-          // Not `--primary`, which is chroma zero here and drew this
-          // as ink. Not amber, which the conflict badge below already
-          // spends on this same card. Not a second blue of my own:
-          // `badge-colour-surface.test.ts` holds every badge to one
-          // literal, because that is exactly what went wrong.
-          //
-          // Fixed across themes on purpose — a brand hue is chosen to
-          // read on both grounds — with the ring carrying it over a
-          // thumbnail of any colour.
-          className="absolute top-1 right-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-        />
-      )}
+      {changed?.has(entry.documentId) && <ChangedDot id={changedId} />}
       {selection !== undefined && (
         <>
           <Circle
@@ -132,6 +142,64 @@ function CardThumbnail({
       )}
     </span>
   )
+}
+
+/**
+ * The ids of the parts of a card that DESCRIBE it, and the `aria-describedby`
+ * naming the ones this entry actually has. The name stays label and kind; a
+ * reader hears these after it.
+ */
+function cardDescription(
+  uid: string,
+  entry: WorkspaceDocumentEntry,
+  changed: FolderContentsListProps['changed'],
+) {
+  const ids = {
+    changed: `${uid}-changed`,
+    conflict: `${uid}-conflict`,
+    pin: `${uid}-pin`,
+    age: `${uid}-age`,
+    tags: `${uid}-tags`,
+  }
+  const describedBy = [
+    changed?.has(entry.documentId) ? ids.changed : undefined,
+    entry.shadowed ? ids.conflict : undefined,
+    entry.pinOrder !== undefined ? ids.pin : undefined,
+    entry.updatedAt !== undefined ? ids.age : undefined,
+    (entry.tags?.length ?? 0) > 0 ? ids.tags : undefined,
+  ]
+    .filter((id) => id !== undefined)
+    .join(' ')
+  return { ids, describedBy }
+}
+
+/** The card's open and menu gestures, each present only when the host handles it. */
+function cardHandlers(
+  entry: WorkspaceDocumentEntry,
+  onActivateDocument: FolderContentsListProps['onActivateDocument'],
+  onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu'],
+) {
+  return {
+    onDoubleClick: onActivateDocument === undefined ? undefined : () => onActivateDocument(entry),
+    onKeyDown:
+      onActivateDocument === undefined
+        ? undefined
+        : (event: KeyboardEvent<HTMLButtonElement>) => {
+            if (event.key === 'Enter') {
+              // Without this the keydown ALSO fires the native
+              // button click, selecting after the open.
+              event.preventDefault()
+              onActivateDocument(entry)
+            }
+          },
+    onContextMenu:
+      onDocumentContextMenu === undefined
+        ? undefined
+        : (event: MouseEvent<HTMLButtonElement>) => {
+            event.preventDefault()
+            onDocumentContextMenu(entry, event.clientX, event.clientY)
+          },
+  }
 }
 
 /**
@@ -158,34 +226,20 @@ function DocumentCard({
   onActivateDocument: FolderContentsListProps['onActivateDocument']
   onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu']
 }) {
+  const { ids, describedBy } = cardDescription(useId(), entry, changed)
   return (
     <button
       type="button"
       data-doc-path={entry.path}
+      // The name is the label and kind alone; the picture, state badges, age
+      // and tags are the description, so a reader hears what the document is
+      // before anything about it.
+      aria-label={documentAccessibleName(entry, 'leaf')}
+      aria-describedby={describedBy === '' ? undefined : describedBy}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
       onClick={() => onOpen({ kind: 'document', document: entry })}
-      onDoubleClick={onActivateDocument === undefined ? undefined : () => onActivateDocument(entry)}
-      onKeyDown={
-        onActivateDocument === undefined
-          ? undefined
-          : (event) => {
-              if (event.key === 'Enter') {
-                // Without this the keydown ALSO fires the native
-                // button click, selecting after the open.
-                event.preventDefault()
-                onActivateDocument(entry)
-              }
-            }
-      }
-      onContextMenu={
-        onDocumentContextMenu === undefined
-          ? undefined
-          : (event) => {
-              event.preventDefault()
-              onDocumentContextMenu(entry, event.clientX, event.clientY)
-            }
-      }
+      {...cardHandlers(entry, onActivateDocument, onDocumentContextMenu)}
       // `group` + `aria-pressed:` so the SELECTED look is derived from
       // the attribute a screen reader reads, rather than written a
       // second time from `selection.has(...)`. toggle-state-surface
@@ -198,6 +252,7 @@ function DocumentCard({
         selection={selection}
         changed={changed}
         renderThumbnail={renderThumbnail}
+        changedId={ids.changed}
       />
       <span className="flex min-w-0 flex-col px-2 py-1.5">
         {/* The display name is the label everywhere else; the segment
@@ -210,6 +265,7 @@ function DocumentCard({
           </span>
           {entry.shadowed && (
             <span
+              id={ids.conflict}
               data-testid="card-shadowed-badge"
               title="Another document owns this path. Rename this one to resolve the conflict."
               className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
@@ -221,6 +277,7 @@ function DocumentCard({
             /* The pin is on the row, not only a sort position — state a
                  reader could not otherwise see on its object. */
             <Pin
+              id={ids.pin}
               role="img"
               aria-label="Pinned"
               className="text-muted-foreground ml-auto size-3 shrink-0"
@@ -228,12 +285,16 @@ function DocumentCard({
           )}
         </span>
         {entry.updatedAt !== undefined && (
-          <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
+          <span
+            id={ids.age}
+            data-testid="card-subtitle"
+            className="text-muted-foreground truncate text-xs"
+          >
             {formatRelative(entry.updatedAt)}
           </span>
         )}
         {(entry.tags?.length ?? 0) > 0 && (
-          <span className="text-muted-foreground truncate text-[11px]">
+          <span id={ids.tags} className="text-muted-foreground truncate text-[11px]">
             {entry.tags?.map((tag) => `#${tag}`).join(' ')}
           </span>
         )}
@@ -261,6 +322,39 @@ function KindBadge({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
   )
 }
 
+/** A folder as a card: how much is inside, and a chevron saying it navigates. */
+function FolderCard({
+  child,
+  onOpen,
+}: {
+  child: ReturnType<typeof folderContents>['folders'][number]
+  onOpen: FolderContentsListProps['onOpen']
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Open folder ${child.name}`}
+      onClick={() => onOpen({ kind: 'folder', path: child.path })}
+      className="hover:bg-accent flex w-full flex-col overflow-hidden rounded-md border text-left"
+    >
+      <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
+        <Folder className="size-7" />
+      </span>
+      <span className="flex min-w-0 items-center gap-1 px-2 py-1.5">
+        <span data-testid="card-title" className="truncate text-sm">
+          {child.name}
+        </span>
+        {/* How much is inside, so a folder is not a blind alley to
+                  click into — and the chevron says this card navigates. */}
+        <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+          {child.count}
+        </span>
+        <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+      </span>
+    </button>
+  )
+}
+
 export function FolderContentsList({
   documents,
   folder,
@@ -272,11 +366,13 @@ export function FolderContentsList({
   changed,
   renderThumbnail,
   className,
+  onColumnCount,
 }: FolderContentsListProps) {
   const { folders, documents: here } = useMemo(
     () => folderContents(documents, folder),
     [documents, folder],
   )
+  const gridRef = useGridColumnCount<HTMLUListElement>(onColumnCount)
   const longPress = useLongPressMenu(
     onDocumentContextMenu === undefined
       ? undefined
@@ -292,6 +388,7 @@ export function FolderContentsList({
 
   return (
     <ul
+      ref={gridRef}
       {...longPress}
       className={cn(
         'grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]',
@@ -300,27 +397,7 @@ export function FolderContentsList({
     >
       {folders.map((child) => (
         <li key={child.path}>
-          <button
-            type="button"
-            aria-label={`Open folder ${child.name}`}
-            onClick={() => onOpen({ kind: 'folder', path: child.path })}
-            className="hover:bg-accent flex w-full flex-col overflow-hidden rounded-md border text-left"
-          >
-            <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
-              <Folder className="size-7" />
-            </span>
-            <span className="flex min-w-0 items-center gap-1 px-2 py-1.5">
-              <span data-testid="card-title" className="truncate text-sm">
-                {child.name}
-              </span>
-              {/* How much is inside, so a folder is not a blind alley to
-                  click into — and the chevron says this card navigates. */}
-              <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
-                {child.count}
-              </span>
-              <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
-            </span>
-          </button>
+          <FolderCard child={child} onOpen={onOpen} />
         </li>
       ))}
       {here.map((entry) => (
