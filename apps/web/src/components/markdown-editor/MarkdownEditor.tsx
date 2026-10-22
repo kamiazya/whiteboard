@@ -792,7 +792,10 @@ export function MarkdownEditor({
         <SourceColumn
           value={value}
           onChange={onChange}
-          autoFocus={autoFocus}
+          // Only an empty note is one the reader opened to write in. An existing
+          // note focused on open traps a keyboard user inside it, because Tab
+          // is indentation there.
+          autoFocus={autoFocus && value === ''}
           mode={effectiveMode}
           splitRatio={splitRatio}
           linkTargets={linkTargets}

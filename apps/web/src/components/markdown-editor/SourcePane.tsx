@@ -10,7 +10,7 @@ import {
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { GFM } from '@lezer/markdown'
-import { type RefObject, useEffect, useRef } from 'react'
+import { type RefObject, useEffect, useId, useRef } from 'react'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
@@ -19,6 +19,7 @@ import {
   followCaret,
   markdownEditingBase,
 } from './markdown-editing-base.js'
+import { TOUCH_BAR_HEIGHT_PX, touchFormattingBarShown } from './verb-bar-layout.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -136,6 +137,38 @@ export interface SourcePaneApi {
  */
 type SourcePaneVariant = 'document' | 'compact'
 
+/**
+ * A phone has no room for a desktop's margins: the two reserved gutters
+ * (26px each) plus the line padding put the text at 76px of 390. Narrowed to
+ * the dot's own width, the reserve stays (a thread arriving must not reflow
+ * the body) and the column is given back. In the editor's theme because the
+ * stylesheet's gutter rules sit in a layer this unlayered theme outranks.
+ */
+function narrowScreenTheme(variant: SourcePaneVariant) {
+  if (variant !== 'document') return {}
+  return {
+    '@media (max-width: 479px)': {
+      '.cm-annotation-gutter, .cm-proposal-gutter': { minWidth: '12px' },
+      '.cm-annotation-gutter-marker, .cm-proposal-gutter-marker': { width: '12px' },
+      '.cm-line': { padding: '0 16px' },
+    },
+  }
+}
+
+/**
+ * The docked formatting bar is a fixed strip over the scroller's bottom
+ * edge, which CodeMirror knows nothing about: left alone it scrolls the
+ * caret to that edge, under the bar.
+ */
+function scrollClearance(variant: SourcePaneVariant): Extension[] {
+  if (variant !== 'document') return []
+  return [
+    EditorView.scrollMargins.of(() =>
+      touchFormattingBarShown() ? { bottom: TOUCH_BAR_HEIGHT_PX } : null,
+    ),
+  ]
+}
+
 export interface SourcePaneProps {
   value: string
   onChange: (next: string) => void
@@ -199,6 +232,7 @@ export function SourcePane({
   onRequestLinkPickerRef.current = onRequestLinkPicker
   // Filled once the view exists; the focus/blur handlers below read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
+  const leaveHintId = useId()
 
   useEffect(() => {
     const host = hostRef.current
@@ -270,6 +304,7 @@ export function SourcePane({
                 },
                 '.cm-line': { padding: '0 24px' },
               }),
+          ...narrowScreenTheme(variant),
           '&.cm-focused': { outline: 'none' },
           // CodeMirror's base theme fills the gutters light grey and rules a
           // light line down their right edge. Unoverridden, that painted a
@@ -302,6 +337,11 @@ export function SourcePane({
           }
         }),
         followCaret(activeRef),
+        // Tab is indentation here, so a keyboard user who lands in the editor
+        // has no way out unless they are told (WCAG 2.1.2). CodeMirror's own
+        // Escape-then-Tab escape hatch is the answer; this names it.
+        EditorView.contentAttributes.of({ 'aria-describedby': leaveHintId }),
+        ...scrollClearance(variant),
       ],
     })
     const view = new EditorView({ state, parent: host })
@@ -427,11 +467,16 @@ export function SourcePane({
   }, [value, reconcileExternalValue])
 
   return (
-    <div
-      ref={hostRef}
-      className={className}
-      style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}
-      data-testid="markdown-source-pane"
-    />
+    <>
+      <div
+        ref={hostRef}
+        className={className}
+        style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}
+        data-testid="markdown-source-pane"
+      />
+      <span id={leaveHintId} className="sr-only">
+        Press Escape, then Tab, to leave the editor.
+      </span>
+    </>
   )
 }

@@ -25,4 +25,12 @@ describe('SourcePane', () => {
     const { unmount } = render(<SourcePane value="content" onChange={() => {}} />)
     expect(() => unmount()).not.toThrow()
   })
+
+  it('tells a keyboard user how to leave, since Tab indents inside the editor', () => {
+    const { container } = render(<SourcePane value="note" onChange={() => {}} />)
+    const content = container.querySelector('.cm-content')
+    const hintId = content?.getAttribute('aria-describedby')
+    expect(hintId).toBeTruthy()
+    expect(document.getElementById(hintId as string)?.textContent).toMatch(/Escape.*Tab/)
+  })
 })
