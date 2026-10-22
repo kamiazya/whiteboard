@@ -22,6 +22,7 @@ import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import type { DatabaseSchema } from './db/schema.js'
+import { inTenantTransaction } from './db/tenant-database.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -209,6 +210,18 @@ type SaveVersionOpts = Parameters<FileVersionStore['save']>[3]
  * The row a saved version becomes. Every optional field is written as NULL
  * rather than omitted, because the column exists either way.
  */
+/**
+ * Rows per statement when adopting, under SQLite's bound-parameter ceiling
+ * (32,766): an insert binds one value per column of a version row plus the
+ * tenant stamp — about twenty — and the read-back one per id.
+ */
+const ADOPT_INSERT_BATCH = 1_000
+const ADOPT_READ_BATCH = 10_000
+
+function* batchesOf<T>(items: readonly T[], size: number): Generator<readonly T[]> {
+  for (let start = 0; start < items.length; start += size) yield items.slice(start, start + size)
+}
+
 function versionRow({
   id,
   documentId,
@@ -387,39 +400,52 @@ export class FileVersionStore implements VersionStore {
     if (rows.length === 0) return []
     return withWorkspaceWriteLock(workspaceId, async () => {
       const db = await this.scope.db()
-      // RETURNING names only the rows this call inserted: an id already held
-      // is skipped, so naming one of this keeper's own rows cannot make that
-      // row one the cap below may take.
-      const inserted = await db
-        .insertInto('versions')
-        .values(
-          rows.map((row) =>
-            versionRow({
-              id: row.id,
-              documentId: row.documentId,
-              workspaceId,
-              opts: row,
-              operator: row.operator,
-              elementCount: row.elementCount,
-              frontiers: frontiersToBase64(row.frontiers),
-              contentDigest: row.contentDigest,
-              createdAt: row.createdAt,
-            }),
-          ),
-        )
-        .onConflict((conflict) => conflict.column('id').doNothing())
-        .returning('id')
-        .execute()
-      const held = await db
-        .selectFrom('versions')
-        .select(['id'])
-        .where('workspaceId', '=', workspaceId)
-        .where(
-          'id',
-          'in',
-          rows.map((row) => row.id),
-        )
-        .execute()
+      // In batches, since a promote carries more rows than one statement may
+      // bind, and in one transaction, so a refused batch leaves none behind.
+      const { inserted, held } = await inTenantTransaction(db, async (trx) => {
+        const inserted: { id: string }[] = []
+        const held: { id: string }[] = []
+        for (const batch of batchesOf(rows, ADOPT_INSERT_BATCH)) {
+          // RETURNING names only the rows this call inserted: an id already
+          // held is skipped, so naming one of this keeper's own rows cannot
+          // make that row one the cap below may take.
+          const written = await trx
+            .insertInto('versions')
+            .values(
+              batch.map((row) =>
+                versionRow({
+                  id: row.id,
+                  documentId: row.documentId,
+                  workspaceId,
+                  opts: row,
+                  operator: row.operator,
+                  elementCount: row.elementCount,
+                  frontiers: frontiersToBase64(row.frontiers),
+                  contentDigest: row.contentDigest,
+                  createdAt: row.createdAt,
+                }),
+              ),
+            )
+            .onConflict((conflict) => conflict.column('id').doNothing())
+            .returning('id')
+            .execute()
+          inserted.push(...written)
+        }
+        for (const batch of batchesOf(rows, ADOPT_READ_BATCH)) {
+          const found = await trx
+            .selectFrom('versions')
+            .select(['id'])
+            .where('workspaceId', '=', workspaceId)
+            .where(
+              'id',
+              'in',
+              batch.map((row) => row.id),
+            )
+            .execute()
+          held.push(...found)
+        }
+        return { inserted, held }
+      })
       const carried = new Set(inserted.map((row) => row.id))
       for (const documentId of new Set(rows.map((row) => row.documentId))) {
         await this.prune(workspaceId, documentId, carried)

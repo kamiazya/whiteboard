@@ -650,6 +650,51 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     )
   }
 
+  describe('adopting more rows than one statement may bind', () => {
+    // Past SQLite's bound-parameter ceiling (32,766) for the read-back's id list,
+    // and so, at a column per value, many times past it for the insert.
+    const ROWS = 33_000
+
+    function carried(documentId: string, count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: `carried-${String(i).padStart(6, '0')}`,
+        documentId,
+        createdAt: 1 + i,
+        auto: false,
+        frontiers: [],
+        elementCount: 0,
+        contentDigest: 'x',
+      }))
+    }
+
+    async function heldRows(documentId: string): Promise<number> {
+      const held = await handle.db
+        .selectFrom('versions')
+        .select((eb) => eb.fn.countAll<number>().as('n'))
+        .where('documentId', '=', documentId)
+        .where('auto', '=', 0)
+        .executeTakeFirstOrThrow()
+      return Number(held.n)
+    }
+
+    it('takes every row in and names every one it holds', async () => {
+      const documentId = await documentIdOf('canvas-x')
+      const kept = await store.adopt('sess-1', carried(documentId, ROWS))
+      expect(kept).toHaveLength(ROWS)
+      expect(new Set(kept).size).toBe(ROWS)
+      expect(await heldRows(documentId)).toBe(ROWS)
+    }, 120_000)
+
+    it('writes none of the rows when one in a later batch is refused', async () => {
+      const documentId = await documentIdOf('canvas-x')
+      const rows = carried(documentId, 5_000)
+      const last = rows.length - 1
+      rows[last] = { ...rows[last], createdAt: null as unknown as number } as (typeof rows)[number]
+      await expect(store.adopt('sess-1', rows)).rejects.toThrow(/NOT NULL/)
+      expect(await heldRows(documentId)).toBe(0)
+    }, 120_000)
+  })
+
   describe('the manual-version ceiling', () => {
     it('refuses the manual save past the ceiling, and still takes an automatic one', async () => {
       const documentId = await documentIdOf('canvas-x')
