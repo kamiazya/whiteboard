@@ -142,6 +142,8 @@ const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   selectedRef:
     'no subject: mirrors the preview selection, written during render so a move reads the row current in the very render that changes it',
+  gridColumns:
+    'no subject: the measured column count of the card grid, a property of the viewport and not of any document or workspace',
   documents: 'cleared on switch',
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
