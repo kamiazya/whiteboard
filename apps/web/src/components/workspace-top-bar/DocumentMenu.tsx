@@ -27,6 +27,12 @@ interface DocumentMenuProps {
    */
   readonly onBookmark?: () => void
   /**
+   * What the row just did, for the polite status region it carries ("Exported
+   * as PNG", "Copied as JSON Canvas"). The page owns the actions, so it owns
+   * the words; the region lives here so the row has exactly one.
+   */
+  readonly notice?: string | null
+  /**
    * Lets a page's own dialog return focus to this trigger on close — the
    * menu item that opened it unmounted with the menu, so the default
    * close-focus would fall to `<body>`.
@@ -73,45 +79,62 @@ interface DocumentMenuProps {
  * Sharing returns when it is designed against the keeper
  * that has to honour it.
  */
-export function DocumentMenu({ onExport, onBookmark, triggerRef, children }: DocumentMenuProps) {
+export function DocumentMenu({
+  onExport,
+  onBookmark,
+  notice,
+  triggerRef,
+  children,
+}: DocumentMenuProps) {
   return (
-    <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-label="More actions"
-              className={HEADER_BUTTON_CLASS}
-            >
-              <EllipsisVertical aria-hidden="true" className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>More actions</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end">
-        {onExport && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2">
-              <Download aria-hidden="true" className="size-3.5" />
-              Export…
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
-        {onBookmark && (
-          <DropdownMenuItem onSelect={onBookmark} className="gap-2">
-            <BookmarkPlus aria-hidden="true" className="size-3.5" />
-            Bookmark this point…
-          </DropdownMenuItem>
-        )}
-        {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      {/* Mounted before it speaks and clipped rather than hidden, so a screen
+          reader announces the change of text. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {notice ?? ''}
+      </span>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <button
+                ref={triggerRef}
+                type="button"
+                aria-label="More actions"
+                className={HEADER_BUTTON_CLASS}
+              >
+                <EllipsisVertical aria-hidden="true" className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+          {onExport && <ExportSubmenu onExport={onExport} />}
+          {onBookmark && (
+            <DropdownMenuItem onSelect={onBookmark} className="gap-2">
+              <BookmarkPlus aria-hidden="true" className="size-3.5" />
+              Bookmark this point…
+            </DropdownMenuItem>
+          )}
+          {children}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+}
+
+function ExportSubmenu({ onExport }: { readonly onExport: (format: SceneExportFormat) => void }) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="gap-2">
+        <Download aria-hidden="true" className="size-3.5" />
+        Export…
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }

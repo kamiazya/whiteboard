@@ -12,12 +12,14 @@ const EXPORT_CONFIG: Record<SceneExportFormat, { extension: string; label: strin
 interface UseSceneExportOptions {
   onExport: ((format: SceneExportFormat) => Promise<Blob | null>) | undefined
   filenameBase: string
+  /** Told, once the file has gone out, what to say about it (e.g. "Exported as PNG"). */
+  onExported?: (message: string) => void
   log?: AppLogger
 }
 
 // Export has no dialog of its own (it's a plain dropdown action), so a
 // failed or unavailable export is surfaced next to the trigger instead.
-export function useSceneExport({ onExport, filenameBase, log }: UseSceneExportOptions) {
+export function useSceneExport({ onExport, filenameBase, onExported, log }: UseSceneExportOptions) {
   const [exportError, setExportError] = useState<string | null>(null)
 
   const handleExport = useCallback(
@@ -45,12 +47,13 @@ export function useSceneExport({ onExport, filenameBase, log }: UseSceneExportOp
         // Chrome/Safari before it has read the blob URL; deferring past the
         // current task lets the download start first.
         setTimeout(() => URL.revokeObjectURL(url), 0)
+        onExported?.(`Exported as ${label}`)
       } catch (err) {
         log?.error('canvas export failed:', err)
         setExportError(`Export as ${label} failed.`)
       }
     },
-    [onExport, filenameBase, log],
+    [onExport, filenameBase, onExported, log],
   )
 
   return { exportError, handleExport }

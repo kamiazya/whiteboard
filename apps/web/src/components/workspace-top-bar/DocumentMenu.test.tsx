@@ -8,6 +8,7 @@ import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
   onExport?: (format: 'png' | 'svg') => void
+  notice?: string | null
   onBookmark?: () => void
   display?: React.ReactNode
   children?: React.ReactNode
@@ -18,6 +19,7 @@ function renderMenu(props?: {
     <DocumentMenu
       onExport={props?.onExport}
       {...(props?.onBookmark === undefined ? {} : { onBookmark: props.onBookmark })}
+      {...(props?.notice === undefined ? {} : { notice: props.notice })}
       {...(props?.display === undefined ? {} : { display: props.display })}
     >
       {props?.children}
@@ -76,6 +78,16 @@ describe('DocumentMenu — export entries', () => {
 
     fireEvent.pointerUp(screen.getByText(`Export as ${format.toUpperCase()}`))
     await waitFor(() => expect(onExport).toHaveBeenCalledWith(format))
+  })
+
+  it('carries a polite status region that is mounted before it speaks', () => {
+    const { rerender } = renderMenu()
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('')
+
+    rerender(<DocumentMenu notice="Exported as PNG" />)
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status.textContent).toBe('Exported as PNG')
   })
 
   // No export path — this app's or Excalidraw's own — produces a PDF or a

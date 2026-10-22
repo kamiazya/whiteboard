@@ -97,7 +97,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
   'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 139,
-  'apps/web/src/components/document-editor/InspectorSegment.tsx#InspectorSegment': 56,
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,

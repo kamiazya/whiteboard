@@ -176,31 +176,49 @@ function InspectorButtons({ open, onToggle, tabs }: InspectorSegmentProps): JSX.
       // them does not, plus the `role="group"` a reader hears.
       className="flex shrink-0 items-center gap-0.5 max-sm:hidden"
     >
-      {INSPECTOR_ORDER.filter((kind) => tabs[kind] !== undefined).map((kind) => {
-        const { count } = tabs[kind] as InspectorTabState
-        const Glyph = GLYPHS[kind]
-        // `null` is "not answered yet", which is not the same as 0 and must
-        // not be pressable — the panel behind it has nothing to show.
-        const pending = count === null
-        return (
-          <Tooltip key={kind}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={accessibleName(kind, count)}
-                aria-pressed={open === kind}
-                disabled={pending}
-                onClick={() => onToggle(kind)}
-                className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
-              >
-                <Glyph aria-hidden="true" className="size-4" />
-                {typeof count === 'number' && (!countIsBacklog(kind) || count > 0) ? count : null}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{INSPECTOR_CHROME[kind].label}</TooltipContent>
-          </Tooltip>
-        )
-      })}
+      {INSPECTOR_ORDER.filter((kind) => tabs[kind] !== undefined).map((kind) => (
+        <InspectorButton
+          key={kind}
+          kind={kind}
+          count={(tabs[kind] as InspectorTabState).count}
+          pressed={open === kind}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
+  )
+}
+
+function InspectorButton({
+  kind,
+  count,
+  pressed,
+  onToggle,
+}: {
+  readonly kind: InspectorKind
+  readonly count: number | null | undefined
+  readonly pressed: boolean
+  readonly onToggle: (kind: InspectorKind) => void
+}): JSX.Element {
+  const Glyph = GLYPHS[kind]
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={accessibleName(kind, count)}
+          aria-pressed={pressed}
+          // \`null\` is "not answered yet", which is not the same as 0 and must
+          // not be pressable — the panel behind it has nothing to show.
+          disabled={count === null}
+          onClick={() => onToggle(kind)}
+          className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
+        >
+          <Glyph aria-hidden="true" className="size-4" />
+          {typeof count === 'number' && (!countIsBacklog(kind) || count > 0) ? count : null}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{INSPECTOR_CHROME[kind].label}</TooltipContent>
+    </Tooltip>
   )
 }

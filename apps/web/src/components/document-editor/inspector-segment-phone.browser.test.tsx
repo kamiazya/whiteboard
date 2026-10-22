@@ -10,8 +10,8 @@
  * injected as an override derived from the class that declares it.
  */
 import { cleanup, render, screen, within } from '@testing-library/react'
-import { userEvent } from 'vitest/browser'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import '../../index.css'
 import { INSPECTOR_CHROME, INSPECTOR_ORDER } from '../../lib/inspector.js'
 import { controlHeightsPx } from '../../test-utils/control-heights-px.js'
