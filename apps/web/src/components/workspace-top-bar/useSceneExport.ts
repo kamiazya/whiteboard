@@ -22,6 +22,10 @@ interface UseSceneExportOptions {
   log?: AppLogger
 }
 
+async function textHasAsset(blob: Blob): Promise<boolean> {
+  return new TextDecoder().decode(await blob.arrayBuffer()).includes('asset:')
+}
+
 // Export has no dialog of its own (it's a plain dropdown action), so a
 // failed or unavailable export is surfaced next to the trigger instead.
 export function useSceneExport({ onExport, filenameBase, onExported, log }: UseSceneExportOptions) {
@@ -57,7 +61,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         } else {
           // An image in a canvas is an `asset:` reference to the workspace's
           // file, so the saved text does not carry its pixels.
-          const referencesImages = format === 'canvas' && (await blob.text()).includes('asset:')
+          const referencesImages = format === 'canvas' && (await textHasAsset(blob))
           onExported?.(
             referencesImages
               ? `Saved as ${saved} — images are referenced, not embedded`

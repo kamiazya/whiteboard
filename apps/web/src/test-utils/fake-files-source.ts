@@ -13,6 +13,7 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
   loadMarkdown: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadMarkdown']>>
   loadSpatialSnapshot: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadSpatialSnapshot']>>
   /** Present only when the test asked for it — see the note in `fakeFilesSource`. */
+  importDocument?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['importDocument']>>>
   setPinned?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['setPinned']>>>
   listTagsInUse?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['listTagsInUse']>>>
 }
@@ -55,6 +56,9 @@ export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): 
     setDocumentName: vi.fn(overrides.setDocumentName ?? (async () => {})),
     loadMarkdown: vi.fn(overrides.loadMarkdown ?? (async () => ({ body: '' }))),
     loadSpatialSnapshot: vi.fn(overrides.loadSpatialSnapshot ?? (async () => new Uint8Array())),
+    ...(overrides.importDocument === undefined
+      ? {}
+      : { importDocument: vi.fn(overrides.importDocument) }),
     ...(overrides.setPinned === undefined ? {} : { setPinned: vi.fn(overrides.setPinned) }),
     ...(overrides.listTagsInUse === undefined
       ? {}

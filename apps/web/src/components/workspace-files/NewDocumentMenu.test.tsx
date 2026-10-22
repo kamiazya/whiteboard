@@ -233,3 +233,37 @@ describe('NewDocumentDialog — an open form is not reset underneath the user', 
     expect(((await screen.findByLabelText(/^Path/)) as HTMLInputElement).value).toBe('untitled-3')
   })
 })
+
+describe('NewDocumentMenu — Import file…', () => {
+  it('offers no import when the host cannot take one', async () => {
+    render(<NewDocumentMenu onCreate={vi.fn()} />)
+    open()
+    await screen.findByTestId('new-document-spatial')
+    expect(screen.queryByTestId('new-document-import')).toBeNull()
+  })
+
+  it('opens a picker that accepts the importable extensions and hands over the chosen files', async () => {
+    const onImportFiles = vi.fn()
+    render(<NewDocumentMenu onCreate={vi.fn()} onImportFiles={onImportFiles} />)
+    open()
+    fireEvent.pointerUp(await screen.findByTestId('new-document-import'))
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(input?.accept).toBe('.md,.markdown,.canvas,.json')
+    expect(input?.multiple).toBe(true)
+
+    const file = new File(['# hi'], 'a.md', { type: 'text/markdown' })
+    fireEvent.change(input as HTMLInputElement, { target: { files: [file] } })
+    expect(onImportFiles).toHaveBeenCalledExactlyOnceWith([file])
+  })
+
+  it('is refused while a create is in flight', async () => {
+    const onImportFiles = vi.fn()
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click')
+    render(<NewDocumentMenu onCreate={vi.fn()} onImportFiles={onImportFiles} disabled />)
+    open()
+    fireEvent.pointerUp(await screen.findByTestId('new-document-import'))
+    expect(click).not.toHaveBeenCalled()
+    click.mockRestore()
+  })
+})

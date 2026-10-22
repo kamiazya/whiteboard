@@ -771,6 +771,10 @@ document's own source rather than a picture. An image on a canvas is saved as an
 "images are referenced, not embedded" when the canvas has one; the picture exports above
 are the ones that carry the pixels.
 
+**Import** reads the same two sources back: `.md`/`.markdown` through the OKF parser
+(frontmatter optional) and `.canvas`/`.json` through the JSON Canvas parser, creating one
+document per file; see [Export and import a document](../how-to/export-and-import-a-document.md#bring-a-file-in).
+
 **Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
 document on the clipboard as plain text — the quickest way to hand the exact
 canvas to another tool or a debugging session from any device.

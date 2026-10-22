@@ -321,6 +321,35 @@ describe('createDocument', () => {
   })
 })
 
+describe('createDocument — with content', () => {
+  it('sends a markdown document its OKF text in the same create', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { workspaceId: 'w1', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'x' },
+          201,
+        ),
+      )
+    await createDocument(
+      fetchFn,
+      DAEMON_BASE_URL,
+      'w1',
+      'x',
+      'markdown',
+      'A name',
+      '---\ntype: note\n---\nhi',
+    )
+    const init = fetchFn.mock.calls[0]![1] as RequestInit
+    expect(JSON.parse(init.body as string)).toEqual({
+      path: 'x',
+      kind: 'markdown',
+      name: 'A name',
+      markdown: '---\ntype: note\n---\nhi',
+    })
+  })
+})
+
 describe('deleteDocument', () => {
   it('sends DELETE to the canvas URL and parses the ok body', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))

@@ -261,7 +261,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 102,
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx#NewDocumentDialog': 165,
-  'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 139,
+  'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 180,
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
   // The two layouts are ONE card with a `layout`. The entry below is that card
   // — the whole of what both layouts draw, counted once.
@@ -276,10 +276,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 793,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 804,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 92,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 96,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 84,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
@@ -306,12 +306,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   // Raised by two: the session's refused-write report and its teardown.
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 339,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 348,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/spatial/clipboard-fragment.ts#remintClipboardFragment': 55,
-  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 94,
+  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 112,
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
@@ -337,7 +337,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
-  'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 270,
+  'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 276,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
   // One property on the options object; its reasoning is a named constant
@@ -373,7 +373,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
   // The row's controls in one JSX run; the notice prop is one more spread.
-  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 52,
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 53,
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.

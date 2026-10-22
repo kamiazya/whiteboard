@@ -202,6 +202,8 @@ export function createDocument(
   path: string,
   kind: DocumentKind,
   name?: string,
+  /** A markdown document's OKF text, written by the same create. Ignored for a canvas, whose content the route does not take. */
+  markdown?: string,
 ): Promise<z.infer<typeof createDocumentV1ResponseSchema>> {
   return fetchAndParse(
     fetchFn,
@@ -216,6 +218,7 @@ export function createDocument(
         path,
         kind,
         ...(name === undefined ? {} : { name }),
+        ...(kind === 'markdown' && markdown !== undefined ? { markdown } : {}),
       } satisfies CreateDocumentV1Request),
     },
   )

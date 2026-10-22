@@ -183,6 +183,7 @@ export function PanelToolbar({
   derivedNewPath,
   outcome,
   createHere,
+  onImportFiles,
   chooseColumns,
 }: {
   columns: 'one' | 'two'
@@ -195,6 +196,7 @@ export function PanelToolbar({
   derivedNewPath: string
   outcome: ReturnType<typeof useWriteOutcome>
   createHere: ComponentProps<typeof NewDocumentMenu>['onCreate']
+  onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']
   chooseColumns: (next: 'one' | 'two') => void
 }) {
   return (
@@ -229,6 +231,7 @@ export function PanelToolbar({
         defaultPath={derivedNewPath}
         createError={outcome.createRefusal?.reason ?? null}
         onCreate={createHere}
+        {...(onImportFiles === undefined ? {} : { onImportFiles })}
         onDismiss={outcome.dismissCreateRefusal}
       />
       <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
