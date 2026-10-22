@@ -19,6 +19,7 @@ import {
   resolveWorkspaceDocumentById,
   statedKindSplit,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
@@ -244,10 +245,7 @@ function judgeVersions(
   const placed = placeRows(incoming, versions)
   if ('id' in placed) return unheld(placed.id)
   const ordered = [...placed].sort(
-    (a, b) =>
-      a.position - b.position ||
-      (a.point < b.point ? -1 : a.point > b.point ? 1 : 0) ||
-      a.index - b.index,
+    (a, b) => a.position - b.position || compareCodeUnit(a.point, b.point) || a.index - b.index,
   )
   const reader = pastReader(incoming)
   const judged = new Map<string, PointJudgement>()
