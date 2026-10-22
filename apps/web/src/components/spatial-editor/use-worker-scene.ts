@@ -112,6 +112,7 @@ type SceneInputs = Pick<
   | 'expandedFileIds'
   | 'fragments'
   | 'suppressedBodyNodeIds'
+  | 'lockedNodeIds'
   | 'showResolved'
   | 'threads'
   | 'proposals'
@@ -147,6 +148,8 @@ export function useWorkerScene(
      *  Must be referentially stable across renders, like the seams object —
      *  it participates in the memo below. */
     readonly suppressedBodyNodeIds?: readonly string[]
+    /** Nodes that wear a padlock; sorted and referentially stable, like the above. */
+    readonly lockedNodeIds?: readonly string[]
     /** Draw resolved comments too; view state, threaded to the worker as data. */
     readonly showResolved?: boolean
     /** The document's conversations, for passage highlights (plain data, crosses to the worker). */
@@ -181,6 +184,7 @@ export function useWorkerScene(
       base.measure,
       base.theme,
       base.suppressedBodyNodeIds,
+      base.lockedNodeIds,
       base.showResolved,
       base.threads,
       base.proposals,
@@ -225,6 +229,7 @@ export function useWorkerScene(
       expandedFileIds,
       fragments,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+      lockedNodeIds: options.lockedNodeIds,
       showResolved: options.showResolved,
       threads: options.threads,
       proposals: options.proposals,
@@ -242,6 +247,7 @@ export function useWorkerScene(
       expandedFileIds,
       fragments,
       options.suppressedBodyNodeIds,
+      options.lockedNodeIds,
       options.showResolved,
       options.threads,
       options.proposals,

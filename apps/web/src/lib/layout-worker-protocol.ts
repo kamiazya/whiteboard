@@ -130,6 +130,8 @@ export type LayoutRequest = LayoutSubject & {
   readonly missingFileRefs?: readonly string[]
   /** Node ids whose body an editor overlay owns — plain data, like the refs. */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** Node ids that wear a padlock — plain data, like the above. */
+  readonly lockedNodeIds?: readonly string[]
   /** The workspace's tag library (ADR-0040 decision 5) — plain data, so it crosses as it is. */
   readonly tagLibrary?: TagLibrary
   /** Draw resolved comments too (the editor's per-user toggle). */

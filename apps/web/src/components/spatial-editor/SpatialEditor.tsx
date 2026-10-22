@@ -532,6 +532,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
+    // The padlock is drawn only where the lock binds (an unlock is wired),
+    // and as a sorted array so the layout's memo keys stay stable.
+    const lockBinds = onToggleNodeLock !== undefined
+    const badgedLockedNodeIds = useMemo(
+      () =>
+        !lockBinds || lockedNodeIds === undefined || lockedNodeIds.size === 0
+          ? undefined
+          : [...lockedNodeIds].sort(),
+      [lockBinds, lockedNodeIds],
+    )
     // Whatever text entry has focus inside the root — a node's editor, the
     // comment compose bubble, a label, the thread card's reply box — stays
     // above the virtual keyboard: the keyboard overlays the page without
@@ -568,6 +578,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         measure: resolvedMeasure,
         theme,
         suppressedBodyNodeIds,
+        lockedNodeIds: badgedLockedNodeIds,
         showResolved: showResolvedComments,
         threads,
         proposals,

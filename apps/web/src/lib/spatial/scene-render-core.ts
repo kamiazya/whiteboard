@@ -74,6 +74,8 @@ export interface RenderCanvasCoreOptions {
    * opaque rectangle erasing a shaped node for the whole edit.
    */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** Node ids that wear a padlock (canvas-render's `lockedNodeIds`). */
+  readonly lockedNodeIds?: readonly string[]
   /**
    * Boxes a comment bubble must not cover, beyond the rendered canvas's own
    * nodes and earlier bubbles (canvas-render's `commentObstacles`). The drag
@@ -170,6 +172,7 @@ export function renderCanvasToSvgWith(
     expandFileNode: options.expandFileNode,
     contentCache: options.contentCache,
     suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+    lockedNodeIds: options.lockedNodeIds,
     commentObstacles: options.commentObstacles,
     showResolved: options.showResolved,
     threads: options.threads,

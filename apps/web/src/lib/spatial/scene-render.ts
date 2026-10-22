@@ -40,6 +40,8 @@ export interface RenderCanvasOptions {
   readonly expandFileNode?: (node: SpatialNode) => boolean
   /** See RenderCanvasCoreOptions: the node ids whose body an editor overlay owns. */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** See RenderCanvasCoreOptions: the node ids that wear a padlock. */
+  readonly lockedNodeIds?: readonly string[]
   /** See RenderCanvasCoreOptions: boxes a comment bubble must not cover. */
   readonly commentObstacles?: readonly BoundingBox[]
   /** See RenderCanvasCoreOptions: draw resolved comments (muted) too. */

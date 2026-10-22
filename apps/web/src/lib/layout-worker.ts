@@ -328,6 +328,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
         wireKey: JSON.stringify([referencesIdentity(request), fragments.keys]),
       }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
+      lockedNodeIds: request.lockedNodeIds,
       showResolved: request.showResolved,
       threads: request.threads,
       proposals: request.proposals,
