@@ -44,8 +44,10 @@ const HEADER_SURFACES: Record<string, number> = {
   // `InspectorSegment`. Before it they were four buttons in three other
   // files, which is how the row came to read `comments, kebab, history` on
   // a canvas and `properties, comments, kebab` on a note: each opener drawn
-  // wherever its own component already was.
-  './components/document-editor/InspectorSegment.tsx': 1,
+  // wherever its own component already was. Two uses, not one: the wide
+  // group's buttons and the phone-width fold button both wear it, since CSS
+  // picks which form is visible.
+  './components/document-editor/InspectorSegment.tsx': 2,
   './components/ui/InspectorPanel.tsx': 1,
 }
 
