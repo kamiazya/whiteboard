@@ -9,9 +9,9 @@ const KBD =
 /**
  * One slot of the touch pill, in screen px — the node-tools pill's slot
  * (SelectionOverlay), so the two clusters attached to a node read as one
- * family: 24px slots, 6px radius, background fill, border-coloured edge,
- * muted 1.5px glyphs, no shadow. Visually 24px; the hit area is widened by
- * the pseudo-element below, since a 24px target is under the touch floor.
+ * family: 44px slots on touch, 6px radius, background fill, border-coloured edge,
+ * muted 1.5px glyphs, no shadow. The pill only renders where the pointer is
+ * coarse, so each slot is the 44px touch floor (the dock's size).
  * The glyph stroke is ABSOLUTE: lucide's strokeWidth is in 24-unit viewBox
  * units, so at 14px a nominal 1.5 draws 0.9px and reads thinner than the
  * node-tools arrow beside it. `absoluteStrokeWidth` rescales against the
@@ -19,7 +19,7 @@ const KBD =
  */
 const GLYPH_PX = 14
 const SLOT_CLASS =
-  'relative flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring after:absolute after:-inset-y-2 after:content-[""]'
+  'relative flex size-11 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 /**
  * Where the strip goes, in the coordinates of the layer it renders into.
@@ -115,7 +115,7 @@ export function EditorExitHint({
           title="Done"
           onPointerDown={keepEditorFocus}
           onClick={onDone}
-          className={cn(SLOT_CLASS, 'after:right-0 after:-left-2')}
+          className={SLOT_CLASS}
         >
           <Check aria-hidden="true" size={GLYPH_PX} strokeWidth={1.5} absoluteStrokeWidth />
         </button>
@@ -126,7 +126,7 @@ export function EditorExitHint({
           title="Cancel"
           onPointerDown={keepEditorFocus}
           onClick={onCancel}
-          className={cn(SLOT_CLASS, 'after:left-0 after:-right-2')}
+          className={SLOT_CLASS}
         >
           <X aria-hidden="true" size={GLYPH_PX} strokeWidth={1.5} absoluteStrokeWidth />
         </button>

@@ -83,7 +83,7 @@ export function resizeHandleBoxes(box: Box, zoom: number): readonly ResizeHandle
 }
 
 /**
- * Invisible hit areas for the corners: `hitPx` on screen (24, or 32 where
+ * Invisible hit areas for the corners: `hitPx` on screen (24, or 44 where
  * the pointer is coarse), centered on the same corners the visible 8px
  * markers sit on. Drawing and hitting are separate questions — a marker any
  * bigger overwhelms small nodes, a target any smaller cannot be touched.
