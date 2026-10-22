@@ -112,6 +112,11 @@ get closer. There is no zoom percentage anywhere: what you can ask for is
 to see everything, or to get closer to something, and the magnification
 between those two is not a number you have to manage.
 
+A corner **overview** of the whole canvas shows whenever the editor is wide
+enough to hold it beside the dock. In a narrower editor, such as a phone held
+upright, it sits behind a map button just above the dock, hidden until you tap
+it and hidden again on a second tap; the choice lasts for the browser session.
+
 Zooming to the selection sits in a node's right-click menu as **Zoom to
 selection**; it frames every selected node, not only the one you pressed.
 

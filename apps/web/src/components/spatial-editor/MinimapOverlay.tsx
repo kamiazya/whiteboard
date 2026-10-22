@@ -14,12 +14,17 @@
  */
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
+import { Map as MapIcon } from 'lucide-react'
+import { useState } from 'react'
+import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import {
   fitMinimap,
   type MinimapBox,
   projectBox,
   unprojectPoint,
 } from '../../lib/spatial/minimap.js'
+import { cn } from '../../lib/utils.js'
+import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
 
 const PADDING_PX = 6
 
@@ -76,15 +81,57 @@ export interface MinimapOverlayProps {
   readonly height: number
   /** Called with the canvas-space point the viewport should centre on. */
   readonly onNavigate: (point: { x: number; y: number }) => void
+  /**
+   * The editor is too narrow to hold the overview beside the dock, so it sits
+   * behind a corner button above the dock and starts hidden.
+   */
+  readonly collapsible?: boolean
 }
 
-export function MinimapOverlay({
+/** Clears the dock (its height plus the bottom offset) with a gap. */
+const TOGGLE_BOTTOM = 'bottom-[calc(5rem+env(safe-area-inset-bottom))]'
+const RAISED_BOTTOM = 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
+
+export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlayProps) {
+  const [open, setOpen] = useState(readMinimapOpen)
+  if (!collapsible) return <MinimapSurface {...props} />
+  return (
+    <>
+      <div
+        data-editor-overlay
+        data-testid="minimap-toggle-wrap"
+        className={cn(
+          'absolute right-[calc(0.75rem+env(safe-area-inset-right))] z-10 rounded-lg border bg-background p-0.5 shadow-md',
+          TOGGLE_BOTTOM,
+        )}
+      >
+        <button
+          type="button"
+          data-testid="minimap-toggle"
+          aria-label={open ? 'Hide overview' : 'Show overview'}
+          aria-expanded={open}
+          onClick={() => {
+            writeMinimapOpen(!open)
+            setOpen(!open)
+          }}
+          className={`${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`}
+        >
+          <MapIcon aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+      {open && <MinimapSurface {...props} raised />}
+    </>
+  )
+}
+
+function MinimapSurface({
   boxes,
   viewportRect,
   width,
   height,
   onNavigate,
-}: MinimapOverlayProps) {
+  raised = false,
+}: Omit<MinimapOverlayProps, 'collapsible'> & { readonly raised?: boolean }) {
   const fit = fitMinimap(boxes, viewportRect, { width, height }, PADDING_PX)
   const marker = projectBox(viewportRect, fit)
 
@@ -113,7 +160,10 @@ export function MinimapOverlay({
       // Safe-area offsets for the same reason the dock carries one: in
       // fullscreen this corner is the screen corner, under the home
       // indicator and — rotated — under the display cutout.
-      className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm"
+      className={cn(
+        'absolute right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm',
+        raised ? RAISED_BOTTOM : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]',
+      )}
       onPointerDown={navigateTo}
       onPointerMove={(event) => {
         // Only while the button is held — a pointer merely passing over the
