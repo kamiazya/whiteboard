@@ -298,6 +298,27 @@ describe('the link picker (real browser)', () => {
     expect(display.placeholder).toBe('The URL itself')
   })
 
+  it('opens from the keyboard with Mod-k, seeded with the word at the caret', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <MarkdownEditor
+        theme="light"
+        value="see weekly notes"
+        onChange={onChange}
+        linkTargets={targets}
+      />,
+    )
+    await caretInto(container, 6) // inside "weekly"
+
+    const mod = navigator.platform.toUpperCase().includes('MAC') ? 'Meta' : 'Control'
+    await userEvent.keyboard(`{${mod}>}k{/${mod}}`)
+
+    const picker = container.querySelector('[data-testid="link-picker"]') as HTMLElement
+    expect(picker).not.toBeNull()
+    expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('closes on Escape without touching the document', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(

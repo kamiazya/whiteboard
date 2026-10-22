@@ -7,8 +7,9 @@ side. Works the same whether the browser or the daemon keeps the workspace.
 
 In a **markdown document**, type `[[` — a completion list of the
 workspace's documents opens as you type, ranked by match; Enter inserts the
-link. The toolbar's Link action offers the same list as a dialog (and also
-handles external URLs). Select some text first and the link keeps it: a document link written
+link. The toolbar's Link action — or `Ctrl + K` (`Cmd + K` on a Mac) while
+you are writing — offers the same list as a dialog (and also handles external
+URLs). Select some text first and the link keeps it: a document link written
 over a selection is `[[path|selected text]]`, the way an external link always
 carried its text. A reference can name its target two ways:
 

@@ -137,4 +137,19 @@ way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
 one, as **Zoom to fit** does.
 
+## Writing in a markdown document
+
+These keys work in a markdown document's source and in a canvas node's text
+editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
+
+| Shortcut | Action |
+|---|---|
+| `Cmd/Ctrl + B` | Bold the selection, or the word at the caret |
+| `Cmd/Ctrl + I` | Italicise the selection, or the word at the caret |
+| `Cmd/Ctrl + E` | Mark the selection, or the word at the caret, as code |
+| `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
+| `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
+| `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it |
+| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
+
 ← Back to [reference](README.md)
