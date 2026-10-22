@@ -38,7 +38,9 @@ export interface SyncStreamDoc {
    * The key canonicalised: registries and broadcasts name a workspace by id,
    * while the map holding this entry is keyed as the client subscribed — by
    * whatever handle its address carries (ADR-0019), which is also what it
-   * routes events by. Two spellings of one document are two subscriptions.
+   * routes events by. Two spellings of one document are two subscriptions,
+   * each sent its own frames — the page could not route one frame to both —
+   * though an update's payload is queued once for all of them.
    */
   key: string
 }
@@ -52,11 +54,12 @@ export interface SyncStreamDoc {
  * update as ASCII bytes — because one broadcast hands the SAME frame to every
  * stream following the workspace, and an update may be as large as the
  * content body limit: encoded once, the bytes are shared by every stream's
- * queue rather than rebuilt for each. The transport wraps them in the
- * `SyncUpdateEvent` envelope for `doc`.
+ * queue rather than rebuilt for each. The transport wraps them in one
+ * `SyncUpdateEvent` envelope per spelling in `docs`: the stream's every
+ * spelling of the workspace, so the payload is charged to its queue once.
  */
 export type SyncFrame =
-  | { event: 'update'; doc: SyncUpdateEvent['doc']; update: Uint8Array }
+  | { event: 'update'; docs: ReadonlyArray<SyncUpdateEvent['doc']>; update: Uint8Array }
   | { event: 'message'; data: SyncMessageEvent }
 
 export interface SyncStream {
@@ -370,12 +373,11 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
   const encoded = encodeUpdate(update)
   const reads: AccessReads = new Map()
   for (const [streamId, stream] of streams) {
-    const frames: SyncFrame[] = []
-    for (const [as, entry] of stream.docs) {
-      if (entry.key !== key) continue
-      frames.push({ event: 'update', doc: as, update: encoded })
+    const docs: string[] = []
+    for (const [as, entry] of stream.docs) if (entry.key === key) docs.push(as)
+    if (docs.length > 0) {
+      deliver(streamId, stream, workspaceId, [{ event: 'update', docs, update: encoded }], reads)
     }
-    if (frames.length > 0) deliver(streamId, stream, workspaceId, frames, reads)
   }
 }
 

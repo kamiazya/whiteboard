@@ -12,8 +12,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
-import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from '../sync-streams.js'
-import { createSyncSseRouter } from './sync-sse.js'
+import {
+  resetSyncStreamsForTests,
+  sseBroadcastWorkspaceUpdate,
+  syncStreamById,
+} from '../sync-streams.js'
+import { resolveTestServerDeps } from './_test-helpers.js'
+import { createSyncSseRouter, type SyncSseRouterOptions } from './sync-sse.js'
 
 // Its own data dir: resolving a workspace handle opens the store, and one
 // shared with a file running in parallel waits on that file's lock.
@@ -30,8 +35,8 @@ afterEach(() => {
 
 type Router = ReturnType<typeof createSyncSseRouter>
 
-function router(): Router {
-  return createSyncSseRouter({ workspaceDocuments: { onUpdated: () => () => {} } })
+function router(extra: Partial<SyncSseRouterOptions> = {}): Router {
+  return createSyncSseRouter({ workspaceDocuments: { onUpdated: () => () => {} }, ...extra })
 }
 
 /** A stream subscribed under `keys`, and a reader that collects its frames as text. */
@@ -117,5 +122,70 @@ describe('fanning one workspace update out to many streams', () => {
     // One byte array, shared by every stream's queue.
     expect(serialisations()).toBe(1)
     for (const stream of streams) await stream.close()
+  })
+})
+
+/** The characters one UPDATE's payload queues, envelope aside. */
+const UPDATE_CHARS = UPDATE_BASE64.length
+
+/** A stream of `user` subscribed under `keys`, left unread. */
+async function unreadStreamOf(app: Router, user: string, keys: readonly string[]) {
+  const res = await app.request('/api/sync/stream', { headers: { 'x-user': user } })
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  const ready = new TextDecoder().decode((await reader.read()).value)
+  const { streamId } = JSON.parse(ready.split('data:')[1] ?? '{}') as { streamId: string }
+  const subscribed = await app.request('/api/sync/subscribe', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-user': user },
+    body: JSON.stringify({ streamId, subscribe: keys }),
+  })
+  expect(subscribed.status).toBe(200)
+  return { streamId, reader }
+}
+
+// A stream may follow one workspace under several handles — its id and its
+// segment, from two tabs sharing the stream — and the page routes each frame
+// by the spelling it subscribed with, so each spelling still needs its own
+// frame. The payload is the same bytes for both, and is queued once.
+describe('one workspace followed under two spellings on one stream', () => {
+  it('queues the update once for both spellings', async () => {
+    const deps = await resolveTestServerDeps(dataDir)
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-two-spellings', segment: 'twice' })
+    // Room for three copies of the payload, not for five: three broadcasts
+    // left unread queue two once the first is taken into the response's
+    // buffer, or five when each spelling's frame is queued apart.
+    const app = router({
+      userOf: async (c) => c.req.header('x-user') ?? null,
+      queueBudget: { perUser: 3 * UPDATE_CHARS, total: 1_000 * UPDATE_CHARS },
+    })
+    const { streamId, reader } = await unreadStreamOf(app, 'bob', [
+      'workspace:ws-two-spellings',
+      'workspace:twice',
+    ])
+
+    for (let i = 0; i < 3; i++) {
+      sseBroadcastWorkspaceUpdate('ws-two-spellings', UPDATE)
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+
+    expect(syncStreamById(streamId)).toBeDefined()
+    // Both spellings are still delivered, each under its own key.
+    const decoder = new TextDecoder()
+    let text = ''
+    // Every part before the last `\n\n` is a whole frame.
+    const updates = () =>
+      text
+        .split('\n\n')
+        .slice(0, -1)
+        .filter((frame) => frame.startsWith('event: update\n'))
+    while (updates().length < 6) {
+      const { value, done } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+    }
+    const docs = updates().map((frame) => JSON.parse(frame.split('\ndata: ')[1] ?? '{}').doc)
+    expect(docs.filter((doc) => doc === 'workspace:ws-two-spellings')).toHaveLength(3)
+    expect(docs.filter((doc) => doc === 'workspace:twice')).toHaveLength(3)
+    await reader.cancel().catch(() => {})
   })
 })

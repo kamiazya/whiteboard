@@ -335,7 +335,7 @@ function openRefusal(c: Context, options: SyncSseRouterOptions, userId: string |
 
 /**
  * A frame as the SSE text `writeSSE` would write, and what it charges the
- * queue: the characters of its `data` line.
+ * queue: the characters of its `data` lines.
  * The `data` value is one line — JSON escapes every line break — so no
  * splitting is needed. An update's encoded payload goes out as its own chunk,
  * the same bytes for every stream, so fanning it out copies nothing that size.
@@ -345,16 +345,20 @@ function wireFrame(frame: SyncFrame): { chunks: Array<string | Uint8Array>; char
     const payload = JSON.stringify(frame.data)
     return { chunks: [`event: message\ndata: ${payload}\n\n`], chars: payload.length }
   }
-  // The envelope with an empty update, split between that string's quotes:
-  // base64 needs no JSON escaping, so the payload's bytes go between them as
-  // they are, and the line is exactly `JSON.stringify` of the whole event.
-  const envelope = JSON.stringify({ doc: frame.doc, update: '' } satisfies SyncUpdateEvent)
-  const head = `event: update\ndata: ${envelope.slice(0, -2)}`
-  const tail = `${envelope.slice(-2)}\n\n`
-  return {
-    chunks: [head, frame.update, tail],
-    chars: envelope.length + frame.update.byteLength,
+  // One event per spelling, each the envelope with an empty update split
+  // between that string's quotes: base64 needs no JSON escaping, so the
+  // payload's bytes go between them as they are, and each line is exactly
+  // `JSON.stringify` of the whole event. The payload is one buffer however
+  // many events carry it, so it is charged once.
+  const chunks: Array<string | Uint8Array> = []
+  let chars = frame.update.byteLength
+  for (const doc of frame.docs) {
+    const envelope = JSON.stringify({ doc, update: '' } satisfies SyncUpdateEvent)
+    chunks.push(`event: update\ndata: ${envelope.slice(0, -2)}`, frame.update)
+    chunks.push(`${envelope.slice(-2)}\n\n`)
+    chars += envelope.length
   }
+  return { chunks, chars }
 }
 
 /** The registry's handle on one open stream. */
