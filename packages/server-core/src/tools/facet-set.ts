@@ -169,7 +169,8 @@ async function setFacets(deps: ServerDeps, given: FacetSetInput): Promise<FacetS
 // beside the write loop.
 //
 // `facet-set.test.ts` pins it: deleting the document-existence pre-pass fails
-// two cases that assert nothing was written.
+// two cases that assert nothing was written, and `facet-set.batch-kind.test.ts`
+// fails when a kind refusal moves back beside the write loop.
 
 /**
  * Which SITE a write targets: an element on the board, the board's own
@@ -236,6 +237,7 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetRequest): P
   for (const documentId of input.documentIds) {
     await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
   }
+  await refuseKindMismatches(deps, input)
   await refuseLockedTargets(deps, input)
   if (input.tags === undefined) return
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
@@ -250,6 +252,54 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetRequest): P
       }
       if (judgesLibrary) refuseAgainstLibrary(library, tags, what)
     }
+  }
+}
+
+/**
+ * Refuse a batch naming a document whose kind cannot hold this write.
+ *
+ * Only the document and canvas sites are judged here: an element write names
+ * one document, so it refuses before any write by construction, and it keeps
+ * its own not-found-before-kind order in `setElementFacets`.
+ */
+async function refuseKindMismatches(deps: ServerDeps, input: FacetSetRequest): Promise<void> {
+  if (input.nodeId !== undefined || input.edgeId !== undefined) return
+  if (input.facets === undefined && input.target !== 'canvas') return
+  for (const documentId of input.documentIds) {
+    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+    refuseKindMismatch(input, documentId, readDocumentKind(doc))
+  }
+}
+
+function refuseKindMismatch(
+  input: FacetSetRequest,
+  documentId: string,
+  kind: DocumentKind | undefined,
+): void {
+  // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
+  // document has nodes and edges and no frontmatter to put one in, so a
+  // facet stored on one is metadata no reader of that format can surface
+  // — written, kept, and invisible. Its TAGS are another matter: a board is
+  // as taggable as a note (ADR-0040 decision 2), and `target` is not needed
+  // to say so, since a board's tags are the canvas's.
+  //
+  // A document with no kind is allowed through and NOT declared: unlike
+  // an OKF content write this replaces nothing, so it has neither
+  // something to lose nor any evidence to offer about the format.
+  if (kind === 'spatial' && input.target !== 'canvas' && input.facets !== undefined) {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
+    )
+  }
+  // A markdown document has no canvas envelope.
+  if (kind === 'markdown' && input.target === 'canvas') {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
+    )
   }
 }
 
@@ -404,26 +454,8 @@ async function setOne(
     return await setElementFacets(deps, input, documentId, doc, kind, sets, deletions, site)
   }
 
-  // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
-  // document has nodes and edges and no frontmatter to put one in, so a
-  // facet stored on one is metadata no reader of that format can surface
-  // — written, kept, and invisible. Its TAGS are another matter: a board is
-  // as taggable as a note (ADR-0040 decision 2), and `target` is not needed
-  // to say so, since a board's tags are the canvas's.
-  //
-  // A document with no kind is allowed through and NOT declared: unlike
-  // an OKF content write this replaces nothing, so it has neither
-  // something to lose nor any evidence to offer about the format.
-  // Stated as the KIND rather than the site, which is what it is about: a
-  // JSON Canvas document has no frontmatter. (`site === 'canvas'` here would
-  // reduce to the same set, and would not narrow `kind` for the error below.)
-  if (kind === 'spatial' && input.target !== 'canvas' && input.facets !== undefined) {
-    throw new DocumentKindMismatchError(
-      documentId,
-      kind,
-      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
-    )
-  }
+  // A kind that cannot hold this write was refused for the whole batch by
+  // `refuseKindMismatches`, before the first document was written.
   if (site === 'canvas') {
     return await setCanvasFacets(deps, input, documentId, doc, kind, sets, deletions)
   }
@@ -448,17 +480,6 @@ async function setCanvasFacets(
   sets: Record<string, unknown>,
   deletions: readonly string[],
 ): Promise<FacetSetOutput['updated'][number]> {
-  // A markdown document has no canvas envelope; a document with no kind
-  // is allowed through and NOT declared, for the reason the document
-  // branch below gives — this replaces nothing, so it has neither
-  // something to lose nor any evidence to offer about the format.
-  if (kind === 'markdown') {
-    throw new DocumentKindMismatchError(
-      documentId,
-      kind,
-      "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
-    )
-  }
   const canvas = readSpatialCanvas(doc)
   const merged: ExtensionFacets = { ...canvas.facets, ...sets }
   for (const key of deletions) delete merged[key]
@@ -524,7 +545,7 @@ async function setDocumentFacets(
  * for a refusal — the node's, the edge's, the board's and every node's
  * and edge's a rename reaches, or the note's own. A target the write
  * cannot reach (no such node, the wrong kind) answers nothing here and
- * leaves `setOne` to refuse it by name.
+ * leaves `refuseKindMismatches` or `setElementFacets` to refuse it by name.
  */
 type TagSet = { what: string; before: number; tags: string[] }
 
