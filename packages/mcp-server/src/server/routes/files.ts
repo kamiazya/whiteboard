@@ -50,16 +50,22 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
   }
 }
 
-// SVG is the one uploadable type that is a document rather than pixels: it can
-// carry script, and a top-level navigation to its URL would run it in the
-// app's origin. The sandbox (no `allow-scripts`, no `allow-same-origin`) and
-// `default-src 'none'` stop it executing or fetching anything, and the
-// attachment disposition makes a navigation download instead of render. Neither
-// affects `<img src>` or a blob made from fetch(), which is how the editor
-// shows it. `setBaselineSecurityHeaders` leaves a CSP a route already chose,
-// so this one repeats the baseline's `frame-ancestors 'none'`.
+// Every answer refuses to run or fetch anything if navigated to: the bytes
+// are whatever was uploaded under an image type, and a top-level load of the
+// URL would otherwise be a document in the app's origin. SVG is the type that
+// is a document by design — it can carry script — so it also keeps its
+// inline styles and is an attachment, making a navigation download instead
+// of render. None of this affects `<img src>` or a blob made from fetch(),
+// which is how the editor shows a file, so rasters stay inline.
+// `setBaselineSecurityHeaders` leaves a CSP a route already chose, so this
+// one repeats the baseline's `frame-ancestors 'none'`.
 function fileHeaders(contentType: string, fileId: string): Record<string, string> {
-  if (contentType !== 'image/svg+xml') return { 'Content-Type': contentType }
+  if (contentType !== 'image/svg+xml') {
+    return {
+      'Content-Type': contentType,
+      'Content-Security-Policy': "default-src 'none'; sandbox; frame-ancestors 'none'",
+    }
+  }
   return {
     'Content-Type': contentType,
     'Content-Security-Policy':

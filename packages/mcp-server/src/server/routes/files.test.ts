@@ -295,15 +295,28 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(res.headers.get('Content-Security-Policy')).toBe(csp)
   })
 
-  it('serves a raster image without a sandbox policy or download disposition', async () => {
-    const { writeFile } = await import('node:fs/promises')
-    await writeFile(
-      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
-      new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-    )
+  // A raster is pixels, but the bytes are whatever was uploaded under an
+  // image type; a top-level navigation to one must still run and fetch
+  // nothing. `<img src>` ignores the response's CSP, so the editor's display
+  // is unaffected, and the disposition stays inline because that is how the
+  // app shows them.
+  it.each([
+    ['image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47])],
+    ['image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0])],
+  ])('serves a %s answer sandboxed, inline', async (type, bytes) => {
     const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
-    expect(res.headers.get('Content-Security-Policy')).toBeNull()
+    const url = '/api/w/session1/document/canvas-a/file/raster1'
+    const put = await app.request(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': type },
+      body: bytes,
+    })
+    expect(put.status).toBe(204)
+    const res = await app.request(url)
+    expect(res.headers.get('Content-Type')).toBe(type)
+    expect(res.headers.get('Content-Security-Policy')).toBe(
+      "default-src 'none'; sandbox; frame-ancestors 'none'",
+    )
     expect(res.headers.get('Content-Disposition')).toBeNull()
   })
 
