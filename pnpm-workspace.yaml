@@ -164,7 +164,7 @@ overrides:
   mermaid@<11.15.0: ^11.16.0
   # GHSA-p98j-92pf-mc4p + GHSA-6688-9rhm-gjv2 (low): cleared at 3.4.16.
   # Reached via apps/web <- mermaid, inside mermaid's own ^3 range.
-  dompurify@<3.4.16: ^3.4.16
+  dompurify@<3.4.17: ^3.4.17
   # GHSA-238p-pmpm-9mq7 (low): cleared at 0.18.2. A deliberate CROSS-MAJOR
   # override: mermaid 11 and micromark-extension-math both declare ^0.16, and
   # no 0.16 release carries the fix. mermaid 12 itself moved to ^0.18; drop
