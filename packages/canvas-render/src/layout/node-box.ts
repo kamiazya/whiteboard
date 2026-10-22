@@ -215,6 +215,21 @@ export function chromeWithFit(
   }
 }
 
+/** Right edge of what is drawn: a paragraph's bbox spans the wrap width, its runs do not. */
+function inkRight(entry: SceneNode): number {
+  if (entry.kind === 'edge') return 0
+  if (entry.kind === 'paragraph' && entry.runs.length > 0) {
+    return Math.max(...entry.runs.map((run) => run.bbox.x + run.bbox.w))
+  }
+  return entry.bbox.x + entry.bbox.w
+}
+
+function tightenToInk(entry: SceneNode): SceneNode {
+  if (entry.kind !== 'paragraph' || entry.runs.length === 0) return entry
+  const left = Math.min(...entry.runs.map((run) => run.bbox.x))
+  return { ...entry, bbox: { ...entry.bbox, x: left, w: inkRight(entry) - left } }
+}
+
 export function placeInNode(
   node: SpatialNode,
   content: Scene,
@@ -237,16 +252,32 @@ export function placeInNode(
   )
   const centres =
     align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
+  let dx = 0
   let dy = 0
   if (options.fitToBox && centres) {
+    const innerW = bounds.w - 2 * padding
     const innerH = bounds.h - 2 * padding
+    const inkW = Math.max(0, ...content.nodes.map(inkRight))
+    if (inkW < innerW) dx = (innerW - inkW) / 2
     const contentH = Math.max(
       0,
       ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
     )
     if (contentH < innerH) dy = (innerH - contentH) / 2
+    else if (contentH <= node.height) {
+      // Taller than the padded inscribed box yet inside the node: a cylinder's
+      // caps leave little between them, and top-aligning there sits the label
+      // on the floor. Centre on the inscribed box, kept inside the node.
+      const top = bounds.y + (bounds.h - contentH) / 2
+      const clamped = Math.min(Math.max(top, node.y), node.y + node.height - contentH)
+      dy = clamped - (bounds.y + padding)
+    }
   }
-  return translateScene(content, bounds.x + padding, bounds.y + padding + dy).nodes
+  // A paragraph's bbox spans the wrap width; once its ink moves right of
+  // the left edge, that bbox would cross the silhouette, so it shrinks to
+  // the ink it holds.
+  const placed = dx > 0 ? { ...content, nodes: content.nodes.map(tightenToInk) } : content
+  return translateScene(placed, bounds.x + padding + dx, bounds.y + padding + dy).nodes
 }
 
 /** Gap between a container's outside label and its frame's top edge. */

@@ -106,6 +106,11 @@ A stencil says what a box is, never where it goes or what it says. Position, siz
 refused by name. That is what keeps a vocabulary reusable: the same `lakehouse` dresses a box
 anywhere on any board.
 
+A box with a silhouette centres its label, across and down, inside the shape; a plain rectangle
+keeps the label at its top left. Stencils do not set this: the silhouette does, so every stencil
+that sets one gets a centred label. To override it for one box, set its text placement in the
+Facets panel.
+
 ### Choosing silhouettes and colours
 
 Two stencils a reader cannot tell apart are worth less than one. The silhouettes a stencil can
