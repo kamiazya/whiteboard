@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { signInAsNewcomer } from '../server/security/_test-helpers.js'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
@@ -299,10 +300,14 @@ describe('whiteboard server grant-member', () => {
   // A display name is whatever the person's provider claims at first sign-in,
   // so whoever signs in as "Alice" first would be the one granted.
   it('refuses a display name as --user, granting nobody', async () => {
-    const attacker = await userNamed('Alice', 'attacker')
+    const { profile: attacker } = await signInAsNewcomer(handle.db, {
+      sub: 'attacker',
+      name: 'Alice',
+    })
     const res = await run(['--json', `--workspace=${WS}`, '--user=Alice', `--data-dir=${root}`])
     expect(res.code).toBe(1)
     expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'unknown-user' })
+    expect(res.stderr).toContain('never a display name')
     expect(await members.isWorkspaceMember(WS, attacker.id)).toBe('not-a-member')
   })
 

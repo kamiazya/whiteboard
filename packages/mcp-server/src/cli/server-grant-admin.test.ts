@@ -7,6 +7,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { signInAsNewcomer } from '../server/security/_test-helpers.js'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { providerAuthenticator, signInConfigSchema } from '../server/security/sign-in-config.js'
 import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
@@ -182,11 +183,11 @@ describe('runServerGrantAdmin', () => {
   // A display name is whatever the person's provider claims at first sign-in,
   // so whoever signs in as "Alice" first would be the one appointed.
   it('refuses a display name as --user, appointing nobody', async () => {
-    await userNamed('Alice', 'attacker')
+    await signInAsNewcomer(handle.db, { sub: 'attacker', name: 'Alice' })
     const res = await run(['--json', '--user=Alice'])
     expect(res.code).toBe(1)
     expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'unknown-user' })
-    expect(res.stderr).toContain('--provider')
+    expect(res.stderr).toContain('never a display name')
     expect(await createTenantAdministratorStore(handle.db).list()).toEqual([])
   })
 })

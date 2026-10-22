@@ -7,6 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { signInAsNewcomer } from '../server/security/_test-helpers.js'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { providerAuthenticator, signInConfigSchema } from '../server/security/sign-in-config.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
@@ -124,11 +125,14 @@ describe('runServerDeactivateUser', () => {
   // so a newcomer could take a colleague's name and have the colleague's
   // deactivation land on themselves, or the reverse.
   it('refuses a display name as --user, deactivating nobody', async () => {
-    const attacker = { authenticator: 'oidc:test', subject: 'attacker' }
-    await members().ensureProfile({ binding: attacker, displayName: 'Alice' })
+    const { binding: attacker } = await signInAsNewcomer(handle.db, {
+      sub: 'attacker',
+      name: 'Alice',
+    })
     const res = await run(['--json', '--user=Alice'])
     expect(res.code).toBe(1)
     expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'unknown-user' })
+    expect(res.stderr).toContain('never a display name')
     expect(await members().isDeactivated(attacker)).toBe(false)
   })
 })

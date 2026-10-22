@@ -487,6 +487,11 @@ The first administrator is named by you, the operator, in one of two ways:
   whiteboard server grant-admin --json --provider=<provider id> --subject=<sub> [--remove]
   ```
 
+  Name the person by user id or by provider and subject, as for
+  `grant-member` above — a display name is refused, because whoever signs
+  in first can claim any name. The output's `bindings` show which identity
+  was appointed.
+
 - **In the sign-in configuration**, for a deployment with no shell. Name
   each administrator by provider and subject:
 
@@ -580,6 +585,9 @@ from the machine that holds the data directory:
 whiteboard server deactivate-user --json --user=<user id> [--reactivate]
 whiteboard server deactivate-user --json --provider=<provider id> --subject=<sub> [--reactivate]
 ```
+
+As with `grant-member`, a display name is refused: name the person by user id
+or by provider and subject, and check the output's `bindings`.
 
 Their sessions end at once, including one a sign-in still in progress was
 about to open. After that, a sign-in is refused with
