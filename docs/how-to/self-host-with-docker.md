@@ -730,6 +730,12 @@ volumes:
 Data written to `/data` is owned by UID 1001 (`whiteboard` user). Ensure the
 volume has the correct ownership if you pre-populate it.
 
+What the server creates there is readable by that user alone: the database,
+uploads and the trash are written `0600` in `0700` directories, whatever the
+umask, so other users on a host with a bind mount cannot read them. A
+directory that already exists keeps the mode it has, the bind-mount root
+included.
+
 ### Reclaiming unreferenced uploads
 
 Once a day the server deletes uploaded images that no live document, trashed

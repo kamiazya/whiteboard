@@ -19,6 +19,16 @@ import { commitStagedWrite } from '../shared/write-file-atomic.js'
 export const PENDING_WRITES_DIRNAME = '.pending-writes'
 
 /**
+ * Content in the data dir is its owner's alone, as the database file is: an
+ * upload or a trashed document's snapshot written under the umask lands 0644
+ * in 0755 directories, which on a host bind mount every host user can read.
+ * Directories that already exist keep the mode they have — an operator's
+ * mount is theirs to set.
+ */
+export const DATA_DIR_MODE = 0o700
+const DATA_FILE_MODE = 0o600
+
+/**
  * Write `bytes` to `targetPath` so no reader ever sees it half-written, and so
  * a crash cannot leave the name on bytes that never reached the disk.
  *
@@ -38,7 +48,7 @@ export const PENDING_WRITES_DIRNAME = '.pending-writes'
  * they stage: this one under the data dir's excluded directory, so the staged
  * name never appears in what a backup walks; that one beside the target, for
  * a target that need not live under a data dir. Use this one for content
- * inside the data dir that a backup copies.
+ * inside the data dir that a backup copies. The file is written 0600.
  */
 export async function writeFileAtomicStaged(
   dataDir: string,
@@ -46,8 +56,10 @@ export async function writeFileAtomicStaged(
   bytes: Uint8Array | string,
 ): Promise<void> {
   const stagingDir = join(dataDir, PENDING_WRITES_DIRNAME)
-  await mkdir(stagingDir, { recursive: true })
+  await mkdir(stagingDir, { recursive: true, mode: DATA_DIR_MODE })
   // A failure removes the staged file: the directory is excluded from
   // backups but it is still the operator's disk.
-  await commitStagedWrite(join(stagingDir, randomUUID()), targetPath, bytes)
+  await commitStagedWrite(join(stagingDir, randomUUID()), targetPath, bytes, {
+    mode: DATA_FILE_MODE,
+  })
 }

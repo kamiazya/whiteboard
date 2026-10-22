@@ -14,7 +14,7 @@ import type {
 import { z } from 'zod'
 import { isMissingFileError } from '../../../shared/errno.js'
 import { sha256Hex } from '../../../shared/sha256.js'
-import { writeFileAtomicStaged } from '../../atomic-write.js'
+import { DATA_DIR_MODE, writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
 import { blobShardDir, blobShardPath } from '../../tenant/data-layout.js'
 import { corruptStoredData } from '../corrupt-stored-data.js'
@@ -78,7 +78,7 @@ export class FsBlobStore implements BlobStore {
       bytesBase64: Buffer.from(input.bytes).toString('base64'),
       contentType: input.contentType,
     }
-    await mkdir(this.shardDirForRef(ref), { recursive: true })
+    await mkdir(this.shardDirForRef(ref), { recursive: true, mode: DATA_DIR_MODE })
     // Atomic, because `put` is idempotent by design: the store is
     // content-addressed, so rewriting an existing blob is ordinary — a
     // re-uploaded image, or two people uploading the same file. A plain
