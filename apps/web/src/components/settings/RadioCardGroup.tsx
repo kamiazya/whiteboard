@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useRef } from 'react'
 
-export interface RadioCardOption<T extends string> {
+interface RadioCardOption<T extends string> {
   value: T
   label: string
   icon: ReactNode
