@@ -169,6 +169,37 @@ function scrollClearance(variant: SourcePaneVariant): Extension[] {
   ]
 }
 
+/** How the host is sized and spaced; see `SourcePaneVariant`. */
+function variantTheme(variant: SourcePaneVariant): Parameters<typeof EditorView.theme>[0] {
+  if (variant === 'compact') {
+    return {
+      // Grows with the draft and then scrolls, rather than filling a pane it
+      // does not have: this box lives inside a card or a rail row, and a
+      // fixed height would either clip one line or reserve space for ten.
+      '&': { width: '100%', fontSize: 'inherit' },
+      '.cm-scroller': {
+        overflow: 'auto',
+        fontFamily: 'inherit',
+        lineHeight: '1.5',
+        maxHeight: '40vh',
+      },
+      '.cm-content': { padding: '4px 0', caretColor: 'var(--foreground)' },
+      '.cm-line': { padding: '0 8px' },
+    }
+  }
+  return {
+    '&': { height: '100%', width: '100%', fontSize: '15px' },
+    '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.7' },
+    '.cm-content': {
+      maxWidth: '70ch',
+      margin: '0 auto',
+      padding: '24px 0 120px',
+      caretColor: 'var(--foreground)',
+    },
+    '.cm-line': { padding: '0 24px' },
+  }
+}
+
 export interface SourcePaneProps {
   value: string
   onChange: (next: string) => void
@@ -277,33 +308,7 @@ export function SourcePane({
         // column (~70ch) like every serious writing surface, instead of
         // lines that stretch across a widescreen pane.
         EditorView.theme({
-          ...(variant === 'compact'
-            ? {
-                // Grows with the draft and then scrolls, rather than
-                // filling a pane it does not have: this box lives inside a
-                // card or a rail row, and a fixed height would either clip
-                // one line or reserve space for ten.
-                '&': { width: '100%', fontSize: 'inherit' },
-                '.cm-scroller': {
-                  overflow: 'auto',
-                  fontFamily: 'inherit',
-                  lineHeight: '1.5',
-                  maxHeight: '40vh',
-                },
-                '.cm-content': { padding: '4px 0', caretColor: 'var(--foreground)' },
-                '.cm-line': { padding: '0 8px' },
-              }
-            : {
-                '&': { height: '100%', width: '100%', fontSize: '15px' },
-                '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.7' },
-                '.cm-content': {
-                  maxWidth: '70ch',
-                  margin: '0 auto',
-                  padding: '24px 0 120px',
-                  caretColor: 'var(--foreground)',
-                },
-                '.cm-line': { padding: '0 24px' },
-              }),
+          ...variantTheme(variant),
           ...narrowScreenTheme(variant),
           '&.cm-focused': { outline: 'none' },
           // CodeMirror's base theme fills the gutters light grey and rules a
