@@ -4,6 +4,10 @@
  * stable from first paint. Announced politely to assistive tech via the
  * status role + label (the visible pulse carries no text).
  *
+ * The dark placeholders are tinted from the foreground: the dark `muted`
+ * token sits so close to the dark ground that the pulse's trough made the
+ * whole page read as a black screen.
+ *
  * skeleton-appear keeps it invisible for a beat so a fast load never
  * flashes placeholders (see index.css).
  */
@@ -16,12 +20,12 @@ export function DocumentPageSkeleton({ label }: { label: string }) {
       className="skeleton-appear flex h-full w-full flex-col"
     >
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-3">
-        <div className="h-5 w-36 animate-pulse rounded bg-muted" />
-        <div className="ml-auto h-6 w-16 animate-pulse rounded-full bg-muted" />
-        <div className="size-6 animate-pulse rounded-md bg-muted" />
+        <div className="h-5 w-36 animate-pulse rounded bg-muted dark:bg-foreground/15" />
+        <div className="ml-auto h-6 w-16 animate-pulse rounded-full bg-muted dark:bg-foreground/15" />
+        <div className="size-6 animate-pulse rounded-md bg-muted dark:bg-foreground/15" />
       </div>
       <div className="flex-1 p-6">
-        <div className="size-full animate-pulse rounded-lg bg-muted/50" />
+        <div className="size-full animate-pulse rounded-lg bg-muted/50 dark:bg-foreground/10" />
       </div>
     </div>
   )
