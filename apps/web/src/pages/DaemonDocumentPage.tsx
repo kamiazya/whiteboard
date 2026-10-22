@@ -491,6 +491,9 @@ function useDaemonDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
+      ...(tagsSource === null
+        ? {}
+        : { createLinkTarget: (path: string) => tagsSource.createDocument(path, 'markdown') }),
       loadReference,
     },
     openDocument,
