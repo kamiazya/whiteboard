@@ -658,12 +658,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   the same document at the same point are checked once, so repeating one row
   costs almost nothing. Rows naming different points cannot each buy a check
   without limit either: checking a version reads the whole document as it
-  stood, so the checks one move makes may read at most 10,368,000,000
-  characters and entries between them — every version a browser keeps of
-  one document (450) at its largest legal size, a board with every node and
-  edge at its limit and its text full — and a move past that is refused
-  whole with `promote_too_many_carried`, naming the budget so the browser
-  can move again with the newest versions that fit. A board is counted by
+  stood, so the checks one move makes may read at most 1,000,000,000
+  characters and entries between them — about a minute of checking, enough
+  for the whole automatic history of a board at every limit — and a move
+  past that is refused whole with `promote_too_many_carried`, naming the
+  budget so the browser can move again with the newest versions that fit
+  and keep the rest in its own copy. A board is counted by
   the text its nodes carry, not by how many nodes it has. The versions are
   checked in history order, so the check walks the history once however the
   rows were sent, and the daemon serves other requests between versions. So

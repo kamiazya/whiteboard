@@ -311,13 +311,16 @@ function largestDocuments(): { board: LoroDoc; note: LoroDoc } {
   return { board, note }
 }
 
-it('judges every version a browser can hold of one document at its largest, board or note', () => {
-  const perDocument =
-    MAX_AUTO_PER_DOCUMENT + MAX_MANUAL_PER_DOCUMENT + MAX_RESTORE_POINTS_PER_DOCUMENT
+it("judges a maximal board's whole automatic history, and a maximal note's many times over", () => {
   const { board, note } = largestDocuments()
   // Reached: the board really is the text-heavy one, so the guard measures it.
   expect(stateSize(board)).toBeGreaterThan(CANVAS_MAX_NODES * NODE_TEXT_MAX_CHARS)
-  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(perDocument * stateSize(board))
+  // Past the budget a move degrades rather than fails — the browser re-sends
+  // without its oldest versions — so the budget is sized by time, and this
+  // holds it to what it must still admit.
+  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(MAX_AUTO_PER_DOCUMENT * stateSize(board))
+  const perDocument =
+    MAX_AUTO_PER_DOCUMENT + MAX_MANUAL_PER_DOCUMENT + MAX_RESTORE_POINTS_PER_DOCUMENT
   expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(perDocument * stateSize(note))
 }, 60_000)
 

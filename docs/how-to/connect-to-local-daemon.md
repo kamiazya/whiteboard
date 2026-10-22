@@ -296,9 +296,9 @@ copy. A daemon sent more refuses the whole move with
 `promote_too_many_carried` and keeps none of it.
 
 The daemon checks each saved version against the document as it stood at
-that version, and those checks may read at most 10,368,000,000 characters
-and entries between them — every version a browser keeps of one document at
-its largest, a board with every node's text full included. When a workspace's saved versions add up to more, the daemon refuses
+that version, and those checks may read at most 1,000,000,000 characters
+and entries between them — about a minute of checking, enough for the whole
+automatic history of a board at every limit. When a workspace's saved versions add up to more, the daemon refuses
 with `promote_too_many_carried` and states that budget, and the browser
 moves again at once carrying the newest saved versions that fit. The result
 says how many older saved versions stayed behind, and the browser keeps its

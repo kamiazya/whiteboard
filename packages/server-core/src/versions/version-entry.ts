@@ -1,9 +1,4 @@
 import {
-  CANVAS_MAX_EDGES_AND_LINES,
-  CANVAS_MAX_NODES,
-  LABEL_MAX_CHARS,
-  MARKDOWN_MAX_CHARS,
-  NODE_TEXT_MAX_CHARS,
   okfActorSchema,
   versionLabelSchema,
   WORKSPACE_ID_PATTERN,
@@ -155,19 +150,6 @@ export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 export const PROMOTE_MAX_VERSIONS = 120_000
 
 /**
- * The largest state one document can hold, in loro-adapter's `stateSize`
- * unit: the larger of a note at `MARKDOWN_MAX_CHARS` and a board at every
- * node and edge limit with each node's text and each edge's label full,
- * plus a quarter for each element's own fields (ids, geometry, tags).
- * Measured: the largest note is 262,158, the largest board 18,520,904 —
- * 22 per element over its text — against an allowance of 23,040,000.
- */
-const LARGEST_DOCUMENT_STATE = Math.max(
-  MARKDOWN_MAX_CHARS,
-  ((CANVAS_MAX_NODES * NODE_TEXT_MAX_CHARS + CANVAS_MAX_EDGES_AND_LINES * LABEL_MAX_CHARS) * 5) / 4,
-)
-
-/**
  * The most a promotion's carried versions may cost to judge, in
  * loro-adapter's `stateSize` unit — one per map entry and list element and
  * one per character of every string, of each document state a row names,
@@ -176,20 +158,20 @@ const LARGEST_DOCUMENT_STATE = Math.max(
  * limit, and each distinct state is projected and judged on the serving
  * loop.
  *
- * Sized from what a browser keeper can hold of ONE document: 450 versions
- * (50 automatic checkpoints, `@kamiazya/whiteboard-history`'s
- * `MAX_AUTO_PER_DOCUMENT`, plus at most 200 manual saves and 200 restore
- * points, its two ceilings) each at `LARGEST_DOCUMENT_STATE`. So any one
- * document's whole history at its largest legal size passes, board or note.
- * Measured at the largest board, one judgement is ~1.1 s (projection 274 ms,
- * size judgement 481 ms, digest 262 ms) — about 17 M a second, so the
- * budget is some ten minutes of judging, handed back to the loop between
- * judgements, against the unbounded hours the row cap alone admits.
- * mcp-server's promote route test builds the largest board and note and
- * holds the figure to 450 of each, since this package cannot import the
- * history package.
+ * Sized by TIME: the measured judging rate, ~17 M a second at the largest
+ * board, times a ceiling of about 60 seconds of judging per request. It does
+ * not admit a worst-case full history, and need not: a move refused past it
+ * names this budget, and the browser re-sends at once without its oldest
+ * versions and keeps its own copy, so a refusal costs a person nothing but
+ * those versions staying where they already are.
+ *
+ * What it does admit, held by mcp-server's promote route test, which builds
+ * the largest legal documents: a maximal board's whole automatic history (50
+ * states of 18.5 M) and a maximal note's whole history many times over. One
+ * maximal board's judgement is a single ~1.1 s call the loop cannot be
+ * handed back inside.
  */
-export const PROMOTE_MAX_JUDGED_SIZE = 450 * LARGEST_DOCUMENT_STATE
+export const PROMOTE_MAX_JUDGED_SIZE = 1_000_000_000
 
 /**
  * The most trashed documents one promotion carries the bytes of: the most
