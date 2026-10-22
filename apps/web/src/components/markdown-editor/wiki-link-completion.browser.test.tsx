@@ -103,7 +103,7 @@ describe('wiki link completion (real browser)', () => {
     // option is marked selected exactly when a result is ACTIVE.
     await userEvent.keyboard('{Enter}')
     await vi.waitFor(() => {
-      expect(value).toBe('see [[release-plan]]')
+      expect(value).toBe('see [[release-plan|Release plan]]')
     })
     // Accepting closed the popup rather than leaving it over the text.
     expect(document.querySelector('.cm-tooltip-autocomplete')).toBeNull()
@@ -135,7 +135,7 @@ describe('wiki link completion (real browser)', () => {
     })
     await userEvent.click(option)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[retro-notes]]')
+      expect(value).toBe('see [[retro-notes|Retro notes]]')
     })
   })
 
@@ -207,7 +207,7 @@ describe('wiki link completion (real browser)', () => {
     await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
     tap('Retro notes', 1)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[retro-notes]]')
+      expect(value).toBe('see [[retro-notes|Retro notes]]')
     })
 
     // And a scroll gesture over the list must NOT commit: same events, but
@@ -216,7 +216,7 @@ describe('wiki link completion (real browser)', () => {
     await vi.waitFor(() => expect(optionLabelled('Release plan')).toBeDefined())
     tap('Release plan', 2, 56)
     await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(value).toBe('see [[retro-notes]] and [[Rel')
+    expect(value).toBe('see [[retro-notes|Retro notes]] and [[Rel')
   })
 
   it('a tap while a sibling source refreshes the list is committed once the list is back', async () => {
@@ -273,7 +273,7 @@ describe('wiki link completion (real browser)', () => {
 
     tap('Retro notes', 3)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[retro-notes]]')
+      expect(value).toBe('see [[retro-notes|Retro notes]]')
     })
   })
 
@@ -324,7 +324,7 @@ describe('wiki link completion (real browser)', () => {
 
     pressEnter(view)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[retro-notes]]')
+      expect(value).toBe('see [[retro-notes|Retro notes]]')
     })
     expect(value).not.toContain('\n')
   })
@@ -458,7 +458,7 @@ describe('wiki link completion (real browser)', () => {
 
     tapElement(second, 4)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[retro-notes-b]]')
+      expect(value).toBe('see [[retro-notes-b|Retro notes]]')
     })
   })
 
