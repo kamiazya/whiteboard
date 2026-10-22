@@ -46,7 +46,7 @@ function makeCreateBackend() {
 // the header's own switcher was retired (finding a document is the document
 // browser's work), and a backlink row opening its source is the remaining
 // document-to-document path a user has without leaving the canvas.
-async function switchDocumentViaConnections(name: string) {
+async function switchDocumentViaLinkedFrom(name: string) {
   fireEvent.click(await screen.findByRole('button', { name: /linked from/i }))
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(name, 'i') }))
 }
@@ -66,7 +66,7 @@ describe('DaemonDocumentPage', () => {
         { path: 'second', documentId: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
-    // One backlink by default so `switchDocumentViaConnections` has a row to
+    // One backlink by default so `switchDocumentViaLinkedFrom` has a row to
     // click in any test that needs to change document mid-session.
     mockGetDocumentBacklinks.mockResolvedValue({
       backlinks: [
@@ -380,7 +380,7 @@ describe('DaemonDocumentPage', () => {
 
     const oldBackend = createdBackends[0]!
 
-    await switchDocumentViaConnections('Second board')
+    await switchDocumentViaLinkedFrom('Second board')
 
     expect(oldBackend.disconnectCount).toBe(1)
     expect(createdBackends).toHaveLength(2)
@@ -503,7 +503,7 @@ describe('DaemonDocumentPage', () => {
     })
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 
-    await switchDocumentViaConnections('Second board')
+    await switchDocumentViaLinkedFrom('Second board')
 
     // The stale sync-off state must not outlive the backend that produced it.
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
