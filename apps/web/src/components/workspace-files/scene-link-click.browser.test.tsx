@@ -23,9 +23,17 @@ import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 const PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
+// The Recent lane shows only when there are more documents than one grid row
+// holds, so the fixture carries enough to outnumber any column count.
+const FILLERS: WorkspaceDocumentEntry[] = Array.from({ length: 24 }, (_, i) => ({
+  documentId: `01ARZ3NDEKTSV4RRFFQ69G6${String(i).padStart(3, '0')}`,
+  path: `filler-${i}`,
+  kind: 'markdown' as const,
+}))
 const docs: WorkspaceDocumentEntry[] = [
   { documentId: PLAN, path: 'plan', kind: 'markdown' },
   { documentId: LINKER, path: 'linker', kind: 'markdown' },
+  ...FILLERS,
 ]
 const bodies: Record<string, string> = {
   [PLAN]: '# Plan',
