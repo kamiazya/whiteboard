@@ -24,6 +24,7 @@ import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { focusedElement } from '../../lib/capture-focus.js'
 import { cn } from '../../lib/utils.js'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
@@ -181,6 +182,9 @@ export function ContextMenu({
   label = 'Canvas actions',
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
+  // Captured during the first render, before the menu takes focus below, and
+  // never re-read: an effect replayed under StrictMode would capture the menu.
+  const [opener] = useState(focusedElement)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so the requested position is nudged back inside once the real menu size
   // is measurable. useLayoutEffect corrects before paint — no visible jump.
@@ -206,6 +210,17 @@ export function ContextMenu({
     }
     setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
   }, [x, y, sheet])
+
+  // Hands focus back on close. Only when focus has nowhere else to be: a
+  // chosen item may open an editor that took it, and a press on another
+  // control moved it there already.
+  useEffect(
+    () => () => {
+      const active = document.activeElement
+      if (active === null || active === document.body) opener?.focus()
+    },
+    [opener],
+  )
 
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)

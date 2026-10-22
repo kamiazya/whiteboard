@@ -19,9 +19,10 @@ import type {
   DocumentKind,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { anchorChipLabel } from '../lib/anchor-chip-label.js'
 import { anchorResolverFor } from '../lib/anchor-resolver.js'
+import { captureFocusInto } from '../lib/capture-focus.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import { type QuoteMemory, quoteMemoryFor } from '../lib/quote-occurrences.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
@@ -79,24 +80,6 @@ function useMarkdownAnchorResolver(
   if (body !== null) memory.current = quoteMemoryFor(memory.current, body)
   const quotes = body === null ? undefined : (memory.current ?? undefined)
   return useMemo(() => markdownAnchorResolver(body, marks, quotes), [body, marks, quotes])
-}
-
-/**
- * Remembers whatever holds focus right now, as the place to hand it back to.
- *
- * Read from `activeElement` rather than named by each caller because four
- * different surfaces open this rail — a gutter marker, a preview marker, the
- * editor toolbar, a canvas pin — and every one of them already holds focus
- * at the moment it calls in. A parameter would be the same answer written
- * out four times, and the fourth surface is the one that would forget.
- */
-function captureFocusInto(ref: MutableRefObject<HTMLElement | null>): void {
-  const active = document.activeElement
-  // `document.body` needs no special case: it is what `activeElement`
-  // answers when nothing is focused, and `focus()` on it is a no-op —
-  // measured in Chromium, not assumed, after a guard against it turned out
-  // to be unfalsifiable.
-  ref.current = active instanceof HTMLElement ? active : null
 }
 
 export function useCommentsRail(args: {
