@@ -58,6 +58,10 @@ export function wikiLinkCompletionSource(
         ...ranked.map(
           (target): Completion => ({
             label: target.name,
+            // Names are not unique, paths are: the secondary text is what
+            // tells two same-named documents apart. It is display only, so
+            // the filter still matches the name and the insert is unchanged.
+            detail: target.path,
             type: 'text',
             // Resolution is by path, so the alias only changes how the source
             // READS: a note that said `[[untitled]]` for a document the popup
