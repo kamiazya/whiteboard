@@ -59,4 +59,23 @@ describe('self-host-with-docker.md sign-in configuration examples', () => {
       expect(result.error?.issues, JSON.stringify(fragment)).toBeUndefined()
     }
   })
+
+  // The page's Compose file publishes the port to the host, and Docker relays
+  // a host connection into the container from the network's gateway, so the
+  // peer the server judges is never loopback. An example that trusts
+  // 127.0.0.1 refuses every sign-in, and the operator's next move is to widen
+  // it to the whole bridge subnet.
+  it('trusts no loopback address in any proxy example', () => {
+    const addresses = withProviders.flatMap((fence) =>
+      (fence.providers as unknown[]).flatMap((provider) =>
+        isRecord(provider) && Array.isArray(provider.trustedAddresses)
+          ? (provider.trustedAddresses as unknown[]).map(String)
+          : [],
+      ),
+    )
+    expect(addresses.length).toBeGreaterThanOrEqual(2)
+    for (const address of addresses) {
+      expect(address, address).not.toMatch(/^(127\.|::1$|::ffff:127\.)/)
+    }
+  })
 })

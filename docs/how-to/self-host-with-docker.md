@@ -148,7 +148,7 @@ providers:
   - id: access
     kind: trusted-header
     displayName: Company SSO
-    trustedAddresses: [127.0.0.1]           # where the proxy connects from
+    trustedAddresses: [172.18.0.1]          # the proxy's address as the container sees it
     assertion:
       header: Cf-Access-Jwt-Assertion
       issuer: https://<team>.cloudflareaccess.com
@@ -175,14 +175,31 @@ providers:
 
 The server honours the provider only on a connection whose own address is in
 `trustedAddresses`: the proxy's address, or a narrow range that holds it. It
-never reads `X-Forwarded-For` for this check. A plain header is only as
-trustworthy as the proxy's habit of **overwriting** it: a proxy that passes a
+never reads `X-Forwarded-For` for this check. The address it checks is the
+socket's peer, which is the proxy's address **as the container sees it**, not
+as the host does. A proxy on the host connects to the `127.0.0.1:3099` that
+`docker-compose.server.yml` publishes, but Docker relays that connection, and
+it reaches the container from the gateway of the container's network. With
+this Compose file that is the project's default network, so the peer is that
+network's gateway (an address such as `172.18.0.1`, not `127.0.0.1`). Read it
+with `docker network inspect <project>_default`, under `IPAM.Config.Gateway`.
+List `127.0.0.1` there instead and every sign-in is refused. When the proxy
+runs in a container of its own, put both containers on a user-defined network,
+give the proxy a fixed `ipv4_address`, and list that one address.
+
+Do not widen the list to the network's subnet (`172.18.0.0/16`) to make a
+sign-in work. Every container attached to that network connects from an
+address inside it, so the server would trust each of them the way it trusts
+the proxy. With a plain header, any of them could then sign in as anyone.
+
+A plain header is only as trustworthy as the proxy's habit of **overwriting** it: a proxy that passes a
 client's own `X-Forwarded-User` through lets anyone sign in as anyone. So
 configure the proxy to set the header on every request and to strip it from
 incoming ones, and keep every other host out of `trustedAddresses`. The
-server trusts an address, not a program. When the proxy runs on the same host
-and connects from `127.0.0.1`, anything else on that host that can reach the
-server can sign in as anyone too. A signed assertion does not have that
+server trusts an address, not a program. When the proxy runs on the host and
+its connections arrive from the gateway, anything else on that host that can
+reach the published port arrives from the gateway too, and can sign in as
+anyone. A signed assertion does not have that
 weakness. The
 server refuses a range covering every address, a credential or forwarding
 header (`Authorization`, `Cookie`, `X-Forwarded-For`, …) as the identity,
