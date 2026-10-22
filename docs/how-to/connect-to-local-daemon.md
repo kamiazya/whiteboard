@@ -374,6 +374,10 @@ passkey.* The next time the daemon cannot be reached, the copy offers
   this device had not yet sent is gone.
 - A browser whose passkeys cannot do this says *This browser cannot make a
   copy readable offline.* and nothing is changed.
+- If the daemon refuses this copy's key outright (the workspace is gone, its
+  copies may no longer be kept offline, or your access was withdrawn), the
+  locked key is removed too, and the copy no longer offers an unlock. A
+  daemon that is merely unreachable changes nothing.
 - **Turn off** on the row removes the locked key, so the copy is again
   readable only while a tab holds it. The passkey stays in your passkey
   manager; delete it there if you no longer want it.

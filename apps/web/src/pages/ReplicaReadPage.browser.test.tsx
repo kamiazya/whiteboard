@@ -603,6 +603,24 @@ describe('ReplicaReadPage states', () => {
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
   })
 
+  it('a key refused as a removal leaves no unlock for the next cold start', async () => {
+    await seedReplica()
+    await forgetEverythingButTheBlob()
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyRefusalFetch('not_a_member') })
+    const page = (
+      <ReplicaReadPage workspaceId={DAEMON_WS} daemonBaseUrl={DAEMON} onReconnect={noopReconnect} />
+    )
+    render(page)
+    await screen.findByTestId('replica-state-removed')
+    cleanup()
+    connectReplicaKeeper(null)
+    forgetAllForTests()
+    render(page)
+    // The daemon out of reach and nothing remembered: a reconnect, never an unlock.
+    await screen.findByTestId('replica-state-locked')
+    expect(screen.queryByTestId('replica-state-unlockable')).toBeNull()
+  })
+
   it('the reason reaches the page: requires_person_session is locked, not removed', async () => {
     await seedReplica()
     connectReplicaKeeper(null)

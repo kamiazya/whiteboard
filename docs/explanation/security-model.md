@@ -264,9 +264,11 @@ directly:
   rather than repeated.
 - **Removed** — a keeper that has members reached this device and refused
   the key as a membership refusal. The person is told plainly and offered no
-  export and no retry that would send anything. No shipped keeper answers
-  this: the local daemon has one person, and server mode serves no replica
-  key.
+  export and no retry that would send anything. The refusal also deletes the
+  wrapped key a passkey would open, so a later cold start with the keeper
+  unreachable offers no unlock: a copy remembered on this device never
+  outranks the keeper's decision. No shipped keeper answers this: the local
+  daemon has one person, and server mode serves no replica key.
 - **Download again** — the daemon rotated the workspace key after this copy
   was saved, so nothing on this device can open it. The copy is not damaged;
   the page says it has to be downloaded again from the daemon, and offers a
