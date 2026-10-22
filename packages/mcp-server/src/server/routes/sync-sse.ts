@@ -17,6 +17,7 @@ import {
   MAX_DOCS_PER_STREAM,
   type SyncReadyEvent,
   type SyncSubscribeResponse,
+  type SyncUpdateEvent,
   syncClientMessageRequestSchema,
   syncSubscribeRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
@@ -33,6 +34,7 @@ import {
   MAX_QUEUED_STREAM_CHARS,
   registerSyncStream,
   releaseSyncStreamQueue,
+  type SyncFrame,
   type SyncQueueBudget,
   type SyncStream,
   type SyncStreamCaps,
@@ -331,6 +333,30 @@ function openRefusal(c: Context, options: SyncSseRouterOptions, userId: string |
   return c.json(errorBody('too_many_streams', message), 429)
 }
 
+/**
+ * A frame as the SSE text `writeSSE` would write, and what it charges the
+ * queue: the characters of its `data` line.
+ * The `data` value is one line — JSON escapes every line break — so no
+ * splitting is needed. An update's encoded payload goes out as its own chunk,
+ * the same bytes for every stream, so fanning it out copies nothing that size.
+ */
+function wireFrame(frame: SyncFrame): { chunks: Array<string | Uint8Array>; chars: number } {
+  if (frame.event === 'message') {
+    const payload = JSON.stringify(frame.data)
+    return { chunks: [`event: message\ndata: ${payload}\n\n`], chars: payload.length }
+  }
+  // The envelope with an empty update, split between that string's quotes:
+  // base64 needs no JSON escaping, so the payload's bytes go between them as
+  // they are, and the line is exactly `JSON.stringify` of the whole event.
+  const envelope = JSON.stringify({ doc: frame.doc, update: '' } satisfies SyncUpdateEvent)
+  const head = `event: update\ndata: ${envelope.slice(0, -2)}`
+  const tail = `${envelope.slice(-2)}\n\n`
+  return {
+    chunks: [head, frame.update, tail],
+    chars: envelope.length + frame.update.byteLength,
+  }
+}
+
 /** The registry's handle on one open stream. */
 function streamEntry(
   stream: SSEStreamingApi,
@@ -345,21 +371,27 @@ function streamEntry(
   let queued = 0
   return {
     docs: new Map(),
-    send: ({ event, data }) => {
+    send: (frame) => {
       if (stream.aborted) return
-      const payload = JSON.stringify(data)
-      queued += payload.length
+      const { chunks, chars } = wireFrame(frame)
+      queued += chars
       if (queued > MAX_QUEUED_STREAM_CHARS) {
         unregisterSyncStream(streamId)
         log.warning({ streamId, queued }, 'sync stream ended: its reader fell too far behind')
         stream.abort()
         return
       }
-      void stream.writeSSE({ event, data: payload }).finally(() => {
-        queued -= payload.length
-        releaseSyncStreamQueue(streamId, payload.length)
+      // Each write hands its chunk to the writer before its first await, so
+      // the chunks queue in order. A frame counts as taken once its FIRST
+      // chunk is accepted — the point at which every earlier frame has been
+      // read past — so what a frame is charged, and when it is released, does
+      // not depend on how many chunks it is written in.
+      const writes = chunks.map((chunk) => stream.write(chunk))
+      void writes[0]?.finally(() => {
+        queued -= chars
+        releaseSyncStreamQueue(streamId, chars)
       })
-      chargeSyncStreamQueue(streamId, payload.length, options.queueBudget)
+      chargeSyncStreamQueue(streamId, chars, options.queueBudget)
     },
     userId,
     ...(userId === null || holdsAccess === undefined

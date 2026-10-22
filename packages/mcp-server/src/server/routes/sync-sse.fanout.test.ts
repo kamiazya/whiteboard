@@ -99,7 +99,7 @@ const UPDATE = new Uint8Array(64 * 1024).map((_, i) => (i * 31) % 251)
 const UPDATE_BASE64 = Buffer.from(UPDATE).toString('base64')
 
 describe('fanning one workspace update out to many streams', () => {
-  it('serialises the frame per stream that follows the workspace', async () => {
+  it('serialises the update once, however many streams follow the workspace', async () => {
     const app = router()
     const streams = []
     for (let i = 0; i < STREAMS; i++) {
@@ -114,8 +114,8 @@ describe('fanning one workspace update out to many streams', () => {
       const data = JSON.parse(stream.updates()[0]?.split('\ndata: ')[1] ?? '{}')
       expect(data).toEqual({ doc: 'workspace:ws-fanout', update: UPDATE_BASE64 })
     }
-    // The cost being measured: one JSON string and one byte array per stream.
-    expect(serialisations()).toBe(2 * STREAMS)
+    // One byte array, shared by every stream's queue.
+    expect(serialisations()).toBe(1)
     for (const stream of streams) await stream.close()
   })
 })

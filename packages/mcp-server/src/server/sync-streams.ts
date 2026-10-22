@@ -45,11 +45,18 @@ export interface SyncStreamDoc {
 
 /**
  * One frame down a stream, as the contract the page parses it with names it.
- * The payload stays an object until the transport serialises it, so a writer
- * cannot hand the page an envelope the schema would drop.
+ * A message payload stays an object until the transport serialises it, so a
+ * writer cannot hand the page an envelope the schema would drop.
+ *
+ * An update carries its payload already encoded — the base64 of the Loro
+ * update as ASCII bytes — because one broadcast hands the SAME frame to every
+ * stream following the workspace, and an update may be as large as the
+ * content body limit: encoded once, the bytes are shared by every stream's
+ * queue rather than rebuilt for each. The transport wraps them in the
+ * `SyncUpdateEvent` envelope for `doc`.
  */
-type SyncFrame =
-  | { event: 'update'; data: SyncUpdateEvent }
+export type SyncFrame =
+  | { event: 'update'; doc: SyncUpdateEvent['doc']; update: Uint8Array }
   | { event: 'message'; data: SyncMessageEvent }
 
 export interface SyncStream {
@@ -340,10 +347,15 @@ export function docKey(workspaceId: string, path: string): string {
   return documentSyncKey(workspaceId, path)
 }
 
-function toBase64(bytes: Uint8Array): string {
+const encoder = new TextEncoder()
+
+/** The update's base64, as the ASCII bytes a frame carries. */
+function encodeUpdate(bytes: Uint8Array): Uint8Array {
   // Node-only file (mcp-server builds with `platform: 'node'`), so this takes
   // the native conversion rather than building a string one byte at a time.
-  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
+  return encoder.encode(
+    Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64'),
+  )
 }
 
 /**
@@ -355,13 +367,13 @@ function toBase64(bytes: Uint8Array): string {
  */
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)
-  const encoded = toBase64(update)
+  const encoded = encodeUpdate(update)
   const reads: AccessReads = new Map()
   for (const [streamId, stream] of streams) {
     const frames: SyncFrame[] = []
     for (const [as, entry] of stream.docs) {
       if (entry.key !== key) continue
-      frames.push({ event: 'update', data: { doc: as, update: encoded } })
+      frames.push({ event: 'update', doc: as, update: encoded })
     }
     if (frames.length > 0) deliver(streamId, stream, workspaceId, frames, reads)
   }
