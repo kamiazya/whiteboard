@@ -170,7 +170,8 @@ function ZoomFitButton({ onZoomToFit }: { readonly onZoomToFit: () => void }) {
   )
 }
 
-function ZoomStepButtons({ onZoomStep }: { readonly onZoomStep: (d: 'in' | 'out') => void }) {
+function ZoomStepButtons({ onZoomStep }: { readonly onZoomStep?: (d: 'in' | 'out') => void }) {
+  if (onZoomStep === undefined || !hasCoarsePointer()) return null
   const steps = [
     { direction: 'in', id: 'zoom-in', label: 'Zoom in', Icon: ZoomIn },
     { direction: 'out', id: 'zoom-out', label: 'Zoom out', Icon: ZoomOut },
@@ -428,9 +429,7 @@ export function ToolPalette({
           <TooltipContent>Add</TooltipContent>
         </Tooltip>
         <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-        {onZoomStep !== undefined && hasCoarsePointer() && (
-          <ZoomStepButtons onZoomStep={onZoomStep} />
-        )}
+        <ZoomStepButtons onZoomStep={onZoomStep} />
         <ZoomFitButton onZoomToFit={onZoomToFit} />
         {addOpen && (
           <div
