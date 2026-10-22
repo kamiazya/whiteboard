@@ -112,6 +112,7 @@ export interface FilesRouterOptions {
 async function storedFileFor(
   dir: string,
   fileId: string,
+  relisted = false,
 ): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null> {
   const files = await readStoredFileNames(dir)
   if (!files) return null
@@ -123,6 +124,10 @@ async function storedFileFor(
   try {
     data = await readFile(filePath)
   } catch (error) {
+    // A re-upload as another type unlinks the name this listing found, so a
+    // missing file is first a superseded one: list once more and read what
+    // replaced it.
+    if (!relisted && isMissingFileError(error)) return storedFileFor(dir, fileId, true)
     throw corruptStoredData(filePath, `failed to read stored file (${messageOf(error)})`)
   }
   // The upload refuses an empty body, so an empty stored file is one this
