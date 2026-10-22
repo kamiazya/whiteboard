@@ -39,9 +39,21 @@ export type ShortcutId =
   | 'tool-connect'
   | 'tool-draw'
   | 'new-note'
+  | 'select-next-node'
+  | 'select-previous-node'
+  | 'select-adjacent-node'
+  | 'edit-selected-node'
 
 /** The headings the help sheet groups the catalog under, in display order. */
-export const SHORTCUT_SECTIONS = ['Tools', 'Edit', 'Arrange', 'View', 'Text', 'Help'] as const
+export const SHORTCUT_SECTIONS = [
+  'Tools',
+  'Navigate',
+  'Edit',
+  'Arrange',
+  'View',
+  'Text',
+  'Help',
+] as const
 type ShortcutSection = (typeof SHORTCUT_SECTIONS)[number]
 
 export interface ShortcutSpec {
@@ -114,6 +126,44 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['n'],
     display: 'N',
     description: 'Add a note at the centre of the view',
+  },
+  // Keyboard traversal of existing nodes. Table-dispatched, but only when the
+  // canvas root itself holds focus: a Tab or Enter that originates in the dock,
+  // a handle or a connect target belongs to that control.
+  {
+    id: 'select-next-node',
+    section: 'Navigate',
+    keys: ['Tab'],
+    shift: false,
+    display: 'Tab',
+    description: 'Select the next node in reading order (the first, when none is selected)',
+    tools: ['select'],
+  },
+  {
+    id: 'select-previous-node',
+    section: 'Navigate',
+    keys: ['Tab'],
+    shift: true,
+    display: 'Shift+Tab',
+    description: 'Select the previous node in reading order',
+    tools: ['select'],
+  },
+  {
+    id: 'select-adjacent-node',
+    section: 'Navigate',
+    keys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+    mod: true,
+    display: 'Cmd+Arrows',
+    description: 'Select the nearest node in that direction',
+    tools: ['select'],
+  },
+  {
+    id: 'edit-selected-node',
+    section: 'Navigate',
+    keys: ['Enter', 'F2'],
+    display: 'Enter',
+    description: "Edit the selected node's text, or a group's label (also F2)",
+    tools: ['select'],
   },
   {
     id: 'toggle-lock',
@@ -284,19 +334,20 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: 'Delete the selected node(s) or edge',
     handledInline: true,
   },
-  // Escape does NOT clear a node selection: `handleKeyDown`'s gesture arm requires a gesture in flight, and
-  // its earlier arms only retire an edge selection or a pending cut. What
-  // it cancels is the gesture — and in a text edit that means DISCARDING
-  // what was typed, with three outcomes worth knowing: an existing node
-  // keeps its committed text, a just-created note carrying typed text goes
-  // with the discard, and a just-created note with nothing typed survives
-  // as the empty box someone sketching a layout meant to leave.
+  // Escape peels one layer per press: a gesture in flight first — in a text
+  // edit that means DISCARDING what was typed, with three outcomes worth
+  // knowing: an existing node keeps its committed text, a just-created note
+  // carrying typed text goes with the discard, and a just-created note with
+  // nothing typed survives as the empty box someone sketching a layout meant
+  // to leave — then a pending cut's hold, then the selection. With nothing
+  // left it hands Tab back to the browser, which is the way from the canvas to
+  // the dock.
   {
     id: 'cancel',
     section: 'Edit',
     keys: ['Escape'],
     display: 'Esc',
-    description: 'Cancel the gesture, discarding text being edited',
+    description: 'Cancel the gesture or clear the selection; discards text being edited',
     handledInline: true,
   },
   {

@@ -6,7 +6,14 @@
 // own, so a keyboard behavior can never disagree with the pointer path
 // about whose state is authoritative.
 
-import { boundsOf, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  boundsOf,
+  isFrame,
+  nodeText,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
+import { useRef } from 'react'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
@@ -17,6 +24,11 @@ import {
   scaleBoxWithin,
 } from '../../lib/spatial/geometry.js'
 import { deleteInkCommand, moveInkCommand } from '../../lib/spatial/ink-commands.js'
+import {
+  type Direction,
+  nearestInDirection,
+  nextInReadingOrder,
+} from '../../lib/spatial/reading-order.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
@@ -40,6 +52,20 @@ const TOOL_SHORTCUTS: Partial<Record<ShortcutId, EditorTool>> = {
   'tool-connect': 'connect',
   'tool-draw': 'draw',
 }
+
+/** The catalog rows that move or act on the selection through the canvas root's own focus. */
+const ADJACENT_DIRECTION: Record<string, Direction> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+}
+const ROOT_FOCUS_SHORTCUTS: ReadonlySet<ShortcutId> = new Set([
+  'select-next-node',
+  'select-previous-node',
+  'select-adjacent-node',
+  'edit-selected-node',
+])
 
 export interface EditorKeyboardInputs {
   tool: EditorTool
@@ -74,6 +100,8 @@ export interface EditorKeyboardInputs {
   /** The full tool switch the dock performs, so a key leaves the same state a click does. */
   changeTool: (tool: EditorTool) => void
   createNodeAtViewportCenter: () => void
+  /** Opens a group's label editor; absent when the host has none, which leaves Enter on a group unhandled. */
+  setGroupLabelEditId?: ((nodeId: string) => void) | undefined
 }
 
 export function useEditorKeyboard({
@@ -106,7 +134,97 @@ export function useEditorKeyboard({
   frameSelection,
   changeTool,
   createNodeAtViewportCenter,
+  setGroupLabelEditId,
 }: EditorKeyboardInputs) {
+  // Set by the Escape that let go of the selection: the next Tab is the
+  // browser's, which is the keyboard's way from the canvas to the dock.
+  const handOffTabRef = useRef(false)
+
+  const selectOnly = (id: string): void => {
+    applySelection({ type: 'set-members', ids: [id] })
+    setSelectedEdgeId(null)
+    setSelectedInkIds([])
+  }
+
+  /** Nodes traversal can land on: a locked node cannot be selected, so it is not a stop. */
+  const traversableNodes = () => canvasRef.current.nodes.filter((node) => !isLocked(node.id))
+
+  const stepThroughNodes = (step: 1 | -1): boolean => {
+    if (handOffTabRef.current && selection === undefined) {
+      handOffTabRef.current = false
+      return false
+    }
+    handOffTabRef.current = false
+    const id = nextInReadingOrder(traversableNodes(), selection?.id ?? null, step)
+    if (id === undefined) return false
+    selectOnly(id)
+    return true
+  }
+
+  const selectAdjacent = (key: string): boolean => {
+    const direction = ADJACENT_DIRECTION[key]
+    if (direction === undefined) return false
+    handOffTabRef.current = false
+    const nodes = traversableNodes()
+    const id =
+      selection === undefined
+        ? nextInReadingOrder(nodes, null, 1)
+        : nearestInDirection(nodes, selection.id, direction)
+    if (id === undefined) return selection !== undefined
+    selectOnly(id)
+    return true
+  }
+
+  /** Enter/F2 on the selection runs the same primary action a double press does. */
+  const editSelectedNode = (): boolean => {
+    if (selectedNode === undefined || gestureState.kind !== 'idle') return false
+    const text = nodeText(selectedNode)
+    if (text !== undefined) {
+      applyResult(
+        reduceGesture(gestureState, canvas, {
+          type: 'start-text-edit',
+          nodeId: selectedNode.id,
+          text,
+        }),
+      )
+      return true
+    }
+    if (isFrame(selectedNode) && setGroupLabelEditId !== undefined) {
+      setGroupLabelEditId(selectedNode.id)
+      return true
+    }
+    return false
+  }
+
+  const runNavigation = (id: ShortcutId, e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    // Only the canvas root itself: a Tab or Enter from the dock, a handle or a
+    // connect target belongs to that control.
+    if (e.target !== e.currentTarget || gestureState.kind !== 'idle') return false
+    switch (id) {
+      case 'select-next-node':
+        return stepThroughNodes(1)
+      case 'select-previous-node':
+        return stepThroughNodes(-1)
+      case 'select-adjacent-node':
+        return selectAdjacent(e.key)
+      case 'edit-selected-node':
+        return editSelectedNode()
+      default:
+        return false
+    }
+  }
+
+  /** Escape's last layer: let go of the selection, then hand Tab back to the browser. */
+  const releaseSelectionWithEscape = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Escape' || gestureState.kind !== 'idle' || typingInText(e)) return false
+    handOffTabRef.current = true
+    if (selection === undefined) return false
+    e.preventDefault()
+    applySelection({ type: 'clear' })
+    setSelectedEdgeId(null)
+    return true
+  }
+
   const selectAllNodes = (): boolean => {
     const allIds = canvasRef.current.nodes.map((node) => node.id).filter((id) => !isLocked(id))
     if (allIds.length === 0) return true
@@ -395,16 +513,20 @@ export function useEditorKeyboard({
     }
   }
 
+  /** The catalog's table-dispatched rows; true when one handled the press. */
+  const runCatalogShortcut = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    const shortcut = findShortcut(e.nativeEvent, tool)
+    if (shortcut === undefined) return false
+    const handled = ROOT_FOCUS_SHORTCUTS.has(shortcut.id)
+      ? runNavigation(shortcut.id, e)
+      : runShortcut(shortcut.id)
+    if (handled) e.preventDefault()
+    return handled
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // Declarative shortcuts first — see shortcuts.ts, the single catalog.
-    const shortcut = findShortcut(e.nativeEvent, tool)
-    if (shortcut !== undefined && runShortcut(shortcut.id)) {
-      e.preventDefault()
-      return
-    }
-    if (clearInkSelection(e)) return
-    if (deleteInkSelection(e)) return
-    if (cancelWithEscape(e)) return
+    if (runCatalogShortcut(e)) return
     // Delete/Backspace deletes the current selection — but never while the
     // event's own target is a text-entry surface (the open TextNodeEditor's
     // textarea, or any other input this root might contain), or Backspace
@@ -415,10 +537,15 @@ export function useEditorKeyboard({
     // Shift multiplies the step. A focused resize handle handles arrows
     // itself and stops propagation there, so an arrow reaching THIS
     // handler is never a resize.
-    if (armSpacePan(e)) return
-    if (nudgeSelection(e)) return
-    if (deleteMultiSelection(e)) return
-    deleteSingleSelection(e)
+    const handledEarly =
+      clearInkSelection(e) ||
+      deleteInkSelection(e) ||
+      cancelWithEscape(e) ||
+      releaseSelectionWithEscape(e) ||
+      armSpacePan(e) ||
+      nudgeSelection(e) ||
+      deleteMultiSelection(e)
+    if (!handledEarly) deleteSingleSelection(e)
   }
 
   const handleResizeHandleKeyDown = (

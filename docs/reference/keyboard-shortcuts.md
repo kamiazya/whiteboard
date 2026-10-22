@@ -33,12 +33,27 @@ pinch zooms in every tool.
 |---|---|
 | `Cmd/Ctrl + A` | Select every node |
 | `Shift` + click | Add or remove a node from the selection |
+| `Tab` | Select the next node in reading order; with nothing selected, the first |
+| `Shift + Tab` | Select the previous node in reading order |
+| `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
+| `Enter` / `F2` | Edit the selected node's text, or a group's label |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
 | Double-click | Edit a node's text, an edge's label, or a group's label |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture; in a text edit, discard what you typed |
+| `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
+
+**Reaching a node without a pointer.** With the canvas focused, `Tab` walks the
+nodes top to bottom, then left to right (ties by position in the document),
+and wraps at the end, so focus stays on the canvas while you cycle. `Esc`
+clears the selection; the `Tab` after that is the browser's, which is the way
+on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
+dock. Locked nodes are skipped, since they cannot be selected.
+`Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
+one straight ahead over a nearer one off to the side; the plain arrow keys
+still nudge. Together with `Enter` and the connect handle this is enough to
+connect two existing nodes using only the keyboard.
 
 **Align and distribute** have no shortcut — they live in the right-click
 menu of a multi-node selection, as **Align** (six edges and centre lines)
