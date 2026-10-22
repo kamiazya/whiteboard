@@ -9,13 +9,15 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useState } from 'react'
 import type { DocumentPickerState, LinkDialogState } from './canvas-commands.js'
+import { useSelectionSource } from './use-selection-source.js'
 
 export interface EditSessionStateInputs {
   readonly canvas: SpatialCanvas
   readonly selectedId: string | null
+  readonly extraIds: ReadonlySet<string>
 }
 
-export function useEditSessionState({ canvas, selectedId }: EditSessionStateInputs) {
+export function useEditSessionState({ canvas, selectedId, extraIds }: EditSessionStateInputs) {
   /**
    * Whether resolved comments are drawn (muted) — ADR-0025 decision 2:
    * per-user VIEW state, never written to the shared document, so one
@@ -118,6 +120,10 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
   // the flag, which only a new selection could get out of.
   if (facetPanelOpen && selectedId === null && selectedEdgeId === null) setFacetPanelOpen(false)
 
+  // Followed from outside the editor (the Display panel); it lives with the
+  // edge selection because that is the half of the selection kept here.
+  const selectionSource = useSelectionSource(selectedId, selectedEdgeId, extraIds)
+
   return {
     showResolvedComments,
     setShowResolvedComments,
@@ -138,5 +144,6 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
     setDocumentPicker,
     facetPanelOpen,
     setFacetPanelOpen,
+    selectionSource,
   }
 }

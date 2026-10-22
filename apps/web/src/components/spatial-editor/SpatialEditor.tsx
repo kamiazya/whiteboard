@@ -559,7 +559,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setDocumentPicker,
       facetPanelOpen,
       setFacetPanelOpen,
-    } = useEditSessionState({ canvas, selectedId })
+      selectionSource,
+    } = useEditSessionState({ canvas, selectedId, extraIds })
     const fontsGeneration = useThemeFontsGeneration()
     useThemeFaceFor(canvas)
     const editingFontFamily = useEditingFontFamily(canvas)
@@ -768,10 +769,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     useImperativeHandle(
       forwardedRef,
       () => ({
+        selection: selectionSource,
         setViewport,
-        fitToContent(nodeIds) {
-          frameContent(nodeIds === undefined ? undefined : new Set(nodeIds))
-        },
+        fitToContent: (nodeIds) => frameContent(nodeIds && new Set(nodeIds)),
         openProposal(proposalId) {
           const at = viewportRevealingProposal(proposalChromeBoxes, proposalId)
           if (at === null) return false
