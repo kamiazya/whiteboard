@@ -621,9 +621,21 @@ function DocumentPageBody({
     >
       {model.slots.replaceEditor ?? (
         <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
+          {/* The editor stays mounted under a preview: its pan and zoom are
+              state of the mounted component, and unmounting it sent the view
+              back to the origin when the preview ended or a restore landed.
+              Inert and hidden, it still holds its size, so nothing re-measures
+              it, and it takes no input and leaves the accessibility tree. */}
           {preview ? (
-            <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
-          ) : (
+            <div className="h-full min-h-0 min-w-0">
+              <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
+            </div>
+          ) : null}
+          <div
+            className={preview ? 'invisible absolute inset-0' : 'h-full min-h-0 min-w-0'}
+            inert={preview !== null}
+            aria-hidden={preview !== null ? true : undefined}
+          >
             <DocumentEditorSurface
               kind={documentKind}
               documentKey={documentKey}
@@ -680,7 +692,7 @@ function DocumentPageBody({
                 </SpatialEditorPane>
               )}
             />
-          )}
+          </div>
         </EditorLock>
       )}
     </DocumentPageShell>

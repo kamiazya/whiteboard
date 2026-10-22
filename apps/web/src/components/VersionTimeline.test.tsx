@@ -381,6 +381,10 @@ describe('VersionTimeline', () => {
     await waitFor(() => {
       expect(preview.current).toBeNull()
     })
+    // The restore rewrote the document; the panel says the old state survives.
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Restored. The state before restoring is kept as a version.',
+    )
   })
 
   it('keeps the dialog open and does not fire onRestored when the restore request fails', async () => {

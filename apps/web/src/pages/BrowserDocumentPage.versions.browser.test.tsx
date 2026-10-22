@@ -1,3 +1,4 @@
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
 import {
   documentContainers,
   projectWorkspaceDocument,
@@ -134,7 +135,9 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // this keeper one now is. It used to point only at the save button, and
     // that was correct until automatic checkpoints reached the browser.
     const empty = await within(panel).findByText(/No versions yet/)
-    expect(empty.textContent).toContain('A checkpoint is saved a little after you stop editing.')
+    expect(empty.textContent).toContain(
+      `A checkpoint is saved about ${CHECKPOINT_QUIET_MS / 60_000} minutes after you stop editing, while the document is open.`,
+    )
 
     // ⌘/Ctrl+S asks for a bookmark rather than taking one: it opens the
     // history with its naming field ready. An unnamed mark would be titled
@@ -221,8 +224,11 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await waitFor(() => expect(preview.textContent ?? '').toContain('first'))
     expect(preview.textContent ?? '').not.toContain('second')
     expect(await storedText(documentId)).toBe('second')
-    // Read-only: the editor is not on screen while a past state is.
-    expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
+    // Read-only: the editor is kept mounted so its pan and zoom survive the
+    // look, but it is inert, hidden and out of the accessibility tree.
+    const hiddenEditor = screen.getByTestId('spatial-editor-container').parentElement
+    expect(hiddenEditor?.hasAttribute('inert')).toBe(true)
+    expect(hiddenEditor?.getAttribute('aria-hidden')).toBe('true')
 
     // Nor is anything that WRITES the live canvas, and the DISPLAY panel is
     // the sharpest case: its settings go to the live document, so drawn
@@ -243,12 +249,13 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // The controls sit on the DOCUMENT's chrome, not inside the history.
     // What changed is the document, and on a narrow screen the panel is a
     // sheet at the far edge from it — so the knowledge and the way out both
-    // belong where the change is. Icon-only, per the project's whole button
-    // policy; the accessible name is the only text.
+    // belong where the change is. Restore carries a visible word beside its
+    // icon on a wide viewport, because a lone icon for an act that rewrites
+    // the document is not enough to find; Stop stays icon-only.
     const chrome = screen.getByRole('banner')
     const restore = within(chrome).getByRole('button', { name: 'Restore this version' })
     const stop = within(chrome).getByRole('button', { name: 'Stop viewing' })
-    expect(restore.textContent).toBe('')
+    expect(restore.textContent).toBe('Restore')
     expect(stop.textContent).toBe('')
     // …and nowhere else: a second Restore inside the panel would be two
     // controls for one act.
@@ -313,5 +320,51 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await waitFor(async () => expect(await storedBody(documentId)).toBe('# first'), {
       timeout: 5000,
     })
+  })
+
+  it('keeps the canvas pan and zoom through a restore and says the old state is kept', async () => {
+    const index = new FoldingBrowserIndex()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'canvas-a',
+      kind: 'spatial',
+    })
+    await writeContent(documentId, 'first')
+    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    await store.save(workspaceId, 'canvas-a', { label: 'first draft' })
+    await writeContent(documentId, 'second')
+
+    await openPage()
+    const transform = () => screen.getByTestId('viewport-transform').style.transform
+    const before = transform()
+    // Pan well away from where the editor opened, so a reset cannot hide as
+    // "already there".
+    screen
+      .getByTestId('spatial-editor')
+      .dispatchEvent(
+        new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 0, deltaY: -240 }),
+      )
+    await waitFor(() => expect(transform()).not.toBe(before))
+    const panned = transform()
+
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const panel = await screen.findByTestId('history-panel')
+    const row = await within(panel).findByTestId('version-row')
+    const target = row.querySelector('button')
+    if (!target) throw new Error('the version row is not restorable')
+    await userEvent.click(target)
+    await screen.findByTestId('document-preview')
+    await userEvent.click(screen.getByRole('button', { name: 'Restore this version' }))
+
+    await waitFor(async () => expect(await storedText(documentId)).toBe('first'), {
+      timeout: 5000,
+    })
+    await waitFor(() => expect(screen.queryByTestId('document-preview')).toBeNull())
+    expect(transform()).toBe(panned)
+    expect(
+      await within(panel).findByText('Restored. The state before restoring is kept as a version.'),
+    ).toBeTruthy()
   })
 })

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../index.css'
@@ -150,5 +150,16 @@ describe('version preview bar', () => {
     // invented: whatever the bar's width, the gap is the whole title.
     expect(stopBox.right).toBeLessThanOrEqual(titleBox.left)
     expect(restoreBox.left).toBeGreaterThanOrEqual(titleBox.right)
+  })
+
+  it('labels Restore with a word on a wide viewport and keeps the icon alone on a phone', async () => {
+    renderTopBar({ preview })
+    const restore = screen.getByRole('button', { name: 'Restore this version' })
+    expect(restore.textContent).toBe('Restore')
+    expect(within(restore).getByText('Restore').checkVisibility()).toBe(true)
+
+    await setViewport(375, 900)
+    await waitFor(() => expect(within(restore).getByText('Restore').checkVisibility()).toBe(false))
+    expect(restore.getBoundingClientRect().width).toBeGreaterThanOrEqual(32)
   })
 })
