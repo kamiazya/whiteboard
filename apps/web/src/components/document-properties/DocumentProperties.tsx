@@ -94,8 +94,7 @@ export function DocumentProperties({
           // is what a title bar wants anyway.
           //
           // `min-w-[10ch]` is the phone floor: the actions beside the box do
-          // not shrink, so without it a narrow row squeezed the name to one
-          // letter. The row clips rather than the name collapsing.
+          // not shrink, and without it the name collapses to one letter.
           //
           // The floor keeps an empty or one-word name a comfortable rename
           // target since the box does not fill the row; past the ceiling

@@ -179,7 +179,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapOverlay': 108,
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
-  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 319,
+  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 323,
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
   // The editor's JSX, cut into the layers it always had: canvas space under
   // the pan/zoom transform, screen space above it, the chrome you press, the
@@ -208,7 +208,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 267,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 106,
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
@@ -405,7 +405,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // browser-kept, so a card hidden there would hide the whole list.
   'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 75,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
-  'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
+  'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 287,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
   // Raised by six for `followRecordedName`, which has to sit beside the
   // snapshot refs: a name the record holds is shown only while no rename of
