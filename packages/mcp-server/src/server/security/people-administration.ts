@@ -246,18 +246,22 @@ export interface WorkspacePeopleAdministration {
     userId: string,
     by: By,
   ): Promise<Done | Refused<'unknown_user' | 'not_an_owner'>>
-  /** The product never leaves a workspace without an owner (ADR-0049). */
+  /**
+   * The product never leaves a workspace without an owner (ADR-0049), and an
+   * owner who leaves never pushes the namespace the workspace moves into past
+   * the workspace ceiling (`too_many_workspaces`); `remove` likewise.
+   */
   changeRole(
     workspaceId: string,
     userId: string,
     role: WorkspaceRole,
     by: By,
-  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner'>>
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner' | 'too_many_workspaces'>>
   remove(
     workspaceId: string,
     userId: string,
     by: By,
-  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner'>>
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner' | 'not_an_owner' | 'too_many_workspaces'>>
   /**
    * The operator admits a person, and when no active owner is left makes them
    * the owner: a member could not manage the people of the workspace this was
@@ -270,6 +274,7 @@ const WORKSPACE_REFUSALS = {
   'not-a-member': 'not_a_member',
   'last-owner': 'last_owner',
   'not-an-owner': 'not_an_owner',
+  'namespace-full': 'too_many_workspaces',
 } as const
 
 export function createWorkspacePeopleAdministration(deps: {

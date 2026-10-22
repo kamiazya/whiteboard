@@ -666,7 +666,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
 - **A person holds a bounded number of workspaces.** In server mode every
   member of a tenant shares one workspace registry, so one person's namespace
   holds at most 1000 workspaces, and a create past that is refused
-  (`too_many_workspaces`) on `/api` and `/mcp` alike. Resolving a workspace's
+  (`too_many_workspaces`) on `/api` and `/mcp` alike. A workspace handed to
+  another owner counts toward theirs as a create would, so handing workspaces
+  to a co-owner cannot be used to create past the limit: demoting or removing
+  the owner who holds a workspace, when that would move it into a full
+  namespace, is refused with the same code and changes nothing, and goes through once
+  that owner has room. Deleting a person is never refused for it: each of
+  their workspaces moves to its oldest surviving owner who has room, and one
+  that no owner has room for waits in the namespace nobody holds, reachable
+  by its id and counted toward nobody's limit, until an operator's
+  `grant-member` homes it with an owner who does. Resolving a workspace's
   address reads only the row it names, and listing workspaces reads the
   caller's own memberships once, so neither costs a request more as other
   people's workspaces grow. The local daemon has one person and no such
@@ -683,7 +692,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   across all of its proposals (`too_many_open_threads`,
   `too_many_open_changes`). Resolved threads are not counted, since the
   daemon never draws them; a reader who asks the web app to show resolved
-  comments lays all of them out in their own browser. What every render
+  comments lays all of them out in their own browser. One thread holds at
+  most 1000 messages, resolved or not, since every reader of a thread reads
+  all of them (`too_many_thread_messages`). What every render
   does read of every thread, resolved ones included, is a node-set anchor,
   so one anchor names at most 2000 nodes (`comment_anchor_too_large`); and
   every reader of a note re-finds each thread's and change's passage after

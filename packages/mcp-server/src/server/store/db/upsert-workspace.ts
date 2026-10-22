@@ -1,6 +1,6 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { WorkspaceNotHeldError, WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
-import type { TenantDatabase } from './tenant-database.js'
+import type { TenantDatabase, TenantScoped } from './tenant-database.js'
 
 /**
  * Did this write violate the segment's unique index — keyed on
@@ -44,7 +44,7 @@ export interface WorkspaceIdentity {
  * segment set elsewhere is never clobbered by a follow-up child write.
  */
 export async function upsertWorkspaceRow(
-  db: TenantDatabase,
+  db: TenantScoped,
   workspaceId: string,
   identity: WorkspaceIdentity & { namespace?: string } = {},
 ): Promise<void> {

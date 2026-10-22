@@ -15,8 +15,8 @@ import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
-/** The nested map of messages inside one thread's container. */
-const MESSAGES_KEY = 'messages'
+/** The nested map of messages inside one thread's container; the sync judge counts it. */
+export const MESSAGES_KEY = 'messages'
 /** The key a thread's anchor sits under in its own map; the sync judge bounds it. */
 export const ANCHOR_FIELD = 'anchor'
 const STATUS_FIELD = 'status'
@@ -207,6 +207,16 @@ export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number 
     commentsMap.delete(commentId)
   }
   return migrated
+}
+
+/**
+ * How many messages one thread STORES, readable or not — the count the sync
+ * judge holds a thread's ceiling to, so a writer that counts only what the
+ * schema accepts cannot take a thread past it.
+ */
+export function storedThreadMessageCount(doc: DocumentContainers, threadId: string): number {
+  const messages = threadContainer(doc, threadId)?.get(MESSAGES_KEY)
+  return messages instanceof LoroMap ? messages.size : 0
 }
 
 /**

@@ -202,7 +202,8 @@ describe('server mode — access lost in another process ends the stream here', 
 
     for (const byte of [1, 2, 3]) sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([byte]))
     let text = ''
-    while ((text.match(/event: update/g) ?? []).length < 3) {
+    // A frame may arrive over several chunks, so wait for whole payloads.
+    while ((text.match(/"update":"[^"]+"/g) ?? []).length < 3) {
       const chunk = await next(stream)
       expect(chunk).not.toBe('closed')
       text += chunk

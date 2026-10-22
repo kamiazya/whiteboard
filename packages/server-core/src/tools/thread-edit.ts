@@ -3,6 +3,7 @@ import {
   readAnnotations,
   readDocumentContent,
   setCommentThreadStatus,
+  storedThreadMessageCount,
   writeCommentThread,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -16,6 +17,7 @@ import {
   commentMessageInputSchema,
   commentThreadSchema,
   documentIdSchema,
+  growsPast,
   nodeText,
   OPS_PER_CALL_LIMIT_PHRASE,
   OPS_PER_CALL_MAX,
@@ -24,6 +26,8 @@ import {
   type SpatialAnchor,
   type SpatialCanvas,
   type TextAnchor,
+  THREAD_MAX_MESSAGES,
+  THREAD_MESSAGES_LIMIT_PHRASE,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -248,11 +252,14 @@ interface ThreadEditContext {
 interface ThreadTally {
   readonly status: Map<string, CommentThreadStatus>
   readonly messageIds: Map<string, Set<string>>
+  /** Stored messages per thread, unreadable ones included: what the ceiling counts. */
+  readonly stored: Map<string, number>
   open: number
 }
 
-function tallyOf(threads: readonly CommentThread[]): ThreadTally {
+function tallyOf(doc: LoroDoc, threads: readonly CommentThread[]): ThreadTally {
   return {
+    stored: new Map(threads.map((thread) => [thread.id, storedThreadMessageCount(doc, thread.id)])),
     status: new Map(threads.map((thread) => [thread.id, thread.status])),
     messageIds: new Map(
       threads.map((thread) => [thread.id, new Set(thread.messages.map((message) => message.id))]),
@@ -314,6 +321,7 @@ const THREAD_EDIT_HANDLERS: {
     held.add(id)
     setTalliedStatus(ctx.tally, id, 'open')
     ctx.tally.messageIds.set(id, new Set([`${id}-m1`]))
+    ctx.tally.stored.set(id, 1)
     ctx.touched.add(id)
   },
 
@@ -337,7 +345,19 @@ const THREAD_EDIT_HANDLERS: {
     let suffix = taken.size + 1
     while (taken.has(`${op.threadId}-m${suffix}`)) suffix += 1
     const id = `${op.threadId}-m${suffix}`
-    ctx.tally.messageIds.set(op.threadId, new Set([...taken, id]))
+    const stored = ctx.tally.stored.get(op.threadId) ?? taken.size
+    if (growsPast(THREAD_MAX_MESSAGES, stored, stored + 1)) {
+      throw new ThreadEditError(
+        index,
+        op.op,
+        `thread "${op.threadId}" would hold ${stored + 1} messages, past ${THREAD_MESSAGES_LIMIT_PHRASE}`,
+      )
+    }
+    ctx.tally.stored.set(op.threadId, stored + 1)
+    // In place: the set is this batch's own, and copying it per reply costs
+    // the whole thread again on every op, under the workspace write lock.
+    taken.add(id)
+    ctx.tally.messageIds.set(op.threadId, taken)
     writeThreadMessage(doc, op.threadId, {
       id,
       body: op.body,
@@ -418,7 +438,7 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
   const board = boardIndexOf(content)
   const atLoad = readAnnotations(doc)
   const held = new Set(atLoad.map((thread) => thread.id))
-  const tally = tallyOf(atLoad)
+  const tally = tallyOf(doc, atLoad)
   const openAtLoad = tally.open
   const now = new Date().toISOString()
   const touched = new Set<string>()

@@ -23,6 +23,7 @@ import {
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
   TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
+  THREAD_MESSAGES_LIMIT_PHRASE,
 } from '@kamiazya/whiteboard-model'
 import { SyncWriteRefusalError } from '@kamiazya/whiteboard-ports'
 import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-io.js'
@@ -365,6 +366,26 @@ class TooManyOpenChangesError extends TextBreachRefusalError {
 }
 
 /**
+ * A comment thread left holding more messages than `THREAD_MAX_MESSAGES` —
+ * every reader of the thread reads all of them. A thread stored past it
+ * still takes an edit to a message it holds.
+ */
+class TooManyThreadMessagesError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['thread-messages']
+
+  constructor(
+    readonly breach: BreachOf<'thread-messages'>,
+    readonly at?: RefusedIn,
+  ) {
+    const thread = `a comment thread of ${breach.count} messages`
+    super(
+      valueRefusalMessage(at, `leave ${thread}`, `holds ${thread}`, THREAD_MESSAGES_LIMIT_PHRASE),
+    )
+    this.name = 'TooManyThreadMessagesError'
+  }
+}
+
+/**
  * A document node's content key left holding a scalar, another kind of
  * container, or nothing — what every reader and writer of the document opens
  * as the container the bridge declares. The same answer the per-document
@@ -463,6 +484,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new TooManyOpenThreadsError(breach, at)
     case 'open-changes':
       return new TooManyOpenChangesError(breach, at)
+    case 'thread-messages':
+      return new TooManyThreadMessagesError(breach, at)
     case 'content-root':
       return new ContentRootKindError(breach, at)
     case 'unattached-container':

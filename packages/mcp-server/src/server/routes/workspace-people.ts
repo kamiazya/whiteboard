@@ -41,6 +41,10 @@ const REFUSALS = {
   unknown_user: [404, 'no user by that id here'],
   not_a_member: [404, 'no such member in this workspace'],
   last_owner: [409, 'a workspace keeps at least one owner; make someone else an owner first'],
+  too_many_workspaces: [
+    413,
+    'the owner this workspace would move to already holds the most workspaces one person may on this server; it can move once they have room',
+  ],
   unknown_invitation: [404, 'no pending invitation by that id in this workspace'],
   sign_in_required: [403, "changing a workspace's people needs a browser sign-in, not a bearer"],
   too_many_invitations: [

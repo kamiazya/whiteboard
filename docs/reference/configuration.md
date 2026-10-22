@@ -280,6 +280,15 @@ fixed, not configurable:
 |---|---|---|---|
 | Workspaces per person's namespace | 1000 | server mode | The next create is refused and nothing is written: `POST /api/workspaces` answers `413 {"error":"too_many_workspaces"}`, and a tool call through `/mcp` with `createWorkspace: true` is refused with an error naming `too_many_workspaces`. Workspaces the person has joined in other namespaces do not count. |
 
+A workspace moving into a namespace counts as a create there. Demoting or
+removing the owner who holds a workspace, when it would move to a co-owner
+whose namespace is full, is refused: `PATCH` or `DELETE
+/api/workspaces/<workspace>/people/<user>` answers
+`413 {"error":"too_many_workspaces"}` and nothing changes. Deleting a person
+skips an owner whose namespace is full for the next-oldest one with room;
+with none, the workspace is reachable by its identifier alone until an
+operator's `whiteboard server grant-member` gives it an owner with room.
+
 The limit is held per instance: creates landing at the same moment through
 several instances of one deployment can each take the last place, leaving the
 namespace a few past it. The local daemon serves one person and applies no

@@ -74,7 +74,10 @@ export const revokeInvitationResponseSchema = z.object({ revoked: z.literal(true
  * Why a change was refused. `last_owner`: the product never leaves a
  * workspace without an owner, so its last owner can be neither demoted nor
  * removed. `too_many_invitations`: {@link MAX_PENDING_WORKSPACE_INVITATIONS}
- * links are already pending. `sign_in_required`: an owner's change came
+ * links are already pending. `too_many_workspaces`: an owner's demotion or
+ * removal would hand the workspace to the next owner, whose namespace already
+ * holds the most workspaces one person may on this server — the same code a
+ * create past that ceiling answers. `sign_in_required`: an owner's change came
  * through a bearer, and only a browser sign-in administers a workspace's
  * people, as it does a tenant's. A narrowing of `apiErrorBodySchema`'s `{ error, message }` arm.
  */
@@ -86,6 +89,7 @@ export const workspacePeopleRefusalSchema = z.object({
     'last_owner',
     'unknown_invitation',
     'too_many_invitations',
+    'too_many_workspaces',
     'sign_in_required',
   ]),
   message: z.string().min(1),

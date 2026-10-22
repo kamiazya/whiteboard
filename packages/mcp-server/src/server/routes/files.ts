@@ -8,7 +8,7 @@ import {
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
 import { isMissingFileError } from '../../shared/errno.js'
-import { writeFileAtomicStaged } from '../atomic-write.js'
+import { DATA_DIR_MODE, writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   filesDirNotContainedErrorBody,
@@ -188,7 +188,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       // GC's stat() and unlink() and have its freshly written file deleted
       // as the stale one it was replacing.
       await withWorkspaceWriteLock(workspaceId, async () => {
-        await mkdir(dir, { recursive: true })
+        await mkdir(dir, { recursive: true, mode: DATA_DIR_MODE })
         // Atomic, so a reader — or a backup copying this tree while the
         // server runs — never sees the upload half-written. A plain write
         // leaves the file short for its whole duration: measured, a copy

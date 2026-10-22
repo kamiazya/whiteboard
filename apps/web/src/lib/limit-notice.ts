@@ -137,6 +137,8 @@ export const KEEPER_LIMIT_REASON = {
     'It would leave more comment threads open on this document than one document may hold. Resolve some first.',
   too_many_open_changes:
     'It would leave more proposed changes open on this document than one document may hold. Adopt or dismiss some first.',
+  too_many_thread_messages:
+    'It would give one comment thread more replies than one thread may hold. Start a new thread to continue the conversation.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>
 
 /**

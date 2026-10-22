@@ -38,18 +38,28 @@ export interface SyncStreamDoc {
    * The key canonicalised: registries and broadcasts name a workspace by id,
    * while the map holding this entry is keyed as the client subscribed — by
    * whatever handle its address carries (ADR-0019), which is also what it
-   * routes events by. Two spellings of one document are two subscriptions.
+   * routes events by. Two spellings of one document are two subscriptions,
+   * each sent its own frames — the page could not route one frame to both —
+   * though an update's payload is queued once for all of them.
    */
   key: string
 }
 
 /**
  * One frame down a stream, as the contract the page parses it with names it.
- * The payload stays an object until the transport serialises it, so a writer
- * cannot hand the page an envelope the schema would drop.
+ * A message payload stays an object until the transport serialises it, so a
+ * writer cannot hand the page an envelope the schema would drop.
+ *
+ * An update carries its payload already encoded — the base64 of the Loro
+ * update as ASCII bytes — because one broadcast hands the SAME frame to every
+ * stream following the workspace, and an update may be as large as the
+ * content body limit: encoded once, the bytes are shared by every stream's
+ * queue rather than rebuilt for each. The transport wraps them in one
+ * `SyncUpdateEvent` envelope per spelling in `docs`: the stream's every
+ * spelling of the workspace, so the payload is charged to its queue once.
  */
-type SyncFrame =
-  | { event: 'update'; data: SyncUpdateEvent }
+export type SyncFrame =
+  | { event: 'update'; docs: ReadonlyArray<SyncUpdateEvent['doc']>; update: Uint8Array }
   | { event: 'message'; data: SyncMessageEvent }
 
 export interface SyncStream {
@@ -340,10 +350,15 @@ export function docKey(workspaceId: string, path: string): string {
   return documentSyncKey(workspaceId, path)
 }
 
-function toBase64(bytes: Uint8Array): string {
+const encoder = new TextEncoder()
+
+/** The update's base64, as the ASCII bytes a frame carries. */
+function encodeUpdate(bytes: Uint8Array): Uint8Array {
   // Node-only file (mcp-server builds with `platform: 'node'`), so this takes
   // the native conversion rather than building a string one byte at a time.
-  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
+  return encoder.encode(
+    Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64'),
+  )
 }
 
 /**
@@ -355,15 +370,14 @@ function toBase64(bytes: Uint8Array): string {
  */
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)
-  const encoded = toBase64(update)
+  const encoded = encodeUpdate(update)
   const reads: AccessReads = new Map()
   for (const [streamId, stream] of streams) {
-    const frames: SyncFrame[] = []
-    for (const [as, entry] of stream.docs) {
-      if (entry.key !== key) continue
-      frames.push({ event: 'update', data: { doc: as, update: encoded } })
+    const docs: string[] = []
+    for (const [as, entry] of stream.docs) if (entry.key === key) docs.push(as)
+    if (docs.length > 0) {
+      deliver(streamId, stream, workspaceId, [{ event: 'update', docs, update: encoded }], reads)
     }
-    if (frames.length > 0) deliver(streamId, stream, workspaceId, frames, reads)
   }
 }
 

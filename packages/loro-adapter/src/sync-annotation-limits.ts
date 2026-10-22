@@ -1,27 +1,30 @@
 // What a sync update does to a document's annotation layer — how many comment
-// threads and proposed changes it leaves open — judged with the text bounds in
-// `sync-text-limits.ts`, by the same keepers on the same bytes. Kept apart
-// because none of it reads text: it counts entries of the threads, legacy
-// comments and proposals maps.
+// threads and proposed changes it leaves open, and how many messages one
+// thread holds — judged with the text bounds in `sync-text-limits.ts`, by the
+// same keepers on the same bytes. Kept apart because none of it reads text:
+// it counts entries of the threads, legacy comments, proposals and messages
+// maps.
 import {
   DOCUMENT_MAX_OPEN_CHANGES,
   DOCUMENT_MAX_OPEN_THREADS,
   growsPast,
+  THREAD_MAX_MESSAGES,
 } from '@kamiazya/whiteboard-model'
 import { type ContainerID, type LoroDoc, LoroMap } from 'loro-crdt'
-import { openThreadCount } from './comment-threads.js'
+import { MESSAGES_KEY, openThreadCount } from './comment-threads.js'
 import { COMMENTS_KEY, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import { openProposedChangeCount } from './proposals.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
-/** A document an update left holding too many open threads, or open proposed changes. */
-export type OpenAnnotationsBreach<
-  S extends 'open-threads' | 'open-changes' = 'open-threads' | 'open-changes',
-> = {
+/**
+ * A document an update left holding too many open threads or open proposed
+ * changes, or one of its threads holding too many messages.
+ */
+export type AnnotationCountBreach<S extends AnnotationBound['shape'] = AnnotationBound['shape']> = {
   readonly shape: S
-  /** How many the document would hold open. */
+  /** How many the document, or the thread, would hold. */
   readonly count: number
-  /** The threads or proposals map, so a caller can name the document. */
+  /** The threads, proposals or messages map, so a caller can name the document. */
   readonly container: ContainerID
 }
 
@@ -37,26 +40,51 @@ function openLegacyCommentCount(commentsMap: LoroMap): number {
   return open
 }
 
+/** How many messages the most-replied thread in `threadsMap` holds. */
+function longestThread(threadsMap: LoroMap): number {
+  let longest = 0
+  for (const threadId of threadsMap.keys()) {
+    const thread = threadsMap.get(threadId)
+    const messages = thread instanceof LoroMap ? thread.get(MESSAGES_KEY) : undefined
+    if (messages instanceof LoroMap) longest = Math.max(longest, messages.size)
+  }
+  return longest
+}
+
 /**
- * Each per-document annotation bound: the maps whose entries it counts, and
- * how an entry counts as open. The thread bound counts the legacy comment
- * rows beside the threads, since `readAnnotations` lifts each into one. Neither
- * a thread nor a change is ever deleted, so only open ones are held to it
- * (`DOCUMENT_MAX_OPEN_THREADS`).
+ * Each annotation bound: the maps whose entries it counts, and how an entry
+ * counts. A `document` bound counts at the document's own maps, and the
+ * thread bound counts the legacy comment rows beside the threads, since
+ * `readAnnotations` lifts each into one. Neither a thread nor a change is
+ * ever deleted, so only open ones are held to it (`DOCUMENT_MAX_OPEN_THREADS`).
+ *
+ * The `thread` bound counts at ONE thread's messages map, every entry
+ * whether or not a reader accepts it, since each is stored and read
+ * (`THREAD_MAX_MESSAGES`); `walk` is what `mostOpenAnnotations` reads of it,
+ * the longest thread a document holds.
  */
 const ANNOTATION_BOUNDS = [
   {
+    scope: 'document',
     keys: [THREADS_KEY, COMMENTS_KEY],
     shape: 'open-threads',
     max: DOCUMENT_MAX_OPEN_THREADS,
-    count: (key: string, map: LoroMap) =>
+    walk: (key: string, map: LoroMap) =>
       key === THREADS_KEY ? openThreadCount(map) : openLegacyCommentCount(map),
   },
   {
+    scope: 'document',
     keys: [PROPOSALS_KEY],
     shape: 'open-changes',
     max: DOCUMENT_MAX_OPEN_CHANGES,
-    count: (_key: string, map: LoroMap) => openProposedChangeCount(map),
+    walk: (_key: string, map: LoroMap) => openProposedChangeCount(map),
+  },
+  {
+    scope: 'thread',
+    keys: [THREADS_KEY],
+    shape: 'thread-messages',
+    max: THREAD_MAX_MESSAGES,
+    walk: (_key: string, map: LoroMap) => longestThread(map),
   },
 ] as const
 
@@ -101,14 +129,27 @@ function deepestAnnotationDepth(key: unknown): number {
 }
 
 /**
+ * Whether a write to the map at `relative` (its path below the document) can
+ * move `bound`: a document bound's maps or the ones under them, as deep as an
+ * annotation opens; the thread bound only a thread's messages map itself,
+ * which is where a reply is set.
+ */
+function reaches(bound: AnnotationBound, relative: readonly unknown[]): boolean {
+  if (!(bound.keys as readonly unknown[]).includes(relative[0])) return false
+  if (bound.scope === 'thread') return relative.length === 3 && relative[2] === MESSAGES_KEY
+  return relative.length <= deepestAnnotationDepth(relative[0])
+}
+
+/**
  * The annotation bound a write to the map `container` can move, when it is
  * one: a threads, legacy comments or proposals map itself (one added), one
- * thread's or proposal's own map (a status set), or a proposal's changes (a
- * change added or decided). A thread's messages open nothing, so a reply is
- * not counted. `undefined` too for a container the doc's current state does
- * not hold, which while detached is one the update itself creates: its
- * parent's write is what the update did to that document. `null` for a
- * document `counted` already holds.
+ * thread's or proposal's own map (a status set), a proposal's changes (a
+ * change added or decided), or one thread's messages (a reply, counted
+ * toward that thread alone). `undefined` too for a container the doc's
+ * current state does not hold, which while detached is one the update itself
+ * creates: its parent's write is what the update did to that document — and
+ * after the update, a thread's new messages map is counted where it now sits.
+ * `null` for a document or thread `counted` already holds.
  */
 function annotationWrite(
   doc: LoroDoc,
@@ -123,24 +164,30 @@ function annotationWrite(
   }
   if (path === undefined) return undefined
   const base = path[0] === WORKSPACE_TREE_KEY ? 2 : 0
-  const key = path[base]
-  const bound = ANNOTATION_BOUNDS.find(({ keys }) => (keys as readonly unknown[]).includes(key))
+  const relative = path.slice(base)
+  const bound = ANNOTATION_BOUNDS.find((candidate) => reaches(candidate, relative))
   if (bound === undefined) return undefined
-  const depth = path.length - base
-  const deepest = deepestAnnotationDepth(key)
-  if (depth > deepest) return undefined
+  const prefix = path.slice(0, base).join('/')
+  if (bound.scope === 'thread') {
+    const messages = doc.getContainerById(container)
+    if (!(messages instanceof LoroMap)) return undefined
+    const owner = `${prefix} ${bound.shape} ${String(relative[1])}`
+    if (counted.has(owner)) return null
+    return { bound, owner, map: messages, open: messages.size }
+  }
+  const depth = relative.length
   let map = doc.getContainerById(container) as LoroMap | undefined
   for (let up = 1; up < depth && map !== undefined; up += 1) {
     map = map.parent() as LoroMap | undefined
   }
   if (map === undefined) return undefined
-  const owner = `${path.slice(0, base).join('/')} ${bound.shape}`
+  const owner = `${prefix} ${bound.shape}`
   // Counting walks every thread or change the document holds, and an update
   // writes one container per thread it touches, so a document already
   // counted is not counted again: once per document, not once per write.
   if (counted.has(owner)) return null
   const open = annotationMaps(doc, map, bound).reduce(
-    (sum, [mapKey, held]) => sum + bound.count(mapKey, held),
+    (sum, [mapKey, held]) => sum + bound.walk(mapKey, held),
     0,
   )
   return { bound, owner, map, open }
@@ -164,14 +211,15 @@ export function annotationCounts(
 
 /**
  * A document the update left holding more open threads or open proposed
- * changes than its bound, and more than before. A document that held none of
- * a bound's maps before the update held none open.
+ * changes than its bound, or a thread holding more messages, and more than
+ * before. A document that held none of a bound's maps before the update held
+ * none open, and a thread it created held no messages.
  */
 export function annotationBreach(
   doc: LoroDoc,
   written: ReadonlySet<ContainerID>,
   before: ReadonlyMap<string, AnnotationWrite>,
-): OpenAnnotationsBreach | null {
+): AnnotationCountBreach | null {
   for (const [owner, { bound, map, open }] of annotationCounts(doc, written)) {
     if (growsPast(bound.max, before.get(owner)?.open ?? 0, open)) {
       return { shape: bound.shape, count: open, container: map.id }
@@ -180,33 +228,46 @@ export function annotationBreach(
   return null
 }
 
+/** No update this short can take any annotation bound past itself from where `mostOpenAnnotations` found them. */
+export const SMALLEST_ANNOTATION_BOUND = Math.min(...ANNOTATION_BOUNDS.map(({ max }) => max))
+
 /**
- * The most open threads or open proposed changes any document in `doc`
- * holds, at its root or under any workspace-tree node — opened only where
- * present, as `longestBody` does.
+ * What `bound` counts of one document, shifted onto `SMALLEST_ANNOTATION_BOUND`
+ * — so `mostOpenAnnotations(doc) + n <= SMALLEST_ANNOTATION_BOUND` says that
+ * `n` more entries take no bound past its own `max`, whichever it is.
+ */
+function measured(bound: AnnotationBound, read: (key: string) => LoroMap | undefined): number {
+  const held = bound.keys.reduce((sum, key) => {
+    const map = read(key)
+    return sum + (map === undefined ? 0 : bound.walk(key, map))
+  }, 0)
+  return held + SMALLEST_ANNOTATION_BOUND - bound.max
+}
+
+/**
+ * The nearest any document in `doc` comes to an annotation bound — its open
+ * threads, its open proposed changes, its longest thread — at its root or
+ * under any workspace-tree node, each measured against the smallest bound
+ * (`measured`); opened only where present, as `longestBody` does.
  */
 export function mostOpenAnnotations(doc: LoroDoc): number {
   const roots = doc.getShallowValue()
   let most = 0
   for (const bound of ANNOTATION_BOUNDS) {
-    const open = bound.keys.reduce(
-      (sum, key) => sum + (key in roots ? bound.count(key, doc.getMap(key)) : 0),
-      0,
+    most = Math.max(
+      most,
+      measured(bound, (key) => (key in roots ? doc.getMap(key) : undefined)),
     )
-    most = Math.max(most, open)
   }
   if (!(WORKSPACE_TREE_KEY in roots)) return most
   for (const node of doc.getTree(WORKSPACE_TREE_KEY).getNodes()) {
     for (const bound of ANNOTATION_BOUNDS) {
-      const open = bound.keys.reduce((sum, key) => {
+      const read = (key: string) => {
         const map = node.data.get(key)
-        return sum + (map instanceof LoroMap ? bound.count(key, map) : 0)
-      }, 0)
-      most = Math.max(most, open)
+        return map instanceof LoroMap ? map : undefined
+      }
+      most = Math.max(most, measured(bound, read))
     }
   }
   return most
 }
-
-/** No update this short can open more threads or changes than either bound from where `mostOpenAnnotations` found them. */
-export const SMALLEST_ANNOTATION_BOUND = Math.min(...ANNOTATION_BOUNDS.map(({ max }) => max))

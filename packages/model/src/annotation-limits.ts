@@ -35,6 +35,27 @@ export const DOCUMENT_MAX_OPEN_THREADS = 500
 /** See `DOCUMENT_MAX_OPEN_THREADS`. */
 export const DOCUMENT_MAX_OPEN_CHANGES = 1000
 
+/**
+ * The most messages one comment thread may hold.
+ *
+ * A STORAGE and read bound rather than a layout one: a thread's messages are
+ * never drawn on a render, but every reader of the thread reads all of them —
+ * the tools' answers, the comments rail and its cards — and each may be
+ * `COMMENT_MESSAGE_MAX_CHARS` long, so an unbounded thread is an unbounded
+ * read for everyone who opens it. 1000 replies is far past any conversation a
+ * person or an agent holds in one thread; one that long is better continued
+ * in a new thread.
+ *
+ * Counted over every message the thread holds, resolved thread or not, since
+ * a message is never deleted and a resolved thread is still read. Held to
+ * `growsPast` like the other bounds: a thread stored past it still reads, and
+ * still takes an edit to a message it holds, but not another reply.
+ */
+export const THREAD_MAX_MESSAGES = 1000
+
+/** The per-thread message bound as every refusal of it ends. */
+export const THREAD_MESSAGES_LIMIT_PHRASE = `the limit of ${THREAD_MAX_MESSAGES} messages in one comment thread; open a new thread to continue`
+
 /** The open-thread bound as every refusal of it ends. */
 export const OPEN_THREADS_LIMIT_PHRASE = `the limit of ${DOCUMENT_MAX_OPEN_THREADS} open comment threads for one document; resolve some first`
 

@@ -44,6 +44,12 @@ function judged(base: LoroDoc, update: Uint8Array) {
 
 const proto = (value: object) => JSON.parse(`{"__proto__":${JSON.stringify(value)},"id":"n2"}`)
 
+/** A mark over the body's first word; JSON.parse so a `__proto__` style is an own key. */
+function markBody(doc: LoroDoc, key: string, value: unknown): void {
+  doc.configTextStyle(JSON.parse(`{${JSON.stringify(key)}:{"expand":"after"}}`))
+  doc.getText('body').mark({ start: 0, end: 5 }, key, value)
+}
+
 const RESERVED: ReadonlyArray<readonly [string, (doc: LoroDoc) => void]> = [
   ['a map entry', (doc) => doc.getMap('nodes').set('__proto__', { id: 'n2' })],
   [
@@ -53,6 +59,8 @@ const RESERVED: ReadonlyArray<readonly [string, (doc: LoroDoc) => void]> = [
   ['a root container', (doc) => doc.getMap('__proto__').set('nodes', { n1: {} })],
   ['a key inside a value', (doc) => doc.getMap('nodes').set('n2', proto({ text: 'x' }))],
   ['a key inside a listed value', (doc) => doc.getList('elements').insert(0, proto({ a: 1 }))],
+  ['a text mark key', (doc) => markBody(doc, '__proto__', true)],
+  ['a key inside a text mark value', (doc) => markBody(doc, 'note', proto({ a: 1 }))],
 ]
 
 describe('an update writing a `__proto__` key', () => {

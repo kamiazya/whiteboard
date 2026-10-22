@@ -4,6 +4,7 @@ import {
   DOCUMENT_MAX_OPEN_THREADS,
   type Proposal,
   type ProposedChange,
+  THREAD_MAX_MESSAGES,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -153,6 +154,79 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
     })
   })
 
+  describe('messages in one comment thread', () => {
+    const longThread = (messages: number, status: CommentThread['status'] = 'open') => ({
+      ...thread('long', status),
+      messages: Array.from({ length: messages }, (_, m) => ({ id: `m${m}`, body: 'and?' })),
+    })
+    const reply = (id: string) => (doc: DocumentContainers) =>
+      writeThreadMessage(doc, 'tlong', { id, body: 'one more' })
+
+    it('takes the reply that brings a thread to the ceiling', () => {
+      const base = stored(placement, (doc) =>
+        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES - 1)),
+      )
+      expect(judged(base, updateFrom(placement, base, reply('extra')))).toBeNull()
+    })
+
+    it('refuses the reply one past the ceiling', () => {
+      const base = stored(placement, (doc) => writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES)))
+      expect(judged(base, updateFrom(placement, base, reply('extra')))).toEqual({
+        shape: 'thread-messages',
+        count: THREAD_MAX_MESSAGES + 1,
+        container: expect.any(String),
+      })
+    })
+
+    it('counts a resolved thread too', () => {
+      const base = stored(placement, (doc) =>
+        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES, 'resolved')),
+      )
+      expect(judged(base, updateFrom(placement, base, reply('extra')))).toMatchObject({
+        shape: 'thread-messages',
+      })
+    })
+
+    it('refuses a thread arriving whole with more messages than the ceiling', () => {
+      const base = stored(placement, threads(1))
+      const update = updateFrom(placement, base, (doc) =>
+        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES + 1)),
+      )
+      expect(judged(base, update)).toMatchObject({
+        shape: 'thread-messages',
+        count: THREAD_MAX_MESSAGES + 1,
+      })
+    })
+
+    it('holds each thread to the ceiling alone, not the document', () => {
+      const base = stored(placement, (doc) => {
+        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES - 1))
+        writeThreadInto(doc, {
+          ...thread('other'),
+          messages: Array.from({ length: THREAD_MAX_MESSAGES }, (_, m) => ({
+            id: `o${m}`,
+            body: 'x',
+          })),
+        })
+      })
+      expect(judged(base, updateFrom(placement, base, reply('extra')))).toBeNull()
+    })
+
+    it('still takes an edit to a message of a thread already past the ceiling, but no reply', () => {
+      const base = stored(placement, (doc) =>
+        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES + 2)),
+      )
+      const edit = updateFrom(placement, base, (doc) =>
+        writeThreadMessage(doc, 'tlong', { id: 'm0', body: 'edited' }),
+      )
+      expect(judged(base, edit)).toBeNull()
+      expect(judged(base, updateFrom(placement, base, reply('extra')))).toMatchObject({
+        shape: 'thread-messages',
+        count: THREAD_MAX_MESSAGES + 3,
+      })
+    })
+  })
+
   describe('open proposed changes', () => {
     const openChanges =
       (count: number, decided = 0) =>
@@ -199,4 +273,5 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 it('answers each annotation ceiling with its own refusal code', () => {
   expect(SYNC_TEXT_BREACH_CODES['open-threads']).toBe('too_many_open_threads')
   expect(SYNC_TEXT_BREACH_CODES['open-changes']).toBe('too_many_open_changes')
+  expect(SYNC_TEXT_BREACH_CODES['thread-messages']).toBe('too_many_thread_messages')
 })

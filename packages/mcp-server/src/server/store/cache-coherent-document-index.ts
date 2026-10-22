@@ -16,6 +16,11 @@ import {
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
 import { checkpointAfterMove, checkpointAfterRemoval } from './auto-checkpoint.js'
+import {
+  inTenantTransaction,
+  type TenantScoped,
+  type TenantTransaction,
+} from './db/tenant-database.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc } from './doc-cache.js'
 import { moveEvictingCache } from './moved-paths.js'
@@ -26,6 +31,25 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /** Creates in one namespace, one at a time per instance — see `createWorkspace`. */
 const namespaceCreates = new KeyedSerializer()
+
+async function refuseWorkspacePastCeiling(
+  trx: TenantTransaction,
+  workspaceId: string,
+  namespace: string,
+): Promise<void> {
+  const held = await trx
+    .selectFrom('workspaces')
+    .select((eb) => eb.fn.countAll<number>().as('held'))
+    .where('namespace', '=', namespace)
+    .executeTakeFirstOrThrow()
+  if (held.held < NAMESPACE_MAX_WORKSPACES) return
+  const existing = await trx
+    .selectFrom('workspaces')
+    .select('id')
+    .where('id', '=', workspaceId)
+    .executeTakeFirst()
+  if (existing === undefined) refuseNewWorkspace(namespace, Number(held.held))
+}
 
 /**
  * The tree index, with this composition root's doc-cache kept coherent
@@ -76,42 +100,39 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     const parsed = createWorkspaceInputSchema.parse(input)
     const namespace = parsed.namespace ?? SINGLE_PERSON_NAMESPACE
     if (namespace === SINGLE_PERSON_NAMESPACE) return this.#createWorkspace(parsed)
-    // Serialised per namespace so two creates in this instance cannot both
-    // count the last free place. Instances do not share this queue, so
-    // concurrent creates through several instances can each take it and land
-    // the namespace a few past the ceiling — the same overshoot every
-    // per-instance ceiling here accepts (workspace-lock.ts).
-    return namespaceCreates.run(`${this.scope.layout.tenantId}\0${namespace}`, async () => {
-      await this.#refuseWorkspacePastCeiling(parsed.workspaceId, namespace)
-      await this.#createWorkspace(parsed)
-    })
+    // What holds the count exact is the transaction `#createWorkspace` counts
+    // in; this queue only lines up one instance's creates in one namespace
+    // in-process, rather than on the database's busy-retry.
+    return namespaceCreates.run(`${this.scope.layout.tenantId}\0${namespace}`, () =>
+      this.#createWorkspace(parsed, namespace),
+    )
   }
 
-  // A create naming a workspace that already exists writes nothing new, so it
-  // is not refused for a namespace that is full.
-  async #refuseWorkspacePastCeiling(workspaceId: string, namespace: string): Promise<void> {
-    const db = await this.scope.db()
-    const held = await db
-      .selectFrom('workspaces')
-      .select((eb) => eb.fn.countAll<number>().as('held'))
-      .where('namespace', '=', namespace)
-      .executeTakeFirstOrThrow()
-    if (held.held < NAMESPACE_MAX_WORKSPACES) return
-    const existing = await db
-      .selectFrom('workspaces')
-      .select('id')
-      .where('id', '=', workspaceId)
-      .executeTakeFirst()
-    if (existing === undefined) refuseNewWorkspace(namespace, Number(held.held))
-  }
-
-  async #createWorkspace(parsed: CreateWorkspaceInput): Promise<void> {
+  /**
+   * `heldBy` is the namespace a server-mode create is held to the ceiling
+   * in. Its count and the registry row are one transaction, which takes the
+   * write lock as it begins (`BEGIN IMMEDIATE`, busy-retry.ts): a hand-over
+   * into the same namespace counts in a transaction of its own
+   * (`namespaceHasRoom`), so the two cannot both take its last place. A
+   * create naming a workspace that already exists writes nothing new, so it
+   * is not refused for a namespace that is full.
+   */
+  async #createWorkspace(parsed: CreateWorkspaceInput, heldBy?: string): Promise<void> {
     return withWorkspaceWriteLock(parsed.workspaceId, async () => {
-      await upsertWorkspaceRow(await this.scope.db(), parsed.workspaceId, {
-        ...(parsed.namespace === undefined ? {} : { namespace: parsed.namespace }),
-        ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
-        ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
-      })
+      const db = await this.scope.db()
+      const claim = (scoped: TenantScoped) =>
+        upsertWorkspaceRow(scoped, parsed.workspaceId, {
+          ...(parsed.namespace === undefined ? {} : { namespace: parsed.namespace }),
+          ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
+          ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
+        })
+      if (heldBy === undefined) await claim(db)
+      else {
+        await inTenantTransaction(db, async (trx) => {
+          await refuseWorkspacePastCeiling(trx, parsed.workspaceId, heldBy)
+          await claim(trx)
+        })
+      }
       await super.createWorkspace(parsed)
     })
   }
