@@ -61,6 +61,9 @@ export interface PointerReleaseContext {
   readonly viewport: EditorPointerInputs['viewport']
 }
 
+const INTERACTIVE =
+  'button, a[href], input, textarea, select, [role="button"], [contenteditable="true"]'
+
 /**
  * Gives the editor root keyboard focus after a press selected something.
  * Node shapes carry no tabIndex, so without it the selection shortcuts
@@ -69,7 +72,12 @@ export interface PointerReleaseContext {
  * after the pointerdown listener and undoes a focus taken there. A text
  * editor (or any other editable) the press opened keeps its focus.
  */
-function focusRootUnlessEditing(root: HTMLElement): void {
+function focusRootUnlessEditing(root: HTMLElement, target: EventTarget): void {
+  // A press on a control inside the root (a dock button, a card action) is
+  // that control's gesture: it opens its own surface and decides where focus
+  // goes, and a surface remembers the focused element to return to on close.
+  // Taking focus here would make the root that element.
+  if (target instanceof Element && target !== root && target.closest(INTERACTIVE) !== null) return
   const active = document.activeElement
   if (
     active instanceof HTMLElement &&
@@ -337,10 +345,10 @@ export function commitRelease(
       })
     if (followerMoves.length > 0) {
       applyResult({ ...result, commands: [...result.commands, ...followerMoves] })
-      focusRootUnlessEditing(e.currentTarget)
+      focusRootUnlessEditing(e.currentTarget, e.target)
       return
     }
   }
   applyResult(result)
-  focusRootUnlessEditing(e.currentTarget)
+  focusRootUnlessEditing(e.currentTarget, e.target)
 }
