@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { deleteInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -32,7 +33,10 @@ export interface ContextMenuTarget {
   /** A comment's pin or bubble under the pointer: the menu is the comment's, not the canvas's. */
   readonly commentId?: string
   readonly point: Point
-  /** The ⋯ control opens the same catalog in the icon-grid or sheet vessel. */
+  /**
+   * The ⋯ control names its vessel; a press that names none (right-click,
+   * long-press) gets the sheet on a coarse pointer and the list otherwise.
+   */
   readonly variant?: 'list' | 'grid' | 'sheet'
   /**
    * The hand tool's menu: the annotation layer's verb for what is under the
@@ -317,7 +321,7 @@ export function CanvasContextMenu({
       label="Canvas actions"
       x={contextMenu.x}
       y={contextMenu.y}
-      variant={contextMenu.variant}
+      variant={contextMenu.variant ?? (hasCoarsePointer() ? 'sheet' : 'list')}
       onClose={close}
       items={items}
     />
