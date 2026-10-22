@@ -1,4 +1,8 @@
-import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
+import {
+  createReferenceContentAccount,
+  type LoadedReference,
+  type ReferenceContentAccount,
+} from '@kamiazya/whiteboard-canvas-render'
 import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, documentPathSchema, type WorkspaceId } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
@@ -33,10 +37,10 @@ async function resolveDocumentEntry(
 }
 
 /**
- * The daemon's half of reference resolution: reach the store for one
- * reference and answer canvas-render's `LoadedReference`. Everything that
- * decides what the record MEANS — which seam draws what — is the shared
- * `referenceSeams`, so this is only I/O.
+ * The daemon's half of reference resolution for ONE walk: reach the store
+ * for each reference and answer canvas-render's `LoadedReference`.
+ * Everything that decides what the record MEANS — which seam draws what — is
+ * the shared `referenceSeams`, so this is only I/O, and the bound on it.
  *
  * `null` when nothing is indexed under the reference. A document whose
  * snapshot is gone still answers its name (its path when it has none), so the card can say what it
@@ -46,29 +50,69 @@ async function resolveDocumentEntry(
  * and the index's `kind` is absent on rows that predate it. A markdown
  * document's stored content is also a valid canvas holding one text node,
  * so "does it parse as a canvas" cannot tell the two apart.
+ *
+ * The walk's target budget counts strings, and a string is priced by the
+ * document it names, so the loader holds two bounds of its own:
+ *
+ * - ONE read per document. Its id and its path are two targets naming one
+ *   document; both answer the same record, from the same read.
+ * - canvas-render's content account. A read is decoded only while the
+ *   account is open, and a document past it answers its name. Reads run one
+ *   at a time in the order the walk asked for them — the lookups before
+ *   them stay concurrent — because the account can only be consulted before
+ *   a read if the reads before it have been charged, and that order is what
+ *   makes the same board load the same references on every call. The decode
+ *   is CPU on the serving loop either way, so serialising it costs the
+ *   overlap of store I/O and nothing else.
  */
-export async function loadReferencedDocument(
+export function createReferencedDocumentLoader(
   deps: ServerDeps,
   workspaceId: WorkspaceId,
-  ref: string,
-): Promise<LoadedReference | null> {
-  const entry = await resolveDocumentEntry(deps, workspaceId, ref)
-  if (entry === null) return null
+): (ref: string) => Promise<LoadedReference | null> {
+  const account = createReferenceContentAccount()
+  const byDocument = new Map<string, Promise<LoadedReference>>()
+  let previous: Promise<unknown> = Promise.resolve()
+
+  const read = (entry: DocumentEntry): Promise<LoadedReference> => {
+    const known = byDocument.get(entry.documentId)
+    if (known !== undefined) return known
+    const loaded = readReferencedDocument(deps, workspaceId, entry, account)
+    byDocument.set(entry.documentId, loaded)
+    return loaded
+  }
+
+  return (ref) => {
+    const resolved = resolveDocumentEntry(deps, workspaceId, ref)
+    const turn = previous.then(async () => {
+      const entry = await resolved
+      return entry === null ? null : await read(entry)
+    })
+    previous = turn.catch(() => undefined)
+    return turn
+  }
+}
+
+async function readReferencedDocument(
+  deps: ServerDeps,
+  workspaceId: WorkspaceId,
+  entry: DocumentEntry,
+  account: ReferenceContentAccount,
+): Promise<LoadedReference> {
   // The web labels a document `displayName ?? path`; an unnamed document (what
   // an agent creates) must read the same here rather than as its raw id.
-  const name = { name: entry.name ?? entry.path }
+  const named = { documentId: entry.documentId, name: entry.name ?? entry.path }
+  if (account.closed) return named
 
   const snapshot = await deps.documentStore.loadSnapshot({
     docRef: { kind: 'document', workspaceId, documentId: entry.documentId },
   })
-  if (snapshot === null) return { documentId: entry.documentId, ...name }
+  if (snapshot === null) return named
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
   const content = readDocumentContent(doc, entry.kind)
-  return {
-    documentId: entry.documentId,
-    ...name,
+  return account.admit({
+    ...named,
     ...(content.kind === 'markdown' ? { body: content.body } : { canvas: content.canvas }),
-  }
+  })
 }

@@ -1,14 +1,19 @@
 // What one `canvas_view` call costs the serving loop when the board names
-// many large documents — each one twice, by id and by path. The reference
-// walk is bounded by a COUNT of distinct target strings, so what it reads
-// and returns is priced by the documents those strings name.
+// many large documents — each one twice, by id and by path. The walk's
+// target COUNT does not bound this, since a target is priced by the document
+// it names; what does is one read per document and the content budget.
 
+import {
+  REFERENCE_CHARS_BUDGET,
+  REFERENCE_ELEMENTS_BUDGET,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test, vi } from 'vitest'
 import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -30,7 +35,7 @@ async function seedHub(store: FakeDocumentStore): Promise<void> {
     documentId: BOARD_ID,
     kind: 'spatial',
   })
-  const nodes = []
+  const nodes: SpatialCanvas['nodes'][number][] = []
   for (let i = 0; i < NOTE_COUNT; i += 1) {
     const id = noteId(i)
     const path = `note-${i}`
@@ -79,8 +84,68 @@ describe('canvas_view reference cost', () => {
       'measurement',
     )
 
+    // Every spelling still answers, so each node keeps its label.
     expect(Object.keys(result.references)).toHaveLength(NOTE_COUNT * 2)
-    expect(referenceReads).toBe(NOTE_COUNT * 2)
-    expect(returnedChars).toBe(NOTE_COUNT * 2 * NOTE_CHARS)
+    expect(Object.values(result.references).every((ref) => ref.documentId !== undefined)).toBe(true)
+    // The notes that fit the budget whole, then one read that did not fit and
+    // closed it; both spellings of a note share its one read.
+    const admitted = Math.floor(REFERENCE_CHARS_BUDGET / NOTE_CHARS)
+    expect(admitted).toBeLessThan(NOTE_COUNT)
+    expect(referenceReads).toBe(admitted + 1)
+    expect(returnedChars).toBe(2 * admitted * NOTE_CHARS)
+  })
+
+  test('a referenced board past the element budget arrives as its name, not its canvas', async () => {
+    const store = new FakeDocumentStore()
+    const boardNodes = Math.ceil(REFERENCE_ELEMENTS_BUDGET / 2.5)
+    const boards = [0, 1, 2].map(noteId)
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'hub',
+      documentId: BOARD_ID,
+      kind: 'spatial',
+    })
+    for (const [i, id] of boards.entries()) {
+      store.documentIndex.seed({
+        workspaceId: WORKSPACE_ID,
+        path: `board-${i}`,
+        documentId: id,
+        kind: 'spatial',
+      })
+      await seedDoc(store, id, (doc) => {
+        writeDocumentKind(doc, 'spatial')
+        writeSpatialCanvas(doc, {
+          nodes: Array.from({ length: boardNodes }, (_, n) =>
+            textNode({ id: `n${n}`, x: n * 20, y: 0, width: 10, height: 10, text: 'a' }),
+          ),
+          edges: [],
+        })
+      })
+    }
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: boards.map((file, i) =>
+          fileNode({ id: `f${i}`, x: i * 400, y: 0, width: 320, height: 220, file }),
+        ),
+        edges: [],
+      })
+    })
+    await placeUnlessPlaced(store, WORKSPACE_ID, BOARD_ID)
+    const tool = createCanvasViewTool(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: BOARD_ID })
+
+    expect(boards.map((id) => result.references[id]?.canvas?.nodes?.length)).toEqual([
+      boardNodes,
+      boardNodes,
+      undefined,
+    ])
+    expect(result.references[boards[2] as string]).toEqual({
+      documentId: boards[2],
+      name: 'board-2',
+    })
   })
 })
