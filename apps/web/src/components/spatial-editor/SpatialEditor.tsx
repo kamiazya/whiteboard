@@ -121,6 +121,7 @@ import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
+import { CanvasEmptyHint } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
@@ -1528,6 +1529,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setPendingCut(null)}
           />
         )}
+        {canvas.nodes.length === 0 && <CanvasEmptyHint coarse={hasCoarsePointer()} />}
         <ToolPalette
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
