@@ -14,6 +14,8 @@
  * callers made wrong.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { useState } from 'react'
+import { attachTargetLabel } from '../../lib/spatial/attach-target-label.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 
@@ -50,6 +52,13 @@ export function BoxTargetOverlay({
   createId,
   applyResult,
 }: BoxTargetOverlayProps) {
+  // The target holding keyboard focus is outlined like the hovered one, so
+  // Tab shows where Enter would attach. The source keeps its dashed marker.
+  const [focusedId, setFocusedId] = useState<string | undefined>(undefined)
+  const labelFor = (id: string): string => {
+    const node = canvas.nodes.find((n) => n.id === id)
+    return node === undefined ? 'Attach to node' : attachTargetLabel(node)
+  }
   return (
     <svg
       style={{
@@ -100,19 +109,19 @@ export function BoxTargetOverlay({
             data-testid={`connect-target-${b.id}`}
             role="button"
             tabIndex={0}
-            aria-label={`Attach to node ${b.id}`}
+            aria-label={labelFor(b.id)}
             x={b.box.x}
             y={b.box.y}
             width={b.box.width}
             height={b.box.height}
             fill="transparent"
-            {...(b.id === hoveredNodeId
-              ? {
-                  'data-hovered': 'true',
-                  stroke: 'var(--manipulation)',
-                  strokeWidth: 2,
-                }
+            {...(b.id === hoveredNodeId ? { 'data-hovered': 'true' } : {})}
+            {...(b.id === focusedId ? { 'data-focused': 'true' } : {})}
+            {...(b.id === hoveredNodeId || b.id === focusedId
+              ? { stroke: 'var(--manipulation)', strokeWidth: 2 }
               : {})}
+            onFocus={() => setFocusedId(b.id)}
+            onBlur={() => setFocusedId((now) => (now === b.id ? undefined : now))}
             style={{ pointerEvents: 'auto', cursor: 'pointer' }}
             onKeyDown={(e) => {
               if (e.key !== 'Enter' && e.key !== ' ') return

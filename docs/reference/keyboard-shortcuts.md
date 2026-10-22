@@ -53,7 +53,10 @@ dock. Locked nodes are skipped, since they cannot be selected.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys
 still nudge. Together with `Enter` and the connect handle this is enough to
-connect two existing nodes using only the keyboard.
+connect two existing nodes using only the keyboard: while a connect is armed,
+`Tab` moves between the boxes it could attach to, each announced by its text
+(or its kind and a short id when it has none) and outlined while focused, and
+`Enter` attaches.
 
 **Align and distribute** have no shortcut — they live in the right-click
 menu of a multi-node selection, as **Align** (six edges and centre lines)
