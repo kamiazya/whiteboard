@@ -5,6 +5,7 @@ import { documentAccessibleName, documentLabel } from '../../lib/document-label.
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { folderContents } from './folder-contents.js'
+import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 /**
@@ -54,6 +55,8 @@ export interface FolderContentsListProps {
    */
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
+  /** How many columns the grid has at its current width; undefined once it is gone. */
+  onColumnCount?: (count: number | undefined) => void
 }
 
 /**
@@ -304,11 +307,13 @@ export function FolderContentsList({
   changed,
   renderThumbnail,
   className,
+  onColumnCount,
 }: FolderContentsListProps) {
   const { folders, documents: here } = useMemo(
     () => folderContents(documents, folder),
     [documents, folder],
   )
+  const gridRef = useGridColumnCount<HTMLUListElement>(onColumnCount)
   const longPress = useLongPressMenu(
     onDocumentContextMenu === undefined
       ? undefined
@@ -324,6 +329,7 @@ export function FolderContentsList({
 
   return (
     <ul
+      ref={gridRef}
       {...longPress}
       className={cn(
         'grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]',

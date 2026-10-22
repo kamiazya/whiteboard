@@ -420,6 +420,7 @@ export function BrowseTwoColumns({
   toggleSelected,
   openCardMenu,
   loadRender,
+  onGridColumns,
 }: {
   documents: readonly WorkspaceDocumentEntry[]
   folder: string
@@ -434,6 +435,7 @@ export function BrowseTwoColumns({
   toggleSelected: (entry: WorkspaceDocumentEntry) => void
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
+  onGridColumns: (count: number | undefined) => void
 }) {
   /**
    * A press in the contents list, in the order the four answers rank: a
@@ -473,6 +475,7 @@ export function BrowseTwoColumns({
               ? {}
               : { onActivateDocument: openEntry })}
             onDocumentContextMenu={openCardMenu}
+            onColumnCount={onGridColumns}
             renderThumbnail={(entry) => (
               <DocumentThumbnail
                 key={entry.documentId}

@@ -173,7 +173,8 @@ addenda of
   below it carried along, before it keeps the update — and if that content
   cannot be stored, the update is refused and nothing of it is kept. The trash
   section appears only when it holds something. **Delete permanently** on a
-  trash row is the one step with no way back: after a confirmation it removes
+  trash row is the one step with no way back: after a confirmation that names the
+  document by the name it had (its path if it had none), it removes
   the row, the evacuated content and the document's saved versions, so the
   document can no longer be restored and the images only it used are no
   longer kept for it. It does not rewrite

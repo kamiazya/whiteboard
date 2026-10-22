@@ -10,6 +10,12 @@ export interface RecentLaneProps {
   recentIds: readonly string[]
   onOpen: (entry: WorkspaceDocumentEntry) => void
   renderThumbnail?: (entry: WorkspaceDocumentEntry) => ReactNode
+  /**
+   * Columns in the grid below at its current width, when there is one. A lane
+   * over documents that all fit in the grid's first row would show every card
+   * twice, so it stays out of the way until the grid has something to scroll.
+   */
+  gridColumns?: number | undefined
 }
 
 /**
@@ -24,7 +30,13 @@ export interface RecentLaneProps {
  * document falls out on its own — the lane needs no reconciliation pass, and
  * a stale id costs nothing but its own absence.
  */
-export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: RecentLaneProps) {
+export function RecentLane({
+  documents,
+  recentIds,
+  onOpen,
+  renderThumbnail,
+  gridColumns,
+}: RecentLaneProps) {
   const entries = recentIds
     .map((id) => documents.find((each) => each.documentId === id))
     .filter((each): each is WorkspaceDocumentEntry => each !== undefined)
@@ -34,6 +46,7 @@ export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: Re
   // that there is nothing to show, which is the wordiness this redesign is
   // removing everywhere else.
   if (entries.length === 0) return null
+  if (gridColumns !== undefined && documents.length <= gridColumns) return null
 
   return (
     <section aria-label="Recently opened" data-testid="recent-lane" className="px-2 pb-2">
