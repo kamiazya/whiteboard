@@ -269,6 +269,8 @@ export function useBrowserDocumentController(
   // requested one when its async load settles is allowed to commit state, so
   // an earlier call resolving after a later one can never clobber it.
   const switchGenerationRef = useRef(0)
+  // The id the last confirmed delete removed; a later edit aimed at it is dropped.
+  const deletedIdRef = useRef<string | null>(null)
   // Tracks the currently in-flight flush so overlapping callers (renameDocument's
   // fire-and-forget flush racing with switchDocument's own awaited flush) serialize
   // on the real outcome instead of the second caller observing an already-cleared
@@ -383,6 +385,10 @@ export function useBrowserDocumentController(
       // current before the immediate flushSave below reads it.
       const base = pendingSnapshotRef.current ?? snapshotRef.current
       if (base === null) return Promise.resolve()
+      // The page keeps showing the deleted document until it navigates away; a
+      // rename in that window has no row to land on and would degrade
+      // persistence for a document nobody can reach.
+      if (base.documentId === deletedIdRef.current) return Promise.resolve()
       // A cleared name becomes null, not an 'untitled' sentinel or the path:
       // the index stores an unnamed document by omitting `name`, and either
       // stand-in would make a name somebody typed equal to it read as none.
@@ -458,6 +464,7 @@ export function useBrowserDocumentController(
       throw new Error(`The ${noun} could not be removed. Your copy has been kept.`)
     }
     if (!removed) return
+    deletedIdRef.current = id
     // A switch in flight was aimed at a page that no longer holds this document.
     switchGenerationRef.current++
   }, [flushSave])
