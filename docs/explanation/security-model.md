@@ -654,6 +654,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   walks documents, and each folder's path is held to the 1,024-character path
   bound a document's is (`invalid_path`), which bounds how deep the tree can
   nest. A record stored before either bound still lists.
+- **A person holds a bounded number of workspaces.** In server mode every
+  member of a tenant shares one workspace registry, so one person's namespace
+  holds at most 1000 workspaces, and a create past that is refused
+  (`too_many_workspaces`) on `/api` and `/mcp` alike. Resolving a workspace's
+  address reads only the row it names, and listing workspaces reads the
+  caller's own memberships once, so neither costs a request more as other
+  people's workspaces grow. The local daemon has one person and no such
+  limit.
 - **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
   board holds at most 2000 nodes and 2000 edges and lines together (a line is

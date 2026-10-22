@@ -270,6 +270,21 @@ local daemon serves one person and leaves both as they are:
 As with the large request limits, every caller whose grant names no user on
 this instance counts as one user.
 
+## Workspace limits
+
+Every member of a server-mode tenant shares one workspace registry, so server
+mode bounds how many workspaces one person's namespace holds. The limit is
+fixed, not configurable:
+
+| Limit | Value | Applies to | When it is reached |
+|---|---|---|---|
+| Workspaces per person's namespace | 1000 | server mode | The next create is refused and nothing is written: `POST /api/workspaces` answers `413 {"error":"too_many_workspaces"}`, and a tool call through `/mcp` with `createWorkspace: true` is refused with an error naming `too_many_workspaces`. Workspaces the person has joined in other namespaces do not count. |
+
+The limit is held per instance: creates landing at the same moment through
+several instances of one deployment can each take the last place, leaving the
+namespace a few past it. The local daemon serves one person and applies no
+limit.
+
 ## Version history limits
 
 The daemon keeps a bounded history per document, on the local daemon and in

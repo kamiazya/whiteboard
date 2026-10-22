@@ -10,6 +10,7 @@ import {
   StoredDocumentUnreadableError,
   TooManyDocumentsError,
   TooManyFoldersError,
+  TooManyWorkspacesError,
 } from '@kamiazya/whiteboard-ports'
 import { ReferenceRewriteTooLargeError } from '@kamiazya/whiteboard-reference-graph'
 import type { Context, ErrorHandler, MiddlewareHandler } from 'hono'
@@ -534,6 +535,9 @@ const REFUSALS: readonly Refusal[] = [
   // A create or move whose new folders would pass the folder ceiling, in
   // the code the sync routes answer the same refusal with.
   refusalOf(TooManyFoldersError, (err: TooManyFoldersError) => err.code, 413),
+  // A mint in a namespace already holding the most workspaces one person may
+  // hold on a shared keeper, in the code `/api`'s create answers with.
+  refusalOf(TooManyWorkspacesError, (err: TooManyWorkspacesError) => err.code, 413),
   // Link-mentions would carry a body or a node past its text ceiling: the
   // code and status a sync write past the same ceiling is refused with.
   refusalOf(

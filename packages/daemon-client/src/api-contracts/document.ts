@@ -343,6 +343,15 @@ export const createWorkspaceRequestSchema = z
   })
   .strict()
 
+// POST /api/workspaces — the refusal a create is answered with (413) when
+// the caller's namespace already holds the most workspaces one person may
+// hold on a server-mode keeper. The code is what a caller matches on.
+const createWorkspaceRefusalSchema = z.object({
+  error: z.literal('too_many_workspaces'),
+  message: z.string(),
+})
+export type CreateWorkspaceRefusal = z.infer<typeof createWorkspaceRefusalSchema>
+
 /**
  * PATCH /api/workspaces/:workspaceId — rename the two chosen layers.
  *

@@ -240,7 +240,7 @@ export type WorkspaceLookup = z.infer<typeof workspaceLookupSchema>
  * whole-list form above and the indexed form below cannot order them
  * differently.
  */
-export function workspaceHandleLookups(
+function workspaceHandleLookups(
   handle: string,
   callerNamespace: string = SINGLE_PERSON_NAMESPACE,
 ): readonly WorkspaceLookup[] {

@@ -27,6 +27,7 @@ import {
   refuseNewDocuments,
   refuseNewFoldersAt,
   type WorkspaceEntry,
+  type WorkspaceLookup,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
@@ -125,6 +126,24 @@ function registryEntry(row: {
 }
 
 /**
+ * One registry row through an index — the primary key, or the per-namespace
+ * segment index — so resolving an address costs the same whatever the tenant
+ * holds.
+ */
+async function findRegistryRow(
+  scope: StoreScope,
+  lookup: WorkspaceLookup,
+): Promise<WorkspaceEntry | null> {
+  const db = await scope.db()
+  const select = db.selectFrom('workspaces').select(REGISTRY_COLUMNS)
+  const row = await ('workspaceId' in lookup
+    ? select.where('id', '=', lookup.workspaceId)
+    : select.where('namespace', '=', lookup.namespace).where('segment', '=', lookup.segment)
+  ).executeTakeFirst()
+  return row === undefined ? null : registryEntry(row)
+}
+
+/**
  * The workspaces REGISTRY, read from the daemon's `workspaces` table — the
  * one row-shaped truth the collapse kept (who this daemon keeps, not what
  * they contain). `saveWorkspaceDoc` upserts it, so a workspace exists here
@@ -141,20 +160,7 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
       const rows = await db.selectFrom('workspaces').select(REGISTRY_COLUMNS).execute()
       return rows.map(registryEntry)
     },
-    /**
-     * One row through an index — the primary key, or the per-namespace
-     * segment index — so resolving an address costs the same whatever the
-     * tenant holds.
-     */
-    async findWorkspace(lookup) {
-      const db = await scope.db()
-      const select = db.selectFrom('workspaces').select(REGISTRY_COLUMNS)
-      const row = await ('workspaceId' in lookup
-        ? select.where('id', '=', lookup.workspaceId)
-        : select.where('namespace', '=', lookup.namespace).where('segment', '=', lookup.segment)
-      ).executeTakeFirst()
-      return row === undefined ? null : registryEntry(row)
-    },
+    findWorkspace: (lookup) => findRegistryRow(scope, lookup),
     /**
      * The registry's write half. Identity is a ROW here, so this is the
      * whole rename — the workspace's tree document holds placement and is

@@ -68,6 +68,10 @@ function renameIdentity(
   return renamed
 }
 
+function firstMatching(rows: WorkspaceEntry[], lookup: WorkspaceLookup): WorkspaceEntry | null {
+  return rows.find((row) => matchesWorkspaceLookup(row, lookup)) ?? null
+}
+
 /**
  * Workspace documents in memory, kept the way a real store keeps them: only
  * what `save` exported survives, and every `open` is a restart that imports it
@@ -122,9 +126,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     async listWorkspaces() {
       return [...stored.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
     },
-    async findWorkspace(lookup) {
-      return (await docs.listWorkspaces()).find((e) => matchesWorkspaceLookup(e, lookup)) ?? null
-    },
+    findWorkspace: async (lookup) => firstMatching(await docs.listWorkspaces(), lookup),
     async seedWorkspace(entry) {
       identities.set(entry.workspaceId, entry)
       await docs.save(entry.workspaceId, await docs.create(entry.workspaceId))

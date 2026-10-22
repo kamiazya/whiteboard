@@ -59,6 +59,7 @@ import {
   hasDescendants,
   moveIntoSelf,
   notFoundAs,
+  pastNamespaceCeiling,
   pastWorkspaceCeiling,
   pathTakenAs,
   refusedBy,
@@ -318,7 +319,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // A segment the suffix loop believed free can still be taken by the
       // time the insert lands. The registry's own unique index is what
       // actually decides, and it reports the same named error a rename does.
-      const owned = firstOwned(err, [segmentTaken, corruptStored])
+      const owned = firstOwned(err, [segmentTaken, pastNamespaceCeiling, corruptStored])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }

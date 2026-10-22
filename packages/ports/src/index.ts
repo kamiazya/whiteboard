@@ -20,4 +20,5 @@ export {
   StoredDocumentUnreadableError,
 } from './stored-document-unreadable-error.js'
 export * from './tokens.js'
+export * from './workspace-count-ceiling.js'
 export * from './workspace-document-ceiling.js'
