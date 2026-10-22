@@ -19,7 +19,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { MessageSquarePlus, SendHorizontal } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
@@ -148,6 +148,25 @@ function glideMovedRows(
   return seen
 }
 
+/** How long an announcement stays in the live region before it is cleared. */
+const ANNOUNCE_CLEAR_MS = 2000
+
+/**
+ * The text for a polite live region. Cleared after a beat so announcing the
+ * same words twice in a row is still a change the reader's software sees.
+ */
+function useAnnouncer(): readonly [string, (text: string) => void] {
+  const [text, setText] = useState('')
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const announce = useCallback((next: string) => {
+    window.clearTimeout(timer.current)
+    setText(next)
+    timer.current = window.setTimeout(() => setText(''), ANNOUNCE_CLEAR_MS)
+  }, [])
+  return [text, announce]
+}
+
 /**
  * Moves focus to the revealed conversation's row.
  *
@@ -213,6 +232,7 @@ export function CommentsPanel({
   const composeRef = useRef<SourcePaneApi | null>(null)
 
   useFocusRevealedRow(revealThreadId, threads, rowRefs)
+  const [announcement, announce] = useAnnouncer()
 
   // A new conversation has nothing to read, so the draft box is the whole
   // of what was asked for.
@@ -230,6 +250,7 @@ export function CommentsPanel({
     const body = composeDraft.trim()
     if (body === '' || composeAnchor === null || onCreateThread === undefined) return
     onCreateThread(composeAnchor, body)
+    announce('Comment posted')
     setComposeDraft('')
   }
 
@@ -310,6 +331,7 @@ export function CommentsPanel({
     if (onResolve === undefined) return
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
+    announce(next === 'resolved' ? 'Conversation resolved' : 'Conversation reopened')
     setPending((prev) => new Map(prev).set(thread.id, next))
     window.setTimeout(() => {
       setPending((prev) => {
@@ -361,6 +383,12 @@ export function CommentsPanel({
       onKeyDown={onEscape}
       className="flex flex-col gap-2"
     >
+      {/* Mounted before it speaks and `sr-only` rather than hidden: a live
+          region inserted already carrying its text is missed by several
+          screen readers. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       {composeAnchor === null && onComposeDocument !== undefined ? (
         <button
           type="button"
@@ -471,7 +499,14 @@ export function CommentsPanel({
               resolveAnchor={resolveAnchor}
               anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
-              onReply={onReply}
+              onReply={
+                onReply === undefined
+                  ? undefined
+                  : (threadId, body) => {
+                      onReply(threadId, body)
+                      announce('Reply sent')
+                    }
+              }
               onEditMessage={onEditMessage}
               rowRefs={rowRefs}
             />
