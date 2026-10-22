@@ -8,6 +8,17 @@ describe('yamlSafeValueSchema', () => {
   })
 
   it.each([
+    ['an own key', JSON.parse('{"a":{"__proto__":{"b":1}}}')],
+    ['a replaced prototype', { a: Object.setPrototypeOf({}, { b: 1 }) }],
+  ])('rejects a key named __proto__ held as %s', (_label, value) => {
+    const result = yamlSafeValueSchema.safeParse(value)
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.message)).toContain(
+      'a key named "__proto__" is not yaml-safe',
+    )
+  })
+
+  it.each([
     ['undefined', undefined],
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],

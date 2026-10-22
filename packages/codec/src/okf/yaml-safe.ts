@@ -1,3 +1,4 @@
+import { holdsReservedKey, RESERVED_MAP_KEY } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /** Why a non-container value cannot round-trip through YAML, or `undefined` when it can. */
@@ -43,6 +44,15 @@ function isPlainContainer(node: object): boolean {
  * instead of crashing the process.
  */
 export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((value, ctx) => {
+  // `parseOkf` refuses the key, so a value holding it would serialise to a
+  // document nothing reads back.
+  if (holdsReservedKey(value)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `a key named "${RESERVED_MAP_KEY}" is not yaml-safe`,
+      path: [],
+    })
+  }
   // Ancestor stack (not a whole-traversal seen set): a DAG where one object
   // is legitimately referenced from two different branches is not cyclic
   // and must not be rejected — only a node that reappears among its own
