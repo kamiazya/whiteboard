@@ -6,7 +6,7 @@
 // may therefore say only what the node records — which still lets an
 // unkinded document be claimed as its own kind, the way a keeper claims one.
 import { type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
-import type { ContainerID, LoroDoc, LoroMap, TreeID } from 'loro-crdt'
+import { type ContainerID, type LoroDoc, LoroMap, type TreeID } from 'loro-crdt'
 import { DOCUMENT_KEY } from './containers.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
@@ -39,6 +39,31 @@ function nodeRecord(doc: LoroDoc, id: TreeID) {
 }
 
 /**
+ * A node whose own `kind` an update rewrote, left disagreeing with the kind
+ * its envelope already states. The node's copy is placement, but changing it
+ * under a kinded envelope splits the two copies just as rewriting the
+ * envelope does; a node created with its kind, or one whose envelope states
+ * none, is not judged here.
+ */
+function nodeKindBreach(doc: LoroDoc, id: TreeID): EnvelopeKindBreach | null {
+  const node = doc.getTree(WORKSPACE_TREE_KEY).getNodeByID(id)
+  if (node === undefined) return null
+  const envelope = node.data.get(DOCUMENT_KEY)
+  if (!(envelope instanceof LoroMap)) return null
+  const stated = parsedKind(envelope.get('kind'))
+  if (stated === undefined) return null
+  const recorded = parsedKind(node.data.get('kind'))
+  if (recorded === stated) return null
+  const documentId = node.data.get('documentId')
+  return {
+    container: envelope.id,
+    recorded: stated,
+    kind: recorded,
+    ...(typeof documentId === 'string' ? { documentId } : {}),
+  }
+}
+
+/**
  * The first envelope among the maps an update wrote a `kind` key in that it
  * left disagreeing with the kind its document records — judged on `doc`'s
  * state once the update is in, so a write a concurrent one outranked is
@@ -57,21 +82,36 @@ export function envelopeKindBreach(
 ): EnvelopeKindBreach | null {
   for (const container of written) {
     const path = doc.getPathToContainer(container)
-    if (path?.at(-1) !== DOCUMENT_KEY) continue
-    let record: { recorded: DocumentKind | undefined; documentId?: string | undefined } | null
-    if (path.length === 1) record = { recorded: recordedAtRoot ?? undefined }
-    else if (path.length === 3 && path[0] === WORKSPACE_TREE_KEY) {
-      record = nodeRecord(doc, path[1] as TreeID)
-    } else continue
-    if (record?.recorded === undefined) continue
-    const kind = parsedKind((doc.getContainerById(container) as LoroMap).get('kind'))
-    if (kind === record.recorded) continue
-    return {
-      container,
-      recorded: record.recorded,
-      kind,
-      ...(record.documentId === undefined ? {} : { documentId: record.documentId }),
-    }
+    if (path === undefined) continue
+    const breach =
+      path.length === 2 && path[0] === WORKSPACE_TREE_KEY
+        ? nodeKindBreach(doc, path[1] as TreeID)
+        : writtenEnvelopeBreach(doc, container, path, recordedAtRoot)
+    if (breach !== null) return breach
   }
   return null
+}
+
+/** `container`, an envelope the update wrote, left disagreeing with its document's recorded kind. */
+function writtenEnvelopeBreach(
+  doc: LoroDoc,
+  container: ContainerID,
+  path: ReadonlyArray<unknown>,
+  recordedAtRoot: DocumentKind | null,
+): EnvelopeKindBreach | null {
+  if (path.at(-1) !== DOCUMENT_KEY) return null
+  let record: { recorded: DocumentKind | undefined; documentId?: string | undefined } | null
+  if (path.length === 1) record = { recorded: recordedAtRoot ?? undefined }
+  else if (path.length === 3 && path[0] === WORKSPACE_TREE_KEY) {
+    record = nodeRecord(doc, path[1] as TreeID)
+  } else return null
+  if (record?.recorded === undefined) return null
+  const kind = parsedKind((doc.getContainerById(container) as LoroMap).get('kind'))
+  if (kind === record.recorded) return null
+  return {
+    container,
+    recorded: record.recorded,
+    kind,
+    ...(record.documentId === undefined ? {} : { documentId: record.documentId }),
+  }
 }

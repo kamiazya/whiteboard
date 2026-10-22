@@ -133,6 +133,25 @@ describe('a workspace-document update writing a document envelope kind', () => {
     expect(store.saves).toBe(0)
   })
 
+  it("is refused when an existing node's own kind is rewritten under a kinded envelope", async () => {
+    const store = seed('spatial')
+    const update = updateFrom(store.get(), (client) => {
+      const node = client
+        .getTree('tree')
+        .getNodes()
+        .find((each) => each.data.get('documentId') === BOARD)
+      node?.data.set('kind', 'markdown')
+    })
+
+    const refusal = await applyWorkspaceDocumentUpdate(deps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toMatchObject({ code: 'document_kind_changed' })
+    expect(store.saves).toBe(0)
+  })
+
   it("claims an unkinded document as its node's kind", async () => {
     const store = seed(null)
 

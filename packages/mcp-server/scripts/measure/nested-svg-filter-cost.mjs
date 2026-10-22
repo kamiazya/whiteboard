@@ -96,8 +96,7 @@ if (process.argv[2] === '--row') {
   const start = performance.now()
   new Resvg(outer, { fitTo: { mode: 'zoom', value: zoom } }).render()
   const ms = Math.round(performance.now() - start)
-  const hwmKb = Number(readFileSync('/proc/self/status', 'utf8').match(/^VmHWM:\s+(\d+)/m)?.[1])
-  process.stdout.write(`${ms} ${Math.round(hwmKb / 1024)}`)
+  process.stdout.write(`${ms} ${peakRssMb()}`)
 } else {
   const deadline = Number(process.env.DEADLINE_MS ?? 60_000)
   const ulimitKb = process.env.ULIMIT_V_KB
@@ -133,5 +132,15 @@ if (process.argv[2] === '--row') {
     process.stdout.write(
       `${kind.padEnd(8)} ${side.padStart(6)} ${n.padStart(6)} ${r.padStart(9)} ${zoom.padStart(5)} ${outerSide.padStart(6)}   ${ms}\n`,
     )
+  }
+}
+
+/** Peak RSS in MB, or `?` where `/proc` is absent (macOS) or says nothing parseable. */
+function peakRssMb() {
+  try {
+    const hwmKb = Number(readFileSync('/proc/self/status', 'utf8').match(/^VmHWM:\s+(\d+)/m)?.[1])
+    return Number.isFinite(hwmKb) ? String(Math.round(hwmKb / 1024)) : '?'
+  } catch {
+    return '?'
   }
 }
