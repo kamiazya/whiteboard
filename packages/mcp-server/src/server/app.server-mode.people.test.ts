@@ -189,7 +189,9 @@ describe('server mode — access lost in another process ends the stream here', 
     const { workspaceId } = (await (await create(bob, 'Plans')).json()) as { workspaceId: string }
     const stream = await followed(bob, workspaceId)
 
-    const outcome = await deactivateUser(handle.db, { user: 'bob', reactivate: false, now: 1 })
+    const profile = await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' })
+    const user = { kind: 'id', id: profile?.id ?? '' } as const
+    const outcome = await deactivateUser(handle.db, { user, reactivate: false, now: 1 })
     expect(outcome).toMatchObject({ kind: 'ok', changed: true })
     sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
     expect(await next(stream)).toBe('closed')

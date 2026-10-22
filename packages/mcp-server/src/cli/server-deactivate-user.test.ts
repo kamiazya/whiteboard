@@ -8,9 +8,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
+import { providerAuthenticator, signInConfigSchema } from '../server/security/sign-in-config.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
 import { deactivateUserOutputSchema } from './operator-json.js'
 import { deactivateUser, runServerDeactivateUser } from './server-deactivate-user.js'
+
+// A bearer-only provider, so the declaration needs no client secret.
+const CORP = {
+  id: 'corp',
+  kind: 'oidc',
+  issuer: 'https://sso.corp.example',
+  admission: { bearerClients: ['ops'] },
+} as const
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -28,36 +37,58 @@ afterEach(async () => {
 })
 
 describe('deactivateUser', () => {
-  it('deactivates a user named by display name, and reactivates them', async () => {
+  it('deactivates a user named by id, and reactivates them', async () => {
     const ada = await members().ensureProfile({ binding, displayName: 'Ada' })
-    expect(await deactivateUser(handle.db, { user: 'Ada', reactivate: false, now: 1 })).toEqual({
+    const user = { kind: 'id', id: ada.id } as const
+    expect(await deactivateUser(handle.db, { user, reactivate: false, now: 1 })).toEqual({
       kind: 'ok',
-      user: { id: ada.id, displayName: 'Ada' },
+      user: {
+        id: ada.id,
+        displayName: 'Ada',
+        bindings: [{ provider: null, authenticator: 'oidc:test', subject: 'ada-1' }],
+      },
       deactivated: true,
       changed: true,
     })
     expect(await members().isDeactivated(binding)).toBe(true)
 
     expect(
-      await deactivateUser(handle.db, { user: ada.id, reactivate: true, now: 2 }),
+      await deactivateUser(handle.db, {
+        user: { kind: 'id', id: ada.id },
+        reactivate: true,
+        now: 2,
+      }),
     ).toMatchObject({ kind: 'ok', deactivated: false, changed: true })
     expect(await members().isDeactivated(binding)).toBe(false)
   })
 
   it('says when there was nothing to change', async () => {
-    await members().ensureProfile({ binding, displayName: 'Ada' })
-    expect(
-      await deactivateUser(handle.db, { user: 'Ada', reactivate: true, now: 1 }),
-    ).toMatchObject({ kind: 'ok', deactivated: false, changed: false })
+    const ada = await members().ensureProfile({ binding, displayName: 'Ada' })
+    const user = { kind: 'id', id: ada.id } as const
+    expect(await deactivateUser(handle.db, { user, reactivate: true, now: 1 })).toMatchObject({
+      kind: 'ok',
+      deactivated: false,
+      changed: false,
+    })
   })
 
   // A deactivated user must stay nameable, or they could never be reactivated.
-  it('finds a deactivated user by name to reactivate them', async () => {
-    await members().ensureProfile({ binding, displayName: 'Ada' })
-    await deactivateUser(handle.db, { user: 'Ada', reactivate: false, now: 1 })
+  it('finds a deactivated user by provider and subject to reactivate them', async () => {
+    const corp = { authenticator: providerAuthenticator(CORP), subject: 'ada-1' }
+    const ada = await members().ensureProfile({ binding: corp, displayName: 'Ada' })
+    await deactivateUser(handle.db, {
+      user: { kind: 'id', id: ada.id },
+      reactivate: false,
+      now: 1,
+    })
     expect(
-      await deactivateUser(handle.db, { user: 'Ada', reactivate: true, now: 2 }),
-    ).toMatchObject({ kind: 'ok', changed: true })
+      await deactivateUser(handle.db, {
+        user: { kind: 'binding', provider: 'corp', subject: 'ada-1' },
+        reactivate: true,
+        now: 2,
+        providers: signInConfigSchema.parse({ providers: [CORP] }).providers,
+      }),
+    ).toMatchObject({ kind: 'ok', changed: true, user: { id: ada.id } })
   })
 })
 
@@ -71,8 +102,8 @@ describe('runServerDeactivateUser', () => {
   }
 
   it('deactivates and prints what it did as one JSON line', async () => {
-    await members().ensureProfile({ binding, displayName: 'Ada' })
-    const res = await run(['--json', '--user=Ada'])
+    const ada = await members().ensureProfile({ binding, displayName: 'Ada' })
+    const res = await run(['--json', `--user=${ada.id}`])
     expect(res.code).toBe(0)
     expect(deactivateUserOutputSchema.parse(JSON.parse(res.stdout))).toMatchObject({
       schemaVersion: 1,
@@ -87,5 +118,17 @@ describe('runServerDeactivateUser', () => {
 
   it('exits 64 without --user', async () => {
     expect((await run(['--json'])).code).toBe(64)
+  })
+
+  // A display name is whatever the person's provider claims at first sign-in,
+  // so a newcomer could take a colleague's name and have the colleague's
+  // deactivation land on themselves, or the reverse.
+  it('refuses a display name as --user, deactivating nobody', async () => {
+    const attacker = { authenticator: 'oidc:test', subject: 'attacker' }
+    await members().ensureProfile({ binding: attacker, displayName: 'Alice' })
+    const res = await run(['--json', '--user=Alice'])
+    expect(res.code).toBe(1)
+    expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'unknown-user' })
+    expect(await members().isDeactivated(attacker)).toBe(false)
   })
 })

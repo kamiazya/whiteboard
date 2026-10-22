@@ -1,10 +1,21 @@
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createPeopleAdministration } from '../server/security/people-administration.js'
+import type { SignInProvider } from '../server/security/sign-in-config.js'
 import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser, operatorRefusal } from './named-user.js'
+import {
+  configuredProviders,
+  findNamedUser,
+  operatorRefusal,
+  readUserReference,
+  UNKNOWN_PROVIDER_GUIDANCE,
+  UNKNOWN_USER_GUIDANCE,
+  USER_REFERENCE_FLAGS,
+  USER_REFERENCE_USAGE,
+  type UserReference,
+} from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 import {
   type GrantAdminOutput,
@@ -25,10 +36,14 @@ export type GrantAdminOutcome = WithoutSchemaVersion<GrantAdminOutput>
  */
 export async function grantAdmin(
   db: TenantDatabase,
-  { user, remove }: { user: string; remove: boolean },
+  {
+    user,
+    remove,
+    providers = [],
+  }: { user: UserReference; remove: boolean; providers?: readonly SignInProvider[] },
 ): Promise<GrantAdminOutcome> {
   const members = createMemberProfileStore(db)
-  const found = await findNamedUser(members, user)
+  const found = await findNamedUser(db, user, providers)
   if (found.kind !== 'found') return found
   const people = createPeopleAdministration({
     members,
@@ -43,14 +58,11 @@ export async function grantAdmin(
   return { kind: 'ok', user: found.user, administrator: !remove }
 }
 
-const USAGE =
-  'Re-run with: whiteboard server grant-admin --json --user=<id|name> [--remove] [--data-dir=<path>]'
+const USAGE = `Re-run with: whiteboard server grant-admin --json ${USER_REFERENCE_USAGE} [--remove] [--data-dir=<path>]`
 
 const REFUSAL: Record<Exclude<GrantAdminOutcome['kind'], 'ok'>, string> = {
-  'unknown-user':
-    'grant refused: no user by that id or name. The person has to become a user here first — by signing in, by a bearer, or with `whiteboard server add-user`; the users there are listed on stdout.',
-  'ambiguous-user':
-    'grant refused: more than one user has that name. Re-run with --user=<id>; the candidates are listed on stdout.',
+  'unknown-user': `grant refused: ${UNKNOWN_USER_GUIDANCE}`,
+  'unknown-provider': `grant refused: ${UNKNOWN_PROVIDER_GUIDANCE}`,
 }
 
 /** `whiteboard server grant-admin`: stdout is the outcome as one JSON line. */
@@ -61,15 +73,17 @@ export async function runServerGrantAdmin(
 ): Promise<number> {
   const scan = scanFlags(args, {
     booleans: ['--json', '--remove'],
-    values: { '--user': 'user', '--data-dir': 'dataDir' },
+    values: { ...USER_REFERENCE_FLAGS, '--data-dir': 'dataDir' },
   })
   if (scan.kind === 'usage-error') return usageError(io, scan.message)
-  const { user, dataDir } = scan.values
+  const { dataDir } = scan.values
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
-  if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
+  const reference = readUserReference(scan.values)
+  if (reference.kind === 'usage-error') return usageError(io, `${reference.message} ${USAGE}`)
 
   const outcome = await grantAdmin(await openKeeperDb(dataDir, env), {
-    user,
+    user: reference.reference,
+    providers: configuredProviders(env),
     remove: scan.seen.has('--remove'),
   })
   io.stdout(

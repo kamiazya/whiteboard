@@ -1,11 +1,22 @@
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createWorkspacePeopleAdministration } from '../server/security/people-administration.js'
+import type { SignInProvider } from '../server/security/sign-in-config.js'
 import { homeWithItsOwner } from '../server/security/workspace-namespace-home.js'
 import { createWorkspaceRoles } from '../server/security/workspace-roles.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser, operatorRefusal } from './named-user.js'
+import {
+  configuredProviders,
+  findNamedUser,
+  operatorRefusal,
+  readUserReference,
+  UNKNOWN_PROVIDER_GUIDANCE,
+  UNKNOWN_USER_GUIDANCE,
+  USER_REFERENCE_FLAGS,
+  USER_REFERENCE_USAGE,
+  type UserReference,
+} from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 import {
   type GrantMemberOutput,
@@ -22,12 +33,16 @@ export type GrantMemberOutcome = WithoutSchemaVersion<GrantMemberOutput>
  * the machine that holds its data — the party ADR-0041 already trusts to
  * reopen one — so no web surface offers "adopt this workspace" to whoever is
  * signed in. The person must have signed in once, which is what makes them a
- * user here; a name that matches nobody, or more than one, is answered with
- * the candidates rather than a guess.
+ * user here; they are named by user id or by provider and subject, and a
+ * reference that reaches nobody is answered with the candidates.
  */
 export async function grantMember(
   db: TenantDatabase,
-  { workspaceId: workspaceHandle, user }: { workspaceId: string; user: string },
+  {
+    workspaceId: workspaceHandle,
+    user,
+    providers = [],
+  }: { workspaceId: string; user: UserReference; providers?: readonly SignInProvider[] },
 ): Promise<GrantMemberOutcome> {
   // A handle, as every other surface reads one (ADR-0019): the canonical id,
   // or a segment qualified by the namespace holding it (ADR-0053). The
@@ -46,7 +61,7 @@ export async function grantMember(
   const { workspaceId } = workspace
 
   const members = createMemberProfileStore(db)
-  const found = await findNamedUser(members, user)
+  const found = await findNamedUser(db, user, providers)
   if (found.kind !== 'found') return found
 
   const granted = await createWorkspacePeopleAdministration({
@@ -58,15 +73,12 @@ export async function grantMember(
   return { kind: 'ok', workspaceId, user: found.user }
 }
 
-const USAGE =
-  'Re-run with: whiteboard server grant-member --json --workspace=<id|handle/segment|segment> --user=<id|name> [--data-dir=<path>]'
+const USAGE = `Re-run with: whiteboard server grant-member --json --workspace=<id|handle/segment|segment> ${USER_REFERENCE_USAGE} [--data-dir=<path>]`
 
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
-  'unknown-user':
-    'grant refused: no user by that id or name. The person has to become a user here first — by signing in, by a bearer, or with `whiteboard server add-user`; the users there are listed on stdout.',
-  'ambiguous-user':
-    'grant refused: more than one user has that name. Re-run with --user=<id>; the candidates are listed on stdout.',
+  'unknown-user': `grant refused: ${UNKNOWN_USER_GUIDANCE}`,
+  'unknown-provider': `grant refused: ${UNKNOWN_PROVIDER_GUIDANCE}`,
 }
 
 /** `whiteboard server grant-member`: stdout is the outcome as one JSON line. */
@@ -77,16 +89,21 @@ export async function runServerGrantMember(
 ): Promise<number> {
   const scan = scanFlags(args, {
     booleans: ['--json'],
-    values: { '--workspace': 'workspaceId', '--user': 'user', '--data-dir': 'dataDir' },
+    values: { '--workspace': 'workspaceId', ...USER_REFERENCE_FLAGS, '--data-dir': 'dataDir' },
   })
   if (scan.kind === 'usage-error') return usageError(io, scan.message)
-  const { workspaceId, user, dataDir } = scan.values
+  const { workspaceId, dataDir } = scan.values
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
   if (workspaceId === undefined)
     return usageError(io, `--workspace=<id|handle/segment|segment> is required. ${USAGE}`)
-  if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
+  const reference = readUserReference(scan.values)
+  if (reference.kind === 'usage-error') return usageError(io, `${reference.message} ${USAGE}`)
 
-  const outcome = await grantMember(await openKeeperDb(dataDir, env), { workspaceId, user })
+  const outcome = await grantMember(await openKeeperDb(dataDir, env), {
+    workspaceId,
+    user: reference.reference,
+    providers: configuredProviders(env),
+  })
   io.stdout(
     operatorJsonLine(grantMemberOutputSchema, {
       schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,

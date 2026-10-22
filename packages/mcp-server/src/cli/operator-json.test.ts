@@ -19,6 +19,14 @@ import {
 
 const ada = { id: '01JZ0000000000000000000001', displayName: 'Ada' }
 const bob = { id: '01JZ0000000000000000000002', displayName: 'Bob' }
+const boundAda = {
+  ...ada,
+  bindings: [{ provider: 'corp', authenticator: 'oidc:5f1c', subject: 'ada-1' }],
+}
+const boundBob = {
+  ...bob,
+  bindings: [{ provider: null, authenticator: 'passkey', subject: '["https://wb","cred"]' }],
+}
 const v = { schemaVersion: OPERATOR_JSON_SCHEMA_VERSION }
 
 const CONTRACTS = {
@@ -32,26 +40,26 @@ const CONTRACTS = {
   'grant-admin': {
     schema: grantAdminOutputSchema,
     outputs: [
-      { ...v, kind: 'ok', user: ada, administrator: true },
-      { ...v, kind: 'unknown-user', users: [ada, bob] },
-      { ...v, kind: 'ambiguous-user', users: [ada, ada] },
+      { ...v, kind: 'ok', user: boundAda, administrator: true },
+      { ...v, kind: 'unknown-user', users: [boundAda, boundBob] },
+      { ...v, kind: 'unknown-provider', providers: ['corp'] },
     ],
   },
   'grant-member': {
     schema: grantMemberOutputSchema,
     outputs: [
-      { ...v, kind: 'ok', workspaceId: '01JZ0000000000000000000003', user: ada },
+      { ...v, kind: 'ok', workspaceId: '01JZ0000000000000000000003', user: boundAda },
       { ...v, kind: 'unknown-workspace', workspaceId: 'ws-nowhere' },
       { ...v, kind: 'unknown-user', users: [] },
-      { ...v, kind: 'ambiguous-user', users: [ada, bob] },
+      { ...v, kind: 'unknown-provider', providers: [] },
     ],
   },
   'deactivate-user': {
     schema: deactivateUserOutputSchema,
     outputs: [
-      { ...v, kind: 'ok', user: ada, deactivated: true, changed: false },
-      { ...v, kind: 'unknown-user', users: [bob] },
-      { ...v, kind: 'ambiguous-user', users: [ada, bob] },
+      { ...v, kind: 'ok', user: boundAda, deactivated: true, changed: false },
+      { ...v, kind: 'unknown-user', users: [boundBob] },
+      { ...v, kind: 'unknown-provider', providers: ['corp', 'google'] },
     ],
   },
   'native-host install': {
