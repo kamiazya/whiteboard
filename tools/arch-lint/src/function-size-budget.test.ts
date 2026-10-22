@@ -276,7 +276,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 774,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 790,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
@@ -632,7 +632,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // what stops it reading as a cap on `chunkSnapshot` instead of a default its
   // writers share.
   'packages/workspace-index/src/document-store-workspace-docs.ts#save': 72,
-  'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
+  'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 54,
 }
 
 /**

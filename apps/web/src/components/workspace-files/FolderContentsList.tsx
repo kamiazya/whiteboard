@@ -287,12 +287,7 @@ export function FolderContentsList({
   )
 
   if (folders.length === 0 && here.length === 0) {
-    return (
-      <p className={cn('text-muted-foreground text-sm', className)}>
-        This folder is empty. A folder exists only while a document's path names it, so it goes once
-        you leave.
-      </p>
-    )
+    return <EmptyFolderNote className={className} />
   }
 
   return (
@@ -343,5 +338,15 @@ export function FolderContentsList({
         </li>
       ))}
     </ul>
+  )
+}
+
+/** Folders are implicit path segments, so an emptied one still being open needs saying. */
+function EmptyFolderNote({ className }: { readonly className: string | undefined }) {
+  return (
+    <p className={cn('text-muted-foreground text-sm', className)}>
+      This folder is empty. A folder exists only while a document's path names it, so it goes once
+      you leave.
+    </p>
   )
 }

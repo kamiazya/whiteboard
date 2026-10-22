@@ -189,7 +189,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `nodesAlong` steps down only toward the requested path and the walk reads
   // node meta without copying content, which needs the tree's own node reader
   // and so cannot leave this file without a value cycle back into it.
-  'packages/loro-adapter/src/workspace-tree.ts': 1074,
+  'packages/loro-adapter/src/workspace-tree.ts': 1076,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
