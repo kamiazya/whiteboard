@@ -20,7 +20,7 @@ import type {
   FacetRegistry,
 } from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import { type CSSProperties, type ReactNode, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
 import { CatalogPopover } from './catalog-popover.js'
 import { ACCENT, DANGER, INK, LINE, MUTED, SURFACE } from './chrome-tokens.js'
 import { FacetCatalogPicker } from './facet-catalog-picker.js'
@@ -664,8 +664,46 @@ function triggerFace(
     const value = (stored as Record<string, unknown>)[field]
     if (typeof value === 'string' && value !== '') return <EmojiText value={value} />
   }
-  // Nothing stored, or a payload no option and no template accounts for.
-  // A word rather than a guessed picture: a wrong picture reads as a value
-  // this facet holds, and it does not hold one.
-  return <span style={{ color: MUTED, fontSize: '0.75rem' }}>Choose</span>
+  if (stored === undefined || stored === null) return CHOOSE
+  return <CatalogFace catalog={catalog} currentKey={currentKey} registry={registry} />
+}
+
+const CHOOSE = <span style={{ color: MUTED, fontSize: '0.75rem' }}>Choose</span>
+
+/**
+ * The picture of a stored value that only the catalog's rows can name (a
+ * vendored icon, which free entry cannot spell). The rows load once the
+ * trigger is on screen, and until then — or when no row accounts for the
+ * payload — the word stands in: a wrong picture reads as a value this facet
+ * holds, and it does not hold one.
+ */
+function CatalogFace({
+  catalog,
+  currentKey,
+  registry,
+}: {
+  readonly catalog: FacetPickerCatalogSpec
+  readonly currentKey: string
+  readonly registry: FacetRegistry
+}): ReactNode {
+  const [face, setFace] = useState<ReactNode>(undefined)
+  const load = catalog.load
+  useEffect(() => {
+    let live = true
+    load().then(
+      (sections) => {
+        if (!live) return
+        const row = sections
+          .flatMap((section) => section.options)
+          .find((option) => facetPayloadKey(option.payload) === currentKey)
+        const glyph = row === undefined ? undefined : glyphIcon(row.glyph, registry)
+        setFace(glyph === undefined ? undefined : <span style={TRIGGER_GLYPH}>{glyph}</span>)
+      },
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [load, currentKey, registry])
+  return face ?? CHOOSE
 }

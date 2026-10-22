@@ -7,12 +7,19 @@
 // which is where they belonged: an option's payload is checked at
 // `defineFacet` time, and a declaration is a thing a node test can read
 // without rendering anything.
-import { cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+
+import { createFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { clearCatalogRecents, DerivedFacetForm } from '@kamiazya/whiteboard-facet-ui'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { visualPlugin } from './data.js'
+import { BUILT_IN_ICON_NAMES } from './icons/icons.js'
 import { canDrawSymbol, SymbolMark, visualUi } from './ui.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  clearCatalogRecents()
+})
 
 describe('the visual plugin declares its own settings', () => {
   it('names its sections in its own order, not the registry order', () => {
@@ -134,4 +141,60 @@ describe('a symbol naming an inherited property', () => {
     const { container } = render(<SymbolMark symbol={symbol} />)
     expect(container.innerHTML).toBe('')
   })
+})
+
+describe('the symbol picker, rendered over the bundled plugin', () => {
+  it.each(BUILT_IN_ICON_NAMES)('picking the %s icon writes it', async (name) => {
+    const onWrite = vi.fn()
+    render(
+      <DerivedFacetForm
+        facetKey="visual.symbol/v0"
+        title="Symbol"
+        stored={undefined}
+        registry={createFacetRegistry([visualPlugin])}
+        onWrite={onWrite}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
+    fireEvent.click(await screen.findByRole('radio', { name: `Icon ${name}` }, { timeout: 20_000 }))
+    expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name })
+  }, 30_000)
+
+  it('shows a stored icon on the trigger instead of the word Choose', async () => {
+    render(
+      <DerivedFacetForm
+        facetKey="visual.symbol/v0"
+        title="Symbol"
+        stored={{ kind: 'icon', name: 'database' }}
+        registry={createFacetRegistry([visualPlugin])}
+        onWrite={vi.fn()}
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: 'Choose symbol' })
+    await vi.waitFor(() => expect(trigger.querySelector('svg')).not.toBeNull(), { timeout: 20_000 })
+    expect(trigger.textContent).not.toContain('Choose')
+  }, 30_000)
+
+  it('finds an icon by a synonym of what it depicts', async () => {
+    render(
+      <DerivedFacetForm
+        facetKey="visual.symbol/v0"
+        title="Symbol"
+        stored={undefined}
+        registry={createFacetRegistry([visualPlugin])}
+        onWrite={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
+    await screen.findByRole('radio', { name: 'Icon database' }, { timeout: 20_000 })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
+      target: { value: 'storage' },
+    })
+    // The unfiltered band also holds database, so the filter is proven by
+    // a sibling icon leaving while the match stays.
+    await vi.waitFor(() => expect(screen.queryByRole('radio', { name: 'Icon file' })).toBeNull(), {
+      timeout: 15_000,
+    })
+    expect(screen.getByRole('radio', { name: 'Icon database' })).toBeTruthy()
+  }, 30_000)
 })

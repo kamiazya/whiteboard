@@ -53,6 +53,21 @@ export const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
  * geometry rather than Unicode's data, and it costs no bytes worth
  * deferring.
  */
+/**
+ * Other words for what each vendored icon depicts, so a search by the
+ * concept a person has in mind ("storage", "secure") finds the picture. Only
+ * honest synonyms: a word with no icon behind it finds nothing rather than
+ * a near miss.
+ */
+const ICON_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  database: ['datastore', 'storage', 'db', 'sql', 'table'],
+  file: ['document', 'page', 'paper'],
+  image: ['picture', 'photo', 'png'],
+  link: ['url', 'hyperlink', 'chain', 'reference'],
+  lock: ['secure', 'security', 'private', 'padlock'],
+  star: ['favorite', 'favourite', 'bookmark', 'rating'],
+}
+
 const ICON_SECTION: FacetPickerCatalogSection = {
   label: 'Icons',
   glyph: { kind: 'asset', id: 'visual.category-icons' },
@@ -60,7 +75,7 @@ const ICON_SECTION: FacetPickerCatalogSection = {
   options: BUILT_IN_ICON_NAMES.map((name) => ({
     payload: { kind: 'icon' as const, name },
     label: `Icon ${name}`,
-    keywords: [name],
+    keywords: [name, ...(ICON_ALIASES[name] ?? [])],
     glyph: { kind: 'asset' as const, id: `visual.${name}` },
   })),
 }

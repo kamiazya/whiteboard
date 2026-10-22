@@ -86,6 +86,25 @@ it('an icon pick stores the facet and draws nothing on the node', async () => {
   expect(drawn).toBeNull()
 })
 
+it.each([
+  'database',
+  'lock',
+  'link',
+])('the %s icon is applied by its label, its radio and Enter in search', async (name) => {
+  const { Host, latest } = makeEditorHost({ initial })
+  const { container } = render(<Host />)
+  const picker = await openSymbolPicker(openInspector(container))
+
+  const cell = picker.querySelector(`[aria-label="Icon ${name}"]`) as HTMLElement
+  fireEvent.click(cell.closest('label') ?? cell)
+  expect(symbolOf(latest.canvas)).toEqual({ kind: 'icon', name })
+  // The trigger shows the pick as a picture, not the word it shows for an
+  // empty facet.
+  const trigger = container.querySelector('[aria-label="Choose symbol"]') as HTMLElement
+  await vi.waitFor(() => expect(trigger.querySelector('svg')).not.toBeNull())
+  expect(trigger.textContent).not.toContain('Choose')
+})
+
 /**
  * The emoji arm is reached by SEARCHING, because no listed option covers
  * it: the facet has accepted any single grapheme since it shipped, and the
