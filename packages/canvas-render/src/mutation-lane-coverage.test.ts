@@ -357,9 +357,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // closing and node-text charge `content-budget.test.ts` pins, and whose
     // use by the daemon's loader `canvas-view.cost.test.ts` counts — each
     // mutation-checked by hand against them.
+    //
+    // 116 with `layout/nodes/mdast-embed-pending.ts`, the framed "Loading…"
+    // a block embed draws while its target is still being fetched. Outside
+    // the lane: three guards and one small layout, each pinned by example
+    // in `mdast-embed-pending.test.ts` and reached from the browser by
+    // `embed-loading-preview.browser.test.tsx`; nothing in it is a cost
+    // model or a search a survivor could hide in.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 115,
+      production: 116,
     })
   })
 
