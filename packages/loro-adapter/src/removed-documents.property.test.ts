@@ -37,7 +37,7 @@ const nodeArbitrary = fc.record({
  * while a move before one is what leaves a survivor below a removed document.
  */
 const editsArbitrary = fc.record({
-  movesToRoot: fc.array(fc.nat({ max: 63 }), { maxLength: 3 }),
+  movesToRoot: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 3 }),
   deletes: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 3 }),
 })
 
@@ -77,7 +77,12 @@ function restoredIds(bytes: Uint8Array): string[] {
   })
 }
 
-/** Measured over 100 runs, six times: removal 82-94, each arrangement 6-17. */
+/**
+ * Measured over 100 runs, thirty times: removal 80-94, a survivor under a
+ * removed document 5-22 (mean 14), a path ancestor on another branch 4-15
+ * (mean 10). With no move drawn the survivor arrangement fell to 2 once in CI,
+ * which is why every draw makes at least one.
+ */
 const REMOVAL_FLOOR = 50
 const ARRANGEMENT_FLOOR = 3
 /** The arrangements the property exists for, counted so a sparse generator fails loudly. */
