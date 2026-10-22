@@ -1,5 +1,10 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentIdSchema, documentPathSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  ID_LIMIT_PHRASE,
+  ID_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -16,6 +21,7 @@ export const versionRestoreInputSchema = z
     versionId: z
       .string()
       .min(1)
+      .max(ID_MAX_CHARS, `a version id is longer than ${ID_LIMIT_PHRASE}`)
       .describe('Version id (`version.id`) returned by wb_version_save or wb_version_list.'),
     targetPath: documentPathSchema
       .optional()

@@ -1,5 +1,6 @@
+import { LABEL_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { WHITEBOARD_INSTRUCTIONS } from './standalone-help.js'
+import { drawDiagramPromptArgsSchema, WHITEBOARD_INSTRUCTIONS } from './standalone-help.js'
 
 describe('WHITEBOARD_INSTRUCTIONS', () => {
   // No tool lists workspaces and an MCP-only install has no skill to name one,
@@ -29,5 +30,17 @@ describe('WHITEBOARD_INSTRUCTIONS', () => {
     )
     expect(claims.length).toBeGreaterThan(0)
     for (const claim of claims) expect(claim).toContain('embedReferences')
+  })
+})
+
+describe('the draw-diagram prompt arguments', () => {
+  // The prompt pastes both into the text it returns, so an unbounded one is
+  // an unbounded message handed back to the client.
+  it.each([
+    ['goal', NODE_TEXT_MAX_CHARS, (value: string) => ({ goal: value })],
+    ['diagramType', LABEL_MAX_CHARS, (value: string) => ({ goal: 'g', diagramType: value })],
+  ])('bounds %s at its limit', (_field, bound, args) => {
+    expect(drawDiagramPromptArgsSchema.safeParse(args('a'.repeat(bound))).success).toBe(true)
+    expect(drawDiagramPromptArgsSchema.safeParse(args('a'.repeat(bound + 1))).success).toBe(false)
   })
 })
