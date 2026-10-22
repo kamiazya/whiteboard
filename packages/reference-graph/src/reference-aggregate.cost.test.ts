@@ -77,21 +77,23 @@ describe('what one backlinks request costs against a board dense with references
 
   it('a request for the referenced document', { timeout: 60_000 }, () => {
     const { answer, parses, excerpts: built, elapsed } = measure(TARGET)
-    // Measured: one excerpt and one id-schema parse per reference, so the
-    // answer carries 327,600 excerpts for this tenth of a board; ~7.1s.
-    expect(answer.backlinks[0]?.contexts).toHaveLength(REFS)
-    expect(built).toBe(REFS)
-    expect(parses).toBe(REFS)
-    expect(elapsed).toBeGreaterThan(0)
+    // Before: one excerpt and one id-schema parse per reference — 327,600
+    // excerpts in the answer for this tenth of a board, ~7.1s. After: the
+    // first three, no parse; ~3ms.
+    expect(answer.backlinks[0]?.contexts).toHaveLength(3)
+    expect(built).toBe(3)
+    expect(parses).toBe(0)
+    expect(elapsed).toBeLessThan(1000)
   })
 
   it('a request for a document nothing references', { timeout: 60_000 }, () => {
-    const { answer, parses, excerpts: built } = measure(UNRELATED)
-    // Measured: every reference in the workspace is classified again, and a
-    // failing id parse is the expensive half; ~6.1s for this tenth of a
-    // board, so ~60s for a full one, on a request about anything else.
+    const { answer, parses, excerpts: built, elapsed } = measure(UNRELATED)
+    // Before: every reference in the workspace classified again by a
+    // failing id parse, ~6.1s here and ~60s for a full board. After: a
+    // string comparison per reference, ~10ms.
     expect(answer.backlinks).toEqual([])
     expect(built).toBe(0)
-    expect(parses).toBe(REFS)
+    expect(parses).toBe(0)
+    expect(elapsed).toBeLessThan(1000)
   })
 })

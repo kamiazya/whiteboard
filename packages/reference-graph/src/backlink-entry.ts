@@ -19,7 +19,11 @@ export const backlinkEntrySchema = z
     path: documentPathSchema,
     name: z.string().min(1).optional(),
     kind: documentKindSchema.optional(),
-    /** One short plain-text excerpt per reference, in document order. */
+    /**
+     * Short plain-text excerpts in document order, one per reference (or
+     * per unlinked occurrence) up to the first three: enough to judge the
+     * source, and a bound on an answer about a source dense with them.
+     */
     contexts: z.array(z.string()),
   })
   .strict()

@@ -154,6 +154,20 @@ describe('what a tag bearer is called in an excerpt', () => {
   })
 })
 
+describe('a wikilink in cached facts', () => {
+  it('records whether its target is a document id or a path to resolve', () => {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'markdown')
+    // The third is id-LENGTH but not an id: 'U' is outside the alphabet.
+    writeMarkdownBody(
+      doc,
+      '[[01ARZ3NDEKTSV4RRFFQ69G5FAV]] [[notes/plan]] [[01ARZ3NDEKTSV4RRFFQ69G5FAU]]',
+    )
+    const refs = extractContentFacts({ kind: 'markdown' }, doc).refs
+    expect(refs.map((ref) => ref.via === 'wikilink' && ref.byId)).toEqual([true, false, false])
+  })
+})
+
 describe('a wikilink excerpt in cached facts', () => {
   const body = `${'filler words '.repeat(12)}see [[target-doc]] here${' and more'.repeat(12)}`
   const doc = new LoroDoc()

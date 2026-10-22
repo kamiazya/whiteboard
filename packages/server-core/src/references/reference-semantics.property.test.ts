@@ -583,7 +583,11 @@ describe('reference semantics under command sequences', () => {
           )
           const fresh = await computeBacklinks(deps, { workspaceId: WS, documentId: doc.id })
           expect(cached, `cache transparency for ${doc.path}`).toEqual(fresh)
-          const expected = model.backlinksOf(doc.id)
+          // The answer carries at most three excerpts per source; the model
+          // counts every reference, so its count is clipped to that.
+          const expected = new Map(
+            [...model.backlinksOf(doc.id)].map(([id, n]) => [id, Math.min(n, 3)]),
+          )
           const got = new Map(cached.backlinks.map((b) => [b.documentId, b.contexts.length]))
           expect(got, `backlinks of ${doc.path} (${doc.id})`).toEqual(expected)
         }

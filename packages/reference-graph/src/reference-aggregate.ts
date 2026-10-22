@@ -1,10 +1,5 @@
 import { createUniqueNameResolver, findNextReference } from '@kamiazya/whiteboard-codec'
-import {
-  compareCodeUnit,
-  documentIdSchema,
-  documentKindSchema,
-  documentPathSchema,
-} from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, documentKindSchema, documentPathSchema } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { snippetAround } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
@@ -53,6 +48,13 @@ const rawReferenceSchema = z.union([
     .object({
       target: referenceTargetSchema,
       via: z.literal('wikilink'),
+      /**
+       * Whether `target` is a document id rather than a path to resolve.
+       * Classified once, when the facts are extracted, so answering a
+       * request compares strings instead of re-classifying every reference
+       * in the workspace.
+       */
+      byId: z.boolean(),
       text: z.string(),
       index: z.number().int().nonnegative(),
       length: z.number().int().positive(),
@@ -92,6 +94,14 @@ export type DocumentReferenceFacts = z.infer<typeof documentReferenceFactsSchema
 
 import type { BacklinkEntry } from './backlink-entry.js'
 
+/**
+ * How many excerpts one source carries, as a backlink or as a mention —
+ * enough to judge it, few enough to read. It also bounds the answer: a
+ * source can hold millions of references, and cutting an excerpt for each
+ * made one request build hundreds of millions of characters.
+ */
+const CONTEXTS_PER_SOURCE = 3
+
 export class ReferenceAggregate {
   private readonly docs = new Map<string, DocumentReferenceFacts>()
 
@@ -122,24 +132,19 @@ export class ReferenceAggregate {
     const resolve = createUniqueNameResolver(
       [...alive].map(([id, facts]) => ({ id, name: facts.path })),
     )
+    // The one path that can resolve to the target is its own, and only
+    // while no other document shares it — so it is resolved once here and
+    // each reference is then a string comparison.
+    const byPath = resolve(target.path) === documentId ? target.path : undefined
 
     const backlinks: BacklinkEntry[] = []
     for (const [sourceId, facts] of alive) {
       if (sourceId === documentId) continue
-      const contexts: string[] = []
-      for (const ref of facts.refs) {
-        if (resolvesTo(ref, documentId, target.path, resolve)) {
-          contexts.push(referenceContext(ref))
-        }
-      }
-      if (contexts.length === 0) continue
-      backlinks.push({
-        documentId: sourceId,
-        path: facts.path,
-        ...(facts.name === undefined ? {} : { name: facts.name }),
-        ...(facts.kind === undefined ? {} : { kind: facts.kind }),
-        contexts,
-      })
+      const contexts = firstContexts(
+        resolving(facts.refs, documentId, target.path, byPath),
+        referenceContext,
+      )
+      if (contexts.length > 0) backlinks.push(sourceEntry(sourceId, facts, contexts))
     }
     // The listing order the DocumentIndex contract fixes (segment-wise path
     // compare), NOT map insertion order — the convergence property caught
@@ -191,9 +196,6 @@ function* unlinkedNameSpansIn(
   }
 }
 
-/** How many snippets a mention carries — enough to judge it, few enough to read. */
-const MENTION_CONTEXTS = 3
-
 /** A snippet around every unlinked occurrence of `name`, across `texts`. */
 function* unlinkedContexts(texts: readonly string[], name: string): Iterable<string> {
   for (const text of texts) {
@@ -218,30 +220,55 @@ function mentionsOfIn(
   const mentions: BacklinkEntry[] = []
   for (const [sourceId, facts] of sources) {
     if (sourceId === target.documentId) continue
-    const contexts: string[] = []
-    for (const context of unlinkedContexts(facts.texts, target.name)) {
-      contexts.push(context)
-      if (contexts.length >= MENTION_CONTEXTS) break
-    }
-    if (contexts.length === 0) continue
-    mentions.push({
-      documentId: sourceId,
-      path: facts.path,
-      ...(facts.name === undefined ? {} : { name: facts.name }),
-      ...(facts.kind === undefined ? {} : { kind: facts.kind }),
-      contexts,
-    })
+    const contexts = firstContexts(unlinkedContexts(facts.texts, target.name), (c) => c)
+    if (contexts.length > 0) mentions.push(sourceEntry(sourceId, facts, contexts))
   }
   return mentions.sort(
     (a, b) => compareDocumentPaths(a.path, b.path) || compareCodeUnit(a.documentId, b.documentId),
   )
 }
 
+/**
+ * The excerpts of the first `CONTEXTS_PER_SOURCE` items, in order. Lazy over
+ * an iterable so a source dense with matches is walked only that far.
+ */
+function firstContexts<T>(items: Iterable<T>, excerpt: (item: T) => string): string[] {
+  const contexts: string[] = []
+  for (const item of items) {
+    if (contexts.length >= CONTEXTS_PER_SOURCE) break
+    contexts.push(excerpt(item))
+  }
+  return contexts
+}
+
+function sourceEntry(
+  documentId: string,
+  facts: DocumentReferenceFacts,
+  contexts: string[],
+): BacklinkEntry {
+  return {
+    documentId,
+    path: facts.path,
+    ...(facts.name === undefined ? {} : { name: facts.name }),
+    ...(facts.kind === undefined ? {} : { kind: facts.kind }),
+    contexts,
+  }
+}
+
+function* resolving(
+  refs: readonly RawReference[],
+  targetId: string,
+  targetPath: string,
+  byPath: string | undefined,
+): Generator<RawReference> {
+  for (const ref of refs) if (resolvesTo(ref, targetId, targetPath, byPath)) yield ref
+}
+
 function resolvesTo(
   ref: RawReference,
   targetId: string,
   targetPath: string,
-  resolve: (alias: string) => string | null,
+  byPath: string | undefined,
 ): boolean {
   switch (ref.via) {
     case 'embed-node':
@@ -249,9 +276,7 @@ function resolvesTo(
     case 'file-node':
       return ref.target === targetPath
     case 'wikilink':
-      return documentIdSchema.safeParse(ref.target).success
-        ? ref.target === targetId
-        : resolve(ref.target) === targetId
+      return ref.byId ? ref.target === targetId : ref.target === byPath
   }
 }
 

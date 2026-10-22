@@ -12,8 +12,8 @@ export {
 } from './backlinks.schemas.js'
 
 /**
- * Every document in the workspace that references `documentId`, with one
- * context excerpt per reference, plus the sources that NAME it without
+ * Every document in the workspace that references `documentId`, with an
+ * excerpt for each of its first few references, plus the sources that NAME it without
  * linking. Read-only.
  *
  * Content facts come through the stamp-validated ContentFactsCache: only
