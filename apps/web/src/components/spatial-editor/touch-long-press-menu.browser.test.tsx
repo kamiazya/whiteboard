@@ -137,10 +137,9 @@ it('on a coarse pointer the long-press menu opens as the same bottom sheet the â
   const { container } = mount(withNode)
   const root = rootOf(container)
   touch(root, 'pointerdown', 200, 130)
-  await new Promise((resolve) => setTimeout(resolve, 650))
   await vi.waitFor(() => {
     expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
-  })
+  }, 3000)
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
   expect(menu.dataset.variant).toBe('sheet')
   const row = [...menu.querySelectorAll('[role="menuitem"]')].find(
@@ -154,10 +153,9 @@ it('a fine pointer keeps the long-press menu a point-anchored list', async () =>
   const { container } = mount(withNode)
   const root = rootOf(container)
   touch(root, 'pointerdown', 200, 130)
-  await new Promise((resolve) => setTimeout(resolve, 650))
   await vi.waitFor(() => {
     expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
-  })
+  }, 3000)
   expect(
     (container.querySelector('[data-testid="context-menu"]') as HTMLElement).dataset.variant,
   ).toBe('list')
