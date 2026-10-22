@@ -49,6 +49,8 @@ class FakeBackend extends FakeDocumentBackend {
   }
 }
 
+const onNavigateBack = vi.fn()
+
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 afterEach(() => {
@@ -82,6 +84,7 @@ const daemonFixture: DocumentPageFixture = {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path={open.path}
+          onNavigateBack={onNavigateBack}
           createBackend={(workspaceId, path) => new FakeBackend(workspaceId, path)}
         />,
         { wrapper: MemoryRouterWrapper, container: document.body },
@@ -93,6 +96,10 @@ const daemonFixture: DocumentPageFixture = {
   labelOf: (doc) => doc.path,
   async expectOpened(path) {
     await waitFor(() => expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path }))
+  },
+  async expectLeftForList(sibling) {
+    await waitFor(() => expect(onNavigateBack).toHaveBeenCalledTimes(1))
+    expect(createdBackends.map((backend) => backend.path)).not.toContain(sibling.path)
   },
   failNextDelete() {
     mockDeleteDocument.mockRejectedValueOnce(new Error('simulated daemon refusal'))
