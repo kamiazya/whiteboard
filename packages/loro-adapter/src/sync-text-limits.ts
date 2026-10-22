@@ -38,6 +38,9 @@ import {
   type ContentRootBreach,
   contentKeyWrites,
   contentRootBreach,
+  RESERVED_MAP_KEY,
+  type ReservedMapKeyBreach,
+  reservedKeyBreach,
   type UnattachedContainerBreach,
   unattachedBreach,
 } from './sync-structure-limits.js'
@@ -112,6 +115,7 @@ export type SyncTextBreach =
   | OpenAnnotationsBreach<'open-changes'>
   | ContentRootBreach
   | UnattachedContainerBreach
+  | ReservedMapKeyBreach
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -134,6 +138,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
   'content-root': 'invalid_document_root',
+  'reserved-map-key': 'reserved_map_key',
   // Sent built on the change that creates the container, it is an ordinary write.
   'unattached-container': 'causal_gap',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
@@ -516,9 +521,9 @@ function judgeImported(
 ): Omit<SyncTextJudgement, 'pending'> {
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const json = doc.exportJsonUpdates(from, doc.oplogVersion(), false)
-  const unattached = unattachedBreach(doc, json)
-  if (unattached !== null) {
-    return { breach: unattached, touchesNodeMeta: true, kindWrittenIn: new Set() }
+  const structural = unattachedBreach(doc, json) ?? reservedKeyBreach(json)
+  if (structural !== null) {
+    return { breach: structural, touchesNodeMeta: true, kindWrittenIn: new Set() }
   }
   const writes = readWrites(doc, json)
   const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
@@ -619,6 +624,25 @@ function largestBoard(doc: LoroDoc): number {
   return largest
 }
 
+const RESERVED_KEY_BYTES = new TextEncoder().encode(RESERVED_MAP_KEY)
+
+/**
+ * Whether `update`'s bytes hold `RESERVED_MAP_KEY` anywhere — they carry every
+ * key and root name whole, so one that does not cannot write it. Text that
+ * merely spells it is judged in full and let through there.
+ */
+function mayNameReservedKey(update: Uint8Array): boolean {
+  const [first] = RESERVED_KEY_BYTES
+  for (
+    let at = update.indexOf(first as number);
+    at !== -1;
+    at = update.indexOf(first as number, at + 1)
+  ) {
+    if (RESERVED_KEY_BYTES.every((byte, offset) => update[at + offset] === byte)) return true
+  }
+  return false
+}
+
 /** No update this short can take a board past either per-canvas bound from where `largestBoard` found it. */
 const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
 
@@ -672,7 +696,7 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
   const mostOpenAtMost = heldBound(record, mostOpenAnnotations)
   return (update) => {
     const most = update.byteLength
-    if (most <= SMALLEST_VALUE_BOUND) {
+    if (most <= SMALLEST_VALUE_BOUND && !mayNameReservedKey(update)) {
       const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
       const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
       const openFits = (walk: boolean) => mostOpenAtMost(walk) + most <= SMALLEST_ANNOTATION_BOUND

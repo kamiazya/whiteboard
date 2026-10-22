@@ -1,5 +1,8 @@
 import { userInfo } from 'node:os'
-import type { saveVersionRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type {
+  CreateWorkspaceRefusal,
+  saveVersionRequestSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   documentPathForAction,
   documentPathForFile,
@@ -15,6 +18,7 @@ import {
   isWorkspaceNotFoundError,
   TooManyDocumentsError,
   TooManyFoldersError,
+  TooManyWorkspacesError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
@@ -142,6 +146,13 @@ export const pastWorkspaceCeiling: ErrorAnswer = (err) =>
   err instanceof TooManyDocumentsError || err instanceof TooManyFoldersError
     ? { status: 413, body: errorBody(err.code, err.message) }
     : null
+
+/** A create in a namespace already holding the most workspaces one person may. */
+export const pastNamespaceCeiling: ErrorAnswer = (err) => {
+  if (!(err instanceof TooManyWorkspacesError)) return null
+  const body: CreateWorkspaceRefusal = { error: err.code, message: err.message }
+  return { status: err.status, body }
+}
 
 /** A conflicting workspace segment: another workspace already holds it. */
 export const segmentTaken: ErrorAnswer = (err) =>

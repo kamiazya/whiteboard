@@ -70,7 +70,7 @@ vi.mock('../store/document-store.js', () => ({
   // that omits it makes every export 500 on a TypeError rather than on
   // anything the case is about. Empty registry: these tests address
   // workspaces by id, which resolution leaves alone.
-  workspaceRegistry: () => ({ listWorkspaces: async () => [] }),
+  workspaceRegistry: () => ({ listWorkspaces: async () => [], findWorkspace: async () => null }),
 }))
 
 // Spies on the real implementation so most tests exercise genuine random

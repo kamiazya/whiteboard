@@ -22,7 +22,7 @@ vi.mock('../config.js', () => ({
 }))
 
 vi.mock('../store/document-store.js', () => ({
-  workspaceRegistry: () => ({ listWorkspaces: async () => [] }),
+  workspaceRegistry: () => ({ listWorkspaces: async () => [], findWorkspace: async () => null }),
 }))
 
 const mockExportCanvasHeadless = vi.fn()

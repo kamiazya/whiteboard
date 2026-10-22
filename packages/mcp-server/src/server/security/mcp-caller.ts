@@ -14,7 +14,11 @@ import {
   parseWorkspaceAddress,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
-import { type DocumentIndex, isWorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentIndex,
+  isWorkspaceSegmentTakenError,
+  TooManyWorkspacesError,
+} from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
 import { runWithWriteAdmission } from '../store/workspace-lock.js'
 import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
@@ -310,6 +314,10 @@ async function mintAsFirstMember(
     await index.createWorkspace({ workspaceId, namespace: profile.handle, segment })
   } catch (err) {
     if (isWorkspaceSegmentTakenError(err)) return 'taken'
+    // Refused like `/api`'s create, in the code a caller matches on.
+    if (err instanceof TooManyWorkspacesError) {
+      throw new McpCallRefusalError(`${err.code}: ${err.message}`)
+    }
     throw err
   }
   await caller.members.addMember(workspaceId, profile.id)

@@ -11,8 +11,10 @@ import { canonicalUlidArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   resolveWorkspaceHandle,
+  resolveWorkspaceHandleBy,
   storedWorkspaceEntrySchema,
   type WorkspaceEntry,
+  type WorkspaceLookup,
 } from './document-index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
@@ -199,5 +201,76 @@ describe('a legacy id is an id', () => {
       segment: 'plans',
     }
     expect(resolveWorkspaceHandle([ada, bob], 'plans', 'bob')).toEqual(bob)
+  })
+})
+
+describe('resolveWorkspaceHandleBy', () => {
+  /**
+   * A registry answering point lookups from two keyed maps, the way an
+   * indexed table does — built here rather than through the module's own
+   * matcher, so a matcher that drifted would show as a disagreement.
+   */
+  function pointRegistry(entries: readonly WorkspaceEntry[]) {
+    const byId = new Map(entries.map((e) => [e.workspaceId, e]))
+    const bySegment = new Map(
+      entries
+        .filter((e) => e.segment !== undefined)
+        .map((e) => [`${e.namespace ?? 'me'}\0${e.segment}`, e]),
+    )
+    const asked: WorkspaceLookup[] = []
+    const find = async (lookup: WorkspaceLookup) => {
+      asked.push(lookup)
+      const key =
+        'workspaceId' in lookup ? lookup.workspaceId : `${lookup.namespace}\0${lookup.segment}`
+      return ('workspaceId' in lookup ? byId.get(key) : bySegment.get(key)) ?? null
+    }
+    return { find, asked }
+  }
+
+  // Dense on the one collision the order decides: legacy ids spelled like
+  // the segments, beside segments in several namespaces.
+  const entryArb = fc.oneof(
+    fc.record({
+      workspaceId: canonicalUlidArbitrary,
+      namespace: fc.constantFrom('me', 'alice', 'bob'),
+      segment: fc.constantFrom('design', 'plan'),
+    }),
+    fc.record({
+      workspaceId: fc.constantFrom('design', 'plan', 'default'),
+      namespace: fc.constantFrom('me', 'alice'),
+    }),
+  )
+  const registryArb = fc.uniqueArray(entryArb, {
+    maxLength: 8,
+    selector: (e) => ('segment' in e ? `${e.namespace}/${e.segment}` : e.workspaceId),
+  })
+  const handleArb = fc.constantFrom(
+    'design',
+    'plan',
+    'default',
+    'alice/design',
+    'bob/plan',
+    'me/design',
+    'absent',
+    'a/b/c',
+  )
+
+  fcTest.prop([registryArb, handleArb, fc.constantFrom('me', 'alice', 'bob', '')], withDefaults())(
+    'answers what the whole-list form answers, in at most two lookups',
+    async (entries, handle, caller) => {
+      const ids = new Set(entries.map((e) => e.workspaceId))
+      fc.pre(ids.size === entries.length)
+      const { find, asked } = pointRegistry(entries)
+      const found = await resolveWorkspaceHandleBy(find, handle, caller)
+      expect(found).toEqual(resolveWorkspaceHandle(entries, handle, caller))
+      expect(asked.length).toBeLessThanOrEqual(2)
+    },
+  )
+
+  it('refuses an answer that is not the row its lookup named', async () => {
+    // A store matching on a stored value the read schema then drops must not
+    // answer a lookup the hydrated row does not satisfy.
+    const hydrated: WorkspaceEntry = { workspaceId: ULID }
+    expect(await resolveWorkspaceHandleBy(async () => hydrated, 'design')).toBeNull()
   })
 })

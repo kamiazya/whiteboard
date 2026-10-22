@@ -41,6 +41,7 @@ import {
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
+  matchesWorkspaceLookup,
   type RenameWorkspaceInput,
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
@@ -102,6 +103,12 @@ export class FoldingBrowserIndex
       // not part of what the fold retires.
       {
         listWorkspaces: () => this.legacy.listWorkspaces(),
+        // Over the listing: this registry is one person's, so it holds what
+        // that person made, and nobody else's workspaces can make it large.
+        findWorkspace: async (lookup) =>
+          (await this.legacy.listWorkspaces()).find((entry) =>
+            matchesWorkspaceLookup(entry, lookup),
+          ) ?? null,
         renameWorkspace: (input) => this.legacy.renameWorkspace(input),
       },
     )

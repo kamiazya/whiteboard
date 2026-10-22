@@ -65,6 +65,7 @@ async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
 
   return new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
     listWorkspaces: async () => [],
+    findWorkspace: async () => null,
     renameWorkspace: notRenamed,
   })
 }
@@ -107,6 +108,7 @@ describe('contested paths', () => {
     createWorkspaceDocumentAtPath(doc, { path: 'solo', documentId: OWNER_ID, kind: 'spatial' })
     const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
     const entry = await index.resolveDocument({ workspaceId: 'ws', path: 'solo' })

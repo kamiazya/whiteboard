@@ -302,7 +302,8 @@ the boundary described above.
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
 - **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today), and each tool it calls would still need the scope its `/api` twin does — a macaroon scoped `mcp:call` and `canvas:read` is refused a write tool with `insufficient_scope`, as server mode refuses a bearer. A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
-- **Security headers**: every response carries `frame-ancestors 'none'` (a route that sets its own CSP — the server-mode web app, an uploaded SVG — repeats it in that policy), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
+- **Security headers**: every response carries `frame-ancestors 'none'` (a route that sets its own CSP — the server-mode web app, an uploaded file — repeats it in that policy), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cross-Origin-Opener-Policy: same-origin`. One page relaxes the opener policy: server mode's transfer receiver (`/receive-transfer`) is a popup another origin opens and answers through `window.opener.postMessage`, which `same-origin` would sever, so it is served `unsafe-none` and checks every message's origin and nonce itself. It takes an offer from any web origin, so before any Accept control exists it asks the person whether they started the transfer, naming the sending origin; declining tells the sender only that it was declined, and accepting still needs the target workspace chosen explicitly, since none is preselected.
+- **Uploaded files are served inert**: every image a workspace serves answers `Content-Security-Policy: default-src 'none'; sandbox; frame-ancestors 'none'`, so opening its URL directly runs and fetches nothing. An SVG, which can carry script, additionally allows only its inline styles and is served as an attachment, so opening it downloads it; other images stay inline. The app reads them through `fetch()`, which none of this affects.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 - **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 10s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
 
@@ -503,7 +504,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   or giving an unkinded document another kind — is refused from any caller
   with `400 {"error":"document_kind_changed"}`, so an edit grant cannot make
   a board read as a note and have someone's next note edit replace its
-  nodes. A
+  nodes. An update that writes a key named `__proto__` anywhere — a map
+  entry, a part of a document, or a key inside a stored value — is refused
+  from any caller with `400 {"error":"reserved_map_key"}`: every reader takes
+  such a key as the record's prototype rather than as a key, so it could lend
+  a document content nobody wrote. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,
@@ -601,7 +606,11 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `too_many_nodes_or_edges`, …) — when one holds a body, node text, label or
   board past its limit. A restore judges the state it is about to write the
   same way, in every mode, and refuses with that error before writing
-  anything.
+  anything. A version whose own record of its kind says something other
+  than the kind the document it is restored into records — a split that only
+  an earlier writer outside the sync checks could have stored — is refused
+  the same way, by the move and by every restore mode, with
+  `400 {"error":"document_kind_changed"}`.
 - **An MCP tool reads only a document its named workspace holds.** A
   `documentId` paired with a `workspaceId` that does not place it is refused
   as not found, by the read tools as by the write tools.
@@ -654,6 +663,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   walks documents, and each folder's path is held to the 1,024-character path
   bound a document's is (`invalid_path`), which bounds how deep the tree can
   nest. A record stored before either bound still lists.
+- **A person holds a bounded number of workspaces.** In server mode every
+  member of a tenant shares one workspace registry, so one person's namespace
+  holds at most 1000 workspaces, and a create past that is refused
+  (`too_many_workspaces`) on `/api` and `/mcp` alike. Resolving a workspace's
+  address reads only the row it names, and listing workspaces reads the
+  caller's own memberships once, so neither costs a request more as other
+  people's workspaces grow. The local daemon has one person and no such
+  limit.
 - **A canvas holds a bounded number of nodes, edges and lines.** Every render,
   export and tidy lays the whole board out again on the serving loop, so one
   board holds at most 2000 nodes and 2000 edges and lines together (a line is

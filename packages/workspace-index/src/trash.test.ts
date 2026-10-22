@@ -103,6 +103,7 @@ describe('deleting a document', () => {
     docs = inMemoryWorkspaceDocs()
     index = new LoroWorkspaceDocumentIndex(docs, blobs, {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
     await index.createWorkspace({ workspaceId: WS })
@@ -179,6 +180,7 @@ describe('restoring a document', () => {
     docs = inMemoryWorkspaceDocs()
     index = new LoroWorkspaceDocumentIndex(docs, blobs, {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
     await index.createWorkspace({ workspaceId: WS })
@@ -281,6 +283,7 @@ describe('restoring a document judges it as a sync write would', () => {
     docs = inMemoryWorkspaceDocs()
     index = new LoroWorkspaceDocumentIndex(docs, blobs, {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
     await index.createWorkspace({ workspaceId: WS })
@@ -361,6 +364,7 @@ describe('purging a trashed document', () => {
     docs = inMemoryWorkspaceDocs()
     index = new LoroWorkspaceDocumentIndex(docs, blobs, {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
     await index.createWorkspace({ workspaceId: WS })
@@ -497,7 +501,11 @@ describe('a trash blob another workspace still names', () => {
     index = new LoroWorkspaceDocumentIndex(
       docs,
       blobs,
-      { listWorkspaces: async () => [], renameWorkspace: notRenamed },
+      {
+        listWorkspaces: async () => [],
+        findWorkspace: async () => null,
+        renameWorkspace: notRenamed,
+      },
       {
         trashBlobNamedElsewhere: async ({ workspaceId, ref }) => {
           asked.push({ workspaceId, digestHex: ref.digestHex })

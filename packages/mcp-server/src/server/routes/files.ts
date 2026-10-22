@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import {
   isUploadableImageType,
@@ -50,16 +50,22 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
   }
 }
 
-// SVG is the one uploadable type that is a document rather than pixels: it can
-// carry script, and a top-level navigation to its URL would run it in the
-// app's origin. The sandbox (no `allow-scripts`, no `allow-same-origin`) and
-// `default-src 'none'` stop it executing or fetching anything, and the
-// attachment disposition makes a navigation download instead of render. Neither
-// affects `<img src>` or a blob made from fetch(), which is how the editor
-// shows it. `setBaselineSecurityHeaders` leaves a CSP a route already chose,
-// so this one repeats the baseline's `frame-ancestors 'none'`.
+// Every answer refuses to run or fetch anything if navigated to: the bytes
+// are whatever was uploaded under an image type, and a top-level load of the
+// URL would otherwise be a document in the app's origin. SVG is the type that
+// is a document by design — it can carry script — so it also keeps its
+// inline styles and is an attachment, making a navigation download instead
+// of render. None of this affects `<img src>` or a blob made from fetch(),
+// which is how the editor shows a file, so rasters stay inline.
+// `setBaselineSecurityHeaders` leaves a CSP a route already chose, so this
+// one repeats the baseline's `frame-ancestors 'none'`.
 function fileHeaders(contentType: string, fileId: string): Record<string, string> {
-  if (contentType !== 'image/svg+xml') return { 'Content-Type': contentType }
+  if (contentType !== 'image/svg+xml') {
+    return {
+      'Content-Type': contentType,
+      'Content-Security-Policy': "default-src 'none'; sandbox; frame-ancestors 'none'",
+    }
+  }
   return {
     'Content-Type': contentType,
     'Content-Security-Policy':
@@ -106,6 +112,7 @@ export interface FilesRouterOptions {
 async function storedFileFor(
   dir: string,
   fileId: string,
+  relisted = false,
 ): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null> {
   const files = await readStoredFileNames(dir)
   if (!files) return null
@@ -117,6 +124,10 @@ async function storedFileFor(
   try {
     data = await readFile(filePath)
   } catch (error) {
+    // A re-upload as another type unlinks the name this listing found, so a
+    // missing file is first a superseded one: list once more and read what
+    // replaced it.
+    if (!relisted && isMissingFileError(error)) return storedFileFor(dir, fileId, true)
     throw corruptStoredData(filePath, `failed to read stored file (${messageOf(error)})`)
   }
   // The upload refuses an empty body, so an empty stored file is one this
@@ -124,6 +135,17 @@ async function storedFileFor(
   // 200 it would be an image that draws nothing, and pages cache it as one.
   if (data.length === 0) throw corruptStoredData(filePath, 'stored file is empty')
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
+}
+
+async function removeOtherTypes(dir: string, fileId: string, keptExt: string): Promise<void> {
+  for (const ext of Object.values(MIME_TO_EXT)) {
+    if (ext === keptExt) continue
+    try {
+      await unlink(join(dir, `${fileId}${ext}`))
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error
+    }
+  }
 }
 
 export function createFilesRouter(options: FilesRouterOptions) {
@@ -174,6 +196,11 @@ export function createFilesRouter(options: FilesRouterOptions) {
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
         await writeFileAtomicStaged(scope.dataDir, filePath, bytes)
+        // The stored name carries the type, so a re-upload as another type
+        // would leave the old file beside the new one and a read would
+        // answer whichever `readdir` lists first. Removed after the write,
+        // so a failure leaves a duplicate rather than no file at all.
+        await removeOtherTypes(dir, fileId, ext)
       })
       return c.body(null, 204)
     },

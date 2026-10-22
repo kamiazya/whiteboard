@@ -63,6 +63,7 @@ import type {
   SetDocumentPinnedInput,
   TrashEntryInput,
   WorkspaceEntry,
+  WorkspaceLookup,
 } from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
@@ -84,7 +85,7 @@ import {
   refuseNewFolders,
   refuseNewFoldersAt,
   renameWorkspaceInputSchema,
-  resolveWorkspaceHandle,
+  resolveWorkspaceHandleBy,
   setDocumentNameInputSchema,
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
@@ -100,6 +101,14 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  */
 export interface WorkspaceRegistry {
   listWorkspaces(): Promise<WorkspaceEntry[]>
+  /**
+   * The one row `lookup` names, or null. A point lookup rather than a filter
+   * over `listWorkspaces`, because resolving an address runs on every
+   * request: a keeper with many people answers it from an index, and a
+   * listing would make each request cost every workspace the keeper holds.
+   * Unvalidated, like `listWorkspaces` — the index hydrates it.
+   */
+  findWorkspace(lookup: WorkspaceLookup): Promise<WorkspaceEntry | null>
   /**
    * The registry's own write, for the same reason the read is here: a
    * workspace's NAME and ADDRESS are registry rows, and the tree holds
@@ -168,12 +177,19 @@ export class LoroWorkspaceDocumentIndex
   }
 
   /**
-   * Over the registry's own rows, through the port's single definition of the
-   * order. Nothing tree-shaped participates: a workspace's ADDRESS is a
+   * Over the registry's point lookups, through the port's single definition
+   * of the order — at most two rows read, however many workspaces it keeps. Nothing tree-shaped participates: a workspace's ADDRESS is a
    * property of who keeps it, the same reason `listWorkspaces` delegates.
    */
   async resolveWorkspace(handle: string, callerNamespace?: string): Promise<WorkspaceEntry | null> {
-    return resolveWorkspaceHandle(await this.listWorkspaces(), handle, callerNamespace)
+    return resolveWorkspaceHandleBy(
+      async (lookup) => {
+        const row = await this.registry.findWorkspace(lookup)
+        return row === null ? null : storedWorkspaceEntrySchema.parse(row)
+      },
+      handle,
+      callerNamespace,
+    )
   }
 
   /**

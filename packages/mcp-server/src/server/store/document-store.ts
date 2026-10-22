@@ -26,6 +26,8 @@ import {
   DocumentPathTakenError,
   refuseNewDocuments,
   refuseNewFoldersAt,
+  type WorkspaceEntry,
+  type WorkspaceLookup,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
@@ -105,6 +107,42 @@ export async function requireDocumentAtPath(
   return documentId
 }
 
+const REGISTRY_COLUMNS = ['id', 'namespace', 'segment', 'displayName'] as const
+
+function registryEntry(row: {
+  id: string
+  namespace: string
+  segment: string | null
+  displayName: string | null
+}): WorkspaceEntry {
+  return {
+    workspaceId: row.id,
+    // `me` is what an absent namespace already means, so a single-person
+    // keeper's rows read exactly as they did before namespaces.
+    ...(row.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: row.namespace }),
+    ...(row.segment === null ? {} : { segment: row.segment }),
+    ...(row.displayName === null ? {} : { displayName: row.displayName }),
+  }
+}
+
+/**
+ * One registry row through an index — the primary key, or the per-namespace
+ * segment index — so resolving an address costs the same whatever the tenant
+ * holds.
+ */
+async function findRegistryRow(
+  scope: StoreScope,
+  lookup: WorkspaceLookup,
+): Promise<WorkspaceEntry | null> {
+  const db = await scope.db()
+  const select = db.selectFrom('workspaces').select(REGISTRY_COLUMNS)
+  const row = await ('workspaceId' in lookup
+    ? select.where('id', '=', lookup.workspaceId)
+    : select.where('namespace', '=', lookup.namespace).where('segment', '=', lookup.segment)
+  ).executeTakeFirst()
+  return row === undefined ? null : registryEntry(row)
+}
+
 /**
  * The workspaces REGISTRY, read from the daemon's `workspaces` table — the
  * one row-shaped truth the collapse kept (who this daemon keeps, not what
@@ -119,19 +157,10 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
   return {
     async listWorkspaces() {
       const db = await scope.db()
-      const rows = await db
-        .selectFrom('workspaces')
-        .select(['id', 'namespace', 'segment', 'displayName'])
-        .execute()
-      return rows.map((row) => ({
-        workspaceId: row.id,
-        // `me` is what an absent namespace already means, so a single-person
-        // keeper's rows read exactly as they did before namespaces.
-        ...(row.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: row.namespace }),
-        ...(row.segment === null ? {} : { segment: row.segment }),
-        ...(row.displayName === null ? {} : { displayName: row.displayName }),
-      }))
+      const rows = await db.selectFrom('workspaces').select(REGISTRY_COLUMNS).execute()
+      return rows.map(registryEntry)
     },
+    findWorkspace: (lookup) => findRegistryRow(scope, lookup),
     /**
      * The registry's write half. Identity is a ROW here, so this is the
      * whole rename — the workspace's tree document holds placement and is

@@ -168,6 +168,8 @@ export function contentDigestOf(content: Record<string, unknown>): string {
 export function contentDigestOfDocument(doc: { toJSON(): unknown }): string {
   const raw = doc.toJSON() as Record<string, unknown>
   const content: Record<string, unknown> = {}
-  for (const { key } of CONTENT_CONTAINER_KEYS) if (key in raw) content[key] = raw[key]
+  // Own keys only: a root named `__proto__` becomes the projection's PROTOTYPE,
+  // so `in` would read content the document does not hold.
+  for (const { key } of CONTENT_CONTAINER_KEYS) if (Object.hasOwn(raw, key)) content[key] = raw[key]
   return contentDigestOf(content)
 }

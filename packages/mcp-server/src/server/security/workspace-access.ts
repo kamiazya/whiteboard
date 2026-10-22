@@ -52,6 +52,26 @@ export async function workspaceAccess(
   return membership === 'not-a-member' ? 'not_a_member' : 'admitted'
 }
 
+/**
+ * Every workspace `workspaceAccess` would admit this grant to, as one
+ * answer: `'all'` for a grant that bypasses membership, otherwise the ids its
+ * person is a current member of. For a caller that would otherwise ask
+ * `workspaceAccess` once per workspace — a listing — so the cost follows the
+ * caller's memberships rather than every workspace the tenant holds. The two
+ * must agree workspace by workspace;
+ * `member-profile-store.property.test.ts` holds them to it.
+ */
+export async function accessibleWorkspaces(
+  grant: ResolvedGrant,
+  members: MemberProfileStore,
+): Promise<'all' | ReadonlySet<string>> {
+  if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return 'all'
+  if (grant.person === undefined) return new Set()
+  const profile = await members.profileForBinding(grant.person)
+  if (profile === null) return new Set()
+  return new Set(await members.workspacesOf(profile.id))
+}
+
 const MEMBERSHIP_REFUSAL_MESSAGE: Record<MembershipDenial, string> = {
   requires_person_session: 'this session is not signed in as a member',
   not_a_member: 'no such member in this workspace',

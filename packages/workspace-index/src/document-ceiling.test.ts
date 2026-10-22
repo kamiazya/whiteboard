@@ -102,6 +102,7 @@ describe('a workspace at its document ceiling', () => {
     docs = inMemoryWorkspaceDocs()
     index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), {
       listWorkspaces: async () => [],
+      findWorkspace: async () => null,
       renameWorkspace: notImplemented,
     })
     await index.createWorkspace({ workspaceId: WS })

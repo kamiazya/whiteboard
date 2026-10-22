@@ -49,14 +49,13 @@ describe('createDocumentRouter hands its options on to the workspaces router', (
     expect(row && 'tier' in row).toBe(false)
   })
 
-  it('applies the admission gate to the listing: a workspace the caller is not admitted to is not named', async () => {
+  it('applies the visibility filter to the listing: a workspace the caller may not see is not named', async () => {
     await serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws-open' })
     await serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws-closed' })
     const gated = createDocumentRouter(
       testDocumentRouterOptions({
         serverDeps,
-        admit: async (_c, workspaceId) =>
-          workspaceId === 'ws-closed' ? 'not_a_member' : 'admitted',
+        visibleWorkspaces: async () => new Set(['ws-open']),
       }),
     )
     const names = (await list(gated)).workspaces.map((w) => w.workspaceId)

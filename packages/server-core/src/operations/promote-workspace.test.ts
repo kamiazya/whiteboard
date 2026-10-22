@@ -507,6 +507,11 @@ describe('promoteWorkspace', () => {
       onRecord: (record: LoroDoc, documentId: string) =>
         nodeDataOf(record, documentId).set('nodes', 1),
     },
+    'reserved-map-key': {
+      at: 'sketch',
+      status: 400,
+      write: (board: Board) => board.getMap('nodes').set('__proto__', { id: 'n2' }),
+    },
     'unattached-container': {
       at: 'sketch',
       status: 409,

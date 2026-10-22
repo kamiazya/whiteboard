@@ -18,6 +18,7 @@ import type { ResolvedGrant } from './credential-resolver.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
 import {
+  accessibleWorkspaces,
   membershipRefusal,
   type WorkspaceAccessDecision,
   workspaceAccess,
@@ -87,6 +88,18 @@ const NO_GRANT_RESOLVED: ResolvedGrant = { kind: 'external-bearer', scopes: [] }
 
 export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
   return (c, workspaceId) => workspaceAccess(grantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members)
+}
+
+/**
+ * Which workspaces this request may see, decided once for a handler that
+ * would otherwise admit workspace by workspace (the listing): `'all'`, or
+ * the ids `WorkspaceAdmit` would admit. Bound to the same grant, and
+ * fail-closed the same way — a request with no grant sees nothing.
+ */
+export type WorkspaceVisibility = (c: Context) => Promise<'all' | ReadonlySet<string>>
+
+export function membershipVisibility(members: MemberProfileStore): WorkspaceVisibility {
+  return (c) => accessibleWorkspaces(grantOf(c) ?? NO_GRANT_RESOLVED, members)
 }
 
 /** Why an owner-only change is refused: the caller is no owner, or is one

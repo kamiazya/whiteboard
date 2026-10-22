@@ -243,7 +243,8 @@ To bring in someone who is not a user yet, an owner creates an invitation
 with `POST /api/workspaces/<workspace>/invitations`. The response carries a
 link to this keeper's `/invite` page, valid for seven days and usable once.
 Whoever signs in through it becomes a user, if they are not one already, and
-a member of that workspace. The token is in the link's fragment, so the
+a member of that workspace. Someone who is already a member signs in without
+using it up, so it still works for the person it was meant for. The token is in the link's fragment, so the
 browser never sends it to a server and it does not appear in a `Referer`;
 once the page has read it, it removes the fragment from the address bar and
 the history entry — so reloading that page shows the plain sign-in page, and

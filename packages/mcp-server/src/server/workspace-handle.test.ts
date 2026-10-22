@@ -6,11 +6,17 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./store/document-store.js', () => ({
-  workspaceRegistry: () => ({
-    listWorkspaces: async () => [{ workspaceId: 'ws_canonical', segment: 'alpha' }],
-  }),
-}))
+vi.mock('./store/document-store.js', async () => {
+  const { matchesWorkspaceLookup } = await import('@kamiazya/whiteboard-ports')
+  const rows = [{ workspaceId: 'ws_canonical', segment: 'alpha' }]
+  return {
+    workspaceRegistry: () => ({
+      listWorkspaces: async () => rows,
+      findWorkspace: async (lookup: Parameters<typeof matchesWorkspaceLookup>[1]) =>
+        rows.find((row) => matchesWorkspaceLookup(row, lookup)) ?? null,
+    }),
+  }
+})
 
 const { parseWorkspaceHandle, refuseMalformedHandle } = await import('./workspace-handle.js')
 

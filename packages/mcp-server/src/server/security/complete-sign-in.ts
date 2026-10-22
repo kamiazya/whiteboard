@@ -8,7 +8,8 @@
  *   2. for a newcomer, find the invitation they arrived with;
  *   3. admit — the provider's rules, then code rules, then the route in;
  *   4. only then spend the invitation, create the user, and add them to the
- *      workspace it invites into (ADR-0049 decision 3);
+ *      workspace it invites into (ADR-0049 decision 3) — unless they are
+ *      already a member of it, when the link is left unspent;
  *   5. open the session — in one write transaction with a check that the
  *      user is still active, so a deactivation racing the steps above
  *      leaves no session behind it.
@@ -162,25 +163,55 @@ export async function completeSignIn(
   })
   if (!decision.admitted) return refuse(decision.reason)
 
-  const profile = await deps.atomically(async ({ members, invitations }) => {
-    const spent =
-      arrived.kind === 'none' ||
-      (await invitations.redeem(arrived.id, JSON.stringify(binding), now))
-    if (!spent) return null
-    const user =
-      existing ??
-      (await members.ensureProfile({ binding, displayName: displayNameFrom(claims, sub) }))
-    if (arrived.kind !== 'none' && arrived.workspaceId !== null) {
-      await members.addMember(arrived.workspaceId, user.id)
-    }
-    return user
-  })
+  const profile = await deps.atomically((stores) =>
+    enter(stores, { existing, arrived, binding, claims, now }),
+  )
   if (profile === null) return refuse('invitation_unusable')
 
   // Null when a deactivation landed after the check above.
   const sessionToken = await openSession(deps, binding, claims, now)
   if (sessionToken === null) return refuse('deactivated')
   return { ok: true, sessionToken, profile }
+}
+
+interface Entry {
+  readonly existing: MemberProfile | null
+  readonly arrived: Exclude<ArrivedWith, { kind: 'unusable' }>
+  readonly binding: AuthenticatorBinding
+  readonly claims: VerifiedClaims
+  readonly now: number
+}
+
+/** Spends the link, creates the user and joins the workspace, in one
+ *  transaction; `null` when the link was not there to spend. */
+async function enter(
+  { members, invitations }: NewcomerStores,
+  { existing, arrived, binding, claims, now }: Entry,
+): Promise<MemberProfile | null> {
+  // A member already in the workspace would be added to nothing, so the
+  // link stays for whoever it was meant for. Read in the transaction that
+  // would spend it, so a removal racing this cannot be read stale.
+  if (
+    existing !== null &&
+    arrived.kind === 'link' &&
+    arrived.workspaceId !== null &&
+    (await members.membershipRole(arrived.workspaceId, existing.id)) !== null
+  ) {
+    return existing
+  }
+  const spent =
+    arrived.kind === 'none' || (await invitations.redeem(arrived.id, JSON.stringify(binding), now))
+  if (!spent) return null
+  const user =
+    existing ??
+    (await members.ensureProfile({
+      binding,
+      displayName: displayNameFrom(claims, binding.subject),
+    }))
+  if (arrived.kind !== 'none' && arrived.workspaceId !== null) {
+    await members.addMember(arrived.workspaceId, user.id)
+  }
+  return user
 }
 
 // OpenID Connect Core 1.0 section 2: `auth_time` is when the End-User

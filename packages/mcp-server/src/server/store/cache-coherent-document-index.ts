@@ -1,8 +1,12 @@
+import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import {
   type BlobStore,
   type CreateWorkspaceInput,
   createWorkspaceInputSchema,
+  KeyedSerializer,
+  NAMESPACE_MAX_WORKSPACES,
   type RenameWorkspaceInput,
+  refuseNewWorkspace,
   renameWorkspaceInputSchema,
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
@@ -19,6 +23,9 @@ import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { trashBlobNamedElsewhere } from './trash-blob-named-elsewhere.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
+
+/** Creates in one namespace, one at a time per instance — see `createWorkspace`. */
+const namespaceCreates = new KeyedSerializer()
 
 /**
  * The tree index, with this composition root's doc-cache kept coherent
@@ -67,6 +74,38 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
    */
   override async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
     const parsed = createWorkspaceInputSchema.parse(input)
+    const namespace = parsed.namespace ?? SINGLE_PERSON_NAMESPACE
+    if (namespace === SINGLE_PERSON_NAMESPACE) return this.#createWorkspace(parsed)
+    // Serialised per namespace so two creates in this instance cannot both
+    // count the last free place. Instances do not share this queue, so
+    // concurrent creates through several instances can each take it and land
+    // the namespace a few past the ceiling — the same overshoot every
+    // per-instance ceiling here accepts (workspace-lock.ts).
+    return namespaceCreates.run(`${this.scope.layout.tenantId}\0${namespace}`, async () => {
+      await this.#refuseWorkspacePastCeiling(parsed.workspaceId, namespace)
+      await this.#createWorkspace(parsed)
+    })
+  }
+
+  // A create naming a workspace that already exists writes nothing new, so it
+  // is not refused for a namespace that is full.
+  async #refuseWorkspacePastCeiling(workspaceId: string, namespace: string): Promise<void> {
+    const db = await this.scope.db()
+    const held = await db
+      .selectFrom('workspaces')
+      .select((eb) => eb.fn.countAll<number>().as('held'))
+      .where('namespace', '=', namespace)
+      .executeTakeFirstOrThrow()
+    if (held.held < NAMESPACE_MAX_WORKSPACES) return
+    const existing = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('id', '=', workspaceId)
+      .executeTakeFirst()
+    if (existing === undefined) refuseNewWorkspace(namespace, Number(held.held))
+  }
+
+  async #createWorkspace(parsed: CreateWorkspaceInput): Promise<void> {
     return withWorkspaceWriteLock(parsed.workspaceId, async () => {
       await upsertWorkspaceRow(await this.scope.db(), parsed.workspaceId, {
         ...(parsed.namespace === undefined ? {} : { namespace: parsed.namespace }),

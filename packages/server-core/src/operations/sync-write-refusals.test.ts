@@ -102,6 +102,7 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
   'content-root': () => textBreachRefusal({ shape: 'content-root', key: 'nodes', container: MAP }),
   'unattached-container': () =>
     textBreachRefusal({ shape: 'unattached-container', container: MAP }),
+  'reserved-map-key': () => textBreachRefusal({ shape: 'reserved-map-key', container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -121,6 +122,7 @@ const SAME_ANSWER_AS: Readonly<Record<string, string>> = {
 const TEXT_STATUS: Partial<Record<SyncTextBreach['shape'], number>> = {
   'content-root': 400,
   'unattached-container': 409,
+  'reserved-map-key': 400,
 }
 
 /** The concrete error classes the module exports, found rather than listed. */
