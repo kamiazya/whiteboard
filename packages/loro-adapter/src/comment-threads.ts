@@ -210,6 +210,16 @@ export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number 
 }
 
 /**
+ * How many messages one thread STORES, readable or not — the count the sync
+ * judge holds a thread's ceiling to, so a writer that counts only what the
+ * schema accepts cannot take a thread past it.
+ */
+export function storedThreadMessageCount(doc: DocumentContainers, threadId: string): number {
+  const messages = threadContainer(doc, threadId)?.get(MESSAGES_KEY)
+  return messages instanceof LoroMap ? messages.size : 0
+}
+
+/**
  * How many threads in `threadsMap` are open, read off each thread's status
  * alone rather than through the schema `readCommentThreads` parses with, so
  * a sync judgement pays one field per thread. A thread without an `open`

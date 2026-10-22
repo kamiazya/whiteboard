@@ -74,8 +74,28 @@ describe('self-host-with-docker.md sign-in configuration examples', () => {
       ),
     )
     expect(addresses.length).toBeGreaterThanOrEqual(2)
-    for (const address of addresses) {
-      expect(address, address).not.toMatch(/^(127\.|::1$|::ffff:127\.)/)
+    for (const address of addresses) expect(isLoopback(address), address).toBe(false)
+  })
+
+  it('reads every loopback spelling an example could use as loopback', () => {
+    for (const address of [
+      '127.0.0.1',
+      '127.0.0.0/8',
+      '::1',
+      '::1/128',
+      '0:0:0:0:0:0:0:1',
+      '::ffff:127.0.0.1',
+    ]) {
+      expect(isLoopback(address), address).toBe(true)
     }
+    expect(isLoopback('172.18.0.1')).toBe(false)
   })
 })
+
+/** Whether `address` — one address or a CIDR range — is or starts at a loopback address. */
+function isLoopback(address: string): boolean {
+  const host = (address.split('/')[0] ?? '').toLowerCase()
+  if (host.startsWith('127.') || host.startsWith('::ffff:127.')) return true
+  // Every IPv6 spelling of ::1: groups of zeros, then a final 1.
+  return /^[0:]*:0*1$/.test(host)
+}

@@ -9,7 +9,7 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { THREAD_MAX_MESSAGES, THREAD_MESSAGES_LIMIT_PHRASE } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+import { type LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, test, vi } from 'vitest'
 import {
   FakeDocumentStore,
@@ -68,6 +68,21 @@ describe('wb_thread_edit holds the per-thread message ceiling', () => {
     await expect(
       createThreadEditTool(deps).execute({ ...target, ops: [reply, reply] }),
     ).rejects.toThrow(pastMessages)
+    expect(saves).not.toHaveBeenCalled()
+  })
+
+  // The sync judge counts every stored entry, so the tool must too: a reply
+  // judged against the readable messages alone would store the 1001st.
+  test('counts a stored message the schema refuses toward the ceiling', async () => {
+    const { deps, saves } = await seeded((doc) => {
+      threadOf(THREAD_MAX_MESSAGES - 1)(doc)
+      const thread = doc.getMap('threads').get('t1')
+      const messages = thread instanceof LoroMap ? thread.get('messages') : undefined
+      if (messages instanceof LoroMap) messages.set('t1-junk', { body: 42 })
+    })
+    await expect(createThreadEditTool(deps).execute({ ...target, ops: [reply] })).rejects.toThrow(
+      /past the limit of \d+ messages in one comment thread/,
+    )
     expect(saves).not.toHaveBeenCalled()
   })
 

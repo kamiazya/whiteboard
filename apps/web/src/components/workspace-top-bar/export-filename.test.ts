@@ -24,12 +24,17 @@ describe('sanitizeExportFilenameBase', () => {
     ['RIGHT-TO-LEFT OVERRIDE', 0x202e],
     ['LEFT-TO-RIGHT ISOLATE', 0x2066],
     ['POP DIRECTIONAL ISOLATE', 0x2069],
+    ['ARABIC LETTER MARK', 0x061c],
+    ['LEFT-TO-RIGHT MARK', 0x200e],
+    ['RIGHT-TO-LEFT MARK', 0x200f],
   ])('replaces %s with a hyphen', (_name, codePoint) => {
     expect(sanitizeExportFilenameBase(`a${String.fromCodePoint(codePoint)}b`)).toBe('a-b')
   })
 
   it('keeps the characters either side of each replaced range', () => {
-    const neighbours = [0x20, 0x7e, 0xa0, 0x2029, 0x202f, 0x2065, 0x206a]
+    const neighbours = [
+      0x20, 0x7e, 0xa0, 0x061b, 0x061d, 0x200d, 0x2010, 0x2029, 0x202f, 0x2065, 0x206a,
+    ]
     const name = String.fromCodePoint(...neighbours)
     expect(sanitizeExportFilenameBase(name)).toBe(name)
   })

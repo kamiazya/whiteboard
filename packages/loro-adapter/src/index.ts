@@ -3,6 +3,7 @@ export {
   migrateCanvasCommentsToThreads,
   readCommentThreads,
   setCommentThreadStatus,
+  storedThreadMessageCount,
   writeCommentThread,
   writeThreadMessage,
 } from './comment-threads.js'

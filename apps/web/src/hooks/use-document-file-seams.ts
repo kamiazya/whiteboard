@@ -30,7 +30,7 @@ import {
   type SpatialCanvas,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type {
   DocumentFileAdapter,
@@ -177,8 +177,12 @@ export function useDocumentFileSeams({
   // A rejection is the adapter's "could not read" (see `DocumentFileAdapter`),
   // so it is asked again; `undefined` is "nothing here", terminal until the
   // stamp moves.
+  // Read by the eviction callback, which runs when a load lands — after a
+  // commit — so the stamps it sees are the committed render's.
   const stampRef = useRef(stampOf)
-  stampRef.current = stampOf
+  useLayoutEffect(() => {
+    stampRef.current = stampOf
+  }, [stampOf])
   const cache = usePrefetchedEntries<LoadedFileDocument>(
     useCallback(
       (loaded) => {
