@@ -7,6 +7,7 @@
  * recovers a workspace whose owners are all deactivated.
  */
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
+import { TooManyWorkspacesError } from '@kamiazya/whiteboard-ports'
 import { type ExpressionBuilder, expressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import {
@@ -14,7 +15,11 @@ import {
   type TenantScoped,
   type TenantTransaction,
 } from '../store/db/tenant-database.js'
-import { moveIntoNamespace, oldestOwnerNamespace } from './workspace-namespace-home.js'
+import {
+  moveIntoNamespace,
+  namespaceHasRoom,
+  oldestOwnerNamespace,
+} from './workspace-namespace-home.js'
 
 export interface WorkspaceMember {
   readonly profile: { readonly id: string; readonly displayName: string }
@@ -22,8 +27,13 @@ export interface WorkspaceMember {
   readonly deactivated: boolean
 }
 
-/** `not-an-owner` answers only a change made on an owner's behalf. */
-type RoleChange = 'ok' | 'not-a-member' | 'last-owner' | 'not-an-owner'
+/**
+ * `not-an-owner` answers only a change made on an owner's behalf.
+ * `namespace-full`: the change would hand the workspace to an owner whose
+ * namespace is at `NAMESPACE_MAX_WORKSPACES`; nothing was changed, and it
+ * goes through once they have room.
+ */
+type RoleChange = 'ok' | 'not-a-member' | 'last-owner' | 'not-an-owner' | 'namespace-full'
 
 export interface WorkspaceRoles {
   list(workspaceId: string): Promise<WorkspaceMember[]>
@@ -137,9 +147,28 @@ async function rehomeFrom(trx: TenantTransaction, workspaceId: string, profileId
     .where('memberProfiles.id', '=', profileId)
     .executeTakeFirst()
   if (held === undefined) return
-  await moveIntoNamespace(trx, held, await oldestOwnerNamespace(trx, workspaceId, profileId), {
-    handedOver: true,
-  })
+  const namespace = await oldestOwnerNamespace(trx, workspaceId, profileId)
+  // Thrown, so the transaction rolls back the role change it rides on.
+  if (!(await namespaceHasRoom(trx, namespace))) {
+    throw new TooManyWorkspacesError(namespace)
+  }
+  await moveIntoNamespace(trx, held, namespace, { handedOver: true })
+}
+
+// One role change in its own transaction. A change refused by `rehomeFrom`'s
+// ceiling is answered as a value once that transaction has rolled back; inside
+// a caller's transaction nothing has rolled back yet, so the error is left for
+// that caller.
+async function roleChange(
+  db: TenantScoped,
+  change: (trx: TenantTransaction) => Promise<RoleChange>,
+): Promise<RoleChange> {
+  try {
+    return await inTenantTransaction(db, change)
+  } catch (err) {
+    if (err instanceof TooManyWorkspacesError && !db.isTransaction) return 'namespace-full'
+    throw err
+  }
 }
 
 // `by` null is the operator, who is held to the last-owner rule alone.
@@ -150,7 +179,7 @@ function setRole(
   role: WorkspaceRole,
   by: string | null,
 ): Promise<RoleChange> {
-  return inTenantTransaction(db, async (trx) => {
+  return roleChange(db, async (trx) => {
     let update = trx
       .updateTable('workspaceMemberships')
       .set({ role })
@@ -174,7 +203,7 @@ function remove(
   profileId: string,
   by: string | null,
 ): Promise<RoleChange> {
-  return inTenantTransaction(db, async (trx) => {
+  return roleChange(db, async (trx) => {
     let removal = trx
       .deleteFrom('workspaceMemberships')
       .where('workspaceId', '=', workspaceId)

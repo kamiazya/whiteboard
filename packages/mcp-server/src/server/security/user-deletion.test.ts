@@ -8,8 +8,9 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { createIsolatedDb, fillNamespace } from '../store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
 import { createInvitationStore, type InvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
@@ -252,5 +253,64 @@ describe('createUserDeletion — the namespace a deleted person held', () => {
     expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
 
     expect(await placed('ws-empty')).toEqual({ namespace: 'me', segment: 'design' })
+  })
+
+  // Deleting a person must not become impossible because an inheritor is at
+  // the namespace ceiling, nor push that inheritor past it.
+  describe('when an inheritor is at the workspace ceiling', () => {
+    async function held(namespace: string): Promise<number> {
+      const row = await handle.db
+        .selectFrom('workspaces')
+        .select((eb) => eb.fn.countAll<number>().as('n'))
+        .where('namespace', '=', namespace)
+        .executeTakeFirstOrThrow()
+      return Number(row.n)
+    }
+
+    // ada holds ws-1; bob is its oldest surviving owner, carol the next.
+    async function adaWithTwoInheritors() {
+      const user = await deactivated(ada, 'Ada')
+      const bobUser = await members.ensureProfile({ binding: bob, displayName: 'Bob' })
+      const carolUser = await members.ensureProfile({ binding: carol, displayName: 'Carol' })
+      await workspaceRow('ws-1', user.handle, 'design')
+      const roles = createWorkspaceRoles(handle.db)
+      for (const id of [user.id, bobUser.id, carolUser.id]) await members.addMember('ws-1', id)
+      for (const id of [bobUser.id, carolUser.id]) await roles.setRole('ws-1', id, 'owner')
+      await handle.db
+        .updateTable('workspaceMemberships')
+        .set({ createdAt: 50 })
+        .where('workspaceId', '=', 'ws-1')
+        .where('profileId', '=', bobUser.id)
+        .execute()
+      await handle.db
+        .updateTable('workspaceMemberships')
+        .set({ createdAt: 60 })
+        .where('workspaceId', '=', 'ws-1')
+        .where('profileId', '=', carolUser.id)
+        .execute()
+      return { user, bobUser, carolUser }
+    }
+
+    it('moves the workspace to the next-oldest owner with room', async () => {
+      const { user, bobUser, carolUser } = await adaWithTwoInheritors()
+      await fillNamespace(handle.db, bobUser.handle, NAMESPACE_MAX_WORKSPACES)
+
+      expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
+
+      expect(await held(bobUser.handle)).toBe(NAMESPACE_MAX_WORKSPACES)
+      expect((await placed('ws-1')).namespace).toBe(carolUser.handle)
+    })
+
+    it('parks the workspace in the namespace nobody holds when no owner has room', async () => {
+      const { user, bobUser, carolUser } = await adaWithTwoInheritors()
+      await fillNamespace(handle.db, bobUser.handle, NAMESPACE_MAX_WORKSPACES)
+      await fillNamespace(handle.db, carolUser.handle, NAMESPACE_MAX_WORKSPACES)
+
+      expect(await deletion().delete(user.id, null)).toEqual({ kind: 'deleted' })
+
+      expect(await held(bobUser.handle)).toBe(NAMESPACE_MAX_WORKSPACES)
+      expect(await held(carolUser.handle)).toBe(NAMESPACE_MAX_WORKSPACES)
+      expect((await placed('ws-1')).namespace).toBe('me')
+    })
   })
 })

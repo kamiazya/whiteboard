@@ -7,6 +7,7 @@
  * workspace would otherwise stay reachable by its id alone.
  */
 import { SINGLE_PERSON_NAMESPACE, WORKSPACE_SEGMENT_MAX_LENGTH } from '@kamiazya/whiteboard-model'
+import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 import {
   inTenantTransaction,
@@ -15,15 +16,15 @@ import {
 } from '../store/db/tenant-database.js'
 
 /**
- * The handle of the workspace's oldest owner, by membership createdAt and
- * then user id — the membership row's time, since no role-change time is
- * stored — leaving out `excluding`. `me` when no owner is left.
+ * The handles of the workspace's owners, oldest first, by membership
+ * createdAt and then user id — the membership row's time, since no
+ * role-change time is stored — leaving out `excluding`.
  */
-export async function oldestOwnerNamespace(
+async function ownerNamespaces(
   trx: TenantTransaction,
   workspaceId: string,
   excluding?: string,
-): Promise<string> {
+): Promise<string[]> {
   let query = trx
     .selectFrom('workspaceMemberships')
     .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
@@ -32,12 +33,60 @@ export async function oldestOwnerNamespace(
     .where('workspaceMemberships.role', '=', 'owner')
   if (excluding !== undefined)
     query = query.where('workspaceMemberships.profileId', '!=', excluding)
-  const row = await query
+  const rows = await query
     .orderBy('workspaceMemberships.createdAt', 'asc')
     .orderBy('workspaceMemberships.profileId', 'asc')
-    .limit(1)
-    .executeTakeFirst()
-  return row?.handle ?? SINGLE_PERSON_NAMESPACE
+    .execute()
+  return rows.map((row) => row.handle)
+}
+
+/** The handle of the workspace's oldest owner, leaving out `excluding`. `me` when no owner is left. */
+export async function oldestOwnerNamespace(
+  trx: TenantTransaction,
+  workspaceId: string,
+  excluding?: string,
+): Promise<string> {
+  return (await ownerNamespaces(trx, workspaceId, excluding))[0] ?? SINGLE_PERSON_NAMESPACE
+}
+
+/**
+ * Whether `namespace` can take one more workspace without passing
+ * `NAMESPACE_MAX_WORKSPACES`, the ceiling a create is held to: a hand-over
+ * adds a workspace to its recipient as surely as a create does, and without
+ * the count a person at the ceiling could hand one to a co-owner, create
+ * again, and repeat. Asked only of an owner's namespace, never of `me`, which
+ * no server-mode user holds. Counted inside the move's own transaction, which
+ * holds the write lock from its start (`BEGIN IMMEDIATE`), so nothing else can
+ * take the last place between the count and the move.
+ */
+export async function namespaceHasRoom(
+  trx: TenantTransaction,
+  namespace: string,
+): Promise<boolean> {
+  const row = await trx
+    .selectFrom('workspaces')
+    .select((eb) => eb.fn.countAll<number>().as('held'))
+    .where('namespace', '=', namespace)
+    .executeTakeFirstOrThrow()
+  return Number(row.held) < NAMESPACE_MAX_WORKSPACES
+}
+
+/**
+ * The oldest owner's handle whose namespace has room for the workspace,
+ * leaving out `excluding`; `me` when none has. For a move that must not be
+ * refused — a deletion, an operator's grant — where an owner at the ceiling
+ * is skipped rather than pushed past it, and a workspace no owner can take
+ * waits in `me`, reachable by its id, until one has room.
+ */
+export async function oldestOwnerNamespaceWithRoom(
+  trx: TenantTransaction,
+  workspaceId: string,
+  excluding?: string,
+): Promise<string> {
+  for (const namespace of await ownerNamespaces(trx, workspaceId, excluding)) {
+    if (await namespaceHasRoom(trx, namespace)) return namespace
+  }
+  return SINGLE_PERSON_NAMESPACE
 }
 
 /**
@@ -128,7 +177,8 @@ function isDigit(code: number): boolean {
 
 /**
  * Takes a workspace held in `me` into its oldest owner's namespace, once it
- * has one.
+ * has one — the oldest with room under the ceiling, and none while every
+ * owner is at it, so a grant is never refused for it.
  *
  * A workspace nobody else is in — a single-person keeper's, restored here —
  * keeps its segment: whoever chose it, nobody but its new holder reads what
@@ -144,7 +194,8 @@ export async function homeWithItsOwner(db: TenantScoped, workspaceId: string): P
       .where('id', '=', workspaceId)
       .executeTakeFirst()
     if (workspace?.namespace !== SINGLE_PERSON_NAMESPACE) return
-    const namespace = await oldestOwnerNamespace(trx, workspaceId)
+    const namespace = await oldestOwnerNamespaceWithRoom(trx, workspaceId)
+    if (namespace === SINGLE_PERSON_NAMESPACE) return
     const someoneElse = await trx
       .selectFrom('workspaceMemberships')
       .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')

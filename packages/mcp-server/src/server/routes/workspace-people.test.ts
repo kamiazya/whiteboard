@@ -12,7 +12,11 @@ import {
   INVITE_PAGE_PATH,
   inviteTokenOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { MAX_PENDING_WORKSPACE_INVITATIONS } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
+import {
+  MAX_PENDING_WORKSPACE_INVITATIONS,
+  workspacePeopleRefusalSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
+import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sha256Hex } from '../../shared/sha256.js'
@@ -25,7 +29,8 @@ import { createWorkspacePeopleAdministration } from '../security/people-administ
 import { serverModePeopleKeeper } from '../security/people-keepers.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
 import { SESSION_COOKIE, type SignInSessionStore } from '../security/sign-in-session-store.js'
-import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { createIsolatedDb, fillNamespace } from '../store/db/test-helpers.js'
+import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
 import { endSyncStreamsOf } from '../sync-streams.js'
 import { createWorkspacePeopleRouter } from './workspace-people.js'
 
@@ -59,6 +64,7 @@ let app: Hono
 let staleApp: Hono
 let roles: ReturnType<typeof serverModePeople>['people']['roles']
 const ids: Record<string, string> = {}
+const handles: Record<string, string> = {}
 const sessionOf: Record<string, string> = {}
 
 // `as` signed in at this host, the way the web app's people screen calls.
@@ -96,6 +102,7 @@ beforeEach(async () => {
     const binding = { authenticator: AUTHENTICATOR, subject: name }
     const user = await members.ensureProfile({ binding, displayName: name })
     ids[name] = user.id
+    handles[name] = user.handle
     sessionOf[name] = await sessions.create(binding, Date.now(), 60_000, Date.now())
   }
   await members.addMember('ws-1', ids.ada as string)
@@ -209,6 +216,24 @@ describe('workspace people', () => {
       status: 404,
       body: { error: 'not_a_member' },
     })
+  })
+
+  // Leaving would hand the workspace to bob, whose namespace is full: refused
+  // with the create's own code, so the ceiling cannot be walked around by
+  // handing workspaces to a co-owner.
+  it.each([
+    ['demote', 'PATCH', { role: 'member' }],
+    ['remove', 'DELETE', undefined],
+  ] as const)('refuses an owner who would %s themself into a full namespace', async (_, method, body) => {
+    await upsertWorkspaceRow(handle.db, 'ws-1', { namespace: handles.ada as string })
+    expect((await call('ada', 'PATCH', `/people/${ids.bob}`, { role: 'owner' })).status).toBe(200)
+    await fillNamespace(handle.db, handles.bob as string, NAMESPACE_MAX_WORKSPACES)
+
+    const refused = await call('ada', method, `/people/${ids.ada}`, body)
+
+    expect(refused.status).toBe(413)
+    expect(workspacePeopleRefusalSchema.parse(refused.body).error).toBe('too_many_workspaces')
+    expect(await members.membershipRole('ws-1', ids.ada as string)).toBe('owner')
   })
 
   // ADR-0049 decision 3: an owner invites into the workspace by a link whose

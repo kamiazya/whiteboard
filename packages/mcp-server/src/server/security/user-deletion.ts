@@ -25,7 +25,7 @@ import {
 } from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 import { administersNow } from './user-deactivation.js'
-import { moveIntoNamespace, oldestOwnerNamespace } from './workspace-namespace-home.js'
+import { moveIntoNamespace, oldestOwnerNamespaceWithRoom } from './workspace-namespace-home.js'
 
 type UserDeletionOutcome =
   | { readonly kind: 'deleted' }
@@ -88,9 +88,12 @@ async function endSessions(trx: TenantTransaction, accountId: string) {
 }
 
 // Moves every workspace the person's namespace holds to its inheritor, their
-// oldest surviving owner (ADR-0053 decision 4). A workspace with no owner left
-// goes to `me`, which no server-mode user can hold, so it stays reachable by
-// its id until an operator grants it a member.
+// oldest surviving owner (ADR-0053 decision 4) whose namespace has room under
+// the workspace ceiling. A deletion is not refused for an inheritor at the
+// ceiling, nor does it push one past it: that owner is skipped for the next.
+// A workspace with no owner left, or none with room, goes to `me`, which no
+// server-mode user can hold and which counts toward nobody's ceiling, so it
+// stays reachable by its id until an operator's grant homes it.
 async function rehomeTheirNamespace(trx: TenantTransaction, profileId: string, handle: string) {
   const held = await trx
     .selectFrom('workspaces')
@@ -102,7 +105,7 @@ async function rehomeTheirNamespace(trx: TenantTransaction, profileId: string, h
     await moveIntoNamespace(
       trx,
       workspace,
-      await oldestOwnerNamespace(trx, workspace.id, profileId),
+      await oldestOwnerNamespaceWithRoom(trx, workspace.id, profileId),
       { handedOver: true },
     )
   }

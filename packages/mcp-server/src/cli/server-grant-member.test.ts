@@ -8,13 +8,14 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
 } from '../server/security/member-profile-store.js'
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
-import { createIsolatedDb } from '../server/store/db/test-helpers.js'
+import { createIsolatedDb, fillNamespace } from '../server/store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../server/store/db/upsert-workspace.js'
 import { grantMemberOutputSchema } from './operator-json.js'
 import { grantMember, runServerGrantMember } from './server-grant-member.js'
@@ -95,6 +96,24 @@ describe('grantMember', () => {
       .where('id', '=', 'ws-restored')
       .executeTakeFirstOrThrow()
     expect(row).toEqual({ namespace: ada.handle, segment: 'plans-2' })
+  })
+
+  // A grant is not refused for the ceiling: the workspace waits in `me`,
+  // reachable by its id, rather than pushing its owner past it.
+  it('leaves a workspace in `me` while its owner is at the workspace ceiling', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    await fillNamespace(handle.db, ada.handle, NAMESPACE_MAX_WORKSPACES)
+
+    const outcome = await grantMember(handle.db, { workspaceId: WS, user: ada.id })
+
+    expect(outcome.kind).toBe('ok')
+    expect(await members.membershipRole(WS, ada.id)).toBe('owner')
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select('namespace')
+      .where('id', '=', WS)
+      .executeTakeFirstOrThrow()
+    expect(row.namespace).toBe('me')
   })
 
   // A workspace parked in `me` with people still in it carries a segment

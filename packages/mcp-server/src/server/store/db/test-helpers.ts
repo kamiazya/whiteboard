@@ -174,3 +174,30 @@ export async function tableExists(db: QueryExecutorProvider, name: string): Prom
   }>`select name from sqlite_master where type = 'table' and name = ${name}`.execute(db)
   return rows.length > 0
 }
+
+/**
+ * Seeds `count` registry rows into `namespace` directly — a store test of the
+ * workspace ceiling needs a full namespace, not a thousand creates. Batched,
+ * since one statement binding every row's values passes SQLite's
+ * host-parameter limit.
+ */
+export async function fillNamespace(
+  db: TenantDatabase,
+  namespace: string,
+  count: number,
+): Promise<void> {
+  const rows = Array.from({ length: count }, (_, i) => ({
+    id: `filler-${namespace}-${i}`,
+    namespace,
+    segment: `filler-${i}`,
+    displayName: null,
+    createdAt: 0,
+    updatedAt: 0,
+  }))
+  for (let i = 0; i < rows.length; i += 200) {
+    await db
+      .insertInto('workspaces')
+      .values(rows.slice(i, i + 200))
+      .execute()
+  }
+}

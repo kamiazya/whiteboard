@@ -320,7 +320,11 @@ holder did not choose that name: kept as it was, it would answer the
 their own, and their writes would land in a workspace somebody else is still
 a member of. The new holder can rename it as soon as it arrives, and nobody
 else can: the other owners cannot rename it back. A workspace the new holder
-already has under that short name is left alone.
+already has under that short name is left alone. The move counts toward the
+new holder's [workspace limit](../reference/configuration.md#workspace-limits): while their
+namespace is full, the demotion or removal is refused with
+`too_many_workspaces` and nothing changes, and a deleted person's workspace
+goes to the next-oldest owner with room instead.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool
 call that names a workspace the caller is not a member of fails with
 `not_a_member`, whether or not that workspace exists, so the answer does not

@@ -6,13 +6,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
+import { NAMESPACE_MAX_WORKSPACES, TooManyWorkspacesError } from '@kamiazya/whiteboard-ports'
 import { Kysely, type Selectable } from 'kysely'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { busyRetryingDialect } from '../store/db/busy-retry.js'
 import { DB_FILENAME } from '../store/db/index.js'
 import type { DatabaseSchema } from '../store/db/schema.js'
-import { tenantDatabase } from '../store/db/tenant-database.js'
-import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { inTenantTransaction, tenantDatabase } from '../store/db/tenant-database.js'
+import { createIsolatedDb, fillNamespace } from '../store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
@@ -239,6 +240,72 @@ describe('createWorkspaceRoles — a workspace handed to a new holder', () => {
 
     expect(await heldAt(bob.handle, 'journal')).toBe('ws-bobs')
     expect((await placed('ws-journal')).segment).not.toMatch(/^journal(-\d+)?$/)
+  })
+})
+
+// A hand-over adds a workspace to its recipient's namespace as surely as a
+// create does, so it is held to the same ceiling: otherwise a person at the
+// ceiling could hand workspaces to a co-owner, create again, and repeat.
+describe('createWorkspaceRoles — a hand-over into a namespace at the ceiling', () => {
+  async function held(namespace: string): Promise<number> {
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select((eb) => eb.fn.countAll<number>().as('n'))
+      .where('namespace', '=', namespace)
+      .executeTakeFirstOrThrow()
+    return Number(row.n)
+  }
+
+  async function sharedWithFullBob() {
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await upsertWorkspaceRow(handle.db, 'ws-shared', { namespace: ada.handle, segment: 'plans' })
+    await members.addMember('ws-shared', ada.id)
+    expect(await roles.addAsOwner('ws-shared', bob.id, ada.id)).toBe('ok')
+    expect(await roles.setRoleAsOwner('ws-shared', bob.id, 'owner', ada.id)).toBe('ok')
+    await fillNamespace(handle.db, bob.handle, NAMESPACE_MAX_WORKSPACES)
+    return { ada, bob }
+  }
+
+  it.each([
+    ['demotes', (id: string) => roles.setRoleAsOwner('ws-shared', id, 'member', id)],
+    ['removes', (id: string) => roles.removeAsOwner('ws-shared', id, id)],
+  ] as const)('refuses an owner who %s themself, changing nothing', async (_, leave) => {
+    const { ada, bob } = await sharedWithFullBob()
+
+    expect(await leave(ada.id)).toBe('namespace-full')
+
+    expect(await held(bob.handle)).toBe(NAMESPACE_MAX_WORKSPACES)
+    expect(await members.membershipRole('ws-shared', ada.id)).toBe('owner')
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .select(['namespace', 'segment'])
+      .where('id', '=', 'ws-shared')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({ namespace: ada.handle, segment: 'plans' })
+  })
+
+  // Inside a caller's transaction nothing has rolled back when the hand-over
+  // is refused, so the refusal is left for that caller to roll back.
+  it("throws inside a caller's transaction rather than answering", async () => {
+    const { ada } = await sharedWithFullBob()
+
+    await expect(
+      inTenantTransaction(handle.db, (trx) =>
+        createWorkspaceRoles(trx).setRoleAsOwner('ws-shared', ada.id, 'member', ada.id),
+      ),
+    ).rejects.toBeInstanceOf(TooManyWorkspacesError)
+
+    expect(await members.membershipRole('ws-shared', ada.id)).toBe('owner')
+  })
+
+  it('lets the hand-over through once the recipient has room', async () => {
+    const { ada, bob } = await sharedWithFullBob()
+    await handle.db.deleteFrom('workspaces').where('segment', '=', 'filler-0').execute()
+
+    expect(await roles.setRoleAsOwner('ws-shared', ada.id, 'member', ada.id)).toBe('ok')
+
+    expect(await held(bob.handle)).toBe(NAMESPACE_MAX_WORKSPACES)
   })
 })
 
