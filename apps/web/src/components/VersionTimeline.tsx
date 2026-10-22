@@ -173,7 +173,7 @@ const RESTORE_FAILED_COPY = 'Restore failed. Please try again.'
  */
 function RestoredNotice({ show }: { show: boolean }) {
   return (
-    <div role="status" className="px-1 text-[11px] text-muted-foreground empty:hidden">
+    <div role="status" className="px-1 text-[11px] text-muted-foreground">
       {show ? 'Restored. The state before restoring is kept as a version.' : null}
     </div>
   )

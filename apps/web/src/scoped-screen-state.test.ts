@@ -140,6 +140,8 @@ const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
 const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
+  selectedRef:
+    'no subject: mirrors the preview selection, written during render so a move reads the row current in the very render that changes it',
   documents: 'cleared on switch',
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
@@ -348,6 +350,8 @@ const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   previewPast: 'cleared on switch',
   restoreError: 'cleared on switch',
   isRestoring: 'cleared on switch',
+  // Says a restore of THIS document just happened; a switch would announce it over the arrived one.
+  restored: 'cleared on switch',
 
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
   stale:
@@ -387,6 +391,9 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   // and a submitted one would open a conversation on the wrong document
   // about a sentence nobody there wrote. Cleared by useCommentsRail.
   composeAnchor: 'cleared on switch',
+  // A request to pan the canvas to a thread's anchor; the thread belongs to
+  // the departed document. Cleared by useCommentsRail's own scope reset.
+  revealRequest: 'cleared on switch',
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   threadsRef:
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',

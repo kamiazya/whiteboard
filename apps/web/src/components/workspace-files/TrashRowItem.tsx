@@ -1,3 +1,4 @@
+import { documentLabel } from '../../lib/document-label.js'
 import type { TrashRow } from '../../lib/files-source.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { PurgeTrashEntryControl } from './PurgeTrashEntryControl.js'
@@ -22,8 +23,8 @@ export function TrashRowItem({
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="min-w-0 truncate" title={row.path}>
-        {row.name ?? row.path}
-        {row.name !== undefined && row.name !== row.path && (
+        {documentLabel(row, 'path')}
+        {row.name !== undefined && (
           <span className="text-muted-foreground pl-2 text-xs">{row.path}</span>
         )}
         <span className="text-muted-foreground pl-2 text-xs">
