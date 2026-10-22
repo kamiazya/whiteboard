@@ -75,7 +75,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/ui/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
-  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
+  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 284,
   'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.

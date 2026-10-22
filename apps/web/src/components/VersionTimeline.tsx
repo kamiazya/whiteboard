@@ -167,6 +167,19 @@ function reportVersionsFailure(
 const RESTORE_FAILED_COPY = 'Restore failed. Please try again.'
 
 /**
+ * A restore rewrites the live document and leaves no row that says so, so the
+ * person is told the one fact that makes it safe. The region is mounted while
+ * empty: one that arrives with its message is announced inconsistently.
+ */
+function RestoredNotice({ show }: { show: boolean }) {
+  return (
+    <div role="status" className="px-1 text-[11px] text-muted-foreground empty:hidden">
+      {show ? 'Restored. The state before restoring is kept as a version.' : null}
+    </div>
+  )
+}
+
+/**
  * What a failed restore tells the person: the daemon's own reason when it gave
  * one, since a refusal that will always repeat is not cured by a retry, else
  * the generic prompt for a failure that may be transient.
@@ -275,8 +288,6 @@ export default function VersionTimeline({
   const [previewPast, setPreviewPast] = useState<PastDocument | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
-  // A restore rewrites the live document and leaves no row that says so by
-  // itself, so the person is told the one fact that makes it safe.
   const [restored, setRestored] = useState(false)
   // Mirrors `previewing`, refreshed on every render so an async handler's
   // async continuation can read the *current* pending version after an
@@ -487,13 +498,7 @@ export default function VersionTimeline({
         </div>
       )}
 
-      {/* Mounted while empty: a live region that arrives with its message is
-          announced inconsistently. */}
-      <div role="status" className="px-1 text-[11px] text-muted-foreground empty:hidden">
-        {restored && previewing === null
-          ? 'Restored. The state before restoring is kept as a version.'
-          : null}
-      </div>
+      <RestoredNotice show={restored && previewing === null} />
 
       {stale && (
         <div data-testid="version-list-stale" className="text-[11px] text-muted-foreground px-1">

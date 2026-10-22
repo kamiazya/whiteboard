@@ -132,6 +132,28 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
 }
 
 /**
+ * The editor stays mounted under a version preview: its pan and zoom are the
+ * mounted component's own state, and unmounting it sent the view back to the
+ * origin when the preview ended or a restore landed. Inert and invisible it
+ * still holds its size, so nothing re-measures it, and it takes no input and
+ * leaves the accessibility tree.
+ */
+function EditorBehindPreview({ preview, children }: { preview: ReactNode; children: ReactNode }) {
+  return (
+    <>
+      {preview === null ? null : <div className="h-full min-h-0 min-w-0">{preview}</div>}
+      <div
+        className={preview === null ? 'h-full min-h-0 min-w-0' : 'invisible absolute inset-0'}
+        inert={preview !== null}
+        aria-hidden={preview === null ? undefined : true}
+      >
+        {children}
+      </div>
+    </>
+  )
+}
+
+/**
  * The merged header row, or nothing while the document is maximised:
  * fullscreen means the DOCUMENT, so the whole row — back, title, menus —
  * steps aside with the shell's row above it.
@@ -621,20 +643,12 @@ function DocumentPageBody({
     >
       {model.slots.replaceEditor ?? (
         <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
-          {/* The editor stays mounted under a preview: its pan and zoom are
-              state of the mounted component, and unmounting it sent the view
-              back to the origin when the preview ended or a restore landed.
-              Inert and hidden, it still holds its size, so nothing re-measures
-              it, and it takes no input and leaves the accessibility tree. */}
-          {preview ? (
-            <div className="h-full min-h-0 min-w-0">
-              <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
-            </div>
-          ) : null}
-          <div
-            className={preview ? 'invisible absolute inset-0' : 'h-full min-h-0 min-w-0'}
-            inert={preview !== null}
-            aria-hidden={preview !== null ? true : undefined}
+          <EditorBehindPreview
+            preview={
+              preview ? (
+                <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
+              ) : null
+            }
           >
             <DocumentEditorSurface
               kind={documentKind}
@@ -692,7 +706,7 @@ function DocumentPageBody({
                 </SpatialEditorPane>
               )}
             />
-          </div>
+          </EditorBehindPreview>
         </EditorLock>
       )}
     </DocumentPageShell>

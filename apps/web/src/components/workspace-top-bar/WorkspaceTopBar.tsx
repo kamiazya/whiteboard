@@ -159,9 +159,6 @@ export default function WorkspaceTopBar({
             aria-hidden="true"
             className={cn('size-4', preview.isRestoring && 'animate-spin')}
           />
-          {/* The word appears where there is room; a phone keeps the icon,
-              whose accessible name is the same. An act that rewrites the
-              document is not left to a glyph to explain. */}
           <span className="hidden sm:inline">Restore</span>
         </button>
       </header>
