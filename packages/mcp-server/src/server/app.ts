@@ -25,7 +25,7 @@ import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createFontsRouter } from './routes/fonts.js'
-import { createMcpRouter } from './routes/mcp.js'
+import { createMcpRouter, refuseUnservedMcpMethods } from './routes/mcp.js'
 import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
@@ -163,7 +163,8 @@ function mountApiAuth(
 }
 
 /**
- * `/mcp`'s own chain: server mode's origin policy (`allowedOrigins`), auth
+ * `/mcp`'s own chain: server mode's origin policy (`allowedOrigins`), the
+ * method guard (`refuseUnservedMcpMethods`, ahead of anything costly), auth
  * (server-mode's `AsyncAuthStrategy` with the `mcp:call` scope, local-daemon's
  * daemon token), and a body limit so an oversized JSON-RPC payload cannot OOM
  * the daemon. The local daemon listens only on its owner-only socket, where no
@@ -182,6 +183,7 @@ function mountMcpMiddleware(
     if (exposure.ok) {
       app.use('/mcp', createServerModeOriginMiddleware(exposure.allowedOrigins))
     }
+    app.use('/mcp', refuseUnservedMcpMethods({ standaloneStream: false }))
     app.use('/mcp', createServerModeMcpAuthMiddleware(options.authStrategy, options.people))
     app.use('/mcp', mcpContentSlot())
     const { members } = options.people
@@ -195,6 +197,7 @@ function mountMcpMiddleware(
       }),
     )
   } else {
+    app.use('/mcp', refuseUnservedMcpMethods({ standaloneStream: true }))
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
   }
   app.use(
@@ -463,7 +466,6 @@ export function createApp(options: AppOptions) {
     createMcpRouter({
       modernMcpHandler,
       serverDeps: options.serverDeps,
-      standaloneStream: options.authMode === 'local-daemon',
     }),
   )
 

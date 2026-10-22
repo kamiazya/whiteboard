@@ -10,9 +10,15 @@
  * reaches the DOM is UI wiring, and that is what the browser test beside this
  * one is for.
  */
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { EditorState } from '@codemirror/state'
+import { type DecorationSet, EditorView } from '@codemirror/view'
+import { type CommentThread, DOCUMENT_MAX_OPEN_THREADS } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { placeThreads } from './annotation-decorations.js'
+import {
+  annotationDecorations,
+  placeThreads,
+  setAnnotationProjection,
+} from './annotation-decorations.js'
 
 function textThread(
   id: string,
@@ -88,5 +94,53 @@ describe('placeThreads', () => {
       textThread('early', 'report', earlier),
     ])
     expect(placed.map((p) => p.threadId)).toEqual(['early', 'late'])
+  })
+})
+
+describe('the resolved conversations the pane draws', () => {
+  // One more resolved conversation than the pane keeps, each over a passage
+  // the body holds, started a minute apart so recency is unambiguous.
+  const COUNT = DOCUMENT_MAX_OPEN_THREADS + 100
+  const quote = (i: number) => `[r${i}]`
+  const body = Array.from({ length: COUNT }, (_, i) => quote(i)).join(' ')
+  const resolved = Array.from({ length: COUNT }, (_, i) =>
+    textThread(`r${i}`, quote(i), body.indexOf(quote(i)), {
+      status: 'resolved',
+      messages: [
+        {
+          id: `r${i}-m1`,
+          body: 'done',
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
+        },
+      ],
+    }),
+  )
+  const open = textThread('open', quote(0), 0)
+
+  function drawnIds(selectedThreadId: string | null): Set<string> {
+    const state = EditorState.create({ doc: body, extensions: [annotationDecorations()] }).update({
+      effects: setAnnotationProjection.of({ threads: [open, ...resolved], selectedThreadId }),
+    }).state
+    const ids = new Set<string>()
+    for (const source of state.facet(EditorView.decorations)) {
+      const set = typeof source === 'function' ? null : (source as DecorationSet)
+      set?.between(0, body.length, (_from, _to, deco) => {
+        const id = deco.spec.attributes?.['data-thread-id']
+        if (typeof id === 'string') ids.add(id)
+      })
+    }
+    return ids
+  }
+
+  it('draws every open one and the most recently active resolved ones', () => {
+    const ids = drawnIds(null)
+    expect(ids.has('open')).toBe(true)
+    expect(ids.has(`r${COUNT - 1}`)).toBe(true)
+    expect(ids.has('r0')).toBe(false)
+    expect(ids.size).toBe(1 + DOCUMENT_MAX_OPEN_THREADS)
+  })
+
+  it('draws an older resolved one when it is the conversation selected', () => {
+    expect(drawnIds('r0').has('r0')).toBe(true)
   })
 })

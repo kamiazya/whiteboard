@@ -71,7 +71,7 @@ import {
   REPLICA_SAVE_FAILED_COPY,
   REPLICA_STATE_COPY,
 } from '../lib/replica-state-copy.js'
-import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
+import { forgetDaemonKeys, forgetWithdrawnReplica, replicaKeyStatus } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -231,6 +231,7 @@ function useReplicaRecord({
     // all. Without this branch a removed member with no replica record on
     // this device would read as 'needs-connection' rather than 'removed'.
     if (withheld !== undefined) {
+      forgetWithdrawnReplica(daemonBaseUrl, workspaceId, withheld)
       setState({ kind: 'withheld', reason: withheld })
       return
     }

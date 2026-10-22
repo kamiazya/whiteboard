@@ -97,6 +97,7 @@ describe('a per-document sync update that builds on a change the keeper lacks', 
     const stored = new StoredDoc(seed)
     const liveDocuments: LiveDocuments = {
       ...unusedLiveDocuments(),
+      kind: async () => null,
       withWriteLock: (_workspaceId, fn) => fn(),
       get: async () => stored.get(),
       save: async (_workspaceId, _path, doc) => stored.save(doc),

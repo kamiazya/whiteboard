@@ -11,6 +11,7 @@ import {
   CONTAINER_NAME_LIMIT_PHRASE,
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
+  type DocumentKind,
   LABEL_LIMIT_PHRASE,
   MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
@@ -522,6 +523,32 @@ export class RootNoDocumentHoldsError extends SyncWriteRefusalError {
       `This update adds root containers a workspace document cannot hold (${roots.map((root) => JSON.stringify(root)).join(', ')}): a document's id, segment, kind, name and timestamps belong to its place in the workspace, and a content container keeps the kind it has`,
     )
     this.name = 'RootNoDocumentHoldsError'
+  }
+}
+
+/**
+ * A sync write refused because it would leave a document's envelope saying
+ * another kind than the document records — rewritten, deleted, or set on an
+ * unkinded document to a kind its node does not record. Readers take the
+ * envelope's word first, so kept, it would make a board read as a note to
+ * every agent, search and render, and let a later markdown write replace the
+ * board's nodes. Nothing of the write was kept.
+ */
+export class DocumentKindChangedError extends SyncWriteRefusalError {
+  readonly code = 'document_kind_changed'
+  readonly status = 400
+
+  constructor(
+    public readonly recorded: DocumentKind,
+    public readonly kind: DocumentKind | undefined,
+    public readonly documentId?: string,
+  ) {
+    const which = documentId === undefined ? 'a document' : `document ${documentId}`
+    const says = kind === undefined ? 'no kind' : `"${kind}"`
+    super(
+      `This update would leave the envelope of ${which} saying ${says} while the document is recorded as "${recorded}"; a document keeps the kind it was created as`,
+    )
+    this.name = 'DocumentKindChangedError'
   }
 }
 

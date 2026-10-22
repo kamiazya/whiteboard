@@ -15,6 +15,7 @@ import { applyDocumentUpdate } from './apply-document-update.js'
 function liveDeps(store: StoredDoc) {
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),
+    kind: async () => null,
     withWriteLock: (_workspaceId, fn) => fn(),
     get: async () => store.get(),
     save: async (_workspaceId, _path, doc) => store.save(doc),

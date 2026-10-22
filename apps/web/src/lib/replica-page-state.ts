@@ -48,6 +48,15 @@ const REMOVAL_REASONS = new Set<WithheldReason>([
   'invalid_workspace_id',
 ])
 
+/**
+ * Whether a withheld key means the daemon withdrew this device's access —
+ * the page's 'removed' state, and the one refusal that also takes the
+ * remembered copy's wrapped key with it (`replica-unlock.ts`).
+ */
+export function withdrawsAccess(reason: WithheldReason): boolean {
+  return REMOVAL_REASONS.has(reason)
+}
+
 export function replicaPageState({
   key,
   remembered,
@@ -78,6 +87,6 @@ export function replicaPageState({
   // (ADR-0042 decision 3), which is exactly when a revocation takes
   // effect. Offering an unlock past it would make a local copy outrank the
   // decision that revoked it, so `remembered` never reaches this arm.
-  if (REMOVAL_REASONS.has(key.withheld)) return 'removed'
+  if (withdrawsAccess(key.withheld)) return 'removed'
   return remembered ? 'unlockable' : 'locked'
 }

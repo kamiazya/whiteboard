@@ -121,6 +121,13 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
   // A `>` or a close tag inside the integration point's own attribute value.
   const integrationPointAttributeHidden =
     '<svg><title a="> </s:title>"><style><x y="</style><svg onload=alert(1)>"></title></svg>'
+  // A quote inside an unquoted value opens nothing for the HTML tokenizer,
+  // which starts a quoted value only right after `=`. A scan that reads it as
+  // one either never finds the tag's end or finds it past the markup.
+  const unquotedValueQuote =
+    '<svg><title x=a\'><style><x y="</style><svg onload=alert(1)>"></title></svg>'
+  const unquotedValueQuoteLater =
+    '<svg><title x=a\'><style><x y="</style><svg onload=alert(1)>"></title><g a=\'>'
 
   it('parses the breakout sample into a live handler', () => {
     // A template's content is inert, so the parsed <img> never loads.
@@ -189,6 +196,26 @@ describe('fragmentIsEmbeddable against the HTML parser', () => {
     const host = document.createElement('template')
     host.innerHTML = svg
     expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it.each([
+    ['ends nowhere for a quote-reading scan', unquotedValueQuote],
+    ['ends past the markup for a quote-reading scan', unquotedValueQuoteLater],
+  ])('refuses a title whose unquoted value holds a quote that %s', (_, svg) => {
+    expect(fragmentIsEmbeddable(svg)).toBe(false)
+  })
+
+  it.each([
+    unquotedValueQuote,
+    unquotedValueQuoteLater,
+  ])('parses a style behind an unquoted quote into a live handler: %j', (svg) => {
+    const host = document.createElement('template')
+    host.innerHTML = svg
+    expect(host.content.querySelector('[onload]')).not.toBeNull()
+  })
+
+  it('refuses a fragment whose last tag never ends', () => {
+    expect(fragmentIsEmbeddable('<svg><g/><title x="a')).toBe(false)
   })
 
   it('accepts an empty end tag, which the parser drops without a comment', () => {

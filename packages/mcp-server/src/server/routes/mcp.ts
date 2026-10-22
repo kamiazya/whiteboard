@@ -13,7 +13,7 @@ import {
   isLegacyRequest,
   WebStandardStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/server'
-import { type Context, Hono } from 'hono'
+import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import {
   extractInitializeDebugPayload,
   isJsonObject,
@@ -30,15 +30,6 @@ export interface McpRouterDeps {
   readonly modernMcpHandler: ReturnType<typeof createMcpHandler>
   /** The deps the root composed, so a legacy-era server answers with them too. */
   readonly serverDeps: ServerDeps
-  /**
-   * Whether a GET opens the legacy standalone event stream. Each server
-   * here is built for one request and nothing holds it afterwards, so that
-   * stream never carries a message — it only keeps a server alive for as
-   * long as the client holds it open. Server mode answers 405, which the
-   * spec gives a server offering no such stream; the local daemon, one
-   * person's, keeps serving it to the clients that open one.
-   */
-  readonly standaloneStream: boolean
 }
 
 /**
@@ -179,16 +170,42 @@ async function closeUnlessStreaming(
   trace.destruct(destructStartedAt)
 }
 
+/**
+ * Refuses every method `/mcp` does not serve, with 405 and the `Allow` that
+ * is true of this composition. Mounted ahead of auth, so a refusal costs no
+ * credential check and builds no server.
+ *
+ * It lists what IS served rather than what is not, because Hono runs HEAD
+ * through a GET handler while `c.req.method` still reads HEAD: a guard naming
+ * GET alone passes HEAD on to the transport. A CORS preflight is not this
+ * guard's — server mode's origin policy answers it before this runs.
+ */
+export function refuseUnservedMcpMethods(options: {
+  /**
+   * Whether a GET opens the legacy standalone event stream. Each server
+   * here is built for one request and nothing holds it afterwards, so that
+   * stream never carries a message — it only keeps a server alive for as
+   * long as the client holds it open. Server mode answers 405, which the
+   * spec gives a server offering no such stream; the local daemon, one
+   * person's, keeps serving it to the clients that open one.
+   */
+  readonly standaloneStream: boolean
+}): MiddlewareHandler {
+  const served = options.standaloneStream ? ['GET', 'POST', 'DELETE'] : ['POST', 'DELETE']
+  const allow = served.join(', ')
+  return async (c, next) => {
+    if (served.includes(c.req.method.toUpperCase())) return next()
+    return c.json(
+      { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null },
+      405,
+      { Allow: allow },
+    )
+  }
+}
+
 export function createMcpRouter(deps: McpRouterDeps): Hono {
   const router = new Hono()
   router.all('/mcp', async (c) => {
-    if (!deps.standaloneStream && c.req.method.toUpperCase() === 'GET') {
-      return c.json(
-        { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null },
-        405,
-        { Allow: 'POST' },
-      )
-    }
     const startedAt = Date.now()
     const trace = mcpHttpTrace(shouldLogMcpHttpDebug())
     const parsedBody = await jsonBodyOf(c)

@@ -148,6 +148,12 @@ export interface SyncTextJudgement {
    */
   readonly touchesNodeMeta: boolean
   /**
+   * Every map the update set or deleted a `kind` key in — the only maps
+   * where it can have changed what a document's envelope says it is
+   * (`envelopeKindBreach`).
+   */
+  readonly kindWrittenIn: ReadonlySet<ContainerID>
+  /**
    * Whether the import parked changes that build on a change the document
    * does not hold. Loro keeps them outside the oplog, so the judgement never
    * read them, and applies them as soon as a later import supplies what they
@@ -219,6 +225,8 @@ interface UpdateWrites {
   setInto: Set<ContainerID>
   /** Every map the update set or deleted a key in — the only maps whose size it changed. */
   mapsWritten: Set<ContainerID>
+  /** Every map the update set or deleted a `kind` key in. */
+  kindWrittenIn: Set<ContainerID>
   touchesNodeMeta: boolean
 }
 
@@ -262,6 +270,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
     names: [],
     setInto: new Set(),
     mapsWritten: new Set(),
+    kindWrittenIn: new Set(),
     touchesNodeMeta: false,
   }
   for (const change of json.changes) {
@@ -280,6 +289,7 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
 function readMapWrite(writes: UpdateWrites, op: Op): void {
   const content = op.content as MapOp
   writes.mapsWritten.add(op.container)
+  if (content.key === 'kind') writes.kindWrittenIn.add(op.container)
   if (content.type !== 'insert') return
   writes.setInto.add(op.container)
   BOUNDED_VALUES.forEach((bound, index) => {
@@ -507,11 +517,14 @@ function judgeImported(
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
   const json = doc.exportJsonUpdates(from, doc.oplogVersion(), false)
   const unattached = unattachedBreach(doc, json)
-  if (unattached !== null) return { breach: unattached, touchesNodeMeta: true }
+  if (unattached !== null) {
+    return { breach: unattached, touchesNodeMeta: true, kindWrittenIn: new Set() }
+  }
   const writes = readWrites(doc, json)
   const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
+    kindWrittenIn: writes.kindWrittenIn,
   })
   const { units, container } = writes.longestRun
   if (replays && units > MARKDOWN_MAX_CHARS && container !== null) {

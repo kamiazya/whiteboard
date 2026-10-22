@@ -1,4 +1,5 @@
 import {
+  envelopeKindBreach,
   importWithinTextLimits,
   readWorkspaceNodes,
   rootsNoDocumentNodeHolds,
@@ -8,13 +9,15 @@ import {
 import {
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
+  type DocumentKind,
   documentPathSchema,
 } from '@kamiazya/whiteboard-model'
-import type { Frontiers, LoroDoc } from 'loro-crdt'
+import type { ContainerID, Frontiers, LoroDoc } from 'loro-crdt'
 import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import {
   CausalGapError,
+  DocumentKindChangedError,
   DocumentNameTooLongError,
   isSyncWriteRefusal,
   OffGrammarPathError,
@@ -161,6 +164,28 @@ function placementRefusal(
 }
 
 /**
+ * The refusal an update earns for leaving an envelope it wrote a `kind` in
+ * saying another kind than its document records. An update writing no
+ * `kind` key pays nothing for it.
+ */
+function kindRefusal(
+  doc: LoroDoc,
+  kindWrittenIn: ReadonlySet<ContainerID>,
+  options: SyncLimitsOptions,
+): DocumentKindChangedError | null {
+  if (kindWrittenIn.size === 0) return null
+  const recordedAtRoot = options.workspaceRecord ? null : options.recordedKind
+  const breach = envelopeKindBreach(doc, kindWrittenIn, recordedAtRoot)
+  if (breach === null) return null
+  return new DocumentKindChangedError(breach.recorded, breach.kind, breach.documentId)
+}
+
+/** Which record the update is for, and what a standalone document records as its kind. */
+type SyncLimitsOptions =
+  | { readonly workspaceRecord: true }
+  | { readonly workspaceRecord: false; readonly recordedKind: DocumentKind | null }
+
+/**
  * Imports a client's update into a CACHED document unless it breaks a text
  * bound (`SYNC_TEXT_BREACH_CODES` lists them) or, for a workspace record,
  * what the record's readers need of a node — in which case nothing of it is
@@ -173,6 +198,9 @@ function placementRefusal(
  * or moves one (`placementRefusal`); a body edit pays nothing for them. A
  * standalone document's update instead answers for the roots it adds, since
  * its content is saved onto its node's own map (`rootsNoDocumentNodeHolds`).
+ * Either may leave a document's envelope saying only the kind the document
+ * records (`envelopeKindBreach`): its node's, or `recordedKind` for a
+ * standalone document, `null` meaning one being created.
  *
  * Every refusal drops the cached instance instead of saving, so the next
  * read rebuilds it from storage and nothing of the write survives — and so
@@ -188,7 +216,7 @@ export function importWithinSyncLimits(
   doc: LoroDoc,
   update: Uint8Array,
   target: CachedTarget,
-  options: { readonly workspaceRecord: boolean },
+  options: SyncLimitsOptions,
 ): void {
   const before = doc.oplogFrontiers()
   // Judged against the document as it was, so a root it already held — which
@@ -197,7 +225,7 @@ export function importWithinSyncLimits(
   const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
   let landed = false
   try {
-    const { breach, touchesNodeMeta, pending } = runEvictingOnEngineTrap(
+    const { breach, touchesNodeMeta, kindWrittenIn, pending } = runEvictingOnEngineTrap(
       trapped,
       'importing an update into',
       () => importWithinTextLimits(doc, update),
@@ -206,6 +234,8 @@ export function importWithinSyncLimits(
     // First: a parked change was judged by nothing below.
     if (pending) refuse(target, new CausalGapError())
     if (breach !== null) refuse(target, textBreachRefusal(breach))
+    const kindChanged = kindRefusal(doc, kindWrittenIn, options)
+    if (kindChanged !== null) refuse(target, kindChanged)
     if (!options.workspaceRecord) {
       const added = rootsNoDocumentNodeHolds(doc).filter((root) => !heldBefore.has(root))
       if (added.length > 0) refuse(target, new RootNoDocumentHoldsError(added))

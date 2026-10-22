@@ -38,6 +38,7 @@ import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
 import {
   CausalGapError,
+  DocumentKindChangedError,
   DocumentNameTooLongError,
   OffGrammarPathError,
   RootNoDocumentHoldsError,
@@ -60,6 +61,8 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
   TooManyFoldersError: () => new TooManyFoldersError(4001),
   CausalGapError: () => new CausalGapError(),
+  DocumentKindChangedError: () =>
+    new DocumentKindChangedError('spatial', 'markdown', '01BRWAAAAAAAAAAAAAAAAAAAB0'),
 }
 
 /**

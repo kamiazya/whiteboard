@@ -263,7 +263,7 @@ local daemon serves one person and leaves both as they are:
 
 | Stream | Server mode | When it is reached |
 |---|---|---|
-| The legacy standalone stream (`GET /mcp`) | Not offered | Answered `405 Method Not Allowed` with `Allow: POST`, as the MCP specification provides for a server that offers no such stream. Nothing is ever sent down it, so a client loses nothing: the MCP SDK's client treats a `405` here as "no stream". |
+| The legacy standalone stream (`GET /mcp`) | Not offered | Answered `405 Method Not Allowed` with `Allow: POST, DELETE`, as the MCP specification provides for a server that offers no such stream. Nothing is ever sent down it, so a client loses nothing: the MCP SDK's client treats a `405` here as "no stream". |
 | `subscriptions/listen` streams open per user | 16 | The next one is refused with `429` and a JSON-RPC error body (`{"jsonrpc":"2.0","error":{"code":-32000,…},"id":null}`). A place frees when one of that user's streams ends, errors or is closed by its client. |
 | `subscriptions/listen` streams open in total, per instance | 1024 | Same refusal, for everyone, until a stream closes. |
 

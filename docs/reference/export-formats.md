@@ -47,9 +47,10 @@ the daemon's host, and never fetches a remote one. Of those it draws only PNG,
 JPEG, GIF, WebP and SVG, written as `data:<type>,…` or `data:<type>;base64,…`
 with no other parameter, and only when it can read the image's size from its
 header. An SVG image that asks for filter effects (a `<filter>`, a filter
-primitive, or a `filter` attribute or style), declares an XML entity, or holds
-an image of its own also draws nothing in a PNG: its drawing time is not bounded
-by its size. Any other image draws nothing.
+primitive, or a `filter` attribute or style), uses a mask (a `<mask>`, or a
+`mask` attribute, or a `mask` or `mask-*` style), declares an XML entity, or
+holds an image of its own also draws nothing in a PNG: the time or memory its
+drawing takes is not bounded by its size. Any other image draws nothing.
 
 ## How large a markdown document may be
 
@@ -105,7 +106,12 @@ not:
   `nodes`). The workspace document's `update` and `promote` refuse it too, for
   an update or record that leaves a document's content container key
   (`nodes`, `body`, `threads` and the others) holding a plain value, a
-  container of another kind, or nothing. The workspace document's `update` also refuses, with
+  container of another kind, or nothing. A document's `update` and the
+  workspace document's `update` and `promote` refuse, with
+  `400 {"error":"document_kind_changed"}`, an update or record that leaves a
+  document's envelope `kind` saying anything other than the kind its
+  workspace node records; setting it on an unkinded document to that same
+  kind is how a keeper claims one, and lands. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`

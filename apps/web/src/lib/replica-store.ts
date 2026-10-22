@@ -19,6 +19,7 @@
 import type {
   ReplicaSource,
   SessionKeyStatus,
+  WithheldReason,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   forget,
@@ -32,6 +33,8 @@ import { createDaemonFetch } from './daemon-fetch.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { dropReplicaImages } from './replica-image-store.js'
+import { withdrawsAccess } from './replica-page-state.js'
+import { stopReplicaReadableOffline } from './replica-unlock.js'
 import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
@@ -95,7 +98,13 @@ const routingProvider: ReplicaKeyProvider = {
       workspaceId,
       sourceFor(daemonBaseUrl),
     ).keyFor(docKey)
-    if (resolved === 'withheld') return resolved
+    if (resolved === 'withheld') {
+      const status = sessionKeyStatus(daemonBaseUrl, workspaceId)
+      if (status?.kind === 'withheld') {
+        forgetWithdrawnReplica(daemonBaseUrl, workspaceId, status.reason)
+      }
+      return resolved
+    }
     // After the ask, so the holder's answer is the one compared: the key it
     // now holds against the generation the stored bytes were sealed under.
     // Writes are refused the same way as reads, because sealing a new chunk
@@ -241,4 +250,19 @@ export function forgetDaemonKeys(daemonBaseUrl: string): void {
   for (const [workspaceId, entry] of Object.entries(registry)) {
     if (entry.daemonBaseUrl === daemonBaseUrl) forget(daemonBaseUrl, workspaceId)
   }
+}
+
+/**
+ * A remembered copy never outranks a daemon decision (ADR-0042 decision 6):
+ * once the daemon has refused the key because access was withdrawn, the
+ * wrapped key goes, so a later cold start with the daemon out of reach
+ * cannot offer the copy as it stood at removal. Silence and a refusal that
+ * reconnecting fixes decide nothing, and leave the copy openable.
+ */
+export function forgetWithdrawnReplica(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  reason: WithheldReason,
+): void {
+  if (withdrawsAccess(reason)) stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
 }
