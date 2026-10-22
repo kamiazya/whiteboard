@@ -20,7 +20,12 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { annotationDecorations, setAnnotationProjection } from './annotation-decorations.js'
 
 const BODY_CHARS = vi.hoisted(() => 45 * 750)
-const work = vi.hoisted(() => ({ resolutions: 0, longestSearch: 0, wholeBodySearches: 0 }))
+const work = vi.hoisted(() => ({
+  resolutions: 0,
+  searches: 0,
+  longestSearch: 0,
+  wholeBodySearches: 0,
+}))
 
 vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
   const model = await importOriginal<typeof import('@kamiazya/whiteboard-model')>()
@@ -31,6 +36,7 @@ vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
       return model.resolveTextAnchor(...args)
     },
     textOccurrences: (...args: Parameters<typeof model.textOccurrences>) => {
+      work.searches += 1
       work.longestSearch = Math.max(work.longestSearch, args[0].length)
       if (args[0].length >= BODY_CHARS) work.wholeBodySearches += 1
       return model.textOccurrences(...args)
@@ -41,25 +47,25 @@ vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
 const BODY = 'The quick brown fox jumps over the lazy dog. '.repeat(750)
 const QUOTE_CHARS = 300
 
-function orphan(index: number): CommentThread {
+function orphan(index: number, status: CommentThread['status'] = 'open'): CommentThread {
   // Absent from BODY: no sentence of it contains a digit.
   const exact = `${index} `.repeat(QUOTE_CHARS).slice(0, QUOTE_CHARS)
   return {
     id: `t${index}`,
     anchor: { kind: 'text', quote: { exact }, start: 0, end: QUOTE_CHARS },
-    status: 'open',
+    status,
     messages: [{ id: `t${index}-m1`, body: 'about this' }],
   }
 }
 
 const THREADS = Array.from({ length: DOCUMENT_MAX_OPEN_THREADS }, (_, i) => orphan(i))
 
-function projected(): EditorState {
+function projected(threads: readonly CommentThread[] = THREADS): EditorState {
   const state = EditorState.create({ doc: BODY, extensions: [annotationDecorations()] })
   const next = state.update({
-    effects: setAnnotationProjection.of({ threads: THREADS, selectedThreadId: null }),
+    effects: setAnnotationProjection.of({ threads, selectedThreadId: null }),
   }).state
-  // The subject is present: setting the threads up searched for every one.
+  // The subject is present: setting the threads up searched for every open one.
   expect(work.resolutions + work.wholeBodySearches).toBeGreaterThanOrEqual(THREADS.length)
   return next
 }
@@ -74,6 +80,7 @@ function measure(state: EditorState, spec: TransactionSpec) {
 
 function reset(): void {
   work.resolutions = 0
+  work.searches = 0
   work.longestSearch = 0
   work.wholeBodySearches = 0
 }
@@ -99,5 +106,34 @@ describe('the annotation projection, under every orphan a document may hold', ()
     })
     expect(cost.resolutions).toBeLessThanOrEqual(2)
     expect(cost.longestSearch).toBeLessThan(BODY.length / 4)
+  })
+})
+
+describe('the annotation projection, beside a long history of resolved orphans', () => {
+  // Resolved threads have no count bound — resolving is how a document at
+  // the open bound takes another — so one member can leave any number of
+  // them, each quoting a passage the body never held.
+  function withResolved(count: number): readonly CommentThread[] {
+    const resolved = Array.from({ length: count }, (_, i) =>
+      orphan(DOCUMENT_MAX_OPEN_THREADS + i, 'resolved'),
+    )
+    return [...THREADS, ...resolved]
+  }
+
+  /** Setting the threads up, and then one keystroke, each counted. */
+  function costs(threads: readonly CommentThread[]) {
+    reset()
+    const state = projected(threads)
+    const setup = { ...work }
+    return { setup, keystroke: measure(state, { changes: { from: 10, insert: 'x' } }) }
+  }
+
+  it('answers a keystroke with work that does not grow with the resolved history', () => {
+    const ordinary = costs(withResolved(DOCUMENT_MAX_OPEN_THREADS))
+    const long = costs(withResolved(10 * DOCUMENT_MAX_OPEN_THREADS))
+    // The subject is present: the keystroke searched near every open quote.
+    expect(ordinary.keystroke.searches).toBeGreaterThanOrEqual(THREADS.length)
+    expect(long.keystroke.searches).toBe(ordinary.keystroke.searches)
+    expect(long.setup.wholeBodySearches).toBe(ordinary.setup.wholeBodySearches)
   })
 })
