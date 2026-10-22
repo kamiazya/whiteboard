@@ -100,6 +100,15 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
     What is shown is a CONDITION — an edit unsaved past `STUCK_AFTER_MS`, or
     a write the store refused — and "is it saved" is answered on asking, in
     the mark's popover, with the time the last write landed.
+
+    A quiet **save status** now sits in the document row beside the title
+    (`SaveStatus`, fed by `saveIndicatorOf`): muted text — never a colour —
+    for "Saved"/"Saving…", amber only for a condition ("Not saved — storage
+    problem", "Offline — changes kept here"), an icon alone below `sm`. It
+    avoids what the removed chip got wrong: "Saving…" is shown only after a
+    write has stayed pending past `SAVING_SHOWN_AFTER_MS`, so typing does not
+    flicker the row, and its polite live region speaks only when a problem
+    arrives.
   - **version dot** — not a header signal. "Are there edits no named version
     holds yet?" is answered in the History panel, where a named version is
     taken and seen.
