@@ -22,6 +22,7 @@ import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
 import { Check, CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
+import { cn } from '../../lib/utils.js'
 import { CommentComposer } from '../annotations/CommentComposer.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
 import { ThreadMessage } from '../annotations/ThreadMessage.js'
@@ -38,6 +39,11 @@ export interface CommentThreadCardProps {
   /** Rewrites ONE message of this conversation, whichever one. */
   readonly onEditMessage: (messageId: string, body: string) => void
   readonly onClose: () => void
+}
+
+const RESOLVED_CARD_STYLE: CSSProperties = {
+  border: '1px solid var(--color-border)',
+  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
 }
 
 export function CommentThreadCard({
@@ -123,7 +129,12 @@ export function CommentThreadCard({
         // would read as a dead button, not as a stacking bug.
         zIndex: 20,
         ...style,
+        // A settled conversation recedes: the bubble's amber is the colour of
+        // something still asking for attention, so a resolved card swaps it
+        // for the neutral border and drops the halo.
+        ...(resolved ? RESOLVED_CARD_STYLE : {}),
       }}
+      data-status={thread.status}
       className="flex flex-col gap-2"
     >
       {/* The THREAD's own verbs, and only those. Edit left this row when
@@ -132,9 +143,28 @@ export function CommentThreadCard({
           which is exactly what it meant. */}
       <div className="flex shrink-0 items-center justify-end gap-0.5">
         {resolved ? (
-          <CardAction label="Reopen" onSelect={() => onResolve(false)}>
-            <RotateCcw className="size-3.5" />
-          </CardAction>
+          <>
+            {/* Said in the header rather than left to the muting alone: a
+                greyed card is also what a disabled one looks like. */}
+            <span
+              data-testid="comment-card-resolved"
+              className="mr-auto flex items-center gap-1 text-xs font-medium text-muted-foreground"
+            >
+              <CircleCheck aria-hidden className="size-3.5" />
+              Resolved
+            </span>
+            {/* A labelled button, always drawn: the way back is the one thing
+                a settled card is for, and an icon behind a hover hides it. */}
+            <button
+              type="button"
+              aria-label="Reopen"
+              onClick={() => onResolve(false)}
+              className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent"
+            >
+              <RotateCcw aria-hidden className="size-3.5" />
+              Reopen
+            </button>
+          </>
         ) : (
           <CardAction label="Resolve" onSelect={() => onResolve(true)}>
             <CircleCheck className="size-3.5" />
@@ -145,8 +175,8 @@ export function CommentThreadCard({
         </CardAction>
       </div>
 
-      <ol className="flex flex-col gap-3">
-        {thread.messages.map((message) => (
+      <ol className={cn('flex flex-col gap-3', resolved && 'max-h-14 overflow-hidden opacity-60')}>
+        {(resolved ? thread.messages.slice(0, 1) : thread.messages).map((message) => (
           <ThreadMessage
             key={message.id}
             message={message}
@@ -187,7 +217,7 @@ export function CommentThreadCard({
           />
         ))}
       </ol>
-      <ReplyComposer onReply={onReply} />
+      {resolved ? null : <ReplyComposer onReply={onReply} />}
     </div>
   )
 }

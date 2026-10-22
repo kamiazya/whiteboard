@@ -341,6 +341,14 @@ export function ThreadRow({
               anybody could act on. */}
           <RowSubject body={thread.messages[0]?.body ?? ''} expanded={expanded} />
           <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+            {status === 'resolved' ? (
+              <span
+                data-testid={`thread-resolved-${thread.id}`}
+                className="font-medium text-neutral-600 dark:text-neutral-400"
+              >
+                Resolved
+              </span>
+            ) : null}
             {anchorLabel(thread.anchor) === undefined ? null : (
               <span data-testid={`thread-about-${thread.id}`}>{anchorLabel(thread.anchor)}</span>
             )}

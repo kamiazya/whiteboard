@@ -63,6 +63,10 @@ it across replies.
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
 
+A resolved conversation says **Resolved** on its rail row and in its card
+on the canvas. The card is muted, shows only the opening message, and keeps a
+labelled **Reopen** button in its header.
+
 A document holds at most **500 open threads** at once. Resolved ones do not
 count, so a document at the limit takes a new comment as soon as one is
 resolved; opening or reopening one past it is refused, with a notice saying

@@ -1,5 +1,5 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -38,4 +38,15 @@ it('draws an opened lone remark’s stamp once, in the conversation and not also
   const { container } = render(<CommentsPanel threads={[LONE]} revealThreadId="t-lone" />)
   expect(container.querySelectorAll('li[data-thread-id="t-lone"] time')).toHaveLength(1)
   expect(container.querySelectorAll('#thread-t-lone time')).toHaveLength(1)
+})
+
+const DONE: CommentThread = { ...LONE, id: 't-done', status: 'resolved' }
+
+it('says Resolved on a resolved row and not on an open one', () => {
+  const { container, getByRole } = render(<CommentsPanel threads={[LONE, DONE]} />)
+  fireEvent.click(getByRole('button', { name: 'All' }))
+  expect(container.querySelector('[data-testid="thread-resolved-t-done"]')?.textContent).toBe(
+    'Resolved',
+  )
+  expect(container.querySelector('[data-testid="thread-resolved-t-lone"]')).toBeNull()
 })
