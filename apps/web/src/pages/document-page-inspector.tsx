@@ -89,6 +89,7 @@ export function DocumentRowActions({
   inspectorSegment,
   model,
   exportError,
+  notice,
   onExport,
   onBookmark,
   versionsEnabled,
@@ -96,6 +97,7 @@ export function DocumentRowActions({
   inspectorSegment: ReactNode
   model: DocumentPageModel
   exportError: string | null | undefined
+  notice: string | null
   onExport: (
     format: Parameters<ReturnType<typeof useSceneExport>['handleExport']>[0],
   ) => void | Promise<void>
@@ -123,6 +125,7 @@ export function DocumentRowActions({
       )}
       <DocumentMenu
         onExport={(format) => void onExport(format)}
+        notice={notice}
         {...(versionsEnabled && !removed ? { onBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}

@@ -158,6 +158,19 @@ describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalid
     expect(Array.isArray(parsed.nodes)).toBe(true)
   })
 
+  it('says the PNG went out, in the status region', async () => {
+    await renderLoaded()
+    captureExportedBlobs()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    fireEvent.pointerUp(await openExportMenuItem('Export as PNG'))
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
+    await waitFor(() =>
+      expect(screen.getByText('Exported as PNG', { selector: '[role="status"]' })).toBeTruthy(),
+    )
+  })
+
   // Export DOWNLOADS must only offer formats `exportScene`
   // (SceneExportFormat) can actually produce — a download entry outside
   // that union is an affordance whose every click fails. Copy as JSON

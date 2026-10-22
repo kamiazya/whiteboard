@@ -367,13 +367,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 342,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 351,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
+  // The row's controls in one JSX run; the notice prop is one more spread.
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 52,
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
