@@ -117,7 +117,7 @@ export function DocumentPreview({
             svg={fitSvgToBox(state.svg)}
             onClickCapture={(event) => followSceneLink(event, findDocument, onOpen)}
             data-testid="preview-render"
-            className="size-full [&>svg]:size-full"
+            className="size-full [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
           />
         ) : (
           <p className="text-muted-foreground text-sm">
