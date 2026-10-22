@@ -406,6 +406,16 @@ storing nothing; a browser-kept workspace refuses it the same way it refuses a
 board past its size, with a notice. A document stored past a limit before it
 existed still reads, and still takes any change that opens nothing.
 
+One comment thread holds at most **1,000** messages, resolved thread or not:
+every reader of a thread — `wb_thread_edit`'s answer, `wb_document_get`, the
+comments rail — reads all of them. `wb_thread_edit`'s `message.add` refuses
+the reply that would pass it — "thread "t1" would hold 1001 messages, past
+the limit of 1000 messages in one comment thread; open a new thread to
+continue" — and writes nothing; a sync update is refused with `413` and
+`{"error":"too_many_thread_messages"}`, storing nothing, by either keeper. A
+thread already holding more than that still reads, and a message it holds can
+still be edited, but it takes no further reply.
+
 A comment anchored to several nodes at once names at most **2,000** of them —
 a whole canvas's worth. Every render looks each named node up, resolved
 threads included, so this is held whether the thread is open or not.

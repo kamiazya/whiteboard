@@ -29,6 +29,8 @@ import {
   TAG_LENGTH_LIMIT_PHRASE,
   TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
+  THREAD_MAX_MESSAGES,
+  THREAD_MESSAGES_LIMIT_PHRASE,
   tagListWriteSchema,
   tagWriteSchema,
 } from '@kamiazya/whiteboard-model'
@@ -99,6 +101,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
     textBreachRefusal({ shape: 'anchor-quote', chars: 2_000, elementId: 't1', container: MAP }),
   'open-threads': () => textBreachRefusal({ shape: 'open-threads', count: 501, container: MAP }),
   'open-changes': () => textBreachRefusal({ shape: 'open-changes', count: 1_001, container: MAP }),
+  'thread-messages': () =>
+    textBreachRefusal({ shape: 'thread-messages', count: 1_001, container: MAP }),
   'content-root': () => textBreachRefusal({ shape: 'content-root', key: 'nodes', container: MAP }),
   'unattached-container': () =>
     textBreachRefusal({ shape: 'unattached-container', container: MAP }),
@@ -351,6 +355,25 @@ describe('a refused count of open annotations', () => {
   it('names the document holding them, once resolved', () => {
     expect(refusal('open-threads', 600, { path: 'boards/ops' })).toBe(
       `The document at "boards/ops" holds 600 open comment threads, past ${OPEN_THREADS_LIMIT_PHRASE}`,
+    )
+  })
+})
+
+describe('a refused count of messages in one thread', () => {
+  const refusal = (count: number, at?: refusals.RefusedIn) =>
+    textBreachRefusal({ shape: 'thread-messages', count, container: MAP }, at)
+
+  it('says how many the thread would hold and ends on the bound the tools hold, 413', () => {
+    const refused = refusal(THREAD_MAX_MESSAGES + 1)
+    expect(refused.message).toBe(
+      `This update would leave a comment thread of ${THREAD_MAX_MESSAGES + 1} messages, past ${THREAD_MESSAGES_LIMIT_PHRASE}`,
+    )
+    expect(syncWriteAnswer(refused)).toEqual({ code: 'too_many_thread_messages', status: 413 })
+  })
+
+  it('names the document holding it, once resolved', () => {
+    expect(refusal(1_200, { path: 'boards/ops' }).message).toBe(
+      `The document at "boards/ops" holds a comment thread of 1200 messages, past ${THREAD_MESSAGES_LIMIT_PHRASE}`,
     )
   })
 })

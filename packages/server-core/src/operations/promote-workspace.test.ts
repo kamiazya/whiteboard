@@ -25,6 +25,7 @@ import {
   NODE_TEXT_MAX_CHARS,
   TAG_MAX_CHARS,
   TEXT_ANCHOR_QUOTE_MAX_CHARS,
+  THREAD_MAX_MESSAGES,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
@@ -487,6 +488,19 @@ describe('promoteWorkspace', () => {
           })
         }
       },
+    },
+    'thread-messages': {
+      at: 'notes/roadmap',
+      write: (doc: Board) =>
+        writeCommentThread(doc, {
+          id: 't1',
+          anchor: { kind: 'document' },
+          status: 'resolved',
+          messages: Array.from({ length: THREAD_MAX_MESSAGES + 1 }, (_, m) => ({
+            id: `m${m}`,
+            body: 'hello',
+          })),
+        }),
     },
     'open-changes': {
       at: 'sketch',

@@ -683,7 +683,9 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   across all of its proposals (`too_many_open_threads`,
   `too_many_open_changes`). Resolved threads are not counted, since the
   daemon never draws them; a reader who asks the web app to show resolved
-  comments lays all of them out in their own browser. What every render
+  comments lays all of them out in their own browser. One thread holds at
+  most 1000 messages, resolved or not, since every reader of a thread reads
+  all of them (`too_many_thread_messages`). What every render
   does read of every thread, resolved ones included, is a node-set anchor,
   so one anchor names at most 2000 nodes (`comment_anchor_too_large`); and
   every reader of a note re-finds each thread's and change's passage after

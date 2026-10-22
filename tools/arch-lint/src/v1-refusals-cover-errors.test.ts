@@ -132,6 +132,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and opens no comment thread, and wb_thread_edit / wb_canvas_edit refuse the same growth as their own op errors',
   TooManyOpenChangesError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no proposal',
+  TooManyThreadMessagesError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no thread message, and wb_thread_edit refuses the same growth as its own op error',
   ContentRootKindError:
     'raised by the sync operations (workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes content through the bridge, which opens each content key as its declared kind',
   UnattachedContainerError:

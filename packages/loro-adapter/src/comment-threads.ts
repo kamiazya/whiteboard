@@ -15,8 +15,8 @@ import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
-/** The nested map of messages inside one thread's container. */
-const MESSAGES_KEY = 'messages'
+/** The nested map of messages inside one thread's container; the sync judge counts it. */
+export const MESSAGES_KEY = 'messages'
 /** The key a thread's anchor sits under in its own map; the sync judge bounds it. */
 export const ANCHOR_FIELD = 'anchor'
 const STATUS_FIELD = 'status'

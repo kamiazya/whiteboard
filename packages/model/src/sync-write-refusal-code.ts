@@ -21,6 +21,7 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'too_many_nodes_or_edges',
   'too_many_open_threads',
   'too_many_open_changes',
+  'too_many_thread_messages',
   'unreadable_document_meta',
   'invalid_document_root',
   'reserved_map_key',

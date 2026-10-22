@@ -28,10 +28,10 @@ import { isEngineTrap } from './engine-trap.js'
 import { heldBound } from './held-bound.js'
 import { isNodeMetaContainer } from './node-meta-containers.js'
 import {
+  type AnnotationCountBreach,
   annotationBreach,
   annotationCounts,
   mostOpenAnnotations,
-  type OpenAnnotationsBreach,
   SMALLEST_ANNOTATION_BOUND,
 } from './sync-annotation-limits.js'
 import {
@@ -68,8 +68,9 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * together (`canvas-size`), or a comment thread whose anchor it left naming
  * more than `CANVAS_MAX_NODES` nodes (`thread-anchor`), or a document it left holding more than
  * `DOCUMENT_MAX_OPEN_THREADS` open comment threads (`open-threads`) or
- * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), and
- * more than before.
+ * `DOCUMENT_MAX_OPEN_CHANGES` open proposed changes (`open-changes`), or a
+ * comment thread holding more than `THREAD_MAX_MESSAGES` messages
+ * (`thread-messages`), and more than before.
  * Lengths are UTF-16 units, the length every limit counts.
  *
  * Two are about what it leaves standing (`sync-structure-limits.ts`).
@@ -111,8 +112,9 @@ export type SyncTextBreach =
       /** The map holding them, so a caller can name the document. */
       readonly container: ContainerID
     }
-  | OpenAnnotationsBreach<'open-threads'>
-  | OpenAnnotationsBreach<'open-changes'>
+  | AnnotationCountBreach<'open-threads'>
+  | AnnotationCountBreach<'open-changes'>
+  | AnnotationCountBreach<'thread-messages'>
   | ContentRootBreach
   | UnattachedContainerBreach
   | ReservedMapKeyBreach
@@ -137,6 +139,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   'anchor-quote': 'anchor_quote_too_long',
   'open-threads': 'too_many_open_threads',
   'open-changes': 'too_many_open_changes',
+  'thread-messages': 'too_many_thread_messages',
   'content-root': 'invalid_document_root',
   'reserved-map-key': 'reserved_map_key',
   // Sent built on the change that creates the container, it is an ordinary write.
@@ -660,7 +663,8 @@ const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
  * enough that no limit can be reached — no longer than the smallest bound,
  * a label's, and not enough to take the longest body past its own, nor the
  * largest board past a node or edge-and-line bound, nor any document past an
- * open-thread or open-change bound, since an update adds no more map entries
+ * open-thread or open-change bound, nor any thread past its message bound,
+ * since an update adds no more map entries
  * (nor sets more statuses) than it has bytes — is therefore answered without
  * being applied.
  *
