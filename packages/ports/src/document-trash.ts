@@ -15,6 +15,7 @@ const trashEntrySummarySchema = z
   .object({
     documentId: documentIdSchema,
     path: z.string().min(1),
+    name: z.string().min(1).optional(),
     deletedAt: z.number().int().nonnegative(),
   })
   .strict()

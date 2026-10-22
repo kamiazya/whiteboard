@@ -18,6 +18,38 @@ afterEach(cleanup)
 const ENTRY = { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'old/plan', deletedAt: 1_700_000 }
 
 describe('WorkspaceFilesPanel trash section', () => {
+  it('names a trashed document by its display name, with the path as secondary text', async () => {
+    const source = fakeFilesSource({
+      listDocuments: async () => [
+        { documentId: 'd-live', path: 'live', kind: 'markdown' as const },
+      ],
+    })
+    source.listTrash = vi.fn(async () => [{ ...ENTRY, path: 'untitled-7', name: 'Team Charter' }])
+    source.restoreFromTrash = vi.fn(async () => undefined)
+    render(<WorkspaceFilesPanel source={source} />)
+
+    fireEvent.click(await screen.findByText(/^Trash/))
+
+    const name = await screen.findByText('Team Charter')
+    expect(name.closest('li')?.textContent).toContain('untitled-7')
+  })
+
+  it('falls back to the path when the trashed document had no display name', async () => {
+    const source = fakeFilesSource({
+      listDocuments: async () => [
+        { documentId: 'd-live', path: 'live', kind: 'markdown' as const },
+      ],
+    })
+    source.listTrash = vi.fn(async () => [ENTRY])
+    source.restoreFromTrash = vi.fn(async () => undefined)
+    render(<WorkspaceFilesPanel source={source} />)
+
+    fireEvent.click(await screen.findByText(/^Trash/))
+
+    const item = (await screen.findByText('old/plan')).closest('li')
+    expect(item?.textContent?.match(/old\/plan/g)).toHaveLength(1)
+  })
+
   it('lists evacuated documents and restore calls the source, then both lists refresh', async () => {
     let trash = [ENTRY]
     const source = fakeFilesSource({

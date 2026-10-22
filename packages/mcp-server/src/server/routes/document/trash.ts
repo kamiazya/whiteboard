@@ -91,6 +91,7 @@ const listHandler =
           entries: entries.map((entry) => ({
             documentId: entry.documentId,
             path: entry.path,
+            ...(entry.name === undefined ? {} : { name: entry.name }),
             deletedAt: entry.deletedAt,
           })),
         }

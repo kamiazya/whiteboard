@@ -47,6 +47,7 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/document-store.js')
+const { setDocumentDisplayName } = await import('../../store/names-store.js')
 const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 const { createTrashRouter } = await import('./trash.js')
@@ -194,6 +195,34 @@ describe('trash routes', () => {
       await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
     )
     expect(after.entries).toEqual([])
+  })
+
+  it('lists the display name a deleted document had, whichever way it was deleted', async () => {
+    const WS = 'ws-trash-names'
+    await saveDocument(WS, 'untitled-1', canvasDoc('a'), { kind: 'spatial' })
+    await saveDocument(WS, 'untitled-2', canvasDoc('b'), { kind: 'spatial' })
+    await setDocumentDisplayName(WS, 'untitled-1', 'Team Charter')
+    await setDocumentDisplayName(WS, 'untitled-2', 'Roadmap')
+    const syncedId = (await resolveDocumentIdAtPath(WS, 'untitled-2')) as string
+    const app = await appWithRealDeps()
+
+    await app.request(`/api/workspaces/${WS}/documents/untitled-1`, { method: 'DELETE' })
+    const snapshot = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
+    const replica = new LoroDoc()
+    replica.import(new Uint8Array(await snapshot.arrayBuffer()))
+    const from = replica.oplogVersion()
+    deleteWorkspaceDocument(replica, { documentId: syncedId })
+    await app.request(`/api/w/${WS}/workspace-document/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(replica.export({ mode: 'update', from })),
+    })
+
+    const listed = listTrashResponseSchema.parse(
+      await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
+    )
+    const names = Object.fromEntries(listed.entries.map((entry) => [entry.path, entry.name]))
+    expect(names).toEqual({ 'untitled-1': 'Team Charter', 'untitled-2': 'Roadmap' })
   })
 
   it('a document a live-sync update removes is restorable, its content and versions with it', async () => {

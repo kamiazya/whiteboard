@@ -143,6 +143,8 @@ export type TagInUse = WorkspaceDocumentTagsResponse['inUse'][number]
 export interface TrashRow {
   readonly documentId: string
   readonly path: string
+  /** The display name it had; absent when it had none, and the path stands in. */
+  readonly name?: string
   readonly deletedAt: number
 }
 

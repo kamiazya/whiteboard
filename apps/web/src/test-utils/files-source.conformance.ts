@@ -30,7 +30,11 @@ interface FilesSourceFixtureDocument {
 interface FilesSourceFixture {
   readonly documents?: readonly FilesSourceFixtureDocument[]
   /** Documents already deleted, so they sit in the trash. */
-  readonly trashed?: readonly { readonly path: string; readonly kind: DocumentKind }[]
+  readonly trashed?: readonly {
+    readonly path: string
+    readonly kind: DocumentKind
+    readonly name?: string
+  }[]
 }
 
 export type FilesSourceFactory = (fixture: FilesSourceFixture) => Promise<WorkspaceFilesSource>
@@ -332,6 +336,18 @@ function trashContract(factory: FilesSourceFactory): void {
       expect(rows?.[0]?.path).toBe('old/plan')
       expect(rows?.[0]?.documentId.length).toBeGreaterThan(0)
       expect(typeof rows?.[0]?.deletedAt).toBe('number')
+    })
+
+    it('lists the display name the document had, and none for one that had none', async () => {
+      const source = await factory({
+        trashed: [
+          { path: 'untitled-7', kind: 'markdown', name: 'Team Charter' },
+          { path: 'plain', kind: 'markdown' },
+        ],
+      })
+      const rows = await source.listTrash?.()
+      expect(rows?.find((row) => row.path === 'untitled-7')?.name).toBe('Team Charter')
+      expect(rows?.find((row) => row.path === 'plain')?.name).toBeUndefined()
     })
 
     it('restores a trashed document under the SAME documentId', async () => {

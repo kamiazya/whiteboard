@@ -564,6 +564,7 @@ export class LoroWorkspaceDocumentIndex
           recordTrashEntry(doc, {
             documentId: target.meta.documentId,
             path: input.path,
+            ...(target.meta.name === undefined ? {} : { name: target.meta.name }),
             deletedAt: Date.now(),
             blob: ref,
           })

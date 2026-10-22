@@ -11,7 +11,7 @@ export interface TrashRowItemProps {
   onPurgeSettled: () => void
 }
 
-/** One trash row: where the document was, when it went, and what can be done with it. */
+/** One trash row: what the document was called, where it was, when it went, and what can be done with it. */
 export function TrashRowItem({
   row,
   busy,
@@ -22,7 +22,10 @@ export function TrashRowItem({
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="min-w-0 truncate" title={row.path}>
-        {row.path}
+        {row.name ?? row.path}
+        {row.name !== undefined && row.name !== row.path && (
+          <span className="text-muted-foreground pl-2 text-xs">{row.path}</span>
+        )}
         <span className="text-muted-foreground pl-2 text-xs">
           deleted {formatRelative(new Date(row.deletedAt).toISOString())}
         </span>
