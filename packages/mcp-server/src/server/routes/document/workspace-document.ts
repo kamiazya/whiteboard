@@ -4,6 +4,7 @@ import {
   PROMOTE_MAX_TRASH,
   PROMOTE_MAX_VERSIONS,
   PROMOTE_REQUEST_LIMIT_BYTES,
+  type PromoteJudgedBudgetRefusal,
   type PromoteWorkspaceRequest,
   type PromoteWorkspaceResponse,
   promoteWorkspaceRequestSchema,
@@ -122,6 +123,21 @@ function tooManyCarriedBody(plane: 'trash' | 'versions', limit: number) {
   )
 }
 
+/**
+ * The refusal for versions that cost more to judge than one move allows. The
+ * same code as a count past the cap, since the sender's way out is the same,
+ * with the budget beside it for the sender to fit under.
+ */
+function judgedBudgetBody(limit: number): PromoteJudgedBudgetRefusal {
+  return {
+    error: 'promote_too_many_carried',
+    message:
+      `Checking the saved versions one move carries may read at most ${limit} characters of their documents; ` +
+      'carry fewer saved versions, leaving the oldest behind.',
+    limit,
+  }
+}
+
 // The contract's ceiling, which the sender fits its body to — derived there
 // from the same file ceiling CONTENT_BODY_LIMIT_BYTES is.
 const PROMOTE_BODY: ReadJsonBodyOptions = {
@@ -234,15 +250,7 @@ function answerPromoted(
     case 'too-many-carried':
       return c.json(tooManyCarriedBody(result.plane, result.limit), 413)
     case 'carried-over-budget':
-      // The same code as a count past the cap: the sender's way out is the same.
-      return c.json(
-        errorBody(
-          'promote_too_many_carried',
-          `Checking the saved versions one move carries may read at most ${result.limit} characters of their documents; ` +
-            'carry fewer saved versions, leaving the oldest behind.',
-        ),
-        413,
-      )
+      return c.json(judgedBudgetBody(result.limit), 413)
     case 'too-many-documents':
       // The message names the count, the limit and the way out, for whoever reads it.
       return c.json(

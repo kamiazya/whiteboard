@@ -22,12 +22,20 @@ import {
   type PromoteWorkspaceRequest,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
+  projectWorkspaceDocument,
   readTrashEntries,
   readWorkspaceDocuments,
   scanFileReferences,
+  stateElementCount,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url, fitToLength, VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  compareCodeUnit,
+  fitToLength,
+  VERSION_LABEL_MAX_LENGTH,
+} from '@kamiazya/whiteboard-model'
+import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
 import { countOf, planeCounts } from './count-wording.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -140,6 +148,8 @@ export interface FittedPlanes {
   readonly trash: PromotedTrashBytes[]
   readonly versions: PromotedVersion[]
   readonly leftBehind: string[]
+  /** How many saved versions the fitting left behind, counted for the move's result. */
+  readonly versionsLeftBehind: number
 }
 
 /**
@@ -214,7 +224,7 @@ export function fitCarriedPlanes(
       size += itemSize
     }
   }
-  return { trash, versions, leftBehind }
+  return { trash, versions, leftBehind, versionsLeftBehind: dropped }
 }
 
 /**
@@ -231,4 +241,59 @@ export function unconfirmedPlanes(
   const trash = (sent.trash ?? []).filter((carried) => !stored.has(carried.documentId)).length
   const versions = (sent.versions ?? []).filter((version) => !kept.has(version.id)).length
   return planeCounts({ trash, versions }).map((phrase) => `${phrase} did not reach ${keeper}`)
+}
+
+/**
+ * What judging each version costs the keeper, in its unit: the elements of
+ * the document's state at the version's point (`stateElementCount` of the
+ * projection), each distinct (point, document) once — the keeper's charge,
+ * computed the keeper's way over this browser's copy of the same record. A
+ * point this record cannot reach costs nothing here; the keeper refuses it
+ * on its own terms.
+ */
+function judgedCost(record: LoroDoc): (version: PromotedVersion) => number {
+  const past = record.fork()
+  const charged = new Set<string>()
+  return (version) => {
+    const key = `${version.frontiers}\u0000${version.documentId}`
+    if (charged.has(key)) return 0
+    charged.add(key)
+    const bytes = base64UrlToBytes(version.frontiers)
+    if (bytes === null) return 0
+    try {
+      past.checkout(decodeFrontiers(bytes))
+    } catch {
+      return 0
+    }
+    const content = projectWorkspaceDocument(past, version.documentId)
+    return content === null ? 0 : stateElementCount(content)
+  }
+}
+
+/**
+ * The newest versions, across every document, whose judging fits `limit` —
+ * the keeper's budget for one move, which it states when it refuses past
+ * it. Newest first and stopping at the first that does not fit, so what is
+ * left behind is exactly the oldest. Kept in the order they were read.
+ */
+export function versionsWithinJudgedBudget(
+  record: LoroDoc,
+  versions: readonly PromotedVersion[],
+  limit: number,
+): { readonly kept: PromotedVersion[]; readonly dropped: number } {
+  const cost = judgedCost(record)
+  const newestFirst = [...versions].sort(
+    (a, b) => b.createdAt - a.createdAt || compareCodeUnit(a.id, b.id),
+  )
+  const keep = new Set<PromotedVersion>()
+  let spent = 0
+  for (const version of newestFirst) {
+    spent += cost(version)
+    if (spent > limit) break
+    keep.add(version)
+  }
+  return {
+    kept: versions.filter((version) => keep.has(version)),
+    dropped: versions.length - keep.size,
+  }
 }

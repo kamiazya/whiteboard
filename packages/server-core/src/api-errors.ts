@@ -64,6 +64,13 @@ const codeArmShape = {
    * shows it is the people screen.
    */
   workspaceIds: z.array(z.string().min(1)).min(1).optional(),
+  /**
+   * `promote_too_many_carried` past the version-judging budget only: the
+   * budget, in elements, so a sender can fit what it carries under it.
+   * daemon-client's `promoteJudgedBudgetRefusalSchema` is that refusal's own
+   * declaration; this admits the field in the emission contract.
+   */
+  limit: z.number().int().positive().optional(),
 }
 
 /**

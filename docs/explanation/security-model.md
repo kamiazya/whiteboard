@@ -661,7 +661,8 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   stood, so the checks one move makes may read at most 117,964,800
   characters between them — every version a browser keeps of one document
   (450) at the largest body (256 KiB) — and a move past that is refused
-  whole with `promote_too_many_carried`. The versions are checked in history
+  whole with `promote_too_many_carried`, naming the budget so the browser
+  can move again with the newest versions that fit. The versions are checked in history
   order, so the check walks the history once however the rows were sent. So
   one request cannot make the daemon write, or check, an unbounded number of
   saved versions, or spend an unbounded time checking them.

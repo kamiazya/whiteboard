@@ -22,6 +22,7 @@ function outcome(overrides: Partial<PromotedOutcome> = {}): PromotedOutcome {
     shadowedPaths: [],
     blobs: { transferred: [], missing: [], failed: [] },
     leftBehind: [],
+    versionsLeftBehind: 0,
     ...overrides,
   }
 }
@@ -46,6 +47,8 @@ describe('demoteWhenSafe', () => {
     ],
     ['an image read as missing', { blobs: { transferred: [], missing: ['f1'], failed: [] } }],
     ['the daemon did not confirm a carried plane', { leftBehind: ['a trash entry'] }],
+    // Counted apart from the sentences, so dropped versions keep the copy even unnamed.
+    ['saved versions stayed behind', { versionsLeftBehind: 1 }],
   ])('keeps it when %s', async (_why, overrides) => {
     expect(await demoteWhenSafe(DOCS, 'ws-daemon', outcome(overrides))).toBe(false)
     expect(demoteBrowserWorkspace).not.toHaveBeenCalled()

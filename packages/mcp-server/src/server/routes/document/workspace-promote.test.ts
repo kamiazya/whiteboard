@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import {
   PROMOTE_MAX_TRASH,
   PROMOTE_MAX_VERSIONS,
+  promoteJudgedBudgetRefusalSchema,
   promoteWorkspaceResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
@@ -287,9 +288,12 @@ it('refuses saved versions that cost more to check than one move allows with 413
   judgedBudget = 1
   const res = await promote(browserRecordWithTrashAndVersion())
   expect(res.status).toBe(413)
-  const body = apiErrorBodySchema.parse(await res.json())
-  expect(body).toMatchObject({ error: 'promote_too_many_carried' })
-  expect('message' in body && body.message).toContain('at most 1 characters')
+  const json: unknown = await res.json()
+  // Both readers: the emission contract, and the refusal's own declaration the sender fits by.
+  apiErrorBodySchema.parse(json)
+  const body = promoteJudgedBudgetRefusalSchema.parse(json)
+  expect(body.limit).toBe(1)
+  expect(body.message).toContain('at most 1 characters')
   expect(await documents()).toEqual([])
 })
 

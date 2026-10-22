@@ -49,6 +49,21 @@ export const promoteWorkspaceRequestSchema = z
   .strict()
 export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSchema>
 
+/**
+ * The refusal of carried versions that would cost more to judge than one move
+ * allows (server-core's PROMOTE_MAX_JUDGED_ELEMENTS): 413, the same code as a
+ * count past the cap, plus the budget as `limit` — in elements, the unit
+ * loro-adapter's `stateElementCount` counts — so the sender can carry the
+ * newest versions that fit and move again. A count refusal carries no
+ * `limit`, so this schema tells the two apart.
+ */
+export const promoteJudgedBudgetRefusalSchema = z.object({
+  error: z.literal('promote_too_many_carried'),
+  message: z.string().min(1),
+  limit: z.number().int().positive(),
+})
+export type PromoteJudgedBudgetRefusal = z.infer<typeof promoteJudgedBudgetRefusalSchema>
+
 export const promoteWorkspaceResponseSchema = z.object({
   ok: z.literal(true),
   recorded: z.array(z.string()),

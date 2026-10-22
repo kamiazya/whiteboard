@@ -18,6 +18,7 @@ import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   statedKindSplit,
+  stateElementCount,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
@@ -132,13 +133,6 @@ function pastReader(incoming: LoroDoc) {
   }
 }
 
-/** Elements in a projected state: a fresh copy's oplog holds one op per character, entry or element. */
-function elementsIn(content: LoroDoc): number {
-  let total = 0
-  for (const count of content.oplogVersion().toJSON().values()) total += count
-  return total
-}
-
 /**
  * The document a row names, judged as the sync surface would judge it
  * written whole at the point `past` is checked out at: a state past a limit
@@ -159,7 +153,7 @@ function judgeDocumentAt(
       reason: `Version "${version.id}" names a document the record did not hold at that point.`,
     }
   }
-  if (!charge(elementsIn(content))) return 'over-budget'
+  if (!charge(stateElementCount(content))) return 'over-budget'
   const breach = judgeStateWithinTextLimits(content)
   if (breach !== null) {
     const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)

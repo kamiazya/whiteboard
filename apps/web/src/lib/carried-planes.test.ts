@@ -107,11 +107,17 @@ describe('fitCarriedPlanes', () => {
       'newest-auto',
     ])
     expect(fitted.leftBehind).toEqual(['1 older saved version: one move carries at most 3'])
+    expect(fitted.versionsLeftBehind).toBe(1)
   })
 
   it('carries everything and leaves nothing when it all fits', () => {
     const fitted = fitCarriedPlanes('snap', planes([entry('a', 10)]))
-    expect(fitted).toEqual({ trash: [entry('a', 10)], versions: [], leftBehind: [] })
+    expect(fitted).toEqual({
+      trash: [entry('a', 10)],
+      versions: [],
+      leftBehind: [],
+      versionsLeftBehind: 0,
+    })
   })
 })
 
