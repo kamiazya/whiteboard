@@ -375,7 +375,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a wait here reports more than "it expired"; both the page embed and its
   // sibling, the note-body embed, have failed on CI from branches that cannot
   // reach them, so the note covers the two as one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1076,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1093,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // The cancel case: the page's effect cleanup has to stop the replica refresh
   // and the push it armed, and both schedulers' mocks have to answer a spy
