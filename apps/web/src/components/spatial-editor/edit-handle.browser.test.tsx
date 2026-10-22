@@ -143,20 +143,15 @@ it('both vessels draw the same catalog in the same band order: properties, verbs
   expect(namesInDomOrder()).toEqual(fromMore)
 })
 
-it('the ⋯ vessel is an icon grid: verbs are icon-only with accessible names intact', async () => {
+it('the ⋯ vessel labels every verb, as the right-click menu does', async () => {
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
   await userEvent.click(page.getByTestId('more-actions-handle'))
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
-  expect(menu.dataset.variant).toBe('grid')
-  // Icon discipline: the verb carries its name for assistive tech (and the
-  // hover tooltip), while showing no visible text.
-  const copy = menu.querySelector('[role="menuitem"][aria-label="Copy"]') as HTMLElement
-  expect(copy).not.toBeNull()
-  expect(copy.textContent).toBe('')
-  expect(copy.title).toBe('Copy')
+  const names = [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent?.trim())
+  for (const verb of ['Copy', 'Cut', 'Duplicate', 'Delete']) expect(names).toContain(verb)
   // The right-click vessel keeps its reading-surface labels.
   await userEvent.keyboard('{Escape}')
   await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
@@ -165,7 +160,6 @@ it('the ⋯ vessel is an icon grid: verbs are icon-only with accessible names in
   fireEvent.contextMenu(root, { clientX: r.left + 200, clientY: r.top + 150 })
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   const listMenu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
-  expect(listMenu.dataset.variant).not.toBe('grid')
   expect(listMenu.textContent).toContain('Copy')
 })
 
@@ -200,9 +194,12 @@ it('under 768px of editor width, the ⋯ opens a bottom sheet instead of a popov
   const rootRect = root.getBoundingClientRect()
   expect(Math.abs(menuRect.bottom - rootRect.bottom)).toBeLessThan(2)
   expect(menuRect.width).toBeGreaterThan(rootRect.width * 0.9)
-  // Same catalog: the icon-grid verbs and the isolated Delete are all here.
-  expect(menu.querySelector('[role="menuitem"][aria-label="Edit text"]')).not.toBeNull()
-  expect(menu.querySelector('[role="menuitem"][aria-label="Delete"]')).not.toBeNull()
+  // Same catalog: the labelled verbs and the isolated Delete are all here.
+  const sheetNames = [...menu.querySelectorAll('[role="menuitem"]')].map((el) =>
+    el.textContent?.trim(),
+  )
+  expect(sheetNames).toContain('Edit text')
+  expect(sheetNames).toContain('Delete')
 
   // The right-click vessel stays a popover at any width.
   await userEvent.keyboard('{Escape}')
