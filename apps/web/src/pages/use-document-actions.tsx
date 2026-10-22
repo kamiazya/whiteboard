@@ -32,7 +32,7 @@ export interface UseDocumentActionsOptions {
   /** Resolves once the document is gone, or rejects. */
   readonly deleteDocument: () => Promise<void>
   /** Runs once the delete resolved; the page leaves the document it showed. */
-  readonly onDeleted?: () => void
+  readonly onDeleted?: (() => void) | undefined
   /**
    * The decoded canvas, when this document HAS one — what the JSON Canvas row
    * copies. Null for a markdown document, and for a board whose bytes have
@@ -74,7 +74,7 @@ export function useDocumentActions({
     documentId,
     documentKind,
     deleteDocument,
-    ...(onDeleted === undefined ? {} : { onDeleted }),
+    onDeleted,
   })
 
   return {

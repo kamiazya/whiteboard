@@ -206,6 +206,31 @@ async function openWhatIsLeft(
   return opened
 }
 
+/**
+ * What a mount opens. A deep link that resolves to nothing falls through to
+ * the normal default-document flow rather than showing a degraded banner — a
+ * stale bookmark must not dead-end the user — unless the workspace holds
+ * nothing to fall back to: seeding there would put an empty canvas at the
+ * dead link's path.
+ */
+async function openOnMount(
+  stores: OpeningStores,
+  initialPath: string | undefined,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | 'workspace-empty' | null> {
+  const deepLinked =
+    initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
+  if (!alive()) return null
+  if (deepLinked !== null) return deepLinked
+  if (
+    initialPath !== undefined &&
+    (await listBrowserDocuments(stores.index, stores.clock)).length === 0
+  ) {
+    return 'workspace-empty'
+  }
+  return openPointedAt(stores, alive)
+}
+
 export function useBrowserDocumentController(
   index: DocumentIndex,
   deps: BrowserControllerDeps = {},
@@ -322,22 +347,13 @@ export function useBrowserDocumentController(
         clock: clockRef.current,
         loro: loroRef.current,
       }
-      // A deep link that resolves to nothing falls through to the normal
-      // default-document flow rather than showing a degraded banner — a stale
-      // bookmark must not dead-end the user.
-      const deepLinked =
-        initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
+      const opened = await openOnMount(stores, initialPath, alive)
       if (!alive()) return
-      if (
-        deepLinked === null &&
-        initialPath !== undefined &&
-        (await listBrowserDocuments(stores.index, stores.clock)).length === 0
-      ) {
-        if (alive()) setWorkspaceEmpty(true)
+      if (opened === 'workspace-empty') {
+        setWorkspaceEmpty(true)
         return
       }
-      const opened = deepLinked ?? (await openPointedAt(stores, alive))
-      if (!alive() || opened === null) return
+      if (opened === null) return
       setSnapshot(opened)
     }
 

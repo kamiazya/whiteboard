@@ -38,7 +38,7 @@ export interface UseDeleteDocumentOptions {
   /** Rejects on refusal; resolves once the document is gone. */
   readonly deleteDocument: () => Promise<void>
   /** Called once the keeper has deleted it — the page leaves for the list here. */
-  readonly onDeleted?: () => void
+  readonly onDeleted?: (() => void) | undefined
 }
 
 export function useDeleteDocument({

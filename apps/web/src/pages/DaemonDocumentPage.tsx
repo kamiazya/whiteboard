@@ -287,7 +287,7 @@ function useDaemonDocument(
     canvas: documentKind === 'spatial' ? canvasValue : null,
     duplicateDocument: controller.duplicateDocument,
     deleteDocument: controller.deleteDocument,
-    ...(onNavigateBack === undefined ? {} : { onDeleted: onNavigateBack }),
+    onDeleted: onNavigateBack,
   })
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
