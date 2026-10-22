@@ -40,6 +40,7 @@ import {
   writeCanvasFacetsField,
 } from './document-envelope-reconcile.js'
 import { LEGACY_EXTENSION_FIELD, liftLegacyExtension, liftStoredNode } from './legacy-lifts.js'
+import { refuseReservedKey } from './reserved-key-write.js'
 
 /** The board's own tags: one value under its own key, like the facets. */
 const TAGS_FIELD = CANVAS_TAGS_FIELD
@@ -136,6 +137,8 @@ function lineToFields(line: CanvasLine): Fields {
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
+  // Asked of the whole canvas before the first op, so a refusal keeps nothing.
+  refuseReservedKey(CANVAS_KEY, canvas)
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
@@ -246,10 +249,12 @@ function dropEvery(
 // and `withSpatialBatch`'s writer, so field projection and the delete
 // cascade can never drift between the two paths.
 function writeNodeInto(doc: DocumentContainers, node: SpatialNode): void {
+  refuseReservedKey(NODES_KEY, node)
   doc.getMap(NODES_KEY).set(node.id, nodeToFields(node))
 }
 
 function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
+  refuseReservedKey(EDGES_KEY, edge)
   doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
 }
 
@@ -303,6 +308,7 @@ function sweepAnchoredInto(doc: DocumentContainers, ids: ReadonlySet<string>): v
 }
 
 function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
+  refuseReservedKey(LINES_KEY, line)
   doc.getMap(LINES_KEY).set(line.id, lineToFields(line))
 }
 
@@ -434,6 +440,9 @@ export function reconcileSpatialCanvasInto(
   prev: SpatialCanvas,
   next: SpatialCanvas,
 ): boolean {
+  // Asked of the whole canvas before the first op, so a refusal keeps
+  // nothing; linear, like the per-element comparison below.
+  refuseReservedKey(CANVAS_KEY, next)
   let wrote = false
   const { writer, settle } = spatialBatchWriter(doc, () => {
     wrote = true

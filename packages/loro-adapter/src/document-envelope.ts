@@ -20,6 +20,7 @@ import {
   TRUST_KEY,
 } from './containers.js'
 import { isReadableFacetKey } from './document-envelope-reconcile.js'
+import { refuseReservedKey } from './reserved-key-write.js'
 
 /**
  * Replace a whole bucket map: write every incoming key and delete the keys
@@ -33,6 +34,7 @@ import { isReadableFacetKey } from './document-envelope-reconcile.js'
  * from a read applies itself with the reconcile forms beside this file.
  */
 function replaceBucket(doc: DocumentContainers, mapKey: string, entries: Fields): void {
+  refuseReservedKey(mapKey, entries)
   const map = doc.getMap(mapKey)
   const existingKeys = map.keys()
 
