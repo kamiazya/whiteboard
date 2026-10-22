@@ -180,6 +180,32 @@ describe('runServerGrantAdmin', () => {
     })
   })
 
+  it('appoints by id when the sign-in configuration cannot be read', async () => {
+    const ada = await userNamed('Ada', 'ada-2')
+    const io = { stdout: () => {}, stderr: () => {} }
+    const code = await runServerGrantAdmin(
+      ['--json', `--user=${ada.id}`, `--data-dir=${root}`],
+      io,
+      {
+        WHITEBOARD_SIGN_IN_CONFIG: join(root, 'missing-sign-in.json'),
+      },
+    )
+    expect(code).toBe(0)
+  })
+
+  it('exits 64 naming the configuration when a binding cannot be looked up in it', async () => {
+    const err: string[] = []
+    const io = { stdout: () => {}, stderr: (s: string) => err.push(s) }
+    const configPath = join(root, 'missing-sign-in.json')
+    const code = await runServerGrantAdmin(
+      ['--json', '--provider=corp', '--subject=alice-7', `--data-dir=${root}`],
+      io,
+      { WHITEBOARD_SIGN_IN_CONFIG: configPath },
+    )
+    expect(code).toBe(64)
+    expect(err.join('')).toContain(configPath)
+  })
+
   // A display name is whatever the person's provider claims at first sign-in,
   // so whoever signs in as "Alice" first would be the one appointed.
   it('refuses a display name as --user, appointing nobody', async () => {

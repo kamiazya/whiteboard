@@ -349,7 +349,7 @@ async function promoteWithinBudget(
   if (promoted.ok || promoted.judgedLimit === undefined || fitted.versions.length === 0) {
     return { promoted, sent: fitted }
   }
-  const { kept, dropped } = versionsWithinJudgedBudget(
+  const { kept, dropped } = await versionsWithinJudgedBudget(
     record,
     fitted.versions,
     promoted.judgedLimit,

@@ -270,24 +270,34 @@ function judgedCost(record: LoroDoc): (version: PromotedVersion) => number {
   }
 }
 
+/** How long pricing versions runs before the page gets its thread back. */
+const FIT_SLICE_MS = 10
+
 /**
  * The newest versions, across every document, whose judging fits `limit` —
  * the keeper's budget for one move, which it states when it refuses past
  * it. Newest first and stopping at the first that does not fit, so what is
  * left behind is exactly the oldest. Kept in the order they were read.
  */
-export function versionsWithinJudgedBudget(
+export async function versionsWithinJudgedBudget(
   record: LoroDoc,
   versions: readonly PromotedVersion[],
   limit: number,
-): { readonly kept: PromotedVersion[]; readonly dropped: number } {
+): Promise<{ readonly kept: PromotedVersion[]; readonly dropped: number }> {
   const cost = judgedCost(record)
   const newestFirst = [...versions].sort(
     (a, b) => b.createdAt - a.createdAt || compareCodeUnit(a.id, b.id),
   )
   const keep = new Set<PromotedVersion>()
   let spent = 0
+  let sliceStarted = Date.now()
   for (const version of newestFirst) {
+    // Pricing a version projects it, and this runs on the page's thread for
+    // as long as the keeper's own budget: hand the thread back between slices.
+    if (Date.now() - sliceStarted >= FIT_SLICE_MS) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      sliceStarted = Date.now()
+    }
     spent += cost(version)
     if (spent > limit) break
     keep.add(version)

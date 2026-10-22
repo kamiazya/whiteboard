@@ -83,6 +83,9 @@ export function createReferencedDocumentLoader(
 
   return (ref) => {
     const resolved = resolveDocumentEntry(deps, workspaceId, ref)
+    // Observed now, so a lookup that fails while an earlier read is pending is
+    // not an unhandled rejection; the turn below still rethrows it to its caller.
+    resolved.catch(() => undefined)
     const turn = previous.then(async () => {
       const entry = await resolved
       return entry === null ? null : await read(entry)

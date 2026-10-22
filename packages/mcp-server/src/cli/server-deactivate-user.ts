@@ -84,10 +84,12 @@ export async function runServerDeactivateUser(
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
   const reference = readUserReference(scan.values)
   if (reference.kind === 'usage-error') return usageError(io, `${reference.message} ${USAGE}`)
+  const providers = configuredProviders(env, reference.reference)
+  if (providers.kind === 'usage-error') return usageError(io, providers.message)
 
   const outcome = await deactivateUser(await openKeeperDb(dataDir, env), {
     user: reference.reference,
-    providers: configuredProviders(env),
+    providers: providers.providers,
     reactivate: scan.seen.has('--reactivate'),
     now: Date.now(),
   })

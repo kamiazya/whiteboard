@@ -98,11 +98,13 @@ export async function runServerGrantMember(
     return usageError(io, `--workspace=<id|handle/segment|segment> is required. ${USAGE}`)
   const reference = readUserReference(scan.values)
   if (reference.kind === 'usage-error') return usageError(io, `${reference.message} ${USAGE}`)
+  const providers = configuredProviders(env, reference.reference)
+  if (providers.kind === 'usage-error') return usageError(io, providers.message)
 
   const outcome = await grantMember(await openKeeperDb(dataDir, env), {
     workspaceId,
     user: reference.reference,
-    providers: configuredProviders(env),
+    providers: providers.providers,
   })
   io.stdout(
     operatorJsonLine(grantMemberOutputSchema, {

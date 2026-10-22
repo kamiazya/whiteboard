@@ -393,10 +393,12 @@ characters** (four documents at the 262,144-character limit), counting a note's
 body and the text of a board's nodes, and at most **4,000 nodes, edges and
 lines** across the referenced boards — one maximal board's worth, which is as
 much as a render draws nested anyway. References are loaded in the order the
-document names them, and the first one that would go past either bound, and
-every one after it, is drawn by its name alone: a file node shows its card,
-an embed its placeholder, and `canvas_view` sends that reference with its id
-and name but no body or canvas.
+document names them, and the first document that would go past either bound,
+and every document not already loaded after it, is drawn by its name alone: a
+file node shows its card, an embed its placeholder, and `canvas_view` sends
+that reference with its id and name but no body or canvas. A later reference
+to a document loaded before the bound was reached still answers with its
+content, since it costs nothing more to read.
 
 ## How many open comment threads and proposed changes one document may hold
 

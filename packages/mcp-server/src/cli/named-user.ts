@@ -53,10 +53,28 @@ export function readUserReference(values: {
   return { kind: 'usage-error', message: `${USER_REFERENCE_USAGE} is required.` }
 }
 
-/** The providers the keeper's sign-in configuration declares, if it has one. */
-export function configuredProviders(env: NodeJS.ProcessEnv): SignInProvider[] {
+/**
+ * The providers the keeper's sign-in configuration declares, if it has one.
+ * Only a binding reference NEEDS them, so a file that cannot be read refuses
+ * that reference by path and lets an id reference proceed without them: its
+ * answer then names each binding by its authenticator alone.
+ */
+export function configuredProviders(
+  env: NodeJS.ProcessEnv,
+  reference: UserReference,
+): { kind: 'ok'; providers: SignInProvider[] } | { kind: 'usage-error'; message: string } {
   const path = env[SIGN_IN_CONFIG_ENV]
-  return path === undefined || path === '' ? [] : readSignInProviders(path)
+  if (path === undefined || path === '') return { kind: 'ok', providers: [] }
+  try {
+    return { kind: 'ok', providers: readSignInProviders(path) }
+  } catch (error) {
+    if (reference.kind === 'id') return { kind: 'ok', providers: [] }
+    const reason = error instanceof Error ? error.message : String(error)
+    return {
+      kind: 'usage-error',
+      message: `the sign-in configuration at ${path} could not be read (${reason}), and --provider/--subject is looked up in it.`,
+    }
+  }
 }
 
 /** The refusal line every user-naming command prints for an unknown user. */
