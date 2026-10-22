@@ -558,7 +558,7 @@ function useBrowserDocument(
       // where it goes.
       onNavigateBack: () => {
         const handle = browserWorkspaceHandleOrNull()
-        navigate(handle === null ? indexPath() : workspacePath(handle))
+        navigate(handle === null ? indexPath() : workspaceFolderPath(handle, snapshot?.path ?? ''))
       },
     },
     spatial: {},

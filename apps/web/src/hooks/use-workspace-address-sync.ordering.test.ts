@@ -36,7 +36,7 @@ describe('the same-commit route-sync ordering the ping-pong fix depends on', () 
     expect(stamp).toBeGreaterThan(-1)
 
     const stateToUrlNavigate = hookSource.indexOf(
-      'navigate(path, { replace: isFirstSync || namingTheSameIndex })',
+      'navigate(workspaceRouteTarget(daemonView), { replace: isFirstSync || namingTheSameIndex })',
       refDecl,
     )
     expect(stateToUrlNavigate).toBeGreaterThan(-1)

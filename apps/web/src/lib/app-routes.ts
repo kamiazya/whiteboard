@@ -46,10 +46,15 @@ export function workspacePath(workspace: string): string {
 // folder, so it gets the plain workspace address. `folder` is the list's own
 // query parameter (useRoutedFolder).
 export function workspaceFolderPath(workspace: string, documentPathInWorkspace: string): string {
-  const cut = documentPathInWorkspace.lastIndexOf('/')
-  if (cut < 0) return workspacePath(workspace)
-  const folder = documentPathInWorkspace.slice(0, cut)
+  const folder = folderOfDocumentPath(documentPathInWorkspace)
+  if (folder === '') return workspacePath(workspace)
   return `${workspacePath(workspace)}?${new URLSearchParams({ folder }).toString()}`
+}
+
+/** The folder a document path sits in; `''` for a root-level document. */
+export function folderOfDocumentPath(documentPathInWorkspace: string): string {
+  const cut = documentPathInWorkspace.lastIndexOf('/')
+  return cut < 0 ? '' : documentPathInWorkspace.slice(0, cut)
 }
 
 export function documentPathPrefix(workspace: string): string {
@@ -66,7 +71,7 @@ export function documentPath(workspace: string, path: string): string {
 }
 
 export type WorkspaceRoute =
-  | { kind: 'index'; workspace?: string }
+  | { kind: 'index'; workspace?: string; folder?: string }
   | { kind: 'document'; workspace: string; path: string }
 
 /**
@@ -147,6 +152,17 @@ export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
 export function workspaceRoutePath(route: WorkspaceRoute): string {
   if (route.kind === 'document') return documentPath(route.workspace, route.path)
   return route.workspace ? workspacePath(route.workspace) : indexPath()
+}
+
+/**
+ * Where the address bar goes for a route: its path, plus the folder an index
+ * route was asked to open. The folder is a query, so it never takes part in
+ * route equality (`workspaceRoutePath`).
+ */
+export function workspaceRouteTarget(route: WorkspaceRoute): string {
+  const path = workspaceRoutePath(route)
+  if (route.kind !== 'index' || route.folder === undefined || route.folder === '') return path
+  return `${path}?${new URLSearchParams({ folder: route.folder }).toString()}`
 }
 
 export type SettingsSection = 'general' | 'data' | 'fonts' | 'connections' | 'developer'
