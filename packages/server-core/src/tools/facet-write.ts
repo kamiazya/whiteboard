@@ -14,7 +14,8 @@ import {
   type FacetTarget,
   firstUnrecognizedKey,
 } from '@kamiazya/whiteboard-facet-engine'
-import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
+import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
+import { type ExtensionFacets, holdsReservedKey } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '../server-deps.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
@@ -33,6 +34,10 @@ function article(target: FacetTarget): string {
  * targets. Unregistered facets pass through unvalidated, for round-trip
  * safety. A registered payload is stored as the schema's PARSED value, and a
  * null payload deletes the key — deletion needs no target or schema check.
+ *
+ * A payload holding a key named `__proto__` is refused first, naming the
+ * facet: an unregistered payload is stored as sent, and the envelope writer's
+ * own refusal could only name the container.
  */
 export function partitionFacetWrites(
   registry: Pick<FacetRegistry, 'targetsOf' | 'validateFacetWrite'>,
@@ -46,6 +51,7 @@ export function partitionFacetWrites(
       deletions.push(key)
       continue
     }
+    if (holdsReservedKey(payload)) throw new ReservedKeyWriteError(`facet "${key}"`)
     const targets = registry.targetsOf(key)
     if (targets !== undefined && !targets.includes(requiredTarget)) {
       throw new FacetWriteRejectedError(

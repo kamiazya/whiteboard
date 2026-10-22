@@ -1,4 +1,4 @@
-import { SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
+import { ReservedKeyWriteError, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
 import {
   DocumentHasDescendantsError,
   DocumentPathTakenError,
@@ -566,6 +566,9 @@ const REFUSALS: readonly Refusal[] = [
   // it does not belong (ADR-0013 decisions 6 and 10): the message names the
   // key and what to change.
   refusalOf(FacetWriteRejectedError, 'facet_write_rejected', 400),
+  // A value holding a key named `__proto__`, refused by the writer before
+  // its first op, in the code a sync update carrying one is refused with.
+  refusalOf(ReservedKeyWriteError, (err: ReservedKeyWriteError) => err.code, 400),
   // Two display names for one document, which no server choice could settle.
   refusalOf(DocumentNameConflictError, 'document_name_conflict', 400),
   // Deleting a document takes the documents below it only when the caller

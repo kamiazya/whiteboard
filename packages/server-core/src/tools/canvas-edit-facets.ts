@@ -3,6 +3,7 @@
  * registry judgement `wb_facet_set` applies, refused by naming the op.
  */
 import type { FacetRegistry, FacetTarget } from '@kamiazya/whiteboard-facet-engine'
+import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { fail } from './canvas-edit-error.js'
 import { FacetWriteRejectedError } from './errors.js'
@@ -27,7 +28,8 @@ function checkedFacets(
   try {
     return checkedBucket(registry, facets, target)
   } catch (error) {
-    if (error instanceof FacetWriteRejectedError) fail(index, op, error.message)
+    if (error instanceof FacetWriteRejectedError || error instanceof ReservedKeyWriteError)
+      fail(index, op, error.message)
     throw error
   }
 }

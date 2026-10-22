@@ -1,3 +1,4 @@
+import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import {
   DocumentNotFoundError,
@@ -266,6 +267,11 @@ describe('DELETE /api/v1 document whose index raises a refusal of its own', () =
       error: () => new DocumentSerializeError(SEEDED_MARKDOWN_ID, 'OKF Markdown', new Error('x')),
       status: 409,
       code: 'document_serialize_failed',
+    },
+    {
+      error: () => new ReservedKeyWriteError('facets'),
+      status: 400,
+      code: 'reserved_map_key',
     },
   ])('answers $code as $status JSON', async ({ error, status, code }) => {
     const store = new FakeDocumentStore()
