@@ -36,10 +36,10 @@ import {
   MousePointer2,
   Pencil,
   Plus,
-  ZoomIn,
-  ZoomOut,
   Spline,
   StickyNote,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
