@@ -28,7 +28,14 @@ import { rasterizeSvgToPng } from './rasterize-svg.js'
 import { layoutMarkdownScene } from './render-preview.js'
 import { themeFacesNamedBy } from './theme-fonts.js'
 
-export type DocumentExportFormat = 'png' | 'svg'
+/** The two pictures a document can be saved as. */
+export type PictureFormat = 'png' | 'svg'
+
+/**
+ * What ⋮ → Export… can save: a picture, or the document's own file (`md` for
+ * a note, `canvas` for a board).
+ */
+export type DocumentExportFormat = PictureFormat | 'md' | 'canvas'
 
 /** A document drawn for saving: the SVG and the box it covers. */
 export interface DrawnDocument {
@@ -80,7 +87,7 @@ export interface SavedPictureOptions {
 
 /** The saved file itself; `null` where this environment cannot rasterise. */
 export async function savedPicture(
-  format: DocumentExportFormat,
+  format: PictureFormat,
   drawn: DrawnDocument,
   options: SavedPictureOptions = {},
 ): Promise<Blob | null> {

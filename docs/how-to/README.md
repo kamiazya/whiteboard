@@ -6,6 +6,8 @@ one specific task. For a guided first run, start with the [Tutorials](../tutoria
 Guides:
 
 - **[self-host-with-docker](self-host-with-docker.md)** — run Whiteboard in server mode for a team.
+- **[export-and-import-a-document](export-and-import-a-document.md)** — save a document as a
+  Markdown or JSON Canvas file, or a picture.
 - **[link-documents](link-documents.md)** — write `[[references]]` between documents and read
   them back through the Linked from chip.
 - **[comment-on-a-document](comment-on-a-document.md)** — leave feedback anchored to a passage

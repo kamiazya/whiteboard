@@ -125,6 +125,7 @@ export function DocumentRowActions({
       )}
       <DocumentMenu
         onExport={(format) => void onExport(format)}
+        kind={model.documentKind}
         notice={notice}
         {...(versionsEnabled && !removed ? { onBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined

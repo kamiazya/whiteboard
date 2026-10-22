@@ -761,6 +761,16 @@ instead of carrying it, as `Roboto, system-ui, sans-serif` — a viewer with Rob
 renders it identically, and one without it falls back to its system sans-serif face
 (rather than a serif one) and gets a smaller file.
 
+**Save as Markdown (.md)** (More actions → Export…, on a markdown note) downloads
+the note as OKF Markdown: its frontmatter — `type`, tags, facets — and its body.
+The document's name is written as the frontmatter `title`, a projection of the
+workspace's display name, so a document with no name writes none. **Save as JSON Canvas
+(.canvas)** (on a canvas) downloads the extended-mode JSON Canvas document. Both are the
+document's own source rather than a picture. An image on a canvas is saved as an
+`asset:` reference to the workspace's file, not as its pixels, so the notice says
+"images are referenced, not embedded" when the canvas has one; the picture exports above
+are the ones that carry the pixels.
+
 **Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
 document on the clipboard as plain text — the quickest way to hand the exact
 canvas to another tool or a debugging session from any device.

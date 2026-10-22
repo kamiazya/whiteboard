@@ -4,9 +4,14 @@ import type { AppLogger } from '../../lib/app-logger.js'
 
 // Keyed by SceneExportFormat so a new format must add its own entry rather
 // than silently inheriting a default.
-const EXPORT_CONFIG: Record<SceneExportFormat, { extension: string; label: string }> = {
+const EXPORT_CONFIG: Record<
+  SceneExportFormat,
+  { extension: string; label: string; saved?: string }
+> = {
   png: { extension: 'png', label: 'PNG' },
   svg: { extension: 'svg', label: 'SVG' },
+  md: { extension: 'md', label: 'Markdown', saved: 'Markdown' },
+  canvas: { extension: 'canvas', label: 'JSON Canvas', saved: 'JSON Canvas' },
 }
 
 interface UseSceneExportOptions {
@@ -26,7 +31,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
     async (format: SceneExportFormat) => {
       if (!onExport) return
       setExportError(null)
-      const { extension, label } = EXPORT_CONFIG[format]
+      const { extension, label, saved } = EXPORT_CONFIG[format]
       try {
         const blob = await onExport(format)
         if (!blob) {
@@ -47,7 +52,18 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         // Chrome/Safari before it has read the blob URL; deferring past the
         // current task lets the download start first.
         setTimeout(() => URL.revokeObjectURL(url), 0)
-        onExported?.(`Exported as ${label}`)
+        if (saved === undefined) {
+          onExported?.(`Exported as ${label}`)
+        } else {
+          // An image in a canvas is an `asset:` reference to the workspace's
+          // file, so the saved text does not carry its pixels.
+          const referencesImages = format === 'canvas' && (await blob.text()).includes('asset:')
+          onExported?.(
+            referencesImages
+              ? `Saved as ${saved} — images are referenced, not embedded`
+              : `Saved as ${saved}`,
+          )
+        }
       } catch (err) {
         log?.error('canvas export failed:', err)
         setExportError(`Export as ${label} failed.`)

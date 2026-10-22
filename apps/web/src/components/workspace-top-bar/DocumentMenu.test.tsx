@@ -4,10 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenuItem } from '../../components/ui/dropdown-menu.js'
+import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
-  onExport?: (format: 'png' | 'svg') => void
+  onExport?: (format: SceneExportFormat) => void
   notice?: string | null
   onBookmark?: () => void
   display?: React.ReactNode
@@ -187,5 +188,29 @@ describe('DocumentMenu — no link handout', () => {
 
     expect(screen.queryByRole('status', { name: /copy status/i })).toBeNull()
     expect(screen.queryByLabelText(/document link/i)).toBeNull()
+  })
+})
+
+describe('DocumentMenu — saving the document itself', () => {
+  it('offers the markdown file for a note, beside the pictures', async () => {
+    const onExport = vi.fn()
+    render(<DocumentMenu onExport={onExport} kind="markdown" />, { container: document.body })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.queryByRole('menuitem', { name: 'Save as JSON Canvas (.canvas)' })).toBeNull()
+    fireEvent.pointerUp(screen.getByRole('menuitem', { name: 'Save as Markdown (.md)' }))
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('md'))
+  })
+
+  it('offers the JSON Canvas file for a canvas, not the markdown one', async () => {
+    const onExport = vi.fn()
+    render(<DocumentMenu onExport={onExport} kind="spatial" />, { container: document.body })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.queryByRole('menuitem', { name: 'Save as Markdown (.md)' })).toBeNull()
+    fireEvent.pointerUp(screen.getByRole('menuitem', { name: 'Save as JSON Canvas (.canvas)' }))
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('canvas'))
   })
 })

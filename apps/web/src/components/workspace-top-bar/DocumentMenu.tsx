@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { BookmarkPlus, Download, EllipsisVertical } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
 import {
@@ -20,6 +21,12 @@ interface DocumentMenuProps {
    * than wiring a control to a capability the page has not set up.
    */
   readonly onExport?: (format: SceneExportFormat) => void
+  /**
+   * What the open document is, which decides the file it can be saved as
+   * beside the pictures (a note's Markdown, a canvas's JSON Canvas). Omitted
+   * offers the pictures alone.
+   */
+  readonly kind?: DocumentKind
   /**
    * Asks for a bookmark: the page opens its History column with the naming
    * field ready. Omitted hides the row — a keeper with no history has no
@@ -81,6 +88,7 @@ interface DocumentMenuProps {
  */
 export function DocumentMenu({
   onExport,
+  kind,
   onBookmark,
   notice,
   triggerRef,
@@ -110,7 +118,7 @@ export function DocumentMenu({
           <TooltipContent>More actions</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
-          {onExport && <ExportSubmenu onExport={onExport} />}
+          {onExport && <ExportSubmenu onExport={onExport} kind={kind} />}
           {onBookmark && (
             <DropdownMenuItem onSelect={onBookmark} className="gap-2">
               <BookmarkPlus aria-hidden="true" className="size-3.5" />
@@ -124,7 +132,13 @@ export function DocumentMenu({
   )
 }
 
-function ExportSubmenu({ onExport }: { readonly onExport: (format: SceneExportFormat) => void }) {
+function ExportSubmenu({
+  onExport,
+  kind,
+}: {
+  readonly onExport: (format: SceneExportFormat) => void
+  readonly kind: DocumentKind | undefined
+}) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className="gap-2">
@@ -134,6 +148,16 @@ function ExportSubmenu({ onExport }: { readonly onExport: (format: SceneExportFo
       <DropdownMenuSubContent>
         <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+        {kind === 'markdown' && (
+          <DropdownMenuItem onSelect={() => onExport('md')}>
+            Save as Markdown (.md)
+          </DropdownMenuItem>
+        )}
+        {kind === 'spatial' && (
+          <DropdownMenuItem onSelect={() => onExport('canvas')}>
+            Save as JSON Canvas (.canvas)
+          </DropdownMenuItem>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   )
