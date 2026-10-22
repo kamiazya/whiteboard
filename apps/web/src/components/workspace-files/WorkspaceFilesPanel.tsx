@@ -480,6 +480,9 @@ export function WorkspaceFilesPanel({
           return parent === folder ? current : null
         })
       }
+      // Entering a search swaps the listing for results, so the selection made
+      // against the folder view would likewise be off screen.
+      if (query.trim() === '' && next.trim() !== '') setSelection(null)
       setQuery(next)
     },
     [query, folder],
@@ -569,6 +572,10 @@ export function WorkspaceFilesPanel({
   const selectFolder = (path: string) => {
     setFolder(path)
     setSelected(null)
+    // The bulk-delete set is as bound to what is on screen as the preview is:
+    // a selection carried into another folder would delete documents the
+    // person cannot see.
+    setSelection(null)
     onFolderChangeRef.current?.(path)
   }
 
