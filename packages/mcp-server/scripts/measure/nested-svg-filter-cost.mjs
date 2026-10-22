@@ -18,7 +18,7 @@
  * mask whose CONTENT is `radius` px square inside a nested root that
  * declares `side`: resvg sizes the mask pixmap from the content's bounding
  * box, so the declared size bounds nothing. Each row reports its peak RSS
- * (VmHWM); with `ULIMIT_V_KB` set every row runs under `ulimit -v`, which is
+ * (VmHWM); with `ULIMIT_V_KB` set every row runs under that address-space limit (prlimit --as, the limit `ulimit -v` sets), which is
  * where `maskwide` aborts the whole process on an allocation it reserves
  * but never touches, invisible to RSS when it succeeds; `plainwide` is the
  * same content with no mask, the control. The abort needs no `ulimit` under
@@ -101,6 +101,9 @@ if (process.argv[2] === '--row') {
 } else {
   const deadline = Number(process.env.DEADLINE_MS ?? 60_000)
   const ulimitKb = process.env.ULIMIT_V_KB
+  if (ulimitKb !== undefined && !/^\d+$/.test(ulimitKb)) {
+    throw new Error(`ULIMIT_V_KB must be a whole number of KiB, got ${JSON.stringify(ulimitKb)}`)
+  }
   const rows = process.argv.length > 2 ? process.argv.slice(2) : DEFAULT_ROWS
   const self = fileURLToPath(import.meta.url)
   if (ulimitKb !== undefined) process.stdout.write(`every row under ulimit -v ${ulimitKb}\n`)
@@ -110,10 +113,8 @@ if (process.argv[2] === '--row') {
     const [command, args] =
       ulimitKb === undefined
         ? [process.execPath, [self, '--row', row]]
-        : [
-            'sh',
-            ['-c', `ulimit -v ${ulimitKb} && exec "$0" "$@"`, process.execPath, self, '--row', row],
-          ]
+        : // prlimit sets the same RLIMIT_AS `ulimit -v` does, with no shell in between.
+          ['prlimit', [`--as=${Number(ulimitKb) * 1024}`, process.execPath, self, '--row', row]]
     const run = spawnSync(command, args, { timeout: deadline, encoding: 'utf8' })
     let ms
     if (run.status === 0) {
