@@ -38,7 +38,7 @@ export function jsonEqual(a: unknown, b: unknown): boolean {
     const leftKeys = Object.keys(leftRec)
     if (leftKeys.length !== Object.keys(rightRec).length) return false
     for (const key of leftKeys) {
-      if (!(key in rightRec)) return false
+      if (!Object.hasOwn(rightRec, key)) return false
       pending.push([leftRec[key], rightRec[key]])
     }
   }
@@ -217,7 +217,8 @@ export function clearRootContainer(
 ): boolean {
   if (kind === 'map') {
     const map = roots.map(key)
-    const keys = Object.keys(map.toJSON() as Record<string, unknown>)
+    // `keys()` rather than the projection: a `__proto__` entry is no own key of `toJSON()`.
+    const keys = map.keys()
     for (const entryKey of keys) map.delete(entryKey)
     return keys.length > 0
   }

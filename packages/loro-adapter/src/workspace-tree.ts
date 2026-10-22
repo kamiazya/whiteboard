@@ -856,7 +856,8 @@ export function writeWorkspaceDocumentContent(
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
     // A key holding another kind is left as `rootFitsNode` leaves it above.
-    if (key in projected || !holdsDeclaredContent(node.data, key)) continue
+    // Own keys only: a `__proto__` root becomes the projection's prototype.
+    if (Object.hasOwn(projected, key) || !holdsDeclaredContent(node.data, key)) continue
     if (clearRootContainer(roots, key, kind)) changed = true
   }
   if (changed) node.data.set('updatedAt', opts.updatedAt ?? Date.now())
@@ -1038,7 +1039,7 @@ export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
   for (const [key, value] of Object.entries(wanted)) syncRootContainer(roots, key, value, past)
   for (const [key, value] of Object.entries(current)) {
     const kind = projectedKind(value)
-    if (key in wanted || kind === null) continue
+    if (Object.hasOwn(wanted, key) || kind === null) continue
     clearRootContainer(roots, key, kind)
   }
   target.commit()
