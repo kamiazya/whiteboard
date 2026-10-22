@@ -23,6 +23,7 @@
 import type { SafeHref } from './format.js'
 
 type SvgRole = 'presentation'
+type BoxRole = SvgRole | 'checkbox'
 
 export type SvgBoxAttrs = {
   x: number
@@ -77,7 +78,8 @@ export type SvgElements = {
     /** The legend's handle (svg/legend.ts): document chrome an editor overlay replaces. */
     'data-wb-legend'?: string
   }
-  rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
+  rect: SvgBoxAttrs &
+    PaintAttrs & { rx?: number; role?: BoxRole; 'aria-checked'?: 'true' | 'false' }
   /** One segment — the legend's edge swatch. Edges themselves are polylines. */
   line: PaintAttrs & { x1: number; y1: number; x2: number; y2: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml

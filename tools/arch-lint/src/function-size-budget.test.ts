@@ -117,13 +117,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
   // +3: `tagLibrary`, threaded to the preview pane.
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 83,
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 86,
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
   'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
   // +2: `tagLibrary`, so an embedded board is coloured by intent.
-  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 54,
+  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 66,
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
   'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
   'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 56,

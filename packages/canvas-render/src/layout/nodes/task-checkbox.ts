@@ -62,6 +62,7 @@ export function checkboxMarker(
     bbox: box,
     radius: Math.max(theme.cornerRadiusPx / 3, 1),
     appearance: outlinePaint(theme, theme.borderOpacity),
+    taskBox: { checked },
   }
   if (!checked) return [frame]
   const tick: ResolvedEdgeNode = {

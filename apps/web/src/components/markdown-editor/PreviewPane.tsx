@@ -3,7 +3,7 @@ import type {
   MeasureText,
   ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
-import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
+import { type CSSProperties, type MutableRefObject, useCallback, useEffect, useMemo } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../lib/render-preview.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { useTaskCheckboxes } from './use-task-checkboxes.js'
 
 export interface PreviewPaneProps {
   value: string
@@ -43,6 +44,11 @@ export interface PreviewPaneProps {
    * re-render of the pane does not re-render whatever holds the rail.
    */
   blocksRef?: MutableRefObject<readonly RailBlock[]>
+  /**
+   * Called with the 1-based source line of the task item whose checkbox was
+   * activated. Absent, the boxes stay inert pictures (a version preview).
+   */
+  onToggleTask?: (line: number) => void
 }
 
 /**
@@ -76,6 +82,7 @@ export function PreviewPane({
   tagLibrary: library,
   anchorsRef,
   blocksRef,
+  onToggleTask,
 }: PreviewPaneProps) {
   const { keyed, anchors, blocks } = useMemo(
     () =>
@@ -96,6 +103,15 @@ export function PreviewPane({
     if (blocksRef) blocksRef.current = blocks
   }, [anchors, anchorsRef, blocks, blocksRef])
 
+  const { hostRef, handlers: taskHandlers } = useTaskCheckboxes(value, keyed, onToggleTask)
+  const keyedRef = useKeyedSvg(keyed)
+  const setHost = useCallback(
+    (element: HTMLDivElement | null) => {
+      hostRef.current = element
+      keyedRef(element)
+    },
+    [hostRef, keyedRef],
+  )
   const fill = editorTextFill(theme)
   return (
     <div
@@ -114,7 +130,8 @@ export function PreviewPane({
       // (var() included) — `inherit` is ignored, so inheritance alone leaves
       // a visited wikiLink near-invisible.
       style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
-      ref={useKeyedSvg(keyed)}
+      ref={setHost}
+      {...taskHandlers}
     />
   )
 }

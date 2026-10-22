@@ -134,7 +134,7 @@ describe('MarkdownEditor (real browser)', () => {
    * its neighbours carry the same ink as a code point that does not exist,
    * so a character checkbox would export as a tofu box.
    */
-  it('draws a checkbox in the preview for each task item, filled when it is ticked', async () => {
+  it('draws a checkbox in the preview for each task item, ticked when it is done', async () => {
     const { getByTestId } = render(
       <MarkdownEditor
         theme="light"
@@ -152,8 +152,10 @@ describe('MarkdownEditor (real browser)', () => {
       return found
     })
     expect(boxes).toHaveLength(2)
-    // The ticked one carries a second, FILLED rect inside its frame; the
-    // unticked one is a frame alone. Ink, not a name, is what a reader sees.
-    expect(preview.querySelectorAll('rect[fill]:not([fill="none"])').length).toBeGreaterThan(0)
+    // The ticked one carries a tick inside its frame; the unticked one is a
+    // frame alone. Ink, not a name, is what a reader sees — and a filled
+    // square there read as "indeterminate" rather than done.
+    expect(preview.querySelectorAll('polyline[stroke]')).toHaveLength(1)
+    expect(preview.querySelectorAll('rect[fill]:not([fill="none"])')).toHaveLength(0)
   })
 })

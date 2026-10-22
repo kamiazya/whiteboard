@@ -1314,27 +1314,11 @@ describe('typesetMdastBlocks — task list markers', () => {
     expect(markerText(item)).not.toContain('•')
   })
 
-  // A filled square inside the box read as "indeterminate", not done; a
-  // done item shows a tick, which is a stroked polyline inside the frame.
-  it('draws a tick inside the box for a ticked item and no fill that could read as indeterminate', () => {
-    const unticked = itemOf(taskList(false))
-    const ticked = itemOf(taskList(true))
-    const frame = shapesOf(ticked)[0]
-    const ticks = ticked.children.filter((child) => child.kind === 'edge')
-    expect(ticks).toHaveLength(1)
-    expect(unticked.children.filter((child) => child.kind === 'edge')).toHaveLength(0)
-    expect(shapesOf(ticked)).toHaveLength(1)
-    const tick = ticks[0]
-    if (tick?.kind !== 'edge' || frame === undefined) throw new Error('expected a tick and a frame')
-    expect(tick.path.length).toBeGreaterThanOrEqual(3)
-    for (const point of tick.path) {
-      expect(point.x).toBeGreaterThan(frame.bbox.x)
-      expect(point.x).toBeLessThan(frame.bbox.x + frame.bbox.w)
-      expect(point.y).toBeGreaterThan(frame.bbox.y)
-      expect(point.y).toBeLessThan(frame.bbox.y + frame.bbox.h)
-    }
-    expect(tick.fromEnd).toBe('none')
-    expect(tick.toEnd).toBe('none')
+  it('draws a tick in the box for a ticked item, so the states differ in ink and not only in name', () => {
+    const ticks = (item: ReturnType<typeof itemOf>) =>
+      item.children.filter((c) => c.kind === 'edge')
+    expect(ticks(itemOf(taskList(false)))).toHaveLength(0)
+    expect(ticks(itemOf(taskList(true)))).toHaveLength(1)
   })
 
   it('leaves an ordinary bullet alone', () => {

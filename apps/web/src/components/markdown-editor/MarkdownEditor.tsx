@@ -25,6 +25,7 @@ import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
 import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 import { openSceneLink } from '../../lib/scene-link.js'
+import { toggleTaskLine } from '../../lib/task-toggle.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
@@ -343,6 +344,12 @@ export function MarkdownEditor({
     [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
+
+  // The preview's lines are those of the debounced body; applying them to a
+  // newer one could flip a different item, so a click inside that window waits.
+  const onToggleTask = (line: number) => {
+    if (value === debouncedValue) onChange(toggleTaskLine(value, line))
+  }
 
   // A document link's href is a bare id: meaningless to the browser, which
   // would resolve it against the page URL. Ordinary links keep the default.
@@ -787,6 +794,7 @@ export function MarkdownEditor({
             renderMath={renderMath}
             renderDiagram={renderDiagram}
             tagLibrary={tagLibrary}
+            onToggleTask={onToggleTask}
           />
         )}
         {!previewEmpty && railAffordable && railHasScroll && railBlocks.length > 0 && (

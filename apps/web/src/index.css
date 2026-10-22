@@ -523,6 +523,15 @@
   }
 
   /*
+   * A task checkbox is an unfilled rect, so by default only its 1px outline
+   * takes a click; `all` makes the whole box the target.
+   */
+  .markdown-preview-pane [role='checkbox'] {
+    pointer-events: all;
+    cursor: pointer;
+  }
+
+  /*
    * One-shot attention echo (ConnectionStatus sync-off entry): an
    * expanding, fading ring behind the chip dot. Compositor props only;
    * a FINITE iteration count at the use site keeps it a pulse that
