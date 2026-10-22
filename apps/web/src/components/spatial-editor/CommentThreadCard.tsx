@@ -137,43 +137,7 @@ export function CommentThreadCard({
       data-status={thread.status}
       className="flex flex-col gap-2"
     >
-      {/* The THREAD's own verbs, and only those. Edit left this row when
-          every message became editable: a verb that acts on one message has
-          to sit on that message, or it can only ever mean the first one —
-          which is exactly what it meant. */}
-      <div className="flex shrink-0 items-center justify-end gap-0.5">
-        {resolved ? (
-          <>
-            {/* Said in the header rather than left to the muting alone: a
-                greyed card is also what a disabled one looks like. */}
-            <span
-              data-testid="comment-card-resolved"
-              className="mr-auto flex items-center gap-1 text-xs font-medium text-muted-foreground"
-            >
-              <CircleCheck aria-hidden className="size-3.5" />
-              Resolved
-            </span>
-            {/* A labelled button, always drawn: the way back is the one thing
-                a settled card is for, and an icon behind a hover hides it. */}
-            <button
-              type="button"
-              aria-label="Reopen"
-              onClick={() => onResolve(false)}
-              className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent"
-            >
-              <RotateCcw aria-hidden className="size-3.5" />
-              Reopen
-            </button>
-          </>
-        ) : (
-          <CardAction label="Resolve" onSelect={() => onResolve(true)}>
-            <CircleCheck className="size-3.5" />
-          </CardAction>
-        )}
-        <CardAction label="Close" onSelect={onClose}>
-          <X className="size-3.5" />
-        </CardAction>
-      </div>
+      <CardHeader resolved={resolved} onResolve={onResolve} onClose={onClose} />
 
       <ol className={cn('flex flex-col gap-3', resolved && 'max-h-14 overflow-hidden opacity-60')}>
         {(resolved ? thread.messages.slice(0, 1) : thread.messages).map((message) => (
@@ -218,6 +182,57 @@ export function CommentThreadCard({
         ))}
       </ol>
       {resolved ? null : <ReplyComposer onReply={onReply} />}
+    </div>
+  )
+}
+
+/**
+ * The THREAD's own verbs, and only those. Edit left this row when every
+ * message became editable: a verb that acts on one message has to sit on that
+ * message, or it can only ever mean the first one.
+ */
+function CardHeader({
+  resolved,
+  onResolve,
+  onClose,
+}: {
+  readonly resolved: boolean
+  readonly onResolve: (resolved: boolean) => void
+  readonly onClose: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-end gap-0.5">
+      {resolved ? (
+        <>
+          {/* Said in the header rather than left to the muting alone: a
+              greyed card is also what a disabled one looks like. */}
+          <span
+            data-testid="comment-card-resolved"
+            className="mr-auto flex items-center gap-1 text-xs font-medium text-muted-foreground"
+          >
+            <CircleCheck aria-hidden className="size-3.5" />
+            Resolved
+          </span>
+          {/* A labelled button, always drawn: the way back is the one thing a
+              settled card is for, and an icon behind a hover hides it. */}
+          <button
+            type="button"
+            aria-label="Reopen"
+            onClick={() => onResolve(false)}
+            className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent"
+          >
+            <RotateCcw aria-hidden className="size-3.5" />
+            Reopen
+          </button>
+        </>
+      ) : (
+        <CardAction label="Resolve" onSelect={() => onResolve(true)}>
+          <CircleCheck className="size-3.5" />
+        </CardAction>
+      )}
+      <CardAction label="Close" onSelect={onClose}>
+        <X className="size-3.5" />
+      </CardAction>
     </div>
   )
 }

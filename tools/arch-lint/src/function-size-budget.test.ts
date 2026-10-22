@@ -81,7 +81,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
+  // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 316,
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -91,7 +92,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // anything.
   'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 155,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 92,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
@@ -195,7 +196,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The component itself: a `forwardRef` function expression, the largest
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1646,
+  // +13: the comment reveal hook, its handle entry and the pulse ring.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1659,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
@@ -207,7 +209,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 97,
+  // +9: the exit hint follows the bubble as it grows.
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 106,
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -288,7 +291,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
-  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 188,
+  // +11: the reveal request and the anchor chip label.
+  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 199,
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,

@@ -40,7 +40,11 @@ import { cn } from '../../lib/utils.js'
  */
 const UNMEASURED_WIDTH_PX = 200
 
-/** Room for a descender and the fade a truncated run paints. */
+/**
+ * Room for a descender and the fade a truncated run paints. Both sides, so
+ * the text's measure is the box less twice this: laid out to the full width
+ * the drawing overflows its column and the last glyphs are clipped.
+ */
 const BODY_PADDING_PX = 1
 
 export interface CommentBodyProps {
@@ -75,9 +79,6 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     const scene = layoutCommentBody(body, {
       measure: resolvedMeasure,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
-      // The SVG is padded on both sides, so the text's measure is the box
-      // less that padding — otherwise the drawing is wider than the column it
-      // was measured from and the last glyphs are clipped by whatever scrolls.
       maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
       // What `compact` has always claimed and, until this, did not do: it
       // set a `text-xs` class the SVG never reads, so a rail whose chrome

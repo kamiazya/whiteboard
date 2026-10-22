@@ -199,10 +199,7 @@ function ThreadConversation({
     // token resolves to `oklch(1 0 0 / 0.1)` in the dark theme,
     // which on this ground is invisible — a connector nobody
     // can see is not one.
-    <div
-      id={`thread-${thread.id}`}
-      className="mt-1 ml-[44px] flex min-w-0 flex-col gap-3 border-l-2 pl-2"
-    >
+    <div id={`thread-${thread.id}`} className="mt-1 ml-[44px] flex flex-col gap-3 border-l-2 pl-2">
       {/* Every message, drawn the same way. The first one
             used to be built here by hand and the rest by
             a replies-only component, which is why only the
@@ -227,6 +224,57 @@ function ThreadConversation({
         <ReplyComposer key={thread.id} compact onReply={(body) => onReply(thread.id, body)} />
       )}
     </div>
+  )
+}
+
+/** The row's second line: its state, what it is about, and how much is in it. */
+function RowMeta({
+  thread,
+  status,
+  expanded,
+  about,
+  orphaned,
+}: {
+  thread: CommentThread
+  status: CommentThreadStatus
+  expanded: boolean
+  about: string | undefined
+  orphaned: boolean
+}) {
+  return (
+    <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+      {status === 'resolved' ? (
+        <span
+          data-testid={`thread-resolved-${thread.id}`}
+          className="font-medium text-neutral-600 dark:text-neutral-400"
+        >
+          Resolved
+        </span>
+      ) : null}
+      {about === undefined ? null : (
+        <span
+          data-testid={`thread-about-${thread.id}`}
+          className="max-w-full truncate rounded bg-muted px-1.5 text-muted-foreground"
+        >
+          {about}
+        </span>
+      )}
+      {/* One stamp at most: ThreadActivity is silent on a lone remark, whose
+          stamp is the opening message's, and an open row leaves it to the
+          column below. Both at once wrapped the row at 390px. */}
+      {thread.messages.length <= 1 && !expanded ? (
+        <MessageBy message={thread.messages[0]} unsignedAs="You" />
+      ) : null}
+      <ThreadActivity thread={thread} />
+      {orphaned ? (
+        <span data-testid={`thread-orphaned-${thread.id}`}>
+          {/* Said, not hidden: the conversation outlived what it
+                was about, which is ordinary once a document is
+                edited — not an error state. */}
+          anchor gone
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -343,43 +391,13 @@ export function ThreadRow({
               named "whole document 3 messages 0s ago" is not one
               anybody could act on. */}
           <RowSubject body={thread.messages[0]?.body ?? ''} expanded={expanded} />
-          <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
-            {status === 'resolved' ? (
-              <span
-                data-testid={`thread-resolved-${thread.id}`}
-                className="font-medium text-neutral-600 dark:text-neutral-400"
-              >
-                Resolved
-              </span>
-            ) : null}
-            {about === undefined ? null : (
-              <span
-                data-testid={`thread-about-${thread.id}`}
-                className="max-w-full truncate rounded bg-muted px-1.5 text-muted-foreground"
-              >
-                {about}
-              </span>
-            )}
-            {/* Exactly one of these draws, by construction:
-                `ThreadActivity` is silent on a lone remark, whose
-                only stamp IS the opening message's. A conversation
-                shows what a closed row can answer — how much is in
-                here and whether it moved lately — and leaves the
-                opening stamp to the first entry of the column one
-                tap away. Both at once wrapped the row at 390px. */}
-            {thread.messages.length <= 1 && !expanded ? (
-              <MessageBy message={thread.messages[0]} unsignedAs="You" />
-            ) : null}
-            <ThreadActivity thread={thread} />
-            {resolveAnchor?.(thread) === 'orphaned' ? (
-              <span data-testid={`thread-orphaned-${thread.id}`}>
-                {/* Said, not hidden: the conversation outlived what it
-                  was about, which is ordinary once a document is
-                  edited — not an error state. */}
-                anchor gone
-              </span>
-            ) : null}
-          </span>
+          <RowMeta
+            thread={thread}
+            status={status}
+            expanded={expanded}
+            about={about}
+            orphaned={resolveAnchor?.(thread) === 'orphaned'}
+          />
         </button>
       </div>
 
