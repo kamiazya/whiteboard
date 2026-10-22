@@ -287,7 +287,12 @@ export function FolderContentsList({
   )
 
   if (folders.length === 0 && here.length === 0) {
-    return <p className={cn('text-muted-foreground text-sm', className)}>This folder is empty.</p>
+    return (
+      <p className={cn('text-muted-foreground text-sm', className)}>
+        This folder is empty. A folder exists only while a document's path names it, so it goes once
+        you leave.
+      </p>
+    )
   }
 
   return (

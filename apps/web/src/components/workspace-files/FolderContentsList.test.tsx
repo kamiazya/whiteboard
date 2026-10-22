@@ -70,6 +70,11 @@ describe('FolderContentsList', () => {
     expect(screen.queryByRole('list')).toBeNull()
   })
 
+  it('explains that a folder lasts only while a document path names it', () => {
+    render(<FolderContentsList documents={docs} folder="design/notes/kickoff" onOpen={vi.fn()} />)
+    expect(screen.getByText(/empty/i).textContent).toMatch(/only while a document/i)
+  })
+
   // The capability slot: this component never fetches or renders a
   // document, so the miniature has to arrive from the caller. It is the only
   // thing that distinguishes one row from another at a glance, and nothing
