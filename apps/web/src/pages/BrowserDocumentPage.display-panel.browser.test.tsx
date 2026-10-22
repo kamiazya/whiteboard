@@ -47,6 +47,12 @@ beforeEach(async () => {
 
 afterEach(cleanup)
 
+/** At phone width the inspector members fold into one menu; the group is hidden. */
+async function openFromFold(name: RegExp) {
+  await userEvent.click(await screen.findByRole('button', { name: /^inspect this document$/i }))
+  await userEvent.click(await screen.findByRole('menuitem', { name }))
+}
+
 async function mountLoaded() {
   const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
@@ -73,7 +79,7 @@ it('opens display settings beside the editor, closable from inside', async () =>
   await mountLoaded()
   expect(screen.queryByTestId('display-panel')).toBeNull()
 
-  await userEvent.click(await screen.findByRole('button', { name: /^display$/i }))
+  await openFromFold(/^display$/i)
   const panel = await screen.findByTestId('display-panel', undefined, { timeout: 15_000 })
   expect(panel).toBeInTheDocument()
 
@@ -84,17 +90,17 @@ it('opens display settings beside the editor, closable from inside', async () =>
 
 it('holds the one slot, so comments cannot stay open beside it', async () => {
   await mountLoaded()
-  await userEvent.click(await screen.findByRole('button', { name: /^display$/i }))
+  await openFromFold(/^display$/i)
   await screen.findByTestId('display-panel', undefined, { timeout: 15_000 })
 
-  await userEvent.click(await screen.findByRole('button', { name: /^comments/i }))
+  await openFromFold(/^comments/i)
   await waitFor(() => expect(screen.queryByTestId('display-panel')).toBeNull(), { timeout: 15_000 })
   expect(screen.getByTestId('comments-rail')).toBeInTheDocument()
 })
 
 it('keeps every display control inside a phone-width screen', async () => {
   await mountLoaded()
-  await userEvent.click(await screen.findByRole('button', { name: /^display$/i }))
+  await openFromFold(/^display$/i)
   const panel = await screen.findByTestId('display-panel', undefined, { timeout: 15_000 })
 
   // A control past the screen's edge is not merely ugly — it cannot be
@@ -118,7 +124,7 @@ it('keeps every display control inside a phone-width screen', async () => {
 
 it('keeps the open panel mounted when the page around it re-renders', async () => {
   const rerenderPage = await mountLoaded()
-  await userEvent.click(await screen.findByRole('button', { name: /^display$/i }))
+  await openFromFold(/^display$/i)
   const panel = await screen.findByTestId('display-panel', undefined, { timeout: 15_000 })
 
   // Expanding is state this SUBTREE owns, so it is what a remount throws away.
