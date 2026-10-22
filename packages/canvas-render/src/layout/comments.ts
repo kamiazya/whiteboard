@@ -17,7 +17,7 @@
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { commentCornerOf, isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
-import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Appearance, BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
@@ -26,6 +26,7 @@ import {
   placeCommentBubble,
 } from './comment-placement.js'
 import type { RegionChrome, ResolvedLayoutOptions } from './layout-options.js'
+import { firstLineOfBlocks } from './nodes/mdast-blocks.js'
 import { contentExtent } from './scene-extent.js'
 import { translateScene } from './translate-scene.js'
 
@@ -227,6 +228,75 @@ function pinCountRun(
   }
 }
 
+const RESOLVED_LABEL = 'Resolved'
+const RESOLVED_LABEL_FONT_PX = 11
+const RESOLVED_LABEL_GAP_PX = 2
+
+/** Repaints every run under `nodes` with `fill`, rebuilding only the spine. */
+function paintRuns(nodes: readonly SceneNode[], fill: string | undefined): readonly SceneNode[] {
+  if (fill === undefined) return nodes
+  return nodes.map((node): SceneNode => {
+    if (node.kind === 'textRun') return { ...node, appearance: { ...node.appearance, fill } }
+    const branches = node as SceneNode & {
+      runs?: readonly SceneNode[]
+      children?: readonly SceneNode[]
+      items?: readonly SceneNode[]
+    }
+    let next: SceneNode = node
+    for (const key of ['runs', 'children', 'items'] as const) {
+      const branch = branches[key]
+      if (branch !== undefined) next = { ...next, [key]: paintRuns(branch, fill) } as SceneNode
+    }
+    return next
+  })
+}
+
+/**
+ * What a settled thread's bubble holds: its body cut to the first line, then
+ * a small "Resolved" label under it, so an open conversation is the only one
+ * that shows its whole text. Paint comes from the overlay's `text`, never a
+ * literal here.
+ */
+function collapseResolvedBody(
+  nodes: readonly SceneNode[],
+  options: ResolvedLayoutOptions,
+  text: Appearance | undefined,
+): readonly SceneNode[] {
+  const body = paintRuns(firstLineOfBlocks(nodes).nodes, text?.fill)
+  const { bottom } = contentExtent(body)
+  const metrics = options.measure(RESOLVED_LABEL, {
+    family: text?.fontFamily ?? 'sans-serif',
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal',
+    sizePx: RESOLVED_LABEL_FONT_PX,
+  })
+  const label: SceneNode = {
+    kind: 'textRun',
+    bbox: {
+      x: 0,
+      y: bottom + RESOLVED_LABEL_GAP_PX,
+      w: metrics.advanceWidth,
+      h: metrics.ascent + metrics.descent,
+    },
+    baseline: metrics.ascent,
+    text: RESOLVED_LABEL,
+    ...(text === undefined ? {} : { appearance: { ...text, fontSize: RESOLVED_LABEL_FONT_PX } }),
+  }
+  return [...body, label]
+}
+
+function bubbleBody(
+  comment: CanvasComment,
+  nodes: readonly SceneNode[],
+  options: ResolvedLayoutOptions,
+  chrome: SpatialCommentAppearance | undefined,
+): readonly SceneNode[] {
+  return comment.resolved === true
+    ? collapseResolvedBody(nodes, options, chrome?.resolvedOverlay.text)
+    : nodes
+}
+
 /**
  * The comment annotation layer (ADR-0024 decision 4): one pin (a circle on
  * the anchor) plus one bubble (rounded rect holding the text, floating
@@ -292,7 +362,8 @@ export function composeComments(
       onParseFailure: (err) =>
         options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err }),
     })
-    const { right: contentRight, bottom: contentBottom } = contentExtent(laid.nodes)
+    const bodyNodes = bubbleBody(comment, laid.nodes, options, chrome)
+    const { right: contentRight, bottom: contentBottom } = contentExtent(bodyNodes)
     const bubble = placeCommentBubble(
       anchor,
       {
@@ -349,7 +420,7 @@ export function composeComments(
     })
     out.push(
       ...translateScene(
-        laid,
+        { ...laid, nodes: bodyNodes },
         bubble.x + COMMENT_BUBBLE_PADDING_PX,
         bubble.y + COMMENT_BUBBLE_PADDING_PX,
       ).nodes,

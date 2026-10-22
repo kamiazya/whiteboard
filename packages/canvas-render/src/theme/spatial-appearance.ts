@@ -110,6 +110,13 @@ interface SpatialCommentChromeAppearance {
    * as `passage`.
    */
   readonly region?: Appearance
+  /**
+   * The words of a settled bubble and its "Resolved" label: `fill` repaints
+   * the collapsed first line, `fontFamily` the label. Only the resolved
+   * overlay reads it — an open bubble's text keeps the body's own paint.
+   * Optional for the same reason as `passage`.
+   */
+  readonly text?: Appearance
 }
 
 /** What a resolver decided for the comment layer's chrome. */

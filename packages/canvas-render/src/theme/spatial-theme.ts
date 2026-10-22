@@ -190,7 +190,8 @@ function buildTheme(palette: SpatialPalette, mode: SpatialThemeMode): SpatialApp
         pinCount,
         resolvedOverlay: {
           pin: muteForResolved(pin),
-          bubble: muteForResolved(bubble),
+          bubble: muteForResolved({ ...bubble, stroke: palette.syntax.comment }),
+          text: { fill: palette.syntax.comment, fontFamily: SPATIAL_THEME_FONT_FAMILY },
           leader: muteForResolved(leader),
           passage: { ...passage, fillOpacity: 0.1 },
           region: { ...region, strokeOpacity: 0.45 },
