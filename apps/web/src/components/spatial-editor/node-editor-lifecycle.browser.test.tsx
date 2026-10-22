@@ -146,3 +146,31 @@ it('Done returns focus to the canvas root', async () => {
   await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
   await vi.waitFor(() => expect(rootOf(container).contains(document.activeElement)).toBe(true))
 })
+
+it('the document holds the draft after a short idle while the editor stays open', async () => {
+  const { Host, latest } = makeEditorHost({ initial: withNode })
+  const { container } = render(<Host />)
+  await editExisting(container)
+  await userEvent.keyboard(' typed')
+
+  await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('start typed'))
+  expect(nodeEditorContent(container)).not.toBeNull()
+
+  // The canvas updating with the editor's own text must not move the caret.
+  await userEvent.keyboard('!')
+  expect(nodeEditorText(container)).toBe('start typed!')
+  await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('start typed!'))
+})
+
+it('Escape after an idle write restores the text the node had before the edit', async () => {
+  const { Host, latest } = makeEditorHost({ initial: withNode })
+  const { container } = render(<Host />)
+  await editExisting(container)
+  await userEvent.keyboard(' typed')
+  await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('start typed'))
+
+  await userEvent.keyboard('{Escape}')
+
+  await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
+  expect(textOf(latest.canvas)).toBe('start')
+})

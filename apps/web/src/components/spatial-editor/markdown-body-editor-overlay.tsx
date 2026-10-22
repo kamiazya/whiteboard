@@ -19,6 +19,7 @@ import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { nodeTextLengthLimit } from './node-text-limit.js'
+import { useDraftWriteThrough } from './use-draft-write-through.js'
 
 /** The silhouette's inscribed content box — where the committed text sits. */
 function contentBoxOf(
@@ -86,6 +87,8 @@ export function MarkdownBodyEditorOverlay({
   /** The family the scene declares under the canvas's look (`useEditingFontFamily`). */
   readonly fontFamily: string
 }) {
+  const draft = useDraftWriteThrough(node, gestureState, applyResult)
+
   return (
     <MarkdownNodeEditor
       box={contentBoxOf(node, selectionBox, sceneNodes)}
@@ -134,13 +137,18 @@ export function MarkdownBodyEditorOverlay({
         padding: SPATIAL_THEME_GEOMETRY.paddingPx,
       }}
       onCommit={(text) => {
+        draft.stop()
         applyResult(reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }))
       }}
       onCancel={() => {
-        applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
+        draft.stop()
+        const cancelled = reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' })
+        const revert = draft.cancelCommands()
+        applyResult(revert === undefined ? cancelled : { ...cancelled, commands: revert })
       }}
       onChange={(text) => {
         applyResult(reduceGesture(gestureState, canvas, { type: 'update-text-edit', text }))
+        draft.schedule(text)
       }}
     />
   )
