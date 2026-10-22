@@ -19,14 +19,15 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { MessageSquarePlus, SendHorizontal } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
 import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
+import { AnnouncerRegion, useAnnouncer } from './announcer.js'
 import { CommentComposer } from './CommentComposer.js'
 import type { CommentsPanelProps, ThreadFilter } from './comments-panel-props.js'
-import { anchorLabel, type ThreadEdit, ThreadRow } from './thread-row.js'
+import { ComposeAbout, type ThreadEdit, ThreadRow } from './thread-row.js'
 
 const FILTERS: readonly { readonly value: ThreadFilter; readonly label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -148,25 +149,6 @@ function glideMovedRows(
   return seen
 }
 
-/** How long an announcement stays in the live region before it is cleared. */
-const ANNOUNCE_CLEAR_MS = 2000
-
-/**
- * The text for a polite live region. Cleared after a beat so announcing the
- * same words twice in a row is still a change the reader's software sees.
- */
-function useAnnouncer(): readonly [string, (text: string) => void] {
-  const [text, setText] = useState('')
-  const timer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(timer.current), [])
-  const announce = useCallback((next: string) => {
-    window.clearTimeout(timer.current)
-    setText(next)
-    timer.current = window.setTimeout(() => setText(''), ANNOUNCE_CLEAR_MS)
-  }, [])
-  return [text, announce]
-}
-
 /**
  * Moves focus to the revealed conversation's row.
  *
@@ -232,7 +214,7 @@ export function CommentsPanel({
   const composeRef = useRef<SourcePaneApi | null>(null)
 
   useFocusRevealedRow(revealThreadId, threads, rowRefs)
-  const [announcement, announce] = useAnnouncer()
+  const { announcement, announce, announcing } = useAnnouncer()
 
   // A new conversation has nothing to read, so the draft box is the whole
   // of what was asked for.
@@ -386,9 +368,7 @@ export function CommentsPanel({
       {/* Mounted before it speaks and `sr-only` rather than hidden: a live
           region inserted already carrying its text is missed by several
           screen readers. */}
-      <p role="status" aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
+      <AnnouncerRegion text={announcement} />
       {composeAnchor === null && onComposeDocument !== undefined ? (
         <button
           type="button"
@@ -429,18 +409,7 @@ export function CommentsPanel({
             submitCompose()
           }}
         >
-          {composeAnchor.kind === 'text' ? (
-            // Quoted back because by the time the reader is typing here,
-            // their selection in the body is no longer what they are looking
-            // at — and a comment about the wrong passage is worse than none.
-            <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
-              {composeAnchor.quote.exact}
-            </p>
-          ) : anchorLabel(composeAnchor) === undefined ? null : (
-            <p data-testid="comments-panel-compose-about" className="text-xs text-neutral-500">
-              About the {anchorLabel(composeAnchor)}
-            </p>
-          )}
+          <ComposeAbout anchor={composeAnchor} />
           <div className="flex items-end gap-1">
             <CommentComposer
               apiRef={composeRef}
@@ -499,14 +468,7 @@ export function CommentsPanel({
               resolveAnchor={resolveAnchor}
               anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
-              onReply={
-                onReply === undefined
-                  ? undefined
-                  : (threadId, body) => {
-                      onReply(threadId, body)
-                      announce('Reply sent')
-                    }
-              }
+              onReply={announcing(onReply, 'Reply sent')}
               onEditMessage={onEditMessage}
               rowRefs={rowRefs}
             />

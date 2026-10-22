@@ -1,5 +1,3 @@
-import type { MutableRefObject } from 'react'
-
 /**
  * Whatever holds focus right now, as the place to hand it back to.
  *
@@ -17,6 +15,6 @@ export function focusedElement(): HTMLElement | null {
   return active instanceof HTMLElement ? active : null
 }
 
-export function captureFocusInto(ref: MutableRefObject<HTMLElement | null>): void {
+export function captureFocusInto(ref: { current: HTMLElement | null }): void {
   ref.current = focusedElement()
 }
