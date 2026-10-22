@@ -157,6 +157,12 @@ describe('SettingsPage — General', () => {
     expect(stored.capabilities.webMcpEnabled).toBe(false)
   })
 
+  it('WebMCP switch widens its hit area to 44px on a coarse pointer', () => {
+    renderAt('/settings')
+    const toggle = within(screen.getByTestId('settings-section')).getByRole('switch')
+    expect(toggle.className).toMatch(/pointer-coarse:after:-inset-3/)
+  })
+
   it('selecting a favicon style persists it to user-settings', () => {
     renderAt('/settings')
     const section = screen.getByTestId('settings-section')

@@ -41,6 +41,13 @@ describe('SetupJourney — storage evidence on the steps', () => {
     expect(detail?.textContent).toMatch(/2\.5 MiB used/)
   })
 
+  it('steps the Protect button up to 44px on a coarse pointer', () => {
+    renderJourney({ persist: 'todo' })
+    expect(screen.getByRole('button', { name: 'Protect' }).className).toMatch(
+      /pointer-coarse:min-h-11/,
+    )
+  })
+
   it('offers Protect only while it can still be asked for, and names who granted it', () => {
     // The two done states are not interchangeable: `granted` is this site's
     // own permission and `browser-managed` is a browser that decides for

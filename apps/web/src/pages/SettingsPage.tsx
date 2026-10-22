@@ -206,7 +206,7 @@ function GeneralSection({
             aria-labelledby={webMcpLabelId}
             aria-describedby={webMcpDescId}
             onClick={onWebMcpToggle}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors pointer-coarse:after:absolute pointer-coarse:after:-inset-3 pointer-coarse:after:content-[''] ${
               webMcpEnabled ? 'bg-primary' : 'bg-input'
             }`}
           >

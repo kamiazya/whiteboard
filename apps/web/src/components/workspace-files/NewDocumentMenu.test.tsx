@@ -38,6 +38,13 @@ describe('NewDocumentMenu', () => {
     expect(onCreate).toHaveBeenCalledWith('markdown')
   })
 
+  it('steps up to a 44px target on a coarse pointer', () => {
+    render(<NewDocumentMenu onCreate={vi.fn()} />)
+    const trigger = screen.getByRole('button', { name: /new document/i })
+    expect(trigger.className).toMatch(/pointer-coarse:min-h-11/)
+    expect(trigger.className).toMatch(/pointer-coarse:min-w-11/)
+  })
+
   // WCAG 2.5.3: the accessible name must contain the visible label, or
   // "click New" fails for anyone driving the page by voice.
   it('keeps the visible label inside the accessible name', () => {

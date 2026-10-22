@@ -48,7 +48,7 @@ interface Step {
 }
 
 const ACTION_CLASS =
-  'mt-1.5 inline-block rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/5'
+  'mt-1.5 inline-flex items-center rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/5 pointer-coarse:min-h-11'
 
 /**
  * The ladder itself: one rung per detectable state of how safe the user's

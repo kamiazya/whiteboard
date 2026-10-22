@@ -88,7 +88,7 @@ export function NewDocumentMenu({
               // user saying "click New" reaches the same control a sighted
               // one points at.
               aria-label="New document"
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded border p-1.5 sm:pr-2.5"
+              className="text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 rounded border p-1.5 sm:pr-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
             >
               <FilePlus2 aria-hidden="true" className="size-4" />
               {/* Free where there is room, dropped where the toolbar is
