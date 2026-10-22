@@ -418,6 +418,23 @@ describe('completeSignIn — an invitation into a workspace', () => {
     })
   })
 
+  // The link would add nobody, so spending it would only take it from the
+  // person it was meant for.
+  it('leaves a workspace link unspent for a user already a member of it', async () => {
+    const user = await deps.members.ensureProfile({ binding: binding(), displayName: 'Ada' })
+    await deps.members.addMember('ws-1', user.id)
+    const { token } = await workspaceLink()
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationTokenHash: sha256Hex(token),
+      now: T0 + 1,
+    })
+    expect(done.ok).toBe(true)
+    expect(await deps.members.isWorkspaceMember('ws-1', user.id)).toBe('member')
+    expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
+  })
+
   // An invitation to the tenant alone makes a user; an existing one has no
   // use for it, so it stays for whoever it was meant for.
   it('leaves an invitation that names no workspace unspent for an existing user', async () => {
