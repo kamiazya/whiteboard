@@ -165,13 +165,15 @@ function holdsReplacedPrototype(value: unknown): boolean {
   while (pending.length > 0) {
     const next = pending.pop()
     if (typeof next !== 'object' || next === null) continue
+    // Pushed one at a time: a spread passes each element as an argument, and
+    // a value wide enough throws RangeError before the update is judged.
     if (Array.isArray(next)) {
-      pending.push(...next)
+      for (const item of next) pending.push(item)
       continue
     }
     const prototype: unknown = Object.getPrototypeOf(next)
     if (prototype !== Object.prototype && prototype !== null) return true
-    pending.push(...Object.values(next))
+    for (const item of Object.values(next)) pending.push(item)
   }
   return false
 }

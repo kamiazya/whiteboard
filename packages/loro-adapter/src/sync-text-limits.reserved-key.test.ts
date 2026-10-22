@@ -94,6 +94,14 @@ describe('an update writing a `__proto__` key', () => {
     expect(judgeStateWithinTextLimits(doc)).toMatchObject({ shape: 'reserved-map-key' })
   })
 
+  it('judges a value too wide to spread into one call', () => {
+    const base = record()
+    const wide = Array.from({ length: 200_000 }, () => 0)
+    const update = updateFrom(base, (doc) => doc.getMap('nodes').set('n2', { wide }), true)
+
+    expect(() => importWithinTextLimits(base.fork(), update)).not.toThrow()
+  })
+
   it('is answered with the reserved-key refusal', () => {
     expect(SYNC_TEXT_BREACH_CODES['reserved-map-key']).toBe('reserved_map_key')
   })
