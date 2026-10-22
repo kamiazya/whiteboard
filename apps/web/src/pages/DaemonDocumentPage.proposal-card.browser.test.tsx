@@ -24,6 +24,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
+import { writeLastTool } from '../lib/initial-tool.js'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 
@@ -71,7 +72,7 @@ function seededSnapshot(): Uint8Array {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
-  sessionStorage.removeItem('wb.lastTool')
+  sessionStorage.removeItem(`wb.lastTool:w1/board`)
 })
 
 function contentOf(root: HTMLElement): SVGElement {
@@ -96,7 +97,7 @@ function nodeLeft(root: HTMLElement): number {
 }
 
 it('an agent’s proposal is drawn in place, and Adopt moves the node and closes it', async () => {
-  sessionStorage.setItem('wb.lastTool', 'select')
+  writeLastTool('w1/board', 'select')
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => jsonResponse({}, 404)),
@@ -138,7 +139,7 @@ it('an agent’s proposal is drawn in place, and Adopt moves the node and closes
 // second place to decide. A proposal on a node four thousand pixels away is
 // drawn correctly and seen by nobody, which is what the index is for.
 it('the Proposals opener counts what is waiting, and a row opens the card in place', async () => {
-  sessionStorage.setItem('wb.lastTool', 'select')
+  writeLastTool('w1/board', 'select')
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => jsonResponse({}, 404)),

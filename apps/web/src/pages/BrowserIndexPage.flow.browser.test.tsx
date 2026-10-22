@@ -45,7 +45,6 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     // Only the keys this page reads — storages are origin-shared across
     // parallel test files.
     localStorage.removeItem('whiteboard.markdown-view-mode')
-    sessionStorage.removeItem('wb.lastTool')
   })
 
   afterEach(() => {

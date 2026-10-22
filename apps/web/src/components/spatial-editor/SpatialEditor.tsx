@@ -91,7 +91,6 @@ import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { firstImageFile } from '../../lib/image-upload-policy.js'
-import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
@@ -237,6 +236,8 @@ export interface SpatialEditorProps {
    * change the mode someone is working in.
    */
   readonly initialTool?: EditorTool
+  /** Reports a tool the user picked with the palette, so the host can remember it. */
+  readonly onToolChosen?: (tool: EditorTool) => void
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -412,6 +413,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme,
       defaultTool = 'hand',
       initialTool,
+      onToolChosen,
       lockedNodeIds,
       lockedEdgeIds,
       agentTouchedNodeIds,
@@ -1555,9 +1557,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onToolChange={(next) => {
             setTool(next)
             toolChosenByUserRef.current = true
-            // A stated preference outranks the canvas-shape guess on the
-            // next open in this tab.
-            writeLastTool(next)
+            onToolChosen?.(next)
             // A context menu is an edit affordance of the mode it was
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.

@@ -1,7 +1,7 @@
 import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { type ReactNode, type Ref, useMemo } from 'react'
 import type { DocumentFileSeams } from '../../hooks/use-document-file-seams.js'
-import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
+import { readLastTool, resolveInitialTool, writeLastTool } from '../../lib/initial-tool.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { SpatialEditor, type SpatialEditorProps } from '../spatial-editor/index.js'
@@ -122,10 +122,11 @@ export function SpatialEditorPane({
           canvasLoaded
             ? resolveInitialTool({
                 isEmpty: canvas.nodes.length === 0,
-                lastTool: readLastTool(),
+                lastTool: readLastTool(editorKey),
               })
             : undefined
         }
+        onToolChosen={(tool) => writeLastTool(editorKey, tool)}
         ref={editorRef}
         {...editorProps}
         onOpenDocument={onOpenDocument}

@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // same fix as App.test.tsx's precedent). The import is
 // unused by name on purpose — being in the module graph is the fix.
 import '../components/workspace-top-bar/WorkspaceTopBar.js'
+import { writeLastTool } from '../lib/initial-tool.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
@@ -961,8 +962,8 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
     ).toBe('true')
   })
 
-  it("this tab's last choice outranks the canvas-shape guess", async () => {
-    sessionStorage.setItem('wb.lastTool', 'hand')
+  it("the document's last choice outranks the canvas-shape guess", async () => {
+    writeLastTool('069CFJNRVY147ADGKPSWZ258BE', 'hand')
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
