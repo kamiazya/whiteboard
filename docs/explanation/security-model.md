@@ -497,7 +497,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `400 {"error":"invalid_document_root"}`, and so is a workspace update, from
   any caller, that leaves one of a document's content parts (its nodes, body,
   threads and the rest) holding a plain value, a part of another kind, or
-  nothing. A
+  nothing. Nor can any update change what kind a document is: one that
+  leaves a document's own record of its kind saying something other than
+  the kind its place in the workspace records — rewriting it, deleting it,
+  or giving an unkinded document another kind — is refused from any caller
+  with `400 {"error":"document_kind_changed"}`, so an edit grant cannot make
+  a board read as a note and have someone's next note edit replace its
+  nodes. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,

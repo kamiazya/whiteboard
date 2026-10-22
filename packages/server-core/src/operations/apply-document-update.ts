@@ -67,6 +67,9 @@ export async function applyDocumentUpdate(
     if (input.mayCreateDocument === false && !(await live.exists(workspaceId, path))) {
       throw new DocumentCreationRefusedError(path)
     }
+    // Read before the import, so judging the update awaits nothing: from the
+    // import to a refusal, no other request sees the half-taken state.
+    const recordedKind = await live.kind(workspaceId, path)
     const doc = await live.get(workspaceId, path)
     importWithinSyncLimits(
       doc,
@@ -76,7 +79,7 @@ export async function applyDocumentUpdate(
         fields: { workspaceId, path },
         evict: () => live.evict(workspaceId, path),
       },
-      { workspaceRecord: false },
+      { workspaceRecord: false, recordedKind },
     )
     try {
       await live.save(workspaceId, path, doc, { overwrite: true })

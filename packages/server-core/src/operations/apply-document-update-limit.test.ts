@@ -90,6 +90,7 @@ function workspaceDeps(store: StoredDoc) {
 function liveDeps(store: StoredDoc) {
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),
+    kind: async () => null,
     ...lock,
     get: async () => store.get(),
     save: async (_workspaceId, _path, doc) => store.save(doc),

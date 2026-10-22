@@ -106,7 +106,12 @@ not:
   `nodes`). The workspace document's `update` and `promote` refuse it too, for
   an update or record that leaves a document's content container key
   (`nodes`, `body`, `threads` and the others) holding a plain value, a
-  container of another kind, or nothing. The workspace document's `update` also refuses, with
+  container of another kind, or nothing. A document's `update` and the
+  workspace document's `update` and `promote` refuse, with
+  `400 {"error":"document_kind_changed"}`, an update or record that leaves a
+  document's envelope `kind` saying anything other than the kind its
+  workspace node records; setting it on an unkinded document to that same
+  kind is how a keeper claims one, and lands. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. The workspace document's `update` and `promote`

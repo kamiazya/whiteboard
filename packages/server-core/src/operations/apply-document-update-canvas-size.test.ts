@@ -37,6 +37,7 @@ function boardOf(nodes: number): LoroDoc {
 function send(store: StoredDoc, edit: (doc: LoroDoc) => void) {
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),
+    kind: async () => null,
     withWriteLock: (_workspaceId, fn) => fn(),
     get: async () => store.get(),
     save: async (_workspaceId, _path, doc) => store.save(doc),

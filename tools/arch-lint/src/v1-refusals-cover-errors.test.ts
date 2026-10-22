@@ -150,6 +150,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 bounds a name through documentNameSchema before any write',
   OffGrammarPathError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
+  DocumentKindChangedError:
+    "raised by the sync update operations on a CRDT update; /api/v1 takes no CRDT bytes, and its writes set a document's kind only at creation",
   RootNoDocumentHoldsError:
     'raised by applyDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes content through the bridge, which names only the content containers',
   OkfNotYamlSafeError:

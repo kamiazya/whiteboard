@@ -46,6 +46,7 @@ function fakeLive(initial?: LoroDoc) {
   let failNextSave: Error | null = null
   const live: LiveDocuments = {
     ...unusedLiveDocuments(),
+    kind: async () => null,
     async get(_workspaceId, _path) {
       calls.push({ method: 'get', lockDepth })
       if (stored === null) stored = new LoroDoc()
@@ -57,11 +58,9 @@ function fakeLive(initial?: LoroDoc) {
     },
     async save(_workspaceId, _path, doc, options) {
       calls.push({ method: 'save', lockDepth, overwrite: options?.overwrite ?? false })
-      if (failNextSave !== null) {
-        const err = failNextSave
-        failNextSave = null
-        throw err
-      }
+      const err = failNextSave
+      failNextSave = null
+      if (err !== null) throw err
       saved = doc
     },
     evict(_workspaceId, path) {
