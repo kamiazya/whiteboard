@@ -39,7 +39,11 @@ import {
   gutter,
   gutterLineClass,
 } from '@codemirror/view'
-import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  type CommentThreadStatus,
+  DOCUMENT_MAX_OPEN_THREADS,
+} from '@kamiazya/whiteboard-model'
 import {
   advanceKnownQuotes,
   type KnownQuotes,
@@ -48,6 +52,7 @@ import {
   textEditsOf,
 } from '../../lib/quote-occurrences.js'
 import type { LivePassage } from '../../lib/text-anchor.js'
+import { threadLastActivityAt } from '../../lib/thread-activity.js'
 import { bucketByLine, buttonGutterHandlers } from './line-button-gutter.js'
 
 /** Where one conversation sits in the body as it stands right now. */
@@ -120,6 +125,8 @@ const EMPTY_PROJECTION: AnnotationProjection = { threads: [], selectedThreadId: 
 
 interface AnnotationState {
   readonly projection: AnnotationProjection
+  /** The projection's threads this pane places — see `threadsToDraw`. */
+  readonly drawn: readonly CommentThread[]
   readonly placed: readonly PlacedThread[]
   readonly marks: DecorationSet
   /** Where the projected quotes occur in the doc this state holds. */
@@ -216,13 +223,54 @@ class ResolvedLineMarker extends GutterMarker {
 
 const RESOLVED_LINE_MARKER = new ResolvedLineMarker()
 
+/**
+ * The most RESOLVED conversations the pane places, beyond the selected one.
+ *
+ * Open threads are bounded by `DOCUMENT_MAX_OPEN_THREADS`; resolved ones are
+ * not, since resolving is how a document at that bound takes another. And
+ * every placed thread is work on every keystroke — its quote is searched for
+ * near each edit, and an orphan's across the whole body when first placed —
+ * so without a bound here one member's history of resolved orphans would
+ * set the price of typing for everyone.
+ */
+const DRAWN_RESOLVED_MAX = DOCUMENT_MAX_OPEN_THREADS
+
+/**
+ * Every open thread, the selected one, and the most recently active
+ * resolved ones up to `DRAWN_RESOLVED_MAX`. An older resolved conversation
+ * is still the rail's to list, and selecting it there draws it.
+ *
+ * Computed when a projection ARRIVES rather than per keystroke, so the
+ * ranking is not a cost an edit pays.
+ */
+function threadsToDraw(
+  threads: readonly CommentThread[],
+  selectedThreadId: string | null,
+): readonly CommentThread[] {
+  const resolved = threads.filter((t) => t.status === 'resolved' && t.anchor.kind === 'text')
+  if (resolved.length <= DRAWN_RESOLVED_MAX) return threads
+  const activity = (thread: CommentThread): number => {
+    const at = Date.parse(threadLastActivityAt(thread) ?? '')
+    return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at
+  }
+  const newest = resolved
+    .map((thread) => ({ id: thread.id, at: activity(thread) }))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, DRAWN_RESOLVED_MAX)
+  const kept = new Set(newest.map((one) => one.id))
+  return threads.filter(
+    (t) => t.status !== 'resolved' || kept.has(t.id) || t.id === selectedThreadId,
+  )
+}
+
 function project(
   doc: string,
   projection: AnnotationProjection,
+  drawn: readonly CommentThread[],
   known: KnownQuotes,
 ): AnnotationState {
   const learnt = new Map<string, readonly number[] | null>()
-  const placed = placeThreads(doc, projection.threads, projection.marks, known, learnt)
+  const placed = placeThreads(doc, drawn, projection.marks, known, learnt)
   const marks = new RangeSetBuilder<Decoration>()
   // No empty-range branch, and that is a decision rather than an oversight:
   // CodeMirror throws on an empty mark decoration, and what stops one here is
@@ -244,11 +292,11 @@ function project(
       }),
     )
   }
-  return { projection, placed, marks: marks.finish(), known: learnt }
+  return { projection, drawn, placed, marks: marks.finish(), known: learnt }
 }
 
 const annotationField = StateField.define<AnnotationState>({
-  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION, NO_KNOWN_QUOTES),
+  create: (state) => project(state.doc.toString(), EMPTY_PROJECTION, [], NO_KNOWN_QUOTES),
   update(value, tr) {
     const projection = tr.effects.reduce<AnnotationProjection | null>(
       (found, effect) => found ?? (effect.is(setAnnotationProjection) ? effect.value : null),
@@ -265,7 +313,13 @@ const annotationField = StateField.define<AnnotationState>({
     const known = tr.docChanged
       ? advanceKnownQuotes(value.known, doc, textEditsOf(tr.changes))
       : value.known
-    return project(doc, projection ?? value.projection, known)
+    if (projection === null) return project(doc, value.projection, value.drawn, known)
+    return project(
+      doc,
+      projection,
+      threadsToDraw(projection.threads, projection.selectedThreadId),
+      known,
+    )
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.marks),
 })

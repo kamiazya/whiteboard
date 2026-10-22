@@ -69,6 +69,11 @@ resolved; opening or reopening one past it is refused, with a notice saying
 why, and nothing is saved. See
 [Export formats](../reference/export-formats.md#how-many-open-comment-threads-and-proposed-changes-one-document-may-hold).
 
+A markdown body highlights every open conversation's passage, but only the
+**500 most recently active resolved ones**: past that, an older resolved
+conversation is still listed under **Resolved** in the rail, and opening it
+there highlights its passage.
+
 A comment on several nodes at once names at most **2,000** of them, the most
 one canvas holds.
 
