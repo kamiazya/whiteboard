@@ -511,7 +511,7 @@ describe('text-edit gesture', () => {
 })
 
 describe('cancel-text-edit on a freshly created node', () => {
-  it('keeps the box when NOTHING was typed — an empty note is a layout tool', () => {
+  it('removes the box when NOTHING was typed — an empty note is debris', () => {
     const c = canvas()
     const created = reduceGesture(
       createIdleState(),
@@ -520,12 +520,9 @@ describe('cancel-text-edit on a freshly created node', () => {
       { createId: () => 'fresh' },
     )
     const result = reduceGesture(created.state, c, { type: 'cancel-text-edit' })
-    // Escape closes the editor; it does not eat the box someone placed to
-    // sketch a layout. Discard-with-the-node stays reserved for the case
-    // where text WAS typed.
-    expect(result.commands).toEqual([])
+    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
     expect(result.state).toEqual({ kind: 'idle' })
-    expect(result.selectedId).toBe('fresh')
+    expect(result.selectedId).toBeNull()
   })
 
   it('a real pointercancel still discards the untouched new node — OS-broken is not "done here"', () => {
@@ -544,7 +541,7 @@ describe('cancel-text-edit on a freshly created node', () => {
     expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
   })
 
-  it('still takes the node with it when text was typed and then discarded', () => {
+  it('keeps the node and its typed text — Escape ends the session, not the note', () => {
     const c = canvas()
     const created = reduceGesture(
       createIdleState(),
@@ -554,7 +551,8 @@ describe('cancel-text-edit on a freshly created node', () => {
     )
     const typing = reduceGesture(created.state, c, { type: 'update-text-edit', text: 'oops' })
     const result = reduceGesture(typing.state, c, { type: 'cancel-text-edit' })
-    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
+    expect(result.commands).toEqual([{ kind: 'set-text', id: 'fresh', text: 'oops' }])
+    expect(result.selectedId).toBe('fresh')
   })
 })
 
@@ -712,7 +710,7 @@ describe('multi-selection resize', () => {
 describe('cancel-text-edit removes a node that only existed for the cancelled edit', () => {
   const empty = (): SpatialCanvas => ({ nodes: [], edges: [] })
 
-  it('keeps the just-created node on cancel — an empty box is a deliberate layout tool', () => {
+  it('removes the just-created node on cancel while it is still empty', () => {
     const created = reduceGesture(
       createIdleState(),
       empty(),
@@ -727,10 +725,8 @@ describe('cancel-text-edit removes a node that only existed for the cancelled ed
     }
     const cancelled = reduceGesture(created.state, withNode, { type: 'cancel-text-edit' })
     expect(cancelled.state).toEqual({ kind: 'idle' })
-    // Escape closes the editor and nothing more: no delete command, and the
-    // box stays selected so it can be moved or resized immediately.
-    expect(cancelled.commands).toEqual([])
-    expect(cancelled.selectedId).toBe('n-new')
+    expect(cancelled.commands).toEqual([{ kind: 'delete-node', id: 'n-new' }])
+    expect(cancelled.selectedId).toBeNull()
   })
 
   it('keeps an existing node — cancel reverts the edit, it does not delete', () => {

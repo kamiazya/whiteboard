@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 describe('Escape while typing a brand-new note (real browser)', () => {
-  it('takes the note with the discarded text instead of leaving an empty box', async () => {
+  it('keeps the note and the text typed into it', async () => {
     const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
     render(<Host />)
 
@@ -27,10 +27,13 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     await userEvent.type(editor, 'changed my mind')
     await userEvent.keyboard('{Escape}')
 
-    await waitFor(() => expect(latest.canvas.nodes).toHaveLength(0))
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull())
+    expect(latest.canvas.nodes).toHaveLength(1)
+    const typed = latest.canvas.nodes[0]
+    expect(typed === undefined ? undefined : nodeText(typed)).toBe('changed my mind')
   })
 
-  it('keeps the box when Escape lands before any typing — sketching layouts', async () => {
+  it('removes the empty box when Escape lands before any typing', async () => {
     const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
     render(<Host />)
 
@@ -41,15 +44,8 @@ describe('Escape while typing a brand-new note (real browser)', () => {
 
     await userEvent.keyboard('{Escape}')
 
-    // The editor closes; the empty box stays. Someone placing boxes to think
-    // about a layout is not cancelling the box — only the typing.
     await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull())
-    expect(latest.canvas.nodes).toHaveLength(1)
-    expect(
-      latest.canvas.nodes[0] === undefined
-        ? 'unset'
-        : (nodeText(latest.canvas.nodes[0]) ?? 'unset'),
-    ).toBe('')
+    expect(latest.canvas.nodes).toHaveLength(0)
   })
 
   it('keeps an existing note and its stored text when the edit is cancelled', async () => {

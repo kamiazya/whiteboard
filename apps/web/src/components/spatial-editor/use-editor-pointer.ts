@@ -364,7 +364,20 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       e.timeStamp,
     )
     if (navigation.preventDefault === true) e.preventDefault()
-    if (!navigation.fallThrough) return true
+    if (!navigation.fallThrough) {
+      // A pan never reaches the document's reducer, and its cancelled default
+      // keeps the editor focused — so the press that left the editor would
+      // otherwise end nothing. Leaving an edit commits it in every tool.
+      if (gestureState.kind === 'editing-text') {
+        applyResult(
+          reduceGesture(gestureState, canvas, {
+            type: 'commit-text-edit',
+            text: gestureState.pendingText,
+          }),
+        )
+      }
+      return true
+    }
     if (e.button !== 0) return true
     // A comment's chrome floats above content, so a press it took never falls
     // through to node or marquee handling. There is deliberately no
