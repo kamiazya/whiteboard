@@ -4,7 +4,7 @@
 // own verbs, completion, theme and chrome around these.
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import type { Extension } from '@codemirror/state'
+import { type Extension, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { RefObject } from 'react'
@@ -15,7 +15,9 @@ import {
 } from './active-markdown-editor.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { emojiShortcodeMarks } from './emoji-shortcode-marks.js'
+import { backspaceEmptyMarkup } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
+import { swallowRetypedMarkerExtension } from './swallow-retyped-marker.js'
 
 /**
  * Markdown token styling, as class names rather than inline colors: the
@@ -61,6 +63,9 @@ const markdownHighlightStyle = HighlightStyle.define([
  * - The style keymap precedes the default keymap so Mod-b/Mod-i win over
  *   any default binding; it also owns Tab (indent / outdent) and keeps it
  *   in the editor.
+ * - Backspace on an empty list or quote marker removes the marker.
+ * - A marker retyped over the one auto-continuation already wrote is
+ *   swallowed instead of doubled.
  * - Prose, not code: long paragraphs soft-wrap instead of growing a
  *   horizontal scrollbar.
  */
@@ -69,7 +74,11 @@ export function markdownEditingBase(): Extension[] {
     syntaxHighlighting(markdownHighlightStyle),
     emojiShortcodeMarks(),
     history(),
+    // Above the language keymap, whose Backspace turns an empty marker into
+    // the spaces it occupied rather than removing it.
+    Prec.highest(keymap.of([{ key: 'Backspace', run: backspaceEmptyMarkup }])),
     keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
+    swallowRetypedMarkerExtension(),
     EditorView.lineWrapping,
   ]
 }

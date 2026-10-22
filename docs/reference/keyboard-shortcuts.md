@@ -149,7 +149,8 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Cmd/Ctrl + E` | Mark the selection, or the word at the caret, as code |
 | `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
 | `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
-| `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it |
+| `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
 | `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
+| `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 
 ← Back to [reference](README.md)

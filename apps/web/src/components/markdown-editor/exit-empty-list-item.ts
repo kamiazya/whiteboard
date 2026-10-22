@@ -22,6 +22,25 @@ function spentMarkup(text: string): string | null {
   return quotes.slice(0, quotes.lastIndexOf('>'))
 }
 
+function clearSpentMarkup(userEvent: string): StateCommand {
+  return ({ state, dispatch }) => {
+    const range = state.selection.main
+    if (!range.empty) return false
+    const line = state.doc.lineAt(range.head)
+    if (range.head !== line.to) return false
+    const remaining = spentMarkup(line.text)
+    if (remaining === null) return false
+    dispatch(
+      state.update({
+        changes: { from: line.from, to: line.to, insert: remaining },
+        selection: { anchor: line.from + remaining.length },
+        userEvent,
+      }),
+    )
+    return true
+  }
+}
+
 /**
  * Enter on an empty list item or empty quote line DELETES the marker
  * instead of continuing it — the standard escape hatch (Typora, Obsidian,
@@ -31,19 +50,11 @@ function spentMarkup(text: string): string | null {
  * ABOVE the language keymap; reports unhandled everywhere else so
  * continuation keeps working.
  */
-export const exitEmptyListItem: StateCommand = ({ state, dispatch }) => {
-  const range = state.selection.main
-  if (!range.empty) return false
-  const line = state.doc.lineAt(range.head)
-  if (range.head !== line.to) return false
-  const remaining = spentMarkup(line.text)
-  if (remaining === null) return false
-  dispatch(
-    state.update({
-      changes: { from: line.from, to: line.to, insert: remaining },
-      selection: { anchor: line.from + remaining.length },
-      userEvent: 'delete',
-    }),
-  )
-  return true
-}
+export const exitEmptyListItem: StateCommand = clearSpentMarkup('delete')
+
+/**
+ * Backspace on the same spent marker removes it outright. The language's own
+ * Backspace turns a marker into the spaces it occupied, so the line is left
+ * holding invisible indentation that the next keystroke inherits.
+ */
+export const backspaceEmptyMarkup: StateCommand = clearSpentMarkup('delete.backward')

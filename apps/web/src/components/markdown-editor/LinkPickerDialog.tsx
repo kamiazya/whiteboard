@@ -20,6 +20,22 @@ export interface LinkPickerDialogProps {
   readonly onCancel: () => void
 }
 
+type LinkRow =
+  | { readonly kind: 'url'; readonly url: string }
+  | { readonly kind: 'document'; readonly target: LinkTarget }
+
+/**
+ * The markup a row writes. The Text field wins; with it empty a link carries
+ * the text it was made over. A document link naming its own name as that
+ * text is left bare, because the bare reference shows the name live and an
+ * alias would only freeze it.
+ */
+function markupFor(row: LinkRow, wanted: string, linkText: string): string {
+  if (row.kind === 'url') return externalLinkMarkup(wanted === '' ? linkText : wanted, row.url)
+  const carried = linkText.trim() === row.target.name ? '' : linkText
+  return linkMarkupFor(row.target, wanted === '' ? carried : wanted)
+}
+
 /**
  * One surface for both kinds of link, because the author knows where they
  * want to go and not what we call it. What is typed decides: a name narrows
@@ -67,15 +83,7 @@ export function LinkPickerDialog({
   const commit = (index: number) => {
     const row = rows[index]
     if (row === undefined) return
-    const wanted = display.trim()
-    if (row.kind === 'url') {
-      onPick(externalLinkMarkup(wanted === '' ? linkText : wanted, row.url))
-      return
-    }
-    // The prose the link was made over survives as the alias; naming the
-    // document's own name would only freeze what a bare reference shows live.
-    const carried = linkText.trim() === row.target.name ? '' : linkText
-    onPick(linkMarkupFor(row.target, wanted === '' ? carried : wanted))
+    onPick(markupFor(row, display.trim(), linkText))
   }
 
   return (

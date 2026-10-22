@@ -222,3 +222,50 @@ describe('changeIndent', () => {
     expect(docAfter(indent, doc, 4, doc.length)).toBe('- a\n  - b\n    - c')
   })
 })
+
+describe('changeIndent renumbers ordered lists', () => {
+  const doc = '1. a\n2. b\n3. c'
+  const caretOn = (text: string, line: string) => text.indexOf(line)
+
+  it('numbers a nested first item 1 and closes the gap it left behind', () => {
+    expect(docAfter(changeIndent(1), doc, caretOn(doc, '2. b'))).toBe('1. a\n   1. b\n2. c')
+  })
+
+  it('continues the nested run an earlier sibling already has', () => {
+    const nested = '1. a\n   1. x\n2. b'
+    expect(docAfter(changeIndent(1), nested, caretOn(nested, '2. b'))).toBe(
+      '1. a\n   1. x\n   2. b',
+    )
+  })
+
+  it('renumbers the parent run when an item comes back out', () => {
+    const nested = '1. a\n   1. b\n2. c'
+    expect(docAfter(changeIndent(-1), nested, caretOn(nested, '1. b'))).toBe('1. a\n2. b\n3. c')
+  })
+
+  it('restarts the children an outdented item leaves behind at 1', () => {
+    const nested = '1. a\n   1. b\n   2. c\n2. d'
+    expect(docAfter(changeIndent(-1), nested, caretOn(nested, '1. b'))).toBe(
+      '1. a\n2. b\n   1. c\n3. d',
+    )
+  })
+
+  it('keeps a list that counts every item as 1', () => {
+    const ones = '1. a\n1. b\n1. c'
+    expect(docAfter(changeIndent(1), ones, caretOn(ones, '1. b'))).toBe('1. a\n   1. b\n1. c')
+    const nested = '1. a\n   1. b\n1. c'
+    expect(docAfter(changeIndent(-1), nested, caretOn(nested, '1. b'))).toBe('1. a\n1. b\n1. c')
+  })
+
+  it('leaves bullets and other ordered runs alone', () => {
+    const mixed = '- a\n- b\n\n5. x\n6. y'
+    expect(docAfter(changeIndent(1), mixed, caretOn(mixed, '- b'))).toBe('- a\n  - b\n\n5. x\n6. y')
+  })
+
+  it('does not renumber across a width change, which would misalign children', () => {
+    const wide = '9. a\n10. b\n    - child\n11. c'
+    expect(docAfter(changeIndent(1), wide, caretOn(wide, '10. b'))).toBe(
+      '9. a\n   10. b\n    - child\n10. c',
+    )
+  })
+})
