@@ -81,6 +81,32 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(saved[0]).toBe(0x89) // PNG magic
   })
 
+  // The stored name carries the type's extension, so a re-upload as another
+  // type would otherwise leave two files with one stem and the GET would
+  // answer whichever `readdir` lists first.
+  it('replaces a re-uploaded file of another type, leaving one stored file for the id', async () => {
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const url = '/api/w/session1/document/canvas-a/file/retyped1'
+    const png = await app.request(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    })
+    expect(png.status).toBe(204)
+    const webp = await app.request(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/webp' },
+      body: new Uint8Array([0x52, 0x49, 0x46, 0x46]),
+    })
+    expect(webp.status).toBe(204)
+
+    const read = await app.request(url)
+    expect(read.headers.get('Content-Type')).toBe('image/webp')
+    expect([...new Uint8Array(await read.arrayBuffer())]).toEqual([0x52, 0x49, 0x46, 0x46])
+    const stored = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'))
+    expect(stored.filter((name) => name.startsWith('retyped1.'))).toEqual(['retyped1.webp'])
+  })
+
   // The router serves the directory and tenant the root booted its deps over,
   // so a composition with another layout is a different argument, not a
   // different route.

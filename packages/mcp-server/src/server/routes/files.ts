@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import {
   isUploadableImageType,
@@ -126,6 +126,17 @@ async function storedFileFor(
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
 }
 
+async function removeOtherTypes(dir: string, fileId: string, keptExt: string): Promise<void> {
+  for (const ext of Object.values(MIME_TO_EXT)) {
+    if (ext === keptExt) continue
+    try {
+      await unlink(join(dir, `${fileId}${ext}`))
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error
+    }
+  }
+}
+
 export function createFilesRouter(options: FilesRouterOptions) {
   const app = new Hono()
   const { scope, versionStore } = options
@@ -174,6 +185,11 @@ export function createFilesRouter(options: FilesRouterOptions) {
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
         await writeFileAtomicStaged(scope.dataDir, filePath, bytes)
+        // The stored name carries the type, so a re-upload as another type
+        // would leave the old file beside the new one and a read would
+        // answer whichever `readdir` lists first. Removed after the write,
+        // so a failure leaves a duplicate rather than no file at all.
+        await removeOtherTypes(dir, fileId, ext)
       })
       return c.body(null, 204)
     },
