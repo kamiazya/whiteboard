@@ -39,6 +39,7 @@ type Row = FakeFilesDaemonRow & { readonly id: string }
 interface Trashed {
   readonly id: string
   readonly path: string
+  readonly name?: string
   readonly kind: 'markdown' | 'spatial'
   readonly deletedAt: number
 }
