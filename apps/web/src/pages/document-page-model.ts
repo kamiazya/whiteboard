@@ -91,6 +91,12 @@ export interface DocumentPageModel {
     readonly missingFileRef: SpatialEditorPaneProps['missingFileRef']
     readonly pickerTargets: ReturnType<typeof linkTargets>
     /**
+     * Makes a markdown note at a path, for the editor's `Create '…'` offer on a
+     * link that names nothing. Absent for a keeper that cannot make one from
+     * here, which hides the offer.
+     */
+    readonly createLinkTarget?: (path: string) => Promise<void>
+    /**
      * How this keeper loads a document a body points at. Required: a default
      * here was the BROWSER's loader, so a keeper that forgot to pass one
      * silently read references from the wrong store.

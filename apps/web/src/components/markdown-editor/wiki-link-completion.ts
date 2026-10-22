@@ -54,26 +54,10 @@ export function wikiLinkCompletionSource(
           (target): Completion => ({
             label: target.name,
             type: 'text',
-            apply: (view: EditorView, _completion, from, to) => {
-              // The brackets sit two characters before the QUERY start — and
-              // it must be the `from` the plugin passes, never a position
-              // captured when the source ran: the document may have changed in
-              // between (mobile autocorrect elsewhere, a CRDT remote echo,
-              // another tab), and the plugin maps from/to through those
-              // changes while a captured offset stays behind and writes the
-              // markup mid-word, corrupting the body.
-              const bracketsFrom = from - 2
-              if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
-              // Resolution is by path, so the alias only changes how the
-              // source READS: a note that said `[[untitled]]` for a document
-              // the popup showed as "Weekly sync" taught nobody what it linked.
-              const insert = linkMarkupFor(target, target.name)
-              view.dispatch({
-                changes: { from: bracketsFrom, to, insert },
-                selection: { anchor: bracketsFrom + insert.length },
-                userEvent: 'input.complete',
-              })
-            },
+            // Resolution is by path, so the alias only changes how the source
+            // READS: a note that said `[[untitled]]` for a document the popup
+            // showed as "Weekly sync" taught nobody what it linked.
+            apply: writeReference(linkMarkupFor(target, target.name)),
           }),
         ),
         ...createOption,
@@ -94,28 +78,44 @@ export type LinkTargetCreator = (path: string) => void | Promise<void>
  * offered: nothing typed, or the text already IS a target's path (a row
  * making a duplicate would only fail).
  */
-export function createRowPath(query: string, targets: readonly LinkTarget[]): string | null {
+function createRowPath(query: string, targets: readonly LinkTarget[]): string | null {
   const path = query.trim()
   if (path === '' || targets.some((target) => target.path === path)) return null
   return path
 }
 
+/**
+ * Replaces the typed `[[query` with `insert`.
+ *
+ * The brackets sit two characters before the QUERY start — and it must be the
+ * `from` the plugin passes, never a position captured when the source ran: the
+ * document may have changed in between (mobile autocorrect elsewhere, a CRDT
+ * remote echo, another tab), and the plugin maps from/to through those changes
+ * while a captured offset stays behind and writes the markup mid-word,
+ * corrupting the body.
+ */
+function writeReference(insert: string): Completion['apply'] {
+  return (view: EditorView, _completion, from, to) => {
+    const bracketsFrom = from - 2
+    if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
+    view.dispatch({
+      changes: { from: bracketsFrom, to, insert },
+      selection: { anchor: bracketsFrom + insert.length },
+      userEvent: 'input.complete',
+    })
+  }
+}
+
 function createLinkOption(path: string, create: LinkTargetCreator): Completion {
+  const write = writeReference(`[[${path}]]`)
   return {
     label: `Create '${path}'`,
     type: 'text',
     // Under every real match: it is the fallback for text that names nothing.
     boost: -99,
-    apply: (view: EditorView, _completion, from, to) => {
-      const bracketsFrom = from - 2
-      if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
+    apply: (view, completion, from, to) => {
       // The match grammar already excludes every character the markup forbids.
-      const insert = `[[${path}]]`
-      view.dispatch({
-        changes: { from: bracketsFrom, to, insert },
-        selection: { anchor: bracketsFrom + insert.length },
-        userEvent: 'input.complete',
-      })
+      if (typeof write === 'function') write(view, completion, from, to)
       void Promise.resolve(create(path)).catch(() => {})
     },
   }

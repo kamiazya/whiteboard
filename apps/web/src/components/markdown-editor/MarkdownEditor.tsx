@@ -56,10 +56,11 @@ import type { SourcePaneApi } from './SourcePane.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { SplitDivider, useSplitDrag } from './split-divider.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { useLinkFollow } from './use-link-follow.js'
 import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
-import { wikiLinkCompletionSource } from './wiki-link-completion.js'
+import { type LinkTargetCreator, wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -120,6 +121,13 @@ export interface MarkdownEditorProps {
    * are inert (their href is a bare ULID, not a URL).
    */
   onOpenDocument?: (documentId: string) => void
+  /**
+   * Creates a markdown note at `path`, for a `[[link]]` that names nothing
+   * yet: the completion's `Create '…'` row and the catalog's row for an
+   * unresolved link under the caret. Absent, neither is offered — the editor
+   * cannot make documents on its own.
+   */
+  onCreateLinkTarget?: LinkTargetCreator
   /**
    * Injection seam for tests: the async engines behind math blocks and
    * diagram fences. Defaults to the real dynamically-imported
@@ -268,6 +276,7 @@ export function MarkdownEditor({
   tagLibrary,
   linkTargets,
   onOpenDocument,
+  onCreateLinkTarget,
   fragmentLoaders,
   sourceExtensions,
   threads,
@@ -283,12 +292,13 @@ export function MarkdownEditor({
   // at view creation, while the document list keeps refreshing under it.
   const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
   linkTargetsRef.current = linkTargets ?? []
+  const linkFollow = useLinkFollow({ linkTargetsRef, onOpenDocument, onCreateLinkTarget })
   const completionExtension = useMemo(() => {
     // Both sources in ONE `autocompletion()`: `override` replaces the whole
     // list, so a second call beside this would kill the `[[` one. The Enter
     // keymap asks the same pair whether a drawn list is still live.
     const sources = [
-      wikiLinkCompletionSource(() => linkTargetsRef.current),
+      wikiLinkCompletionSource(() => linkTargetsRef.current, linkFollow.getCreate),
       shortcodeCompletionSource,
     ]
     return [
@@ -311,7 +321,7 @@ export function MarkdownEditor({
       completionPopupTheme,
       completionTouchAccept,
     ]
-  }, [])
+  }, [linkFollow.getCreate])
   // Read through a ref for the same reason the completion source is: the
   // extension is installed once at view creation, while the handler the host
   // passes is a fresh closure on every render.
@@ -337,11 +347,18 @@ export function MarkdownEditor({
     () => [
       LENGTH_LIMIT,
       completionExtension,
+      linkFollow.extension,
       annotationExtension,
       passageProposals.extension,
       ...(sourceExtensions ?? []),
     ],
-    [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
+    [
+      annotationExtension,
+      completionExtension,
+      linkFollow.extension,
+      passageProposals.extension,
+      sourceExtensions,
+    ],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
 
@@ -702,6 +719,7 @@ export function MarkdownEditor({
             },
           }
         : {}),
+      ...linkFollow.catalogLinkRows(value, sourceApiRef.current?.caretOffset() ?? 0),
       ...(annotation.open !== undefined && annotation.anchor() !== null
         ? { composeThread: annotation.open }
         : {}),

@@ -37,6 +37,7 @@ export interface MarkdownDocumentSession
     | 'tagLibrary'
     | 'linkTargets'
     | 'onOpenDocument'
+    | 'onCreateLinkTarget'
     | 'autoFocus'
     | 'title'
     | 'threads'

@@ -504,6 +504,7 @@ function useBrowserDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
+      createLinkTarget: (path: string) => tagsSource.createDocument(path, 'markdown'),
       loadReference: browserReferenceLoader,
     },
     openDocument: navigateToDocument,
