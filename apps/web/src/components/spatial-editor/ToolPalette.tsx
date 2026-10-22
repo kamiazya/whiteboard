@@ -36,6 +36,8 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  ZoomIn,
+  ZoomOut,
   Spline,
   StickyNote,
 } from 'lucide-react'
@@ -43,6 +45,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { cn } from '../../lib/utils.js'
 import { useActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
@@ -88,6 +91,12 @@ interface ToolPaletteProps {
   readonly onToolChange: (tool: EditorTool) => void
   /** Frames every node in the viewport — the touch equivalent of Shift+1. */
   readonly onZoomToFit: () => void
+  /**
+   * One step closer or further, the same step the `+` / `-` keys take. Touch
+   * only: pinch is otherwise the single way to get closer on a phone, while a
+   * pointer has the wheel and the keyboard. Absent hides the pair.
+   */
+  readonly onZoomStep?: (direction: 'in' | 'out') => void
   /** The shortcut sheet's open state; absent hides the dock's Help button. */
   readonly shortcutHelp?: ShortcutHelpControl
 }
@@ -161,6 +170,34 @@ function ZoomFitButton({ onZoomToFit }: { readonly onZoomToFit: () => void }) {
   )
 }
 
+function ZoomStepButtons({ onZoomStep }: { readonly onZoomStep: (d: 'in' | 'out') => void }) {
+  const steps = [
+    { direction: 'in', id: 'zoom-in', label: 'Zoom in', Icon: ZoomIn },
+    { direction: 'out', id: 'zoom-out', label: 'Zoom out', Icon: ZoomOut },
+  ] as const
+  return (
+    <>
+      {steps.map(({ direction, id, label, Icon }) => (
+        <Tooltip key={id}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid={`${id}-button`}
+              aria-label={label}
+              aria-keyshortcuts={shortcutAriaKeysFor(id)}
+              onClick={() => onZoomStep(direction)}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{withShortcut(label, id)}</TooltipContent>
+        </Tooltip>
+      ))}
+    </>
+  )
+}
+
 /**
  * The Help button, and the sheet it opens. A corner of its own rather than a
  * dock slot: one more dock button widens the dock into the minimap at tablet
@@ -207,6 +244,7 @@ export function ToolPalette({
   tool,
   onToolChange,
   onZoomToFit,
+  onZoomStep,
   shortcutHelp,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
@@ -390,6 +428,9 @@ export function ToolPalette({
           <TooltipContent>Add</TooltipContent>
         </Tooltip>
         <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        {onZoomStep !== undefined && hasCoarsePointer() && (
+          <ZoomStepButtons onZoomStep={onZoomStep} />
+        )}
         <ZoomFitButton onZoomToFit={onZoomToFit} />
         {addOpen && (
           <div

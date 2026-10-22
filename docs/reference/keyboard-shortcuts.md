@@ -106,7 +106,9 @@ is, and later edits never move the view.
 | Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
 
 The dock carries one view control — **zoom to fit** — and it is there in
-every tool. There is no zoom percentage anywhere: what you can ask for is
+every tool. On a touch screen it is joined by **zoom in** and **zoom out**,
+which take the same step as `+` and `-`, so pinching is not the only way to
+get closer. There is no zoom percentage anywhere: what you can ask for is
 to see everything, or to get closer to something, and the magnification
 between those two is not a number you have to manage.
 
