@@ -5,6 +5,7 @@ import { DocumentHeader, type DocumentHeaderProps } from './DocumentHeader.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
 import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
+import { shownBody } from './read-title.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 
 // The two COLUMNS the editor lays side by side, and the marker that sits in
@@ -203,7 +204,7 @@ export function PreviewColumn({
           <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
         ) : (
           <PreviewPane
-            value={value}
+            value={shownBody(value, mode, meta !== undefined, title)}
             maxWidth={previewWidth}
             measure={measure}
             theme={theme}
