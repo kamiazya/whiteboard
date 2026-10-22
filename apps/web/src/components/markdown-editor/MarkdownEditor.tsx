@@ -25,6 +25,7 @@ import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
 import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 import { openSceneLink } from '../../lib/scene-link.js'
+import { toggleTaskLine } from '../../lib/task-toggle.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
@@ -55,10 +56,11 @@ import type { SourcePaneApi } from './SourcePane.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { SplitDivider, useSplitDrag } from './split-divider.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { useLinkFollow } from './use-link-follow.js'
 import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
-import { wikiLinkCompletionSource } from './wiki-link-completion.js'
+import { type LinkTargetCreator, wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -119,6 +121,15 @@ export interface MarkdownEditorProps {
    * are inert (their href is a bare ULID, not a URL).
    */
   onOpenDocument?: (documentId: string) => void
+  /**
+   * Creates a markdown note at `path`, for a `[[link]]` that names nothing
+   * yet: the completion's `Create '…'` row and the catalog's row for an
+   * unresolved link under the caret. Absent, neither is offered — the editor
+   * cannot make documents on its own.
+   */
+  onCreateLinkTarget?: LinkTargetCreator
+  /** The open document's own path: a `[[` naming it is a self-link, never a Create row. */
+  ownPath?: string
   /**
    * Injection seam for tests: the async engines behind math blocks and
    * diagram fences. Defaults to the real dynamically-imported
@@ -267,6 +278,8 @@ export function MarkdownEditor({
   tagLibrary,
   linkTargets,
   onOpenDocument,
+  onCreateLinkTarget,
+  ownPath,
   fragmentLoaders,
   sourceExtensions,
   threads,
@@ -282,12 +295,17 @@ export function MarkdownEditor({
   // at view creation, while the document list keeps refreshing under it.
   const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
   linkTargetsRef.current = linkTargets ?? []
+  const linkFollow = useLinkFollow({ linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath })
   const completionExtension = useMemo(() => {
     // Both sources in ONE `autocompletion()`: `override` replaces the whole
     // list, so a second call beside this would kill the `[[` one. The Enter
     // keymap asks the same pair whether a drawn list is still live.
     const sources = [
-      wikiLinkCompletionSource(() => linkTargetsRef.current),
+      wikiLinkCompletionSource(
+        () => linkTargetsRef.current,
+        linkFollow.getCreate,
+        linkFollow.getOwnPath,
+      ),
       shortcodeCompletionSource,
     ]
     return [
@@ -310,7 +328,7 @@ export function MarkdownEditor({
       completionPopupTheme,
       completionTouchAccept,
     ]
-  }, [])
+  }, [linkFollow.getCreate, linkFollow.getOwnPath])
   // Read through a ref for the same reason the completion source is: the
   // extension is installed once at view creation, while the handler the host
   // passes is a fresh closure on every render.
@@ -336,13 +354,38 @@ export function MarkdownEditor({
     () => [
       LENGTH_LIMIT,
       completionExtension,
+      linkFollow.extension,
       annotationExtension,
       passageProposals.extension,
       ...(sourceExtensions ?? []),
     ],
-    [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
+    [
+      annotationExtension,
+      completionExtension,
+      linkFollow.extension,
+      passageProposals.extension,
+      sourceExtensions,
+    ],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
+
+  // The preview's lines are those of the debounced body; applying them to a
+  // newer one could flip a different item, so a click inside that window waits.
+  // Written through the source view whenever one is mounted: a CRDT-bound
+  // host makes `onChange` a no-op and takes edits only from the view.
+  const onToggleTask = (line: number) => {
+    if (value !== debouncedValue) return
+    const api = sourceApiRef.current
+    if (api === null) return onChange(toggleTaskLine(value, line))
+    api.run(({ state, dispatch }) => {
+      if (line > state.doc.lines) return false
+      const at = state.doc.line(line)
+      const next = toggleTaskLine(at.text, 1)
+      if (next === at.text) return false
+      dispatch(state.update({ changes: { from: at.from, to: at.to, insert: next } }))
+      return true
+    })
+  }
 
   // A document link's href is a bare id: meaningless to the browser, which
   // would resolve it against the page URL. Ordinary links keep the default.
@@ -695,6 +738,7 @@ export function MarkdownEditor({
             },
           }
         : {}),
+      ...linkFollow.catalogLinkRows(value, sourceApiRef.current?.caretOffset() ?? 0),
       ...(annotation.open !== undefined && annotation.anchor() !== null
         ? { composeThread: annotation.open }
         : {}),
@@ -787,6 +831,7 @@ export function MarkdownEditor({
             renderMath={renderMath}
             renderDiagram={renderDiagram}
             tagLibrary={tagLibrary}
+            onToggleTask={onToggleTask}
           />
         )}
         {!previewEmpty && railAffordable && railHasScroll && railBlocks.length > 0 && (

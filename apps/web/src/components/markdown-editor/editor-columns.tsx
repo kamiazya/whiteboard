@@ -5,6 +5,7 @@ import { DocumentHeader, type DocumentHeaderProps } from './DocumentHeader.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
 import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
+import { shownBody } from './read-title.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 
 // The two COLUMNS the editor lays side by side, and the marker that sits in
@@ -154,6 +155,7 @@ export function PreviewColumn({
   renderMath,
   renderDiagram,
   tagLibrary,
+  onToggleTask,
 }: {
   value: string
   mode: MarkdownViewMode
@@ -174,6 +176,7 @@ export function PreviewColumn({
   renderMath: Parameters<typeof PreviewPane>[0]['renderMath']
   renderDiagram: Parameters<typeof PreviewPane>[0]['renderDiagram']
   tagLibrary: Parameters<typeof PreviewPane>[0]['tagLibrary']
+  onToggleTask: Parameters<typeof PreviewPane>[0]['onToggleTask']
 }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
@@ -201,7 +204,7 @@ export function PreviewColumn({
           <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
         ) : (
           <PreviewPane
-            value={value}
+            value={shownBody(value, mode, meta !== undefined, title)}
             maxWidth={previewWidth}
             measure={measure}
             theme={theme}
@@ -211,6 +214,7 @@ export function PreviewColumn({
             tagLibrary={tagLibrary}
             anchorsRef={anchorsRef}
             blocksRef={blocksRef}
+            onToggleTask={onToggleTask}
           />
         )}
       </div>

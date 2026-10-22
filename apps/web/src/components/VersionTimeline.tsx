@@ -2,6 +2,7 @@ import type {
   OperatorInfo,
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -166,6 +167,19 @@ function reportVersionsFailure(
 const RESTORE_FAILED_COPY = 'Restore failed. Please try again.'
 
 /**
+ * A restore rewrites the live document and leaves no row that says so, so the
+ * person is told the one fact that makes it safe. The region is mounted while
+ * empty: one that arrives with its message is announced inconsistently.
+ */
+function RestoredNotice({ show }: { show: boolean }) {
+  return (
+    <div role="status" className="px-1 text-[11px] text-muted-foreground">
+      {show ? 'Restored. The state before restoring is kept as a version.' : null}
+    </div>
+  )
+}
+
+/**
  * What a failed restore tells the person: the daemon's own reason when it gave
  * one, since a refusal that will always repeat is not cured by a retry, else
  * the generic prompt for a failure that may be transient.
@@ -274,6 +288,7 @@ export default function VersionTimeline({
   const [previewPast, setPreviewPast] = useState<PastDocument | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
+  const [restored, setRestored] = useState(false)
   // Mirrors `previewing`, refreshed on every render so an async handler's
   // async continuation can read the *current* pending version after an
   // await, instead of a value closed over before the request started.
@@ -319,6 +334,7 @@ export default function VersionTimeline({
     setPreviewPast(null)
     setRestoreError(null)
     setIsRestoring(false)
+    setRestored(false)
     onPreview?.(null)
   }, [workspaceId, path, onPreview])
 
@@ -367,6 +383,7 @@ export default function VersionTimeline({
       // document itself has already moved.
       if (isRestoring) return
       setRestoreError(null)
+      setRestored(false)
       setPreviewing(v)
       try {
         const past = await versionsBackend.loadPast(workspaceId, path, v.id)
@@ -427,6 +444,7 @@ export default function VersionTimeline({
     if (previewingRef.current?.id !== v.id) return
     setPreviewing(null)
     setPreviewPast(null)
+    setRestored(true)
     onRestored?.()
     await refresh()
   }, [isRestoring, workspaceId, path, onRestored, refresh, versionsBackend])
@@ -480,6 +498,8 @@ export default function VersionTimeline({
         </div>
       )}
 
+      <RestoredNotice show={restored && previewing === null} />
+
       {stale && (
         <div data-testid="version-list-stale" className="text-[11px] text-muted-foreground px-1">
           Could not refresh — showing what was last read.
@@ -498,12 +518,13 @@ export default function VersionTimeline({
                   filtered, so an empty one means there is nothing anywhere. */}
               No versions yet.
               <br />
-              {/* No interval in the copy. A number here is a second place
-                  the trigger's timing lives, and the one nothing updates —
-                  it read "~30s" through the whole life of the five-minute
-                  pause that replaced it. */}
-              A checkpoint is saved a little after you stop editing. Bookmark this point with the
-              button above, or ⌘/Ctrl+S.
+              {/* Derived from the scheduler's constant so the copy cannot drift
+                  from the trigger. "While the document is open" is the
+                  honest limit: a tab closed inside the quiet period is
+                  covered only by the page-exit flush. */}
+              A checkpoint is saved about {CHECKPOINT_QUIET_MS / 60_000} minutes after you stop
+              editing, while the document is open. Bookmark this point with the button above, or
+              ⌘/Ctrl+S.
             </div>
           ) : (
             versions.map((v) => (

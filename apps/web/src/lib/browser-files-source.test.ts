@@ -727,7 +727,12 @@ describe('createBrowserFilesSource conformance', () => {
       await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     }
     for (const gone of fixture.trashed ?? []) {
-      const entry = await index.createDocument({ workspaceId, path: gone.path, kind: gone.kind })
+      const entry = await index.createDocument({
+        workspaceId,
+        path: gone.path,
+        kind: gone.kind,
+        ...(gone.name === undefined ? {} : { name: gone.name }),
+      })
       await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
       await index.deleteDocument({ workspaceId, path: gone.path })
     }

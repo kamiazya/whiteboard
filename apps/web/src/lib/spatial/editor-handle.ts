@@ -18,4 +18,13 @@ export interface SpatialEditorHandle {
    * a frame, and moving the viewport to nowhere is worse than not moving.
    */
   openProposal(proposalId: string): boolean
+  /**
+   * Brings what a conversation is about on screen and marks it for a
+   * moment — the rail's row is a list, and a list that cannot take you to
+   * its subject is a dead end. Answers false when the conversation points
+   * at no place on this canvas (the whole document, a passage of a note) or
+   * at something no longer here, so a caller can tell "moved" from "had
+   * nowhere to go".
+   */
+  revealThread(threadId: string): boolean
 }

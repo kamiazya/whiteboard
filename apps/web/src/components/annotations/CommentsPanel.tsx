@@ -151,6 +151,7 @@ function glideMovedRows(
 export function CommentsPanel({
   threads,
   resolveAnchor,
+  anchorLabelOf,
   onSelect,
   onReply,
   revealThreadId = null,
@@ -398,6 +399,9 @@ export function CommentsPanel({
           <div className="flex items-end gap-1">
             <CommentComposer
               apiRef={composeRef}
+              // Also on mount: a StrictMode replay can rebuild the view after
+              // the effect above ran.
+              autoFocus
               label="Comment"
               value={composeDraft}
               onChange={setComposeDraft}
@@ -448,6 +452,7 @@ export function CommentsPanel({
               toggle={toggle}
               resolveWithBeat={resolveWithBeat}
               resolveAnchor={resolveAnchor}
+              anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
               onReply={onReply}
               onEditMessage={onEditMessage}

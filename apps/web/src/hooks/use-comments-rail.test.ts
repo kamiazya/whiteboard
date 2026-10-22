@@ -114,3 +114,55 @@ describe('useCommentsRail anchor resolver', () => {
     expect(hook.result.current.resolveAnchor).toBeUndefined()
   })
 })
+
+describe('useCommentsRail reveal requests', () => {
+  it('asks the surface to show a conversation each time the reader picks one, even the same one twice', () => {
+    const { hook } = renderRail()
+    expect(hook.result.current.revealRequest).toBeNull()
+
+    act(() => hook.result.current.selectThread('t1'))
+    const first = hook.result.current.revealRequest
+    expect(first?.threadId).toBe('t1')
+
+    act(() => hook.result.current.selectThread('t1'))
+    const second = hook.result.current.revealRequest
+    expect(second?.threadId).toBe('t1')
+    expect(second).not.toBe(first)
+  })
+
+  it('also asks when the surface itself revealed the conversation, and clears on a null pick', () => {
+    const { hook } = renderRail()
+    act(() => hook.result.current.revealThread('t1'))
+    expect(hook.result.current.revealRequest?.threadId).toBe('t1')
+    act(() => hook.result.current.selectThread(null))
+    expect(hook.result.current.revealRequest).toBeNull()
+  })
+
+  it('does not ask for a reveal when a draft is started', () => {
+    const { hook } = renderRail()
+    act(() => hook.result.current.composeThread({ kind: 'document' }))
+    expect(hook.result.current.revealRequest).toBeNull()
+  })
+
+  it('names an anchor from the canvas it is judging', () => {
+    const { hook } = renderRail({
+      canvas: {
+        nodes: [
+          {
+            id: 'n1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            resource: { mimeType: 'text/markdown', content: '# Sign-up form' },
+          } as never,
+        ],
+        edges: [],
+      },
+    })
+    expect(hook.result.current.anchorLabelOf({ kind: 'spatial', nodeId: 'n1', x: 0, y: 0 })).toBe(
+      'on Sign-up form',
+    )
+  })
+})

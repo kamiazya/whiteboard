@@ -16,6 +16,8 @@ export interface RemovedDocument {
   readonly documentId: string
   /** Where it was before the import, for a trash listing a human can read. */
   readonly path: string
+  /** The display name it had, if it was given one. */
+  readonly name?: string
   /** Its subtree as it stood before the import: what a restore puts back. */
   readonly bytes: Uint8Array
 }
@@ -133,7 +135,13 @@ function exportDeepestFirst(
   for (const evacuee of order) {
     for (const id of below.get(evacuee.path) ?? []) deleteWorkspaceNode(before, id)
     const bytes = exportWorkspaceNodeSubtree(before, evacuee.id)
-    if (bytes !== null) out.push({ documentId: evacuee.documentId, path: evacuee.path, bytes })
+    if (bytes !== null)
+      out.push({
+        documentId: evacuee.documentId,
+        path: evacuee.path,
+        ...(evacuee.name === undefined ? {} : { name: evacuee.name }),
+        bytes,
+      })
   }
   return out
 }

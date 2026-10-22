@@ -178,7 +178,43 @@ describe('SelectionOverlay', () => {
   })
 })
 
-it('grows the hit boxes to 32px where the pointer is coarse', () => {
+it('draws the node-tools slots 44px square where the pointer is coarse, 24px otherwise', () => {
+  const original = window.matchMedia
+  const stub = (coarse: boolean) =>
+    (window.matchMedia = ((query: string) =>
+      ({
+        matches: coarse && query === '(pointer: coarse)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia)
+  const slotSize = () => {
+    const { unmount } = render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={vi.fn()}
+        onConnectPointerDown={vi.fn()}
+        onOpenInEditor={vi.fn()}
+        onMoreActions={vi.fn()}
+      />,
+    )
+    const rect = screen.getByTestId('open-in-editor-handle').querySelector('rect')
+    const size = [Number(rect?.getAttribute('width')), Number(rect?.getAttribute('height'))]
+    unmount()
+    return size
+  }
+  try {
+    stub(false)
+    expect(slotSize()).toEqual([24, 24])
+    stub(true)
+    expect(slotSize()).toEqual([44, 44])
+  } finally {
+    window.matchMedia = original
+  }
+})
+
+it('grows the hit boxes to the 44px touch floor where the pointer is coarse', () => {
   const original = window.matchMedia
   // The repo already stubs matchMedia in jsdom (useThemeMode.test.tsx) —
   // this branch is plain JS, so unlike dock-button's CSS-only variant it
@@ -202,7 +238,7 @@ it('grows the hit boxes to 32px where the pointer is coarse', () => {
     )
     fireEvent.pointerDown(screen.getByTestId('resize-handle-se'))
     const [, box] = onHandlePointerDown.mock.calls[0] as [string, typeof BOX]
-    expect(box.width).toBe(32)
+    expect(box.width).toBe(44)
   } finally {
     window.matchMedia = original
   }

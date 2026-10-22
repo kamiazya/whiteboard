@@ -206,6 +206,7 @@ function trashMembers(
       return rows.map((row) => ({
         documentId: row.documentId,
         path: row.path,
+        ...(row.name === undefined ? {} : { name: row.name }),
         deletedAt: row.deletedAt,
       }))
     },

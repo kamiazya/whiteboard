@@ -1,0 +1,68 @@
+/**
+ * "Show me this conversation": moves the viewport to what a thread is about
+ * and marks the spot for a moment.
+ *
+ * The caller holds an id, never a box — the anchor may be a node that has
+ * since moved, so it is resolved against the canvas at the moment of the
+ * request. `revealThread` is stable and reads the latest state through a ref,
+ * so an imperative handle that never re-creates itself still sees the
+ * current viewport.
+ */
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import type { Box } from '../../lib/spatial/geometry.js'
+import { anchorBox, viewportRevealing } from '../../lib/spatial/reveal-anchor.js'
+import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+
+/** Long enough to be seen after a pan, short enough not to read as state. */
+const PULSE_MS = 1400
+
+export interface RevealPulse {
+  readonly box: Box
+  /** Distinguishes two reveals of the same box, so the animation restarts. */
+  readonly key: number
+}
+
+export function useCommentReveal(inputs: {
+  readonly threads: readonly CommentThread[] | undefined
+  readonly canvas: SpatialCanvas
+  readonly edgePathOf: (edgeId: string) => readonly Point[] | undefined
+  readonly viewport: Viewport
+  readonly setViewport: (viewport: Viewport) => void
+  readonly rootRef: RefObject<HTMLDivElement | null>
+  readonly containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
+}): { readonly revealThread: (threadId: string) => boolean; readonly pulse: RevealPulse | null } {
+  const latest = useRef(inputs)
+  latest.current = inputs
+  const [pulse, setPulse] = useState<RevealPulse | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sequence = useRef(0)
+
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current)
+    },
+    [],
+  )
+
+  const revealThread = useCallback((threadId: string): boolean => {
+    const { threads, canvas, edgePathOf, viewport, setViewport, rootRef, containerSizeOf } =
+      latest.current
+    const thread = threads?.find((entry) => entry.id === threadId)
+    if (thread === undefined) return false
+    const box = anchorBox(thread.anchor, canvas, edgePathOf)
+    if (box === null) return false
+    const next = viewportRevealing(box, viewport, containerSizeOf(rootRef.current), {
+      bottom: DOCK_OCCLUSION_PX,
+    })
+    if (next !== undefined) setViewport(next)
+    sequence.current += 1
+    setPulse({ box, key: sequence.current })
+    if (timer.current !== null) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setPulse(null), PULSE_MS)
+    return true
+  }, [])
+
+  return { revealThread, pulse }
+}

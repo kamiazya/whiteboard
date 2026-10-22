@@ -99,9 +99,11 @@ export function SelectionOverlay({
   const handles = resizeHandleBoxes(box, zoom)
   // Hitting and drawing are separate questions: the markers stay 8px so
   // small nodes are not swallowed, while the transparent hit shapes below
-  // meet WCAG 2.5.8's 24px floor — 32px where the pointer is a finger
+  // meet WCAG 2.5.8's 24px floor — 44px where the pointer is a finger
   // (matchMedia is cheap and correct here; a resize re-render re-reads it).
-  const hitPx = hasCoarsePointer() ? 32 : 24
+  // 44px is the touch floor the dock uses for the same reason.
+  const coarse = hasCoarsePointer()
+  const hitPx = coarse ? 44 : 24
   const cornerHits = cornerHitBoxes(box, zoom, hitPx)
   const edgeBands = edgeBandBoxes(box, zoom, hitPx / 2, hitPx)
   const connectHandleSize = 10 / zoom
@@ -263,6 +265,8 @@ export function SelectionOverlay({
           // drawn quietly: the selection outline already says "this is
           // selected", so a solid accent fill here would be the loudest thing
           // on a canvas whose job is to recede behind its content.
+          // The slots are the same family as the hit boxes: a finger needs 44.
+          const toolPx = coarse ? 44 : 24
           const slots = [
             ...(onOpenInEditor === undefined
               ? []
@@ -275,16 +279,16 @@ export function SelectionOverlay({
                     label: 'More actions',
                     run: () =>
                       onMoreActions({
-                        x: box.x + box.width - 12 / zoom,
-                        y: box.y - 18 / zoom,
+                        x: box.x + box.width - toolPx / 2 / zoom,
+                        y: box.y - (toolPx / 2 + 6) / zoom,
                       }),
                   },
                 ]),
           ]
-          const slotSize = 24 / zoom
+          const slotSize = toolPx / zoom
           const groupWidth = slotSize * slots.length
           const left = box.x + box.width - groupWidth
-          const top = box.y - 30 / zoom
+          const top = box.y - (toolPx + 6) / zoom
           return (
             <g data-testid="node-tools">
               <rect

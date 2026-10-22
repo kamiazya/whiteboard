@@ -23,14 +23,29 @@ import { focusEditable } from '../test-utils/focus-editable.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 
-vi.mock('../components/spatial-editor/index.js', () => ({
-  // Fills its host the way the real editor does. A zero-height stand-in makes
-  // any geometric assertion about the surface vacuous — the overlap case below
-  // passed against the very layout it exists to reject.
-  SpatialEditor: (_props: { canvas: SpatialCanvas }) => (
-    <div data-testid="mock-spatial-editor" style={{ height: '100%', width: '100%' }} />
-  ),
-}))
+/** Every conversation id the page asked the editor to show. */
+const revealed = vi.hoisted((): string[] => [])
+
+vi.mock('../components/spatial-editor/index.js', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react')
+  return {
+    // Fills its host the way the real editor does. A zero-height stand-in makes
+    // any geometric assertion about the surface vacuous — the overlap case below
+    // passed against the very layout it exists to reject.
+    SpatialEditor: forwardRef((_props: { canvas: SpatialCanvas }, ref) => {
+      useImperativeHandle(ref, () => ({
+        setViewport() {},
+        fitToContent() {},
+        openProposal: () => false,
+        revealThread(threadId: string) {
+          revealed.push(threadId)
+          return true
+        },
+      }))
+      return <div data-testid="mock-spatial-editor" style={{ height: '100%', width: '100%' }} />
+    }),
+  }
+})
 
 vi.mock('../lib/browser-backend.js', async () => {
   const { FakeBrowserBackend, workspaceSnapshotFor } = await import(
@@ -133,6 +148,22 @@ it('opens a rail listing this document conversations, open ones first and by def
   })
   // Resolved is one filter away, not on screen by default.
   expect(screen.queryByText('settled last week')).toBeNull()
+})
+
+it('takes the canvas to a conversation when its row is pressed in the rail', async () => {
+  revealed.length = 0
+  const store = new BrowserStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
+  await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+  await userEvent.click(await screen.findByText('still needs a decision'))
+
+  await waitFor(() => expect(revealed).toContain('t-open'), { timeout: 15_000 })
 })
 
 it('counts the OPEN conversations on the opener, so the rail need not be open to know', async () => {

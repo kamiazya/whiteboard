@@ -75,13 +75,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/ui/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
-  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
+  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 284,
   'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
+  // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 316,
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -91,7 +92,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // anything.
   'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 155,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 92,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
@@ -112,18 +113,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // (measured: lifting a slot moves the complexity by about one, because the
   // condition that decides whether to render it stays).
   // +2: `tagLibrary`, handed to the preview column.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 618,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 640,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
   // +3: `tagLibrary`, threaded to the preview pane.
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 83,
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 86,
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
   'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
   // +2: `tagLibrary`, so an embedded board is coloured by intent.
-  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 54,
+  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 66,
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
   'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
   'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 56,
@@ -178,7 +179,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapOverlay': 108,
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
-  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 319,
+  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 323,
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
   // The editor's JSX, cut into the layers it always had: canvas space under
   // the pan/zoom transform, screen space above it, the chrome you press, the
@@ -195,7 +196,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The component itself: a `forwardRef` function expression, the largest
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1646,
+  // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1662,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
@@ -206,8 +208,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 97,
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 267,
+  // +9: the exit hint follows the bubble as it grows.
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 106,
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -276,7 +279,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 774,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 790,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
@@ -288,7 +291,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
-  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 188,
+  // +11: the reveal request and the anchor chip label.
+  'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 199,
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
@@ -364,7 +368,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 338,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 342,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
@@ -401,7 +405,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // browser-kept, so a card hidden there would hide the whole list.
   'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 75,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
-  'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
+  'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 287,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
   // Raised by six for `followRecordedName`, which has to sit beside the
   // snapshot refs: a name the record holds is shown only while no rename of
@@ -632,7 +636,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // what stops it reading as a cap on `chunkSnapshot` instead of a default its
   // writers share.
   'packages/workspace-index/src/document-store-workspace-docs.ts#save': 72,
-  'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
+  'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 54,
 }
 
 /**

@@ -3,14 +3,20 @@ import type * as React from 'react'
 
 import { cn } from '../../lib/utils.js'
 
+// A tooltip here is a label, never a surface to move into, so it closes the
+// moment the pointer leaves its trigger. Radix's default keeps it open until
+// the next pointer move leaves a "grace area" toward the content — which a
+// pointer that stops, or a touch that lifts, never supplies.
 function TooltipProvider({
   delayDuration = 0,
+  disableHoverableContent = true,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       delayDuration={delayDuration}
+      disableHoverableContent={disableHoverableContent}
       {...props}
     />
   )

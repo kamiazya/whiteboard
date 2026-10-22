@@ -14,6 +14,11 @@ export const trashEntrySchema = z
     documentId: documentIdSchema,
     /** Where it was, for a listing a human can read. */
     path: z.string().min(1),
+    /**
+     * The display name it had. Absent on rows recorded before names were kept
+     * and for a document that never had one; a listing falls back to the path.
+     */
+    name: z.string().min(1).optional(),
     deletedAt: z.number().int().nonnegative(),
     blob: z.object({
       algorithm: z.literal('sha-256'),

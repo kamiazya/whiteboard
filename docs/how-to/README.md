@@ -10,6 +10,8 @@ Guides:
   them back through the Connections chip.
 - **[comment-on-a-document](comment-on-a-document.md)** — leave feedback anchored to a passage
   or a node, and read the conversations already on a document.
+- **[review-proposals-and-restore-versions](review-proposals-and-restore-versions.md)** — adopt
+  or dismiss an agent's proposed changes, and find or restore a saved version.
 - **[find-documents-from-chat](find-documents-from-chat.md)** — full-text document search
   through the MCP tool, CJK included.
 - **[organize-with-tags](organize-with-tags.md)** — tag documents and filter the document
@@ -23,6 +25,8 @@ Guides:
   trace from Settings when a touch or drag misbehaved.
 - **[choose-a-theme](choose-a-theme.md)** — draw a canvas hand-drawn or neon, from the Display
   panel or through `wb_facet_set`, and ask `wb_scene_render` or an export for that look.
+- **[tick-off-tasks](tick-off-tasks.md)** — keep a `- [ ]` checklist in a markdown document and
+  tick items off by clicking the box in the preview.
 - **[define-your-own-stencils](define-your-own-stencils.md)** — dress a box by what it IS, and
   grow the vocabulary with a stencil library the workspace owns.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas

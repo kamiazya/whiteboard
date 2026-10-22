@@ -93,6 +93,9 @@ export function DocumentProperties({
           // proportional face lands a little wide — slack after the name, which
           // is what a title bar wants anyway.
           //
+          // `min-w-[10ch]` is the phone floor: the actions beside the box do
+          // not shrink, and without it the name collapses to one letter.
+          //
           // The floor keeps an empty or one-word name a comfortable rename
           // target since the box does not fill the row; past the ceiling
           // the name ellipsises the way any title does.
@@ -144,7 +147,7 @@ export function DocumentProperties({
           // canonical name, which is already trimmed.
           onBlur={() => setDraftTitle(null)}
           placeholder="Untitled"
-          className={`text-foreground placeholder:text-muted-foreground min-w-0 shrink truncate bg-transparent font-medium outline-none ${
+          className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
             inline ? 'text-sm' : 'text-base'
           }`}
         />

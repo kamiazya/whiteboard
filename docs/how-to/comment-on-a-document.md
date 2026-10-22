@@ -49,6 +49,11 @@ here**. The comment is drawn as a pin with a bubble, connected by a dotted
 leader, and it also appears in the rail like any other conversation. Drag
 a pin to move where its comment points.
 
+Each rail row names what it is about in a small chip — the node's first line
+("on Sign-up form"), "on canvas" for a spot, "on an edge", or "whole
+document". Pressing a row moves the canvas to that place if it is off screen
+and rings it briefly. A whole-document conversation has no place to go to.
+
 ## Reply, and close the conversation
 
 Expanding a conversation in the rail shows a **Reply** box. A reply
@@ -62,6 +67,10 @@ it across replies.
 **Resolve** closes a conversation; **Reopen** brings it back. Resolving is
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
+
+A resolved conversation says **Resolved** on its rail row and in its card
+on the canvas. The card is muted, shows only the opening message, and keeps a
+labelled **Reopen** button in its header.
 
 A document holds at most **500 open threads** at once. Resolved ones do not
 count, so a document at the limit takes a new comment as soon as one is

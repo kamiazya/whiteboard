@@ -157,7 +157,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the rationale beside that wiring buys lines at the price of what the
   // lines were for, so it is not met that way.
   // +2: `tagLibrary`, so a board the preview embeds is coloured by intent.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 881,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 904,
   // The ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it. The next
   // shrink is the PREFERENCE half (candidate generation, from
@@ -189,7 +189,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `nodesAlong` steps down only toward the requested path and the walk reads
   // node meta without copying content, which needs the tree's own node reader
   // and so cannot leave this file without a value cycle back into it.
-  'packages/loro-adapter/src/workspace-tree.ts': 1074,
+  'packages/loro-adapter/src/workspace-tree.ts': 1076,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2060,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2062,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -375,7 +375,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a wait here reports more than "it expired"; both the page embed and its
   // sibling, the note-body embed, have failed on CI from branches that cannot
   // reach them, so the note covers the two as one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1076,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1093,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // The cancel case: the page's effect cleanup has to stop the replica refresh
   // and the push it armed, and both schedulers' mocks have to answer a spy

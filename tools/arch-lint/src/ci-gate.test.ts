@@ -22,6 +22,7 @@ interface RunJob {
   name: string
   status: string
   conclusion: string | null
+  steps?: { name: string; status: string; conclusion: string | null }[]
 }
 
 const { gateFailures, SKIPPABLE_JOBS, baseJobName, stillSettling, readSettledJobs } = (await import(
@@ -181,6 +182,39 @@ describe('the gate judges the run, and refuses everything but success', () => {
       job.name === 'verify' ? { ...job, status: 'in_progress', conclusion: null } : job,
     )
     expect(run(jobs)).toEqual(['verify: still in_progress when the gate ran'])
+  })
+
+  // The job record was measured lagging its own steps by minutes: `Complete
+  // job` done, the record still `in_progress`. The steps are the same fact
+  // written earlier, so a run that finished reads as finished.
+  it('passes a job the API still calls in_progress once its runner has completed every step', () => {
+    const steps = [
+      { name: 'Set up job', status: 'completed', conclusion: 'success' },
+      { name: 'Test', status: 'completed', conclusion: 'success' },
+      { name: 'Complete job', status: 'completed', conclusion: 'success' },
+    ]
+    const jobs = fixture('green').map((job) =>
+      job.name === 'verify' ? { ...job, status: 'in_progress', conclusion: null, steps } : job,
+    )
+    expect(run(jobs)).toEqual([])
+    expect(stillSettling({ jobs, needed: needed(), gateJobName: 'ci-gate' })).toBe(false)
+  })
+
+  it('still fails an in_progress job whose steps are not all done, or one of them failed', () => {
+    const running = [
+      { name: 'Set up job', status: 'completed', conclusion: 'success' },
+      { name: 'Test', status: 'in_progress', conclusion: null },
+    ]
+    const failed = [
+      { name: 'Test', status: 'completed', conclusion: 'failure' },
+      { name: 'Complete job', status: 'completed', conclusion: 'success' },
+    ]
+    for (const steps of [running, failed]) {
+      const jobs = fixture('green').map((job) =>
+        job.name === 'verify' ? { ...job, status: 'in_progress', conclusion: null, steps } : job,
+      )
+      expect(run(jobs)).toEqual(['verify: still in_progress when the gate ran'])
+    }
   })
 
   it('fails a cancelled job', () => {

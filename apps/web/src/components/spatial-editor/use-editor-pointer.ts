@@ -74,7 +74,7 @@ import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/sp
 import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
-import { reduceGesture } from './gestures.js'
+import { type GestureState, reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
 import type { PointerKind } from './navigation.js'
 import { DOUBLE_PRESS_WINDOW_MS } from './navigation.js'
@@ -131,6 +131,14 @@ function describePress(pick: ReturnType<typeof pickContentAt>): {
   const hitPathId = hitInkId ?? (pick?.kind === 'edges' ? pick.id : undefined)
   const pressKey = hitId ?? (hitPathId !== undefined ? `edge:${hitPathId}` : 'empty')
   return { hitId, hitPathId, pressKey }
+}
+
+/** The result of leaving the open text edit with its draft kept. */
+function commitPendingText(
+  state: Extract<GestureState, { kind: 'editing-text' }>,
+  canvas: Parameters<typeof reduceGesture>[1],
+) {
+  return reduceGesture(state, canvas, { type: 'commit-text-edit', text: state.pendingText })
 }
 
 export function useEditorPointer(inputs: EditorPointerInputs) {
@@ -364,7 +372,12 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       e.timeStamp,
     )
     if (navigation.preventDefault === true) e.preventDefault()
-    if (!navigation.fallThrough) return true
+    if (!navigation.fallThrough) {
+      // A pan never reaches the document's reducer, and its cancelled default
+      // keeps the editor focused: leaving an edit commits it in every tool.
+      if (gestureState.kind === 'editing-text') applyResult(commitPendingText(gestureState, canvas))
+      return true
+    }
     if (e.button !== 0) return true
     // A comment's chrome floats above content, so a press it took never falls
     // through to node or marquee handling. There is deliberately no

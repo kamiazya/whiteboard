@@ -121,8 +121,10 @@ import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
+import { CanvasEmptyHint } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
+import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -155,6 +157,7 @@ import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPale
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
+import { useCommentReveal } from './use-comment-reveal.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
 import { useEditSessionState } from './use-edit-session-state.js'
@@ -170,6 +173,7 @@ import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
 import { useSceneProjection } from './use-scene-projection.js'
+import { useShortcutHelp } from './use-shortcut-help.js'
 import { useToolState } from './use-tool-state.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
@@ -617,6 +621,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
     )
+    const { revealThread, pulse: revealPulse } = useCommentReveal({
+      threads,
+      canvas,
+      edgePathOf,
+      viewport,
+      setViewport,
+      rootRef,
+      containerSizeOf,
+    })
     // Named for the TYPE it holds rather than for the state that keys it:
     // `selectedEdgeId` may name a relation or a stroke, because the scene
     // hands both out as the same kind of node. Looking in `canvas.edges`
@@ -762,6 +775,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setOpenProposalId(proposalId)
           return true
         },
+        revealThread,
       }),
       [boxes, proposalChromeBoxes],
     )
@@ -1154,6 +1168,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameContent,
       frameSelection,
     })
+    const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
     /** Places one of the directly-creatable kinds at a canvas-space point. */
     const createAt = (kind: DraggableCreation, point: Point) => {
@@ -1516,6 +1531,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setPendingCut(null)}
           />
         )}
+        {canvas.nodes.length === 0 && <CanvasEmptyHint coarse={hasCoarsePointer()} />}
         <ToolPalette
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
@@ -1523,6 +1539,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the one view control (zoom to fit) is always in the same place.
           leading={paletteLeading}
           onZoomToFit={frameContent}
+          shortcutHelp={shortcutHelp.palette}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
@@ -1902,8 +1919,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
           onLostPointerCapture={handleLostPointerCapture}
-          onKeyDown={handleKeyDown}
+          onKeyDown={shortcutHelp.onKeyDown}
         >
+          {revealPulse === null ? null : (
+            <CommentRevealPulse
+              pulse={revealPulse}
+              viewport={viewport}
+              color={palette.comment.pin.stroke}
+            />
+          )}
           {(() => {
             // Drawn only when the threads plane can answer for it: the
             // canvas comment alone holds one message, and a card that

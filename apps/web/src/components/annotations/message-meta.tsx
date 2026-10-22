@@ -33,13 +33,25 @@ function stampOf(iso: string | undefined): {
  * name when one was written, and silence otherwise — inventing the
  * distinction from a free string would be a guess wearing a badge.
  */
-export function MessageBy({ message }: { readonly message: CommentMessage | undefined }) {
+export function MessageBy({
+  message,
+  unsignedAs,
+}: {
+  readonly message: CommentMessage | undefined
+  /**
+   * What to call the writer of a message that names nobody. This app has no
+   * accounts, so an unsigned message is the reader's own (a peer's carries
+   * the name its caller supplied) and a surface may say so.
+   */
+  readonly unsignedAs?: string
+}) {
   if (message === undefined) return null
   const stamp = stampOf(message.createdAt)
-  if (message.author === undefined && stamp.text === '') return null
+  const author = message.author ?? unsignedAs
+  if (author === undefined && stamp.text === '') return null
   return (
     <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-      {message.author !== undefined ? <span>{message.author}</span> : null}
+      {author !== undefined ? <span>{author}</span> : null}
       {stamp.text !== '' ? <time dateTime={stamp.dateTime}>{stamp.text}</time> : null}
     </span>
   )

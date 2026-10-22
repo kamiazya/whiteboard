@@ -46,7 +46,7 @@ to.
 
 ![The document browser for a workspace kept in this browser](../assets/browser-local-list.png)
 
-A fresh canvas starts empty. Double-click empty canvas space to make a note
+A fresh canvas starts empty, with a one-line hint ("Double-click to add a note", or "Tap + to add a note" on a touch screen) that disappears with the first node. Double-click empty canvas space to make a note
 and start typing immediately, or open the **+** menu in the bottom dock: tap
 an entry to place it in the middle of the view, or drag one onto the canvas
 to drop it exactly where you want it. In **Select** mode, right-clicking

@@ -67,13 +67,21 @@ export interface ThreadMessageProps {
    * result of a conditional either way round.
    */
   readonly editor?: ReactNode
+  /** What an unsigned message's writer is called; see `MessageBy`. */
+  readonly unsignedAs?: string
 }
 
-export function ThreadMessage({ message, compact = false, action, editor }: ThreadMessageProps) {
+export function ThreadMessage({
+  message,
+  compact = false,
+  action,
+  editor,
+  unsignedAs,
+}: ThreadMessageProps) {
   return (
     <li className="group/message flex flex-col gap-0.5">
       <div className="flex min-h-4 items-center justify-between gap-2">
-        <MessageBy message={message} />
+        <MessageBy message={message} {...(unsignedAs === undefined ? {} : { unsignedAs })} />
         {action === undefined || action === null ? null : (
           <span className={THREAD_MESSAGE_ACTION_CLASS}>{action}</span>
         )}

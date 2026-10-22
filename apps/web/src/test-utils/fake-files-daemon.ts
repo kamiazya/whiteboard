@@ -39,6 +39,7 @@ type Row = FakeFilesDaemonRow & { readonly id: string }
 interface Trashed {
   readonly id: string
   readonly path: string
+  readonly name?: string
   readonly kind: 'markdown' | 'spatial'
   readonly deletedAt: number
 }
@@ -233,6 +234,7 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
         entries: state.trash.map((row) => ({
           documentId: row.id,
           path: row.path,
+          ...(row.name === undefined ? {} : { name: row.name }),
           deletedAt: row.deletedAt,
         })),
       }),
@@ -251,7 +253,7 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
 
 export function createFakeFilesDaemon(seed: {
   readonly rows: readonly FakeFilesDaemonRow[]
-  readonly trashed: readonly Pick<FakeFilesDaemonRow, 'path' | 'kind'>[]
+  readonly trashed: readonly Pick<FakeFilesDaemonRow, 'path' | 'kind' | 'name'>[]
 }): typeof globalThis.fetch {
   const state: State = { rows: [], trash: [], pinned: [], counter: 0 }
   state.rows = seed.rows.map((row) => ({ ...row, id: nextId(state) }))

@@ -213,6 +213,37 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
   })
 
+  // The page binds the source view to the document, which makes the editor's
+  // own onChange a no-op: the toggle has to be written through the view.
+  it('ticking a task checkbox in the preview rewrites the stored body', async () => {
+    const store = new FoldingBrowserIndex()
+    await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
+    const first = renderPage(<BrowserDocumentPage store={store} />)
+    const editable = await waitFor(() => {
+      const el = document.querySelector('[contenteditable="true"]')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    })
+    await waitFor(() => expect(document.activeElement).toBe(editable), { timeout: 30_000 })
+    await userEvent.keyboard('- [[ ] first')
+    const box = () => document.querySelector('[role="checkbox"]')
+    await waitFor(() => expect(box()?.getAttribute('aria-checked')).toBe('false'), {
+      timeout: 10_000,
+    })
+    await userEvent.click(box() as Element)
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('- [x] first')
+      expect(box()?.getAttribute('aria-checked')).toBe('true')
+    })
+
+    await waitForSaved()
+    first.unmount()
+    renderPage(<BrowserDocumentPage store={store} />)
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('- [x] first')
+    })
+  })
+
   /**
    * The OKF core facets a person edits, through real IndexedDB. jsdom already
    * covers which value the component emits; what only a browser can answer is

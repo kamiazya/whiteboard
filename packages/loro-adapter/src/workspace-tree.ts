@@ -404,6 +404,7 @@ export function setWorkspacePinned(doc: LoroDoc, documentId: string, pinned: boo
 export interface PlacedWorkspaceDocument {
   readonly documentId: string
   readonly path: string
+  readonly name: string | undefined
   readonly id: TreeID
   /** The documentId of the nearest document on its parent chain, if any. */
   readonly above: string | undefined
@@ -416,7 +417,9 @@ export interface PlacedWorkspaceDocument {
  */
 export function readPlacedWorkspaceDocuments(doc: LoroDoc): PlacedWorkspaceDocument[] {
   return walk(doc).flatMap(({ node: { id }, read, path, above }) =>
-    read.type === 'document' ? [{ documentId: read.meta.documentId, path, id, above }] : [],
+    read.type === 'document'
+      ? [{ documentId: read.meta.documentId, path, name: read.meta.name, id, above }]
+      : [],
   )
 }
 

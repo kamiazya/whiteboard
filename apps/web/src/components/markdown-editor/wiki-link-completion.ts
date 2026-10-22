@@ -25,7 +25,11 @@ import { type LinkTarget, linkMarkupFor, rankLinkTargets } from '../../lib/link-
  * list refreshes while the editor lives, and a completion source is built
  * once at view creation.
  */
-export function wikiLinkCompletionSource(getTargets: () => readonly LinkTarget[]) {
+export function wikiLinkCompletionSource(
+  getTargets: () => readonly LinkTarget[],
+  getCreate: () => LinkTargetCreator | undefined = () => undefined,
+  getOwnPath: () => string | undefined = () => undefined,
+) {
   return (context: CompletionContext): CompletionResult | null => {
     // The open [[ with whatever partial query follows it. `matchBefore` only
     // looks at the current line, so a reference cannot span a line break —
@@ -36,37 +40,96 @@ export function wikiLinkCompletionSource(getTargets: () => readonly LinkTarget[]
     const match = context.matchBefore(/\[\[[^\][|#]*$/)
     if (match === null) return null
     const targets = getTargets()
-    if (targets.length === 0) return null
-    const ranked = rankLinkTargets(targets, match.text.slice(2))
-    if (ranked.length === 0) return null
+    const create = getCreate()
+    const query = match.text.slice(2)
+    const wanted = createRowPath(query, targets, getOwnPath())
+    if (targets.length === 0 && (create === undefined || wanted === null)) return null
+    const ranked = rankLinkTargets(targets, query)
+    // Only when nothing matches: a Create row beside real matches reads as
+    // "this note does not exist" while it does.
+    const createOption =
+      create !== undefined && wanted !== null && ranked.length === 0
+        ? [createLinkOption(wanted, create)]
+        : []
+    if (ranked.length === 0 && createOption.length === 0) return null
     return {
       from: match.from + 2,
-      options: ranked.map(
-        (target): Completion => ({
-          label: target.name,
-          type: 'text',
-          apply: (view: EditorView, _completion, from, to) => {
-            // The brackets sit two characters before the QUERY start — and
-            // it must be the `from` the plugin passes, never a position
-            // captured when the source ran: the document may have changed in
-            // between (mobile autocorrect elsewhere, a CRDT remote echo,
-            // another tab), and the plugin maps from/to through those
-            // changes while a captured offset stays behind and writes the
-            // markup mid-word, corrupting the body.
-            const bracketsFrom = from - 2
-            if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
-            const insert = linkMarkupFor(target)
-            view.dispatch({
-              changes: { from: bracketsFrom, to, insert },
-              selection: { anchor: bracketsFrom + insert.length },
-              userEvent: 'input.complete',
-            })
-          },
-        }),
-      ),
+      options: [
+        ...ranked.map(
+          (target): Completion => ({
+            label: target.name,
+            type: 'text',
+            // Resolution is by path, so the alias only changes how the source
+            // READS: a note that said `[[untitled]]` for a document the popup
+            // showed as "Weekly sync" taught nobody what it linked.
+            apply: writeReference(linkMarkupFor(target, target.name)),
+          }),
+        ),
+        ...createOption,
+      ],
       // A growing plain query keeps this result (the plugin narrows it);
-      // a ] or | changes the grammar and re-asks the source.
-      validFor: /^[^\][|]*$/,
+      // a ] or | changes the grammar and re-asks the source. With a Create
+      // row the row NAMES the typed text, so any growth must re-ask instead.
+      validFor: create === undefined ? /^[^\][|]*$/ : (text: string) => text === query,
     }
+  }
+}
+
+/** Creates a markdown note at `path`; the host owns where and how. */
+export type LinkTargetCreator = (path: string) => void | Promise<void>
+
+/**
+ * The path a Create row would make for `query`, or null when none should be
+ * offered: nothing typed, or the text already IS a target's path (a row
+ * making a duplicate would only fail). The open document is not among the
+ * targets, so its own path is asked for separately: a self-link is a link,
+ * not a document to make.
+ */
+function createRowPath(
+  query: string,
+  targets: readonly LinkTarget[],
+  ownPath: string | undefined,
+): string | null {
+  const path = query.trim()
+  if (path === '' || path === ownPath || targets.some((target) => target.path === path)) {
+    return null
+  }
+  return path
+}
+
+/**
+ * Replaces the typed `[[query` with `insert`.
+ *
+ * The brackets sit two characters before the QUERY start — and it must be the
+ * `from` the plugin passes, never a position captured when the source ran: the
+ * document may have changed in between (mobile autocorrect elsewhere, a CRDT
+ * remote echo, another tab), and the plugin maps from/to through those changes
+ * while a captured offset stays behind and writes the markup mid-word,
+ * corrupting the body.
+ */
+function writeReference(insert: string): Completion['apply'] {
+  return (view: EditorView, _completion, from, to) => {
+    const bracketsFrom = from - 2
+    if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
+    view.dispatch({
+      changes: { from: bracketsFrom, to, insert },
+      selection: { anchor: bracketsFrom + insert.length },
+      userEvent: 'input.complete',
+    })
+  }
+}
+
+function createLinkOption(path: string, create: LinkTargetCreator): Completion {
+  const write = writeReference(`[[${path}]]`)
+  return {
+    label: `Create '${path}'`,
+    type: 'text',
+    // Under every real match: it is the fallback for text that names nothing.
+    boost: -99,
+    apply: (view, completion, from, to) => {
+      // The match grammar already excludes every character the markup forbids.
+      if (typeof write === 'function') write(view, completion, from, to)
+      void Promise.resolve(create(path)).catch(() => {})
+    },
   }
 }

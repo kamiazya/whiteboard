@@ -71,4 +71,26 @@ describe('WorkspaceFilesPanel — the open folder is an address', () => {
 
     await waitFor(() => expect(onFolderChange).toHaveBeenCalledWith(''))
   })
+
+  // Folders are implicit path segments: the last document leaving one leaves
+  // the open folder standing empty, and navigating away takes it with it.
+  it('lets an emptied folder go once the person leaves it', async () => {
+    let rows = [
+      { documentId: 'd1', path: 'design/login', kind: 'spatial' as const },
+      { documentId: 'd2', path: 'notes', kind: 'markdown' as const },
+    ]
+    const source = fakeFilesSource({ listDocuments: () => Promise.resolve(rows) })
+    const view = render(<WorkspaceFilesPanel source={source} initialFolder="design" revision={1} />)
+    await screen.findByTestId('folder-contents')
+
+    rows = rows.filter((each) => each.documentId !== 'd1')
+    view.rerender(<WorkspaceFilesPanel source={source} initialFolder="design" revision={2} />)
+    await screen.findByText(/This folder is empty/)
+
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Folder path' })).getByText('Workspace'),
+    )
+
+    await waitFor(() => expect(screen.queryByText('design')).toBeNull())
+  })
 })

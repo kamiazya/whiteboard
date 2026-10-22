@@ -12,6 +12,7 @@ const TARGETS: readonly LinkTarget[] = [
   { id: ID_A, path: 'release-plan', name: 'Release plan' },
   { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-08', name: 'Retro 8月' },
   { id: ID_C, path: 'dup', name: 'Dup' },
+  { id: '01EX5ZZKBKACTAV9WEVGEMMVRC', path: 'same', name: 'same' },
   { id: '01DX5ZZKBKACTAV9WEVGEMMVRB', path: 'dup-2', name: 'Dup' },
 ]
 
@@ -53,14 +54,14 @@ describe('wikiLinkCompletionSource', () => {
   it('accepting replaces the whole reference, brackets included', () => {
     const doc = '詳細は [[Re'
     const result = complete(doc, doc.length)
-    // The PATH is the written form; the render-time title shows the name.
-    expect(accept(doc, result!, 0)).toBe('詳細は [[release-plan]]')
+    // Resolution stays by PATH; the alias makes the source read as the name.
+    expect(accept(doc, result!, 0)).toBe('詳細は [[release-plan|Release plan]]')
   })
 
   it('keeps a preceding ! so an embed stays an embed', () => {
     const doc = '![[Re'
     const result = complete(doc, doc.length)
-    expect(accept(doc, result!, 0)).toBe('![[release-plan]]')
+    expect(accept(doc, result!, 0)).toBe('![[release-plan|Release plan]]')
   })
 
   it('a duplicated name is no problem — paths are unique', () => {
@@ -68,7 +69,7 @@ describe('wikiLinkCompletionSource', () => {
     const result = complete(doc, doc.length)
     const index = result!.options.findIndex((o) => o.label === 'Dup')
     expect(index).toBeGreaterThanOrEqual(0)
-    expect(accept(doc, result!, index)).toBe('[[dup]]')
+    expect(accept(doc, result!, index)).toBe('[[dup|Dup]]')
   })
 
   it('inserts at the CURRENT bracket position even after the document changed above it', () => {
@@ -93,7 +94,7 @@ describe('wikiLinkCompletionSource', () => {
     const mappedFrom = PREFIX.length + before.length - 'Re'.length
     const mappedTo = PREFIX.length + before.length
     option.apply(view, option, mappedFrom, mappedTo)
-    expect(view.state.doc.toString()).toBe(`${PREFIX}詳細は [[release-plan]]`)
+    expect(view.state.doc.toString()).toBe(`${PREFIX}詳細は [[release-plan|Release plan]]`)
     view.destroy()
   })
 
@@ -114,5 +115,71 @@ describe('wikiLinkCompletionSource', () => {
       const inserted = accept('[[', result!, i)
       expect(scanReferences(inserted), inserted).toHaveLength(1)
     }
+  })
+
+  it('writes the bare path when the name already equals it', () => {
+    const doc = '[[sa'
+    const result = complete(doc, doc.length)
+    const index = result!.options.findIndex((o) => o.label === 'same')
+    expect(accept(doc, result!, index)).toBe('[[same]]')
+  })
+})
+
+describe('wikiLinkCompletionSource create row', () => {
+  const created: string[] = []
+  const withCreate = (doc: string) =>
+    wikiLinkCompletionSource(
+      () => TARGETS,
+      () => (path: string) => {
+        created.push(path)
+      },
+    )(new CompletionContext(EditorState.create({ doc }), doc.length, false))
+
+  it('offers a Create row when the typed text matches no target', () => {
+    const result = withCreate('[[Nope')
+    expect(result?.options.map((o) => o.label)).toEqual(["Create 'Nope'"])
+  })
+
+  it('offers no Create row without a host that can create', () => {
+    expect(complete('[[Nope', 6)).toBeNull()
+  })
+
+  it('offers no Create row for an empty query or an existing path', () => {
+    expect(withCreate('[[')?.options.map((o) => o.label)).toEqual(TARGETS.map((t) => t.name))
+    expect(withCreate('[[release-plan')).toBeNull()
+  })
+
+  it("offers no Create row for the open document's own path", () => {
+    const source = wikiLinkCompletionSource(
+      () => TARGETS,
+      () => (path: string) => {
+        created.push(path)
+      },
+      () => 'weekly-sync',
+    )
+    const doc = '[[weekly-sync'
+    expect(source(new CompletionContext(EditorState.create({ doc }), doc.length, false))).toBeNull()
+  })
+
+  it('offers no Create row while any target matches the typed text', () => {
+    const labels = withCreate('[[Re')?.options.map((o) => o.label)
+    expect(labels?.[0]).toBe('Release plan')
+    expect(labels?.some((l) => l.startsWith('Create'))).toBe(false)
+  })
+
+  it('accepting it creates the note at the typed path and inserts the link', () => {
+    created.length = 0
+    const doc = 'see [[Nope'
+    const result = withCreate(doc)
+    expect(accept(doc, result!, 0)).toBe('see [[Nope]]')
+    expect(created).toEqual(['Nope'])
+  })
+
+  it('re-asks the source as the query grows so the row names the current text', () => {
+    const result = withCreate('[[No')
+    expect(typeof result?.validFor).toBe('function')
+    const validFor = result?.validFor as (text: string) => boolean
+    expect(validFor('No')).toBe(true)
+    expect(validFor('Nop')).toBe(false)
   })
 })

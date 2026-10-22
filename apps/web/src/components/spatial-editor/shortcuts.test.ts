@@ -31,6 +31,7 @@ interface KeyEventLike {
 
 const MOD_SPEC: ShortcutSpec = {
   id: 'reorder-forward', // any table id — the matcher only reads matching fields
+  section: 'Arrange',
   keys: ['c'],
   mod: true,
   display: 'Cmd+C',
@@ -39,6 +40,7 @@ const MOD_SPEC: ShortcutSpec = {
 
 const PLAIN_SPEC: ShortcutSpec = {
   id: 'reorder-backward',
+  section: 'Arrange',
   codes: ['BracketLeft'],
   shift: false,
   display: '[',
@@ -98,6 +100,7 @@ describe('findShortcutIn modifier semantics', () => {
   ])('never fires from <%s>, and still fires from a plain element', (tag) => {
     const spec: ShortcutSpec = {
       id: 'reorder-forward',
+      section: 'Arrange',
       keys: ['x'],
       display: 'X',
       description: 'test spec',

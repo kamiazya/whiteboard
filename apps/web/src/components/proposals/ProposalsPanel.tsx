@@ -68,7 +68,8 @@ export function ProposalsPanel({ proposals, onOpen }: ProposalsPanelProps) {
       </p>
       {waiting.length === 0 ? (
         <p className="text-muted-foreground py-2 text-sm">
-          Nothing waiting — changes an agent proposes land here, and on the document itself.
+          Nothing waiting. Proposed changes come only from a connected AI agent — you edit the
+          document directly. To connect one, follow Quick install in the docs.
         </p>
       ) : (
         <ul className="flex flex-col">

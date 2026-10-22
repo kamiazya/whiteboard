@@ -153,12 +153,13 @@ export default function WorkspaceTopBar({
           aria-label="Restore this version"
           disabled={preview.isRestoring}
           onClick={preview.restore}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           <RotateCcw
             aria-hidden="true"
             className={cn('size-4', preview.isRestoring && 'animate-spin')}
           />
+          <span className="hidden sm:inline">Restore</span>
         </button>
       </header>
     )

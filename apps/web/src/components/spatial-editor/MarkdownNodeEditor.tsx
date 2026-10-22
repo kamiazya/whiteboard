@@ -93,6 +93,34 @@ function nodeEditorTheme(centerContent: boolean): Extension {
   })
 }
 
+/**
+ * An explicit exit (chord or button) hands the keyboard back to the canvas
+ * the editor lives in, or Delete, arrows and undo go to <body> and do
+ * nothing until the next click. A blur-driven exit does not: focus has
+ * already gone where the person pointed it.
+ */
+function returnFocusToCanvas(host: HTMLElement | null): void {
+  host?.closest<HTMLElement>('[role="application"]')?.focus({ preventScroll: true })
+}
+
+/**
+ * The draft reaches the document only through commit, so a reload, a closed
+ * tab or a phone app switch would drop it while the save state still reads
+ * saved. `pagehide` fires on every unload path (bfcache included);
+ * `visibilitychange` covers a backgrounded tab that is never unloaded cleanly.
+ */
+function onPageHide(handler: () => void): () => void {
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') handler()
+  }
+  window.addEventListener('pagehide', handler)
+  document.addEventListener('visibilitychange', onVisibility)
+  return () => {
+    window.removeEventListener('pagehide', handler)
+    document.removeEventListener('visibilitychange', onVisibility)
+  }
+}
+
 export interface MarkdownNodeEditorProps {
   readonly box: Box
   readonly initialText: string
@@ -178,6 +206,14 @@ export function MarkdownNodeEditor({
     finishedRef.current = true
     callbacksRef.current.onCancel()
   }
+  const commitAndReturn = (view: EditorView) => {
+    commit(view)
+    returnFocusToCanvas(hostRef.current)
+  }
+  const cancelAndReturn = () => {
+    cancel()
+    returnFocusToCanvas(hostRef.current)
+  }
 
   // useLayoutEffect, not useEffect: passive cleanups run AFTER React has
   // detached the host DOM, and detaching a focused contentDOM fires a
@@ -200,7 +236,7 @@ export function MarkdownNodeEditor({
             {
               key: 'Mod-Enter',
               run: (view) => {
-                commit(view)
+                commitAndReturn(view)
                 return true
               },
             },
@@ -212,7 +248,7 @@ export function MarkdownNodeEditor({
                 // is not a trade anyone would take, and this editor is the
                 // only one where Escape is destructive.
                 if (completionStatus(view.state) === 'active' && closeCompletion(view)) return true
-                cancel()
+                cancelAndReturn()
                 return true
               },
             },
@@ -307,7 +343,10 @@ export function MarkdownNodeEditor({
     // caret at position 0, which reads as "my text got replaced".
     view.dispatch({ selection: { anchor: view.state.doc.length } })
 
+    const stopWatchingPageHide = onPageHide(() => commit(view))
+
     return () => {
+      stopWatchingPageHide()
       // BEFORE destroy: EditorView.destroy() blurs a focused content DOM,
       // and that blur must find this editor already retired.
       mountedRef.current = false
@@ -357,9 +396,9 @@ export function MarkdownNodeEditor({
       <EditorExitHint
         onDone={() => {
           const view = viewRef.current
-          if (view !== null) commit(view)
+          if (view !== null) commitAndReturn(view)
         }}
-        onCancel={cancel}
+        onCancel={cancelAndReturn}
         canvasOverlay
         placement={{
           left: box.x,

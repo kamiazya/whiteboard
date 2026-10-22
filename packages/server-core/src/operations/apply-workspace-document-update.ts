@@ -176,13 +176,19 @@ async function evacuateRemoved(
     documentsRemovedSince(doc, since),
   )
   const deletedAt = Date.now()
-  for (const { documentId, path, bytes } of removed) {
+  for (const { documentId, path, name, bytes } of removed) {
     const { ref } = await blobStore.put({
       // Copied so the DTO's narrow buffer type is satisfied without a cast.
       bytes: new Uint8Array(bytes),
       contentType: 'application/octet-stream',
     })
-    recordTrashEntry(doc, { documentId, path, deletedAt, blob: ref })
+    recordTrashEntry(doc, {
+      documentId,
+      path,
+      ...(name === undefined ? {} : { name }),
+      deletedAt,
+      blob: ref,
+    })
   }
 }
 

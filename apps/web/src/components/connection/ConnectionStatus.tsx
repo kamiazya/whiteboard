@@ -194,7 +194,7 @@ export function ConnectionStatus({
           // published one.
           aria-label={markAriaLabel(workspaceName, label)}
           {...(label === null ? {} : { title: label })}
-          className="flex shrink-0 items-center justify-center rounded-md p-1 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
         >
           {state === null ? <ShellMark /> : <ShellMark state={state} />}
         </button>

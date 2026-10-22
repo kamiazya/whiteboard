@@ -132,6 +132,28 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
 }
 
 /**
+ * The editor stays mounted under a version preview: its pan and zoom are the
+ * mounted component's own state, and unmounting it sent the view back to the
+ * origin when the preview ended or a restore landed. Inert and invisible it
+ * still holds its size, so nothing re-measures it, and it takes no input and
+ * leaves the accessibility tree.
+ */
+function EditorBehindPreview({ preview, children }: { preview: ReactNode; children: ReactNode }) {
+  return (
+    <>
+      {preview === null ? null : <div className="h-full min-h-0 min-w-0">{preview}</div>}
+      <div
+        className={preview === null ? 'h-full min-h-0 min-w-0' : 'invisible absolute inset-0'}
+        inert={preview !== null}
+        aria-hidden={preview === null ? undefined : true}
+      >
+        {children}
+      </div>
+    </>
+  )
+}
+
+/**
  * The merged header row, or nothing while the document is maximised:
  * fullscreen means the DOCUMENT, so the whole row — back, title, menus —
  * steps aside with the shell's row above it.
@@ -294,6 +316,8 @@ function markdownPaneProps({
     ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
     linkTargets: files.pickerTargets,
     onOpenDocument: model.openDocument,
+    ...(files.createLinkTarget === undefined ? {} : { onCreateLinkTarget: files.createLinkTarget }),
+    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
     selectedThreadId: commentsRail.selectedThreadId,
@@ -447,6 +471,12 @@ function DocumentPageBody({
     canvas: threads.railCanvas,
     write: threads.write,
   })
+  // Picking a conversation in the rail takes the canvas to its anchor; a
+  // note has no handle, and its marker already sits beside the passage.
+  const { revealRequest } = commentsRail
+  useEffect(() => {
+    if (revealRequest !== null) spatialHandle.current?.revealThread(revealRequest.threadId)
+  }, [revealRequest, spatialHandle])
 
   /**
    * A passage decided from the body (ADR-0029 decision 6). The same command
@@ -621,9 +651,13 @@ function DocumentPageBody({
     >
       {model.slots.replaceEditor ?? (
         <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
-          {preview ? (
-            <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
-          ) : (
+          <EditorBehindPreview
+            preview={
+              preview ? (
+                <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
+              ) : null
+            }
+          >
             <DocumentEditorSurface
               kind={documentKind}
               documentKey={documentKey}
@@ -680,7 +714,7 @@ function DocumentPageBody({
                 </SpatialEditorPane>
               )}
             />
-          )}
+          </EditorBehindPreview>
         </EditorLock>
       )}
     </DocumentPageShell>

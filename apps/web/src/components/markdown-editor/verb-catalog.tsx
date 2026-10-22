@@ -13,7 +13,7 @@
  * only when the host has a selection to be about.
  */
 import type { StateCommand } from '@codemirror/state'
-import { MessageSquarePlus } from 'lucide-react'
+import { ExternalLink, FilePlus, MessageSquarePlus } from 'lucide-react'
 import type { ContextMenuItem } from '../ui/ContextMenu.js'
 import {
   levelCommand,
@@ -30,6 +30,10 @@ export interface VerbCatalogHost {
   readonly run: (command: StateCommand) => void
   /** Opens the host's link picker; absent when there is nothing to pick from. */
   readonly openLinkPicker?: () => void
+  /** Follows the `[[link]]` under the caret; absent when the caret is not in a resolved one. */
+  readonly openLink?: () => void
+  /** Creates the note an unresolved `[[link]]` under the caret names; absent otherwise. */
+  readonly createLinkTarget?: { readonly path: string; readonly run: () => void }
   /** Opens a conversation about the selection; absent with no selection or no layer. */
   readonly composeThread?: () => void
   /** Called before any row's action, so the vessel can close. */
@@ -86,17 +90,49 @@ export function verbCatalogItems(host: VerbCatalogHost): readonly ContextMenuIte
     items.push({ label: spec.label, icon, onSelect: run(command) })
   }
 
-  if (host.composeThread !== undefined) {
-    const compose = host.composeThread
-    items.push({ kind: 'separator' })
-    items.push({
+  items.push(...linkRows(host), ...commentRows(host))
+  return items
+}
+
+/** The rows for the `[[link]]` under the caret, behind a separator, or none. */
+function linkRows(host: VerbCatalogHost): readonly ContextMenuItem[] {
+  const { openLink, createLinkTarget } = host
+  const rows: ContextMenuItem[] = []
+  if (openLink !== undefined) {
+    rows.push({
+      label: 'Open link under caret',
+      icon: <ExternalLink aria-hidden />,
+      onSelect: () => {
+        host.close()
+        openLink()
+      },
+    })
+  }
+  if (createLinkTarget !== undefined) {
+    rows.push({
+      label: `Create '${createLinkTarget.path}'`,
+      icon: <FilePlus aria-hidden />,
+      onSelect: () => {
+        host.close()
+        createLinkTarget.run()
+      },
+    })
+  }
+  return rows.length === 0 ? [] : [{ kind: 'separator' }, ...rows]
+}
+
+function commentRows(host: VerbCatalogHost): readonly ContextMenuItem[] {
+  const compose = host.composeThread
+  if (compose === undefined) return []
+  return [
+    { kind: 'separator' },
+    {
       label: 'Comment on this',
       icon: <MessageSquarePlus aria-hidden />,
       onSelect: () => {
         host.close()
         compose()
       },
-    })
-  }
-  return items
+    },
+  ]
 }

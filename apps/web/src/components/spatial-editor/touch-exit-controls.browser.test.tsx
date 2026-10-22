@@ -34,6 +34,15 @@ afterEach(() => {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
 
+it('Done and Cancel are each at least 44px square, the touch floor', () => {
+  render(<MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />)
+  for (const name of ['Done', 'Cancel']) {
+    const rect = screen.getByRole('button', { name }).getBoundingClientRect()
+    expect(rect.width).toBeGreaterThanOrEqual(44)
+    expect(rect.height).toBeGreaterThanOrEqual(44)
+  }
+})
+
 it('tapping Cancel on a markdown node editor cancels, and never commits', async () => {
   const onCommit = vi.fn()
   const onCancel = vi.fn()
@@ -96,7 +105,7 @@ it('inside the spatial editor, tapping Cancel drops the draft and closes the edi
   // Mirrors node-tools: hangs off the node's bottom-RIGHT corner.
   const pill = screen.getByTestId('editor-exit-hint').getBoundingClientRect()
   expect(pill.right - root.getBoundingClientRect().left).toBeCloseTo(300, 0)
-  expect(pill.height).toBeCloseTo(26, 0)
+  expect(pill.height).toBeCloseTo(46, 0)
 
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())

@@ -1314,10 +1314,11 @@ describe('typesetMdastBlocks — task list markers', () => {
     expect(markerText(item)).not.toContain('•')
   })
 
-  it('fills the box for a ticked item, so the two states differ in ink and not only in name', () => {
-    const unticked = shapesOf(itemOf(taskList(false)))
-    const ticked = shapesOf(itemOf(taskList(true)))
-    expect(ticked.length).toBeGreaterThan(unticked.length)
+  it('draws a tick in the box for a ticked item, so the states differ in ink and not only in name', () => {
+    const ticks = (item: ReturnType<typeof itemOf>) =>
+      item.children.filter((c) => c.kind === 'edge')
+    expect(ticks(itemOf(taskList(false)))).toHaveLength(0)
+    expect(ticks(itemOf(taskList(true)))).toHaveLength(1)
   })
 
   it('leaves an ordinary bullet alone', () => {

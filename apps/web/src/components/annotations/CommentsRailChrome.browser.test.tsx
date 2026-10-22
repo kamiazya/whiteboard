@@ -27,6 +27,8 @@ function railOpen(toggle = vi.fn()): CommentsRail {
     toggle,
     selectedThreadId: null,
     selectThread: vi.fn(),
+    revealRequest: null,
+    anchorLabelOf: () => 'on canvas',
     composeAnchor: null,
     revealThread: vi.fn(),
     composeThread: vi.fn(),

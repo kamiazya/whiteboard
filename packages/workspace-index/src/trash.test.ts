@@ -132,6 +132,20 @@ describe('deleting a document', () => {
     expect(blobs.size()).toBe(1)
   })
 
+  it('lists the display name the document had, beside its path', async () => {
+    await index.createDocument({
+      workspaceId: WS,
+      path: 'untitled-7',
+      kind: 'markdown',
+      name: 'Team Charter',
+    })
+    await index.deleteDocument({ workspaceId: WS, path: 'untitled-7' })
+
+    const [row] = await index.listTrash({ workspaceId: WS })
+
+    expect(row?.name).toBe('Team Charter')
+  })
+
   it('restores the document under the id it had, so a share link survives', async () => {
     const documentId = await seedCanvas('design', 'important')
     await index.deleteDocument({ workspaceId: WS, path: 'design' })

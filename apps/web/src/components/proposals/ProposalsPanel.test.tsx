@@ -81,6 +81,11 @@ describe('ProposalsPanel', () => {
     render(<ProposalsPanel proposals={[decided]} onOpen={() => {}} />)
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
-    expect(screen.getByText(/Nothing waiting/)).not.toBeNull()
+    const copy = screen.getByText(/Nothing waiting/).textContent ?? ''
+    // Proposals come from connected AI agents only; a person edits directly.
+    expect(copy).toMatch(/connected AI agent/i)
+    expect(copy).toMatch(/only/i)
+    expect(copy).toMatch(/Quick install/)
+    expect(copy).not.toMatch(/\bpropose a change\b/i)
   })
 })

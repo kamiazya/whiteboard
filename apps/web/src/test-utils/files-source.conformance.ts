@@ -30,7 +30,11 @@ interface FilesSourceFixtureDocument {
 interface FilesSourceFixture {
   readonly documents?: readonly FilesSourceFixtureDocument[]
   /** Documents already deleted, so they sit in the trash. */
-  readonly trashed?: readonly { readonly path: string; readonly kind: DocumentKind }[]
+  readonly trashed?: readonly {
+    readonly path: string
+    readonly kind: DocumentKind
+    readonly name?: string
+  }[]
 }
 
 export type FilesSourceFactory = (fixture: FilesSourceFixture) => Promise<WorkspaceFilesSource>
@@ -321,6 +325,22 @@ function pinContract(factory: FilesSourceFactory): void {
   })
 }
 
+function trashNameContract(factory: FilesSourceFactory): void {
+  describe('trash names', () => {
+    it('lists the display name the document had, and none for one that had none', async () => {
+      const source = await factory({
+        trashed: [
+          { path: 'untitled-7', kind: 'markdown', name: 'Team Charter' },
+          { path: 'plain', kind: 'markdown' },
+        ],
+      })
+      const rows = await source.listTrash?.()
+      expect(rows?.find((row) => row.path === 'untitled-7')?.name).toBe('Team Charter')
+      expect(rows?.find((row) => row.path === 'plain')?.name).toBeUndefined()
+    })
+  })
+}
+
 function trashContract(factory: FilesSourceFactory): void {
   describe('trash', () => {
     const trashed = { trashed: [{ path: 'old/plan', kind: 'markdown' as const }] }
@@ -385,5 +405,6 @@ export function describeWorkspaceFilesSourceConformance(
     stencilLibraryContract(factory)
     pinContract(factory)
     trashContract(factory)
+    trashNameContract(factory)
   })
 }

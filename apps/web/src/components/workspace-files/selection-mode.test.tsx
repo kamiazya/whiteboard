@@ -198,4 +198,39 @@ describe('selection mode', () => {
     await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(2))
     await waitFor(() => expect(bar()?.textContent).toContain('1 selected'))
   })
+
+  it('ends the selection when the open folder changes, so Delete never reaches an unseen document', async () => {
+    const onRequestDeleteMany = vi.fn()
+    render(
+      <WorkspaceFilesPanel
+        source={fakeFilesSource({
+          listDocuments: () =>
+            Promise.resolve([
+              ...entries,
+              { documentId: 'd4', path: 'design/login', kind: 'spatial' as const },
+            ]),
+        })}
+        onRequestDeleteMany={onRequestDeleteMany}
+      />,
+    )
+    await enterSelection('Roadmap')
+    expect(bar()?.textContent).toContain('1 selected')
+
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder design' }))
+
+    await waitFor(() => expect(bar()).toBeNull())
+    expect(onRequestDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it('ends the selection when a search starts, since the results replace the folder view', async () => {
+    renderPanel({ onRequestDeleteMany: vi.fn() })
+    await enterSelection('Roadmap')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+      target: { value: 'tok' },
+    })
+
+    await waitFor(() => expect(bar()).toBeNull())
+  })
 })

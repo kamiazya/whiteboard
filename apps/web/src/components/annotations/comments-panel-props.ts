@@ -16,6 +16,13 @@ export interface CommentsPanelProps {
    * tell rather than a claim that every anchor resolves.
    */
   readonly resolveAnchor?: (thread: CommentThread) => 'placed' | 'orphaned'
+  /**
+   * A few words naming what a conversation is about ("on Sign-up form",
+   * "on canvas"), drawn as a chip on its row. A host that knows its own
+   * surface supplies it; absent, only the anchors with no place of their own
+   * (the document, a node set, a region) are named.
+   */
+  readonly anchorLabelOf?: (anchor: AnnotationAnchor) => string | undefined
   /** Reveal the thread in the host's own surface. */
   readonly onSelect?: (thread: CommentThread) => void
   /**

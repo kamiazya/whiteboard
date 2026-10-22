@@ -259,6 +259,13 @@ export interface ShapeSceneNode {
   readonly shape?: ShapeId
   readonly appearance?: Appearance
   /**
+   * This chrome is a task item's checkbox, in the given state. The SVG
+   * backend paints it as `role="checkbox"` with `aria-checked`, which is the
+   * handle a host uses to make it clickable: the layout cannot know the
+   * source line (positions never enter the model), only that the box is one.
+   */
+  readonly taskBox?: { readonly checked: boolean }
+  /**
    * How this chrome is INKED, when a theme says other than crisp (ADR-0030
    * decision 7). A kind plus a seed, never coordinates: the SVG backend
    * derives the strokes from `bbox`/`shape` through the shared decomposition

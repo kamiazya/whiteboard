@@ -26,8 +26,8 @@
  * requested gesture, matching every text editor's click-away-commits
  * behavior (and this component's own blur-commits convention in
  * `TextNodeEditor`). Escape (`cancel-text-edit`) remains the only explicit
- * discard, and it discards the whole node when the node existed only to
- * hold that edit.
+ * discard: it reverts an edit of an existing node, keeps a new node that
+ * holds typed text, and removes a new node that is still empty.
  */
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
@@ -547,23 +547,25 @@ function reducePointerCancel(state: GestureState): GestureResult {
 }
 
 /**
- * Escape discards what was TYPED, and takes the node with it only when there
- * is typed text to discard.
+ * Escape ends the editing SESSION, not the thing the person made.
  *
- * With nothing typed, Escape just closes the editor: an empty note is a
- * layout tool — the rectangle this product deliberately does not have a
- * second kind for — and eating it punished exactly the person sketching
- * boxes.
+ * A just-created node with nothing typed is debris (an empty box nobody
+ * asked to keep) and goes; one with text keeps it, because losing a typed
+ * note to the key that closes an editor has no undo.
  */
 function reduceCancelTextEdit(state: GestureState): GestureResult {
   if (state.kind !== 'editing-text' || state.createdForEdit !== true) return idle
   if (state.pendingText === '') {
-    return { state: { kind: 'idle' }, commands: [], selectedId: state.nodeId }
+    return {
+      state: { kind: 'idle' },
+      commands: [{ kind: 'delete-node', id: state.nodeId }],
+      selectedId: null,
+    }
   }
   return {
     state: { kind: 'idle' },
-    commands: [{ kind: 'delete-node', id: state.nodeId }],
-    selectedId: null,
+    commands: [{ kind: 'set-text', id: state.nodeId, text: state.pendingText }],
+    selectedId: state.nodeId,
   }
 }
 

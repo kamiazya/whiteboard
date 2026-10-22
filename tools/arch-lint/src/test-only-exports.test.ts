@@ -305,8 +305,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'generates the published JSON Canvas loss table that loss-table.test.ts holds equal to the committed docs page',
   'packages/codec/src/spatial/loss-table.ts#ocifLossTable':
     'generates the published OCIF loss table that loss-table.test.ts holds equal to the committed docs page',
-  'packages/history/src/checkpoints/scheduler.ts#CHECKPOINT_QUIET_MS':
-    'the shared checkpoint cadence that keeper tests advance fake timers by, so a retune cannot leave them stale',
   'packages/loro-adapter/src/loro-bridge.ts#deleteCanvasComment':
     'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
   'packages/loro-adapter/src/loro-bridge.ts#deleteSpatialEdge':

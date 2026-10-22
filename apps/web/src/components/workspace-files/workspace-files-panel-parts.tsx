@@ -290,7 +290,6 @@ export function cardMenuItemsFor(
     onRequestDelete,
     onRequestDeleteMany,
     setPeek,
-    setSelected,
     setSelection,
     togglePinned,
     openRename,
@@ -302,7 +301,6 @@ export function cardMenuItemsFor(
     onRequestDelete: WorkspaceFilesPanelProps['onRequestDelete']
     onRequestDeleteMany: WorkspaceFilesPanelProps['onRequestDeleteMany']
     setPeek: (entry: WorkspaceDocumentEntry) => void
-    setSelected: (entry: WorkspaceDocumentEntry) => void
     setSelection: (next: ReadonlySet<string>) => void
     togglePinned: (entry: WorkspaceDocumentEntry) => Promise<void> | void
     openRename: (entry: WorkspaceDocumentEntry) => void
@@ -357,10 +355,7 @@ export function cardMenuItemsFor(
     {
       label: 'Rename…',
       icon: <Pencil />,
-      onSelect: () => {
-        setSelected(entry)
-        openRename(entry)
-      },
+      onSelect: () => openRename(entry),
     },
     ...(onRequestDelete === undefined
       ? []

@@ -189,6 +189,9 @@ export const updateDocumentResponseSchema = z.object({
 export const trashEntrySummarySchema = z.object({
   documentId: z.string().min(1),
   path: z.string().min(1),
+  // Absent for a document that had no display name, and on rows recorded
+  // before names were kept: the path is then all a listing has to show.
+  name: z.string().min(1).optional(),
   deletedAt: z.number().int().nonnegative(),
 })
 

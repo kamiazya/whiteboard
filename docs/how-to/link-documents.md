@@ -10,11 +10,19 @@ workspace's documents opens as you type, ranked by match; Enter inserts the
 link. The toolbar's Link action offers the same list as a dialog (and also
 handles external URLs). A reference can name its target two ways:
 
-- `[[path]]` — what the picker and completion insert. The link is shown
-  with the target's **current display name**, so it always reads naturally,
-  and moving the document rewrites references to the old path for you.
+- `[[path]]` — what the picker inserts. The link is shown with the
+  target's **current display name**, so it always reads naturally, and
+  moving the document rewrites references to the old path for you. The `[[`
+  completion inserts `[[path|Name]]` instead, so the source reads as the
+  name you picked; the address is still the path, and the name in the link
+  is just the words it shows.
 - `[[<document id>]]` — survives everything; what the picker inserts for
   the rare path that could be mistaken for an id.
+
+Type a name that matches no document and the completion list offers
+a `Create 'name'` row: it makes a markdown note at that path and writes the link
+to it. Where the editor cannot make documents (a daemon-kept workspace,
+today) the row is not offered.
 
 Write `[[path|your own words]]` when the link should read as something
 other than the target's name. A `[[Display name]]` is **not** a link — it
@@ -78,6 +86,12 @@ same way: a link in a note or on a canvas, or a file node you double-click,
 opens the linked document from that copy, in place. A link to a document the
 copy does not hold does nothing.
 
+In the markdown editor's source, hold Ctrl (Cmd on a Mac) and click a
+`[[...]]` link to open its document. From the keyboard, put the caret inside
+the link and choose **Open link under caret** in the editing actions menu.
+On a link that names no document the same menu offers `Create 'path'` where
+the editor can make documents.
+
 A followed link opens the document at its top; a `#` part names what the link
 points at but does not scroll to it.
 
@@ -87,6 +101,9 @@ behaviour.
 
 In the inline chat view (`canvas_view`), document links do nothing; see
 [View a canvas inline in your AI chat](view-canvas-in-chat.md#links-in-the-view).
+
+Read mode shows the document's name once: a body that opens with a `# Heading`
+repeating the name does not print it a second time under the header.
 
 ## See what links back
 

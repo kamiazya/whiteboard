@@ -377,6 +377,9 @@ function renderChromeRect(node: ShapeSceneNode): SvgChild {
     rx: isPositiveLength(node.radius) ? node.radius : undefined,
     ...appearanceAttrs(node.appearance),
     filter: node.appearance?.dropShadow === true ? `url(#${DROP_SHADOW_ID})` : glow.filter,
+    ...(node.taskBox === undefined
+      ? {}
+      : { role: 'checkbox', 'aria-checked': node.taskBox.checked ? 'true' : 'false' }),
   })
   if (node.appearance?.dropShadow === true) return withDefs(rect, DROP_SHADOW_DEFS)
   return glow.filter === undefined ? rect : withDefs(rect, glow.defs)

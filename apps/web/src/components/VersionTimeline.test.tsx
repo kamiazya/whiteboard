@@ -1,3 +1,4 @@
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
@@ -307,15 +308,17 @@ describe('VersionTimeline', () => {
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     const empty = await screen.findByText(/No versions yet/i)
 
-    // The empty state names no cadence, and that is the point rather than
-    // vagueness. It said "auto-save (~30s)" for as long as the trigger was a
-    // 30-second throttle and for a while after it became a five-minute
-    // pause — a number in copy is a second place the interval lives, and the
-    // one nothing updates. It also said "this canvas" for a history that is
-    // the DOCUMENT's, and reads the same above a markdown body.
+    // The interval is read from the scheduler's own constant, so the copy
+    // cannot drift from the trigger (a hand-written "~30s" once outlived the
+    // throttle it described). It names the open-document condition because a
+    // tab closed inside the quiet period is the one case it does not cover.
+    // The copy says "document", not "canvas": it reads the same above a
+    // markdown body.
     const copy = empty.textContent ?? ''
-    expect(copy).not.toMatch(/\d+\s*s\b|~|canvas/i)
-    expect(copy).toContain('A checkpoint is saved a little after you stop editing.')
+    expect(copy).not.toMatch(/canvas/i)
+    expect(copy).toContain(
+      `A checkpoint is saved about ${CHECKPOINT_QUIET_MS / 60_000} minutes after you stop editing, while the document is open.`,
+    )
   })
 
   it('scroll container can shrink inside the fixed-height history popover', async () => {
@@ -378,6 +381,10 @@ describe('VersionTimeline', () => {
     await waitFor(() => {
       expect(preview.current).toBeNull()
     })
+    // The restore rewrote the document; the panel says the old state survives.
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Restored. The state before restoring is kept as a version.',
+    )
   })
 
   it('keeps the dialog open and does not fire onRestored when the restore request fails', async () => {

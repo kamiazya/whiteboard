@@ -132,6 +132,19 @@ describe('DocumentPreview', () => {
     expect(onOpen).toHaveBeenCalledWith(doc)
   })
 
+  // The picture is laid out at full size and shrunk by its viewBox, and the
+  // browser's default text rendering rounds each glyph advance at the shrunk
+  // pixel size, so a word drifts apart ("Ga rde nbe ds"). The thumbnail
+  // holds the same rule; this pins the preview to it.
+  it('keeps the shrunk picture at the full-size glyph spacing', async () => {
+    render(<DocumentPreview document={doc} loadRender={async () => drawn} />)
+    await act(async () => {})
+
+    expect(screen.getByTestId('preview-render').className).toContain(
+      '[&>svg]:[text-rendering:geometricPrecision]',
+    )
+  })
+
   // A reply for the document that WAS selected must not paint over the one
   // selected since — the pane would then show one document's picture under
   // another's name.
