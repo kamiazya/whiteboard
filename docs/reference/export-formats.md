@@ -380,6 +380,26 @@ further hops are drawn, while the hops already found are kept — so a board of
 long, nearly parallel edges that never cross cannot make a render search
 indefinitely. Edges and lines are searched in the order they are drawn.
 
+## How much referenced content one render loads
+
+When `wb_scene_render` draws with `embedReferences`, and whenever `canvas_view`
+answers, the server loads what the document points at — file nodes, `[[…]]`
+links and `![[…]]` embeds, and what those documents name in turn — up to
+**256 references**. A document named more than one way, by its id and by its
+path, is read once and answers both.
+
+The content those references load is bounded too: at most **1,048,576
+characters** (four documents at the 262,144-character limit), counting a note's
+body and the text of a board's nodes, and at most **4,000 nodes, edges and
+lines** across the referenced boards — one maximal board's worth, which is as
+much as a render draws nested anyway. References are loaded in the order the
+document names them, and the first document that would go past either bound,
+and every document not already loaded after it, is drawn by its name alone: a
+file node shows its card, an embed its placeholder, and `canvas_view` sends
+that reference with its id and name but no body or canvas. A later reference
+to a document loaded before the bound was reached still answers with its
+content, since it costs nothing more to read.
+
 ## How many open comment threads and proposed changes one document may hold
 
 One document holds at most **500 open comment threads** and at most **1,000

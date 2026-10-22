@@ -10,7 +10,7 @@ import type {
   SpatialNode,
   TagBearerKind,
 } from '@kamiazya/whiteboard-model'
-import { frameLabel, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
+import { frameLabel, isDocumentId, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { searchableTexts } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
@@ -20,6 +20,7 @@ function textReferences(value: string): RawReference[] {
   return scanReferences(value).map((match) => ({
     target: match.target,
     via: 'wikilink' as const,
+    byId: isDocumentId(match.target),
     text: value,
     index: match.index,
     length: match.full.length,

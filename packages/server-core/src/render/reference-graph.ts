@@ -8,7 +8,7 @@ import {
 import type { WorkspaceId } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadReferencedDocument } from './resolve-file-references.js'
+import { createReferencedDocumentLoader } from './resolve-file-references.js'
 
 const log = getLogger('reference-graph')
 
@@ -36,19 +36,15 @@ export async function loadReferenceGraph(
   workspaceId: WorkspaceId,
   seeds: ReferenceSeeds,
 ): Promise<LoadedReferenceGraph> {
-  const graph = await walkReferences(
-    seeds,
-    (target) => loadReferencedDocument(deps, workspaceId, target),
-    {
-      onFailure: (target, err) => {
-        log.warning('reference did not load; rendering it unresolved', {
-          workspaceId,
-          target,
-          err,
-        })
-        return null
-      },
+  const graph = await walkReferences(seeds, createReferencedDocumentLoader(deps, workspaceId), {
+    onFailure: (target, err) => {
+      log.warning('reference did not load; rendering it unresolved', {
+        workspaceId,
+        target,
+        err,
+      })
+      return null
     },
-  )
+  })
   return { graph, seams: referenceSeams(graph) }
 }

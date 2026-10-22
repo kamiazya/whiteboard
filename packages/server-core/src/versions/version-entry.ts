@@ -150,6 +150,30 @@ export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 export const PROMOTE_MAX_VERSIONS = 120_000
 
 /**
+ * The most a promotion's carried versions may cost to judge, in
+ * loro-adapter's `stateSize` unit — one per map entry and list element and
+ * one per character of every string, of each document state a row names,
+ * every distinct (point, document) once. The row cap does not bound it: a
+ * row is a few hundred bytes, the state it names is up to a document's
+ * limit, and each distinct state is projected and judged on the serving
+ * loop.
+ *
+ * Sized by TIME: the measured judging rate, ~17 M a second at the largest
+ * board, times a ceiling of about 60 seconds of judging per request. It does
+ * not admit a worst-case full history, and need not: a move refused past it
+ * names this budget, and the browser re-sends at once without its oldest
+ * versions and keeps its own copy, so a refusal costs a person nothing but
+ * those versions staying where they already are.
+ *
+ * What it does admit, held by mcp-server's promote route test, which builds
+ * the largest legal documents: a maximal board's whole automatic history (50
+ * states of 18.5 M) and a maximal note's whole history many times over. One
+ * maximal board's judgement is a single ~1.1 s call the loop cannot be
+ * handed back inside.
+ */
+export const PROMOTE_MAX_JUDGED_SIZE = 1_000_000_000
+
+/**
  * The most trashed documents one promotion carries the bytes of: the most
  * documents a workspace holds. A browser past it leaves the rest behind and
  * names them, as it does a trashed document too large for the body.

@@ -7,8 +7,9 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
+import { DATA_DIR_MODE } from '../../shared/data-modes.js'
 import { isMissingFileError } from '../../shared/errno.js'
-import { DATA_DIR_MODE, writeFileAtomicStaged } from '../atomic-write.js'
+import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   filesDirNotContainedErrorBody,

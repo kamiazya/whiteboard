@@ -2,23 +2,34 @@
  * ADR-0046 decision 10: the first member of a workspace that already exists
  * is granted by the operator, on the machine that holds the data directory.
  * The person names themselves by signing in; the operator names them by
- * their user id or their display name here, and an unknown or ambiguous
- * name is refused with the candidates rather than guessed.
+ * their user id or by provider and subject — never by display name, which
+ * the person's provider chose — and a reference reaching nobody is refused
+ * with the candidates.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NAMESPACE_MAX_WORKSPACES } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { signInAsNewcomer } from '../server/security/_test-helpers.js'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
 } from '../server/security/member-profile-store.js'
+import { providerAuthenticator, signInConfigSchema } from '../server/security/sign-in-config.js'
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import { createIsolatedDb, fillNamespace } from '../server/store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../server/store/db/upsert-workspace.js'
 import { grantMemberOutputSchema } from './operator-json.js'
 import { grantMember, runServerGrantMember } from './server-grant-member.js'
+
+// A bearer-only provider, so the declaration needs no client secret.
+const CORP = {
+  id: 'corp',
+  kind: 'oidc',
+  issuer: 'https://sso.corp.example',
+  admission: { bearerClients: ['ops'] },
+} as const
 
 const WS = 'ws-plans'
 
@@ -47,11 +58,18 @@ afterEach(async () => {
 describe('grantMember', () => {
   it('makes a user named by id a member, closing the workspace to everyone else', async () => {
     const ada = await userNamed('Ada', 'ada-1')
-    const outcome = await grantMember(handle.db, { workspaceId: WS, user: ada.id })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: WS,
+      user: { kind: 'id', id: ada.id },
+    })
     expect(outcome).toEqual({
       kind: 'ok',
       workspaceId: WS,
-      user: { id: ada.id, displayName: 'Ada' },
+      user: {
+        id: ada.id,
+        displayName: 'Ada',
+        bindings: [{ provider: null, authenticator: 'oidc:test', subject: 'ada-1' }],
+      },
     })
     expect(await members.isWorkspaceMember(WS, ada.id)).toBe('member')
   })
@@ -60,7 +78,10 @@ describe('grantMember', () => {
   it('finds the workspace by its segment, the handle in its URL', async () => {
     await upsertWorkspaceRow(handle.db, 'ws-01HX', { segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')
-    const outcome = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: 'plans',
+      user: { kind: 'id', id: ada.id },
+    })
     expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-01HX')
     expect(await members.isWorkspaceMember('ws-01HX', ada.id)).toBe('member')
   })
@@ -72,8 +93,14 @@ describe('grantMember', () => {
     await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')
 
-    const bare = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
-    const qualified = await grantMember(handle.db, { workspaceId: 'bob/plans', user: ada.id })
+    const bare = await grantMember(handle.db, {
+      workspaceId: 'plans',
+      user: { kind: 'id', id: ada.id },
+    })
+    const qualified = await grantMember(handle.db, {
+      workspaceId: 'bob/plans',
+      user: { kind: 'id', id: ada.id },
+    })
 
     expect(bare.kind).toBe('unknown-workspace')
     expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('ws-bob')
@@ -87,7 +114,10 @@ describe('grantMember', () => {
     await upsertWorkspaceRow(handle.db, 'ws-ada-own', { namespace: 'ada', segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')
 
-    const outcome = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: 'plans',
+      user: { kind: 'id', id: ada.id },
+    })
 
     expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-restored')
     const row = await handle.db
@@ -104,7 +134,10 @@ describe('grantMember', () => {
     const ada = await userNamed('Ada', 'ada-1')
     await fillNamespace(handle.db, ada.handle, NAMESPACE_MAX_WORKSPACES)
 
-    const outcome = await grantMember(handle.db, { workspaceId: WS, user: ada.id })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: WS,
+      user: { kind: 'id', id: ada.id },
+    })
 
     expect(outcome.kind).toBe('ok')
     expect(await members.membershipRole(WS, ada.id)).toBe('owner')
@@ -129,7 +162,7 @@ describe('grantMember', () => {
       .execute()
     const bob = await userNamed('Bob', 'bob-1')
 
-    await grantMember(handle.db, { workspaceId: id, user: bob.id })
+    await grantMember(handle.db, { workspaceId: id, user: { kind: 'id', id: bob.id } })
 
     const row = await handle.db
       .selectFrom('workspaces')
@@ -144,7 +177,7 @@ describe('grantMember', () => {
     await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')
 
-    await grantMember(handle.db, { workspaceId: 'ws-bob', user: ada.id })
+    await grantMember(handle.db, { workspaceId: 'ws-bob', user: { kind: 'id', id: ada.id } })
 
     const row = await handle.db
       .selectFrom('workspaces')
@@ -154,31 +187,39 @@ describe('grantMember', () => {
     expect(row).toEqual({ namespace: 'bob', segment: 'plans' })
   })
 
-  it('finds a user by their exact display name', async () => {
-    const ada = await userNamed('Ada', 'ada-1')
-    await userNamed('Bob', 'bob-1')
-    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Ada' })
-    expect(outcome.kind === 'ok' && outcome.user.id).toBe(ada.id)
-  })
-
-  it('refuses a name two users share, listing both', async () => {
-    const one = await userNamed('Ada', 'ada-1')
-    const two = await userNamed('Ada', 'ada-2')
-    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Ada' })
-    expect(outcome.kind).toBe('ambiguous-user')
-    expect(outcome.kind === 'ambiguous-user' && outcome.users.map((u) => u.id).sort()).toEqual(
-      [one.id, two.id].sort(),
-    )
+  it('finds a user by provider and subject, telling two of one name apart', async () => {
+    const one = await members.ensureProfile({
+      binding: { authenticator: providerAuthenticator(CORP), subject: 'ada-1' },
+      displayName: 'Ada',
+    })
+    const two = await members.ensureProfile({
+      binding: { authenticator: providerAuthenticator(CORP), subject: 'ada-2' },
+      displayName: 'Ada',
+    })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: WS,
+      user: { kind: 'binding', provider: 'corp', subject: 'ada-2' },
+      providers: signInConfigSchema.parse({ providers: [CORP] }).providers,
+    })
+    expect(outcome.kind === 'ok' && outcome.user.id).toBe(two.id)
     expect(await members.isWorkspaceMember(WS, one.id)).toBe('not-a-member')
-    expect(await members.isWorkspaceMember(WS, two.id)).toBe('not-a-member')
   })
 
-  it('refuses a user nobody has signed in as, listing who has', async () => {
+  it('refuses a subject nobody has signed in as, listing who has', async () => {
     const ada = await userNamed('Ada', 'ada-1')
-    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Grace' })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: WS,
+      user: { kind: 'id', id: 'Grace' },
+    })
     expect(outcome).toEqual({
       kind: 'unknown-user',
-      users: [{ id: ada.id, displayName: 'Ada' }],
+      users: [
+        {
+          id: ada.id,
+          displayName: 'Ada',
+          bindings: [{ provider: null, authenticator: 'oidc:test', subject: 'ada-1' }],
+        },
+      ],
     })
   })
 
@@ -190,7 +231,7 @@ describe('grantMember', () => {
     const bob = await userNamed('Bob', 'bob-1')
     await members.addMember(WS, ada.id)
     await createUserDeactivation(handle.db).deactivate(ada.id, Date.now())
-    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    await grantMember(handle.db, { workspaceId: WS, user: { kind: 'id', id: bob.id } })
     expect(await members.membershipRole(WS, bob.id)).toBe('owner')
   })
 
@@ -200,7 +241,7 @@ describe('grantMember', () => {
     await members.addMember(WS, ada.id)
     await members.addMember(WS, bob.id)
     await createUserDeactivation(handle.db).deactivate(ada.id, Date.now())
-    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    await grantMember(handle.db, { workspaceId: WS, user: { kind: 'id', id: bob.id } })
     expect(await members.membershipRole(WS, bob.id)).toBe('owner')
   })
 
@@ -208,13 +249,16 @@ describe('grantMember', () => {
     const ada = await userNamed('Ada', 'ada-1')
     const bob = await userNamed('Bob', 'bob-1')
     await members.addMember(WS, ada.id)
-    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    await grantMember(handle.db, { workspaceId: WS, user: { kind: 'id', id: bob.id } })
     expect(await members.membershipRole(WS, bob.id)).toBe('member')
   })
 
   it('refuses a workspace this keeper does not hold', async () => {
     const ada = await userNamed('Ada', 'ada-1')
-    const outcome = await grantMember(handle.db, { workspaceId: 'ws-nowhere', user: ada.id })
+    const outcome = await grantMember(handle.db, {
+      workspaceId: 'ws-nowhere',
+      user: { kind: 'id', id: ada.id },
+    })
     expect(outcome).toEqual({ kind: 'unknown-workspace', workspaceId: 'ws-nowhere' })
   })
 })
@@ -233,13 +277,17 @@ describe('whiteboard server grant-member', () => {
 
   it('grants and prints what it did as one JSON line', async () => {
     const ada = await userNamed('Ada', 'ada-1')
-    const res = await run(['--json', `--workspace=${WS}`, '--user=Ada', `--data-dir=${root}`])
+    const res = await run(['--json', `--workspace=${WS}`, `--user=${ada.id}`, `--data-dir=${root}`])
     expect(res.code).toBe(0)
     expect(grantMemberOutputSchema.parse(JSON.parse(res.stdout))).toEqual({
       schemaVersion: 1,
       kind: 'ok',
       workspaceId: WS,
-      user: { id: ada.id, displayName: 'Ada' },
+      user: {
+        id: ada.id,
+        displayName: 'Ada',
+        bindings: [{ provider: null, authenticator: 'oidc:test', subject: 'ada-1' }],
+      },
     })
   })
 
@@ -247,6 +295,20 @@ describe('whiteboard server grant-member', () => {
     const res = await run(['--json', `--workspace=${WS}`, '--user=Grace', `--data-dir=${root}`])
     expect(res.code).toBe(1)
     expect(res.stderr).toContain('whiteboard server add-user')
+  })
+
+  // A display name is whatever the person's provider claims at first sign-in,
+  // so whoever signs in as "Alice" first would be the one granted.
+  it('refuses a display name as --user, granting nobody', async () => {
+    const { profile: attacker } = await signInAsNewcomer(handle.db, {
+      sub: 'attacker',
+      name: 'Alice',
+    })
+    const res = await run(['--json', `--workspace=${WS}`, '--user=Alice', `--data-dir=${root}`])
+    expect(res.code).toBe(1)
+    expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'unknown-user' })
+    expect(res.stderr).toContain('never a display name')
+    expect(await members.isWorkspaceMember(WS, attacker.id)).toBe('not-a-member')
   })
 
   it('exits 64 without --workspace', async () => {

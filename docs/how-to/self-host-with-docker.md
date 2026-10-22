@@ -383,12 +383,19 @@ before sign-in was configured — has no member, so nobody can open it until
 the operator grants one from the machine that holds the data directory:
 
 ```sh
-whiteboard server grant-member --json --workspace=<workspace segment or id> --user=<user id or display name>
+whiteboard server grant-member --json --workspace=<workspace segment or id> --user=<user id>
+whiteboard server grant-member --json --workspace=<workspace segment or id> --provider=<provider id> --subject=<sub>
 ```
 
 The person must have become a user first (by signing in, by a bearer as
-above, or by `add-user`). A name that matches nobody, or more than one user, is refused and the
-candidates are printed.
+above, or by `add-user`). Name them by their user id, or by the provider and
+the subject (`sub`) it knows them by, as `add-user` takes them — never by
+display name. A display name is whatever the person's identity provider
+claimed when they first signed in, so anyone able to sign in could take a
+colleague's name before the colleague does. `--provider` reads
+`WHITEBOARD_SIGN_IN_CONFIG` for the provider. A reference that matches nobody
+is refused, and every user is printed with the bindings (provider and
+subject) that tell them apart.
 
 A workspace moved in from a local daemon has no owner's address yet, so the
 address `--workspace` takes is its id, or its segment as the daemon showed it.
@@ -476,8 +483,14 @@ The first administrator is named by you, the operator, in one of two ways:
 - **From the machine that holds the data directory:**
 
   ```sh
-  whiteboard server grant-admin --json --user=<user id or display name> [--remove]
+  whiteboard server grant-admin --json --user=<user id> [--remove]
+  whiteboard server grant-admin --json --provider=<provider id> --subject=<sub> [--remove]
   ```
+
+  Name the person by user id or by provider and subject, as for
+  `grant-member` above — a display name is refused, because whoever signs
+  in first can claim any name. The output's `bindings` show which identity
+  was appointed.
 
 - **In the sign-in configuration**, for a deployment with no shell. Name
   each administrator by provider and subject:
@@ -569,8 +582,12 @@ someone out without losing anything they made, you can also deactivate them
 from the machine that holds the data directory:
 
 ```sh
-whiteboard server deactivate-user --json --user=<user id or display name> [--reactivate]
+whiteboard server deactivate-user --json --user=<user id> [--reactivate]
+whiteboard server deactivate-user --json --provider=<provider id> --subject=<sub> [--reactivate]
 ```
+
+As with `grant-member`, a display name is refused: name the person by user id
+or by provider and subject, and check the output's `bindings`.
 
 Their sessions end at once, including one a sign-in still in progress was
 about to open. After that, a sign-in is refused with
@@ -589,11 +606,15 @@ JSON line on stdout and the explanation on stderr. Every line carries
 
 | `kind` | when | other fields |
 |---|---|---|
-| `ok` | it did what you asked | `user` (`id`, `displayName`); plus `created` (`add-user`), `workspaceId` (`grant-member`), `administrator` (`grant-admin`), or `deactivated` and `changed` (`deactivate-user`) |
-| `unknown-user` | no user has that id or name | `users`: everyone there is |
-| `ambiguous-user` | more than one user has that name | `users`: the candidates |
+| `ok` | it did what you asked | `user` (`id`, `displayName`, and except for `add-user`, `bindings`); plus `created` (`add-user`), `workspaceId` (`grant-member`), `administrator` (`grant-admin`), or `deactivated` and `changed` (`deactivate-user`) |
+| `unknown-user` | no user has that id, or that provider and subject | `users`: everyone there is, each with `bindings` |
 | `unknown-workspace` | `grant-member` found no such workspace | `workspaceId`, as you passed it |
-| `unknown-provider` | `add-user` found no such provider | `providers`: the ids declared |
+| `unknown-provider` | `--provider` names no provider in the sign-in configuration | `providers`: the ids declared |
+
+`bindings` lists the identities a user signs in with, so you can check that the
+person acted on is the one you meant: each entry has the `provider` id from the
+sign-in configuration (`null` for a passkey, or for a provider no longer
+declared), the stored `authenticator`, and the `subject`.
 
 The exit code is `0` for `ok`, `1` for any other `kind`, and `64` for a usage
 error, which prints no JSON. One more refusal prints no JSON either: `add-user`
@@ -752,10 +773,11 @@ Data written to `/data` is owned by UID 1001 (`whiteboard` user). Ensure the
 volume has the correct ownership if you pre-populate it.
 
 What the server creates there is readable by that user alone: the database,
-uploads and the trash are written `0600` in `0700` directories, whatever the
-umask, so other users on a host with a bind mount cannot read them. A
-directory that already exists keeps the mode it has, the bind-mount root
-included.
+uploads, the trash, exports and installed fonts are written `0600` in `0700`
+directories, whatever the umask, so other users on a host with a bind mount
+cannot read them. An export written to an output path you chose is created
+the same way. A file or directory that already exists keeps the mode it has,
+the bind-mount root included.
 
 ### Reclaiming unreferenced uploads
 

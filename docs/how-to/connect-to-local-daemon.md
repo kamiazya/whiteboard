@@ -295,6 +295,15 @@ saved versions, the oldest automatic checkpoints go first), and keeps its
 copy. A daemon sent more refuses the whole move with
 `promote_too_many_carried` and keeps none of it.
 
+The daemon checks each saved version against the document as it stood at
+that version, and those checks may read at most 1,000,000,000 characters
+and entries between them — about a minute of checking, enough for the whole
+automatic history of a board at every limit. When a workspace's saved versions add up to more, the daemon refuses
+with `promote_too_many_carried` and states that budget, and the browser
+moves again at once carrying the newest saved versions that fit. The result
+says how many older saved versions stayed behind, and the browser keeps its
+copy, since it is the only place those versions are still held.
+
 One move carries at most 2000 documents, the most a browser keeps on a
 desktop. The daemon refuses a larger workspace whole, with the error
 `promote_too_many_documents`, and keeps none of it. The same 2000 is the most

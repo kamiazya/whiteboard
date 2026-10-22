@@ -1,9 +1,9 @@
-import {
-  CANVAS_MAX_EDGES_AND_LINES,
-  CANVAS_MAX_NODES,
-  type SpatialCanvas,
-} from '@kamiazya/whiteboard-model'
+import { CANVAS_MAX_EDGES_AND_LINES, CANVAS_MAX_NODES } from '@kamiazya/whiteboard-model'
 import { createTokenizerBudget, type TokenizerBudget } from '../../highlight/tokenizer-budget.js'
+
+// What a nested canvas charges the element budget is what a reference walk
+// charges for loading it: one count, defined where both can read it.
+export { canvasElementCount } from '../../references/content-budget.js'
 
 /**
  * How many NESTED documents one render may lay out, across every embed kind:
@@ -69,12 +69,6 @@ export function createNestedLayoutBudget(): NestedLayoutBudget {
     remaining: NESTED_LAYOUT_BUDGET,
     elementsRemaining: NESTED_ELEMENT_BUDGET,
   }
-}
-
-/** What a nested canvas charges the element budget: everything it lays out; a body, 0. */
-export function canvasElementCount(canvas: SpatialCanvas | undefined): number {
-  if (canvas === undefined) return 0
-  return canvas.nodes.length + canvas.edges.length + (canvas.lines?.length ?? 0)
 }
 
 /**

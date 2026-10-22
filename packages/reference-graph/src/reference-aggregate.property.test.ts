@@ -40,13 +40,15 @@ const factsArb: fc.Arbitrary<DocumentReferenceFacts> = fc.record(
     texts: fc.array(fc.constantFrom('Plan の話', 'plain prose'), { maxLength: 2 }),
     refs: fc.array(
       fc.oneof(
-        fc.record({
-          target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
-          via: fc.constant<'wikilink'>('wikilink'),
-          text: fc.string({ minLength: 1, maxLength: 3 }),
-          index: fc.constant(0),
-          length: fc.constant(1),
-        }),
+        fc
+          .record({
+            target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
+            via: fc.constant<'wikilink'>('wikilink'),
+            text: fc.string({ minLength: 1, maxLength: 3 }),
+            index: fc.constant(0),
+            length: fc.constant(1),
+          })
+          .map((ref) => ({ ...ref, byId: ULID_SHAPE.test(ref.target) })),
         fc.record({
           target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
           via: fc.constantFrom<Exclude<Via, 'wikilink'>>('embed-node', 'file-node'),
@@ -74,21 +76,28 @@ function stateOf(aggregate: ReferenceAggregate): unknown {
   return IDS.map((id) => ({ id, backlinks: aggregate.backlinksOf(id) }))
 }
 
-function expectedBacklinks(
+/** Whether a reference names `targetId`, by the reader's rule. */
+function pointsTo(
   documents: readonly (readonly [string, DocumentReferenceFacts])[],
   targetId: string,
-) {
-  const target = documents.find(([id]) => id === targetId)
-  if (target === undefined) return []
-  const targetPath = target[1].path
+): (ref: DocumentReferenceFacts['refs'][number]) => boolean {
+  const targetPath = documents.find(([id]) => id === targetId)?.[1].path
   const ownersOf = (path: string) => documents.filter(([, facts]) => facts.path === path)
-  const points = (ref: DocumentReferenceFacts['refs'][number]): boolean => {
+  return (ref) => {
     if (ref.via === 'embed-node') return ref.target === targetId
     if (ref.via === 'file-node') return ref.target === targetPath
     if (ULID_SHAPE.test(ref.target)) return ref.target === targetId
     const owners = ownersOf(ref.target)
     return owners.length === 1 && owners[0]?.[0] === targetId
   }
+}
+
+function expectedBacklinks(
+  documents: readonly (readonly [string, DocumentReferenceFacts])[],
+  targetId: string,
+) {
+  if (!documents.some(([id]) => id === targetId)) return []
+  const points = pointsTo(documents, targetId)
   return (
     documents
       .filter(([id]) => id !== targetId)
@@ -97,6 +106,8 @@ function expectedBacklinks(
         facts,
         contexts: facts.refs
           .filter(points)
+          // At most three excerpts per source, the first in document order.
+          .slice(0, 3)
           .map((r) =>
             r.via === 'wikilink' ? snippetAround(r.text, r.index, r.length) : r.context,
           ),
@@ -175,5 +186,56 @@ describe('ReferenceAggregate over a listing', () => {
     // producing the arrangement still falls far below.
     expect(withBacklink, 'feeds with a backlink').toBeGreaterThan(150)
     expect(ambiguous, 'feeds with a wikilink to a shared path').toBeGreaterThan(25)
+  })
+})
+
+/**
+ * One source written densely, so a source with more resolving references
+ * than an answer carries excerpts for is the common case: the feed above
+ * reaches it in ~1% of draws.
+ */
+const denseFeedArb = fc
+  .array(
+    fc.record({
+      target: fc.constantFrom<string>(IDS[1], 'dir/beta', 'alpha'),
+      text: fc.string({ minLength: 1, maxLength: 3 }),
+    }),
+    { maxLength: 9 },
+  )
+  .map((written): (readonly [string, DocumentReferenceFacts])[] => [
+    [
+      IDS[0],
+      {
+        path: 'alpha',
+        texts: [],
+        refs: written.map(({ target, text }) => ({
+          target,
+          via: 'wikilink' as const,
+          byId: ULID_SHAPE.test(target),
+          text,
+          index: 0,
+          length: 1,
+        })),
+      },
+    ],
+    [IDS[1], { path: 'dir/beta', texts: [], refs: [] }],
+  ])
+
+describe('the excerpts one source carries', () => {
+  fcTest.prop([denseFeedArb], withDefaults({ numRuns: 300 }))(
+    'are the first three of its resolving references, in document order',
+    (documents) => {
+      expect(feed(documents).backlinksOf(IDS[1])).toEqual(expectedBacklinks(documents, IDS[1]))
+    },
+  )
+
+  fcTest('the dense generator reaches a source with more references than excerpts', () => {
+    const sample = fc.sample(denseFeedArb, { numRuns: 400 })
+    const clipped = sample.filter(
+      (documents) => (documents[0]?.[1].refs.filter(pointsTo(documents, IDS[1])).length ?? 0) > 3,
+    ).length
+    // Measured 135-160 of 400 over six samples; a generator that stops
+    // writing past three falls to zero.
+    expect(clipped, 'sources clipped to three excerpts').toBeGreaterThan(100)
   })
 })

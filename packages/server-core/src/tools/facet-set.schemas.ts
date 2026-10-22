@@ -8,6 +8,8 @@ import {
   extensionFacetsSchema,
   nodeIdSchema,
   TAG_COUNT_LIMIT_PHRASE,
+  TAG_LENGTH_LIMIT_PHRASE,
+  TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
   tagListWriteSchema,
   tagWriteSchema,
@@ -21,6 +23,15 @@ import { workspaceAddressArgSchema } from './workspace-address-arg.js'
  * just did.
  */
 const MAX_DOCUMENTS = 50
+
+/**
+ * A tag named to find what is stored, so held to no grammar — only to the
+ * length a tag is written under, since no longer one can be matched.
+ */
+const storedTagNameSchema = z
+  .string()
+  .min(1)
+  .max(TAG_MAX_CHARS, `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`)
 
 /**
  * Tags are OKF core frontmatter, and "tag this note" is the thing a caller
@@ -39,7 +50,7 @@ const tagsChangeSchema = z
       .optional()
       .describe('Tags to add; one already present is left where it is.'),
     remove: z
-      .array(z.string().min(1))
+      .array(storedTagNameSchema)
       .max(TAGS_PER_ELEMENT_MAX, `more tags to remove than ${TAG_COUNT_LIMIT_PHRASE}`)
       .optional()
       .describe('Tags to drop, by name.'),
@@ -52,7 +63,7 @@ const tagsChangeSchema = z
       .array(
         z
           .object({
-            from: z.string().min(1).describe('The tag as it is spelled now.'),
+            from: storedTagNameSchema.describe('The tag as it is spelled now.'),
             to: tagWriteSchema.describe('What to call it; an existing tag merges.'),
           })
           .strict(),

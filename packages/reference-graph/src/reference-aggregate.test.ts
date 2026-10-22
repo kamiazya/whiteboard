@@ -1,6 +1,7 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
+import { snippetAround } from '@kamiazya/whiteboard-search'
 import { describe, expect, it } from 'vitest'
 import { backlinksIn, unlinkedNameSpans } from './reference-aggregate.js'
 
@@ -42,6 +43,46 @@ describe('unlinked mentions', () => {
       A,
     )
     expect(out.unlinkedMentions).toEqual([])
+  })
+})
+
+describe('backlinks', () => {
+  it('reads an id-shaped target as the id, even where a document has that as its path', () => {
+    const C = '01CX5ZZKBKACTAV9WEVGEMMVRZ'
+    // A's path spells C's id; `[[C]]` names C and never A.
+    const entries = [
+      { documentId: A, path: C, kind: 'markdown' as const },
+      { documentId: B, path: 'notes', kind: 'markdown' as const },
+      { documentId: C, path: 'other', kind: 'markdown' as const },
+    ]
+    const text = `[[${C}]]`
+    const refs = [{ target: C, via: 'wikilink' as const, byId: true, text, index: 0, length: 30 }]
+    const content = new Map([[B, { refs, texts: [] }]])
+    expect(backlinksIn(entries as never, content, A).backlinks).toEqual([])
+    expect(backlinksIn(entries as never, content, C).backlinks.map((b) => b.documentId)).toEqual([
+      B,
+    ])
+  })
+
+  it('carries the first three references of a source as excerpts, in document order', () => {
+    const entries = [
+      { documentId: A, path: 'plan', kind: 'markdown' as const },
+      { documentId: B, path: 'notes', kind: 'markdown' as const },
+    ]
+    const text = '[[plan]] one [[plan]] two [[01ARZ3NDEKTSV4RRFFQ69G5FAV]] three [[plan]] four'
+    const refs = scanReferences(text).map((match) => ({
+      target: match.target,
+      via: 'wikilink' as const,
+      byId: match.target === A,
+      text,
+      index: match.index,
+      length: match.full.length,
+    }))
+    const out = backlinksIn(entries as never, new Map([[B, { refs, texts: [] }]]), A)
+    expect(out.backlinks).toHaveLength(1)
+    expect(out.backlinks[0]?.contexts).toEqual(
+      refs.slice(0, 3).map((ref) => snippetAround(text, ref.index, ref.length)),
+    )
   })
 })
 

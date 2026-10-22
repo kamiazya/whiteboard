@@ -44,12 +44,24 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { type CarriedPlanes, fitCarriedPlanes, readCarriedPlanes } from './carried-planes.js'
+import {
+  type CarriedPlanes,
+  type FittedPlanes,
+  fitCarriedPlanes,
+  readCarriedPlanes,
+  versionsWithinJudgedBudget,
+} from './carried-planes.js'
+import { countOf } from './count-wording.js'
 import { putDaemonImage } from './daemon-file-adapter.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal } from './image-upload-policy.js'
 import { describeTransferFailure, errorName, type FailureCopy } from './keeper-transfer-failure.js'
-import { type PromoteWording, requestPromote } from './promote-request.js'
+import {
+  type PromoteRequestOptions,
+  type PromoteRequestResult,
+  type PromoteWording,
+  requestPromote,
+} from './promote-request.js'
 
 const log = getAppLogger('promote-workspace')
 
@@ -120,6 +132,12 @@ export type PromoteWorkspaceResult =
        * listed.
        */
       leftBehind: string[]
+      /**
+       * How many saved versions this browser holds that the move did not
+       * carry — past the most one move carries, or past what the keeper
+       * would check in one move. Each is also named in `leftBehind`.
+       */
+      versionsLeftBehind: number
     }
   | { kind: 'failed'; reason: string }
 
@@ -283,14 +301,11 @@ async function promoteWorkspaceUnsafe(
   const fitted = fitCarriedPlanes(snapshot, planes)
 
   onProgress?.('record')
-  // The promote route rather than the sync surface's update: the same merge,
-  // plus the planes beside it and the checkpoints a person's move leaves.
-  const promoted = await requestPromote({
+  const { promoted, sent } = await promoteWithinBudget(record, fitted, {
     fetch,
     keeperBaseUrl,
     workspaceId,
     snapshot,
-    planes: fitted,
     wording: DAEMON_WORDING,
   })
   if (!promoted.ok) return { kind: 'failed', reason: promoted.reason }
@@ -310,6 +325,46 @@ async function promoteWorkspaceUnsafe(
     promotedDocumentIds,
     shadowedPaths: promoted.shadowedPaths,
     blobs,
-    leftBehind: [...planes.leftBehind, ...fitted.leftBehind, ...promoted.leftBehind],
+    leftBehind: [...planes.leftBehind, ...sent.leftBehind, ...promoted.leftBehind],
+    versionsLeftBehind: sent.versionsLeftBehind,
   }
+}
+
+/**
+ * The promote route rather than the sync surface's update: the same merge,
+ * plus the planes beside it and the checkpoints a person's move leaves.
+ *
+ * A keeper that refuses the versions as costing more to check than one move
+ * allows states its budget, and the move is re-sent ONCE with the newest
+ * versions that fit under it — the rest stay behind, named, so the browser
+ * copy that alone holds them is kept. Once, because a keeper refusing what
+ * was fitted to its own number is not a refusal another fitting would cure.
+ */
+async function promoteWithinBudget(
+  record: LoroDoc,
+  fitted: FittedPlanes,
+  request: Omit<PromoteRequestOptions, 'planes'>,
+): Promise<{ promoted: PromoteRequestResult; sent: FittedPlanes }> {
+  const promoted = await requestPromote({ ...request, planes: fitted })
+  if (promoted.ok || promoted.judgedLimit === undefined || fitted.versions.length === 0) {
+    return { promoted, sent: fitted }
+  }
+  const { kept, dropped } = await versionsWithinJudgedBudget(
+    record,
+    fitted.versions,
+    promoted.judgedLimit,
+  )
+  const sent: FittedPlanes = {
+    ...fitted,
+    versions: kept,
+    leftBehind:
+      dropped === 0
+        ? fitted.leftBehind
+        : [
+            ...fitted.leftBehind,
+            `${countOf(dropped, 'older saved version', 'older saved versions')}: checking more would take the daemon longer than one move allows`,
+          ],
+    versionsLeftBehind: fitted.versionsLeftBehind + dropped,
+  }
+  return { promoted: await requestPromote({ ...request, planes: sent }), sent }
 }

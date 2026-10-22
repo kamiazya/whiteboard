@@ -10,6 +10,7 @@ import {
   CONTAINER_NAME_MAX_CHARS,
   growsPast,
   MARKDOWN_MAX_CHARS,
+  RESERVED_MAP_KEY,
   type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
 import {
@@ -38,7 +39,6 @@ import {
   type ContentRootBreach,
   contentKeyWrites,
   contentRootBreach,
-  RESERVED_MAP_KEY,
   type ReservedMapKeyBreach,
   reservedKeyBreach,
   type UnattachedContainerBreach,

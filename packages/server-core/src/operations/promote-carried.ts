@@ -18,11 +18,14 @@ import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   statedKindSplit,
+  stateSize,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
 import {
+  PROMOTE_MAX_JUDGED_SIZE,
   PROMOTE_MAX_TRASH,
   PROMOTE_MAX_VERSIONS,
   type PromotedTrashBytes,
@@ -49,6 +52,8 @@ export type CarriedJudgement =
       readonly carried: number
       readonly limit: number
     }
+  /** Judging the carried versions would project more than one promotion is allowed; nothing merged. */
+  | { readonly kind: 'over-budget'; readonly limit: number }
   | {
       readonly kind: 'admitted'
       readonly trash: readonly CarriedTrashBytes[]
@@ -133,17 +138,22 @@ function pastReader(incoming: LoroDoc) {
  * written whole at the point `past` is checked out at: a state past a limit
  * is thrown as the same `TextBreachRefusalError` the merge raises, naming
  * the document.
+ *
+ * `charge` is told the projection's size BEFORE the size judgement, the
+ * dearer half, and answers whether the budget still holds it.
  */
 function judgeDocumentAt(
   past: LoroDoc,
   version: Pick<CarriedVersion, 'id' | 'documentId'>,
-): PointJudgement | { readonly reason: string } {
+  charge: (size: number) => boolean,
+): PointJudgement | { readonly reason: string } | 'over-budget' {
   const content = projectWorkspaceDocument(past, version.documentId)
   if (content === null) {
     return {
       reason: `Version "${version.id}" names a document the record did not hold at that point.`,
     }
   }
+  if (!charge(stateSize(content))) return 'over-budget'
   const breach = judgeStateWithinTextLimits(content)
   if (breach !== null) {
     const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)
@@ -162,6 +172,58 @@ function judgeDocumentAt(
   }
 }
 
+/** How long version judging runs before handing the loop back. */
+const JUDGE_SLICE_MS = 10
+
+/**
+ * A turn of the loop for whatever else is waiting. A timer rather than
+ * `setImmediate`, which this runtime-neutral package cannot assume.
+ */
+function yieldToLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
+/** A carried row with its point decoded, and where that point sits in the record's history. */
+interface PlacedRow {
+  readonly index: number
+  readonly version: Omit<CarriedVersion, 'frontiers'>
+  readonly decoded: ReturnType<typeof decodeFrontiers>
+  readonly point: string
+  /** Ops the record holds up to the point: a linear extension of causal order. */
+  readonly position: number
+}
+
+/**
+ * Each row's point, decoded and placed, in the caller's order — so the row
+ * a refusal names is the first unheld one the caller sent.
+ */
+function placeRows(
+  incoming: LoroDoc,
+  versions: readonly CarriedVersion[],
+): { readonly id: string } | readonly PlacedRow[] {
+  const positions = new Map<string, number>()
+  const placed: PlacedRow[] = []
+  for (const [index, { frontiers, ...version }] of versions.entries()) {
+    const decoded = decodedPoint(frontiers)
+    if (decoded === undefined) return { id: version.id }
+    const point = pointKey(decoded)
+    let position = positions.get(point)
+    if (position === undefined) {
+      try {
+        position = 0
+        for (const count of incoming.frontiersToVV(decoded).toJSON().values()) position += count
+      } catch {
+        return { id: version.id }
+      }
+      positions.set(point, position)
+    }
+    placed.push({ index, version, decoded, point, position })
+  }
+  return placed
+}
+
 /**
  * Each frontier checked out of ONE fork of the incoming record — a fork
  * copies the whole workspace, a checkout moves the one it has. The count and
@@ -172,35 +234,57 @@ function judgeDocumentAt(
  * state back as it stands, so each state is also judged here as the sync
  * surface would judge it written whole (`judgeDocumentAt`).
  *
- * A document at a point is judged once, however many rows name it, and the
- * fork moves only when a row names another point: rows repeating one point
- * cost a lookup each rather than a projection.
+ * A document at a point is judged once, however many rows name it, and rows
+ * are judged in history order, so the fork crosses the history once however
+ * the caller ordered them; the answer keeps the caller's order. Every
+ * distinct judgement is charged to `budget`, in `stateSize` of each projection, so rows
+ * naming distinct points cannot buy a projection each without bound.
+ *
+ * Within the budget a move may still hold hundreds of judgements, each
+ * synchronous, so the loop is handed back once a slice of
+ * `JUDGE_SLICE_MS` has been spent: the stall another request waits behind
+ * is one judgement, not the move. Nothing shared is read across the yield —
+ * the fork is this call's own, and `incoming` is the request's record,
+ * merged only after this returns.
  */
-function judgeVersions(
+async function judgeVersions(
   incoming: LoroDoc,
   versions: readonly CarriedVersion[],
-): { readonly reason: string } | { readonly rows: AdoptedVersion[] } {
+  budget: number,
+): Promise<{ readonly reason: string } | 'over-budget' | { readonly rows: AdoptedVersion[] }> {
   if (versions.length === 0) return { rows: [] }
-  const reader = pastReader(incoming)
-  const judged = new Map<string, PointJudgement>()
-  const rows: AdoptedVersion[] = []
   const unheld = (id: string) => ({
     reason: `Version "${id}" names a point the record does not hold.`,
   })
-  for (const { frontiers, ...version } of versions) {
-    const decoded = decodedPoint(frontiers)
-    if (decoded === undefined) return unheld(version.id)
-    const point = pointKey(decoded)
+  const placed = placeRows(incoming, versions)
+  if ('id' in placed) return unheld(placed.id)
+  const ordered = [...placed].sort(
+    (a, b) => a.position - b.position || compareCodeUnit(a.point, b.point) || a.index - b.index,
+  )
+  const reader = pastReader(incoming)
+  const judged = new Map<string, PointJudgement>()
+  const rows: AdoptedVersion[] = new Array(versions.length)
+  let spent = 0
+  const charge = (size: number): boolean => {
+    spent += size
+    return spent <= budget
+  }
+  let sliceStarted = Date.now()
+  for (const { index, version, decoded, point } of ordered) {
     const key = `${point}\u0000${version.documentId}`
     let judgement = judged.get(key)
     if (judgement === undefined) {
+      if (Date.now() - sliceStarted >= JUDGE_SLICE_MS) {
+        await yieldToLoop()
+        sliceStarted = Date.now()
+      }
       if (!reader.moveTo(point, decoded)) return unheld(version.id)
-      const answer = judgeDocumentAt(reader.past, version)
-      if ('reason' in answer) return answer
+      const answer = judgeDocumentAt(reader.past, version, charge)
+      if (answer === 'over-budget' || 'reason' in answer) return answer
       judgement = answer
       judged.set(key, judgement)
     }
-    rows.push({ ...version, frontiers: decoded, ...judgement })
+    rows[index] = { ...version, frontiers: decoded, ...judgement }
   }
   return { rows }
 }
@@ -211,6 +295,8 @@ export async function judgeCarried(
     readonly trash: readonly CarriedTrashBytes[]
     readonly versions: readonly CarriedVersion[]
   },
+  /** The `stateSize` the version judgements may charge; a parameter so a test can reach it cheaply. */
+  budget: number = PROMOTE_MAX_JUDGED_SIZE,
 ): Promise<CarriedJudgement> {
   // Counted before any row is judged, so past either cap nothing is.
   if (carried.versions.length > PROMOTE_MAX_VERSIONS) {
@@ -231,7 +317,8 @@ export async function judgeCarried(
   }
   const trashRefusal = await judgeTrash(incoming, carried.trash)
   if (trashRefusal !== null) return { kind: 'refused', reason: trashRefusal }
-  const versions = judgeVersions(incoming, carried.versions)
+  const versions = await judgeVersions(incoming, carried.versions, budget)
+  if (versions === 'over-budget') return { kind: 'over-budget', limit: budget }
   if ('reason' in versions) return { kind: 'refused', reason: versions.reason }
   return { kind: 'admitted', trash: carried.trash, versions: versions.rows }
 }

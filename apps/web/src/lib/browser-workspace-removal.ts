@@ -36,12 +36,15 @@ type PromotedOutcome = Extract<PromoteWorkspaceResult, { kind: 'ok' }>
  * source copy is the only evidence of what the document pointed at.
  * `leftBehind` refuses because a trash entry or a saved version the daemon
  * did not confirm holding exists only in the copy a demote would delete.
+ * `versionsLeftBehind` refuses for the saved versions the move chose not to
+ * carry, so a demote cannot delete them even if no sentence named them.
  */
 function canDemote(outcome: PromotedOutcome): boolean {
   return (
     outcome.blobs.failed.length === 0 &&
     outcome.blobs.missing.length === 0 &&
-    outcome.leftBehind.length === 0
+    outcome.leftBehind.length === 0 &&
+    outcome.versionsLeftBehind === 0
   )
 }
 

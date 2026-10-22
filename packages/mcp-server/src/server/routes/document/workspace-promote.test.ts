@@ -11,31 +11,42 @@ import { join } from 'node:path'
 import {
   PROMOTE_MAX_TRASH,
   PROMOTE_MAX_VERSIONS,
+  promoteJudgedBudgetRefusalSchema,
   promoteWorkspaceResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
+import {
+  MAX_AUTO_PER_DOCUMENT,
+  MAX_MANUAL_PER_DOCUMENT,
+  MAX_RESTORE_POINTS_PER_DOCUMENT,
+} from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   documentContainers,
   exportWorkspaceSubtree,
+  projectWorkspaceDocument,
   readMarkdownBody,
   readSpatialCanvas,
   recordTrashEntry,
   resolveWorkspaceDocumentById,
+  stateSize,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
+  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { apiErrorBodySchema, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/version-entry'
+import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
@@ -48,6 +59,18 @@ let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
 // isolated data dir.
 let serverDeps: ServerDeps
+// The judgement budget is reached in a test by lowering it, not by projecting
+// a hundred million characters.
+let judgedBudget: number | undefined
+vi.mock('@kamiazya/whiteboard-server-core/versions/version-entry', async (importOriginal) => {
+  const real = await importOriginal<typeof versionEntry>()
+  return {
+    ...real,
+    get PROMOTE_MAX_JUDGED_SIZE() {
+      return judgedBudget ?? real.PROMOTE_MAX_JUDGED_SIZE
+    },
+  }
+})
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
     return tempDir
@@ -73,6 +96,7 @@ beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
+  judgedBudget = undefined
   await handle.dispose()
   await rm(tempDir, { recursive: true, force: true })
 })
@@ -255,6 +279,63 @@ it('carries every automatic checkpoint a browser at the document ceiling can hol
     MAX_AUTO_PER_DOCUMENT * WORKSPACE_MAX_DOCUMENTS,
   )
   expect(PROMOTE_MAX_TRASH).toBe(WORKSPACE_MAX_DOCUMENTS)
+})
+
+/** A record holding the largest board and the largest note the limits admit. */
+function largestDocuments(): { board: LoroDoc; note: LoroDoc } {
+  const doc = new LoroDoc()
+  createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: SKETCH_ID, kind: 'spatial' })
+  createWorkspaceDocumentAtPath(doc, { path: 'note', documentId: ROADMAP_ID, kind: 'markdown' })
+  const nodes = Array.from({ length: CANVAS_MAX_NODES }, (_unused, i) =>
+    textNode({
+      id: `node-${i}`,
+      x: i,
+      y: i,
+      width: 200,
+      height: 80,
+      text: 'x'.repeat(NODE_TEXT_MAX_CHARS),
+    }),
+  )
+  const edges = Array.from({ length: CANVAS_MAX_EDGES_AND_LINES }, (_unused, i) => ({
+    id: `edge-${i}`,
+    from: { node: `node-${i % CANVAS_MAX_NODES}` },
+    to: { node: `node-${(i + 1) % CANVAS_MAX_NODES}` },
+    label: 'y'.repeat(LABEL_MAX_CHARS),
+  }))
+  writeSpatialCanvas(documentContainers(doc, SKETCH_ID), { nodes, edges })
+  writeMarkdownBody(documentContainers(doc, ROADMAP_ID), 'a'.repeat(MARKDOWN_MAX_CHARS))
+  doc.commit()
+  const board = projectWorkspaceDocument(doc, SKETCH_ID)
+  const note = projectWorkspaceDocument(doc, ROADMAP_ID)
+  if (board === null || note === null) throw new Error('not projected')
+  return { board, note }
+}
+
+it("judges a maximal board's whole automatic history, and a maximal note's many times over", () => {
+  const { board, note } = largestDocuments()
+  // Reached: the board really is the text-heavy one, so the guard measures it.
+  expect(stateSize(board)).toBeGreaterThan(CANVAS_MAX_NODES * NODE_TEXT_MAX_CHARS)
+  // Past the budget a move degrades rather than fails — the browser re-sends
+  // without its oldest versions — so the budget is sized by time, and this
+  // holds it to what it must still admit.
+  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(MAX_AUTO_PER_DOCUMENT * stateSize(board))
+  const perDocument =
+    MAX_AUTO_PER_DOCUMENT + MAX_MANUAL_PER_DOCUMENT + MAX_RESTORE_POINTS_PER_DOCUMENT
+  expect(PROMOTE_MAX_JUDGED_SIZE).toBeGreaterThanOrEqual(perDocument * stateSize(note))
+}, 60_000)
+
+it('refuses saved versions that cost more to check than one move allows with 413, merging nothing', async () => {
+  const { promote, documents } = harness()
+  judgedBudget = 1
+  const res = await promote(browserRecordWithTrashAndVersion())
+  expect(res.status).toBe(413)
+  const json: unknown = await res.json()
+  // Both readers: the emission contract, and the refusal's own declaration the sender fits by.
+  apiErrorBodySchema.parse(json)
+  const body = promoteJudgedBudgetRefusalSchema.parse(json)
+  expect(body.limit).toBe(1)
+  expect(body.message).toContain('at most 1 characters')
+  expect(await documents()).toEqual([])
 })
 
 it('answers 404 for a workspace the daemon never registered', async () => {

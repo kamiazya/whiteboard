@@ -33,7 +33,7 @@ const BASE = 'http://127.0.0.1:3099'
  * answers, when `confirms`, that it holds every trash entry and version the
  * body carried — what the real route reads back after storing them.
  */
-function daemonStub(options: { confirms: boolean }) {
+function daemonStub(options: { confirms: boolean; judgedLimit?: number }) {
   const promotes: PromoteWorkspaceRequest[] = []
   const putFiles: string[] = []
   const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -41,6 +41,12 @@ function daemonStub(options: { confirms: boolean }) {
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string) as PromoteWorkspaceRequest
       promotes.push(body)
+      if (options.judgedLimit !== undefined && promotes.length === 1) {
+        return Response.json(
+          { error: 'promote_too_many_carried', message: 'over', limit: options.judgedLimit },
+          { status: 413 },
+        )
+      }
       return Response.json({
         ok: true,
         recorded: [],
@@ -197,6 +203,27 @@ describe('promoteWorkspace, what travels beside the record', () => {
     expect(daemon.promotes[0]?.trash).toBeUndefined()
     expect(result.leftBehind).toEqual([
       'the trashed document "gone" cannot be read in this browser',
+    ])
+  })
+
+  it('re-sends without the saved versions past the daemon check budget, counting them', async () => {
+    // A board's version: a board is charged for what its nodes carry, so even one costs more than 1.
+    await seedWorkspace()
+    const daemon = daemonStub({ confirms: true, judgedLimit: 1 })
+    const result = await promoteWorkspace({
+      fetch: daemon.fetch,
+      keeperBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(daemon.promotes).toHaveLength(2)
+    expect(daemon.promotes[0]?.versions).toHaveLength(1)
+    expect(daemon.promotes[1]?.versions).toBeUndefined()
+    expect(result.versionsLeftBehind).toBe(1)
+    expect(result.leftBehind).toEqual([
+      '1 older saved version: checking more would take the daemon longer than one move allows',
     ])
   })
 })

@@ -5,6 +5,7 @@ import {
   documentIdSchema,
   documentNameSchema,
   documentPathSchema,
+  isDocumentId,
   nodeIdSchema,
   WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
   WORKSPACE_SEGMENT_MAX_LENGTH,
@@ -35,6 +36,26 @@ describe('documentIdSchema', () => {
   it('rejects a first character outside 0-7 (128-bit overflow constraint)', () => {
     expect(documentIdSchema.safeParse('8ZZZZZZZZZZZZZZZZZZZZZZZZZ').success).toBe(false)
     expect(documentIdSchema.safeParse('ZZZZZZZZZZZZZZZZZZZZZZZZZZ').success).toBe(false)
+  })
+})
+
+describe('isDocumentId', () => {
+  it('answers what documentIdSchema answers, without a parse', () => {
+    const samples = [
+      '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      '7ZZZZZZZZZZZZZZZZZZZZZZZZZ',
+      '01ARZ3NDEKTSV4RRFFQ69G5FA',
+      '01ARZ3NDEKTSV4RRFFQ69G5FAVX',
+      '01ARZ3NDEKTSV4RRFFQ69G5FAU',
+      '8ZZZZZZZZZZZZZZZZZZZZZZZZZ',
+      '01arz3ndektsv4rrffq69g5fav',
+      'notes/plan',
+      '',
+    ]
+    expect(samples.map(isDocumentId)).toEqual(
+      samples.map((value) => documentIdSchema.safeParse(value).success),
+    )
+    expect(samples.filter(isDocumentId)).toHaveLength(2)
   })
 })
 

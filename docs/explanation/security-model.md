@@ -508,7 +508,14 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   entry, a part of a document, or a key inside a stored value — is refused
   from any caller with `400 {"error":"reserved_map_key"}`: every reader takes
   such a key as the record's prototype rather than as a key, so it could lend
-  a document content nobody wrote. A
+  a document content nobody wrote. Every other write refuses the same key
+  before anything is kept: OKF frontmatter holding one is refused as it is
+  parsed (through `/api/v1`, `400 {"error":"okf_parse_failed"}` at the
+  `frontmatter-schema` stage), a facet payload holding one — written by
+  `wb_facet_set`, a `wb_canvas_edit` op or frontmatter `facets:` — is refused
+  naming the facet, and a write that reaches storage holding one anyway is
+  refused there, answered through `/api/v1` as
+  `400 {"error":"reserved_map_key"}`. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,
@@ -649,8 +656,19 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   (`promote_too_many_documents`, `promote_too_many_carried`). Each saved
   version is checked against the record before the merge, and rows naming
   the same document at the same point are checked once, so repeating one row
-  costs almost nothing. So one request cannot make the daemon write, or
-  check, an unbounded number of saved versions.
+  costs almost nothing. Rows naming different points cannot each buy a check
+  without limit either: checking a version reads the whole document as it
+  stood, so the checks one move makes may read at most 1,000,000,000
+  characters and entries between them — about a minute of checking, enough
+  for the whole automatic history of a board at every limit — and a move
+  past that is refused whole with `promote_too_many_carried`, naming the
+  budget so the browser can move again with the newest versions that fit
+  and keep the rest in its own copy. A board is counted by
+  the text its nodes carry, not by how many nodes it has. The versions are
+  checked in history order, so the check walks the history once however the
+  rows were sent, and the daemon serves other requests between versions. So
+  one request cannot make the daemon write, or check, an unbounded number of
+  saved versions, or spend an unbounded time checking them.
 - **A workspace holds a bounded number of documents.** The 2000-document
   ceiling holds for the workspace as a whole, however the documents arrive: a
   sync update or a move that would leave the workspace holding more is

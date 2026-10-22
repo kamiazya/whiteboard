@@ -21,7 +21,7 @@ import {
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { blobRefKey } from '@kamiazya/whiteboard-ports'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
@@ -29,7 +29,12 @@ import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BLOBS_STORE, VERSIONS_STORE, whiteboardDbName } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { fitCarriedPlanes, readCarriedPlanes, unconfirmedPlanes } from './carried-planes.js'
+import {
+  fitCarriedPlanes,
+  readCarriedPlanes,
+  unconfirmedPlanes,
+  versionsWithinJudgedBudget,
+} from './carried-planes.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -107,11 +112,47 @@ describe('fitCarriedPlanes', () => {
       'newest-auto',
     ])
     expect(fitted.leftBehind).toEqual(['1 older saved version: one move carries at most 3'])
+    expect(fitted.versionsLeftBehind).toBe(1)
   })
 
   it('carries everything and leaves nothing when it all fits', () => {
     const fitted = fitCarriedPlanes('snap', planes([entry('a', 10)]))
-    expect(fitted).toEqual({ trash: [entry('a', 10)], versions: [], leftBehind: [] })
+    expect(fitted).toEqual({
+      trash: [entry('a', 10)],
+      versions: [],
+      leftBehind: [],
+      versionsLeftBehind: 0,
+    })
+  })
+})
+
+describe('versionsWithinJudgedBudget', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // Pricing a version projects it on the page's thread, for as long as the
+  // keeper's own budget, so a slice that has run long hands the thread back.
+  it('hands the thread back between slices, and still keeps every version that fits', async () => {
+    let clock = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      clock += 20
+      return clock
+    })
+    const versions = ['v-1', 'v-2', 'v-3'].map((id, index) => ({
+      id,
+      documentId: generateDocumentId(),
+      createdAt: index,
+      auto: false,
+      frontiers: 'AA',
+    }))
+    let ranBetween = false
+    setTimeout(() => {
+      ranBetween = true
+    }, 0)
+    const fitted = await versionsWithinJudgedBudget(new LoroDoc(), versions, 1_000)
+    expect(ranBetween).toBe(true)
+    expect(fitted).toEqual({ kept: versions, dropped: 0 })
   })
 })
 

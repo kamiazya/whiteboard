@@ -410,9 +410,10 @@ try {
     }
 
     await refusedAs('before the operator adds the user', 'not_invited')
-    operator(['server', 'add-user', '--provider=smoke', '--subject=cli-smoke-user'])
+    const binding = ['--provider=smoke', '--subject=cli-smoke-user']
+    operator(['server', 'add-user', ...binding])
     await refusedAs('before a member is granted', 'not_a_member')
-    operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, '--user=cli-smoke-user'])
+    operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, ...binding])
     const listRes = await listDocuments()
     if (!listRes.ok) fail(`scenario 5: list answered ${listRes.status}`, { stderr: tail() })
     const list = await listRes.json()

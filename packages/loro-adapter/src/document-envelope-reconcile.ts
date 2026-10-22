@@ -18,6 +18,7 @@ import {
   type Fields,
 } from './containers.js'
 import { LEGACY_EXTENSION_FIELD } from './legacy-lifts.js'
+import { refuseReservedKey } from './reserved-key-write.js'
 
 /** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
 export const CANVAS_FACETS_FIELD = 'facets'
@@ -51,6 +52,7 @@ function reconcileBucket(
   prev: Fields,
   next: Fields,
 ): void {
+  refuseReservedKey(mapKey, next)
   const map = doc.getMap(mapKey)
   const wanted = Object.entries(next).filter(([, value]) => value !== undefined)
   const kept = new Set(wanted.map(([key]) => key))
@@ -120,6 +122,7 @@ export function writeCanvasFacetsField(
   doc: DocumentContainers,
   next: ExtensionFacets | undefined,
 ): void {
+  refuseReservedKey(CANVAS_KEY, next)
   const canvasMap = doc.getMap(CANVAS_KEY)
   const unreadable = Object.entries(asRecord(canvasMap.get(CANVAS_FACETS_FIELD)) ?? {}).filter(
     ([key]) => !isReadableFacetKey(key),

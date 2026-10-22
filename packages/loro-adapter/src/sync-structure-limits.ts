@@ -2,6 +2,7 @@
 // `sync-text-limits.ts` by the same keepers on the same bytes. Kept apart
 // because none of it measures how much: both are about whether a reader can
 // find, and open, what the update wrote.
+import { holdsReservedKey, RESERVED_MAP_KEY } from '@kamiazya/whiteboard-model'
 import type { ContainerID, JsonSchema, LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import { containerKind } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
@@ -45,9 +46,6 @@ export type ReservedMapKeyBreach = {
   /** The container written into. */
   readonly container: ContainerID
 }
-
-/** The one key a projection cannot hold as a key. */
-export const RESERVED_MAP_KEY = '__proto__'
 
 type Change = JsonSchema['changes'][number]
 
@@ -155,30 +153,6 @@ export function contentRootBreach(
 }
 
 /**
- * Whether `value` holds, at any depth, an object a projection gave a
- * prototype other than its own — the trace a `__proto__` key leaves, since
- * the key itself never survives into the JSON. A `__proto__` of `null` or of
- * a scalar leaves no chain to follow, and needs no answer.
- */
-function holdsReplacedPrototype(value: unknown): boolean {
-  const pending: unknown[] = [value]
-  while (pending.length > 0) {
-    const next = pending.pop()
-    if (typeof next !== 'object' || next === null) continue
-    // Pushed one at a time: a spread passes each element as an argument, and
-    // a value wide enough throws RangeError before the update is judged.
-    if (Array.isArray(next)) {
-      for (const item of next) pending.push(item)
-      continue
-    }
-    const prototype: unknown = Object.getPrototypeOf(next)
-    if (prototype !== Object.prototype && prototype !== null) return true
-    for (const item of Object.values(next)) pending.push(item)
-  }
-  return false
-}
-
-/**
  * The first op in `json` writing a `__proto__` key: setting one in a map,
  * writing into a root container of that name, or carrying one inside a value
  * (a map entry, a list item, a text mark). A DELETE of one is let through —
@@ -200,8 +174,8 @@ export function reservedKeyBreach(json: JsonSchema): ReservedMapKeyBreach | null
         op.container.startsWith(`cid:root-${RESERVED_MAP_KEY}:`) ||
         content.key === RESERVED_MAP_KEY ||
         content.style_key === RESERVED_MAP_KEY ||
-        holdsReplacedPrototype(content.value) ||
-        holdsReplacedPrototype(content.style_value)
+        holdsReservedKey(content.value) ||
+        holdsReservedKey(content.style_value)
       if (writes) return { shape: 'reserved-map-key', container: op.container }
     }
   }

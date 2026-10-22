@@ -51,6 +51,7 @@ function outcome(overrides: Partial<OkOutcome> = {}): OkOutcome {
     shadowedPaths: [],
     blobs: { transferred: [], missing: [], failed: [] },
     leftBehind: [],
+    versionsLeftBehind: 0,
     ...overrides,
   } as OkOutcome
 }
@@ -126,6 +127,15 @@ describe('PromoteWorkspaceSection, what the move left behind', () => {
     expect(result.textContent).toMatch(/Not moved yet: 1 trashed document did not reach the daemon/)
     expect(result.textContent).toMatch(/original copy is kept in this browser/)
     expect(replicaCarriesAll).not.toHaveBeenCalled()
+    expect(demoteBrowserWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('says how many saved versions stayed behind past the check budget, and keeps the copy', async () => {
+    const sentence =
+      '2 older saved versions: checking more would take the daemon longer than one move allows'
+    const result = await move(outcome({ leftBehind: [sentence], versionsLeftBehind: 2 }))
+    expect(result.textContent).toContain(`Not moved yet: ${sentence}`)
+    expect(result.textContent).toMatch(/original copy is kept in this browser/)
     expect(demoteBrowserWorkspace).not.toHaveBeenCalled()
   })
 

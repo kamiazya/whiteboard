@@ -14,7 +14,10 @@ import {
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import {
+  type PromoteWorkspaceRequest,
+  promoteJudgedBudgetRefusalSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { z } from 'zod'
@@ -53,7 +56,15 @@ export type PromoteRequestResult =
       /** What was sent and the keeper did not report holding afterwards. */
       leftBehind: string[]
     }
-  | { ok: false; reason: string }
+  | {
+      ok: false
+      reason: string
+      /**
+       * The keeper's budget for judging carried versions, when that is what
+       * it refused past: the number a re-sent move fits its versions under.
+       */
+      judgedLimit?: number
+    }
 
 /**
  * An empty plane is omitted rather than sent as `[]`: a keeper whose strict
@@ -79,15 +90,20 @@ const invalidBodySchema = z.object({ error: z.literal('invalid_body') })
  * the refusal is of the planes: a keeper built before them answers a body
  * carrying any with a shape refusal that says nothing about its age.
  */
-async function refusedReason(
+async function refused(
   res: Response,
   sent: PromoteWorkspaceRequest,
   wording: PromoteWording,
-): Promise<string> {
+): Promise<Extract<PromoteRequestResult, { ok: false }>> {
   const { reason, body } = await refusalReasonOf(res, wording.refused(res.status))
+  const budget = promoteJudgedBudgetRefusalSchema.safeParse(body)
+  if (budget.success) return { ok: false, reason, judgedLimit: budget.data.limit }
   const carried = sent.trash !== undefined || sent.versions !== undefined
-  if (!carried || !invalidBodySchema.safeParse(body).success) return reason
-  return `${wording.subject} refused the trash and saved versions sent with the workspace (${reason}). If ${wording.object} is older than this page, update it and move again.`
+  if (!carried || !invalidBodySchema.safeParse(body).success) return { ok: false, reason }
+  return {
+    ok: false,
+    reason: `${wording.subject} refused the trash and saved versions sent with the workspace (${reason}). If ${wording.object} is older than this page, update it and move again.`,
+  }
 }
 
 /**
@@ -108,7 +124,7 @@ export async function requestPromote(
       body: JSON.stringify(body),
     }),
   )
-  if (!res.ok) return { ok: false, reason: await refusedReason(res, body, wording) }
+  if (!res.ok) return refused(res, body, wording)
   // A body cut after the status line propagates as the network's failure; one
   // that arrived and broke the promote contract is the keeper's, already logged.
   let promoted: z.infer<typeof promoteWorkspaceResponseSchema>

@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setLogSink } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadReferenceGraph } from './reference-graph.js'
-import { loadReferencedDocument } from './resolve-file-references.js'
+import { createReferencedDocumentLoader } from './resolve-file-references.js'
 
-vi.mock('./resolve-file-references.js', () => ({ loadReferencedDocument: vi.fn() }))
-
-const load = vi.mocked(loadReferencedDocument)
+const load = vi.fn<(target: string) => Promise<LoadedReference | null>>()
+vi.mock('./resolve-file-references.js', () => ({ createReferencedDocumentLoader: vi.fn() }))
+vi.mocked(createReferencedDocumentLoader).mockReturnValue(load)
 const deps = {} as ServerDeps
 const workspaceId = 'ws' as WorkspaceId
 
@@ -20,7 +20,7 @@ afterEach(() => {
 describe('loadReferenceGraph', () => {
   it('asks the store for documents only, transitively', async () => {
     const bodies: Record<string, string> = { a: '![[b]] ![[asset:inner]]', b: 'leaf' }
-    load.mockImplementation(async (_deps, _ws, target): Promise<LoadedReference | null> => {
+    load.mockImplementation(async (target): Promise<LoadedReference | null> => {
       const body = bodies[target]
       return body === undefined ? null : { documentId: target, body }
     })
@@ -28,13 +28,13 @@ describe('loadReferenceGraph', () => {
       bodies: ['![[asset:pic]] ![[a]]'],
     })
     expect([...graph.keys()]).toEqual(['a', 'b'])
-    expect(load.mock.calls.map(([, , target]) => target)).toEqual(['a', 'b'])
+    expect(load.mock.calls.map(([target]) => target)).toEqual(['a', 'b'])
   })
 
   it('draws a reference whose read failed as unresolved, and says so', async () => {
     const records: { msg: string; data?: Record<string, unknown> }[] = []
     setLogSink((record) => records.push(record))
-    load.mockImplementation(async (_deps, _ws, target) => {
+    load.mockImplementation(async (target) => {
       if (target === 'bad') throw new Error('index unavailable')
       return { documentId: target, body: '' }
     })

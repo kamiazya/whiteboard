@@ -15,15 +15,32 @@ export const OPERATOR_JSON_SCHEMA_VERSION = 1 as const
 const schemaVersion = z.literal(OPERATOR_JSON_SCHEMA_VERSION)
 
 const namedUserSchema = z.object({ id: z.string(), displayName: z.string() }).strict()
-export type NamedUser = z.infer<typeof namedUserSchema>
+
+/**
+ * One identity a user signs in with: the stored authenticator and subject,
+ * and the configured provider id that authenticator belongs to — null for a
+ * passkey, or when no provider in the sign-in configuration produces it.
+ */
+const userBindingSchema = z
+  .object({ provider: z.string().nullable(), authenticator: z.string(), subject: z.string() })
+  .strict()
+
+/**
+ * A user an operator command acted on or could act on. The bindings are what
+ * tell two people apart: a display name is whatever a provider claimed at
+ * first sign-in, so it never identifies anyone.
+ */
+const boundUserSchema = namedUserSchema.extend({ bindings: z.array(userBindingSchema) }).strict()
+export type BoundUser = z.infer<typeof boundUserSchema>
 
 /** The refusals every user-naming command shares: the candidates ride along. */
 const unknownUserSchema = z
-  .object({
-    schemaVersion,
-    kind: z.enum(['unknown-user', 'ambiguous-user']),
-    users: z.array(namedUserSchema),
-  })
+  .object({ schemaVersion, kind: z.literal('unknown-user'), users: z.array(boundUserSchema) })
+  .strict()
+
+/** `--provider` named no provider the sign-in configuration declares. */
+const unknownProviderSchema = z
+  .object({ schemaVersion, kind: z.literal('unknown-provider'), providers: z.array(z.string()) })
   .strict()
 
 export const addUserOutputSchema = z.discriminatedUnion('kind', [
@@ -49,11 +66,12 @@ export const grantAdminOutputSchema = z.discriminatedUnion('kind', [
     .object({
       schemaVersion,
       kind: z.literal('ok'),
-      user: namedUserSchema,
+      user: boundUserSchema,
       administrator: z.boolean(),
     })
     .strict(),
   unknownUserSchema,
+  unknownProviderSchema,
 ])
 export type GrantAdminOutput = z.infer<typeof grantAdminOutputSchema>
 
@@ -63,13 +81,14 @@ export const grantMemberOutputSchema = z.discriminatedUnion('kind', [
       schemaVersion,
       kind: z.literal('ok'),
       workspaceId: z.string(),
-      user: namedUserSchema,
+      user: boundUserSchema,
     })
     .strict(),
   z
     .object({ schemaVersion, kind: z.literal('unknown-workspace'), workspaceId: z.string() })
     .strict(),
   unknownUserSchema,
+  unknownProviderSchema,
 ])
 export type GrantMemberOutput = z.infer<typeof grantMemberOutputSchema>
 
@@ -78,12 +97,13 @@ export const deactivateUserOutputSchema = z.discriminatedUnion('kind', [
     .object({
       schemaVersion,
       kind: z.literal('ok'),
-      user: namedUserSchema,
+      user: boundUserSchema,
       deactivated: z.boolean(),
       changed: z.boolean(),
     })
     .strict(),
   unknownUserSchema,
+  unknownProviderSchema,
 ])
 export type DeactivateUserOutput = z.infer<typeof deactivateUserOutputSchema>
 

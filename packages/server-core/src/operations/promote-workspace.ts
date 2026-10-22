@@ -42,6 +42,8 @@ export type PromoteWorkspaceResult =
   | { kind: 'unmatched-carried'; reason: string }
   /** More trash entries or versions than a promote carries; nothing was judged or merged. */
   | { kind: 'too-many-carried'; plane: 'trash' | 'versions'; carried: number; limit: number }
+  /** Judging the carried versions would charge more than `limit` (`stateSize`); nothing was merged. */
+  | { kind: 'carried-over-budget'; limit: number }
   | {
       kind: 'promoted'
       /**
@@ -188,6 +190,7 @@ export async function promoteWorkspace(
     const { plane, carried: count, limit } = carried
     return { kind: 'too-many-carried', plane, carried: count, limit }
   }
+  if (carried.kind === 'over-budget') return { kind: 'carried-over-budget', limit: carried.limit }
 
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,

@@ -1,12 +1,12 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { McpServer } from '@modelcontextprotocol/server'
-import { z } from 'zod'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
 import {
   buildDrawDiagramPrompt,
+  drawDiagramPromptArgsSchema,
   WHITEBOARD_DRAW_PROMPT,
   WHITEBOARD_INSTRUCTIONS,
 } from './standalone-help.js'
@@ -17,15 +17,7 @@ function registerDrawPrompt(server: McpServer): void {
     {
       title: 'Draw Diagram',
       description: 'Generate a starter prompt for drawing a new diagram with the whiteboard tools.',
-      argsSchema: z.object({
-        goal: z.string().describe('What the diagram should explain or align on.'),
-        diagramType: z
-          .string()
-          .optional()
-          .describe(
-            'Optional diagram type hint such as architecture, sequence, review, or comparison.',
-          ),
-      }),
+      argsSchema: drawDiagramPromptArgsSchema,
     },
     async ({ goal, diagramType }) => ({
       description: 'Starter instructions for creating a new whiteboard diagram.',

@@ -350,9 +350,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // and `highlight-layout-budget.test.ts` pins both accounts, the refusal
     // count a cache reads, and a fresh account per layout — each
     // mutation-checked by hand against it.
+    //
+    // 115 with `references/content-budget.ts`, one reference walk's account
+    // of the characters and canvas elements it loads. Outside the lane, as
+    // `embed-budget.ts` is: two constants and an account whose refusal,
+    // closing and node-text charge `content-budget.test.ts` pins, and whose
+    // use by the daemon's loader `canvas-view.cost.test.ts` counts — each
+    // mutation-checked by hand against them.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 114,
+      production: 115,
     })
   })
 

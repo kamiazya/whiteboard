@@ -67,7 +67,9 @@ export {
   writeProposal,
 } from './proposals.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
+export { ReservedKeyWriteError } from './reserved-key-write.js'
 export { countSpatialNodes } from './spatial-node-count.js'
+export { stateSize } from './state-size.js'
 export { holdsContainerCreation } from './sync-structure-limits.js'
 export {
   importWithinTextLimits,

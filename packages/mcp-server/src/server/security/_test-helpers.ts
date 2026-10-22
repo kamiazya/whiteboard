@@ -4,10 +4,19 @@
 // membership — a second middleware that skips that gate must not be
 // importable from production code, which is why this lives beside the tests.
 import type { MiddlewareHandler } from 'hono'
+import type { TenantDatabase } from '../store/db/tenant-database.js'
 import type { AuthScope } from './auth-strategy.js'
+import { completeSignIn, createCompleteSignInDeps } from './complete-sign-in.js'
+import type { MemberProfile } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import type { ResolvedProvider } from './oidc-relying-party.js'
-import type { OidcProvider, SignInProvider } from './sign-in-config.js'
+import type { VerifiedClaims } from './sign-in-admission.js'
+import {
+  type OidcProvider,
+  providerAuthenticator,
+  type SignInProvider,
+  signInConfigSchema,
+} from './sign-in-config.js'
 
 export function createAsyncAuthStrategyMiddleware(options: {
   strategy: AsyncAuthStrategy
@@ -61,4 +70,49 @@ export const DENY_ALL_STRATEGY: AsyncAuthStrategy = {
     code: 'auth.required',
     wwwAuthenticate: 'Bearer',
   }),
+}
+
+/**
+ * A provider anyone can join, so a test can make a user the way a stranger
+ * does: by signing in with whatever claims their own identity provider issues.
+ */
+const OPEN_SIGN_IN_PROVIDER: OidcProvider = (() => {
+  const [provider] = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'open',
+          kind: 'oidc',
+          issuer: 'https://idp.open.example',
+          clientId: 'wb',
+          clientSecret: { env: 'OPEN_SECRET' },
+          admission: { createAccounts: true },
+        },
+      ],
+    }).providers,
+  )
+  if (provider === undefined) throw new Error('unreachable')
+  return provider
+})()
+
+/** The user `claims` become by signing in through `OPEN_SIGN_IN_PROVIDER`, and their binding. */
+export async function signInAsNewcomer(
+  db: TenantDatabase,
+  claims: VerifiedClaims,
+): Promise<{
+  profile: MemberProfile
+  binding: { authenticator: string; subject: string }
+}> {
+  const done = await completeSignIn(createCompleteSignInDeps(db, 60 * 60 * 1000), {
+    provider: OPEN_SIGN_IN_PROVIDER,
+    claims,
+    now: Date.now(),
+  })
+  if (!done.ok) throw new Error(`sign-in refused: ${done.reason}`)
+  const subject = claims.sub
+  if (typeof subject !== 'string') throw new Error('claims carry no sub')
+  return {
+    profile: done.profile,
+    binding: { authenticator: providerAuthenticator(OPEN_SIGN_IN_PROVIDER), subject },
+  }
 }

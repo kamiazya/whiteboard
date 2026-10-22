@@ -25,6 +25,7 @@ import type { DatabaseSchema } from './db/schema.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
+import { insertAdoptedRows } from './version-adopt-rows.js'
 import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -387,44 +388,28 @@ export class FileVersionStore implements VersionStore {
     if (rows.length === 0) return []
     return withWorkspaceWriteLock(workspaceId, async () => {
       const db = await this.scope.db()
-      // RETURNING names only the rows this call inserted: an id already held
-      // is skipped, so naming one of this keeper's own rows cannot make that
-      // row one the cap below may take.
-      const inserted = await db
-        .insertInto('versions')
-        .values(
-          rows.map((row) =>
-            versionRow({
-              id: row.id,
-              documentId: row.documentId,
-              workspaceId,
-              opts: row,
-              operator: row.operator,
-              elementCount: row.elementCount,
-              frontiers: frontiersToBase64(row.frontiers),
-              contentDigest: row.contentDigest,
-              createdAt: row.createdAt,
-            }),
-          ),
-        )
-        .onConflict((conflict) => conflict.column('id').doNothing())
-        .returning('id')
-        .execute()
-      const held = await db
-        .selectFrom('versions')
-        .select(['id'])
-        .where('workspaceId', '=', workspaceId)
-        .where(
-          'id',
-          'in',
-          rows.map((row) => row.id),
-        )
-        .execute()
-      const carried = new Set(inserted.map((row) => row.id))
+      const { inserted, held } = await insertAdoptedRows(
+        db,
+        workspaceId,
+        rows.map((row) =>
+          versionRow({
+            id: row.id,
+            documentId: row.documentId,
+            workspaceId,
+            opts: row,
+            operator: row.operator,
+            elementCount: row.elementCount,
+            frontiers: frontiersToBase64(row.frontiers),
+            contentDigest: row.contentDigest,
+            createdAt: row.createdAt,
+          }),
+        ),
+      )
+      const carried = new Set(inserted)
       for (const documentId of new Set(rows.map((row) => row.documentId))) {
         await this.prune(workspaceId, documentId, carried)
       }
-      return held.map((row) => row.id)
+      return held
     })
   }
 
