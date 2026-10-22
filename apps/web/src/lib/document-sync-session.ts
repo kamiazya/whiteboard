@@ -543,7 +543,10 @@ export function createDocumentSyncSession(
   }
 
   function getContentState(): string | null {
-    return doc === null ? null : contentStateOf(doc)
+    if (doc === null) return null
+    // A document a peer deleted has no tree node to name it by; the record's own
+    // digest still answers a string so the contract stays total.
+    return listedContentState(doc, deps.contentDocumentId) ?? contentStateOf(doc)
   }
 
   function getAnnotations(): readonly CommentThread[] {
