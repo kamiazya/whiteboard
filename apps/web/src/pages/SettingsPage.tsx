@@ -30,6 +30,7 @@ import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
 import { LocalCopiesCard } from '../components/settings/LocalCopiesCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
+import { RadioCardGroup } from '../components/settings/RadioCardGroup.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
 import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
@@ -118,7 +119,6 @@ function GeneralSection({
   onWebMcpToggle,
 }: GeneralSectionProps) {
   const themeGroupId = useId()
-  const faviconGroupId = useId()
   const webMcpLabelId = useId()
   const webMcpDescId = useId()
   return (
@@ -130,59 +130,34 @@ function GeneralSection({
         </h2>
         <fieldset>
           <legend className="sr-only">Theme</legend>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
-            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-              // biome-ignore lint/a11y/useSemanticElements: WAI-ARIA button-as-radio pattern (icon + label styling not achievable with a native radio input)
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={theme === value}
-                onClick={() => onThemeChange(value)}
-                className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-2.5 text-xs transition-colors ${
-                  theme === value
-                    ? 'border-primary bg-primary/5 text-primary'
-                    : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                }`}
-              >
-                <Icon className="size-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+          <RadioCardGroup
+            label="Theme"
+            columns={3}
+            options={THEME_OPTIONS.map(({ value, label, icon: Icon }) => ({
+              value,
+              label,
+              icon: <Icon className="size-4" />,
+            }))}
+            value={theme}
+            onChange={onThemeChange}
+          />
         </fieldset>
         <fieldset className="mt-4">
           <legend className="mb-2 text-xs text-muted-foreground">
             Tab icon — Minimap mirrors the canvas content; Dot only keeps the plain mark. Both carry
             the save/sync status dot.
           </legend>
-          <div
-            className="grid grid-cols-2 gap-2"
-            role="radiogroup"
-            aria-labelledby={faviconGroupId}
-          >
-            <span id={faviconGroupId} className="sr-only">
-              Tab icon
-            </span>
-            {FAVICON_OPTIONS.map(({ value, label, icon: Icon }) => (
-              // biome-ignore lint/a11y/useSemanticElements: same WAI-ARIA button-as-radio pattern as the theme picker above
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={faviconStyle === value}
-                onClick={() => onFaviconStyleChange(value)}
-                className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-2.5 text-xs transition-colors ${
-                  faviconStyle === value
-                    ? 'border-primary bg-primary/5 text-primary'
-                    : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                }`}
-              >
-                <Icon className="size-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+          <RadioCardGroup
+            label="Tab icon"
+            columns={2}
+            options={FAVICON_OPTIONS.map(({ value, label, icon: Icon }) => ({
+              value,
+              label,
+              icon: <Icon className="size-4" />,
+            }))}
+            value={faviconStyle}
+            onChange={onFaviconStyleChange}
+          />
         </fieldset>
       </section>
 
