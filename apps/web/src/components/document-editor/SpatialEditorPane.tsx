@@ -6,6 +6,7 @@ import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { SpatialEditor, type SpatialEditorProps } from '../spatial-editor/index.js'
+import { CanvasAnnouncerRegion } from './CanvasAnnouncerRegion.js'
 import { CanvasVerbBar } from './CanvasVerbBar.js'
 import { NodeTextEditorOverlay, type NodeTextEditorOverlayProps } from './NodeTextEditorOverlay.js'
 import type { NodeInEditor } from './use-node-in-editor.js'
@@ -119,6 +120,7 @@ export function SpatialEditorPane({
     <div data-testid="spatial-editor-container" className={className}>
       {children}
       <CanvasVerbBar />
+      <CanvasAnnouncerRegion />
       {/* Keyed on canvas identity: the editor's pan/zoom, in-flight gesture
           and open text editor all describe ONE canvas, and `SpatialCanvas`
           carries no id for the editor to notice a switch by. Without the

@@ -214,7 +214,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
   'apps/web/src/components/spatial-editor/context-menu-items/ink-menu-items.tsx#inkMenuItems': 166,
-  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 275,
+  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 221,
   'apps/web/src/components/spatial-editor/drag-preview.ts#computeDragPreview': 102,
   'apps/web/src/components/spatial-editor/facet-widgets/FacetFormPanel.tsx#FacetFormPanel': 132,
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,

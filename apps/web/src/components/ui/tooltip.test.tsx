@@ -1,16 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.js'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+/** Radix opens on a timer even at zero delay; let any such open happen. */
+const tick = () => act(() => vi.advanceTimersByTimeAsync(50))
 
 function coarsePointer(coarse: boolean) {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: coarse && query === '(pointer: coarse)',
   }))
 }
-
-const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 function Fixture() {
   return (
@@ -25,6 +29,7 @@ function Fixture() {
 
 describe('Tooltip on a coarse pointer', () => {
   it('does not open from a pointer entering the trigger', async () => {
+    vi.useFakeTimers()
     coarsePointer(true)
     render(<Fixture />)
     fireEvent.pointerMove(screen.getByRole('button', { name: 'Target' }), { pointerType: 'mouse' })
@@ -33,6 +38,7 @@ describe('Tooltip on a coarse pointer', () => {
   })
 
   it('does not open from a tap focusing the trigger', async () => {
+    vi.useFakeTimers()
     coarsePointer(true)
     render(<Fixture />)
     const target = screen.getByRole('button', { name: 'Target' })

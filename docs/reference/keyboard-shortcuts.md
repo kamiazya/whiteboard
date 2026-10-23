@@ -75,7 +75,9 @@ and **Distribute** (horizontal, vertical). Align appears once two nodes are
 selected; distribute once there are three, because it repositions the
 middle ones and leaves the outermost two anchoring the span. Both align to
 the selection's own bounding box, so the result does not depend on which
-node you clicked first, and each is a single undo step.
+node you clicked first, and each is a single undo step. Choosing one closes the
+menu so the result is in view, and a screen reader hears what was done (for
+example "Aligned 3 nodes left").
 
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
@@ -182,8 +184,9 @@ one, as **Zoom to fit** does.
 
 ## Inside a menu
 
-The right-click and **More actions** menus take focus on their first item and
-are one Tab stop. `Up` and `Down` move between items and wrap; `Home` and
+The right-click and **More actions** menus take focus on their first labelled
+action (not a colour swatch; reach the swatches with `Up` or `Left`) and are one
+Tab stop. `Up` and `Down` move between items and wrap; `Home` and
 `End` jump to the first and last; typing a letter jumps to the next item that
 starts with it. In a row of choices such as the colour swatches, `Left` and
 `Right` move within the row. `Enter` or `Space` activates the item, and

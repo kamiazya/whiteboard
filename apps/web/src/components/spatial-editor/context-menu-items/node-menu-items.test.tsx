@@ -15,6 +15,7 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { canvasAnnouncement } from '../../../lib/canvas-announcer.js'
 import type { NodeMenuItemsInput } from './node-menu-items.js'
 import { nodeMenuItems } from './node-menu-items.js'
 
@@ -72,7 +73,6 @@ function baseInput(
     missingFileRef: undefined,
     fileRefOptions: undefined,
     facetRegistry: emptyRegistry,
-    selectedAlignableBoxes: () => [],
     imagePicker: {
       input: { current: null },
       request: { current: { backgroundGroupId: null, point: null } },
@@ -94,6 +94,7 @@ function baseInput(
     setDocumentPicker: vi.fn(),
     setFacetPanelOpen: vi.fn(),
     setCommentCompose: vi.fn(),
+    close: vi.fn(),
     ...overrides,
   }
 }
@@ -154,6 +155,65 @@ describe('nodeMenuItems', () => {
     const trio = nodeMenuItems(baseInput(textNode, canvas, { extraIds: new Set(['b', 'c']) }))
     expect(trio.some((item) => labelOf(item) === 'Align')).toBe(true)
     expect(trio.some((item) => labelOf(item) === 'Distribute')).toBe(true)
+  })
+
+  describe('verbs that change the board close the menu and say so', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
+    const optionOf = (items: readonly unknown[], row: string, ariaLabel: string) => {
+      const group = items.find((item) => labelOf(item) === row) as {
+        options: { ariaLabel?: string; onSelect: () => void }[]
+      }
+      return group.options.find((option) => option.ariaLabel === ariaLabel)
+    }
+
+    it('Align closes the menu and announces the side', () => {
+      const close = vi.fn()
+      const applyBoxMoves = vi.fn()
+      const items = nodeMenuItems(
+        baseInput(textNode, canvas, {
+          extraIds: new Set(['b', 'c']),
+          close,
+          applyBoxMoves,
+        }),
+      )
+      optionOf(items, 'Align', 'Align left')?.onSelect()
+      expect(applyBoxMoves).toHaveBeenCalledTimes(1)
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(canvasAnnouncement()).toBe('Aligned 3 nodes left')
+    })
+
+    it('Distribute closes the menu and announces the axis', () => {
+      const close = vi.fn()
+      const items = nodeMenuItems(
+        baseInput(textNode, canvas, { extraIds: new Set(['b', 'c']), close }),
+      )
+      optionOf(items, 'Distribute', 'Distribute horizontally')?.onSelect()
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(canvasAnnouncement()).toBe('Distributed horizontally')
+    })
+
+    it('Tidy, Lock and Unlock announce what they did', () => {
+      const onToggleNodeLock = vi.fn()
+      const items = nodeMenuItems(
+        baseInput(textNode, canvas, {
+          extraIds: new Set(['b']),
+          lockEnabled: true,
+          onToggleNodeLock,
+        }),
+      )
+      const say = (label: string) => {
+        const row = items.find((item) => labelOf(item) === label) as { onSelect: () => void }
+        row.onSelect()
+        return canvasAnnouncement()
+      }
+      expect(say('Tidy')).toBe('Tidied')
+      expect(say('Lock')).toBe('Locked 1 node')
+      const unlock = nodeMenuItems(
+        baseInput(textNode, canvas, { isLocked: () => true, onToggleNodeLock }),
+      )[0] as { onSelect: () => void }
+      unlock.onSelect()
+      expect(canvasAnnouncement()).toBe('Unlocked 1 node')
+    })
   })
 
   it('hides Open canvas for a missing file ref, and offers it for a live one', () => {
