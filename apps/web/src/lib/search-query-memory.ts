@@ -18,3 +18,8 @@ export function rememberSearchQuery(scope: string | undefined, query: string): v
   if (query === '') queries.delete(scope)
   else queries.set(scope, query)
 }
+
+/** Test isolation: the map outlives a page on purpose, so a suite forgets it between tests. */
+export function forgetSearchQueries(): void {
+  queries.clear()
+}

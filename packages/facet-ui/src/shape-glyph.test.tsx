@@ -5,7 +5,7 @@ import { glyphIcon } from './glyph.js'
 afterEach(cleanup)
 
 const draw = (name: 'circle' | 'octagon') => {
-  const { container } = render(<>{glyphIcon({ kind: 'shape', name })}</>)
+  const { container } = render(<div>{glyphIcon({ kind: 'shape', name })}</div>)
   return container
 }
 

@@ -2,7 +2,7 @@
 // composer the menu's "Comment on this" opens, for a node, a set or an edge.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
@@ -48,8 +48,8 @@ it('Cmd/Ctrl+Alt+M opens the composer on the selected node', async () => {
 })
 
 it('with several nodes selected the composer opens for the set', async () => {
-  mount()
-  await userEvent.keyboard('{Control>}a{/Control}')
+  const { container } = mount()
+  fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
   await userEvent.keyboard(comment)
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
 })

@@ -61,7 +61,8 @@ it('the group label editor takes a label of exactly its limit and refuses one mo
   const editor = () =>
     container.querySelector<HTMLTextAreaElement>('[data-testid="group-label-editor"]')
 
-  await userEvent.dblClick(rootOf(container), { position: { x: 100, y: 100 } })
+  // The name strip above the frame's top edge; its interior adds a note instead.
+  await userEvent.dblClick(rootOf(container), { position: { x: 100, y: 60 } })
   await vi.waitFor(() => expect(editor()).not.toBeNull())
   await userEvent.fill(editor() as HTMLTextAreaElement, 'y'.repeat(LABEL_MAX_CHARS))
   expect(notice('group-label-editor')).toBeNull()

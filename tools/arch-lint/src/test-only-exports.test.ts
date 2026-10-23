@@ -253,6 +253,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the subtree-move plan the in-memory DocumentIndex double executes; no production keeper moves rows by path any more (the browser tree index moves nodes), so the port double is its one reader',
   'apps/web/src/lib/commit-debounce.ts#COMMIT_MAX_WAIT_MS':
     'the longest an edit waits; the sustained-edit test asserts the write lands inside it',
+  'apps/web/src/lib/search-query-memory.ts#forgetSearchQueries':
+    'the remembered search query is module state that outlives a page by design, so an index-page suite forgets it between tests',
   'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
     'the one await a test has over a startup fold an unmount left running, so clearing the database cannot land between its listing and its record open; production never deletes storage under a running fold',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':

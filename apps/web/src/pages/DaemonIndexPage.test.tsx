@@ -20,6 +20,7 @@ import {
 import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
+import { forgetSearchQueries } from '../lib/search-query-memory.js'
 
 // The page now reads useNavigate (Settings navigation), so every render
 // needs a Router ancestor — wrapping once here keeps the existing
@@ -58,6 +59,7 @@ const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 afterEach(() => {
   cleanup()
+  forgetSearchQueries()
   vi.unstubAllGlobals()
 })
 
