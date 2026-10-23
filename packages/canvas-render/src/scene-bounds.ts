@@ -184,24 +184,38 @@ export function sceneBounds(scene: Scene): BoundingBox {
 }
 
 /**
- * The box a DOCUMENT of this scene is drawn in: the scene's bounds, plus a
- * band on the left for the legend when the scene carries one (ADR-0040
- * decision 6), so the legend the backend draws in the top-left corner
- * covers no content. Without the band the legend sat over the first box of
- * every tagged board. The band is the legend's estimated panel plus its
- * margins; the scene's own bounds — what the digest, the drawing score and
- * the editor read — are untouched, so a legend never moves an instrument.
+ * The box a DOCUMENT of this scene is drawn in: the scene's bounds, plus room
+ * BELOW the content for the legend when the scene carries one (ADR-0040
+ * decision 6), and `padding` on every side. The legend sits at the content's
+ * left edge under the drawing rather than in a band beside it, so it never
+ * widens a picture by the width of its longest value, and the backend draws
+ * it at the bottom-left of the box, covering no content. The scene's own
+ * bounds — what the digest, the drawing score and the editor read — are
+ * untouched, so a legend never moves an instrument.
+ *
+ * `padding` defaults to none: a host that sizes by these bounds (the
+ * rendering tool reports them) keeps the drawing flush, while a saved
+ * picture asks for a margin so a border drawn at the edge is not clipped.
  */
-export function sceneDocumentBounds(scene: Scene): BoundingBox {
-  const bounds = sceneBounds(scene)
+export function sceneDocumentBounds(scene: Scene, padding = 0): BoundingBox {
+  const bounds = withLegendRoom(scene, sceneBounds(scene))
+  if (!Number.isFinite(padding) || padding <= 0) return bounds
+  return {
+    x: bounds.x - padding,
+    y: bounds.y - padding,
+    w: bounds.w + padding * 2,
+    h: bounds.h + padding * 2,
+  }
+}
+
+function withLegendRoom(scene: Scene, bounds: BoundingBox): BoundingBox {
   if (scene.legend === undefined) return bounds
   const panel = legendPanelSize(scene.legend)
   if (panel.w === 0) return bounds
-  const band = panel.w + LEGEND_MARGIN_PX * 2
   return {
-    x: bounds.x - band,
+    x: bounds.x,
     y: bounds.y,
-    w: bounds.w + band,
-    h: Math.max(bounds.h, panel.h + LEGEND_MARGIN_PX * 2),
+    w: Math.max(bounds.w, panel.w + LEGEND_MARGIN_PX * 2),
+    h: bounds.h + panel.h + LEGEND_MARGIN_PX * 2,
   }
 }

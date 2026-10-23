@@ -1,7 +1,8 @@
 /**
  * The legend as document chrome ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
- * decision 6): drawn in the top-left corner of an EXPORTED document's
- * viewBox, over the content, so a reader of an SVG or a PNG sees what the
+ * decision 6): drawn in the bottom-left corner of an EXPORTED document's
+ * viewBox, in the room the envelope reserves under the content, so a reader
+ * of an SVG or a PNG sees what the
  * colour means without a panel. The editor draws the same `SceneLegend`
  * as its own overlay and asks this backend to omit it.
  *
@@ -132,7 +133,7 @@ export function renderLegend(legend: SceneLegend, viewBox: BoundingBox): SvgChil
     'g',
     {
       'data-wb-legend': '',
-      transform: `translate(${viewBox.x + MARGIN_PX} ${viewBox.y + MARGIN_PX})`,
+      transform: `translate(${viewBox.x + MARGIN_PX} ${viewBox.y + viewBox.h - MARGIN_PX - height})`,
     },
     children,
   )

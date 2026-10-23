@@ -657,8 +657,9 @@ doing even when the on-screen canvas looks fine.
 
 ## Tags, the legend and the workspace's tag library
 
-A board whose boxes or edges carry scoped tags exports with its **legend** in the top-left
-corner whenever the board's colours follow a key, exactly as the editor shows it (see
+A board whose boxes or edges carry scoped tags exports with its **legend** under the
+drawing, at its left edge, whenever the board's colours follow a key, exactly as the editor
+shows it (see
 [organize with tags](../how-to/organize-with-tags.md#read-the-legend)). When the workspace
 declares a [tag library](../how-to/organize-with-tags.md#declare-the-vocabulary) — the document
 at `tags` — a box or an edge carrying a value the library colours, and having no colour of its

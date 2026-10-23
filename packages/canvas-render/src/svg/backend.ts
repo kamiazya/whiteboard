@@ -543,7 +543,7 @@ function expandBox(box: BoundingBox, padding: number): BoundingBox {
 function resolveViewBox(scene: Scene, options: SvgDocumentOptions): BoundingBox {
   if (options.viewBox && isUsableViewBox(options.viewBox)) return options.viewBox
   // A derived envelope makes room for the legend it draws; an explicit one
-  // is the caller's, who reserves the band with `sceneDocumentBounds`.
+  // is the caller's, who reserves the room with `sceneDocumentBounds`.
   const drawsLegend = scene.legend !== undefined && options.legend !== 'omit'
   const bounds = drawsLegend ? sceneDocumentBounds(scene) : sceneBounds(scene)
   return expandBox(bounds, sanitizePadding(options.padding))
