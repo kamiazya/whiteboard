@@ -12,7 +12,7 @@ import {
   openTestSession,
   snapshotOf,
 } from '../test-utils/document-sync-session.js'
-import { COMMIT_DEBOUNCE_MS, COMMIT_MAX_WAIT_MS } from './document-sync-session.js'
+import { COMMIT_DEBOUNCE_MS, COMMIT_MAX_WAIT_MS } from './commit-debounce.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 import { STUCK_AFTER_MS, storageHealthOf } from './storage-health.js'
 

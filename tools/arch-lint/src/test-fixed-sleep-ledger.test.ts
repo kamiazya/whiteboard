@@ -76,6 +76,8 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/pages/BrowserDocumentPage.browser.test.tsx': 1,
   'apps/web/src/pages/BrowserDocumentPage.dialog-outlives-document.test.tsx': 5,
   'apps/web/src/pages/BrowserDocumentPage.rename.browser.test.tsx': 1,
+  // The gap between keystrokes IS the subject: a burst with no pause long enough to commit.
+  'apps/web/src/pages/BrowserDocumentPage.sustained-typing.browser.test.tsx': 1,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1,
   'apps/web/src/pages/BrowserIndexPage.defaults.browser.test.tsx': 1,
   'apps/web/src/pages/DaemonDocumentPage.surface-outlives-document.test.tsx': 1,

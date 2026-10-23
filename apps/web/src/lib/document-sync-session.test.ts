@@ -466,7 +466,9 @@ describe('createDocumentSyncSession', () => {
         expect(kinds(onPersistenceChange)).toEqual(['pending'])
         backend._ctrl.releasePushes()
         await flushMicrotasks()
-        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved'])
+        // The first landing is said as progress, not as saved.
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'pending', 'saved'])
+        expect(onPersistenceChange.mock.calls[1][0]).toHaveProperty('landedAt')
         session.dispose()
       } finally {
         vi.useRealTimers()
