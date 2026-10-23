@@ -437,8 +437,8 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // discard the live handle instead of a stale one.
   spatialHandle:
     'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
-  attachedHandle:
-    'no subject: the same handle as state, so the Display panel re-renders with the selection source; set by the editor’s callback ref, which React re-runs with the new instance on a switch',
+  selectionSource:
+    'no subject: the mounted editor’s selection source as state, so the Display panel follows it; set by the editor’s callback ref, which React re-runs with the new instance on a switch',
   keeperEditorRefLatest:
     'no subject: the keeper’s own editor ref, read through a ref so the callback ref stays identity-stable; it names no document',
 }

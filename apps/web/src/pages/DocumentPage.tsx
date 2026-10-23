@@ -38,7 +38,7 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { fileRefOptions } from '../lib/link-entries.js'
 import { applyCommand } from '../lib/spatial/commands.js'
-import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import type { SelectionSource, SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -119,24 +119,23 @@ export function DocumentPage<Props>({
  */
 function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['editorRef']) {
   const spatialHandle = useRef<SpatialEditorHandle | null>(null)
-  // State as well as a ref: the Display panel follows the editor's selection
-  // through the handle, and a ref alone would leave it mounted with none
-  // when the panel renders before the editor attaches. The callback is
-  // identity-stable (the keeper's ref is read through a ref of its own), so
-  // React attaches once per editor instead of re-attaching on every render —
-  // a setState from a callback ref that changes identity each render is a
-  // render loop.
-  const [attachedHandle, setAttachedHandle] = useState<SpatialEditorHandle | null>(null)
+  // The selection SOURCE as state, beside the ref: the Display panel follows
+  // it, and a ref alone would leave a panel that rendered first following
+  // nothing. Only the source is held, never the handle — the editor rebuilds
+  // its handle whenever its boxes change, so holding the handle re-rendered
+  // this page on every rebuild and the page's render rebuilt it again; the
+  // source is one object for the editor's life, so the setter bails out.
+  const [selectionSource, setSelectionSource] = useState<SelectionSource | undefined>(undefined)
   const keeperEditorRefLatest = useRef(keeperEditorRef)
   keeperEditorRefLatest.current = keeperEditorRef
   const attachSpatialHandle = useCallback((node: SpatialEditorHandle | null) => {
     spatialHandle.current = node
-    setAttachedHandle(node)
+    setSelectionSource(node?.selection)
     const keeperRef = keeperEditorRefLatest.current
     if (typeof keeperRef === 'function') keeperRef(node)
     else if (keeperRef !== null && keeperRef !== undefined) keeperRef.current = node
   }, [])
-  return { spatialHandle, attachedHandle, attachSpatialHandle }
+  return { spatialHandle, selectionSource, attachSpatialHandle }
 }
 
 /**
@@ -422,7 +421,7 @@ function DocumentPageBody({
    * the daemon page holds one for MCP viewport requests, and both want the
    * same handle.
    */
-  const { spatialHandle, attachedHandle, attachSpatialHandle } = useMergedSpatialHandle(
+  const { spatialHandle, selectionSource, attachSpatialHandle } = useMergedSpatialHandle(
     model.spatial.editorRef,
   )
 
@@ -652,7 +651,7 @@ function DocumentPageBody({
     documentKind,
     model,
     spatialHandle,
-    attachedHandle,
+    selectionSource,
   })
 
   return (

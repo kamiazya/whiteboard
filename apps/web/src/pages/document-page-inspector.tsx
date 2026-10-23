@@ -16,7 +16,7 @@ import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import type { useCommentsRail } from '../hooks/use-comments-rail.js'
 import type { InspectorKind } from '../lib/inspector.js'
 import { openProposals } from '../lib/open-proposals.js'
-import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import type { SelectionSource, SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import type { DocumentPageModel } from './document-page-model.js'
 
 /**
@@ -160,8 +160,8 @@ export function inspectorPanelsFor(deps: {
   documentKind: DocumentPageModel['documentKind']
   model: DocumentPageModel
   spatialHandle: { current: SpatialEditorHandle | null }
-  /** The attached editor, as state, so the Display panel re-renders with its selection. */
-  attachedHandle: SpatialEditorHandle | null
+  /** The attached editor's selection source, as state, so the Display panel follows it. */
+  selectionSource: SelectionSource | undefined
 }): Record<InspectorKind, () => ReactNode> {
   const {
     versions,
@@ -179,7 +179,7 @@ export function inspectorPanelsFor(deps: {
     documentKind,
     model,
     spatialHandle,
-    attachedHandle,
+    selectionSource,
   } = deps
   return {
     history: () =>
@@ -284,9 +284,7 @@ export function inspectorPanelsFor(deps: {
             <CanvasDisplaySettings
               canvas={sync.canvas}
               onChange={sync.onChange}
-              {...(attachedHandle?.selection === undefined
-                ? {}
-                : { selectionSource: attachedHandle.selection })}
+              {...(selectionSource === undefined ? {} : { selectionSource })}
               {...(model.tags === undefined
                 ? {}
                 : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
