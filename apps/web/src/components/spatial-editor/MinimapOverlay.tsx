@@ -15,7 +15,7 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { Map as MapIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import {
   fitMinimap,
@@ -25,6 +25,7 @@ import {
 } from '../../lib/spatial/minimap.js'
 import { cn } from '../../lib/utils.js'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
+import { keyboardAvoidanceSubject } from './use-keyboard-avoidance.js'
 
 const PADDING_PX = 6
 
@@ -92,11 +93,48 @@ export interface MinimapOverlayProps {
 const TOGGLE_BOTTOM = 'bottom-[calc(5rem+env(safe-area-inset-bottom))]'
 const RAISED_BOTTOM = 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
 
+/**
+ * Whether a text entry inside the surrounding editor root has focus. The
+ * overview shares the bottom-right corner with the formatting bar and the
+ * on-screen keyboard's strip, so while someone types it can only cover the
+ * thing being typed into or sit clipped behind the bar; it returns when the
+ * entry loses focus. `anchor` is a childless marker inside that root — the
+ * overlay has no element of its own to ask.
+ */
+function useTextEntryFocused(anchor: React.RefObject<HTMLElement | null>): boolean {
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    const root = anchor.current?.parentElement
+    if (root === null || root === undefined) return
+    const refresh = () => setFocused(keyboardAvoidanceSubject(root) !== null)
+    document.addEventListener('focusin', refresh)
+    document.addEventListener('focusout', refresh)
+    refresh()
+    return () => {
+      document.removeEventListener('focusin', refresh)
+      document.removeEventListener('focusout', refresh)
+    }
+  }, [anchor])
+  return focused
+}
+
 export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlayProps) {
   const [open, setOpen] = useState(readMinimapOpen)
-  if (!collapsible) return <MinimapSurface {...props} />
+  const anchor = useRef<HTMLSpanElement>(null)
+  const typing = useTextEntryFocused(anchor)
+  const marker = <span ref={anchor} hidden />
+  if (typing) return <>{marker}</>
+  if (!collapsible) {
+    return (
+      <>
+        {marker}
+        <MinimapSurface {...props} />
+      </>
+    )
+  }
   return (
     <>
+      {marker}
       <div
         data-editor-overlay
         data-testid="minimap-toggle-wrap"

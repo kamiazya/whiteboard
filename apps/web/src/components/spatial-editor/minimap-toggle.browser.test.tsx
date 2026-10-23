@@ -28,6 +28,7 @@ function Chrome({ collapsible }: { readonly collapsible: boolean }) {
           onNavigate={vi.fn()}
           collapsible={collapsible}
         />
+        <textarea aria-label="Note text" />
         <ToolPalette
           onCreateNode={vi.fn()}
           onCreateLink={vi.fn()}
@@ -85,4 +86,21 @@ it('shows the overview with no toggle when there is room beside the dock', () =>
   render(<Chrome collapsible={false} />)
   expect(minimap()).not.toBeNull()
   expect(screen.queryByRole('button', { name: /overview/i })).toBeNull()
+})
+
+it.each([
+  true,
+  false,
+])('steps aside while a text entry has focus (collapsible: %s)', async (collapsible) => {
+  render(<Chrome collapsible={collapsible} />)
+  if (collapsible) fireEvent.click(toggle())
+  expect(minimap()).not.toBeNull()
+
+  const entry = screen.getByLabelText('Note text')
+  entry.focus()
+  await vi.waitFor(() => expect(minimap()).toBeNull())
+  expect(screen.queryByRole('button', { name: /overview/i })).toBeNull()
+
+  entry.blur()
+  await vi.waitFor(() => expect(minimap()).not.toBeNull())
 })
