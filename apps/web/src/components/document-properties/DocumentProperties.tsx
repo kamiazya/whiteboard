@@ -2,6 +2,7 @@ import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/white
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
+import { noteFocusPlaced } from '../../lib/focus-claim.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 
@@ -99,6 +100,7 @@ export function DocumentProperties({
           size={Math.min(Math.max((draftTitle ?? title).length + 2, 14), 44)}
           onChange={(event) => {
             if (onTitleChange === undefined) return
+            noteFocusPlaced()
             setDraftTitle(event.target.value)
             typedRef.current = event.target.value
             commit(event.target.value)
@@ -108,6 +110,7 @@ export function DocumentProperties({
           aria-invalid={refusal === null ? undefined : true}
           aria-describedby={refusal === null ? undefined : `${suggestionsId}-refusal`}
           onFocus={() => {
+            noteFocusPlaced()
             editBaselineRef.current = title
           }}
           // stopPropagation is belt-and-braces: the editor binds its shortcuts

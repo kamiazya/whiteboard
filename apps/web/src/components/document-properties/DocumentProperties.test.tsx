@@ -14,6 +14,7 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mayAutofocus, resetFocusClaim } from '../../lib/focus-claim.js'
 import { DocumentFacetsEditor, DocumentProperties } from './DocumentProperties.js'
 
 // An `<input list=...>` maps to role combobox, not textbox — the datalist
@@ -26,7 +27,17 @@ function textboxValue(name: RegExp): string {
   return (screen.getByRole('textbox', { name }) as HTMLInputElement).value
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  resetFocusClaim()
+})
+
+it('records that the reader placed focus in the title, so the editor will not claim it', () => {
+  render(<DocumentProperties {...titleProps()} />)
+  expect(mayAutofocus()).toBe(true)
+  fireEvent.focus(screen.getByRole('textbox', { name: /title|name/i }))
+  expect(mayAutofocus()).toBe(false)
+})
 
 function meta(overrides: Partial<StoredCoreFacets> = {}): StoredCoreFacets {
   return { type: 'markdown', ...overrides }

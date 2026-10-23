@@ -11,6 +11,7 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useId, useRef } from 'react'
+import { mayAutofocus } from '../../lib/focus-claim.js'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
@@ -424,11 +425,12 @@ export function SourcePane({
     //   <body>, permanently, since this focus() is one-shot);
     // - the title input the user clicked BEFORE this deferred effect ran —
     //   real; claiming from it steals keystrokes mid-typing.
-    // <body>/null also count as unclaimed.
+    // <body>/null also count as unclaimed — unless the reader has just placed
+    // focus in a field and a remount cleared it (lib/focus-claim.ts).
     const holder = document.activeElement
     const holderIsTransient =
       holder === null || holder === document.body || holder.closest('[role="menu"]') !== null
-    if (autoFocus && holderIsTransient) {
+    if (autoFocus && holderIsTransient && mayAutofocus()) {
       // The caret goes AFTER what the box was handed. CodeMirror's own
       // default is offset 0, which is right for an empty box (a fresh note,
       // a reply) and wrong for one opened on existing prose: pressing Edit
