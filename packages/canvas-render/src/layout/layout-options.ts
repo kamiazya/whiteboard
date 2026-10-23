@@ -301,6 +301,14 @@ export interface SpatialLayoutOptions {
    */
   readonly showResolved?: boolean
   /**
+   * Whether the annotation layer is drawn at all: pins, cards, leaders,
+   * region outlines and passage highlights. Absent/true draws it, which is
+   * what every surface a person edits on needs. A caller producing a
+   * picture to hand someone else switches it off and gets the board
+   * alone, the envelope's own comments included.
+   */
+  readonly commentLayer?: boolean
+  /**
    * Extra boxes a comment bubble must not cover, beyond this canvas's own
    * nodes and earlier bubbles. For a caller laying out ONE comment apart
    * from its canvas (the editor's drag preview renders the dragged comment
@@ -360,6 +368,13 @@ export interface SpatialContentCache {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /**
+   * The frames that hold nothing, derived from the canvas being laid out. An
+   * empty frame is its own outline and nothing else, so it is tinted to stay
+   * findable; one with members stays unfilled, since a fill emitted ahead of
+   * its members would otherwise risk covering them.
+   */
+  readonly emptyFrameIds?: ReadonlySet<string>
   /** `threads`'s node passages, grouped by the node they are about. */
   readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
   /**

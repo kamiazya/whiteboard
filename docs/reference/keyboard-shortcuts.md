@@ -17,7 +17,7 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you last chose on it |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you were last using on it, chosen or not |
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |
@@ -37,26 +37,37 @@ pinch zooms in every tool.
 | `Shift + Tab` | Select the previous node in reading order |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, or a group's label |
+| `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
+| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
-| Double-click | Edit a node's text, an edge's label, or a group's label |
+| Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
 | `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
 
-**Reaching a node without a pointer.** With the canvas focused, `Tab` walks the
+**Reaching a node without a pointer.** The canvas is a Tab stop, announced as
+"Canvas, 5 notes. Tab selects the first note". With it focused, `Tab` walks the
 nodes top to bottom, then left to right (ties by position in the document),
 and wraps at the end, so focus stays on the canvas while you cycle. `Esc`
-clears the selection; the `Tab` after that is the browser's, which is the way
-on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
+clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
 dock. Locked nodes are skipped, since they cannot be selected.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys
 still nudge. Together with `Enter` and the connect handle this is enough to
 connect two existing nodes using only the keyboard: while a connect is armed,
-`Tab` moves between the boxes it could attach to, each announced by its text
+`Tab` from the canvas moves to the first box it could attach to and on between them, `Esc` cancels, each announced by its text
 (or its kind and a short id when it has none) and outlined while focused, and
 `Enter` attaches.
+
+**The menu from the keyboard.** `Shift + F10` (or the `Menu` key) opens the menu
+for what is selected, a node, a set of nodes, an edge or a group, and puts focus on
+its first row. `Arrow Up` / `Arrow Down` step through the rows, `Home` and
+`End` jump to the first and last, `Enter` runs the one under focus, and `Esc`
+closes the menu and returns focus to the canvas. While a menu is open no other
+canvas key acts: the arrows do not nudge the node behind it, and the tool and
+note letters stay silent.
 
 **Align and distribute** have no shortcut — they live in the right-click
 menu of a multi-node selection, as **Align** (six edges and centre lines)
@@ -64,7 +75,9 @@ and **Distribute** (horizontal, vertical). Align appears once two nodes are
 selected; distribute once there are three, because it repositions the
 middle ones and leaves the outermost two anchoring the span. Both align to
 the selection's own bounding box, so the result does not depend on which
-node you clicked first, and each is a single undo step.
+node you clicked first, and each is a single undo step. Choosing one closes the
+menu so the result is in view, and a screen reader hears what was done (for
+example "Aligned 3 nodes left").
 
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
@@ -74,6 +87,11 @@ release it. Nodes and edges lock independently: locking a node does not
 lock the edges attached to it, and an edge between two locked nodes stays
 editable until you lock the edge itself. The lock is editor state — it is
 stored alongside the canvas but never appears in an export.
+
+A locked node takes the press: dragging it moves nothing, not even the frame
+around it, and a brief "Locked — unlock from the menu" notice says why. A
+frame holding an edge gives way to the edge, so you can select, label or
+restyle that edge by pressing it; the frame is selected from its border.
 
 ## Clipboard
 
@@ -115,13 +133,21 @@ on screen. The same four moves sit in a node's right-click menu under
 | `Shift + 2` | Zoom to the selection |
 | `+` / `-` | Zoom in or out one step, about the middle of the view |
 | `Cmd/Ctrl` + scroll | Zoom under the pointer |
-
-The view is not remembered between visits. A canvas opens at the origin, and
-when none of its content is in view there it opens framed on the content, as
-**Zoom to fit** would. A canvas that already shows some content opens where it
-is, and later edits never move the view.
 | Scroll / two-finger drag | Pan |
-| Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
+| Double-tap in Hand mode (touch) | Zoom in on the point you pressed; with a mouse or pen a double-click edits or adds a note instead, and never moves the view |
+
+Each canvas remembers where you were looking, for the rest of the browser
+session: leave it or reload the page and it reopens at the same pan and zoom,
+separately for each document. A new session, or a canvas that has no memory
+yet, opens at the origin, and when none of its content is in view there (or
+in the remembered position) it opens framed on the content, as **Zoom to fit**
+would. Later edits never move the view.
+
+When a panel covers part of the canvas, as the inspector does in a narrow
+window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
+frame their target in the part you can still see, and opening a panel over the
+selected node moves it clear.
+
 
 The dock carries one view control — **zoom to fit** — and it is there in
 every tool. On a touch screen it is joined by **zoom in** and **zoom out**,
@@ -164,6 +190,16 @@ way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
 one, as **Zoom to fit** does.
 
+## Inside a menu
+
+The right-click and **More actions** menus take focus on their first labelled
+action (not a colour swatch; reach the swatches with `Up` or `Left`) and are one
+Tab stop. `Up` and `Down` move between items and wrap; `Home` and
+`End` jump to the first and last; typing a letter jumps to the next item that
+starts with it. In a row of choices such as the colour swatches, `Left` and
+`Right` move within the row. `Enter` or `Space` activates the item, and
+`Esc` closes the menu and returns focus to the control that opened it.
+
 ## Writing in a markdown document
 
 These keys work in a markdown document's source and in a canvas node's text
@@ -179,5 +215,59 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
 | `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
+| `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
+
+The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
+
+## On the canvas with a screen reader
+
+The text fields that open over a canvas say what they edit: "Text of Review"
+for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
+to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
+keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
+thrown-away draft is not silent.
+
+On an empty canvas the cue to add a note is part of the canvas's description, so
+it is read with the canvas. Choosing a tool, by key or from the dock, announces
+it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
+
+Every node and edge is listed by name for a screen reader, in the order `Tab`
+walks them, and the canvas points at the selected one: a note by its first
+line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
+Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
+and what you do is said back: "Note added", "Connected Review to Ship",
+"Grouped 3 nodes", "Deleted 2 nodes".
+
+The controls around a selected node name it ("Resize Review, south-east",
+"More actions for Review") and add three `Tab` stops, not thirteen: the
+south-east resize handle (the arrow keys resize from it), the right-hand
+connect handle and the actions button.
+
+Whatever you finish on the canvas leaves the keyboard on it: keeping a label
+with `Ctrl + Enter` or discarding it with `Esc`, completing a connection, choosing
+Group from the dock, and closing a dialog or the context menu with `Esc`.
+`Delete`, the arrow keys and undo work straight away, with no click first.
+
+## Moving between pages
+
+Opening a document, returning to the list or opening Settings moves keyboard
+focus to the page's heading and has a screen reader say where you are
+("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
+titled the same way ("Roadmap · Whiteboard"). A new, empty note is the
+exception for focus: the editor takes it, so you can type at once, and the
+announcement still plays.
+
+## Searching the document list
+
+In the document list's search box, the results are one key away, and a screen
+reader hears how many there are once the search settles ("3 results for
+“map”", or "No results for “map”"). A search that takes longer than a moment
+shows "Searching…".
+
+| Shortcut | Action |
+|---|---|
+| `ArrowDown` in the search box | Move to the first result |
+| `ArrowDown` / `ArrowUp` on a result | Move to the next or previous result; `ArrowUp` on the first returns to the box |
+| `Enter` on a result | Open the document |
 
 ← Back to [reference](README.md)

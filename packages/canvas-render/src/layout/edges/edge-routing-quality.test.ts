@@ -14,9 +14,12 @@
 // it, and only the side-choice penalties upstream ever priced it.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import {
   clusteredLayout,
+  designerBoard,
+  latticeLayouts,
   ROUTING_CORPUS,
   syntheticLayouts,
 } from '../../test-utils/routing-corpus.js'
@@ -29,7 +32,10 @@ import {
   interiorInk,
   type MetricRect,
   pathLength,
+  touches,
+  unhoppedCrossings,
 } from '../../test-utils/routing-metrics.js'
+import { computeEdgeJumps } from './edge-jumps.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
@@ -43,6 +49,21 @@ type Violation = { edge: string; node: string; ink: number; kind: ViolationKind 
  * is clear.
  */
 type ViolationKind = 'own-endpoint' | 'foreign' | 'degenerate'
+
+/** Every edge routed as the layout would route it, anchors assigned together. */
+function routeAll(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[]) {
+  const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+  return edges.map((edge) => routeEdge(nodes, edge, 'orthogonal', anchors.get(edge.id)))
+}
+
+/** Crossings of these routed edges that line jumps leave undrawn. */
+function undrawnHops(routed: readonly ResolvedEdgeNode[]): number {
+  const jumps = computeEdgeJumps(routed)
+  return unhoppedCrossings(
+    routed.map((r) => r.path),
+    routed.map((r) => (jumps.get(r.id) ?? []).map((j) => ({ x: j.x, y: j.y }))),
+  )
+}
 
 const rectOf = (n: SpatialNode): MetricRect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
@@ -96,7 +117,7 @@ describe('an edge is always visible', () => {
   // A deliberate sweep over the whole corpus, like the aggregate below: it
   // routes every edge of 2005 layouts, so it needs a budget that reflects
   // the work rather than the 5s default a unit test gets.
-  it('draws something for every edge in every layout', { timeout: 60_000 }, () => {
+  it('draws something for every edge in every layout', { timeout: 180_000 }, () => {
     const invisible: { layout: string; edge: string }[] = []
     for (const testCase of [...ROUTING_CORPUS, ...syntheticLayouts(2000)]) {
       const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
@@ -129,6 +150,11 @@ describe('routing quality', () => {
  *   already holds to. `own-endpoint` dominating by an order of magnitude is
  *   what says where to start — it is exactly the class `bestCandidate`
  *   cannot see.
+ * - `touches` and `unhoppedCrossings` are DEBT too: two edges meeting at a
+ *   corner draw a plus sign that neither a crossing count nor a hop can
+ *   see, and a crossing too near a segment end draws no hop even when line
+ *   jumps are on. Read from the hops `computeEdgeJumps` actually emits, against
+ *   crossings found between straight runs rather than between waypoints.
  * - `borderInk`, `bends`, `crossings` and `length` are PRICE. They have no
  *   target; they are here so a change that buys less tunnelling with a
  *   worse-looking drawing cannot do it silently. A fix that halves interior
@@ -143,7 +169,7 @@ describe('routing quality across the synthetic corpus', () => {
   // A deliberate 2000-layout sweep, not a unit test: it routes tens of
   // thousands of edges and the default 5s timeout is close enough to its
   // runtime to fail under a loaded parallel suite rather than on merit.
-  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
+  it('reports the current violation count and drawing cost', { timeout: 180_000 }, () => {
     const violations: Record<ViolationKind, number> = {
       'own-endpoint': 0,
       foreign: 0,
@@ -153,6 +179,8 @@ describe('routing quality across the synthetic corpus', () => {
     let border = 0
     let bendCount = 0
     let crossingCount = 0
+    let touchCount = 0
+    let unhopped = 0
     let length = 0
     // Arrowheads drawn on a segment shorter than the arrow itself.
     let shortRunway = 0
@@ -161,11 +189,11 @@ describe('routing quality across the synthetic corpus', () => {
         violations[v.kind]++
         interior += v.ink
       }
-      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
-      const paths = testCase.edges.map(
-        (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
-      )
+      const routed = routeAll(testCase.nodes, testCase.edges)
+      const paths = routed.map((r) => r.path)
       crossingCount += crossings(paths)
+      touchCount += touches(paths)
+      unhopped += undrawnHops(routed)
       for (const path of paths) {
         bendCount += bends(path)
         length += pathLength(path)
@@ -179,6 +207,8 @@ describe('routing quality across the synthetic corpus', () => {
       borderInk: Math.round(border),
       bends: bendCount,
       crossings: crossingCount,
+      touches: touchCount,
+      unhoppedCrossings: unhopped,
       length: Math.round(length),
       shortArrowRunway: shortRunway,
     }).toEqual({
@@ -193,6 +223,10 @@ describe('routing quality across the synthetic corpus', () => {
       borderInk: 770,
       bends: 8046,
       crossings: 494,
+      touches: 36,
+      // 54 -> 22 when a crossing on a waypoint of a straight run started to
+      // hop (the earlier line hops when the later one has no room).
+      unhoppedCrossings: 22,
       length: 1338795,
       shortArrowRunway: 136,
     })
@@ -257,4 +291,92 @@ describe('routing quality past the side-choice optimizer gate', () => {
       length: 275766,
     })
   }, 120_000)
+})
+
+/**
+ * The board a designer drew: eight boxes in two frames, orthogonal routing,
+ * line jumps on. Its debts are the ones a reader sees, not the ones the
+ * synthetic sweep prices: an edge that reads as connecting a box it only
+ * passes, and two edges meeting at a corner so that they draw a plus sign
+ * no hop can break.
+ */
+describe('routing quality on the service-tier board', () => {
+  const board = designerBoard()
+  const routed = routeAll(board.nodes, board.edges)
+  const paths = routed.map((r) => r.path)
+
+  it('reports its debt', () => {
+    const throughUnrelated = new Set(
+      avoidableInk(board.nodes, board.edges)
+        .filter((v) => v.kind === 'foreign')
+        .map((v) => v.edge),
+    )
+    expect({
+      edgesThroughUnrelatedNode: throughUnrelated.size,
+      touches: touches(paths),
+      unhoppedCrossings: undrawnHops(routed),
+      crossings: crossings(paths),
+    }).toEqual({
+      // 0/1/0/0 -> 0/0/0/1 when two corners on one point were priced as the
+      // crossing they read as: the Gateway -> Queue detour left the margin
+      // lane it shared with Auth -> Orders and runs under the Gateway, where
+      // the crossing it now makes is hopped.
+      edgesThroughUnrelatedNode: 0,
+      touches: 0,
+      unhoppedCrossings: 0,
+      crossings: 1,
+    })
+  })
+})
+
+/**
+ * The same columns over boxes on a lattice, where lanes coincide. Measured
+ * apart from the synthetic corpus so neither number hides the other: a fix
+ * for aligned boards can leave the scattered ones byte-identical.
+ */
+describe('routing quality across lattice boards', () => {
+  it('reports the current violation count and drawing cost', { timeout: 180_000 }, () => {
+    let throughUnrelated = 0
+    let touchCount = 0
+    let unhopped = 0
+    let crossingCount = 0
+    let bendCount = 0
+    let length = 0
+    for (const testCase of latticeLayouts(400)) {
+      throughUnrelated += new Set(
+        avoidableInk(testCase.nodes, testCase.edges)
+          .filter((v) => v.kind === 'foreign')
+          .map((v) => v.edge),
+      ).size
+      const routed = routeAll(testCase.nodes, testCase.edges)
+      const paths = routed.map((r) => r.path)
+      touchCount += touches(paths)
+      unhopped += undrawnHops(routed)
+      crossingCount += crossings(paths)
+      for (const path of paths) {
+        bendCount += bends(path)
+        length += pathLength(path)
+      }
+    }
+    expect({
+      edgesThroughUnrelatedNode: throughUnrelated,
+      touches: touchCount,
+      unhoppedCrossings: unhopped,
+      crossings: crossingCount,
+      bends: bendCount,
+      length: Math.round(length),
+    }).toEqual({
+      // touches 100 -> 94, crossings 320 -> 323, bends 3282 -> 3286, length
+      // 1488552 -> 1488498: six corner kisses became crossings, of which a
+      // reader sees three more and a hop can now break; the other 94 touches
+      // are crossings that land on a collinear waypoint of one path.
+      edgesThroughUnrelatedNode: 0,
+      touches: 94,
+      // 96 -> 2 likewise.
+      unhoppedCrossings: 2,
+      crossings: 323,
+      bends: 3286,
+      length: 1488498,
+    })
+  })
 })

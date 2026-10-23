@@ -5,11 +5,8 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  * multi-selection targeting, the facet doorway, order/align/distribute/
  * tidy/lock, and the properties/facets/verbs/delete band order.
  */
-import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
-  boundsOf,
-  commentCornerOf,
   endIn,
   frameBackground,
   frameBackgroundStyle,
@@ -21,14 +18,6 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import {
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignHorizontalDistributeCenter,
-  AlignStartHorizontal,
-  AlignStartVertical,
-  AlignVerticalDistributeCenter,
   BringToFront,
   ChevronDown,
   ChevronUp,
@@ -46,20 +35,19 @@ import {
   ScanSearch,
   Scissors,
   SendToBack,
-  Sparkles,
   Tag,
   Trash2,
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
+import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import type { FileRefOption } from '../../../lib/link-entries.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
-import type { AlignableBox } from '../align.js'
-import { alignBoxes, distributeBoxes } from '../align.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 import { nodePropertyItems } from '../facet-widgets/index.js'
 import { type GestureState, reduceGesture } from '../gestures.js'
 import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
-import { commentOnNodeItem } from './annotation-verbs.js'
+import { commentOnNodeItem, commentOnNodesCompose } from './annotation-verbs.js'
+import { pushArrangeBands } from './arrange-bands.js'
 import { colorRow } from './color-row.js'
 
 export interface NodeMenuItemsInput {
@@ -78,7 +66,6 @@ export interface NodeMenuItemsInput {
   readonly missingFileRef?: (file: string) => boolean
   readonly fileRefOptions?: readonly FileRefOption[]
   readonly facetRegistry: FacetRegistry
-  readonly selectedAlignableBoxes: () => readonly AlignableBox[]
   readonly imagePicker: ImagePicker
   readonly applyResult: CanvasCommands['applyResult']
   readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
@@ -97,6 +84,8 @@ export interface NodeMenuItemsInput {
   readonly setDocumentPicker: CanvasCommands['setDocumentPicker']
   readonly setFacetPanelOpen: CanvasCommands['setFacetPanelOpen']
   readonly setCommentCompose: CanvasCommands['setCommentCompose']
+  /** Closes the menu: the property rows that CHANGE the board use it, so the result is in view. */
+  readonly close: () => void
 }
 
 /**
@@ -164,37 +153,16 @@ function pushFrameBands(
 }
 
 /**
- * What a MULTI-selection offers: verbs that act on the whole set rather
+ * What a MULTI-selection adds: verbs that act on the whole set rather
  * than on the node the menu was opened over.
  */
 function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput): void {
-  const { node, canvas, extraIds, groupSelection, setCommentCompose } = input
-  verbs.push({
-    label: 'Group selection',
-    icon: <Frame />,
-    onSelect: () => groupSelection([node.id, ...extraIds]),
-  })
-  // A conversation about the SELECTION, not one member: the spatial arm
-  // naming every member, with the box they occupy stored as the place
-  // the thread is drawn from once they are gone. The bubble opens at the
-  // box's top-right corner, where the layer will pin it.
+  const { node, canvas, extraIds, setCommentCompose } = input
   const nodeIds = [node.id, ...extraIds]
-  const box = boundsOf(canvas.nodes.filter((entry) => nodeIds.includes(entry.id))) ?? node
   verbs.push({
     label: 'Comment on selection',
     icon: <MessageSquarePlus />,
-    onSelect: () =>
-      setCommentCompose({
-        point: commentCornerOf(box),
-        threadAnchor: {
-          kind: 'spatial',
-          nodeIds,
-          x: Math.round(box.x),
-          y: Math.round(box.y),
-          width: Math.round(box.width),
-          height: Math.round(box.height),
-        },
-      }),
+    onSelect: () => setCommentCompose(commentOnNodesCompose(canvas, nodeIds, node)),
   })
 }
 
@@ -255,7 +223,6 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
   const {
     node,
     canvas,
-    canvasRef,
     palette,
     gestureState,
     isLocked,
@@ -264,9 +231,7 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
     extraIds,
     selectedId,
     facetRegistry,
-    selectedAlignableBoxes,
     applyResult,
-    applyBoxMoves,
     copySelection,
     cutSelection,
     duplicateSelection,
@@ -287,10 +252,16 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
   if (isFrame(node)) {
     pushFrameBands(properties, verbs, input)
   }
-  // Framing an existing multi-selection is reached from any of
-  // its members — the frame encloses every selected node,
-  // including group frames: nesting is geometric in JSON Canvas,
-  // and containment moves already handle nested frames.
+  // Framing the selection is reached from any of its members — the frame
+  // encloses every selected node, including group frames: nesting is
+  // geometric in JSON Canvas, and containment moves already handle nested
+  // frames. A lone node is a selection of one, framed the way the dock's
+  // Group frames it.
+  verbs.push({
+    label: 'Group selection',
+    icon: <Frame />,
+    onSelect: () => input.groupSelection([node.id, ...extraIds]),
+  })
   if (extraIds.size > 0) {
     pushMultiSelectionBands(verbs, input)
   }
@@ -334,7 +305,10 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
       {
         label: 'Unlock',
         icon: <LockOpen />,
-        onSelect: () => onToggleNodeLock?.(node.id, false),
+        onSelect: () => {
+          onToggleNodeLock?.(node.id, false)
+          announceOnCanvas('Unlocked 1 node')
+        },
       },
       commentOnThis,
     ]
@@ -438,69 +412,15 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
       },
     ],
   })
-  // Align needs a second box to align TO, and distribute needs a
-  // middle one to place — so each row appears only once its
-  // action means something, rather than sitting there inert.
-  const alignableCount = extraIds.size + 1
-  if (alignableCount >= 2) {
-    properties.push({
-      kind: 'options',
-      label: 'Align',
-      options: (
-        [
-          ['left', 'Align left', <AlignStartVertical key="l" />],
-          ['center-x', 'Align centre horizontally', <AlignCenterVertical key="cx" />],
-          ['right', 'Align right', <AlignEndVertical key="r" />],
-          ['top', 'Align top', <AlignStartHorizontal key="t" />],
-          ['center-y', 'Align centre vertically', <AlignCenterHorizontal key="cy" />],
-          ['bottom', 'Align bottom', <AlignEndHorizontal key="b" />],
-        ] as const
-      ).map(([mode, ariaLabel, icon]) => ({
-        label: mode,
-        ariaLabel,
-        icon,
-        selected: false,
-        onSelect: () => applyBoxMoves(alignBoxes(selectedAlignableBoxes(), mode)),
-      })),
-    })
-  }
-  if (alignableCount >= 3) {
-    properties.push({
-      kind: 'options',
-      label: 'Distribute',
-      options: (
-        [
-          ['horizontal', 'Distribute horizontally', <AlignHorizontalDistributeCenter key="h" />],
-          ['vertical', 'Distribute vertically', <AlignVerticalDistributeCenter key="v" />],
-        ] as const
-      ).map(([axis, ariaLabel, icon]) => ({
-        label: axis,
-        ariaLabel,
-        icon,
-        selected: false,
-        onSelect: () => applyBoxMoves(distributeBoxes(selectedAlignableBoxes(), axis)),
-      })),
-    })
-  }
-  if (alignableCount >= 2) {
-    verbs.push({
-      label: 'Tidy',
-      icon: <Sparkles />,
-      onSelect: () =>
-        applyBoxMoves(
-          tidyNodes(tidyBoxes(canvasRef.current.nodes), {
-            scope: new Set([node.id, ...extraIds]),
-            locked: isLocked,
-            edges: canvasRef.current.edges,
-          }),
-        ),
-    })
-  }
+  pushArrangeBands(properties, verbs, input)
   if (lockEnabled) {
     verbs.push({
       label: 'Lock',
       icon: <LockIcon />,
-      onSelect: () => onToggleNodeLock?.(node.id, true),
+      onSelect: () => {
+        onToggleNodeLock?.(node.id, true)
+        announceOnCanvas('Locked 1 node')
+      },
     })
   }
   verbs.push(zoomToSelectionItem(input.frameSelection), commentOnThis)

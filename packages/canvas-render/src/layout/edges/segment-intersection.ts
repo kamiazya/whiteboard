@@ -10,7 +10,7 @@ export const EDGE_JUMP_RADIUS_PX = 5
  * segment; crossings closer than that to a segment end (junctions, corner
  * touches) are not drawn.
  */
-const END_CLEARANCE_PX = EDGE_JUMP_RADIUS_PX + 1
+export const END_CLEARANCE_PX = EDGE_JUMP_RADIUS_PX + 1
 
 /** Proper interior intersection of segments a1-a2 and b1-b2, or undefined. */
 export function segmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | undefined {

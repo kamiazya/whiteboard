@@ -115,8 +115,30 @@ export function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOpti
   return outlineContentBox(options.nodeOutlines?.[node.id], box, options.shapeTable)
 }
 
+/**
+ * The padding kept between content and the edge of `nodeContentBounds`.
+ * A silhouette's inscribed box already stands back from the node's own edge
+ * (a diamond's by a quarter of each side), and that gap IS the margin the
+ * stroke needs — padding on top of it shrank a 160x100 diamond's 80px
+ * measure to 64 and broke "Payments" mid-word. So the padding only tops the
+ * inscribed box's own inset up to the configured amount, per axis.
+ */
+function nodeContentPadding(
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): { readonly x: number; readonly y: number } {
+  const padding = options.geometry.paddingPx
+  const bounds = nodeContentBounds(node, options)
+  const insetX = Math.min(bounds.x - node.x, node.x + node.width - (bounds.x + bounds.w))
+  const insetY = Math.min(bounds.y - node.y, node.y + node.height - (bounds.y + bounds.h))
+  return {
+    x: Math.max(0, padding - Math.max(0, insetX)),
+    y: Math.max(0, padding - Math.max(0, insetY)),
+  }
+}
+
 export function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number {
-  const width = nodeContentBounds(node, options).w - 2 * options.geometry.paddingPx
+  const width = nodeContentBounds(node, options).w - 2 * nodeContentPadding(node, options).x
   const floor = options.geometry.minContentWidthPx
   return Number.isFinite(width) && width > floor ? width : floor
 }
@@ -230,12 +252,65 @@ function tightenToInk(entry: SceneNode): SceneNode {
   return { ...entry, bbox: { ...entry.bbox, x: left, w: inkRight(entry) - left } }
 }
 
+/** Moves each line of a paragraph so its ink is centred in `width`. */
+function centreLines(entry: SceneNode & { kind: 'paragraph' }, width: number): SceneNode {
+  const lines = new Map<number, typeof entry.runs>()
+  for (const run of entry.runs) {
+    lines.set(run.bbox.y, [...(lines.get(run.bbox.y) ?? []), run])
+  }
+  const runs = [...lines.values()].flatMap((line) => {
+    const left = Math.min(...line.map((run) => run.bbox.x))
+    const right = Math.max(...line.map((run) => run.bbox.x + run.bbox.w))
+    const shift = right - left < width ? (width - (right - left)) / 2 - left : 0
+    return line.map((run) => ({ ...run, bbox: { ...run.bbox, x: run.bbox.x + shift } }))
+  })
+  return tightenToInk({ ...entry, runs })
+}
+
+/** How far down a shaped node's content moves to sit centred vertically. */
+function verticalCentreOffset(
+  content: Scene,
+  node: SpatialNode,
+  bounds: BoundingBox,
+  padY: number,
+): number {
+  const innerH = bounds.h - 2 * padY
+  const contentH = Math.max(
+    0,
+    ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+  )
+  if (contentH < innerH) return (innerH - contentH) / 2
+  if (contentH > node.height) return 0
+  // Taller than the padded inscribed box yet inside the node: a cylinder's
+  // caps leave little between them, and top-aligning there sits the label
+  // on the floor. Centre on the inscribed box, kept inside the node.
+  const top = bounds.y + (bounds.h - contentH) / 2
+  const clamped = Math.min(Math.max(top, node.y), node.y + node.height - contentH)
+  return clamped - (bounds.y + padY)
+}
+
+/**
+ * A wrapped paragraph is centred LINE by line: shifting the block by its
+ * widest line left a short last line flush with the left edge of a block that
+ * was itself centred. Everything else moves as a block by `dx`.
+ */
+function centreContent(content: Scene, width: number, dx: number): Scene {
+  return {
+    ...content,
+    nodes: content.nodes.map((entry) =>
+      entry.kind === 'paragraph' && entry.runs.length > 0
+        ? centreLines(entry, width)
+        : (translateScene({ nodes: [entry] }, dx, 0).nodes[0] ?? entry),
+    ),
+  }
+}
+
 export function placeInNode(
   node: SpatialNode,
   content: Scene,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const padding = options.geometry.paddingPx
+  const pad = nodeContentPadding(node, options)
   const bounds = nodeContentBounds(node, options)
   // A SHAPED node centers content that fits vertically — the diagram-symbol
   // convention (Excalidraw/draw.io). An overflowing body fills the inscribed
@@ -254,30 +329,20 @@ export function placeInNode(
     align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
   let dx = 0
   let dy = 0
+  let lineCentreWidth: number | undefined
   if (options.fitToBox && centres) {
-    const innerW = bounds.w - 2 * padding
-    const innerH = bounds.h - 2 * padding
+    const innerW = bounds.w - 2 * pad.x
     const inkW = Math.max(0, ...content.nodes.map(inkRight))
     if (inkW < innerW) dx = (innerW - inkW) / 2
-    const contentH = Math.max(
-      0,
-      ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
-    )
-    if (contentH < innerH) dy = (innerH - contentH) / 2
-    else if (contentH <= node.height) {
-      // Taller than the padded inscribed box yet inside the node: a cylinder's
-      // caps leave little between them, and top-aligning there sits the label
-      // on the floor. Centre on the inscribed box, kept inside the node.
-      const top = bounds.y + (bounds.h - contentH) / 2
-      const clamped = Math.min(Math.max(top, node.y), node.y + node.height - contentH)
-      dy = clamped - (bounds.y + padding)
-    }
+    lineCentreWidth = innerW
+    dy = verticalCentreOffset(content, node, bounds, pad.y)
   }
   // A paragraph's bbox spans the wrap width; once its ink moves right of
   // the left edge, that bbox would cross the silhouette, so it shrinks to
   // the ink it holds.
-  const placed = dx > 0 ? { ...content, nodes: content.nodes.map(tightenToInk) } : content
-  return translateScene(placed, bounds.x + padding + dx, bounds.y + padding + dy).nodes
+  const placed =
+    lineCentreWidth === undefined ? content : centreContent(content, lineCentreWidth, dx)
+  return translateScene(placed, bounds.x + pad.x, bounds.y + pad.y + dy).nodes
 }
 
 /** Gap between a container's outside label and its frame's top edge. */
@@ -354,10 +419,10 @@ function contentBox(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): { readonly w: number; readonly h: number } | undefined {
-  const padding = options.geometry.paddingPx
+  const pad = nodeContentPadding(node, options)
   const bounds = nodeContentBounds(node, options)
-  const w = bounds.w - 2 * padding
-  const h = bounds.h - 2 * padding
+  const w = bounds.w - 2 * pad.x
+  const h = bounds.h - 2 * pad.y
   return w > 0 && h > 0 ? { w, h } : undefined
 }
 

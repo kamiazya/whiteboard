@@ -414,7 +414,11 @@ describe('what an errand costs in tool calls', () => {
         // bytes a dressed box. This is the price of the snapshot telling
         // the truth about what a node wears: before, the answer to "dress
         // six boxes" never said they were dressed. One call either way.
-        responseBytes: 3480,
+        // Then 3,480 -> 3,926: +446, every bundled stencil now carries a
+        // badge symbol and the dress writes it beside the stencil facet, so
+        // six symbol facets ride in the echoed board — about 75 bytes a box.
+        // Same one call; the extra bytes are the badge saying what it is.
+        responseBytes: 3926,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading

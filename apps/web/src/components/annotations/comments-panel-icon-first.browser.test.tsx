@@ -45,17 +45,22 @@ function box(el: Element) {
   return { w: Math.round(r.width), h: Math.round(r.height) }
 }
 
-it('draws the conversation verbs icon-only, with the name spoken rather than printed', async () => {
+it('draws the object verbs icon-only, with the name spoken rather than printed', async () => {
   render(<CommentsPanel threads={[OPEN]} onResolve={vi.fn()} onEditMessage={vi.fn()} />)
   await userEvent.click(page.getByText('tighten the copy here'))
 
-  for (const name of ['Resolve', 'Edit message']) {
-    const el = page.getByRole('button', { name }).element()
-    // A name it has; a label it draws. "No visible text" is a visual
-    // statement only — the accessible name is non-negotiable.
-    expect(el.textContent?.trim()).toBe('')
-    expect(el.getAttribute('title')).toBe(name)
-  }
+  const el = page.getByRole('button', { name: 'Edit message' }).element()
+  // A name it has; a label it draws. "No visible text" is a visual
+  // statement only — the accessible name is non-negotiable.
+  expect(el.textContent?.trim()).toBe('')
+  expect(el.getAttribute('title')).toBe('Edit message')
+})
+
+it('prints Resolve, the one verb a misfire on cost a reader the wrong conversation', async () => {
+  render(<CommentsPanel threads={[OPEN]} onResolve={vi.fn()} />)
+  expect(page.getByRole('button', { name: 'Resolve' }).element().textContent?.trim()).toBe(
+    'Resolve',
+  )
 })
 
 it('gives every verb the 44px the rule names, which is the half that must not be dropped', async () => {

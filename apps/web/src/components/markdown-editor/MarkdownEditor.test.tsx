@@ -1,6 +1,6 @@
 import { layoutMdastBlocks, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -404,5 +404,15 @@ describe('MarkdownEditor', () => {
     // this mount poisoning every concurrent reader the moment a test clicks
     // a toolbar mode button.
     expect(window.localStorage.getItem('whiteboard.markdown-view-mode')).toBe('split')
+  })
+})
+
+describe('an empty note in Read mode', () => {
+  afterEach(() => window.localStorage.removeItem('whiteboard.markdown-view-mode'))
+
+  it('says how to start writing while the Write control is on screen', () => {
+    render(<MarkdownEditor theme="light" value="" onChange={() => {}} initialViewMode="read" />)
+    expect(screen.getByText('Nothing to preview yet. Switch to Write to start.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Write' })).toBeTruthy()
   })
 })

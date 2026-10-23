@@ -28,7 +28,7 @@ import {
   endNode,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { distanceToPolyline, hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
+import { type Box, distanceToPolyline, hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { type DrawnPath, inkUnder, inkWithin, type Rect } from './ink-hit.js'
 
@@ -228,20 +228,71 @@ export function pointableBoxes(
   return pointable.length === boxes.length ? boxes : pointable
 }
 
+/**
+ * Whether `at` lies in a frame's border band: inside the box, within
+ * `tolerance` of one of its sides. A frame's interior is padding around what
+ * it holds, so only this band and the frame's own chrome mean "the frame".
+ */
+function onFrameBorder(box: Box, at: Point, tolerance: number): boolean {
+  return (
+    at.x - box.x <= tolerance ||
+    box.x + box.width - at.x <= tolerance ||
+    at.y - box.y <= tolerance ||
+    box.y + box.height - at.y <= tolerance
+  )
+}
+
+/**
+ * The unlocked path under `at`. A locked edge is invisible here, which is
+ * what keeps it out of the selection and therefore out of Delete, the label
+ * editor (double-press) and every restyle command, at one point instead of
+ * at each of them.
+ */
+function pathUnder(inputs: PickInputs, at: Point): string | undefined {
+  return inputs.paths.find(
+    (path) =>
+      !inputs.isEdgeLocked(path.id) && distanceToPolyline(at, path.path) <= inputs.tolerance,
+  )?.id
+}
+
+function frameBox(inputs: PickInputs, id: string): NodeBox | undefined {
+  const entry = inputs.boxes.find((candidate) => candidate.id === id)
+  return entry?.container === true ? entry : undefined
+}
+
+/**
+ * Whether a press at `at` lands on a LOCKED node and stops there.
+ *
+ * A locked node is invisible to the pick, so without this the press fell
+ * through to whatever lay beneath — the frame around it, the edge behind
+ * it — and that was dragged instead. A locked frame absorbs only on its
+ * border band, the way an unlocked one is picked: its interior stays
+ * transparent, so a marquee can still start inside it.
+ */
+export function lockedNodeAbsorbsPress(inputs: PickInputs, at: Point): boolean {
+  const id = hitTest(inputs.boxes, at)
+  if (id === undefined || !inputs.isNodeLocked(id)) return false
+  const frame = frameBox(inputs, id)
+  return frame === undefined || onFrameBorder(frame.box, at, inputs.tolerance)
+}
+
 /** The probes a PRESS contends with, in `CONTENT_PICK_ORDER`. */
 export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe | SkippedProbe> {
   return {
     lines: (at) => inkUnder(inputs.paths, at, inputs.tolerance, inputs.isEdgeLocked)?.id,
-    nodes: (at) => hitTest(pointableBoxes(inputs.boxes, inputs.isNodeLocked), at),
-    // Locked edges are invisible here, which is what keeps a locked edge out
-    // of the selection and therefore out of Delete, the label editor
-    // (double-press) and every restyle command, at one point instead of at
-    // each of them.
-    edges: (at) =>
-      inputs.paths.find(
-        (path) =>
-          !inputs.isEdgeLocked(path.id) && distanceToPolyline(at, path.path) <= inputs.tolerance,
-      )?.id,
+    nodes: (at) => {
+      const id = hitTest(pointableBoxes(inputs.boxes, inputs.isNodeLocked), at)
+      if (id === undefined) return undefined
+      const frame = frameBox(inputs, id)
+      // A frame's interior yields to a relation drawn across it: the relation
+      // is what a press there is aimed at, and the border band stays the
+      // frame's own.
+      if (frame !== undefined && !onFrameBorder(frame.box, at, inputs.tolerance)) {
+        return pathUnder(inputs, at) === undefined ? id : undefined
+      }
+      return id
+    },
+    edges: (at) => pathUnder(inputs, at),
   }
 }
 

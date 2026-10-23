@@ -46,6 +46,11 @@ export interface NodeCreationInputs {
    */
   readonly collapseExtras: () => void
   readonly containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
+  /** The selection a Group chosen with no point frames: the primary, then the rest. */
+  readonly selectedId: string | null
+  readonly extraIds: Iterable<string>
+  /** Opens the name editor on a frame the person just asked for. */
+  readonly openGroupLabel: (id: string) => void
 }
 
 /**
@@ -70,6 +75,9 @@ export function useNodeCreation({
   applyResult,
   collapseExtras,
   containerSizeOf,
+  selectedId,
+  extraIds,
+  openGroupLabel,
 }: NodeCreationInputs) {
   /**
    * The canvas-space rectangle a person can actually see: the root, minus
@@ -159,7 +167,18 @@ export function useNodeCreation({
     panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
   }
 
+  /**
+   * A Group chosen WITHOUT a point (the dock) frames the selection when there
+   * is one — an empty frame dropped over work it does not hold is the wrong
+   * answer to "group these" — and otherwise makes a frame in free space and
+   * asks for its name, since an unnamed empty frame has nothing to find it by.
+   * A point (a drop, the canvas menu) is the person's own choice of place.
+   */
   const createGroupAtViewportCenter = (at?: Point) => {
+    if (at === undefined && selectedId !== null) {
+      groupSelection([selectedId, ...extraIds])
+      return
+    }
     const point = spawnPoint(at, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT })
     const id = newId()
     const node = groupNodeDefaults(id, point)
@@ -170,6 +189,7 @@ export function useNodeCreation({
     })
     collapseExtras()
     panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
+    if (at === undefined) openGroupLabel(id)
   }
 
   /** Frames the current multi-selection: enclosing box + padding. */

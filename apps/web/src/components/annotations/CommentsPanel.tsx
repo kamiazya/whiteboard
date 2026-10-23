@@ -27,6 +27,7 @@ import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
 import { AnnouncerRegion, useAnnouncer } from './announcer.js'
 import { CommentComposer } from './CommentComposer.js'
 import type { CommentsPanelProps, ThreadFilter } from './comments-panel-props.js'
+import { ResolveUndoNotice, useResolveUndo } from './resolve-undo.js'
 import { ComposeAbout, type ThreadEdit, ThreadRow } from './thread-row.js'
 
 const FILTERS: readonly { readonly value: ThreadFilter; readonly label: string }[] = [
@@ -186,6 +187,8 @@ export function CommentsPanel({
   onResolve,
   onEditMessage,
   onReturnFocus,
+  showResolvedOnCanvas = false,
+  onShowResolvedOnCanvasChange,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -309,10 +312,13 @@ export function CommentsPanel({
   const statusOf = (thread: CommentThread): CommentThreadStatus =>
     pending.get(thread.id) ?? thread.status
 
-  function resolveWithBeat(thread: CommentThread): void {
+  const { offer: undo, offerUndo } = useResolveUndo()
+
+  function resolveWithBeat(thread: CommentThread, withUndo = true): void {
     if (onResolve === undefined) return
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
+    offerUndo(withUndo ? { threadId: thread.id, to: next } : null)
     announce(next === 'resolved' ? 'Conversation resolved' : 'Conversation reopened')
     setPending((prev) => new Map(prev).set(thread.id, next))
     window.setTimeout(() => {
@@ -399,6 +405,29 @@ export function CommentsPanel({
           </button>
         ))}
       </fieldset>
+      {onShowResolvedOnCanvasChange === undefined ? null : (
+        <button
+          type="button"
+          aria-pressed={showResolvedOnCanvas}
+          onClick={() => onShowResolvedOnCanvasChange(!showResolvedOnCanvas)}
+          className={cn(
+            'self-start rounded px-2 py-1 text-xs text-muted-foreground aria-pressed:font-medium',
+            TOGGLE_STATE_CLASS,
+          )}
+        >
+          Show resolved on canvas
+        </button>
+      )}
+
+      {undo === null ? null : (
+        <ResolveUndoNotice
+          to={undo.to}
+          onUndo={() => {
+            const target = threads.find((entry) => entry.id === undo.threadId)
+            if (target !== undefined) resolveWithBeat(target, false)
+          }}
+        />
+      )}
 
       {composeAnchor !== null && onCreateThread !== undefined ? (
         <form

@@ -181,6 +181,66 @@ describe('computeEdgeJumps end clearance', () => {
   })
 })
 
+describe('computeEdgeJumps across a waypoint on a straight run', () => {
+  // The router keeps a departure stub as a waypoint when the detour carries
+  // on along it, so a straight line arrives as two segments meeting at (100, 100).
+  const split = (id: string) =>
+    routed(id, [
+      { x: 0, y: 100 },
+      { x: 100, y: 100 },
+      { x: 300, y: 100 },
+    ])
+  const vertical = (id: string) =>
+    routed(id, [
+      { x: 100, y: 0 },
+      { x: 100, y: 200 },
+    ])
+
+  it('hops a line that crosses the earlier edge exactly on its waypoint', () => {
+    expect(computeEdgeJumps([split('a'), vertical('b')]).get('b')).toEqual([
+      { segment: 0, x: 100, y: 100 },
+    ])
+  })
+
+  it("lets the earlier edge hop when the crossing is the later edge's own waypoint", () => {
+    const jumps = computeEdgeJumps([vertical('a'), split('b')])
+    expect(jumps.get('a')).toEqual([{ segment: 0, x: 100, y: 100 }])
+    expect(jumps.get('b')).toBeUndefined()
+  })
+
+  it("keeps the earlier edge's own hops, in order, when it takes one over", () => {
+    const jumps = computeEdgeJumps([
+      routed('z', [
+        { x: 0, y: 20 },
+        { x: 300, y: 20 },
+      ]),
+      vertical('a'),
+      split('b'),
+    ])
+    expect(jumps.get('a')).toEqual([
+      { segment: 0, x: 100, y: 20 },
+      { segment: 0, x: 100, y: 100 },
+    ])
+    expect(jumps.get('b')).toBeUndefined()
+  })
+
+  it('draws nothing where two corners meet on one point', () => {
+    const jumps = computeEdgeJumps([
+      routed('a', [
+        { x: 0, y: 50 },
+        { x: 50, y: 50 },
+        { x: 50, y: 0 },
+      ]),
+      routed('b', [
+        { x: 100, y: 50 },
+        { x: 50, y: 50 },
+        { x: 50, y: 100 },
+      ]),
+    ])
+    expect(jumps.size).toBe(0)
+  })
+})
+
 describe('computeEdgeJumps order and paint order', () => {
   it("orders one segment's hops along it, whatever order the edges were drawn in", () => {
     const far = routed('far', [

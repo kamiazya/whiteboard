@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { DocumentThumbnail } from './DocumentThumbnail.js'
 import { RecentLane } from './RecentLane.js'
 
 // The lane is an ADDITION beside the grid, never a reordering of it: the grid
@@ -27,7 +28,14 @@ const documents = [
 
 describe('RecentLane', () => {
   it('lists the recorded documents in recency order, not the listing order', () => {
-    render(<RecentLane documents={documents} recentIds={['d3', 'd1']} onOpen={() => {}} />)
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d3', 'd1']}
+        onSelect={() => {}}
+        onOpen={() => {}}
+      />,
+    )
 
     const lane = screen.getByRole('region', { name: /recent/i })
     expect(
@@ -38,7 +46,9 @@ describe('RecentLane', () => {
   })
 
   it('renders nothing at all when nothing has been recorded', () => {
-    render(<RecentLane documents={documents} recentIds={[]} onOpen={() => {}} />)
+    render(
+      <RecentLane documents={documents} recentIds={[]} onSelect={() => {}} onOpen={() => {}} />,
+    )
 
     expect(screen.queryByRole('region', { name: /recent/i })).toBeNull()
   })
@@ -46,7 +56,14 @@ describe('RecentLane', () => {
   it('drops a recorded id the listing no longer holds, rather than showing a dead tile', () => {
     // A deleted document — the lane resolves against the listing already in
     // hand, so it needs no reconciliation pass of its own.
-    render(<RecentLane documents={documents} recentIds={['gone', 'd2']} onOpen={() => {}} />)
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['gone', 'd2']}
+        onSelect={() => {}}
+        onOpen={() => {}}
+      />,
+    )
 
     const lane = screen.getByRole('region', { name: /recent/i })
     expect(within(lane).getAllByRole('button')).toHaveLength(1)
@@ -54,18 +71,58 @@ describe('RecentLane', () => {
   })
 
   it('renders nothing when every recorded id has gone', () => {
-    render(<RecentLane documents={documents} recentIds={['gone', 'also-gone']} onOpen={() => {}} />)
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['gone', 'also-gone']}
+        onSelect={() => {}}
+        onOpen={() => {}}
+      />,
+    )
 
     expect(screen.queryByRole('region', { name: /recent/i })).toBeNull()
   })
 
-  it('opens the entry it was given, not one looked up by path', () => {
+  it('selects on a click and opens on a double-click, each with the entry it was given', () => {
+    const onSelect = vi.fn()
     const onOpen = vi.fn()
-    render(<RecentLane documents={documents} recentIds={['d2']} onOpen={onOpen} />)
+    render(
+      <RecentLane documents={documents} recentIds={['d2']} onSelect={onSelect} onOpen={onOpen} />,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /Board/ }))
+    expect(onSelect).toHaveBeenCalledWith(documents[1])
+    expect(onOpen).not.toHaveBeenCalled()
 
+    fireEvent.doubleClick(screen.getByRole('button', { name: /Board/ }))
     expect(onOpen).toHaveBeenCalledWith(documents[1])
+  })
+
+  it('opens on Enter without also selecting', () => {
+    const onSelect = vi.fn()
+    const onOpen = vi.fn()
+    render(
+      <RecentLane documents={documents} recentIds={['d2']} onSelect={onSelect} onOpen={onOpen} />,
+    )
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /Board/ }), { key: 'Enter' })
+    expect(onOpen).toHaveBeenCalledWith(documents[1])
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('marks the tile the preview is showing', () => {
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d2', 'd1']}
+        selectedPath="design/board"
+        onSelect={() => {}}
+        onOpen={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Board/ }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('button', { name: /Login/ }).getAttribute('aria-current')).toBeNull()
   })
 
   it('shows the path tail when a document was never named', () => {
@@ -73,6 +130,7 @@ describe('RecentLane', () => {
       <RecentLane
         documents={[entry({ documentId: 'd9', path: 'notes/untitled-2', name: undefined })]}
         recentIds={['d9']}
+        onSelect={() => {}}
         onOpen={() => {}}
       />,
     )
@@ -85,6 +143,7 @@ describe('RecentLane', () => {
       <RecentLane
         documents={documents}
         recentIds={['d1', 'd2']}
+        onSelect={() => {}}
         onOpen={() => {}}
         renderThumbnail={(each) => <span data-testid={`thumb-${each.documentId}`} />}
       />,
@@ -103,6 +162,7 @@ describe('RecentLane', () => {
         documents={documents}
         recentIds={['d1', 'd2']}
         gridColumns={3}
+        onSelect={() => {}}
         onOpen={() => {}}
       />,
     )
@@ -115,9 +175,33 @@ describe('RecentLane', () => {
         documents={documents}
         recentIds={['d1', 'd2']}
         gridColumns={2}
+        onSelect={() => {}}
         onOpen={() => {}}
       />,
     )
     expect(screen.getByTestId('recent-lane')).toBeTruthy()
+  })
+
+  it('draws a tile with the same render a card draws, not the kind icon', async () => {
+    const loadRender = vi.fn(async () => ({
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="10" height="10"/></svg>',
+      bounds: { x: 0, y: 0, w: 400, h: 300 },
+    }))
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d2']}
+        onSelect={() => {}}
+        onOpen={() => {}}
+        renderThumbnail={(each) => (
+          <DocumentThumbnail document={each} loadRender={loadRender} className="size-full" />
+        )}
+      />,
+    )
+
+    const picture = screen.getByTestId('document-thumbnail')
+    await waitFor(() => expect(picture.querySelector('[data-kind]')).toBeNull())
+    expect(picture.querySelector('svg rect')).not.toBeNull()
+    expect(loadRender).toHaveBeenCalledWith(documents[1])
   })
 })

@@ -59,6 +59,7 @@ export class PersistenceLedger {
         this.inFlightPushes--
         if (this.failureEpoch === epochAtPush) this.writeFailed = false
         this.settle()
+        this.reportLanding()
       },
       rejected: () => {
         this.inFlightPushes--
@@ -128,6 +129,17 @@ export class PersistenceLedger {
     this.unsaved = false
     this.lastSavedAt = new Date().toISOString()
     this.report({ kind: 'saved', lastSavedAt: this.lastSavedAt })
+  }
+
+  /**
+   * A write landed and the document is still unsaved behind it — edits kept
+   * coming, so it could not settle. Said again so the store's progress is on
+   * the record; without it a long unbroken burst of typing reads as one write
+   * that never lands.
+   */
+  private reportLanding(): void {
+    if (!this.unsaved || this.writeFailed || this.awaitingKeeperState || this.documentGone) return
+    this.report({ kind: 'pending', lastSavedAt: this.lastSavedAt, landedAt: Date.now() })
   }
 
   private failed(): void {

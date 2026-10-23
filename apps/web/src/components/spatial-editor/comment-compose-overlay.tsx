@@ -168,6 +168,7 @@ export function CommentComposeOverlay({
         exitHintTop={box.y + grownHeight + EXIT_HINT_GAP_PX}
         box={box}
         initialText=""
+        label="New comment"
         testId="comment-compose"
         style={commentComposeStyle(palette)}
         lengthLimit={commentMessageLengthLimit}

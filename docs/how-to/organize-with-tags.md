@@ -124,6 +124,36 @@ What the library changes:
   `workspaceId` answers the library under `tagLibrary` beside the tags in
   use, so an agent can read the vocabulary it will be held to.
 
+## Colour a tag
+
+In a browser-kept workspace, a tag can be coloured without writing the
+library by hand. In the **Display** panel's **Tags** row (and the same row
+in a note's header), open a `key:value` chip's menu and choose **Set
+colour…**, then one of the six swatches the box colour row uses, or **No
+colour** to take the colour back. The colour is written into the workspace's
+tag library, so every box or edge carrying that tag and no colour of its own
+is drawn in it, and the legend lists the key — a colour you set on a box with
+a swatch stays yours and is never explained by a key, which is why it gets no
+legend.
+
+A few things worth knowing:
+
+- Only `key:value` tags have a menu; a plain tag has nowhere in the library
+  to be coloured.
+- The first colour on a key that declared no values gives that key a list of
+  admitted values — the one you coloured and every value the workspace already
+  carries under it. A key with values refuses others, so a new value under it
+  is then refused until it is added to the library.
+- The legend appears when the key tells boxes apart by colour: colouring
+  `tier:service` while a box tagged `tier:database` stays uncoloured lists
+  both; colouring the only value on the board lists nothing. The keys `frame`,
+  `kind` and `stencil` are the board's own distinctions, so a tag under one of
+  them is drawn in its colour but never listed.
+- The colour is an edit to the `tags` document, not to the board you are on:
+  it does not join the board's undo. **No colour** reverses it.
+- A workspace the daemon keeps cannot be coloured this way yet; the menu is
+  not offered there. Write the library with `wb_facet_set` as above.
+
 ## Find by tag
 
 In the document browser:

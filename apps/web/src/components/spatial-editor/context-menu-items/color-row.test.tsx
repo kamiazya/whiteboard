@@ -2,7 +2,8 @@
 import { resolveCanvasPalette, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
-import { colorRow, presetEntries } from './color-row.js'
+import { presetEntries } from '../../../lib/color-presets.js'
+import { colorRow } from './color-row.js'
 
 describe('colorRow', () => {
   it('offers default plus every preset, selecting the current value', () => {

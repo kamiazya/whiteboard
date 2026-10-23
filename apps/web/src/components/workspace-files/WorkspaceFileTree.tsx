@@ -1,9 +1,10 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { FileText, Folder, LayoutGrid } from 'lucide-react'
-import { type ReactNode, useMemo } from 'react'
+import { type KeyboardEvent, type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
+import { useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -79,6 +80,21 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
 }
 
 /**
+ * Enter opens; without the preventDefault the keydown ALSO fires the native
+ * button click, selecting after the open.
+ */
+function activateOnEnter(
+  onActivate: (document: WorkspaceDocumentEntry) => void,
+  document: WorkspaceDocumentEntry,
+) {
+  return (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    onActivate(document)
+  }
+}
+
+/**
  * The document row: a button, because opening one is the point of the tree.
  *
  * Its own component because a document row and a folder row share nothing
@@ -101,10 +117,12 @@ function DocumentRow({
   renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   selectedPath?: string
 }) {
+  const dragProps = useDocumentDragProps(document.path)
   return (
     <button
       type="button"
       data-doc-path={document.path}
+      {...dragProps}
       aria-current={document.path === selectedPath ? 'true' : undefined}
       onClick={() => onOpen(document)}
       onContextMenu={
@@ -116,18 +134,7 @@ function DocumentRow({
             }
       }
       onDoubleClick={onActivate === undefined ? undefined : () => onActivate(document)}
-      onKeyDown={
-        onActivate === undefined
-          ? undefined
-          : (event) => {
-              if (event.key === 'Enter') {
-                // Without this the keydown ALSO fires the native
-                // button click, selecting after the open.
-                event.preventDefault()
-                onActivate(document)
-              }
-            }
-      }
+      onKeyDown={onActivate === undefined ? undefined : activateOnEnter(onActivate, document)}
       className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
     >
       {/* A caller-supplied miniature when there is one; otherwise the
@@ -150,10 +157,14 @@ function KindIcon({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
   )
 }
 
-/** A folder: a label, never a target. Only its children can be opened. */
-function FolderRow({ name }: { name: string }) {
+/** A folder: a label to open nothing, but a drop target and menu for the documents it holds. */
+function FolderRow({ name, path }: { name: string; path: string }) {
+  const folderProps = useFolderProps(path)
   return (
-    <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5 text-sm">
+    <span
+      {...folderProps}
+      className="text-muted-foreground data-[dropping]:ring-ring flex data-[dropping]:ring-2 items-center gap-1.5 px-1.5 py-0.5 text-sm"
+    >
       <Folder className="size-3.5 shrink-0" />
       <span className="truncate">{name}</span>
     </span>
@@ -182,7 +193,7 @@ function TreeItem({
       hasChildren={node.children.length > 0}
       row={
         node.canvas === null ? (
-          <FolderRow name={node.name} />
+          <FolderRow name={node.name} path={node.path} />
         ) : (
           <DocumentRow
             document={node.canvas}

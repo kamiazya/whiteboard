@@ -1,8 +1,10 @@
+import { referenceMarkup } from '@kamiazya/whiteboard-codec'
 import { useMemo, useRef } from 'react'
 import type { LinkTarget } from '../../lib/link-target.js'
+import { planLinkTarget } from '../../lib/link-target-plan.js'
 import type { VerbCatalogHost } from './verb-catalog.js'
 import type { LinkTargetCreator } from './wiki-link-completion.js'
-import { referenceAtOffset, wikiLinkFollow } from './wiki-link-follow.js'
+import { type ReferenceUnderOffset, referenceAtOffset, wikiLinkFollow } from './wiki-link-follow.js'
 
 /**
  * Following and creating `[[links]]` from the source pane: the Ctrl/Cmd+click
@@ -18,8 +20,10 @@ export function useLinkFollow(options: {
   readonly onCreateLinkTarget: LinkTargetCreator | undefined
   /** The open document's path, which the Create row must never offer to make. */
   readonly ownPath: string | undefined
+  /** Writes the body, so the link the note was made for can be pointed at it. */
+  readonly onChange: (next: string) => void
 }) {
-  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath } = options
+  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath, onChange } = options
   const ownPathRef = useRef(ownPath)
   ownPathRef.current = ownPath
   const openRef = useRef(onOpenDocument)
@@ -48,10 +52,48 @@ export function useLinkFollow(options: {
       const open = onOpenDocument
       return open === undefined ? {} : { openLink: () => open(found.target.id) }
     }
-    const create = onCreateLinkTarget
-    return create === undefined
+    return onCreateLinkTarget === undefined
       ? {}
-      : { createLinkTarget: { path: found.path, run: () => void create(found.path) } }
+      : createRow(found, {
+          value,
+          create: onCreateLinkTarget,
+          ownPath: ownPathRef.current,
+          existingPaths: linkTargetsRef.current.map((target) => target.path),
+          onChange,
+        })
   }
   return { extension, getCreate, getOwnPath, catalogLinkRows }
+}
+
+/**
+ * The catalog's Create row for an unresolved link: it makes the note, then
+ * rewrites that link to the address the note was made at. The words the link
+ * was written with stay (an alias already there wins).
+ */
+function createRow(
+  found: Extract<ReferenceUnderOffset, { kind: 'unresolved' }>,
+  host: {
+    readonly value: string
+    readonly create: LinkTargetCreator
+    readonly ownPath: string | undefined
+    readonly existingPaths: readonly string[]
+    readonly onChange: (next: string) => void
+  },
+): Pick<VerbCatalogHost, 'createLinkTarget'> {
+  const plan = planLinkTarget(found.path, host.ownPath, host.existingPaths)
+  if (plan === null) return {}
+  return {
+    createLinkTarget: {
+      path: found.path,
+      run: () => {
+        const markup =
+          referenceMarkup({ target: plan.path, alias: found.alias ?? plan.name }) ?? plan.markup
+        const { value } = host
+        host.onChange(
+          value.slice(0, found.index) + markup + value.slice(found.index + found.length),
+        )
+        void Promise.resolve(host.create(plan.path, plan.name)).catch(() => {})
+      },
+    },
+  }
 }

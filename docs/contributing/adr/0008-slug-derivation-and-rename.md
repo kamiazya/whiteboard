@@ -20,6 +20,16 @@
 > retired and fails `tools/arch-lint/src/vocabulary-check.test.ts`; this ADR is
 > history and keeps it. See `.claude/rules/vocabulary.md`.
 
+> **Addendum (2026-10-23):** the decision that a path is never derived from a
+> name stands, with one narrow exception. The FIRST rename from the title
+> re-derives a generated path (`untitled`, `untitled-N`) from the new name,
+> because the path is still a default nobody chose; a collision with a sibling
+> is numbered `-2`, `-3`. After that the path is fixed: every later rename
+> leaves it alone, a path a person chose is never replaced, and a name the path
+> alphabet cannot spell (or one that would itself read as generated) leaves the
+> path as it was. The move runs when the title box is left, not per keystroke.
+> The rule is `pathAfterFirstRename` in `apps/web/src/lib/first-rename-path.ts`.
+
 ## Context
 
 [ADR-0007](0007-canvas-identity-and-store-split.md) fixed `(workspaceId,

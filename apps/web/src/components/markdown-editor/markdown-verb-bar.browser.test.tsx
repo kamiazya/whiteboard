@@ -69,3 +69,24 @@ it('drops the verbs a narrow width cannot hold rather than wrapping the strip', 
   await setViewport(1280, 800)
   await vi.waitFor(() => expect(slots().length).toBe(MARKDOWN_EDITOR_VERBS.length))
 })
+
+it('applies a verb to a selection the browser placed that CodeMirror has not read yet', async () => {
+  await setViewport(1280, 800)
+  const onChange = await mount()
+  await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
+
+  // A tap on a touch screen moves the native selection and the very next
+  // press arrives before the editor's selectionchange handling has run.
+  const text = source().querySelector('.cm-line')?.firstChild as Text
+  const range = document.createRange()
+  range.setStart(text, 1)
+  range.setEnd(text, 3)
+  const selection = window.getSelection() as Selection
+  selection.removeAllRanges()
+  selection.addRange(range)
+  const bold = screen.getByRole('button', { name: 'Bold' })
+  bold.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
+  bold.click()
+
+  await vi.waitFor(() => expect(lastValue(onChange)).toBe('m**il**k'))
+})

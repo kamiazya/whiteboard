@@ -230,6 +230,7 @@ describe('canvas_view draws a board as wb_scene_render does (colour by intent)',
       workspaceId,
       documentId,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
     const viewed = viewerSvg(

@@ -35,7 +35,7 @@ import {
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endNode, isFrame } from '@kamiazya/whiteboard-model'
+import { endNode, isFrame, membersOf } from '@kamiazya/whiteboard-model'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
@@ -63,13 +63,18 @@ import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import type { Point } from './edges/edge-geometry.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
-import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
+import {
+  edgeLabelPlacement,
+  type LabelObstacle,
+  labelObstacles,
+} from './edges/edge-label-anchor.js'
 import { routeEdge } from './edges/edge-router.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { RoutingBudget } from './edges/routing-budget.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
+import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import { nodePassagesOf } from './passage-highlight.js'
@@ -235,6 +240,20 @@ function pullEdgeOntoOutlines(
 }
 
 /**
+ * Where each frame's title is drawn: above the frame's border, outside the
+ * box a node obstacle covers, yet text a label must not land on.
+ */
+function frameTitleBoxes(
+  nodes: readonly SpatialNode[],
+  options: ResolvedLayoutOptions,
+): LabelObstacle[] {
+  return nodes
+    .filter((node) => isFrame(node))
+    .flatMap((node) => labelRuns(node, labelOf(node, undefined), 'above', options))
+    .flatMap((run) => (run.kind === 'textRun' ? [run.bbox] : []))
+}
+
+/**
  * Composes a centered label run for an edge that carries one. Returns
  * `undefined` for no label, an empty/whitespace-only label, or a
  * degenerate path — `layoutSpatialCanvas` stays total either way. The
@@ -296,11 +315,15 @@ export function layoutSpatialCanvasWithAnchors(
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // Intent first, so every reader below sees the same colours.
   const canvas = withDeclaredColours(stored, options.tagLibrary)
+  // An empty `comments` is an answer, not a gap (it replaces the envelope's
+  // copy), so switching the layer off needs no branch in the composers.
+  const threads = options.commentLayer === false ? [] : (options.threads ?? [])
   return layoutSpatialCanvasInternal(canvas, {
     ...withSpatialReferenceSeams(options),
     ...resolveContributions(canvas, options),
-    passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
-    regionsByThread: regionsOf(options.threads ?? [], canvas),
+    ...(options.commentLayer === false ? { comments: [] } : {}),
+    passagesByNode: groupPassages(nodePassagesOf(threads)),
+    regionsByThread: regionsOf(threads, canvas),
     messagesByThread: new Map((options.threads ?? []).map((t) => [t.id, t.messages.length])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
@@ -510,11 +533,22 @@ export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNod
   return [...groups, ...nodes.filter((node) => !isFrame(node))]
 }
 
+function emptyFrameIdsOf(canvas: SpatialCanvas): ReadonlySet<string> {
+  return new Set(
+    canvas.nodes
+      .filter((node) => isFrame(node) && membersOf(canvas.nodes, node).length === 0)
+      .map((node) => node.id),
+  )
+}
+
 function layoutSpatialCanvasInternal(
   canvas: SpatialCanvas,
   incoming: ResolvedLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const resolved = withCanvasTheme(canvas, incoming)
+  const resolved: ResolvedLayoutOptions = {
+    ...withCanvasTheme(canvas, incoming),
+    emptyFrameIds: emptyFrameIdsOf(canvas),
+  }
   const nodeContent = paintOrderOf(canvas.nodes).flatMap((node) => [
     ...composeNode(node, resolved),
     ...composeDecorations(node, resolved),
@@ -537,6 +571,9 @@ function layoutSpatialCanvasInternal(
     resolved,
     (id) => edgePaths.get(id),
     mdastOptionsFor,
+    [...nodeContent, ...content].flatMap((node) =>
+      node.kind === 'textRun' && node.annotates !== undefined ? [node.bbox] : [],
+    ),
   )
   const proposalContent = composeProposals(
     canvas,
@@ -621,7 +658,7 @@ function composeEdgesAndLabels(
           if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
           return { ...edge, jumps }
         })
-  const obstacles = labelObstacles(canvas.nodes)
+  const obstacles = labelObstacles(canvas.nodes, frameTitleBoxes(canvas.nodes, resolved))
   const labelContent = routable
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)

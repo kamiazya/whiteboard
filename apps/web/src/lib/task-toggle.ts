@@ -47,3 +47,9 @@ export function toggleTaskLine(source: string, line: number): string {
   )
   return lines.join('\n')
 }
+
+/** The words of the task item on 1-based `line`, without its list marker and box. */
+export function taskItemText(source: string, line: number): string {
+  const text = source.split('\n')[line - 1] ?? ''
+  return text.replace(TASK_LINE, '').trim()
+}

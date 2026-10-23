@@ -16,7 +16,7 @@ export interface PlacedNode {
 export type Direction = 'up' | 'down' | 'left' | 'right'
 
 /** Top to bottom, then left to right by box position; ties fall to the id. */
-function readingOrder<T extends PlacedNode>(nodes: readonly T[]): T[] {
+export function readingOrder<T extends PlacedNode>(nodes: readonly T[]): T[] {
   return [...nodes].sort((a, b) => a.y - b.y || a.x - b.x || compareCodeUnit(a.id, b.id))
 }
 

@@ -70,6 +70,7 @@
  * diagram that needs a shape uses an image node.
  */
 
+import { useRef } from 'react'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
@@ -97,7 +98,12 @@ import {
   dismissProposalCard,
   releaseProposalPress,
 } from './pointer-proposal-claim.js'
-import { commitRelease, releaseDrawing, releaseMarquee } from './pointer-release.js'
+import {
+  commitRelease,
+  releaseDrawing,
+  releaseHandDoublePress,
+  releaseMarquee,
+} from './pointer-release.js'
 
 /**
  * The navigation machine distinguishes touch from everything else; pen
@@ -142,6 +148,8 @@ function commitPendingText(
 }
 
 export function useEditorPointer(inputs: EditorPointerInputs) {
+  /** A hand-tool double press waiting for its release; see `armHandDoublePress`. */
+  const handDoublePressRef = useRef<{ key: string; point: Point; screen: Point } | null>(null)
   const {
     createNodeAt,
     pasteClipboard,
@@ -185,6 +193,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     extraIds,
     isOverlayEvent,
     lastStrokeRef,
+    lockedPress,
     pickInputs,
     rootRef,
     runNavigation,
@@ -265,6 +274,21 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       at - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
     lastPressRef.current = isDoublePress ? null : { key: pressKey, at, point: screenPoint }
     doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
+  }
+
+  /** The hand tool pans on every press: its double click is judged here, acted on at the release. */
+  const armHandDoublePress = (
+    e: React.PointerEvent<HTMLDivElement>,
+    pressKey: string,
+    screenPoint: Point,
+    point: Point,
+  ) => {
+    if (tool !== 'hand' || e.pointerType === 'touch' || e.button !== 0) return
+    if (spaceDownRef.current || commentHoldsPress(inputs)) return
+    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    const armed = doublePressRef.current
+    doublePressRef.current = null
+    handDoublePressRef.current = armed === null ? null : { ...armed, screen: screenPoint }
   }
 
   /**
@@ -410,7 +434,10 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     const pick = pickContentAt(pressProbes(pickInputs), point)
     const { hitId, hitPathId, pressKey } = describePress(pick)
 
-    if (chromeClaimsPress(e, root, point, screenPoint, hitId)) return
+    if (chromeClaimsPress(e, root, point, screenPoint, hitId)) {
+      armHandDoublePress(e, pressKey, screenPoint, point)
+      return
+    }
     if (beginDrawStroke(inputs, e, root, point)) return
     // Deliberately NO pointer capture below. Capturing on the press retargets
     // the subsequent clicks to the capturing root, so a control the press
@@ -418,6 +445,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // real pointermove instead (`captureOnFirstMove`); overlay handle/connect
     // gestures are the exception and want it immediately.
     if (claimShiftPress(e, pick)) return
+    if (lockedPress.absorb(e, pick, point, screenPoint)) return
 
     recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
     if (hitId === undefined) {
@@ -508,6 +536,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (root === null) return
     cancelLongPressPastSlop(e, root)
     const screenPoint = clientPointToRootLocal(e, root)
+    lockedPress.announceDrag(e, screenPoint)
     captureOnFirstMove(e, root)
     if (startCommentPinDrag(inputs, e, root, screenPoint)) return
     const navigation = runNavigation(
@@ -587,6 +616,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
+    lockedPress.release()
     const navigation = runNavigation(
       root,
       {
@@ -596,6 +626,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       },
       e.timeStamp,
     )
+    releaseHandDoublePress(handDoublePressRef, clientPointToRootLocal(e, root), releaseContext)
     if (chromeClaimsRelease(e, root, navigation.fallThrough)) return
 
     const armed = doublePressRef.current
@@ -618,6 +649,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
+    lockedPress.release()
     // The machine's own cancel arm emits the long-press clear, the capture
     // release and the gesture cancel, in that order — the three things
     // a handler would otherwise do by hand across four refs.

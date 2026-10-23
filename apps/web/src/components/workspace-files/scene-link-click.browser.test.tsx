@@ -120,7 +120,8 @@ it('a link inside a card picture opens the card, not the link', async () => {
     <RecentLane
       documents={docs}
       recentIds={[LINKER]}
-      onOpen={(entry) => opened.push(entry.path)}
+      onSelect={(entry) => opened.push(entry.path)}
+      onOpen={() => {}}
       renderThumbnail={(entry) => (
         <DocumentThumbnail document={entry} loadRender={load} className="size-full" />
       )}
@@ -143,6 +144,7 @@ it('nothing drawn in a card picture takes keyboard focus', async () => {
     <RecentLane
       documents={docs}
       recentIds={[LINKER]}
+      onSelect={() => {}}
       onOpen={() => {}}
       renderThumbnail={(entry) => (
         <DocumentThumbnail document={entry} loadRender={load} className="size-full" />

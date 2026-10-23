@@ -6,9 +6,11 @@ import { BrowserCapacityNotice } from '../components/BrowserCapacityNotice.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { DocumentsSkeleton } from '../components/document-list/DocumentsSkeleton.js'
+import { PageHeading } from '../components/shell/PageHeading.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { browserMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
+import { useListRoutePresence } from '../hooks/use-route-presence.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
   type ContentClock,
@@ -646,14 +648,16 @@ export function BrowserIndexPage({
   })
   useLauncherShortcut(handleCreate)
 
+  const headingRef = useListRoutePresence()
+
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4">
+    <main className="flex h-full flex-col overflow-y-auto p-4">
       {/* The generic word moved to the panel's own region label. Before the
           row lands the segment is what the address carries, and the last
           fallback keeps the page from ever having no h1 at all. */}
-      <h1 className="mb-3 truncate text-lg font-semibold">
+      <PageHeading headingRef={headingRef}>
         {workspaceName ?? activeWorkspace?.segment ?? 'Documents'}
-      </h1>
+      </PageHeading>
       {moved && <WorkspaceMovedNotice />}
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
@@ -677,6 +681,6 @@ export function BrowserIndexPage({
         capacity={capacity}
       />
       <DeleteDocumentsDialog {...deleteDialog} />
-    </div>
+    </main>
   )
 }

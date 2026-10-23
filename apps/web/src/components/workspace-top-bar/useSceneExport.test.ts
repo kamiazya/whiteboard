@@ -113,6 +113,24 @@ describe('useSceneExport', () => {
     await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'))
   })
 
+  it.each([
+    ['png-comments', 'my-canvas.png', 'Exported as PNG (with comments)'],
+    ['svg-comments', 'my-canvas.svg', 'Exported as SVG (with comments)'],
+  ] as const)('downloads %s under the plain extension and says what it carried', async (format, file, message) => {
+    const { downloads } = stubDownloads()
+    const onExported = vi.fn()
+    const onExport = vi.fn().mockResolvedValue(new Blob(['x']))
+    const { result } = renderHook(() =>
+      useSceneExport({ onExport, filenameBase: 'my-canvas', onExported }),
+    )
+    await act(async () => {
+      await result.current.handleExport(format)
+    })
+    expect(onExport).toHaveBeenCalledWith(format)
+    expect(downloads).toEqual([file])
+    expect(onExported).toHaveBeenCalledWith(message)
+  })
+
   it('is a no-op when onExport is undefined', async () => {
     const { result } = renderHook(() =>
       useSceneExport({ onExport: undefined, filenameBase: 'my-canvas' }),

@@ -186,6 +186,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_PAGE,
     note: 'both pages decide which backend to sync through; the browser half is one inline memo over `BrowserBackend` keyed on the document id, because a browser-kept document has no transport to choose, no token to carry and no session to be refused — which is most of what this module is',
   },
+  'src/pages/use-place-by-name.ts': {
+    reach: 'both-keepers',
+    browser: 'src/pages/use-browser-document-controller.ts',
+    note: 'both keepers move a still-generated path to the name once, through one derivation (`first-rename-path.ts`); the browser controller does it against its own index and the files source, the daemon over its path route',
+  },
   'src/lib/extension-connection.ts': {
     reach: 'daemon-itself',
     why: 'asks whether the whiteboard extension can reach a daemon at all — the answer is a daemon connection, so a browser-kept workspace, which is not connected to anything, has no counterpart',
@@ -213,6 +218,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/lib/replica-refresh.ts': {
     reach: 'daemon-itself',
     why: "keeps this browser's cached copy of a daemon workspace fresh while that workspace is open — a browser-kept workspace has no cached copy to refresh",
+  },
+  'src/pages/use-replica-reconcile.ts': {
+    reach: 'daemon-itself',
+    why: 'arms the replica push and refresh for the daemon workspace the page is open on — the same reason as `replica-refresh.ts`: a browser-kept workspace has no cached copy to reconcile',
   },
   'src/hooks/use-transfer-handshake.ts': {
     reach: 'daemon-itself',
@@ -416,7 +425,13 @@ describe('each answer is checked, so none of them can be a word in front of an o
 const FILES_SOURCE_OMISSIONS: Record<
   string,
   { readonly missing: string; readonly followUp: string }
-> = {}
+> = {
+  'writeTagLibrary@daemon': {
+    missing:
+      "colouring a tag from its chip writes the workspace tag library, and the daemon keeper has no web writer for another document's facets yet, so the chip menu offers no colour there",
+    followUp: 'issues/daemon-tag-library-writer',
+  },
+}
 
 const FILES_SOURCE_KEEPERS = {
   daemon: '/src/lib/daemon-files-source.ts',

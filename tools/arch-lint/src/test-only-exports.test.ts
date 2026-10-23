@@ -62,7 +62,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/markdown-editor/active-markdown-editor.ts#subscribeActiveMarkdownEditor',
   'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#ghostPresses',
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#TOOL_BUTTON_CLASS',
-  'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#presetEntries',
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace',
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#writeReachesIds',
   'apps/web/src/components/spatial-editor/shortcuts.ts#findShortcutIn',
@@ -213,6 +212,7 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'apps/web/src/lib/browser-idb-upgrades.ts#discardPlaintextReplicas',
   'apps/web/src/lib/browser-idb-upgrades.ts#mintBrowserWorkspaceSegment',
   'apps/web/src/lib/browser-idb-upgrades.ts#rekeyBrowserWorkspace',
+  'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
   'packages/canvas-render/src/layout/comment-placement.ts#COMMENT_BUBBLE_OFFSET_PX',
   'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
   'packages/canvas-render/src/layout/nodes/node-outline.ts#outlineContains',
@@ -222,7 +222,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/canvas-render/src/quality/drawing-score.ts#DrawingScore',
   'packages/canvas-render/src/quality/facet-score.ts#FacetScore',
   'packages/canvas-render/src/scene-bounds.ts#MIN_SCENE_EXTENT_PX',
-  'packages/codec/src/references/markup.ts#referenceMarkup',
   'packages/codec/src/spatial/census.ts#CensusFacet',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
@@ -252,6 +251,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'production reaches it through daemonBlobStore; exported so the conformance suite and the store module test can name the class the port ledger holds them to',
   'packages/ports/src/document-path-tree.ts#planSubtreeMove':
     'the subtree-move plan the in-memory DocumentIndex double executes; no production keeper moves rows by path any more (the browser tree index moves nodes), so the port double is its one reader',
+  'apps/web/src/lib/commit-debounce.ts#COMMIT_MAX_WAIT_MS':
+    'the longest an edit waits; the sustained-edit test asserts the write lands inside it',
+  'apps/web/src/lib/search-query-memory.ts#forgetSearchQueries':
+    'the remembered search query is module state that outlives a page by design, so an index-page suite forgets it between tests',
   'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
     'the one await a test has over a startup fold an unmount left running, so clearing the database cannot land between its listing and its record open; production never deletes storage under a running fold',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
@@ -363,7 +366,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 149
+const DEBT_CEILING = 148
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

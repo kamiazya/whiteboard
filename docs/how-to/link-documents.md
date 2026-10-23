@@ -25,9 +25,13 @@ external link always carried its text. A reference can name its target two ways:
   the rare path that could be mistaken for an id.
 
 Type a name that matches no document and the completion list offers
-a `Create 'name'` row: it makes a markdown note at that path and writes the link
-to it. Where the editor cannot make documents (a daemon-kept workspace,
-today) the row is not offered.
+a `Create 'name'` row. Your words become the note's **name**, and its path is
+derived from them the way a first rename derives one — `Lecture 6 notes` makes
+`lecture-6-notes` (`-2` if that is taken), in the folder of the document you are
+writing. The link is written to match, `[[lecture-6-notes|Lecture 6 notes]]`, so
+it resolves and still reads as you typed it, and a short notice says
+`Created 'Lecture 6 notes'`. Text that is already a path (`notes/plan`) keeps
+it. Where the editor cannot make documents the row is not offered.
 
 Write `[[path|your own words]]` when the link should read as something
 other than the target's name. A `[[Display name]]` is **not** a link — it
@@ -98,8 +102,9 @@ copy does not hold does nothing.
 In the markdown editor's source, hold Ctrl (Cmd on a Mac) and click a
 `[[...]]` link to open its document. From the keyboard, put the caret inside
 the link and choose **Open link under caret** in the editing actions menu.
-On a link that names no document the same menu offers `Create 'path'` where
-the editor can make documents.
+On a link that names no document the same menu offers `Create 'text'` where
+the editor can make documents; it makes the note as above and rewrites that
+link to point at it.
 
 A followed link opens the document at its top; a `#` part names what the link
 points at but does not scroll to it.

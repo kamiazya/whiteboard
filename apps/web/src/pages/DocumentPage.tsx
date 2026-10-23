@@ -22,28 +22,41 @@ import {
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
+import { TagColouringProvider } from '../components/tags/tag-colouring.js'
 import { VersionPreview } from '../components/VersionPreview.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import type { DocumentIdentity } from '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { useBrowserToolRegistry } from '../hooks/use-browser-tool-registry.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
+import { useDocumentRoutePresence } from '../hooks/use-route-presence.js'
 import { useWhiteboardCommands } from '../hooks/use-whiteboard-commands.js'
 import type { SceneExportOptions } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { fileRefOptions } from '../lib/link-entries.js'
+import { pictureExportOptionsOf } from '../lib/picture-export-options.js'
 import { applyCommand } from '../lib/spatial/commands.js'
-import type { SelectionSource, SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import type {
+  SelectionSource,
+  ShowResolvedSource,
+  SpatialEditorHandle,
+} from '../lib/spatial/editor-handle.js'
 import type { ResolvedTheme } from '../lib/theme.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { createUserSettingsStore, type UserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
-import { AnnounceNoticeProvider, useTransientNotice } from './document-notice.js'
+import {
+  type AnnounceNotice,
+  AnnounceNoticeProvider,
+  createLinkTargetAnnouncing,
+  useTransientNotice,
+} from './document-notice.js'
 import {
   DocumentInspectorSegment,
   DocumentRowActions,
@@ -103,7 +116,9 @@ export function DocumentPage<Props>({
   const answer = keeper.useDocument(props, events)
   if (answer.kind === 'terminal') return answer.node
   const page: ReactNode = (
-    <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+    <TagColouringProvider setTagColour={answer.model.tags?.setTagColour}>
+      <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+    </TagColouringProvider>
   )
   return answer.wrap === undefined ? page : answer.wrap(page)
 }
@@ -126,16 +141,20 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
   // this page on every rebuild and the page's render rebuilt it again; the
   // source is one object for the editor's life, so the setter bails out.
   const [selectionSource, setSelectionSource] = useState<SelectionSource | undefined>(undefined)
+  const [showResolvedSource, setShowResolvedSource] = useState<ShowResolvedSource | undefined>(
+    undefined,
+  )
   const keeperEditorRefLatest = useRef(keeperEditorRef)
   keeperEditorRefLatest.current = keeperEditorRef
   const attachSpatialHandle = useCallback((node: SpatialEditorHandle | null) => {
     spatialHandle.current = node
     setSelectionSource(node?.selection)
+    setShowResolvedSource(node?.showResolved)
     const keeperRef = keeperEditorRefLatest.current
     if (typeof keeperRef === 'function') keeperRef(node)
     else if (keeperRef !== null && keeperRef !== undefined) keeperRef.current = node
   }, [])
-  return { spatialHandle, selectionSource, attachSpatialHandle }
+  return { spatialHandle, selectionSource, showResolvedSource, attachSpatialHandle }
 }
 
 /**
@@ -203,6 +222,7 @@ function DocumentHeader({
                     key={documentKey}
                     title={model.title === 'top-bar' ? identity.name : model.title.value}
                     onTitleChange={titleWriter(model, identity.onRename)}
+                    {...settledProp(model, identity)}
                     // No save state in the row: the shell mark answers
                     // for the keeper, and only when there is a condition.
                     {...(model.properties.status === undefined
@@ -230,6 +250,18 @@ function DocumentHeader({
 }
 
 type TitleWriter = ComponentProps<typeof DocumentProperties>['onTitleChange']
+
+/** The keeper's settle step, held back behind the bar's renames still on the wire. */
+function settledProp(
+  model: DocumentPageModel,
+  identity: DocumentIdentity,
+): Pick<ComponentProps<typeof DocumentProperties>, 'onTitleSettled'> {
+  const { onNameSettled } = model
+  if (onNameSettled === undefined) return {}
+  const { afterRenamesLand } = identity
+  if (afterRenamesLand === undefined) return { onTitleSettled: onNameSettled }
+  return { onTitleSettled: (name) => afterRenamesLand(() => onNameSettled(name)) }
+}
 
 /**
  * Who takes a rename typed into the title field: the bar's own rename when
@@ -298,7 +330,9 @@ function markdownPaneProps({
   commentsRail,
   sync,
   decidePassage,
+  announce,
 }: {
+  announce: AnnounceNotice
   model: DocumentPageModel
   resolvedTheme: ResolvedTheme
   references: ReturnType<typeof useReferenceSeams>
@@ -324,7 +358,9 @@ function markdownPaneProps({
     ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
     linkTargets: files.pickerTargets,
     onOpenDocument: model.openDocument,
-    ...(files.createLinkTarget === undefined ? {} : { onCreateLinkTarget: files.createLinkTarget }),
+    ...(files.createLinkTarget === undefined
+      ? {}
+      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
     ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
@@ -349,15 +385,19 @@ function exportOptions({
   fileSeams,
   threads,
   model,
+  settingsStore,
 }: {
   documentKind: DocumentKind
   references: ReturnType<typeof useReferenceSeams>
   fileSeams: ReturnType<typeof useDocumentFileSeams>
   threads: DocumentPageModel['threads']
   model: DocumentPageModel
+  settingsStore: UserSettingsStore
 }): SceneExportOptions {
   return {
     kind: documentKind,
+    // Read at the click, not at render: the menu writes the store itself.
+    picture: pictureExportOptionsOf(settingsStore.load()),
     references:
       documentKind === 'markdown' ? references : referenceSeamsFromWire(fileSeams.references),
     threads: threads.annotations,
@@ -421,9 +461,8 @@ function DocumentPageBody({
    * the daemon page holds one for MCP viewport requests, and both want the
    * same handle.
    */
-  const { spatialHandle, selectionSource, attachSpatialHandle } = useMergedSpatialHandle(
-    model.spatial.editorRef,
-  )
+  const { spatialHandle, selectionSource, showResolvedSource, attachSpatialHandle } =
+    useMergedSpatialHandle(model.spatial.editorRef)
 
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
@@ -547,7 +586,7 @@ function DocumentPageBody({
     onExport: (format) =>
       sync.exportScene(
         format,
-        exportOptions({ documentKind, references, fileSeams, threads, model }),
+        exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
       ),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
     onExported: setNotice,
@@ -604,6 +643,7 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
+  const headingRef = useDocumentRoutePresence(model, documentKind)
   // No variation chrome here, and no `?v=`: ADR-0029 retires the surface.
   // A proposal is drawn on the document a person is already looking at, so
   // a lane to switch onto — and an address that names which one — is the
@@ -652,11 +692,13 @@ function DocumentPageBody({
     model,
     spatialHandle,
     selectionSource,
+    showResolvedSource,
   })
 
   return (
     <DocumentPageShell
       srTitle={model.srTitle}
+      headingRef={headingRef}
       aside={inspector === null ? undefined : lockedInspector(sync, inspectorPanels[inspector]())}
       header={
         <DocumentHeader
@@ -690,6 +732,7 @@ function DocumentPageBody({
                 commentsRail,
                 sync,
                 decidePassage,
+                announce: setNotice,
               })}
               spatial={() => (
                 <SpatialEditorPane

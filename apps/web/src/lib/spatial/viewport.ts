@@ -142,18 +142,23 @@ export function frameViewport(
   containerSize: ContainerSize | null,
   currentZoom: number,
   marginPx: number,
+  occlusion?: ViewportOcclusion,
 ): Viewport {
+  const visible = containerSize === null ? null : visibleSize(containerSize, occlusion)
   const center =
-    containerSize === null
+    visible === null || containerSize === null
       ? { x: 0, y: 0 }
-      : { x: containerSize.width / 2, y: containerSize.height / 2 }
+      : {
+          x: (occlusion?.left ?? 0) + visible.width / 2,
+          y: (occlusion?.top ?? 0) + visible.height / 2,
+        }
   const contentCenter = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 }
   const width = Math.max(1, bounds.maxX - bounds.minX)
   const height = Math.max(1, bounds.maxY - bounds.minY)
   let zoom = currentZoom
-  if (containerSize !== null) {
-    const usableWidth = Math.max(1, containerSize.width - marginPx * 2)
-    const usableHeight = Math.max(1, containerSize.height - marginPx * 2)
+  if (visible !== null) {
+    const usableWidth = Math.max(1, visible.width - marginPx * 2)
+    const usableHeight = Math.max(1, visible.height - marginPx * 2)
     zoom = clampZoom(Math.min(1, usableWidth / width, usableHeight / height))
   }
   return {
@@ -177,6 +182,19 @@ export const PAN_MARGIN_PX = 12
 export interface ViewportOcclusion {
   readonly top?: number
   readonly bottom?: number
+  readonly left?: number
+  readonly right?: number
+}
+
+/** The part of the container no chrome paints over. Never below 1px a side, so a fit never divides by nothing. */
+export function visibleSize(
+  containerSize: ContainerSize,
+  occlusion?: ViewportOcclusion,
+): ContainerSize {
+  return {
+    width: Math.max(1, containerSize.width - (occlusion?.left ?? 0) - (occlusion?.right ?? 0)),
+    height: Math.max(1, containerSize.height - (occlusion?.top ?? 0) - (occlusion?.bottom ?? 0)),
+  }
 }
 
 /** How far one axis must move so [start,end] lands inside [min,max]. */
@@ -215,13 +233,15 @@ export function panToShowTarget(
   const bottomRight = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, viewport)
   const visibleTop = occlusion?.top ?? 0
   const visibleBottom = containerSize.height - (occlusion?.bottom ?? 0)
+  const visibleLeft = occlusion?.left ?? 0
+  const visibleRight = containerSize.width - (occlusion?.right ?? 0)
   const fits =
-    topLeft.x >= 0 &&
+    topLeft.x >= visibleLeft &&
     topLeft.y >= visibleTop &&
-    bottomRight.x <= containerSize.width &&
+    bottomRight.x <= visibleRight &&
     bottomRight.y <= visibleBottom
   if (fits) return undefined
-  const dx = shiftToReveal(topLeft.x, bottomRight.x, 0, containerSize.width)
+  const dx = shiftToReveal(topLeft.x, bottomRight.x, visibleLeft, visibleRight)
   const dy = shiftToReveal(topLeft.y, bottomRight.y, visibleTop, visibleBottom)
   // The shifts are screen pixels; the viewport origin is canvas units.
   return { ...viewport, x: viewport.x + dx / viewport.zoom, y: viewport.y + dy / viewport.zoom }

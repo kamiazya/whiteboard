@@ -96,6 +96,8 @@ export interface RenderCanvasCoreOptions {
    * (committed, worker, drag layers) and is never written to the document.
    */
   readonly showResolved?: boolean
+  /** canvas-render's `commentLayer`; absent draws the annotation layer, as the editor needs. */
+  readonly commentLayer?: boolean
   /**
    * The document's conversations, for the passages inside text nodes
    * (canvas-render's `threads`): a highlight behind the quoted words. Pins
@@ -175,6 +177,7 @@ export function renderCanvasToSvgWith(
     lockedNodeIds: options.lockedNodeIds,
     commentObstacles: options.commentObstacles,
     showResolved: options.showResolved,
+    commentLayer: options.commentLayer,
     threads: options.threads,
     proposals: options.proposals,
     onDegrade: options.onDegrade,
@@ -206,12 +209,23 @@ function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
 export function renderCanvasForExportWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
+  background?: string,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   const { scene } = renderCanvasToSvgWith(canvas, options)
   const bounds = sceneDocumentBounds(scene)
   return {
-    svg: renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds }),
+    svg: renderSceneToSvg(scene, exportEnvelope(bounds, background)),
     bounds,
+  }
+}
+
+/** The saved document's envelope; `background` absent leaves the picture transparent. */
+export function exportEnvelope(bounds: BoundingBox, background?: string): SvgDocumentOptions {
+  return {
+    width: bounds.w,
+    height: bounds.h,
+    viewBox: bounds,
+    ...(background === undefined ? {} : { background }),
   }
 }
 

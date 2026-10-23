@@ -68,6 +68,8 @@ const ROOT_FOCUS_SHORTCUTS: ReadonlySet<ShortcutId> = new Set([
   'select-previous-node',
   'select-adjacent-node',
   'edit-selected-node',
+  'open-context-menu',
+  'open-context-menu-shift-f10',
 ])
 
 export interface EditorKeyboardInputs {
@@ -105,6 +107,16 @@ export interface EditorKeyboardInputs {
   createNodeAtViewportCenter: () => void
   /** Opens a group's label editor; absent when the host has none, which leaves Enter on a group unhandled. */
   setGroupLabelEditId?: ((nodeId: string) => void) | undefined
+  /**
+   * Whether a context menu or sheet is open. The menu owns the keyboard for
+   * as long as it is: a key it does not consume must not reach the board
+   * behind it as a nudge, a tool hotkey or a new note.
+   */
+  menuOpen: boolean
+  /** Opens the menu a right-click on the current selection would, focused. */
+  openSelectionMenu: () => void
+  /** Opens the comment composer for the selection; false when it has none to comment on. */
+  commentOnSelection: () => boolean
 }
 
 export function useEditorKeyboard({
@@ -138,6 +150,9 @@ export function useEditorKeyboard({
   changeTool,
   createNodeAtViewportCenter,
   setGroupLabelEditId,
+  menuOpen,
+  openSelectionMenu,
+  commentOnSelection,
 }: EditorKeyboardInputs) {
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
@@ -212,6 +227,10 @@ export function useEditorKeyboard({
         return selectAdjacent(e.key)
       case 'edit-selected-node':
         return editSelectedNode()
+      case 'open-context-menu':
+      case 'open-context-menu-shift-f10':
+        openSelectionMenu()
+        return true
       default:
         return false
     }
@@ -220,8 +239,14 @@ export function useEditorKeyboard({
   /** Escape's last layer: let go of the selection, then hand Tab back to the browser. */
   const releaseSelectionWithEscape = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (e.key !== 'Escape' || gestureState.kind !== 'idle' || typingInText(e)) return false
-    handOffTabRef.current = true
-    if (selection === undefined) return false
+    if (selection === undefined) {
+      // Nothing left to let go of: this Escape is the way out, so the Tab
+      // after it is the browser's. An Escape that DID release a selection
+      // keeps the walk, or the first Escape would already have left it.
+      handOffTabRef.current = true
+      return false
+    }
+    handOffTabRef.current = false
     e.preventDefault()
     applySelection({ type: 'clear' })
     setSelectedEdgeId(null)
@@ -315,6 +340,8 @@ export function useEditorKeyboard({
         return reorderSelection('front')
       case 'reorder-back':
         return reorderSelection('back')
+      case 'comment-on-selection':
+        return commentOnSelection()
       case 'new-note':
         createNodeAtViewportCenter()
         return true
@@ -527,7 +554,25 @@ export function useEditorKeyboard({
     return handled
   }
 
+  /**
+   * While a connect or re-attach is live its targets are the only thing
+   * Tab can mean from the canvas root. They sit after the dock in document
+   * order, so the browser's own Tab would reach Undo first and the
+   * keyboard path to a target would exist only on paper.
+   */
+  const focusFirstAttachTarget = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Tab' || e.shiftKey || e.target !== e.currentTarget) return false
+    if (gestureState.kind !== 'connecting' && gestureState.kind !== 'reattaching') return false
+    const target = e.currentTarget.querySelector<SVGElement>('[data-testid^="connect-target-"]')
+    if (target === null) return false
+    e.preventDefault()
+    target.focus()
+    return true
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (menuOpen) return
+    if (focusFirstAttachTarget(e)) return
     // Declarative shortcuts first — see shortcuts.ts, the single catalog.
     if (runCatalogShortcut(e)) return
     // Delete/Backspace deletes the current selection — but never while the

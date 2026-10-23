@@ -111,6 +111,7 @@ describe('choosing a stencil in the inspector', () => {
     expect(facetsOf(choose('Queue', dressed)(), 'n1')).toEqual({
       'visual.shape/v0': { kind: 'parallelogram' },
       'visual.stencil/v0': { stencil: 'visual.queue' },
+      'visual.symbol/v0': { kind: 'icon', name: 'layers' },
     })
   })
 

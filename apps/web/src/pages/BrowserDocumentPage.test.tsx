@@ -368,7 +368,7 @@ describe('BrowserDocumentPage', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('loro save failed')
     // No switch happened — still on the source canvas. (Asserted before
     // reopening the menu: Radix's modal dropdown aria-hides the page.)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled')
     await openDocumentOpsMenu()
     expect((await documentOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
   })
@@ -615,16 +615,18 @@ describe('BrowserDocumentPage', () => {
       )
     })
     const heading = screen.getByRole('heading', { level: 1 })
-    expect(heading.textContent).toBe('untitled')
+    expect(heading.textContent).toBe('Untitled')
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
     expect(await screen.findByRole('button', { name: 'More actions' })).toBeTruthy()
   })
 
+  // At a path somebody chose, so the rename is the name alone: a generated
+  // path would also move the document, which needs the real stores.
   it('renaming through the title field updates the heading and flushes a save', async () => {
     vi.useRealTimers()
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
+    await store.save({ ...snap, path: 'chosen' })
     await act(async () => {
       renderInRouter(
         <BrowserDocumentPage
@@ -672,14 +674,14 @@ describe('BrowserDocumentPage', () => {
     await waitFor(() => expect(heading()).toBe('Half typed'))
 
     fireEvent.keyDown(titleInput, { key: 'Escape' })
-    await waitFor(() => expect(heading()).toBe('untitled'))
+    await waitFor(() => expect(heading()).toBe('Untitled'))
 
     // Settle everything still in flight before believing it: the defect is a
     // LATER write winning, which a first-match assertion sails straight past.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
-    expect(heading()).toBe('untitled')
+    expect(heading()).toBe('Untitled')
     expect((await store.load('069CFJNRVY147ADGKPSWZ258BE'))?.name).toBeNull()
   })
 

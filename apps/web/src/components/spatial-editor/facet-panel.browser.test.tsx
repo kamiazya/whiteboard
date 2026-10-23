@@ -110,6 +110,7 @@ it('a stencil picked in the panel draws its silhouette, not only the record', ()
   expect(latest.canvas.nodes[0]?.facets).toEqual({
     'visual.shape/v0': { kind: 'hexagon' },
     'visual.stencil/v0': { stencil: 'visual.gateway' },
+    'visual.symbol/v0': { kind: 'icon', name: 'network' },
   })
   // The hexagon the shape row drew is the one the stencil expands to, so it
   // is still drawn once — and the second stencil swaps it rather than adding.

@@ -28,7 +28,7 @@ describe('useDebouncedDocumentSearch', () => {
   it('leaves a query that starts with # to the tag filter', () => {
     const { searchDocuments, result } = searchFor(' #ops')
     expect(searchDocuments).not.toHaveBeenCalled()
-    expect(result.current.hits).toBeNull()
+    expect(result.current.search.hits).toBeNull()
   })
 
   it('searches content for a query with # anywhere but its start', () => {

@@ -49,6 +49,7 @@ import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { commandTargetKey, commitToDoc } from './command-writes.js'
+import { createCommitDebounce } from './commit-debounce.js'
 import { contentStateOf } from './document-state.js'
 import {
   DOCUMENT_SYNC_CHANGED_EVENT,
@@ -68,8 +69,7 @@ const log = getAppLogger('document-sync')
 // stuck commitChain cannot leave a disconnect() call pending forever.
 const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 
-/** Edits within this window (ms) of each other coalesce into one commit. */
-export const COMMIT_DEBOUNCE_MS = 300
+export { COMMIT_DEBOUNCE_MS } from './commit-debounce.js'
 
 /** Stable empty set so a lock read before the first snapshot is referentially stable. */
 const EMPTY_LOCKS: ReadonlySet<string> = new Set()
@@ -407,7 +407,7 @@ export function createDocumentSyncSession(
 
   const persistence = new PersistenceLedger(
     (state) => deps.onPersistenceChange?.(state),
-    () => debounceTimer !== null || pendingTargets.size > 0 || pendingCommitCount > 0,
+    () => debounce.isArmed() || pendingTargets.size > 0 || pendingCommitCount > 0,
   )
   // Loro delivers subscribeLocalUpdates on a later microtask than the commit
   // (see the subscription below), so "the commit drained" is not yet "the
@@ -668,7 +668,6 @@ export function createDocumentSyncSession(
   // a peer record merged inside the window would then count as visible to
   // this edit and be deleted by it.
   let windowStart: SpatialCanvas | null = null
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
   // Body text the editor binding wrote at its positions and has not
   // committed: the ops are in the doc (a read sees them) and ride the same
   // debounce as a canvas edit, so a burst of keystrokes is one commit and
@@ -732,19 +731,13 @@ export function createDocumentSyncSession(
     if (content !== null) commitToDoc(targetDoc, content, prev, next, command)
   }
 
-  function armDebounce(): void {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null
-      commitPendingTargets()
-    }, COMMIT_DEBOUNCE_MS)
-  }
+  const debounce = createCommitDebounce(commitPendingTargets)
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
     persistence.edited()
     pendingTargets.set(commandTargetKey(command), command)
     latestNext = next
-    armDebounce()
+    debounce.arm()
   }
 
   /**
@@ -755,7 +748,7 @@ export function createDocumentSyncSession(
     if (bound !== doc || removed) return
     persistence.edited()
     bodyOpsPending = true
-    armDebounce()
+    debounce.arm()
   }
 
   const bodyBindingOf = bodyBindingFor({
@@ -767,8 +760,7 @@ export function createDocumentSyncSession(
     return bodyBindingOf(doc)
   }
   onCanvasChange.flush = (): void => {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = null
+    debounce.cancel()
     commitPendingTargets()
   }
 
@@ -1124,9 +1116,8 @@ export function createDocumentSyncSession(
    * something a caller can await.
    */
   function dropQueuedWrite(): boolean {
-    if (debounceTimer === null && pendingTargets.size === 0) return false
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = null
+    if (!debounce.isArmed() && pendingTargets.size === 0) return false
+    debounce.cancel()
     pendingTargets.clear()
     latestNext = null
     // Nothing is left to land, and `unsaved` is only cleared by something

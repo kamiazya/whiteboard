@@ -1,7 +1,9 @@
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import {
   edgeLabelPlacement,
+  frameTitleObstacles,
   labelObstacles,
+  type SceneNode,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -13,9 +15,14 @@ import {
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { labelNotice } from '../../lib/limit-notice.js'
+import {
+  FRAME_TITLE_EDITOR_HEIGHT_PX,
+  FRAME_TITLE_OFFSET_PX,
+} from '../../lib/spatial/frame-interior.js'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
+import { edgeRoute } from './node-a11y-name.js'
 import { type TextLengthLimit, TextNodeEditor } from './TextNodeEditor.js'
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
@@ -68,6 +75,7 @@ export function EdgeLabelEditorOverlay({
   canvas,
   fontFamily,
   edgePaths,
+  sceneNodes,
   zoom,
   palette,
   applyResult,
@@ -77,6 +85,8 @@ export function EdgeLabelEditorOverlay({
   readonly canvas: SpatialCanvas
   readonly fontFamily: string
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
+  /** The laid-out scene, whose frame titles the draft keeps off as the drawn label does. */
+  readonly sceneNodes: readonly SceneNode[]
   readonly zoom: number
   /** The palette the board is drawn in, so the draft matches the label it becomes. */
   readonly palette: SpatialPalette
@@ -95,7 +105,7 @@ export function EdgeLabelEditorOverlay({
   const mid = edgeLabelPlacement(
     path,
     { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX },
-    labelObstacles(canvas.nodes),
+    labelObstacles(canvas.nodes, frameTitleObstacles(canvas.nodes, sceneNodes)),
   )
   if (mid === undefined) return null
   return (
@@ -107,6 +117,7 @@ export function EdgeLabelEditorOverlay({
         width: EDGE_LABEL_EDITOR_WIDTH_PX,
         height: EDGE_LABEL_EDITOR_HEIGHT_PX,
       }}
+      label={`Label of edge ${edgeRoute(edge, canvas.nodes)}`}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
       {...labelDraft(palette, fontFamily)}
@@ -148,9 +159,16 @@ export function GroupLabelEditorOverlay({
   return (
     <TextNodeEditor
       exitHintScale={1 / zoom}
-      box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
+      box={{
+        x: group.x,
+        y: group.y - FRAME_TITLE_OFFSET_PX,
+        width: group.width,
+        height: FRAME_TITLE_EDITOR_HEIGHT_PX,
+      }}
+      label={`Name of frame${frameLabel(group)?.trim() ? ` ${frameLabel(group)?.trim()}` : ''}`}
       initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
+      placeholder="Frame"
       {...labelDraft(palette, fontFamily)}
       onCommit={(label) => {
         applyResult({

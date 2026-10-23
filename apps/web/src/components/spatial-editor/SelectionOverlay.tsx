@@ -7,6 +7,8 @@ import type { Point } from '../../lib/spatial/viewport.js'
 export interface SelectionOverlayProps {
   readonly box: Box
   readonly zoom: number
+  /** What the controls act on, in the words a screen reader should hear: a node's name, or "3 nodes". */
+  readonly subject: string
   /**
    * Handle/connect pointerdowns stop propagation before these fire, so the
    * root's own empty-space hit-test never also sees them.
@@ -55,16 +57,24 @@ const SELECTION_STROKE = 'var(--manipulation)'
  */
 const TOOL_INK = 'var(--muted-foreground, oklch(0.556 0 0))'
 const TOOL_EDGE = 'var(--border, oklch(0.922 0 0))'
-const HANDLE_LABEL: Record<ResizeHandleKind, string> = {
-  nw: 'Resize north-west',
-  n: 'Resize north',
-  ne: 'Resize north-east',
-  e: 'Resize east',
-  se: 'Resize south-east',
-  s: 'Resize south',
-  sw: 'Resize south-west',
-  w: 'Resize west',
+const HANDLE_DIRECTION: Record<ResizeHandleKind, string> = {
+  nw: 'north-west',
+  n: 'north',
+  ne: 'north-east',
+  e: 'east',
+  se: 'south-east',
+  s: 'south',
+  sw: 'south-west',
+  w: 'west',
 }
+/**
+ * The one resize handle the keyboard reaches by Tab. Its arrows resize the
+ * node by the handle's own corner, so the other seven would be seven more
+ * stops to the same result; they stay reachable by pointer and by script.
+ */
+const RESIZE_TAB_STOP: ResizeHandleKind = 'se'
+/** Likewise the one connect handle: every side starts the same gesture. */
+const CONNECT_TAB_STOP = 'e'
 const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 
 /**
@@ -89,6 +99,7 @@ const CONNECT_SIDES: readonly SideSpec[] = [
 export function SelectionOverlay({
   box,
   zoom,
+  subject,
   onHandlePointerDown,
   onConnectPointerDown,
   onHandleKeyDown,
@@ -149,8 +160,8 @@ export function SelectionOverlay({
           key={band.kind}
           data-testid={`resize-handle-${band.kind}`}
           role="button"
-          tabIndex={0}
-          aria-label={HANDLE_LABEL[band.kind]}
+          tabIndex={band.kind === RESIZE_TAB_STOP ? 0 : -1}
+          aria-label={`Resize ${subject}, ${HANDLE_DIRECTION[band.kind]}`}
           x={band.box.x}
           y={band.box.y}
           width={band.box.width}
@@ -179,8 +190,8 @@ export function SelectionOverlay({
           key={hit.kind}
           data-testid={`resize-handle-${hit.kind}`}
           role="button"
-          tabIndex={0}
-          aria-label={HANDLE_LABEL[hit.kind]}
+          tabIndex={hit.kind === RESIZE_TAB_STOP ? 0 : -1}
+          aria-label={`Resize ${subject}, ${HANDLE_DIRECTION[hit.kind]}`}
           x={hit.box.x}
           y={hit.box.y}
           width={hit.box.width}
@@ -235,8 +246,8 @@ export function SelectionOverlay({
             <circle
               data-testid={side.kind === 'e' ? 'connect-handle' : `connect-handle-${side.kind}`}
               role="button"
-              tabIndex={0}
-              aria-label={`Connect to another node (from the ${side.label} side)`}
+              tabIndex={side.kind === CONNECT_TAB_STOP ? 0 : -1}
+              aria-label={`Connect ${subject} to another node (from the ${side.label} side)`}
               cx={side.cx(box, connectHandleSize)}
               cy={side.cy(box, connectHandleSize)}
               r={connectHitRadius}
@@ -270,13 +281,19 @@ export function SelectionOverlay({
           const slots = [
             ...(onOpenInEditor === undefined
               ? []
-              : [{ kind: 'open' as const, label: 'Open in editor', run: onOpenInEditor }]),
+              : [
+                  {
+                    kind: 'open' as const,
+                    label: `Open ${subject} in editor`,
+                    run: onOpenInEditor,
+                  },
+                ]),
             ...(onMoreActions === undefined
               ? []
               : [
                   {
                     kind: 'more' as const,
-                    label: 'More actions',
+                    label: `More actions for ${subject}`,
                     run: () =>
                       onMoreActions({
                         x: box.x + box.width - toolPx / 2 / zoom,

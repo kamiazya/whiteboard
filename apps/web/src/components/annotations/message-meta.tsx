@@ -25,6 +25,10 @@ function stampOf(iso: string | undefined): {
   return { text: formatRelative(iso, { pastDay: 'absolute' }), dateTime: iso }
 }
 
+function editedTitle(iso: string): string {
+  return `Edited ${formatRelative(iso, { pastDay: 'absolute' })}`
+}
+
 /**
  * Who wrote a message and when, or nothing when the message says neither.
  *
@@ -53,6 +57,11 @@ export function MessageBy({
     <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
       {author !== undefined ? <span>{author}</span> : null}
       {stamp.text !== '' ? <time dateTime={stamp.dateTime}>{stamp.text}</time> : null}
+      {message.editedAt === undefined ? null : (
+        <span data-testid={`message-edited-${message.id}`} title={editedTitle(message.editedAt)}>
+          (edited)
+        </span>
+      )}
     </span>
   )
 }
@@ -75,7 +84,7 @@ export function ThreadActivity({ thread }: { readonly thread: CommentThread }) {
   return (
     <span
       data-testid={`thread-message-count-${thread.id}`}
-      className="flex items-center text-[11px] text-muted-foreground"
+      className="flex items-center text-[11px] whitespace-nowrap text-muted-foreground"
     >
       <span>{thread.messages.length} messages</span>
       {stamp.text === '' ? null : (

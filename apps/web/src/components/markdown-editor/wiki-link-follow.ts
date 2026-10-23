@@ -5,7 +5,14 @@ import type { LinkTarget } from '../../lib/link-target.js'
 /** What the reference under an offset points at, by the codec's grammar. */
 export type ReferenceUnderOffset =
   | { readonly kind: 'resolved'; readonly target: LinkTarget }
-  | { readonly kind: 'unresolved'; readonly path: string }
+  | {
+      readonly kind: 'unresolved'
+      readonly path: string
+      /** The reference's own markup and where it sits, for rewriting it in place. */
+      readonly alias: string | undefined
+      readonly index: number
+      readonly length: number
+    }
 
 /**
  * The reference whose markup covers `offset`, resolved the way the renderer
@@ -24,7 +31,13 @@ export function referenceAtOffset(
   if (match === undefined) return null
   const target = targets.find((one) => one.path === match.target || one.id === match.target)
   return target === undefined
-    ? { kind: 'unresolved', path: match.target }
+    ? {
+        kind: 'unresolved',
+        path: match.target,
+        alias: match.alias,
+        index: match.index,
+        length: match.full.length,
+      }
     : { kind: 'resolved', target }
 }
 

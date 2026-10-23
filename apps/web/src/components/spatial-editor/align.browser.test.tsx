@@ -8,6 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -63,6 +64,19 @@ it('aligns the whole selection to its left edge in one undo step', () => {
   // One batch, not three moves: an align is one user action.
   expect(latest.commands).toHaveLength(1)
   expect(latest.commands[0]).toMatchObject({ kind: 'batch' })
+})
+
+it('closes the menu after an align so the result is in view, and announces it', () => {
+  const { Host } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  selectAll(root)
+  openMenuOn(root, 100, 70)
+  clickOption(container, 'Align left')
+
+  expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+  expect(canvasAnnouncement()).toBe('Aligned 3 nodes left')
 })
 
 it('aligns to the bottom edge, accounting for differing heights', () => {

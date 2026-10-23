@@ -5,6 +5,7 @@ import {
   CopyPlus,
   ExternalLink,
   Eye,
+  FolderInput,
   List,
   Pencil,
   Pin,
@@ -12,7 +13,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, KeyboardEvent } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -25,7 +26,7 @@ import { FolderContentsList } from './FolderContentsList.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
-import type { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
+import type { SearchState } from './use-debounced-document-search.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
@@ -58,7 +59,7 @@ function searchResultRows({
   query,
 }: {
   activeTag: string | null
-  hits: ReturnType<typeof useDebouncedDocumentSearch>['hits']
+  hits: SearchState['hits']
   documents: readonly WorkspaceDocumentEntry[]
   query: string
 }): ComponentProps<typeof SearchResults>['results'] {
@@ -222,6 +223,7 @@ export function PanelToolbar({
           maxLength={SEARCH_QUERY_MAX_CHARS}
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
+          onKeyDown={focusFirstResult}
           className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
         />
       </div>
@@ -269,6 +271,23 @@ export function PanelToolbar({
   )
 }
 
+/** Pin or Unpin, offered only where the keeper keeps a pinned list. */
+function pinMenuItem(
+  entry: WorkspaceDocumentEntry,
+  source: WorkspaceFilesSource,
+  togglePinned: (entry: WorkspaceDocumentEntry) => Promise<void> | void,
+): ComponentProps<typeof ContextMenu>['items'] {
+  if (source.setPinned === undefined) return []
+  const pinned = entry.pinOrder !== undefined
+  return [
+    {
+      label: pinned ? 'Unpin' : 'Pin',
+      icon: pinned ? <PinOff /> : <Pin />,
+      onSelect: () => void togglePinned(entry),
+    },
+  ]
+}
+
 /**
  * What a card's own menu offers for one document. Every entry is
  * spread-or-nothing on the HOST's ability to do it, so a build that cannot
@@ -296,6 +315,7 @@ export function cardMenuItemsFor(
     setSelection,
     togglePinned,
     openRename,
+    openMove,
   }: {
     tapOpens: boolean
     source: WorkspaceFilesSource
@@ -307,6 +327,7 @@ export function cardMenuItemsFor(
     setSelection: (next: ReadonlySet<string>) => void
     togglePinned: (entry: WorkspaceDocumentEntry) => Promise<void> | void
     openRename: (entry: WorkspaceDocumentEntry) => void
+    openMove: (entry: WorkspaceDocumentEntry) => void
   },
 ): ComponentProps<typeof ContextMenu>['items'] {
   return [
@@ -337,15 +358,7 @@ export function cardMenuItemsFor(
             onSelect: () => onDuplicateDocument(entry.path),
           },
         ]),
-    ...(source.setPinned === undefined
-      ? []
-      : [
-          {
-            label: entry.pinOrder === undefined ? 'Pin' : 'Unpin',
-            icon: entry.pinOrder === undefined ? <Pin /> : <PinOff />,
-            onSelect: () => void togglePinned(entry),
-          },
-        ]),
+    ...pinMenuItem(entry, source, togglePinned),
     ...(onRequestDeleteMany === undefined
       ? []
       : [
@@ -355,6 +368,11 @@ export function cardMenuItemsFor(
             onSelect: () => setSelection(new Set([entry.path])),
           },
         ]),
+    {
+      label: 'Move to folder…',
+      icon: <FolderInput />,
+      onSelect: () => openMove(entry),
+    },
     {
       label: 'Rename…',
       icon: <Pencil />,
@@ -390,6 +408,34 @@ export type ColumnView =
   | { kind: 'searching'; documents: readonly WorkspaceDocumentEntry[] }
   | { kind: 'browseOne'; documents: readonly WorkspaceDocumentEntry[] }
   | { kind: 'browseTwo'; documents: readonly WorkspaceDocumentEntry[] }
+
+/**
+ * A re-read (a workspace switch, most of all) keeps the toolbar
+ * above and the room below: measured on a real switch, replacing
+ * the whole section with one line of text moved the card area up
+ * 38px and back within 54ms, which is the jolt everything inherits.
+ * `.skeleton-appear` holds it invisible for 300ms, so a fast
+ * re-read shows quiet background rather than a flash of
+ * placeholders.
+ */
+export function LoadingColumns({ cards }: { cards: number }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading documents"
+      className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
+    >
+      {Array.from({ length: Math.max(cards, 1) }, (_, i) => (
+        <div key={i} className="overflow-hidden rounded-md border">
+          <div className="bg-muted/40 aspect-video w-full animate-pulse" />
+          <div className="px-2 py-1.5">
+            <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function columnViewOf(
   documents: readonly WorkspaceDocumentEntry[] | null,
@@ -494,6 +540,33 @@ export function BrowseTwoColumns({
   )
 }
 
+/** What a listener hears when a search settles. */
+function resultsAnnouncement(count: number, query: string): string {
+  const q = query.trim()
+  if (count === 0) return `No results for “${q}”`
+  return `${count} ${count === 1 ? 'result' : 'results'} for “${q}”`
+}
+
+/**
+ * ArrowDown in the search box lands on the first result, so reaching it is one
+ * key rather than a Tab walk across every control between the two.
+ */
+function focusFirstResult(event: KeyboardEvent<HTMLInputElement>): void {
+  if (event.key !== 'ArrowDown') return
+  const first = event.currentTarget
+    .closest('[data-testid="workspace-files-panel"]')
+    ?.querySelector<HTMLElement>('[data-testid="search-results"] button[data-doc-path]')
+  if (first === null || first === undefined) return
+  event.preventDefault()
+  first.focus()
+}
+
+function focusSearchBox(): void {
+  document
+    .querySelector<HTMLInputElement>('[data-testid="workspace-files-panel"] input[type="search"]')
+    ?.focus()
+}
+
 /**
  * The results of a search, in place of the columns. They come from
  * everywhere, so neither the folder tree nor the folder's own contents
@@ -504,8 +577,7 @@ export function SearchColumn({
   documents,
   query,
   activeTag,
-  hits,
-  searchDegraded,
+  search,
   selectedPath,
   tapOpens,
   onOpenDocument,
@@ -517,8 +589,7 @@ export function SearchColumn({
   documents: readonly WorkspaceDocumentEntry[]
   query: string
   activeTag: string | null
-  hits: ReturnType<typeof useDebouncedDocumentSearch>['hits']
-  searchDegraded: boolean
+  search: SearchState
   selectedPath: string | undefined
   tapOpens: boolean
   onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
@@ -527,35 +598,41 @@ export function SearchColumn({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
 }) {
+  const { hits, searchDegraded, searching } = search
+  const rows = searchResultRows({ activeTag, hits, documents, query })
   return (
     // Results come from everywhere, so neither the folder tree nor the
     // folder's own contents describes them. One flat list, in both
     // column modes — a search that behaved differently per mode would
     // be two features wearing one box.
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-      <div data-testid="search-results">
+      <div data-testid="search-results" aria-busy={searching !== 'idle'}>
         {/* Always mounted, text swapped: a polite live region added to
             the DOM already carrying its message is announced
-            inconsistently (see polite-live-region.test.ts). */}
+            inconsistently (see polite-live-region.test.ts). The count is
+            withheld while the answer is in flight, so a listener hears the
+            settled number once rather than the name-match one. */}
         <p
           role="status"
+          aria-label="Search results"
           className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
         >
-          {searchDegraded
-            ? 'Searching names and paths only — this workspace’s content search is unavailable.'
-            : ''}
+          {searching !== 'idle' ? '' : resultsAnnouncement(rows.length, query)}
+          {searchDegraded &&
+            ' Searching names and paths only — this workspace’s content search is unavailable.'}
         </p>
+        {searching === 'slow' && (
+          <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
+            Searching…
+          </p>
+        )}
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
           // A `#tag` query is a FILTER over what is loaded (the
           // search contract), not a content search — it never leaves the
           // client. Everything else asks the source.
-          results={searchResultRows({
-            activeTag,
-            hits,
-            documents: documents,
-            query,
-          })}
+          results={rows}
+          onLeaveUp={focusSearchBox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
           selectedPath={selectedPath}

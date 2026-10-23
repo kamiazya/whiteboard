@@ -19,6 +19,12 @@ export interface DocumentIdentity {
    * renaming through its own store rather than through `/names`.
    */
   readonly onRename?: (next: string) => Promise<string | null>
+  /**
+   * Runs `then` once every rename this bar has sent has landed, so a step that
+   * re-addresses the document never races a name still on its way to the old
+   * address. Absent where `onRename` is.
+   */
+  readonly afterRenamesLand?: (then: () => void) => void
 }
 
 /**
@@ -110,7 +116,7 @@ export default function WorkspaceTopBar({
   saveState,
 }: Props) {
   const keptByBrowser = keeper === 'browser'
-  const { effectiveNames, renameDocument } = useDocumentNames({
+  const { effectiveNames, renameFor } = useDocumentNames({
     workspaceId,
     keptByBrowser,
     daemonFetch: useDaemonApi(),
@@ -196,7 +202,7 @@ export default function WorkspaceTopBar({
 
         {titleSlot?.({
           name: documentLabel({ name: canvasCustomName, path }, 'path'),
-          ...(keptByBrowser ? {} : { onRename: (next: string) => renameDocument(path, next) }),
+          ...(keptByBrowser ? {} : renameFor(path)),
         })}
         {saveState && (
           <SaveStatus indicator={saveIndicatorOf(saveState.persistence, saveState.connection)} />

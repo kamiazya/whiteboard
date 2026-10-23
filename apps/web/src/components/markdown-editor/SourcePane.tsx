@@ -11,6 +11,7 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useId, useRef } from 'react'
+import { mayAutofocus } from '../../lib/focus-claim.js'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
@@ -208,6 +209,8 @@ export interface SourcePaneProps {
   variant?: SourcePaneVariant
   /** Focus the editor as soon as it mounts (fresh-note flows). */
   autoFocus?: boolean
+  /** What a screen reader calls the editing surface. */
+  accessibleName?: string
   /** Shown while the document is empty. */
   placeholderText?: string
   /** Receives the imperative API while the view is mounted, null after. */
@@ -247,6 +250,7 @@ export function SourcePane({
   className,
   variant = 'document',
   autoFocus = false,
+  accessibleName = 'Markdown document',
   placeholderText,
   apiRef,
   extensions,
@@ -345,7 +349,12 @@ export function SourcePane({
         // Tab is indentation here, so a keyboard user who lands in the editor
         // has no way out unless they are told (WCAG 2.1.2). CodeMirror's own
         // Escape-then-Tab escape hatch is the answer; this names it.
-        EditorView.contentAttributes.of({ 'aria-describedby': leaveHintId }),
+        EditorView.contentAttributes.of({
+          'aria-describedby': leaveHintId,
+          // Without a name a textbox is announced by its content, which turns
+          // every re-focus into a read-out of the document.
+          'aria-label': accessibleName,
+        }),
         ...scrollClearance(variant),
       ],
     })
@@ -424,11 +433,12 @@ export function SourcePane({
     //   <body>, permanently, since this focus() is one-shot);
     // - the title input the user clicked BEFORE this deferred effect ran —
     //   real; claiming from it steals keystrokes mid-typing.
-    // <body>/null also count as unclaimed.
+    // <body>/null also count as unclaimed — unless the reader has just placed
+    // focus in a field and a remount cleared it (lib/focus-claim.ts).
     const holder = document.activeElement
     const holderIsTransient =
       holder === null || holder === document.body || holder.closest('[role="menu"]') !== null
-    if (autoFocus && holderIsTransient) {
+    if (autoFocus && holderIsTransient && mayAutofocus()) {
       // The caret goes AFTER what the box was handed. CodeMirror's own
       // default is offset 0, which is right for an empty box (a fresh note,
       // a reply) and wrong for one opened on existing prose: pressing Edit
@@ -480,7 +490,7 @@ export function SourcePane({
         data-testid="markdown-source-pane"
       />
       <span id={leaveHintId} className="sr-only">
-        Press Escape, then Tab, to leave the editor.
+        Press Escape, then Tab or Shift+Tab, to leave the editor.
       </span>
     </>
   )

@@ -1,11 +1,14 @@
 // A tooltip must not outlive the gesture that raised it.
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 function Fixture() {
   return (
@@ -93,4 +96,13 @@ it('closes when the focused trigger is replaced while its tooltip is showing', a
   await userEvent.keyboard('{Enter}')
   await expect.element(page.getByRole('button', { name: 'Swapped' })).toBeInTheDocument()
   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument()
+})
+
+// A coarse pointer refuses the tap-raised tooltip (tooltip.test.tsx) but a
+// keyboard user still gets one: focus that arrives by Tab is :focus-visible.
+it('on a coarse pointer, Tab onto the trigger still opens it', async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' }))
+  render(<Fixture />)
+  await userEvent.keyboard('{Tab}')
+  await expect.element(page.getByRole('tooltip')).toBeVisible()
 })

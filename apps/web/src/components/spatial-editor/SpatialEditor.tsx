@@ -76,6 +76,7 @@ import {
   forwardRef,
   type ReactNode,
   useCallback,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -86,6 +87,7 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
@@ -119,8 +121,9 @@ import {
 import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
+import { activeDescendantId, CanvasA11yTree } from './CanvasA11yTree.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
-import { CanvasEmptyHint } from './CanvasEmptyHint.js'
+import { CanvasEmptyHint, emptyHintRef } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
@@ -136,6 +139,7 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
+import { canvasRootLabel, selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -144,6 +148,7 @@ import {
   type NavigationResult,
   reduceNavigation,
 } from './navigation.js'
+import { selectionSubject } from './node-a11y-name.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
@@ -153,6 +158,8 @@ import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
+import { TOOL_ANNOUNCEMENT } from './tool-announcement.js'
+import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
@@ -168,6 +175,7 @@ import { useImageIntake } from './use-image-intake.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockBadgeIds, useLockPolicy } from './use-lock-policy.js'
+import { useLockedPress } from './use-locked-press.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
@@ -238,6 +246,8 @@ export interface SpatialEditorProps {
   readonly initialTool?: EditorTool
   /** Reports a tool the user picked with the palette, so the host can remember it. */
   readonly onToolChosen?: (tool: EditorTool) => void
+  /** Names the document for viewport memory: pan and zoom are restored per key within a session. */
+  readonly viewportKey?: string
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -414,6 +424,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       defaultTool = 'hand',
       initialTool,
       onToolChosen,
+      viewportKey,
       lockedNodeIds,
       lockedEdgeIds,
       agentTouchedNodeIds,
@@ -475,6 +486,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setLongPressPulse,
       openContextMenuAtRef,
     } = useToolState({ defaultTool, initialTool })
+    const emptyHintId = useId()
+    const a11yIdPrefix = useId()
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -492,14 +505,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // The pan/zoom viewport and its frame/zoom verbs — see
     // use-viewport-controls.ts. Wheel/hand/pinch navigation stays with the
     // pointer wiring below and drives the same setViewport.
-    const { viewport, setViewport, stepZoom, frameContent, frameSelection } = useViewportControls({
-      rootRef,
-      boxes,
-      selection,
-      extraIds,
-      viewportCenterScreen,
-      containerSizeOf,
-    })
+    const { viewport, setViewport, stepZoom, frameContent, frameSelection, insetsOf } =
+      useViewportControls({
+        rootRef,
+        boxes,
+        selection,
+        extraIds,
+        viewportCenterScreen,
+        containerSizeOf,
+        memoryKey: viewportKey,
+      })
     // What THIS canvas can read of the host's wider wire, by identity.
     const {
       wire: canvasWire,
@@ -542,6 +557,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const {
       showResolvedComments,
       setShowResolvedComments,
+      showResolvedSource,
       selectedEdgeId,
       setSelectedEdgeId,
       selectedInkIds,
@@ -561,6 +577,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setFacetPanelOpen,
       selectionSource,
     } = useEditSessionState({ canvas, selectedId, extraIds })
+    useCanvasFocusReturn(rootRef, gestureState, linkDialog, canvasPicker)
     const fontsGeneration = useThemeFontsGeneration()
     useThemeFaceFor(canvas)
     const editingFontFamily = useEditingFontFamily(canvas)
@@ -634,6 +651,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport,
       rootRef,
       containerSizeOf,
+      showResolved: () => setShowResolvedComments(true),
+      insetsOf,
     })
     // Named for the TYPE it holds rather than for the state that keys it:
     // `selectedEdgeId` may name a relation or a stroke, because the scene
@@ -737,6 +756,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * included. A locked object has to stay right-clickable or Unlock would
      * be unreachable — only the selection side effect is skipped for it.
      */
+    const lockedPress = useLockedPress(pickInputs)
     const menuPickInputs = { ...pickInputs, isNodeLocked: () => false, isEdgeLocked: () => false }
 
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
@@ -770,6 +790,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       forwardedRef,
       () => ({
         selection: selectionSource,
+        showResolved: showResolvedSource,
+        setShowResolved: setShowResolvedComments,
         setViewport,
         fitToContent: (nodeIds) => frameContent(nodeIds && new Set(nodeIds)),
         openProposal(proposalId) {
@@ -1142,6 +1164,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const changeTool = (next: EditorTool) => {
       setTool(next)
+      announceOnCanvas(TOOL_ANNOUNCEMENT[next])
       toolChosenByUserRef.current = true
       onToolChosen?.(next)
       // A context menu belongs to the mode it opened in; it must not
@@ -1197,6 +1220,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameSelection,
       changeTool,
       createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
+      menuOpen: contextMenu !== null,
+      openSelectionMenu: () =>
+        setContextMenu(
+          selectionMenuTarget({
+            nodeSelection:
+              selection !== undefined && selectionBox !== undefined
+                ? { id: selection.id, box: selectionBox }
+                : undefined,
+            selectedInkIds,
+            edgePathOf,
+            viewport,
+            viewCenterScreen: viewportCenterScreen(),
+            variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
+          }),
+        ),
+      commentOnSelection: () => {
+        const compose = selectionCommentCompose({
+          canvas,
+          nodeIds: selection === undefined ? [] : [selection.id, ...extraIds],
+          selectedInkIds,
+          edgePathOf,
+        })
+        if (compose === undefined) return false
+        setCommentCompose(compose)
+        return true
+      },
     })
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
@@ -1250,6 +1299,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
+      selectedId,
+      extraIds,
+      openGroupLabel: setGroupLabelEditId,
     })
     const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({
       onAddImage,
@@ -1330,6 +1382,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       isOverlayEvent,
       lastStrokeRef,
       menuPickInputs,
+      lockedPress,
       openProposalId,
       pickInputs,
       pressedProposalRef,
@@ -1384,6 +1437,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           gesture={gesture}
           target={{ id: selection.id, box: selectionBox }}
           members={isMultiSelection ? selectionMembers : undefined}
+          subject={selectionSubject(selectedNode, extraIds.size)}
           onHandleKeyDown={handleResizeHandleKeyDown}
           onConnectKeyDown={handleConnectKeyDown}
           // Only a single text node has a body to open, and only when the
@@ -1561,8 +1615,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setPendingCut(null)}
           />
         )}
-        {canvas.nodes.length === 0 && <CanvasEmptyHint coarse={hasCoarsePointer()} />}
+        {canvas.nodes.length === 0 && (
+          <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
+        )}
         <ToolPalette
+          onReturnFocus={() => rootRef.current?.focus({ preventScroll: true })}
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
           // for entering hand mode — the host's history cluster stays put and
@@ -1575,7 +1632,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           shortcutHelp={shortcutHelp.palette}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
-          onCreateGroup={createGroupAtViewportCenter}
+          onCreateGroup={() => createGroupAtViewportCenter()}
           onCreateDocumentRef={
             fileRefOptions === undefined ? undefined : () => setDocumentPicker({ mode: 'create' })
           }
@@ -1586,6 +1643,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }
           tool={tool}
           onToolChange={changeTool}
+        />
+        <CanvasNotice
+          testId="locked-notice"
+          notice={lockedPress.notice}
+          onDismiss={lockedPress.dismiss}
         />
         <CanvasNotice
           testId="clipboard-notice"
@@ -1810,10 +1872,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the same documented tradeoff drawing/whiteboard editors commonly
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
-          aria-label="Spatial canvas editor"
-          // Click-focusable (not tab-reachable): edge selection focuses this
-          // root programmatically so real keyboard events reach onKeyDown.
-          tabIndex={-1}
+          aria-label={canvasRootLabel(canvas.nodes.length)}
+          aria-describedby={emptyHintRef(canvas.nodes.length, emptyHintId)}
+          aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
+          // A Tab stop: the keyboard's way in to the canvas, where Tab then
+          // walks the nodes (see use-editor-keyboard.ts). Edge selection also
+          // focuses it programmatically so key events reach onKeyDown.
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: role="application" is the interactive surface, and the keyboard reaches the nodes only through it.
+          tabIndex={0}
           style={{
             position: 'relative',
             flex: '1 1 auto',
@@ -1935,6 +2001,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onLostPointerCapture={handleLostPointerCapture}
           onKeyDown={shortcutHelp.onKeyDown}
         >
+          <CanvasA11yTree
+            canvas={canvas}
+            idPrefix={a11yIdPrefix}
+            primaryId={selectedId}
+            extraIds={extraIds}
+            selectedEdgeId={selectedEdgeId}
+          />
           {revealPulse === null ? null : (
             <CommentRevealPulse
               pulse={revealPulse}

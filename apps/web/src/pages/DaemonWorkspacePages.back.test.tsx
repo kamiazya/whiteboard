@@ -3,6 +3,7 @@
  * document sat in, the way the browser keeper's page does.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonWorkspacePages } from './DaemonWorkspacePages.js'
 
@@ -19,12 +20,14 @@ afterEach(cleanup)
 async function pressBackFrom(path: string) {
   const onView = vi.fn()
   render(
-    <DaemonWorkspacePages
-      daemonBaseUrl="http://127.0.0.1:3099"
-      view={{ kind: 'document', workspace: 'w1', path }}
-      onView={onView}
-      waitingMessage="waiting"
-    />,
+    <MemoryRouter>
+      <DaemonWorkspacePages
+        daemonBaseUrl="http://127.0.0.1:3099"
+        view={{ kind: 'document', workspace: 'w1', path }}
+        onView={onView}
+        waitingMessage="waiting"
+      />
+    </MemoryRouter>,
   )
   fireEvent.click(await screen.findByRole('button', { name: 'back' }))
   return onView

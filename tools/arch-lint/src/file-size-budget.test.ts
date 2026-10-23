@@ -157,7 +157,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the rationale beside that wiring buys lines at the price of what the
   // lines were for, so it is not met that way.
   // +2: `tagLibrary`, so a board the preview embeds is coloured by intent.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 904,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 905, // +1: the formatting bar's roving-tab wiring
   // The ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it. The next
   // shrink is the PREFERENCE half (candidate generation, from
@@ -210,7 +210,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // node go, stop writing, and say so. Raised by three more for a trash
   // restore bringing the node back, which resumes it. Lowered by two when the
   // per-reader guards became one content lookup that answers null meanwhile.
-  'apps/web/src/lib/document-sync-session.ts': 1266,
+  'apps/web/src/lib/document-sync-session.ts': 1257,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2076,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2149, // +15: the accessibility projection mount, active descendant and the controls' subject; +8: the tool announcement, the empty cue's description id and their imports; +4: the viewportKey prop that names the document for viewport memory; +2: the viewport's panel insets reach the comment reveal; +4: the resolved-view source and setter on the handle; +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -354,7 +354,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no sample size makes safe, and the setup both runs share.
   // +95: R1 (the canvas stays readable through the model's own schema after
   // every step) and the long-stroke command that reaches the bend cap.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2967,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2973,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // The v19 -> v20 upgrade block (the plaintext replica discard): the seed
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical
@@ -364,7 +364,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The three cases pinning undo: the document agreeing with the screen after an
   // undo and after a redo, and a taken-back write settling as saved rather than
   // reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2662,
+  'apps/web/src/lib/document-sync-session.test.ts': 2655,
   // One example per rule of every command arm, ink included: a table of ink
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
@@ -397,7 +397,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
   // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1259, // +19: the empty-frame tint case
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   // +1: the import of `afterAllFloor`, which keeps the reach floor from failing
@@ -520,7 +520,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // step, live in `smoke/lib/canvas-view-theme.mjs`; the listed-pin check is
   // `smoke/lib/listed-pin.mjs`, leaving an import and a call here; so are the
   // proposal-author and facet-write refusal checks (`smoke/lib/*.mjs`).
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2712,
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2721,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

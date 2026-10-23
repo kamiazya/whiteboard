@@ -6,7 +6,7 @@ the document's persisted content — neither requires a connected browser client
 | Tool | Output | Notes |
 | --- | --- | --- |
 | `wb_document_get` | The document's own format | A markdown document comes back as OKF Markdown (YAML frontmatter + Markdown body), lossless round-trip with `wb_workspace_edit`'s `document.set` op. A spatial document comes back as JSON Canvas 1.0 with the `x-whiteboard` extension, round-tripping with other JSON Canvas-compatible tools. Either kind also carries the document's comment `threads` beside `content` when it has any; the conversations are not part of either format's content. |
-| `wb_scene_render` | Vector image (`.svg`) | Rendered from the document's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
+| `wb_scene_render` | Vector image (`.svg`) | Rendered from the document's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. A canvas's comments (pins, cards, region outlines, highlighted passages) are left out unless the call passes `comments: true`. |
 
 **The format is not a parameter.** `wb_document_get` answers in whatever
 format the document is in, and says which in its `kind` field; there is no
@@ -382,7 +382,9 @@ crossing, without its arc. Finding crossings has its own bound too: past
 **4,000,000 candidate pairs** examined on one board, the search stops and no
 further hops are drawn, while the hops already found are kept — so a board of
 long, nearly parallel edges that never cross cannot make a render search
-indefinitely. Edges and lines are searched in the order they are drawn.
+indefinitely. Edges and lines are searched in the order they are drawn. The
+later edge hops over the earlier one; where it has no straight run to carry the
+arc (the crossing falls on one of its bends) the earlier edge hops instead.
 
 ## How much referenced content one render loads
 
@@ -731,11 +733,24 @@ export's bytes never depend on a display preference — and with the document's
 theme, if it names one, since that is part of the document rather than of the
 display.
 
+A picture is filled with the light palette's surface (white) by default, as a
+`<rect>` covering the whole viewBox drawn before anything else, so a PNG is
+opaque and an SVG dropped onto a dark slide still reads. The **With background**
+checkbox in the Export… submenu turns the fill off, and the file is then
+transparent, byte for byte what an export without the option draws. The **2×
+resolution (PNG)** checkbox rasterises a PNG at twice the pixels in each
+direction with the same drawing (the viewBox is unchanged); an SVG ignores it.
+Both are remembered per browser and apply to all four picture entries. The
+daemon's `wb_scene_render` and `POST …/export` do not read these checkboxes; the
+PNG route keeps its own `scale` parameter.
+
 The export draws what the editor shows, including what the document points at:
 
 - **A canvas** exports with its pictures, the note or board a file node points
-  at, what a text node embeds with `![[…]]`, and the highlights of comment
-  threads about a passage. A file node pointing at another board draws its
+  at, and what a text node embeds with `![[…]]`. The comment layer — pins, cards,
+  region outlines and the highlights of threads about a passage — is left out of
+  Export as PNG / SVG and drawn by Export as PNG (with comments) / SVG (with
+  comments). A file node pointing at another board draws its
   miniature whatever its size on screen, as `wb_scene_render` does with
   `embedReferences`. Math
   blocks and Mermaid diagrams are drawn as the editor draws them, in a text

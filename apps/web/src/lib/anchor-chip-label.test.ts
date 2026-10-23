@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { anchorChipLabel } from './anchor-chip-label.js'
 
@@ -50,4 +50,37 @@ it('says a paragraph for a passage of a note body and a node for a passage of a 
       canvas,
     ),
   ).toBe('on Sign-up form')
+})
+
+const edgeCanvas: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'API Gateway' }),
+    textNode({ id: 'b', x: 200, y: 0, width: 100, height: 50, text: 'Order Service' }),
+    textNode({ id: 'c', x: 400, y: 0, width: 100, height: 50, text: '' }),
+    groupNode({ id: 'g', x: 0, y: 200, width: 100, height: 50 }),
+  ],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a', side: 'right', end: 'none' },
+      to: { node: 'b', side: 'left', end: 'arrow' },
+    },
+    {
+      id: 'e2',
+      from: { node: 'c', side: 'right', end: 'none' },
+      to: { node: 'g', side: 'top', end: 'arrow' },
+    },
+  ],
+}
+
+it('names an edge by the nodes it joins', () => {
+  expect(anchorChipLabel({ kind: 'spatial', edgeId: 'e1', x: 5, y: 5 }, edgeCanvas)).toBe(
+    'on API Gateway → Order Service',
+  )
+})
+
+it('names an edge end that has no text by what kind of node it is', () => {
+  expect(anchorChipLabel({ kind: 'spatial', edgeId: 'e2', x: 5, y: 5 }, edgeCanvas)).toBe(
+    'on text node → group',
+  )
 })

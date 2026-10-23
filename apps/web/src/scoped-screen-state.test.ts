@@ -46,6 +46,7 @@ const sources = import.meta.glob(
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
     './components/workspace-files/use-device-memory.ts',
+    './components/workspace-files/use-panel-opener.ts',
     './components/workspace-files/use-rename-document.ts',
     './components/workspace-files/use-write-outcome.ts',
     './components/workspace-files/use-document-pointers.ts',
@@ -98,6 +99,8 @@ const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-s
 // lane and the changed-dot baselines. Extracted from the panel when its
 // file-size budget said so; same SCREEN by the same rule as the two above.
 const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
+// Every open from the panel, with the ref that mirrors the host's handler.
+const PANEL_OPENER_HOOK = './components/workspace-files/use-panel-opener.ts'
 // The rename dialog's target and its form's in-flight/refusal state; what
 // the panel has to SAY about its last write; the four things it points AT;
 // and the tag vocabulary in use. Same SCREEN by the same rule as the three
@@ -173,8 +176,8 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // above the hook) can close a dialog left open across a switch.
   renameRef: 'no subject: mirrors the current flow, reassigned every render',
   openRef: 'no subject: mirrors the host’s open handler, reassigned every render',
-  hits: 'cleared on switch',
-  searchDegraded: 'cleared on switch',
+  answer: 'cleared on switch',
+  elapsed: 'cleared on switch',
   staleList: 'cleared on switch',
   pinRefusal: 'cleared on switch',
   // The keeper's vocabulary names the departed workspace's tags; until the
@@ -439,11 +442,15 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
   selectionSource:
     'no subject: the mounted editor’s selection source as state, so the Display panel follows it; set by the editor’s callback ref, which React re-runs with the new instance on a switch',
+  showResolvedSource:
+    'no subject: the mounted editor’s resolved-comments view state as state, so the comments panel follows it; set by the editor’s callback ref like the selection source',
   keeperEditorRefLatest:
     'no subject: the keeper’s own editor ref, read through a ref so the callback ref stays identity-stable; it names no document',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  urlSyncedDocumentRef:
+    'no subject: remembers which document the address last followed, so a rename moves the URL once; it names the current document by construction',
   // The one that bit: a bare boolean over the keeper's `deleteDocument()`,
   // which acts on whatever document the controller currently holds.
   // Confirmed after a switch, it deleted the document that had arrived.
@@ -515,6 +522,7 @@ const CASES = [
       PANEL_COLUMNS_HOOK,
       PANEL_SEARCH_HOOK,
       PANEL_DEVICE_MEMORY_HOOK,
+      PANEL_OPENER_HOOK,
       PANEL_RENAME_HOOK,
       PANEL_WRITE_OUTCOME_HOOK,
       PANEL_POINTERS_HOOK,

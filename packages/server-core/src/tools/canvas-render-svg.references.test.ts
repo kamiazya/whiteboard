@@ -90,6 +90,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -106,6 +107,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -127,6 +129,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -159,6 +162,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -175,6 +179,7 @@ describe('wb_scene_render reference resolution', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         embedReferences: true,
+        comments: false,
         style: 'clean',
       }),
     ).resolves.toMatchObject({ svg: expect.stringContaining('<svg') })
@@ -198,6 +203,7 @@ describe('reference resolution edge cases', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -217,6 +223,7 @@ describe('reference resolution edge cases', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -237,6 +244,7 @@ describe('a referenced document with no display name', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 

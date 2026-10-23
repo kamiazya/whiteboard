@@ -20,6 +20,24 @@ projector, a colour-blind reader and a greyscale print, and colour stays free to
 else about the box — healthy or failing, say. That rule is
 [ADR-0036](../contributing/adr/0036-semantic-axes.md) §5.
 
+The editor draws the same six: pick one under **Facets…** on a selected box and the box takes
+its silhouette, with the label wrapped to fit inside it and centred line by line. Each stencil
+also carries a small badge at the top of the box, so two kinds that differ by silhouette alone
+(the octagon and the hexagon) stay apart at a glance:
+
+| stencil | badge |
+|---|---|
+| `visual.datastore` | a database |
+| `visual.service` | a server |
+| `visual.gateway` | a network |
+| `visual.queue` | stacked layers |
+| `visual.actor` | a person |
+| `visual.external` | a link |
+
+The badge is drawn for a box that wears a stencil. A symbol you set by hand on a plain box is
+not drawn on the box; it shows where a box is too small to read, such as the minimap and a file
+row. Boxes shorter than 48px leave the badge off so it does not sit on the label.
+
 ## Wearing one
 
 `stencil` sits beside `op`, next to `node`, on `node.add` and `node.patch`:

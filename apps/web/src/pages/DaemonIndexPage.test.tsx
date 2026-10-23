@@ -12,6 +12,7 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
+import { forgetSearchQueries } from '../lib/search-query-memory.js'
 import {
   installFakeDaemonFetch,
   otherReadBody,
@@ -58,6 +59,7 @@ const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 afterEach(() => {
   cleanup()
+  forgetSearchQueries()
   vi.unstubAllGlobals()
 })
 

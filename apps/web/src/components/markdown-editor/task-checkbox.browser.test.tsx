@@ -57,4 +57,28 @@ describe('task checkboxes in the preview', () => {
     await userEvent.keyboard(' ')
     await expect.poll(() => latest).toContain('* [x] star item')
   })
+
+  it('names each box from its item, keeps focus through a toggle and announces the result', async () => {
+    render(<Harness mode="read" />)
+    await expect.poll(() => boxes().length).toBe(3)
+    expect(boxes().map((box) => box.getAttribute('aria-label'))).toEqual([
+      'first',
+      'nested',
+      'star item',
+    ])
+    ;(boxes()[2] as SVGElement).focus()
+    await userEvent.keyboard(' ')
+    await expect.poll(() => latest).toContain('* [x] star item')
+    await expect.poll(() => boxes()[2]?.getAttribute('aria-checked')).toBe('true')
+    expect(document.activeElement).toBe(boxes()[2])
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('star item')
+    await expect
+      .poll(() => document.querySelector('[data-testid="task-announcement"]')?.textContent)
+      .toBe('star item: checked')
+    await userEvent.keyboard(' ')
+    await expect
+      .poll(() => document.querySelector('[data-testid="task-announcement"]')?.textContent)
+      .toBe('star item: not checked')
+    expect(document.activeElement).toBe(boxes()[2])
+  })
 })

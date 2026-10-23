@@ -3,8 +3,10 @@ import { BookmarkPlus, Download, EllipsisVertical } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -13,6 +15,7 @@ import {
 import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
+import { usePictureExportPreferences } from '../../hooks/usePictureExportPreferences.js'
 
 interface DocumentMenuProps {
   /**
@@ -148,6 +151,16 @@ function ExportSubmenu({
       <DropdownMenuSubContent>
         <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+        {kind === 'spatial' && (
+          <>
+            <DropdownMenuItem onSelect={() => onExport('png-comments')}>
+              Export as PNG (with comments)
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onExport('svg-comments')}>
+              Export as SVG (with comments)
+            </DropdownMenuItem>
+          </>
+        )}
         {kind === 'markdown' && (
           <DropdownMenuItem onSelect={() => onExport('md')}>
             Save as Markdown (.md)
@@ -158,7 +171,34 @@ function ExportSubmenu({
             Save as JSON Canvas (.canvas)
           </DropdownMenuItem>
         )}
+        <PictureOptionItems />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
+  )
+}
+
+function PictureOptionItems() {
+  const { options, setScale, setBackground } = usePictureExportPreferences()
+  return (
+    <>
+      <DropdownMenuSeparator />
+      {/* A choice about the picture entries above, not an action: keeping the
+          menu open lets both be set before the export that uses them. An SVG
+          has no pixels, so the resolution is named as the PNG's. */}
+      <DropdownMenuCheckboxItem
+        checked={options.scale === 2}
+        onCheckedChange={(on) => setScale(on ? 2 : 1)}
+        onSelect={(event) => event.preventDefault()}
+      >
+        2× resolution (PNG)
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        checked={options.background}
+        onCheckedChange={setBackground}
+        onSelect={(event) => event.preventDefault()}
+      >
+        With background
+      </DropdownMenuCheckboxItem>
+    </>
   )
 }

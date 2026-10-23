@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenuItem } from '../../components/ui/dropdown-menu.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
+import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
   onExport?: (format: SceneExportFormat) => void
+  kind?: 'spatial' | 'markdown'
   notice?: string | null
   onBookmark?: () => void
   display?: React.ReactNode
@@ -19,6 +21,7 @@ function renderMenu(props?: {
   return render(
     <DocumentMenu
       onExport={props?.onExport}
+      {...(props?.kind === undefined ? {} : { kind: props.kind })}
       {...(props?.onBookmark === undefined ? {} : { onBookmark: props.onBookmark })}
       {...(props?.notice === undefined ? {} : { notice: props.notice })}
       {...(props?.display === undefined ? {} : { display: props.display })}
@@ -46,6 +49,53 @@ async function openExportSubmenu() {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+})
+
+describe('DocumentMenu — picture options', () => {
+  const resolution = () => screen.getByRole('menuitemcheckbox', { name: /2× resolution/ })
+  const background = () => screen.getByRole('menuitemcheckbox', { name: 'With background' })
+
+  it('offers 2× resolution off and With background on, until the person chooses otherwise', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(resolution().getAttribute('aria-checked')).toBe('false')
+    expect(background().getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('remembers a toggle in the user settings, and reads it back on the next open', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(resolution())
+    await waitFor(() =>
+      expect(createUserSettingsStore().load().pictureExport?.doubleResolution).toBe(true),
+    )
+    cleanup()
+
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    expect(resolution().getAttribute('aria-checked')).toBe('true')
+    expect(background().getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('keeps the menu open when a toggle is chosen, so both can be set before exporting', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(background())
+
+    await waitFor(() => expect(background().getAttribute('aria-checked')).toBe('false'))
+    expect(screen.getByRole('menuitem', { name: 'Export as PNG' })).toBeTruthy()
+  })
+
+  it('does not offer the toggles to a document with nothing to export', async () => {
+    renderMenu()
+    await openMenu()
+    expect(screen.queryByRole('menuitemcheckbox')).toBeNull()
+  })
 })
 
 describe('DocumentMenu — export entries', () => {
@@ -79,6 +129,25 @@ describe('DocumentMenu — export entries', () => {
 
     fireEvent.pointerUp(screen.getByText(`Export as ${format.toUpperCase()}`))
     await waitFor(() => expect(onExport).toHaveBeenCalledWith(format))
+  })
+
+  it('names the annotation layer in the two board entries that carry it', async () => {
+    const onExport = vi.fn()
+    renderMenu({ onExport, kind: 'spatial' })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.getByText('Export as PNG')).toBeTruthy()
+    fireEvent.pointerUp(screen.getByText('Export as SVG (with comments)'))
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('svg-comments'))
+  })
+
+  it('offers no with-comments entry for a note, which has no annotation layer in its picture', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'markdown' })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.queryByText(/with comments/)).toBeNull()
   })
 
   it('carries a polite status region that is mounted before it speaks', () => {

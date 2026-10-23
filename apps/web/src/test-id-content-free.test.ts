@@ -37,6 +37,7 @@ const CONTENT_FREE: Record<string, string> = {
   './components/settings/LocalCopiesCard.tsx row.workspaceId': 'a generated workspace id',
   './components/settings/ReplicaOfflineControl.tsx target.workspaceId': 'a generated workspace id',
   './components/annotations/message-meta.tsx thread.id': 'a generated thread id',
+  './components/annotations/message-meta.tsx message.id': 'a generated message id',
   './components/annotations/thread-row.tsx message.id': 'a generated message id',
   './components/spatial-editor/CommentThreadCard.tsx message.id': 'a generated message id',
   './components/annotations/thread-row.tsx thread.id': 'a generated thread id',

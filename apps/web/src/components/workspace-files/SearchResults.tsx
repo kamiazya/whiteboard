@@ -14,7 +14,7 @@
  */
 
 import { LayoutGrid, List } from 'lucide-react'
-import { type ReactNode, useId, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
@@ -66,6 +66,8 @@ export interface SearchResultsProps {
   onActivate?: (document: WorkspaceDocumentEntry) => void
   /** Right-click or touch long-press on a result row — the object-action menu hook. */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
+  /** ArrowUp from the first result: hand focus back to whatever asked. */
+  onLeaveUp?: () => void
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
@@ -243,6 +245,22 @@ function titleOf(entry: WorkspaceDocumentEntry): string {
   return documentLabel(entry, 'leaf')
 }
 
+/**
+ * Arrow keys walk the result buttons; ArrowUp from the first hands focus back
+ * to whatever asked (the search box), so the list is a place you can leave.
+ */
+function walkResults(event: KeyboardEvent<HTMLElement>, onLeaveUp: (() => void) | undefined): void {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-doc-path]'),
+  )
+  const at = rows.indexOf(document.activeElement as HTMLButtonElement)
+  if (at === -1) return
+  event.preventDefault()
+  if (event.key === 'ArrowUp' && at === 0) onLeaveUp?.()
+  else rows[event.key === 'ArrowDown' ? Math.min(at + 1, rows.length - 1) : at - 1]?.focus()
+}
+
 export function SearchResults({
   results,
   query,
@@ -251,6 +269,7 @@ export function SearchResults({
   onSelect,
   onActivate,
   onDocumentContextMenu,
+  onLeaveUp,
   renderThumbnail,
   className,
 }: SearchResultsProps) {
@@ -334,6 +353,7 @@ export function SearchResults({
       </div>
       <ul
         {...longPress}
+        onKeyDown={(event) => walkResults(event, onLeaveUp)}
         data-testid={layout === 'list' ? 'search-results-list' : 'search-results-grid'}
         className={
           layout === 'list' ? 'space-y-1 p-0.5' : 'grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3'

@@ -13,6 +13,7 @@ import type { useCommentState } from './use-comment-state.js'
 import type { useEditSessionState } from './use-edit-session-state.js'
 import type { useInteractionState } from './use-interaction-state.js'
 import type { useLockPolicy } from './use-lock-policy.js'
+import type { useLockedPress } from './use-locked-press.js'
 import type { useNodeBoxes } from './use-node-boxes.js'
 import type { useToolState } from './use-tool-state.js'
 import type { useViewportControls } from './use-viewport-controls.js'
@@ -94,6 +95,7 @@ export interface EditorPointerInputs {
   readonly isOverlayEvent: (e: React.SyntheticEvent) => boolean
   readonly lastStrokeRef: RefObject<PreviousStroke | null>
   readonly menuPickInputs: PickInputs
+  readonly lockedPress: ReturnType<typeof useLockedPress>
   readonly openProposalId: string | null
   readonly pickInputs: PickInputs
   readonly pressedProposalRef: RefObject<{

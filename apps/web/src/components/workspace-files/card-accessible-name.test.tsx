@@ -69,7 +69,14 @@ describe('document card accessible name', () => {
   })
 
   it('names a Recent lane tile by its label and kind', () => {
-    render(<RecentLane documents={[standup, board]} recentIds={['d1', 'd2']} onOpen={vi.fn()} />)
+    render(
+      <RecentLane
+        documents={[standup, board]}
+        recentIds={['d1', 'd2']}
+        onSelect={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    )
     const lane = screen.getByRole('region', { name: /recent/i })
     expect(within(lane).getByRole('button', { name: 'Standup 22 Oct, Markdown note' })).toBeTruthy()
     expect(within(lane).getByRole('button', { name: 'board, Canvas' })).toBeTruthy()

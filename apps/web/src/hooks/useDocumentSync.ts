@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import {
   type DocumentExportFormat,
+  isCommentedPicture,
+  pictureFormatOf,
   renderMarkdownForExport,
   savedPicture,
 } from '../lib/document-export.js'
@@ -33,6 +35,7 @@ import { layoutWithFragments } from '../lib/fragment-requests.js'
 import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
 import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
+import type { PictureExportOptions } from '../lib/spatial/picture-options.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
@@ -57,6 +60,8 @@ export interface SceneExportOptions {
   /** A canvas's conversations, for the passage highlights the editor draws. */
   readonly threads?: readonly CommentThread[]
   readonly tagLibrary?: TagLibrary
+  /** The picture entries' resolution and background; absent is 1x, transparent. */
+  readonly picture?: PictureExportOptions
 }
 
 export interface UseDocumentSyncResult {
@@ -549,17 +554,18 @@ export function useDocumentSync(
       if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
       if (options.kind === 'markdown') {
         const body = session?.getMarkdownBody() ?? markdownBody
-        return savedPicture(format, await renderMarkdownForExport(body, options))
+        return savedPicture(pictureFormatOf(format), await renderMarkdownForExport(body, options))
       }
       const exported = session?.getCanvas() ?? canvas
       const measure = createBrowserMeasureText()
+      const comments = isCommentedPicture(format)
       // Waits for every math block and diagram fence the layout asks for —
       // a text node's, a file node's note's — so the file is typeset as the screen is.
       const drawn = await layoutWithFragments(
-        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams }),
+        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams, comments }),
         FRAGMENT_ENGINES,
       )
-      return savedPicture(format, drawn, {
+      return savedPicture(pictureFormatOf(format), drawn, {
         // Editable PNG (the draw.io pattern): the extended JSON Canvas
         // document rides in an iTXt chunk under `whiteboard`, so the image
         // carries its own source, exact coordinates included.

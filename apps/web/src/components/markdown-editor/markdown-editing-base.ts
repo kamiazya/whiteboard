@@ -106,6 +106,27 @@ export function followCaret(
 }
 
 /**
+ * Takes the selection the browser holds inside the editor into its state.
+ *
+ * CodeMirror reads a native selection change asynchronously, and `focus()`
+ * writes the STATE's selection back over the DOM one. A tap that moves the
+ * caret followed at once by a toolbar press (an on-screen keyboard, where
+ * the two arrive in one task) would otherwise see the verb land on the
+ * previous caret, or `focus()` snap the new one away.
+ */
+function adoptDomSelection(view: EditorView): void {
+  const selection = view.contentDOM.ownerDocument.getSelection()
+  const { anchorNode, focusNode } = selection ?? {}
+  if (!selection || !anchorNode || !focusNode) return
+  if (!view.contentDOM.contains(anchorNode) || !view.contentDOM.contains(focusNode)) return
+  const anchor = view.posAtDOM(anchorNode, selection.anchorOffset)
+  const head = view.posAtDOM(focusNode, selection.focusOffset)
+  const { main } = view.state.selection
+  if (main.anchor === anchor && main.head === head) return
+  view.dispatch({ selection: { anchor, head } })
+}
+
+/**
  * The handle every host answers the same way, plus what this one adds
  * (a link picker, a comment composer).
  */
@@ -115,8 +136,9 @@ export function activeMarkdownEditorFor(
 ): ActiveMarkdownEditor {
   return {
     run: (command) => {
-      command({ state: view.state, dispatch: view.dispatch })
+      adoptDomSelection(view)
       view.focus()
+      command({ state: view.state, dispatch: view.dispatch })
     },
     headingLevel: () => headingLevelAt(view.state),
     focus: () => view.focus(),

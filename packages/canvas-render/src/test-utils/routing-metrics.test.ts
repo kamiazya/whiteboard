@@ -2,7 +2,15 @@
 // if the numbers under it are right, and every value here is hand-computed
 // against a picture rather than recorded from a run.
 import { describe, expect, it } from 'vitest'
-import { bends, borderInk, crossings, interiorInk, pathLength } from './routing-metrics.js'
+import {
+  bends,
+  borderInk,
+  crossings,
+  interiorInk,
+  pathLength,
+  touches,
+  unhoppedCrossings,
+} from './routing-metrics.js'
 
 const box = { x: 100, y: 100, w: 200, h: 100 } // x 100..300, y 100..200
 
@@ -233,6 +241,127 @@ describe('crossings', () => {
           { x: 10, y: 10 },
         ],
       ]),
+    ).toBe(0)
+  })
+})
+
+describe('touches', () => {
+  // Two corners meeting at (5,5): one path turns left-to-up, the other
+  // right-to-down. Drawn, that is a plus sign; geometrically it is no crossing.
+  const kissing = [
+    [
+      { x: 0, y: 5 },
+      { x: 5, y: 5 },
+      { x: 5, y: 0 },
+    ],
+    [
+      { x: 10, y: 5 },
+      { x: 5, y: 5 },
+      { x: 5, y: 10 },
+    ],
+  ]
+
+  it('counts two corners that meet at one point once', () => {
+    expect(touches(kissing)).toBe(1)
+    expect(crossings(kissing)).toBe(0)
+  })
+
+  it('does not count a proper crossing', () => {
+    expect(
+      touches([
+        [
+          { x: 0, y: 5 },
+          { x: 10, y: 5 },
+        ],
+        [
+          { x: 5, y: 0 },
+          { x: 5, y: 10 },
+        ],
+      ]),
+    ).toBe(0)
+  })
+
+  it('does not count paths that end on the same point', () => {
+    expect(
+      touches([
+        [
+          { x: 0, y: 5 },
+          { x: 5, y: 5 },
+        ],
+        [
+          { x: 5, y: 0 },
+          { x: 5, y: 5 },
+        ],
+      ]),
+    ).toBe(0)
+  })
+
+  it('does not count a stretch where two paths run on one line', () => {
+    expect(
+      touches([
+        [
+          { x: 0, y: 5 },
+          { x: 10, y: 5 },
+          { x: 10, y: 9 },
+        ],
+        [
+          { x: 4, y: 5 },
+          { x: 6, y: 5 },
+        ],
+      ]),
+    ).toBe(0)
+  })
+})
+
+describe('unhoppedCrossings', () => {
+  const horizontal = [
+    { x: 0, y: 50 },
+    { x: 100, y: 50 },
+  ]
+  const vertical = [
+    { x: 50, y: 0 },
+    { x: 50, y: 100 },
+  ]
+
+  it('counts a crossing nobody hops', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], []])).toBe(1)
+  })
+
+  it('counts nothing for a crossing either path hops', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], [{ x: 50, y: 50 }]])).toBe(0)
+    expect(unhoppedCrossings([horizontal, vertical], [[{ x: 50, y: 50 }], []])).toBe(0)
+  })
+
+  it('does not take a hop elsewhere on the path for this crossing', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], [{ x: 50, y: 80 }]])).toBe(1)
+  })
+
+  it('counts a crossing that lands on a waypoint of a straight run', () => {
+    const split = [
+      { x: 50, y: 0 },
+      { x: 50, y: 50 },
+      { x: 50, y: 100 },
+    ]
+    expect(unhoppedCrossings([horizontal, split], [[], []])).toBe(1)
+  })
+
+  it('leaves two corners on one point to touches', () => {
+    expect(
+      unhoppedCrossings(
+        [
+          [
+            { x: 0, y: 50 },
+            { x: 50, y: 50 },
+            { x: 50, y: 0 },
+          ],
+          [
+            { x: 100, y: 50 },
+            { x: 50, y: 50 },
+            { x: 50, y: 100 },
+          ],
+        ],
+        [[], []],
+      ),
     ).toBe(0)
   })
 })

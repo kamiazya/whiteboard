@@ -18,13 +18,18 @@
  */
 
 import { growsPast } from '@kamiazya/whiteboard-model'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useId, useRef, useState } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { EditorExitHint } from '../ui/EditorExitHint.js'
+import { returnFocusToCanvas } from './canvas-focus.js'
+import { EditorExitDescription } from './EditorExitDescription.js'
 
 export interface TextNodeEditorProps {
   readonly box: Box
   readonly initialText: string
+  /** The field's accessible name: what is being edited, since the field is placed over it with no label of its own. */
+  readonly label: string
   /** Overrides the testid for non-node uses (e.g. the edge label editor). */
   readonly testId?: string
   /**
@@ -53,6 +58,8 @@ export interface TextNodeEditorProps {
    * can still be shortened.
    */
   readonly lengthLimit?: TextLengthLimit
+  /** Shown while the draft is empty: what an empty field here is asking for. */
+  readonly placeholder?: string
 }
 
 export interface TextLengthLimit {
@@ -117,6 +124,7 @@ function LengthLimitNotice({
 export function TextNodeEditor({
   box,
   initialText,
+  label,
   testId = 'text-node-editor',
   exitHintScale,
   style,
@@ -124,11 +132,13 @@ export function TextNodeEditor({
   onCancel,
   onChange,
   lengthLimit,
+  placeholder,
 }: TextNodeEditorProps) {
   const { value, offer, refusal } = useLimitedDraft(initialText, lengthLimit)
   const mountedRef = useRef(true)
   const finishedRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const hintId = useId()
 
   useEffect(() => {
     mountedRef.current = true
@@ -151,15 +161,31 @@ export function TextNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
+    announceOnCanvas('Discarded')
     onCancel()
+  }
+  // An explicit exit hands the keyboard back; a blur commit must not, since
+  // focus has already gone where the person pointed it.
+  const commitAndReturn = () => {
+    const field = textareaRef.current
+    commit()
+    returnFocusToCanvas(field)
+  }
+  const cancelAndReturn = () => {
+    const field = textareaRef.current
+    cancel()
+    returnFocusToCanvas(field)
   }
 
   return (
     <>
       <textarea
         ref={textareaRef}
+        aria-label={label}
+        aria-describedby={hintId}
         aria-keyshortcuts="Meta+Enter Control+Enter"
         data-testid={testId}
+        placeholder={placeholder}
         value={value}
         style={{
           position: 'absolute',
@@ -184,17 +210,18 @@ export function TextNodeEditor({
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault()
-            cancel()
+            cancelAndReturn()
           } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault()
-            commit()
+            commitAndReturn()
           }
         }}
       />
+      <EditorExitDescription id={hintId} />
       {refusal !== null && <LengthLimitNotice box={box} testId={testId} text={refusal} />}
       <EditorExitHint
-        onDone={commit}
-        onCancel={cancel}
+        onDone={commitAndReturn}
+        onCancel={cancelAndReturn}
         canvasOverlay
         placement={{
           left: box.x,

@@ -4,6 +4,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
+import { useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { folderContents } from './folder-contents.js'
 import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -227,10 +228,12 @@ function DocumentCard({
   onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu']
 }) {
   const { ids, describedBy } = cardDescription(useId(), entry, changed)
+  const dragProps = useDocumentDragProps(entry.path)
   return (
     <button
       type="button"
       data-doc-path={entry.path}
+      {...dragProps}
       // The name is the label and kind alone; the picture, state badges, age
       // and tags are the description, so a reader hears what the document is
       // before anything about it.
@@ -330,12 +333,14 @@ function FolderCard({
   child: ReturnType<typeof folderContents>['folders'][number]
   onOpen: FolderContentsListProps['onOpen']
 }) {
+  const folderProps = useFolderProps(child.path)
   return (
     <button
       type="button"
       aria-label={`Open folder ${child.name}`}
       onClick={() => onOpen({ kind: 'folder', path: child.path })}
-      className="hover:bg-accent flex w-full flex-col overflow-hidden rounded-md border text-left"
+      {...folderProps}
+      className="hover:bg-accent data-[dropping]:ring-ring data-[dropping]:bg-accent flex data-[dropping]:ring-2 w-full flex-col overflow-hidden rounded-md border text-left"
     >
       <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
         <Folder className="size-7" />

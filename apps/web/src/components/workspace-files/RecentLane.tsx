@@ -8,7 +8,12 @@ export interface RecentLaneProps {
   documents: readonly WorkspaceDocumentEntry[]
   /** Most recent first, from `recent-documents.ts`. */
   recentIds: readonly string[]
+  /** One click: the host decides whether that selects or, on touch, opens. */
+  onSelect: (entry: WorkspaceDocumentEntry) => void
+  /** Double-click or Enter: the committed open. */
   onOpen: (entry: WorkspaceDocumentEntry) => void
+  /** The document the preview is showing, so the lane agrees with the grid. */
+  selectedPath?: string | undefined
   renderThumbnail?: (entry: WorkspaceDocumentEntry) => ReactNode
   /**
    * Columns in the grid below at its current width, when there is one. A lane
@@ -20,16 +25,30 @@ export interface RecentLaneProps {
 
 function RecentTile({
   entry,
+  selectedPath,
+  onSelect,
   onOpen,
   renderThumbnail,
-}: Pick<RecentLaneProps, 'onOpen' | 'renderThumbnail'> & { entry: WorkspaceDocumentEntry }) {
+}: Pick<RecentLaneProps, 'onSelect' | 'onOpen' | 'renderThumbnail' | 'selectedPath'> & {
+  entry: WorkspaceDocumentEntry
+}) {
   const KindIcon = entry.kind === 'spatial' ? LayoutGrid : FileText
   return (
     <button
       type="button"
       aria-label={documentAccessibleName(entry, 'leaf')}
-      onClick={() => onOpen(entry)}
-      className="hover:bg-accent/40 flex w-28 shrink-0 flex-col overflow-hidden rounded-md border text-left md:w-32"
+      aria-current={entry.path === selectedPath ? 'true' : undefined}
+      onClick={() => onSelect(entry)}
+      onDoubleClick={() => onOpen(entry)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          // Without this the keydown ALSO fires the native button click,
+          // selecting after the open.
+          event.preventDefault()
+          onOpen(entry)
+        }
+      }}
+      className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-28 shrink-0 flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1 md:w-32"
     >
       <span className="bg-muted/40 flex aspect-video w-full items-center justify-center overflow-hidden">
         {renderThumbnail?.(entry) ?? (
@@ -63,7 +82,9 @@ function RecentTile({
 export function RecentLane({
   documents,
   recentIds,
+  onSelect,
   onOpen,
+  selectedPath,
   renderThumbnail,
   gridColumns,
 }: RecentLaneProps) {
@@ -93,6 +114,8 @@ export function RecentLane({
           <RecentTile
             key={entry.documentId}
             entry={entry}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
             onOpen={onOpen}
             renderThumbnail={renderThumbnail}
           />

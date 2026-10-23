@@ -25,10 +25,11 @@ import {
   type TagLibraryObjection,
   tagLibraryObjection,
 } from '@kamiazya/whiteboard-plugin-visual'
-import { X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { tagCountNotice } from '../../lib/limit-notice.js'
+import { TagChip } from './TagChip.js'
+import { useTagColouring } from './tag-colouring.js'
 
 export interface TagChipsEditorProps {
   readonly tags: readonly string[]
@@ -106,6 +107,8 @@ export function TagChipsEditor({
   library,
 }: TagChipsEditorProps) {
   const listId = useId()
+  const helpId = useId()
+  const colouring = useTagColouring() !== null
   const offered = library === undefined ? suggestions : [...suggestions, ...declaredTags(library)]
   const [draft, setDraft] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -127,20 +130,13 @@ export function TagChipsEditor({
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {tags.map((tag) => (
-          <span
+          <TagChip
             key={tag}
-            className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-          >
-            {tag}
-            <button
-              type="button"
-              aria-label={`Remove tag ${tag}`}
-              onClick={() => onChange(tags.filter((entry) => entry !== tag))}
-              className="hover:text-foreground"
-            >
-              <X aria-hidden className="size-3" />
-            </button>
-          </span>
+            tag={tag}
+            library={library}
+            onRemove={() => onChange(tags.filter((entry) => entry !== tag))}
+            onColourFailed={setRefusal}
+          />
         ))}
         <input
           id={inputId}
@@ -161,8 +157,9 @@ export function TagChipsEditor({
             commitDraft()
           }}
           onBlur={commitDraft}
-          placeholder="Add tag"
+          placeholder="Add tag, e.g. kind:service"
           aria-label="Add tag"
+          {...(colouring ? { 'aria-describedby': helpId } : {})}
           aria-invalid={refusal !== null}
           className="text-foreground placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-xs outline-none"
         />
@@ -172,6 +169,11 @@ export function TagChipsEditor({
           ))}
         </datalist>
       </div>
+      {colouring && (
+        <p id={helpId} className="text-muted-foreground text-xs">
+          A key:value tag can be coloured from its menu; a coloured tag appears in the legend.
+        </p>
+      )}
       {refusal !== null && (
         <p role="alert" className="text-destructive text-xs">
           {refusal}

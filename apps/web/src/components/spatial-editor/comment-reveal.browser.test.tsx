@@ -17,6 +17,11 @@ const start: SpatialCanvas = {
     textNode({ id: 'far', x: 4000, y: 3000, width: 120, height: 60, text: 'over there' }),
   ],
   edges: [],
+  // The scene draws a pin for each of these (the thread plane only decorates).
+  comments: [
+    { id: 't-far', x: 4060, y: 3030, text: 'check this one' },
+    { id: 't-done', x: 60, y: 30, text: 'already settled', resolved: true },
+  ],
 }
 
 const ON_FAR_NODE: CommentThread = {
@@ -38,13 +43,20 @@ const WHOLE: CommentThread = {
   messages: [{ id: 'm3', body: 'about all of it', createdAt: '2026-09-02T00:00:00.000Z' }],
 }
 
+const RESOLVED: CommentThread = {
+  id: 't-done',
+  anchor: { kind: 'spatial', nodeId: 'near', x: 60, y: 30 },
+  status: 'resolved',
+  messages: [{ id: 'm4', body: 'already settled', createdAt: '2026-09-02T00:00:00.000Z' }],
+}
+
 const SIZE = { width: 900, height: 700 }
 
 function mount() {
   const host = makeEditorHost({
     initial: start,
     size: SIZE,
-    editorProps: { threads: [ON_FAR_NODE, ON_FAR_SPOT, WHOLE] },
+    editorProps: { threads: [ON_FAR_NODE, ON_FAR_SPOT, WHOLE, RESOLVED] },
   })
   const { container } = render(<host.Host />)
   return { ...host, container }
@@ -109,4 +121,34 @@ it('pans nowhere for a whole-document or unknown conversation, and says so', asy
   expect(latest.handle?.revealThread('t-nowhere')).toBe(false)
   expect(nodeRect(container, 'far').left).toBe(before)
   expect(page.getByTestId('comment-reveal-pulse').query()).toBeNull()
+})
+
+const pinOf = (root: HTMLElement, id: string) =>
+  root.querySelector(`[data-testid="canvas-content"] [data-wb-key="${id}/pin"]`)
+
+it('draws a resolved conversation when it is revealed, though resolved ones are hidden by default', async () => {
+  const { latest, container } = mount()
+  await expect.element(page.getByTestId('canvas-content')).toBeInTheDocument()
+  await vi.waitFor(() => expect(pinOf(container, 't-far')).not.toBeNull())
+  expect(pinOf(container, 't-done')).toBeNull()
+
+  expect(latest.handle?.revealThread('t-done')).toBe(true)
+
+  await vi.waitFor(() => expect(pinOf(container, 't-done')).not.toBeNull())
+})
+
+it('shows and hides resolved conversations on the canvas through the handle', async () => {
+  const { latest, container } = mount()
+  await expect.element(page.getByTestId('canvas-content')).toBeInTheDocument()
+  await vi.waitFor(() => expect(pinOf(container, 't-far')).not.toBeNull())
+  const source = latest.handle?.showResolved
+  expect(source?.get()).toBe(false)
+
+  latest.handle?.setShowResolved(true)
+  await vi.waitFor(() => expect(pinOf(container, 't-done')).not.toBeNull())
+  expect(source?.get()).toBe(true)
+
+  latest.handle?.setShowResolved(false)
+  await vi.waitFor(() => expect(pinOf(container, 't-done')).toBeNull())
+  expect(source?.get()).toBe(false)
 })

@@ -57,3 +57,14 @@ describe('ShortcutHelpSheet', () => {
     expect(screen.queryByTestId('shortcut-help-sheet')).toBeNull()
   })
 })
+
+describe('ShortcutHelpSheet comment row', () => {
+  it('lists the comment-on-selection shortcut with its platform label', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const row = screen
+      .getByTestId('shortcut-help-sheet')
+      .querySelector('[data-shortcut-id="comment-on-selection"]') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(within(row).getByText(shortcutLabel('Cmd+Alt+M'))).toBeTruthy()
+  })
+})

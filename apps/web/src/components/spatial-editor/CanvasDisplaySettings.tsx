@@ -178,6 +178,7 @@ export function CanvasDisplaySettings({
         />
       )}
       <div data-testid="document-settings">
+        <span className="text-xs font-medium">Whole canvas</span>
         {POINT_SECTIONS.canvasSettings.map((section) =>
           section === 'facets' ? facetRows : tagsRow,
         )}

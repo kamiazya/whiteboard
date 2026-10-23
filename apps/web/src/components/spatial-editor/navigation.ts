@@ -433,7 +433,13 @@ function reducePanPress(
   if (!pans) return { state: next, effects, fallThrough: true }
 
   if (context.handMode && event.button === 0 && !context.spaceDown) {
-    if (isDoublePress(next.lastHandPress, event.timeStamp, event.point)) {
+    // Zoom is the one-handed touch answer to a double press. A pointer that
+    // can aim reads the same two presses as a double CLICK, which the editor
+    // resolves at the release (`armHandDoublePress`), so it only pans.
+    if (
+      event.pointerType === 'touch' &&
+      isDoublePress(next.lastHandPress, event.timeStamp, event.point)
+    ) {
       effects.push({
         kind: 'zoom-at',
         anchorScreen: event.point,

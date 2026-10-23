@@ -13,6 +13,7 @@ describe('SelectionOverlay', () => {
     const onHandlePointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={onHandlePointerDown}
@@ -34,6 +35,7 @@ describe('SelectionOverlay', () => {
     const onHandlePointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={2}
         onHandlePointerDown={onHandlePointerDown}
@@ -51,6 +53,7 @@ describe('SelectionOverlay', () => {
     const onConnectPointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -65,6 +68,7 @@ describe('SelectionOverlay', () => {
     const onHandlePointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={onHandlePointerDown}
@@ -79,6 +83,7 @@ describe('SelectionOverlay', () => {
     const onConnectPointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -92,6 +97,7 @@ describe('SelectionOverlay', () => {
   it('exposes every resize handle and the connect handle as a focusable, labeled control', () => {
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -114,6 +120,7 @@ describe('SelectionOverlay', () => {
     const onHandleKeyDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -136,6 +143,7 @@ describe('SelectionOverlay', () => {
     const onConnectKeyDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -157,6 +165,7 @@ describe('SelectionOverlay', () => {
     const onMoreActions = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={2}
         onHandlePointerDown={vi.fn()}
@@ -191,6 +200,7 @@ it('draws the node-tools slots 44px square where the pointer is coarse, 24px oth
   const slotSize = () => {
     const { unmount } = render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={vi.fn()}
@@ -230,6 +240,7 @@ it('grows the hit boxes to the 44px touch floor where the pointer is coarse', ()
     const onHandlePointerDown = vi.fn()
     render(
       <SelectionOverlay
+        subject="Note"
         box={BOX}
         zoom={1}
         onHandlePointerDown={onHandlePointerDown}

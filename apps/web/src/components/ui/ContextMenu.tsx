@@ -25,6 +25,7 @@ import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { useRestoreFocus } from '../../hooks/use-restore-focus.js'
+import { useRovingMenu } from '../../hooks/use-roving-menu.js'
 import { cn } from '../../lib/utils.js'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
@@ -153,6 +154,7 @@ function CustomColorPanel({
 export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
+  const roving = useRovingMenu(menuRef, onClose)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so it is nudged back inside once measurable, before paint (no visible jump).
   const [pos, setPos] = useState({ x, y })
@@ -181,10 +183,8 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
 
-  // Focus the menu on open so Escape works without an extra click, and close
-  // on any pointerdown outside — both standard menu dismissal paths.
+  // Close on any pointerdown outside (focus on open is the roving hook's).
   useEffect(() => {
-    menuRef.current?.focus()
     const onPointerDownAnywhere = (e: PointerEvent) => {
       if (e.target instanceof Element && e.target.closest('[data-context-menu]') !== null) return
       onClose()
@@ -231,14 +231,9 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
               top: pos.y,
             }
       }
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation()
-          onClose()
-        }
-      }}
+      onKeyDown={roving.onKeyDown}
     >
-      {items.map(renderCatalogItem)}
+      {items.map((item, index) => renderCatalogItem(item, index))}
     </div>
   )
 

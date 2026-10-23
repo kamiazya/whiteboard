@@ -267,8 +267,27 @@ function composeNodeContent(
   return [chromeShape(node, options)]
 }
 
+/** Alpha of the stroke colour an empty frame is tinted with. */
+const EMPTY_FRAME_TINT_OPACITY = 0.06
+
 function composeFrameNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
-  const chrome = chromeShape(node, options)
+  const outline = chromeShape(node, options)
+  const { fill, stroke } = outline.appearance ?? {}
+  // A colour the author gave the frame is already a fill; only the unfilled
+  // default needs one.
+  const chrome =
+    options.emptyFrameIds?.has(node.id) === true &&
+    stroke !== undefined &&
+    (fill === undefined || fill === 'none')
+      ? {
+          ...outline,
+          appearance: {
+            ...outline.appearance,
+            fill: stroke,
+            fillOpacity: EMPTY_FRAME_TINT_OPACITY,
+          },
+        }
+      : outline
   const background = composeGroupBackground(node, options)
   return [
     chrome,

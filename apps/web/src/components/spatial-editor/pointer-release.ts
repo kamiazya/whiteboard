@@ -11,6 +11,7 @@
 
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { frameTitleAt, pointInsideFrame } from '../../lib/spatial/frame-interior.js'
 import { hitTest } from '../../lib/spatial/geometry.js'
 import { strokeBounds } from '../../lib/spatial/stroke-group.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -19,7 +20,7 @@ import { bandProbes, pickContentWithin } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { carriedByGesture } from './gesture-view.js'
 import type { GestureResult } from './gestures.js'
-import { reduceGesture } from './gestures.js'
+import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
 import type { EditorPointerInputs } from './pointer-inputs.js'
 
@@ -83,11 +84,60 @@ function focusRootUnlessEditing(root: HTMLElement, target: EventTarget): void {
     active instanceof HTMLElement &&
     root.contains(active) &&
     active !== root &&
-    (active.isContentEditable || active.matches('input, textarea, select'))
+    // A menu a long press opened mid-gesture owns focus past the release.
+    (active.isContentEditable ||
+      active.matches('input, textarea, select') ||
+      active.closest('[data-context-menu]') !== null)
   ) {
     return
   }
   root.focus({ preventScroll: true })
+}
+
+/**
+ * A double press on paper nothing else claimed: on a frame's name strip it
+ * edits the name, anywhere else it adds a note there.
+ */
+function emptyDoublePress(at: Point, ctx: PointerReleaseContext): void {
+  const frameId = frameTitleAt(ctx.canvasRef.current.nodes, at)
+  if (frameId !== undefined) ctx.setGroupLabelEditId(frameId)
+  else ctx.createNodeAt(at)
+}
+
+/** How far a hand-tool press may travel and still be a click rather than a pan. */
+const HAND_CLICK_SLOP_PX = 10
+
+/**
+ * The double press the hand tool resolves at its release, when the pointer
+ * stayed put (a drag is a pan, not a second click). The press itself only
+ * panned, so nothing was selected: each target gets the verb it has under the
+ * select tool and no more.
+ */
+export function releaseHandDoublePress(
+  pending: { current: { key: string; point: Point; screen: Point } | null },
+  screenPoint: Point,
+  ctx: PointerReleaseContext,
+): void {
+  const armed = pending.current
+  pending.current = null
+  if (armed === null) return
+  if (
+    Math.hypot(screenPoint.x - armed.screen.x, screenPoint.y - armed.screen.y) > HAND_CLICK_SLOP_PX
+  ) {
+    return
+  }
+  if (armed.key === 'empty') {
+    emptyDoublePress(armed.point, ctx)
+    return
+  }
+  if (armed.key.startsWith('edge:')) {
+    ctx.setEdgeLabelEditId(armed.key.slice('edge:'.length))
+    return
+  }
+  const node = ctx.canvasRef.current.nodes.find((n) => n.id === armed.key)
+  if (node === undefined) return
+  ctx.applySelection({ type: 'set-primary', id: node.id })
+  runPrimaryAction(node, { state: ctx.gestureState, commands: [] }, armed.point, ctx)
 }
 
 /**
@@ -106,7 +156,6 @@ export function releaseMarquee(
   const {
     applySelection,
     canvas,
-    createNodeAt,
     lastPressRef,
     pasteClipboard,
     pendingCut,
@@ -122,7 +171,7 @@ export function releaseMarquee(
     // A stationary empty press: a plain one just cleared selection at
     // the press; a DOUBLE one creates a node here (resolved at the
     // release, consistent with the node-edit double-press rule).
-    if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+    if (armed !== null && armed.key === 'empty') emptyDoublePress(armed.point, ctx)
     // Tap-to-place (touch only): while a cut is pending, a stationary
     // empty tap answers it HERE — one tap instead of long-press →
     // menu → Paste here. Mice keep the explicit paste: an empty click
@@ -221,17 +270,18 @@ export function releaseDrawing(
 function runPrimaryAction(
   node: SpatialNode | undefined,
   result: GestureResult,
+  at: Point,
   ctx: PointerReleaseContext,
 ): boolean {
   if (node === undefined) return false
   const {
     applyResult,
     canvas,
+    createNodeAt,
     isImageFileRef,
     missingFileRef,
     onOpenDocument,
     openLinkNode,
-    setGroupLabelEditId,
   } = ctx
   const text = nodeText(node)
   if (text !== undefined) {
@@ -246,8 +296,9 @@ function runPrimaryAction(
     return true
   }
   if (isFrame(node)) {
-    applyResult(result)
-    setGroupLabelEditId(node.id)
+    // A frame's interior is paper that belongs to it: the name is edited from
+    // its own strip (`emptyDoublePress`), and a double press here adds a note.
+    createNodeAt(pointInsideFrame(node, at, { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }))
     return true
   }
   const file = nodeFile(node)
@@ -319,6 +370,7 @@ export function commitRelease(
     runPrimaryAction(
       canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId),
       result,
+      armed.point,
       ctx,
     )
   ) {

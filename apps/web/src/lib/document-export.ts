@@ -26,6 +26,8 @@ import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
 import { embedTextInPng } from './png-embed.js'
 import { rasterizeSvgToPng } from './rasterize-svg.js'
 import { layoutMarkdownScene } from './render-preview.js'
+import { backgroundOf, type PictureExportOptions } from './spatial/picture-options.js'
+import { exportEnvelope } from './spatial/scene-render-core.js'
 import { themeFacesNamedBy } from './theme-fonts.js'
 
 /** The two pictures a document can be saved as. */
@@ -35,18 +37,39 @@ export type PictureFormat = 'png' | 'svg'
  * What ⋮ → Export… can save: a picture, or the document's own file (`md` for
  * a note, `canvas` for a board).
  */
-export type DocumentExportFormat = PictureFormat | 'md' | 'canvas'
+export type DocumentExportFormat = PictureFormat | CommentedPictureFormat | 'md' | 'canvas'
+
+/**
+ * A board's picture with its annotation layer drawn in. The plain pictures
+ * leave it out: a file handed to someone else should not carry the
+ * authors' review conversation unless they chose it.
+ */
+type CommentedPictureFormat = 'png-comments' | 'svg-comments'
+
+/** Whether a picture format asks for the annotation layer to be drawn in. */
+export function isCommentedPicture(format: PictureFormat | CommentedPictureFormat): boolean {
+  return format === 'png-comments' || format === 'svg-comments'
+}
+
+/** The picture a commented format saves, or the format itself when it is already plain. */
+export function pictureFormatOf(format: PictureFormat | CommentedPictureFormat): PictureFormat {
+  return format === 'png-comments' ? 'png' : format === 'svg-comments' ? 'svg' : format
+}
 
 /** A document drawn for saving: the SVG and the box it covers. */
 export interface DrawnDocument {
   readonly svg: string
   readonly bounds: BoundingBox
+  /** PNG pixels per canvas unit it is saved at (default 1); an SVG has none. */
+  readonly scale?: number
 }
 
 export interface MarkdownExportOptions {
   /** The bundle the preview resolves the body's references and pictures through. */
   readonly references?: ReferenceSeams
   readonly tagLibrary?: TagLibrary
+  /** Absent is a transparent 1x picture. */
+  readonly picture?: PictureExportOptions
   /** Injection seam for tests; defaults to the real MathJax/mermaid engines. */
   readonly fragments?: FragmentLoaders
 }
@@ -69,8 +92,9 @@ export async function renderMarkdownForExport(
   const scene = await markdownExportScene(body, options)
   const bounds = sceneDocumentBounds(scene)
   return {
-    svg: renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds }),
+    svg: renderSceneToSvg(scene, exportEnvelope(bounds, backgroundOf(options.picture))),
     bounds,
+    ...(options.picture === undefined ? {} : { scale: options.picture.scale }),
   }
 }
 
@@ -102,6 +126,7 @@ export async function savedPicture(
     await withViewerFontEmbedded(svg, themeFacesNamedBy(svg)),
     Math.max(1, Math.round(drawn.bounds.w)),
     Math.max(1, Math.round(drawn.bounds.h)),
+    drawn.scale ?? 1,
   )
   if (png === null || options.source === undefined) return png
   const embedded = embedTextInPng(

@@ -2,6 +2,7 @@ import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/white
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
+import { noteFocusPlaced } from '../../lib/focus-claim.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 
@@ -28,6 +29,14 @@ export interface DocumentPropertiesProps {
    */
   readonly onTitleChange?: (next: string) => Promise<string | null>
   /**
+   * The edit is OVER and left a different name: called once on leaving the
+   * box, never per keystroke, and not after an Escape that put the old name
+   * back. Whatever should happen once a name is settled (the address
+   * following it) belongs here, because acting on a keystroke would act on
+   * "C".
+   */
+  readonly onTitleSettled?: (name: string) => void
+  /**
    * Save-state indicator, rendered LEFT of the title — the canvas's "am I
    * safe" signal reads before its name, like a title-bar dirty dot.
    */
@@ -53,23 +62,12 @@ export function DocumentProperties({
   inline = false,
   title,
   onTitleChange,
+  onTitleSettled,
   status,
   actions,
 }: DocumentPropertiesProps) {
-  // Null means "not being edited" — the box then shows the canonical name.
-  // While it is a string the box shows that instead, because the name comes
-  // back NORMALISED (trimmed, and blank replaced by the unnamed sentinel) and
-  // rendering the normalised form on the keystroke that typed a space erases
-  // it: the next character lands flush against the previous word, and
-  // "Release plan" typed one key at a time arrives as "Releaseplan".
-  const [draftTitle, setDraftTitle] = useState<string | null>(null)
-  // The name this field held when the current edit began. Every keystroke is
-  // already committed (there is no Save button), so Escape has nothing to
-  // discard — it has to put the previous name BACK. Without it, "type, change
-  // your mind, Escape" silently keeps the half-typed name.
-  const editBaselineRef = useRef(title)
-  const suggestionsId = useId()
-  const { refusal, commit } = useTitleCommit(onTitleChange)
+  const { draftTitle, setDraftTitle, editBaselineRef, typedRef, suggestionsId, refusal, commit } =
+    useTitleEditing(title, onTitleChange)
 
   return (
     <div
@@ -103,6 +101,7 @@ export function DocumentProperties({
           onChange={(event) => {
             if (onTitleChange === undefined) return
             setDraftTitle(event.target.value)
+            typedRef.current = event.target.value
             commit(event.target.value)
           }}
           readOnly={onTitleChange === undefined}
@@ -133,6 +132,7 @@ export function DocumentProperties({
             if (event.key !== 'Escape' || onTitleChange === undefined) return
             event.preventDefault()
             setDraftTitle(null)
+            typedRef.current = null
             // Compared against what the BOX holds, never against `title`: the
             // commit is async, so `title` can still be the old name here and a
             // comparison to it would decide "nothing changed" while a rename
@@ -145,7 +145,13 @@ export function DocumentProperties({
           onKeyUp={(event) => event.stopPropagation()}
           // Dropping the draft is the whole tidy-up: the box falls back to the
           // canonical name, which is already trimmed.
-          onBlur={() => setDraftTitle(null)}
+          onBlur={() => {
+            setDraftTitle(null)
+            const typed = typedRef.current
+            typedRef.current = null
+            if (typed === null || typed.trim() === editBaselineRef.current.trim()) return
+            onTitleSettled?.(typed.trim())
+          }}
           placeholder="Untitled"
           className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
             inline ? 'text-sm' : 'text-base'
@@ -158,6 +164,29 @@ export function DocumentProperties({
       </div>
     </div>
   )
+}
+
+/** The title box's edit state: the draft, the baseline Escape restores, and the commits. */
+function useTitleEditing(title: string, onTitleChange: DocumentPropertiesProps['onTitleChange']) {
+  // Null means "not being edited" — the box then shows the canonical name.
+  // While it is a string the box shows that instead, because the name comes
+  // back NORMALISED (trimmed, and blank replaced by the unnamed sentinel) and
+  // rendering the normalised form on the keystroke that typed a space erases
+  // it: the next character lands flush against the previous word, and
+  // "Release plan" typed one key at a time arrives as "Releaseplan".
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
+  // The name this field held when the current edit began. Every keystroke is
+  // already committed (there is no Save button), so Escape has nothing to
+  // discard — it has to put the previous name BACK. Without it, "type, change
+  // your mind, Escape" silently keeps the half-typed name.
+  const editBaselineRef = useRef(title)
+  // What the box held at the last keystroke, or null when nothing differing
+  // is pending. A ref because Escape clears it and blurs in the same handler,
+  // before a state update could reach the blur's closure.
+  const typedRef = useRef<string | null>(null)
+  const suggestionsId = useId()
+  const { refusal, commit } = useTitleCommit(onTitleChange)
+  return { draftTitle, setDraftTitle, editBaselineRef, typedRef, suggestionsId, refusal, commit }
 }
 
 /** Why the last rename was refused, beside the box it was typed into. */
@@ -184,6 +213,7 @@ function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange'])
   const latestRef = useRef(0)
   const commit = (next: string) => {
     if (onTitleChange === undefined) return
+    noteFocusPlaced()
     const ticket = ++latestRef.current
     void onTitleChange(next).then((answer) => {
       if (ticket === latestRef.current) setRefusal(answer)

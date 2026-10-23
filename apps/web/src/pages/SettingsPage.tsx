@@ -581,7 +581,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <main className="flex h-full flex-col overflow-y-auto">
       {/* The section list, which exists only below `sm` and only at /settings:
           the wide layout has no index state, it shows a section with the
           sidebar beside it. */}
@@ -705,6 +705,6 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
           </div>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

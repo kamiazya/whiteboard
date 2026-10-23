@@ -10,6 +10,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useState } from 'react'
 import type { DocumentPickerState, LinkDialogState } from './canvas-commands.js'
 import { useSelectionSource } from './use-selection-source.js'
+import { useShowResolvedSource } from './use-show-resolved-source.js'
 
 export interface EditSessionStateInputs {
   readonly canvas: SpatialCanvas
@@ -24,6 +25,7 @@ export function useEditSessionState({ canvas, selectedId, extraIds }: EditSessio
    * person's toggle cannot change what another person sees.
    */
   const [showResolvedComments, setShowResolvedComments] = useState(false)
+  const showResolvedSource = useShowResolvedSource(showResolvedComments)
   /**
    * The ink the selection holds — edges and lines alike, since the scene
    * hands both out the same way and only `deleteInkCommand` has cause to
@@ -127,6 +129,7 @@ export function useEditSessionState({ canvas, selectedId, extraIds }: EditSessio
   return {
     showResolvedComments,
     setShowResolvedComments,
+    showResolvedSource,
     selectedEdgeId,
     setSelectedEdgeId,
     selectedInkIds,

@@ -25,7 +25,11 @@ import {
   patchAnchorGroups,
   patchWork,
 } from './edge-anchors.js'
-import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
+import {
+  buildPairwiseScores,
+  scoreQuantizedSegmentPair,
+  sharedCorners,
+} from './edge-crossing-sweep.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { boundingBoxOf, centerOf, midpointExtent, pathLength, rectOf } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
@@ -116,7 +120,7 @@ function pairScore(a: readonly Point[], b: readonly Point[], budget: RoutingBudg
       crossings += c
     }
   }
-  return pairPenalty([overlap, illegible, crossings])
+  return pairPenalty([overlap, illegible, crossings + sharedCorners(a, b)])
 }
 
 /**

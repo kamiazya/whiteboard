@@ -86,11 +86,12 @@ it('Enter and F2 open the in-place editor of the selected text node', async () =
   )
 })
 
-it('Escape clears the selection, and the next Tab is left to the browser', async () => {
+it('Escape clears the selection, and a second Escape leaves the next Tab to the browser', async () => {
   const { latest, container } = mount()
   await userEvent.keyboard('{Tab}')
   await userEvent.keyboard('{Escape}')
   expect(await selectedId(latest)).toBeUndefined()
+  await userEvent.keyboard('{Escape}')
   await userEvent.keyboard('{Tab}')
   expect(document.activeElement === rootOf(container)).toBe(false)
   expect(latest.kinds).toEqual([])

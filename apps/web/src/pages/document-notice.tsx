@@ -32,3 +32,19 @@ export function useTransientNotice(): readonly [string | null, AnnounceNotice] {
   }, [notice])
   return [notice, setNotice]
 }
+
+/**
+ * Wraps the keeper's note creator so a made note is said aloud. Said only
+ * after the create stands: a refusal must not announce a document that was
+ * never made, and the rejection still reaches the caller.
+ */
+export function createLinkTargetAnnouncing(
+  create: (path: string, name: string) => Promise<void>,
+  announce: AnnounceNotice,
+): (path: string, name: string) => Promise<void> {
+  return async (path, name) => {
+    await create(path, name)
+    announce(null)
+    announce(`Created '${name}'`)
+  }
+}

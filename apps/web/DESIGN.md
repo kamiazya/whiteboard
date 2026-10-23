@@ -907,6 +907,14 @@ and a button inside a button is invalid, so the row is now an `<li>`
 holding the dot-toggle and the subject toggle as siblings. The subject
 toggle stays the row's heading, so the focus contract above is unchanged.
 
+**Resolve is the exception that observation reversed.** The rule says
+labels return by observation, not by guess, and dogfooding supplied one: an
+unlabelled dot whose check showed on hover, twice on screen while a
+conversation was open, resolved the wrong conversation. The row's Resolve
+now prints its verb under the dot, an open conversation carries the only
+Resolve (the row's dot becomes a plain indicator), and a press offers
+"Resolved · Undo" for a few seconds. Edit and Save stay icon-only.
+
 Three carve-outs, each with a reason the rule itself gives:
 
 - **Submit is inert before it is pressed, not just guarded after.** The
@@ -1278,6 +1286,14 @@ canvas or by the Help button in the editor's top-left corner (hidden on
 touch). Key labels (⌘⇧L / Ctrl+Shift+L) are derived from `display` in
 `src/components/spatial-editor/shortcut-labels.ts`, as are a dock tooltip's accelerator suffix and its
 `aria-keyshortcuts`; none is hand-written at a call site.
+
+The keyboard reaches the same menu a right-click does: `Menu` / `Shift+F10`
+opens the SELECTION's menu (node, set, edge or group; the canvas's when
+nothing is selected) anchored at the selection, with focus on its first row
+(every menu focuses its first row on open, `use-roving-menu`). While any context menu or sheet is open
+`handleKeyDown` handles nothing — one gate on the menu's open state, not a
+flag per key — so the arrows move through the rows instead of nudging the
+node behind it and the tool and note letters stay silent.
 
 Bindings today: `Cmd/Ctrl+A` select all, `Cmd/Ctrl+C/X/V` copy/cut/paste,
 `Cmd/Ctrl+D` duplicate, `]`/`[`/`Shift+]`/`Shift+[` z-order,

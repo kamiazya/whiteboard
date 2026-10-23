@@ -28,9 +28,12 @@ describe('referenceAtOffset', () => {
   })
 
   it('answers unresolved with the written path, never matching a display name', () => {
-    expect(referenceAtOffset('[[Release plan]]', 4, TARGETS)).toEqual({
+    expect(referenceAtOffset('a [[Release plan]]', 6, TARGETS)).toEqual({
       kind: 'unresolved',
       path: 'Release plan',
+      alias: undefined,
+      index: 2,
+      length: 16,
     })
   })
 

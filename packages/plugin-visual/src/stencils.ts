@@ -60,11 +60,14 @@ const SYMBOL_KEY = 'visual.symbol/v0'
  * does not weaken the vocabulary — it stops pretending, and hands the
  * lost-anyway channel to an axis that can state what it means.
  *
- * The badge is not a channel here either, though two members carry one. This
- * package contributes no node decoration (`render.ts`), so `visual.symbol`
- * draws nothing on a canvas — it reaches the minimap, the favicon and a file
- * row, where a node is too small to read. Counting it once shipped `service`
- * and `external` as two rectangles a reader tells apart by colour alone.
+ * The badge is not a channel either, but every member carries one, drawn at
+ * the top of the box (`render.ts`). Two kinds that differ by silhouette alone
+ * — an octagon beside a hexagon — are hard to tell apart at a glance, and a
+ * mark is the second signal that survives a lost colour channel. Counting it
+ * as a channel once shipped `service` and `external` as two rectangles a
+ * reader told apart by colour alone; it stays out of the discriminability
+ * count because the same symbol reaches the minimap and a file row, where it
+ * is the only thing that can say which kind a box is.
  *
  * Every silhouette distinct puts the set at the CEILING of the silhouette
  * vocabulary: six kinds, six members, and none of them the plain rect an
@@ -93,22 +96,34 @@ export const VISUAL_STENCILS: Readonly<Record<string, StencilAssetInput>> = {
     // that is the order the work had to go in: a stencil with no silhouette
     // and no colour is indistinguishable from an undressed box, which
     // ADR-0033 scores as `deficit` and a reader sees as nothing.
-    facets: { [SHAPE_KEY]: { kind: 'octagon' } },
+    facets: {
+      [SHAPE_KEY]: { kind: 'octagon' },
+      [SYMBOL_KEY]: { kind: 'icon', name: 'server' },
+    },
   },
   /** Where traffic enters or is routed: a gateway, a load balancer, a proxy. */
   gateway: {
     displayName: 'Gateway',
-    facets: { [SHAPE_KEY]: { kind: 'hexagon' } },
+    facets: {
+      [SHAPE_KEY]: { kind: 'hexagon' },
+      [SYMBOL_KEY]: { kind: 'icon', name: 'network' },
+    },
   },
   /** Something in flight rather than at rest: a queue, a topic, a stream. */
   queue: {
     displayName: 'Queue',
-    facets: { [SHAPE_KEY]: { kind: 'parallelogram' } },
+    facets: {
+      [SHAPE_KEY]: { kind: 'parallelogram' },
+      [SYMBOL_KEY]: { kind: 'icon', name: 'layers' },
+    },
   },
   /** Whoever the drawing is FOR: a person, a client, a calling system. */
   actor: {
     displayName: 'Actor',
-    facets: { [SHAPE_KEY]: { kind: 'ellipse' } },
+    facets: {
+      [SHAPE_KEY]: { kind: 'ellipse' },
+      [SYMBOL_KEY]: { kind: 'icon', name: 'user' },
+    },
   },
   /** Something the drawing does not own: a third-party API, a vendor service. */
   external: {

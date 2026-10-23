@@ -43,6 +43,9 @@ export type ShortcutId =
   | 'select-previous-node'
   | 'select-adjacent-node'
   | 'edit-selected-node'
+  | 'open-context-menu'
+  | 'open-context-menu-shift-f10'
+  | 'comment-on-selection'
   | 'undo'
   | 'redo'
 
@@ -167,6 +170,27 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: "Edit the selected node's text, or a group's label (also F2)",
     tools: ['select'],
   },
+  // The keyboard's right-click: the SELECTION's menu (the canvas's when
+  // nothing is selected), the one vessel a pointer reaches by right-click.
+  // Two rows because the Menu key takes any shift state while F10 alone is
+  // not ours to claim.
+  {
+    id: 'open-context-menu',
+    section: 'Navigate',
+    keys: ['ContextMenu'],
+    display: 'Menu',
+    description: "Open the selection's menu (the canvas menu when nothing is selected)",
+    tools: ['select'],
+  },
+  {
+    id: 'open-context-menu-shift-f10',
+    section: 'Navigate',
+    keys: ['F10'],
+    shift: true,
+    display: 'Shift+F10',
+    description: "Open the selection's menu (the canvas menu when nothing is selected)",
+    tools: ['select'],
+  },
   {
     id: 'toggle-lock',
     section: 'Edit',
@@ -175,6 +199,20 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     shift: true,
     display: 'Cmd+Shift+L',
     description: 'Lock or unlock the selection',
+    tools: ['select'],
+  },
+  // Cmd+Alt+M is the comment chord of the document editors people already
+  // use. The physical key (`codes`) because Option rewrites `key` on macOS;
+  // the markdown editor's chords (B, I, E, K, Enter) are all Cmd-only, so
+  // none collides.
+  {
+    id: 'comment-on-selection',
+    section: 'Edit',
+    codes: ['KeyM'],
+    mod: true,
+    alt: true,
+    display: 'Cmd+Alt+M',
+    description: 'Comment on the selected node, nodes or edge',
     tools: ['select'],
   },
   // Viewport framing (tldraw combos). Live in every tool — navigation is

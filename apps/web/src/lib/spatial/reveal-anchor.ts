@@ -8,7 +8,14 @@
  */
 import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Box } from './geometry.js'
-import { type ContainerSize, type Point, panToShowTarget, type Viewport } from './viewport.js'
+import {
+  type ContainerSize,
+  type Point,
+  panToShowTarget,
+  type Viewport,
+  type ViewportOcclusion,
+  visibleSize,
+} from './viewport.js'
 
 /** The footprint given to a spot: a pin is drawn about this big. */
 const SPOT_SIZE_PX = 28
@@ -76,14 +83,16 @@ export function viewportRevealing(
   box: Box,
   viewport: Viewport,
   containerSize: ContainerSize | null,
-  occlusion: { readonly bottom?: number } = {},
+  occlusion: ViewportOcclusion = {},
 ): Viewport | undefined {
   if (containerSize === null) return undefined
   if (panToShowTarget(box, viewport, containerSize, occlusion) === undefined) return undefined
-  const visibleHeight = containerSize.height - (occlusion.bottom ?? 0)
+  const visible = visibleSize(containerSize, occlusion)
+  const centreX = (occlusion.left ?? 0) + visible.width / 2
+  const centreY = (occlusion.top ?? 0) + visible.height / 2
   return {
     ...viewport,
-    x: box.x + box.width / 2 - containerSize.width / 2 / viewport.zoom,
-    y: box.y + box.height / 2 - visibleHeight / 2 / viewport.zoom,
+    x: box.x + box.width / 2 - centreX / viewport.zoom,
+    y: box.y + box.height / 2 - centreY / viewport.zoom,
   }
 }

@@ -157,6 +157,17 @@ describe('the hand double press', () => {
     expect(atSlop.effects.filter((effect) => effect.kind === 'zoom-at')).toHaveLength(1)
   })
 
+  it('is a double tap: a mouse or pen double press only pans, so it can be a double click', () => {
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const press = (timeStamp: number) =>
+        down(1, { x: 100, y: 100 }, { timeStamp, pointerType: pointerType as 'mouse' })
+      const mouseUp: NavigationEvent = { type: 'pointerup', pointerId: 1, pointerType: 'mouse' }
+      const { effects, state } = run([press(0), mouseUp, press(100)])
+      expect(effects.filter((effect) => effect.kind === 'zoom-at')).toEqual([])
+      expect(state.mode.kind).toBe('panning')
+    }
+  })
+
   it('belongs to the hand tool alone: a Space or middle-button double press only pans', () => {
     const mouse = (button: number, context: PressContext, timeStamp: number) =>
       down(1, { x: 100, y: 100 }, { button, context, timeStamp, pointerType: 'mouse' })

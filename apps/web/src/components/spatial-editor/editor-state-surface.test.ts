@@ -46,6 +46,7 @@ const sources = import.meta.glob(
     './use-interaction-state.ts',
     './use-tool-state.ts',
     './use-viewport-controls.ts',
+    './use-visible-insets.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -75,6 +76,8 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
 
   viewport:
     'not modelled: pan/zoom, owned by viewport.property.test.ts — it cannot reach canvas, gesture or selection state',
+  insets:
+    'view only: what registered panels cover of the root, re-measured on any resize; it only re-renders the editor so the viewport verbs see it',
   tool: 'modelled',
   marquee: 'modelled',
 

@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { styleRandomFromSeed } from '../layout/seed.js'
 import { node } from './spatial-node.js'
 
@@ -113,6 +114,42 @@ export function syntheticLayouts(count: number): readonly RoutingCase[] {
 }
 
 /**
+ * Boards a person lays out: equal boxes on a lattice, edges between random
+ * pairs. Alignment is the point. Random positions almost never put two
+ * detours on the same lane, so the synthetic corpus cannot show the defects
+ * that appear only when boxes line up - two edges bending at one corner,
+ * runs sharing a margin lane - and those are what a tidy diagram is full of.
+ */
+export function latticeLayouts(count: number): readonly RoutingCase[] {
+  const random = styleRandomFromSeed(0x1a771ce)
+  const int = (max: number) => Math.floor(random() * max)
+  const COLUMNS = 5
+  const ROWS = 3
+  const cases: RoutingCase[] = []
+  for (let i = 0; cases.length < count; i++) {
+    const sites = Array.from({ length: COLUMNS * ROWS }, (_, site) => site)
+    const size = 5 + int(4)
+    const chosen: number[] = []
+    for (let n = 0; n < size; n++) chosen.push(sites.splice(int(sites.length), 1)[0] as number)
+    const nodes = chosen.map((site, n) =>
+      node(`n${n}`, (site % COLUMNS) * 288 + 96, Math.floor(site / COLUMNS) * 200 + 96, 200, 100),
+    )
+    const edges: CanvasEdge[] = []
+    const seen = new Set<string>()
+    for (let e = 0; e < size + 2; e++) {
+      const a = int(size)
+      const b = int(size)
+      const key = `${a}->${b}`
+      if (a === b || seen.has(key)) continue
+      seen.add(key)
+      edges.push({ id: `e${a}_${b}`, from: { node: `n${a}` }, to: { node: `n${b}` } })
+    }
+    if (edges.length > 1) cases.push({ name: `lattice ${i}`, nodes, edges })
+  }
+  return cases
+}
+
+/**
  * One large canvas with REAL LOCALITY — the shape an AI-authored document
  * grows into, and the case every other instrument in this package is blind
  * to.
@@ -182,4 +219,31 @@ export function clusteredLayout(options: {
     }
   }
   return { name: `clustered ${clusters}x${nodesPerCluster}`, nodes, edges }
+}
+
+/** The two-tier service board (8 nodes in 2 frames) the designer persona reported. */
+export function designerBoard(): { nodes: SpatialNode[]; edges: CanvasEdge[] } {
+  const box = (id: string, x: number, y: number) => node(id, x, y, 200, 100)
+  return {
+    nodes: [
+      groupNode({ id: 'edgeTier', x: 60, y: 60, width: 1120, height: 180, label: 'Edge tier' }),
+      groupNode({ id: 'coreTier', x: 60, y: 280, width: 1120, height: 160, label: 'Core tier' }),
+      box('web', 96, 96),
+      box('api', 384, 96),
+      box('auth', 664, 96),
+      box('payments', 944, 96),
+      box('customer', 96, 312),
+      box('orders', 384, 312),
+      box('queue', 664, 312),
+      box('db', 944, 312),
+    ],
+    edges: [
+      { id: 'e_api_queue', from: { node: 'api' }, to: { node: 'queue' } },
+      { id: 'e_queue_db', from: { node: 'queue' }, to: { node: 'db' }, label: 'persist' },
+      { id: 'e_web_api', from: { node: 'web' }, to: { node: 'api' } },
+      { id: 'e_customer_web', from: { node: 'customer' }, to: { node: 'web' }, label: 'HTTPS' },
+      { id: 'e_orders_queue', from: { node: 'orders' }, to: { node: 'queue' }, label: 'publish' },
+      { id: 'e_auth_orders', from: { node: 'auth' }, to: { node: 'orders' } },
+    ],
+  }
 }

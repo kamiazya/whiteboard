@@ -60,6 +60,12 @@ export interface DocumentPageModel {
   readonly title:
     | { readonly value: string; readonly onChange: (next: string) => Promise<string | null> }
     | 'top-bar'
+  /**
+   * The person finished naming the document (left the title box on a name
+   * different from the one they found). The keeper's place to let the
+   * address follow the name; absent for a keeper that never does.
+   */
+  readonly onNameSettled?: (name: string) => void
   readonly properties: {
     /** False while the row must not render yet (the browser's facets have not hydrated). */
     readonly ready: boolean
@@ -96,7 +102,7 @@ export interface DocumentPageModel {
      * link that names nothing. Absent for a keeper that cannot make one from
      * here, which hides the offer.
      */
-    readonly createLinkTarget?: (path: string) => Promise<void>
+    readonly createLinkTarget?: (path: string, name: string) => Promise<void>
     /**
      * How this keeper loads a document a body points at. Required: a default
      * here was the BROWSER's loader, so a keeper that forgot to pass one

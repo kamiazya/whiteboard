@@ -10,6 +10,8 @@ const EXPORT_CONFIG: Record<
 > = {
   png: { extension: 'png', label: 'PNG' },
   svg: { extension: 'svg', label: 'SVG' },
+  'png-comments': { extension: 'png', label: 'PNG (with comments)' },
+  'svg-comments': { extension: 'svg', label: 'SVG (with comments)' },
   md: { extension: 'md', label: 'Markdown', saved: 'Markdown' },
   canvas: { extension: 'canvas', label: 'JSON Canvas', saved: 'JSON Canvas' },
 }

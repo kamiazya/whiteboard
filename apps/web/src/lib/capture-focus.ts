@@ -6,7 +6,7 @@
  * calls in: a parameter would be the same answer written out once per
  * surface, and the newest surface is the one that would forget.
  */
-export function focusedElement(): HTMLElement | null {
+function focusedElement(): HTMLElement | null {
   const active = document.activeElement
   // `document.body` needs no special case: it is what `activeElement`
   // answers when nothing is focused, and `focus()` on it is a no-op —

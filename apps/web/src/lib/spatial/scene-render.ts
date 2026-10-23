@@ -17,6 +17,7 @@ import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteb
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
+import { backgroundOf, type PictureExportOptions } from './picture-options.js'
 import {
   type RenderCanvasCoreOptions,
   type RenderedCanvas,
@@ -85,6 +86,13 @@ export interface CanvasExportOptions {
   readonly threads?: readonly CommentThread[]
   /** The workspace's colour by intent (ADR-0040 decision 5), part of the picture. */
   readonly tagLibrary?: TagLibrary
+  /**
+   * Draw the annotation layer (pins, cards, highlights) into the picture.
+   * Absent is off: unlike the editor, a saved file is for someone else.
+   */
+  readonly comments?: boolean
+  /** Absent is a transparent 1x picture. */
+  readonly picture?: PictureExportOptions
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
   readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
   readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
@@ -102,15 +110,30 @@ export interface CanvasExportOptions {
  */
 export function renderCanvasForExport(
   canvas: SpatialCanvas,
-  { measure, references, threads, tagLibrary, renderMath, renderDiagram }: CanvasExportOptions,
-): { readonly svg: string; readonly bounds: BoundingBox } {
-  return renderCanvasForExportWith(canvas, {
+  {
     measure,
-    theme: 'light',
-    ...(references === undefined ? {} : { references, expandFileNode: () => true }),
-    ...(threads === undefined ? {} : { threads }),
-    ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    references,
+    threads,
+    tagLibrary,
+    comments,
+    picture,
     renderMath,
     renderDiagram,
-  })
+  }: CanvasExportOptions,
+): { readonly svg: string; readonly bounds: BoundingBox; readonly scale?: number } {
+  const drawn = renderCanvasForExportWith(
+    canvas,
+    {
+      measure,
+      theme: 'light',
+      commentLayer: comments === true,
+      ...(references === undefined ? {} : { references, expandFileNode: () => true }),
+      ...(threads === undefined ? {} : { threads }),
+      ...(tagLibrary === undefined ? {} : { tagLibrary }),
+      renderMath,
+      renderDiagram,
+    },
+    backgroundOf(picture),
+  )
+  return picture === undefined ? drawn : { ...drawn, scale: picture.scale }
 }

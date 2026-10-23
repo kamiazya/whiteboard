@@ -18,6 +18,7 @@ import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
+import { nodeA11yName } from './node-a11y-name.js'
 import { nodeTextLengthLimit } from './node-text-limit.js'
 import { useDraftWriteThrough } from './use-draft-write-through.js'
 
@@ -92,6 +93,7 @@ export function MarkdownBodyEditorOverlay({
   return (
     <MarkdownNodeEditor
       box={contentBoxOf(node, selectionBox, sceneNodes)}
+      label={`Text of ${nodeA11yName(node)}`}
       initialText={nodeText(node) ?? ''}
       lengthLimit={nodeTextLengthLimit}
       // The conversations about passages of this node's text, highlighted

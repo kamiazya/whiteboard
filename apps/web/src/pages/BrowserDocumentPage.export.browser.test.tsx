@@ -11,6 +11,7 @@ import { LoroStore } from '../lib/loro-store.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { STORAGE_KEY } from '../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -188,6 +189,57 @@ describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalid
 
     expect(screen.queryByText(/excalidraw/i)).toBeNull()
     expect(screen.queryByText(/export as json/i)).toBeNull()
+  })
+})
+
+/** The pixel width a PNG's header declares. */
+function pngWidth(bytes: Uint8Array): number {
+  return new DataView(bytes.buffer, bytes.byteOffset).getUint32(16)
+}
+
+describe('BrowserDocumentPage export options', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    localStorage.removeItem(STORAGE_KEY)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    localStorage.removeItem(STORAGE_KEY)
+  })
+
+  it('fills the SVG with the paper by default, and leaves it transparent once the option is off', async () => {
+    await renderLoaded()
+    expect(await exportSvgText()).toContain('role="presentation"')
+
+    cleanup()
+    vi.restoreAllMocks()
+    await renderLoaded()
+    fireEvent.pointerUp(await openExportMenuItem('With background'))
+    cleanup()
+    await renderLoaded()
+    expect(await exportSvgText()).not.toContain('role="presentation"')
+  })
+
+  it('rasterises a PNG twice as wide once 2× resolution is on', async () => {
+    const widthOfPng = async (): Promise<number> => {
+      const { blobs } = captureExportedBlobs()
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      fireEvent.pointerUp(await openExportMenuItem('Export as PNG'))
+      await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
+      return pngWidth(new Uint8Array(await blobs[blobs.length - 1]!.arrayBuffer()))
+    }
+    await renderLoaded()
+    const at1x = await widthOfPng()
+    cleanup()
+    vi.restoreAllMocks()
+
+    await renderLoaded()
+    fireEvent.pointerUp(await openExportMenuItem('2× resolution (PNG)'))
+    cleanup()
+    await renderLoaded()
+    expect(await widthOfPng()).toBe(at1x * 2)
   })
 })
 

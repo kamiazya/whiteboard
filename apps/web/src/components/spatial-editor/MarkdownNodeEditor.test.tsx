@@ -10,7 +10,13 @@ const BOX = { x: 40, y: 60, width: 200, height: 80 }
 describe('MarkdownNodeEditor exit hint', () => {
   it('shows the exit hint below the editing box while open', () => {
     render(
-      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />,
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
     )
     const hint = screen.getByTestId('editor-exit-hint')
     expect(hint.textContent).toContain('Done')

@@ -289,7 +289,13 @@ export function MarkdownEditor({
   // at view creation, while the document list keeps refreshing under it.
   const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
   linkTargetsRef.current = linkTargets ?? []
-  const linkFollow = useLinkFollow({ linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath })
+  const linkFollow = useLinkFollow({
+    linkTargetsRef,
+    onOpenDocument,
+    onCreateLinkTarget,
+    ownPath,
+    onChange,
+  })
   const completionExtension = useMemo(() => {
     // Both sources in ONE `autocompletion()`: `override` replaces the whole
     // list, so a second call beside this would kill the `[[` one. The Enter

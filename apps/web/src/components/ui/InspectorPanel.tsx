@@ -35,6 +35,7 @@ import { ChevronUp, X } from 'lucide-react'
 import type { ReactNode, Ref } from 'react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useInspectorPresence } from '../../contexts/inspector-presence.js'
+import { useOccluder } from '../../hooks/use-occluder.js'
 import { INSPECTOR_CHROME, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
 import { HEADER_BUTTON_CLASS } from './header-button.js'
@@ -80,6 +81,7 @@ export function InspectorPanel({
     })
     return () => cancelAnimationFrame(frame)
   }, [presence])
+  useOccluder(root)
   const { label, testId } = INSPECTOR_CHROME[kind]
   const lower = label.toLowerCase()
   return (

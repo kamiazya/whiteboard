@@ -217,6 +217,8 @@ export function buildSpatialScene(
     measure,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
     onDegrade,
+    // A saved picture is for someone else: the review conversation stays out.
+    commentLayer: false,
     ...(style === undefined ? {} : { style }),
     ...(fontAvailable === undefined ? {} : { fontAvailable }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),

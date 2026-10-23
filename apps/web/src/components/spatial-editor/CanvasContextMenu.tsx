@@ -13,7 +13,6 @@ import type { ResolvedTheme } from '../../lib/theme.js'
 import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { verbCatalogItems } from '../markdown-editor/verb-catalog.js'
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu.js'
-import { alignableBoxesOf } from './align.js'
 import type { CanvasCommands } from './canvas-commands.js'
 import { annotationVerbItems } from './context-menu-items/annotation-verbs.js'
 import { canvasMenuItems } from './context-menu-items/canvas-menu-items.js'
@@ -163,11 +162,6 @@ export function CanvasContextMenu({
   // hidden rather than offering a lock that can never be released.
   const lockEnabled = onToggleNodeLock !== undefined
   const edgeLockEnabled = onToggleEdgeLock !== undefined
-  // Read from canvasRef (not the `canvas` prop) so a menu action never
-  // computes against a stale render closure.
-  const selectedAlignableBoxes = () =>
-    alignableBoxesOf(canvasRef.current.nodes, selectedId === null ? [] : [selectedId, ...extraIds])
-
   const { node, edge, line, comment } = menuSubject(contextMenu, canvas, canvasRef.current)
 
   const activeEditor = contextMenu.editor ?? null
@@ -284,7 +278,6 @@ export function CanvasContextMenu({
       missingFileRef,
       fileRefOptions,
       facetRegistry,
-      selectedAlignableBoxes,
       imagePicker,
       applyResult,
       applyBoxMoves,
@@ -303,6 +296,7 @@ export function CanvasContextMenu({
       setDocumentPicker,
       setFacetPanelOpen,
       setCommentCompose,
+      close,
     })
   }
 

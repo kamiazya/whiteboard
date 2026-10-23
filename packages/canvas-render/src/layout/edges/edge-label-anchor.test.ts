@@ -107,6 +107,34 @@ describe('edgeLabelPlacement', () => {
     expect(edgeLabelPlacement(flat, { w: 20, h: 10 }, [blocker, sliver])).toEqual({ x: 0, y: 128 })
   })
 
+  describe('a label that only clips a box at the end of its line', () => {
+    // The drawn line starts where the edge leaves the box's outline, inside
+    // the box's bounding rect, so the midpoint of a short drawn line can lie
+    // a few pixels over the rect.
+    const source = { x: 0, y: 0, w: 200, h: 100 }
+    const outlineToTarget = [
+      { x: 130, y: 50 },
+      { x: 300, y: 50 },
+    ]
+
+    it('slides along the line, not off it', () => {
+      expect(edgeLabelPlacement(outlineToTarget, { w: 52, h: 23 }, [source])).toEqual({
+        x: 231,
+        y: 50,
+      })
+    })
+
+    it('does not slide past the end of the drawn line', () => {
+      const stub = [
+        { x: 150, y: 50 },
+        { x: 200, y: 50 },
+      ]
+      const placed = edgeLabelPlacement(stub, { w: 52, h: 23 }, [source])
+      expect(placed?.x).toBeLessThanOrEqual(200)
+      expect(placed?.y).not.toBe(50)
+    })
+  })
+
   it('answers undefined for a path that draws no line, like the anchor', () => {
     expect(edgeLabelPlacement([{ x: 1, y: 1 }], label, [])).toBeUndefined()
   })

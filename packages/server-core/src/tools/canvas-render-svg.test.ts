@@ -3,6 +3,7 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  writeCommentThread,
   writeDocumentKind,
   writeFacets,
   writeMarkdownBody,
@@ -50,6 +51,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -86,6 +88,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -106,6 +109,7 @@ describe('wb_scene_render tool', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         embedReferences: false,
+        comments: false,
         style: 'clean',
       }),
     ).rejects.toThrow(SnapshotNotFoundError)
@@ -123,6 +127,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -151,6 +156,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -185,6 +191,7 @@ describe('wb_scene_render measurer injection', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -221,6 +228,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
     expect(result.svg).not.toContain('wb-glow')
@@ -232,6 +240,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'document',
     })
     expect(result.svg).toContain('filterUnits="userSpaceOnUse"')
@@ -243,6 +252,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'visual.sketch',
     })
     expect(result.svg).toContain('stroke-linecap="round"')
@@ -258,6 +268,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'visual.sktech',
     })
     await expect(refused).rejects.toThrow(/visual\.sktech/)
@@ -271,6 +282,7 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         embedReferences: false,
+        comments: false,
         style: 'visual.nope',
       }),
     ).rejects.toThrow(/no theme "visual\.nope" is registered/)
@@ -318,6 +330,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'document',
     })
     expect(result.svg).toContain('font-family="Yomogi"')
@@ -329,6 +342,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'document',
     })
     expect(result.svg).not.toContain('Yomogi')
@@ -343,6 +357,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'document',
     })
     expect(result.svg).not.toContain('Yomogi')
@@ -384,6 +399,7 @@ describe('wb_scene_render draws the legend (ADR-0040 decision 6)', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
     const legend = result.svg.slice(result.svg.indexOf('data-wb-legend'))
@@ -439,6 +455,7 @@ describe('wb_scene_render and a workspace tag library (ADR-0040 decision 5)', ()
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -526,6 +543,7 @@ describe('wb_scene_render colours a board it draws inside another document', () 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences,
+      comments: false,
       style: 'clean',
     })
 
@@ -552,5 +570,43 @@ describe('wb_scene_render colours a board it draws inside another document', () 
     const { svg } = await render(store, true)
     expect(svg).toContain('>db<')
     expect(svg).toContain(FAILING_FILL)
+  })
+})
+
+describe('wb_scene_render comments', () => {
+  const NOTE = textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 50, text: 'ship the plan' })
+
+  async function renderWith(withThread: boolean, comments?: boolean) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, { nodes: [NOTE], edges: [] })
+      if (withThread) {
+        writeCommentThread(doc, {
+          id: 't1',
+          anchor: { kind: 'text', nodeId: 'n1', quote: { exact: 'plan' }, start: 0, end: 1 },
+          status: 'open',
+          messages: [{ id: 'm1', body: 'about it' }],
+        })
+      }
+    })
+    const tool = createCanvasRenderSvgTool(await makeDeps(store))
+    const input = canvasRenderSvgInputSchema.parse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ...(comments === undefined ? {} : { comments }),
+    })
+    return (await tool.execute(input)).svg
+  }
+
+  test('defaults to leaving the conversation out', async () => {
+    expect(
+      canvasRenderSvgInputSchema.parse({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+        .comments,
+    ).toBe(false)
+    expect(await renderWith(true)).toBe(await renderWith(false))
+  })
+
+  test('draws the conversation when asked to', async () => {
+    expect(await renderWith(true, true)).not.toBe(await renderWith(false))
   })
 })

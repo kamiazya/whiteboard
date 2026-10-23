@@ -1590,6 +1590,16 @@ async function theLockStaysOutOfTheExportAndTheSceneDraws(ctx) {
   if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<rect')) {
     throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
   }
+  const withComments = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    comments: true,
+  })
+  if (typeof withComments.svg !== 'string' || !withComments.svg.includes('<rect')) {
+    throw new Error(
+      `wb_scene_render comments:true returned unexpected shape: ${JSON.stringify(withComments)}`,
+    )
+  }
   console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
 }
 

@@ -249,6 +249,16 @@ const appearanceSettingsSchema = z
   })
   .strict()
 
+// What ⋮ → Export… remembers for the picture entries. Absent means the
+// defaults the page applies (1x, with the paper background), so a stored value
+// only ever records a choice the person made.
+const pictureExportSettingsSchema = z
+  .object({
+    doubleResolution: z.boolean().optional(),
+    background: z.boolean().optional(),
+  })
+  .strict()
+
 export const userSettingsSchema = z
   .object({
     version: z.literal(5),
@@ -258,6 +268,7 @@ export const userSettingsSchema = z
     // Optional (not required) so payloads stored before this section existed
     // keep parsing — see the key/version comment at the top of this file.
     appearance: appearanceSettingsSchema.optional(),
+    pictureExport: pictureExportSettingsSchema.optional(),
   })
   .strict()
 

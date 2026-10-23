@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { taskLineNumbers, toggleTaskLine } from './task-toggle.js'
+import { taskItemText, taskLineNumbers, toggleTaskLine } from './task-toggle.js'
 
 const taskLine = fc.record({
   quote: fc.constantFrom('', '> ', '>> '),
@@ -66,5 +66,12 @@ describe('taskLineNumbers', () => {
   it('agrees with the lines toggleTaskLine accepts', () => {
     const source = '- [ ] a\n\ntext\n1. [x] b\n'
     expect(taskLineNumbers(source)).toEqual([1, 4])
+  })
+})
+
+describe('taskItemText', () => {
+  it('is the item without its marker, box and indentation', () => {
+    expect(taskItemText('# t\n  - [x] nested one', 2)).toBe('nested one')
+    expect(taskItemText('> 1. [ ] quoted', 1)).toBe('quoted')
   })
 })

@@ -1,10 +1,12 @@
 import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { type ReactNode, type Ref, useMemo } from 'react'
 import type { DocumentFileSeams } from '../../hooks/use-document-file-seams.js'
-import { readLastTool, resolveInitialTool, writeLastTool } from '../../lib/initial-tool.js'
+import { useRememberedTool } from '../../hooks/use-remembered-tool.js'
+import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { SpatialEditor, type SpatialEditorProps } from '../spatial-editor/index.js'
+import { CanvasAnnouncerRegion } from './CanvasAnnouncerRegion.js'
 import { CanvasVerbBar } from './CanvasVerbBar.js'
 import { NodeTextEditorOverlay, type NodeTextEditorOverlayProps } from './NodeTextEditorOverlay.js'
 import type { NodeInEditor } from './use-node-in-editor.js'
@@ -107,10 +109,18 @@ export function SpatialEditorPane({
     () => referenceSeamsFromWire(fileSeams.references),
     [fileSeams.references],
   )
+  const initialTool = canvasLoaded
+    ? resolveInitialTool({
+        isEmpty: canvas.nodes.length === 0,
+        lastTool: readLastTool(editorKey),
+      })
+    : undefined
+  const rememberTool = useRememberedTool(editorKey, initialTool)
   return (
     <div data-testid="spatial-editor-container" className={className}>
       {children}
       <CanvasVerbBar />
+      <CanvasAnnouncerRegion />
       {/* Keyed on canvas identity: the editor's pan/zoom, in-flight gesture
           and open text editor all describe ONE canvas, and `SpatialCanvas`
           carries no id for the editor to notice a switch by. Without the
@@ -118,15 +128,9 @@ export function SpatialEditorPane({
           viewport. */}
       <SpatialEditor
         key={editorKey}
-        initialTool={
-          canvasLoaded
-            ? resolveInitialTool({
-                isEmpty: canvas.nodes.length === 0,
-                lastTool: readLastTool(editorKey),
-              })
-            : undefined
-        }
-        onToolChosen={(tool) => writeLastTool(editorKey, tool)}
+        initialTool={initialTool}
+        onToolChosen={rememberTool}
+        viewportKey={editorKey}
         ref={editorRef}
         {...editorProps}
         onOpenDocument={onOpenDocument}

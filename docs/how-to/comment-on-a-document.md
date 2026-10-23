@@ -18,6 +18,12 @@ The rail's filter starts on **Open**, because "what still needs an answer"
 is the question a reader usually has. **Resolved** and **All** are one
 press away. Press a row to expand a conversation and read its replies.
 
+On a canvas the pins of resolved conversations are hidden by default. Press
+**Show resolved on canvas** under the filter to draw them (muted), or press
+it again to hide them. Pressing a resolved conversation's row turns it on for
+you, so the pin the canvas pans to is drawn there. The setting is yours alone:
+it is not saved in the document and does not change what anyone else sees.
+
 The rail is the surface a whole document has, so it reaches everything —
 including a conversation whose subject has since been deleted, which is
 marked `anchor gone` rather than hidden.
@@ -67,6 +73,12 @@ it across replies.
 **Resolve** closes a conversation; **Reopen** brings it back. Resolving is
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
+
+In the rail the verb is printed on the row (**Resolve** or **Reopen**); while
+a conversation is expanded, its own button at the foot of the conversation is
+the only one. Pressing it shows a *Resolved · Undo* line above the list for a few
+seconds. A message you have rewritten is marked **(edited)**, and a thread on
+an edge is named by the two nodes it joins.
 
 A resolved conversation says **Resolved** on its rail row and in its card
 on the canvas. The card is muted, shows only the opening message, and keeps a

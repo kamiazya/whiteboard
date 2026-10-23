@@ -17,6 +17,7 @@ import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import {
   documentPath as documentRoutePath,
   indexPath,
@@ -39,6 +40,7 @@ import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
+import { documentHeading } from '../lib/document-title.js'
 import { faviconStatusOf } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
@@ -99,6 +101,8 @@ export interface BrowserDocumentPageProps {
   initialPath?: string
 }
 
+const log = getAppLogger('browser-document-page')
+
 /**
  * The browser keeper: the controller over IndexedDB, the spatial sync session
  * over `BrowserBackend`, the markdown body over its own Loro binding, and the
@@ -128,6 +132,7 @@ function useBrowserDocument(
     startFresh,
     renameDocument,
     followRecordedName,
+    placeByName,
     listDocuments,
     switchDocument,
     duplicateDocument,
@@ -240,6 +245,10 @@ function useBrowserDocument(
   // by the time navigate() below lands, location.pathname already equals
   // path — so the other effect sees no drift left to act on.
   const isFirstDocumentUrlSyncRef = useRef(true)
+  // The document this effect last wrote the address for. The same document at
+  // a new path is a move (the first rename giving it its name's address), not
+  // a step to somewhere else, so it replaces.
+  const urlSyncedDocumentRef = useRef<string | null>(null)
   useEffect(() => {
     if (documentPath === null) return
     const handle = browserWorkspaceHandleOrNull()
@@ -247,12 +256,14 @@ function useBrowserDocument(
     const path = documentRoutePath(handle, documentPath)
     const isFirstSync = isFirstDocumentUrlSyncRef.current
     isFirstDocumentUrlSyncRef.current = false
+    const moved = documentId !== null && urlSyncedDocumentRef.current === documentId
+    urlSyncedDocumentRef.current = documentId
     if (location.pathname === path) return
     // The SEARCH rides along: this writes the address of the document already
     // loaded, so a bare pathname drops a query the reader arrived with — which
     // is how `?v=` never survived to be read here (ADR-0022's note).
-    navigate({ pathname: path, search: location.search }, { replace: isFirstSync })
-  }, [documentPath, navigate, location.search])
+    navigate({ pathname: path, search: location.search }, { replace: isFirstSync || moved })
+  }, [documentPath, documentId, navigate, location.search])
 
   useBrowserRouteSync({
     documentId,
@@ -504,7 +515,7 @@ function useBrowserDocument(
   const model: DocumentPageModel = {
     scopeKey: documentId,
     documentKind,
-    srTitle: label,
+    srTitle: documentHeading(title),
     sync,
     markdown: {
       body: markdownBody,
@@ -518,6 +529,9 @@ function useBrowserDocument(
       hydrating: documentKind === 'markdown' && !sync.loaded,
     },
     title: { value: title, onChange: onTitleChange },
+    onNameSettled: () => {
+      placeByName().catch((err: unknown) => log.warn('placing a document by its name failed', err))
+    },
     properties: {
       ...documentPropertiesSlot(documentKind, sync),
       status: persistenceFact,
@@ -530,7 +544,8 @@ function useBrowserDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
-      createLinkTarget: (path: string) => tagsSource.createDocument(path, 'markdown'),
+      createLinkTarget: (path: string, name: string) =>
+        tagsSource.createDocument(path, 'markdown', name),
       loadReference: browserReferenceLoader,
     },
     openDocument: navigateToDocument,
