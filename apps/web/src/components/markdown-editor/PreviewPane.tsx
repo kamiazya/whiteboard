@@ -103,7 +103,11 @@ export function PreviewPane({
     if (blocksRef) blocksRef.current = blocks
   }, [anchors, anchorsRef, blocks, blocksRef])
 
-  const { hostRef, handlers: taskHandlers } = useTaskCheckboxes(value, keyed, onToggleTask)
+  const {
+    hostRef,
+    announcement,
+    handlers: taskHandlers,
+  } = useTaskCheckboxes(value, keyed, onToggleTask)
   const keyedRef = useKeyedSvg(keyed)
   const setHost = useCallback(
     (element: HTMLDivElement | null) => {
@@ -114,24 +118,29 @@ export function PreviewPane({
   )
   const fill = editorTextFill(theme)
   return (
-    <div
-      data-testid="markdown-preview-pane"
-      className="markdown-preview-pane"
-      // `fill` on the host, not in the SVG: canvas-render assigns markdown
-      // body runs no fill of their own, so each `<text>` would otherwise take
-      // the SVG default — black — on every theme, leaving the dark preview
-      // black on near-black. Inheriting from here themes every run at once
-      // and keeps color out of the render path, so exported SVG bytes stay
-      // independent of whichever theme the viewer happens to be using.
-      //
-      // `--preview-fill` repeats the same value for the anchor rule in
-      // index.css: Chromium repaints an SVG <a>'s fill with its UA :visited
-      // color and, in visited context, honors only an explicit color value
-      // (var() included) — `inherit` is ignored, so inheritance alone leaves
-      // a visited wikiLink near-invisible.
-      style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
-      ref={setHost}
-      {...taskHandlers}
-    />
+    <>
+      <div
+        data-testid="markdown-preview-pane"
+        className="markdown-preview-pane"
+        // `fill` on the host, not in the SVG: canvas-render assigns markdown
+        // body runs no fill of their own, so each `<text>` would otherwise take
+        // the SVG default — black — on every theme, leaving the dark preview
+        // black on near-black. Inheriting from here themes every run at once
+        // and keeps color out of the render path, so exported SVG bytes stay
+        // independent of whichever theme the viewer happens to be using.
+        //
+        // `--preview-fill` repeats the same value for the anchor rule in
+        // index.css: Chromium repaints an SVG <a>'s fill with its UA :visited
+        // color and, in visited context, honors only an explicit color value
+        // (var() included) — `inherit` is ignored, so inheritance alone leaves
+        // a visited wikiLink near-invisible.
+        style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
+        ref={setHost}
+        {...taskHandlers}
+      />
+      <span role="status" aria-live="polite" data-testid="task-announcement" className="sr-only">
+        {announcement}
+      </span>
+    </>
   )
 }

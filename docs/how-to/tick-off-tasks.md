@@ -23,7 +23,9 @@ In **Split** and **Read** view, click the box. The item's `[ ]` becomes `[x]`
 (or back) in the source, and nothing else on the line changes: the marker, the
 indentation and the text stay as you wrote them.
 
-From the keyboard, Tab to a box and press Enter or Space.
+From the keyboard, Tab to a box and press Enter or Space. Focus stays on the
+same box after the toggle. A screen reader reads each box by its item's text and
+announces the result, for example "draft the outline: checked".
 
 The preview is read-only elsewhere, so version previews show the boxes but do
 not respond to clicks. A box inside an embedded document (`![[path]]`) is part of

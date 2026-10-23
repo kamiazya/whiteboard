@@ -6,8 +6,9 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
 } from 'react'
-import { taskLineNumbers } from '../../lib/task-toggle.js'
+import { taskItemText, taskLineNumbers } from '../../lib/task-toggle.js'
 
 const CHECKBOX = '[role="checkbox"]'
 
@@ -25,12 +26,18 @@ export function useTaskCheckboxes(
   onToggleTask: ((line: number) => void) | undefined,
 ): {
   hostRef: MutableRefObject<HTMLDivElement | null>
+  /** What a screen reader should hear after the last toggle; empty before one. */
+  announcement: string
   handlers: {
     onClick?: (event: MouseEvent<HTMLDivElement>) => void
     onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void
   }
 } {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  // A toggle repaints the preview, which replaces the box that held focus, so
+  // the box is found again by its position once the repaint arrives.
+  const pending = useRef<{ index: number; keyed: KeyedSvgRender } | null>(null)
+  const [announcement, setAnnouncement] = useState('')
   const toggleFrom = useCallback(
     (target: EventTarget | null): boolean => {
       const host = hostRef.current
@@ -40,22 +47,41 @@ export function useTaskCheckboxes(
       const lines = taskLineNumbers(source)
       const line = lines[drawn.indexOf(box)]
       if (drawn.length !== lines.length || line === undefined) return false
+      pending.current = { index: drawn.indexOf(box), keyed }
       onToggleTask(line)
       return true
     },
-    [onToggleTask, source],
+    [keyed, onToggleTask, source],
   )
   // Declared after the keyed patcher's layout effect has run for this commit,
   // so the boxes it just painted are the ones made focusable.
   useEffect(() => {
     if (onToggleTask === undefined) return
-    for (const box of hostRef.current?.querySelectorAll(CHECKBOX) ?? []) {
+    const boxes = Array.from(hostRef.current?.querySelectorAll(CHECKBOX) ?? [])
+    const lines = taskLineNumbers(source)
+    boxes.forEach((box, index) => {
       box.setAttribute('tabindex', '0')
-    }
-  }, [keyed, onToggleTask])
-  if (onToggleTask === undefined) return { hostRef, handlers: {} }
+      // A rect has no text of its own: its words sit in a sibling <text>.
+      const line = lines[index]
+      if (boxes.length === lines.length && line !== undefined) {
+        box.setAttribute('aria-label', taskItemText(source, line))
+      }
+    })
+    const waiting = pending.current
+    if (waiting === null) return
+    const box = boxes[waiting.index]
+    if (box instanceof SVGElement && document.activeElement !== box) box.focus()
+    if (keyed === waiting.keyed || box === undefined) return
+    pending.current = null
+    const done = box.getAttribute('aria-checked') === 'true'
+    setAnnouncement(
+      `${box.getAttribute('aria-label') ?? 'Task'}: ${done ? 'checked' : 'not checked'}`,
+    )
+  }, [keyed, onToggleTask, source])
+  if (onToggleTask === undefined) return { hostRef, announcement, handlers: {} }
   return {
     hostRef,
+    announcement,
     handlers: {
       onClick: (event) => {
         toggleFrom(event.target)
