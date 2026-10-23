@@ -3,8 +3,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { applyStencil, VISUAL_STENCILS } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { describe, expect, it } from 'vitest'
-import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { renderSceneToSvg } from '../svg/backend.js'
+import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const APPEARANCE = {

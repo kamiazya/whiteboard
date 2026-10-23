@@ -15,6 +15,7 @@ import {
   frameViewport,
   IDENTITY_VIEWPORT,
   type Point,
+  panToShowTarget,
   type Viewport,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
@@ -67,6 +68,38 @@ function useOpenOnContent({
   })
 }
 
+/**
+ * Keeps the selected node in view when the canvas is resized. The facet
+ * panel (and any other column taken out of the canvas) shrinks the root, and
+ * a node that sat in the column it took is then styled blind; the least pan
+ * that shows it again is the medium's own answer, and a node already visible
+ * is not moved. The first measurement only records the size: a root that was
+ * never measured has nothing to pan against.
+ */
+function useKeepSelectionInView({
+  rootRef,
+  boxes,
+  selection,
+  containerSizeOf,
+  viewport,
+  setViewport,
+}: Pick<ViewportControlsInputs, 'rootRef' | 'boxes' | 'selection' | 'containerSizeOf'> & {
+  viewport: Viewport
+  setViewport: (next: Viewport) => void
+}) {
+  const lastSizeRef = useRef<ContainerSize | null>(null)
+  useEffect(() => {
+    const size = containerSizeOf(rootRef.current)
+    const last = lastSizeRef.current
+    lastSizeRef.current = size
+    if (size === null || last === null) return
+    const box = boxes.find((candidate) => candidate.id === selection?.id)
+    if (box === undefined) return
+    const next = panToShowTarget(box.box, viewport, size)
+    if (next !== undefined) setViewport(next)
+  })
+}
+
 export function useViewportControls({
   rootRef,
   boxes,
@@ -78,6 +111,7 @@ export function useViewportControls({
   const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
 
   useOpenOnContent({ rootRef, boxes, containerSizeOf, viewport, setViewport })
+  useKeepSelectionInView({ rootRef, boxes, selection, containerSizeOf, viewport, setViewport })
 
   /** Keyboard zoom: about the viewport centre, since there is no pointer. */
   const stepZoom = (factor: number): boolean => {
