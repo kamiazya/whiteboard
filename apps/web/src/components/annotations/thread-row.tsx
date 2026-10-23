@@ -21,6 +21,14 @@ import { MessageBy, ThreadActivity } from './message-meta.js'
 import { ReplyComposer } from './ReplyComposer.js'
 import { ThreadMessage } from './ThreadMessage.js'
 
+/**
+ * The row's Resolve: the state dot over its verb, printed. Icon-only was
+ * DESIGN.md's call until a reader resolved the wrong conversation from an
+ * unnamed dot; the label returns by that observation.
+ */
+const ROW_VERB_CLASS =
+  'flex min-h-11 w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded text-muted-foreground hover:bg-accent hover:text-foreground'
+
 export interface ThreadEdit {
   readonly threadId: string
   readonly messageId: string
@@ -198,6 +206,8 @@ function ThreadConversation({
   commitEdit,
   onReply,
   onEditMessage,
+  status,
+  onResolveThread,
 }: {
   thread: CommentThread
   editing: ThreadEdit | null
@@ -205,6 +215,9 @@ function ThreadConversation({
   commitEdit: (thread: CommentThread) => void
   onReply: CommentsPanelProps['onReply']
   onEditMessage: CommentsPanelProps['onEditMessage']
+  status: CommentThreadStatus
+  /** Absent hides the verb, like the panel's own `onResolve`. */
+  onResolveThread: (() => void) | undefined
 }) {
   return (
     // ONE column for the whole conversation, standing on the
@@ -245,6 +258,19 @@ function ThreadConversation({
         // half a sentence across.
         <ReplyComposer key={thread.id} compact onReply={(body) => onReply(thread.id, body)} />
       )}
+      {onResolveThread === undefined ? null : (
+        <button
+          type="button"
+          aria-label={status === 'resolved' ? 'Reopen' : 'Resolve'}
+          onClick={onResolveThread}
+          className="flex min-h-11 items-center gap-1.5 self-start rounded px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <span className="annotation-dot" data-status={status} aria-hidden="true">
+            <Check aria-hidden="true" />
+          </span>
+          {status === 'resolved' ? 'Reopen' : 'Resolve'}
+        </button>
+      )}
     </div>
   )
 }
@@ -264,7 +290,7 @@ function RowMeta({
   orphaned: boolean
 }) {
   return (
-    <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+    <span className="comment-row-meta mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-neutral-500">
       {status === 'resolved' ? (
         <span
           data-testid={`thread-resolved-${thread.id}`}
@@ -297,6 +323,39 @@ function RowMeta({
         </span>
       ) : null}
     </span>
+  )
+}
+
+function RowResolve({
+  status,
+  interactive,
+  onPress,
+}: {
+  status: CommentThreadStatus
+  interactive: boolean
+  onPress: () => void
+}) {
+  if (!interactive) {
+    return (
+      <span className="grid size-11 shrink-0 place-items-center">
+        <span className="annotation-dot" data-status={status} aria-hidden="true" />
+      </span>
+    )
+  }
+  const verb = status === 'resolved' ? 'Reopen' : 'Resolve'
+  return (
+    <button
+      type="button"
+      aria-label={verb}
+      title={verb}
+      onClick={onPress}
+      className={ROW_VERB_CLASS}
+    >
+      <span className="annotation-dot" data-status={status} aria-hidden="true">
+        <Check aria-hidden="true" />
+      </span>
+      <span className="text-[10px] leading-none">{verb}</span>
+    </button>
   )
 }
 
@@ -363,23 +422,14 @@ export function ThreadRow({
             button within a button is invalid and collapses the
             accessibility tree, which is why merging the two
             restructured the row rather than adding a class. */}
-        {onResolve === undefined ? (
-          <span className="grid size-11 shrink-0 place-items-center">
-            <span className="annotation-dot" data-status={status} aria-hidden="true" />
-          </span>
-        ) : (
-          <button
-            type="button"
-            aria-label={status === 'resolved' ? 'Reopen' : 'Resolve'}
-            title={status === 'resolved' ? 'Reopen' : 'Resolve'}
-            onClick={() => resolveWithBeat(thread)}
-            className={ICON_VERB_CLASS}
-          >
-            <span className="annotation-dot" data-status={status}>
-              <Check aria-hidden="true" />
-            </span>
-          </button>
-        )}
+        <RowResolve
+          status={status}
+          // While the conversation is open its own Resolve is the one target:
+          // two identical ones, a row apart, is how the wrong thread got
+          // resolved.
+          interactive={onResolve !== undefined && !expanded}
+          onPress={() => resolveWithBeat(thread)}
+        />
         <button
           type="button"
           ref={(node) => {
@@ -431,6 +481,8 @@ export function ThreadRow({
           commitEdit={commitEdit}
           onReply={onReply}
           onEditMessage={onEditMessage}
+          status={status}
+          onResolveThread={onResolve === undefined ? undefined : () => resolveWithBeat(thread)}
         />
       ) : null}
     </li>

@@ -68,6 +68,12 @@ it across replies.
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
 
+In the rail the verb is printed on the row (**Resolve** or **Reopen**); while
+a conversation is expanded, its own button at the foot of the conversation is
+the only one. Pressing it shows **Resolved · Undo** above the list for a few
+seconds. A message you have rewritten is marked **(edited)**, and a thread on
+an edge is named by the two nodes it joins.
+
 A resolved conversation says **Resolved** on its rail row and in its card
 on the canvas. The card is muted, shows only the opening message, and keeps a
 labelled **Reopen** button in its header.

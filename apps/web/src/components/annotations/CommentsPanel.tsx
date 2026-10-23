@@ -51,6 +51,9 @@ const FILTERS: readonly { readonly value: ThreadFilter; readonly label: string }
 const RESOLVE_HOLD_MS = 200
 const RESOLVE_LEAVE_MS = 220
 
+/** How long the Undo stays offered: long enough to notice a wrong press and reach it. */
+const UNDO_WINDOW_MS = 6000
+
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
   return filter === 'all' || thread.status === filter
 }
@@ -309,10 +312,20 @@ export function CommentsPanel({
   const statusOf = (thread: CommentThread): CommentThreadStatus =>
     pending.get(thread.id) ?? thread.status
 
-  function resolveWithBeat(thread: CommentThread): void {
+  const [undo, setUndo] = useState<{
+    readonly threadId: string
+    readonly to: CommentThreadStatus
+  } | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(undoTimer.current), [])
+
+  function resolveWithBeat(thread: CommentThread, offerUndo = true): void {
     if (onResolve === undefined) return
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
+    window.clearTimeout(undoTimer.current)
+    setUndo(offerUndo ? { threadId: thread.id, to: next } : null)
+    undoTimer.current = window.setTimeout(() => setUndo(null), UNDO_WINDOW_MS)
     announce(next === 'resolved' ? 'Conversation resolved' : 'Conversation reopened')
     setPending((prev) => new Map(prev).set(thread.id, next))
     window.setTimeout(() => {
@@ -399,6 +412,26 @@ export function CommentsPanel({
           </button>
         ))}
       </fieldset>
+
+      {undo === null ? null : (
+        <div
+          data-testid="comments-panel-undo"
+          className="flex items-center gap-1 rounded bg-muted px-2 text-xs"
+        >
+          <span>{undo.to === 'resolved' ? 'Resolved' : 'Reopened'}</span>
+          <span aria-hidden="true">&middot;</span>
+          <button
+            type="button"
+            onClick={() => {
+              const target = threads.find((entry) => entry.id === undo.threadId)
+              if (target !== undefined) resolveWithBeat(target, false)
+            }}
+            className="min-h-11 rounded px-1 font-medium text-foreground underline underline-offset-2 hover:bg-accent"
+          >
+            Undo
+          </button>
+        </div>
+      )}
 
       {composeAnchor !== null && onCreateThread !== undefined ? (
         <form

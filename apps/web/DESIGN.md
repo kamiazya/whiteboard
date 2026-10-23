@@ -907,6 +907,14 @@ and a button inside a button is invalid, so the row is now an `<li>`
 holding the dot-toggle and the subject toggle as siblings. The subject
 toggle stays the row's heading, so the focus contract above is unchanged.
 
+**Resolve is the exception that observation reversed.** The rule says
+labels return by observation, not by guess, and dogfooding supplied one: an
+unlabelled dot whose check showed on hover, twice on screen while a
+conversation was open, resolved the wrong conversation. The row's Resolve
+now prints its verb under the dot, an open conversation carries the only
+Resolve (the row's dot becomes a plain indicator), and a press offers
+"Resolved · Undo" for a few seconds. Edit and Save stay icon-only.
+
 Three carve-outs, each with a reason the rule itself gives:
 
 - **Submit is inert before it is pressed, not just guarded after.** The
