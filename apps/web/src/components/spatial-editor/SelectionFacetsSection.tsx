@@ -80,7 +80,7 @@ export function SelectionFacetsSection({
 
 const SelectionHeading = ({ kind, count }: { kind: 'node' | 'edge'; count: number }) => (
   <div className="flex items-baseline justify-between">
-    <span className="text-xs font-medium">{kind === 'node' ? 'Node' : 'Edge'}</span>
+    <span className="text-xs font-medium">{kind === 'node' ? 'This node' : 'This edge'}</span>
     {count > 1 && <span className="text-xs text-muted-foreground">{count} selected</span>}
   </div>
 )

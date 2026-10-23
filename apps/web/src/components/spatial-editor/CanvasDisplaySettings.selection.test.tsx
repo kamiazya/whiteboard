@@ -19,7 +19,7 @@ const canvas: SpatialCanvas = {
     textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 60, text: 'a' }),
     textNode({ id: 'n2', x: 200, y: 0, width: 120, height: 60, text: 'b' }),
   ],
-  edges: [],
+  edges: [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }],
 }
 
 const NONE: EditorSelection = { selectedId: null, selectedEdgeId: null, extraIds: [] }
@@ -74,6 +74,19 @@ describe('Display panel with a selection', () => {
     expect(within(section).getByLabelText('Shape')).not.toBeNull()
     const doc = screen.getByTestId('document-settings')
     expect(section.compareDocumentPosition(doc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('names the two sections by what they change: this node, and the whole canvas', () => {
+    const { source } = sourceOf({ selectedId: 'n1', selectedEdgeId: null, extraIds: [] })
+    render(<Host source={source} />)
+    expect(within(screen.getByTestId('selection-facets')).getByText('This node')).not.toBeNull()
+    expect(within(screen.getByTestId('document-settings')).getByText('Whole canvas')).not.toBeNull()
+  })
+
+  it('names the selected edge as this edge', () => {
+    const { source } = sourceOf({ selectedId: null, selectedEdgeId: 'e1', extraIds: [] })
+    render(<Host source={source} />)
+    expect(within(screen.getByTestId('selection-facets')).getByText('This edge')).not.toBeNull()
   })
 
   it('writes a facet pick to the node through onChange', () => {
