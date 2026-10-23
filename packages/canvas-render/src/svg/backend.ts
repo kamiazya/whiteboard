@@ -14,6 +14,7 @@ import type {
 import { isFiniteBox } from '../finite-box.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
+import { TEXT_HALO_PAD_PX } from '../theme/text-halo.js'
 import { documentHref, embedHref } from './document-href.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
 import { boundFilterWork } from './filter-budget.js'
@@ -46,11 +47,6 @@ function textBaselineY(run: TextRunNode): number {
     ? run.bbox.y + run.baseline
     : run.bbox.y
 }
-
-/** Breathing room the halo pill adds around the text box, in px. Paint-only
- * decoration in the arrowhead class: bounds keep reading the bbox, and the
- * 2px overhang never exceeds the hit tolerance. */
-const TEXT_HALO_PAD_PX = 2
 
 /** Corner radius of a text run's backdrop pill (GitHub's inline code). */
 const BACKDROP_RADIUS_PX = 6

@@ -3,6 +3,7 @@ import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+import type { ImportedDocument } from './document-import.js'
 
 /**
  * What one markdown read answers with: the body a renderer draws, and the
@@ -42,6 +43,14 @@ export interface WorkspaceFilesSource {
    * untitled-N, with nothing on screen saying which half went wrong.
    */
   createDocument(path: string, kind: DocumentKind, name?: string): Promise<void>
+  /**
+   * Create a document at `path` holding a file's content — the document is
+   * created and filled by the one call, so a refusal leaves nothing behind.
+   * OPTIONAL: a keeper that cannot take a file's content omits it and the
+   * panel offers no import. A kind the keeper cannot fill rejects with the
+   * reason to show.
+   */
+  importDocument?(path: string, document: ImportedDocument): Promise<void>
   /** Move a document — and everything under it — to a new path. */
   renameDocumentPath(path: string, newPath: string): Promise<void>
   /**

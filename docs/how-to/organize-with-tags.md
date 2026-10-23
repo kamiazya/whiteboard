@@ -11,8 +11,10 @@ title), and add tags. Tags are OKF frontmatter — they travel with the
 document on export.
 
 On a board, tag a box or an edge from its Facets panel: right-click it and
-choose **Facets…**; the **Tags** row sits under the visual style. The
-board's own tags are in the Display settings, under the theme.
+choose **Facets…**, or select it and open **Display**, where the selection's
+facets lead the panel; the **Tags** row sits under the visual style. The
+board's own tags are in the Display settings, below the selection's, under the
+theme.
 
 Every tag row works the same way: type a tag and press Enter or a comma to
 finish it, and press a chip's × to remove it. A tag is either a plain word

@@ -104,4 +104,24 @@ describe('the content state announced by a workspace-scoped session', () => {
     expect(states.at(-1)).toBe(listed)
     s.session.dispose()
   })
+
+  it('is the state getContentState answers, and it moves with an edit', async () => {
+    vi.useFakeTimers()
+    const s = openTestSession({
+      snapshot: workspaceSnapshot(),
+      deps: { contentDocumentId: DOC },
+    })
+    const opened = s.session.getContentState()
+
+    await editAndPush(s.session, canvas, MOVE)
+
+    const exported = s.session.exportSnapshot() as Uint8Array
+    const record = new LoroDoc()
+    record.import(exported)
+    const listed = resolveWorkspaceDocumentById(record, DOC)?.contentDigest
+    expect(listed).toBeDefined()
+    expect(s.session.getContentState()).toBe(listed)
+    expect(s.session.getContentState()).not.toBe(opened)
+    s.session.dispose()
+  })
 })

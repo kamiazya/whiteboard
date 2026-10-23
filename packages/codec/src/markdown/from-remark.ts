@@ -73,6 +73,26 @@ const flowAt = (node: RemarkNode, depth: number): MdastFlowContent =>
     ? { type: 'paragraph', children: [{ type: 'text', value: flattenText(node) }] }
     : toFlow(node, depth)
 
+const footnoteMarker = (node: RemarkNode): string =>
+  `[^${optionalOf<string>(node, 'label') ?? textOf(node, 'identifier')}]`
+
+/**
+ * A footnote definition has no node of its own in the model, so it reads as
+ * the paragraph it was written as: `[^label]: ` then its text. A definition
+ * of one paragraph keeps that paragraph's inline formatting; one of several
+ * blocks keeps their text, flattened, since a paragraph cannot hold blocks.
+ */
+function footnoteDefinitionAsParagraph(node: RemarkNode, depth: number): MdastFlowContent {
+  const label: MdastPhrasingContent = { type: 'text', value: `${footnoteMarker(node)}: ` }
+  const blocks = node.children ?? []
+  const [only] = blocks
+  if (blocks.length === 1 && only?.type === 'paragraph') {
+    return { type: 'paragraph', children: [label, ...childrenOf(only, depth + 1, phrasingAt)] }
+  }
+  const text = blocks.map(flattenText).join(' ')
+  return { type: 'paragraph', children: [label, { type: 'text', value: text }] }
+}
+
 function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
   switch (node.type) {
     case 'text':
@@ -121,6 +141,10 @@ function toPhrasing(node: RemarkNode, depth: number): MdastPhrasingContent {
         referenceType: node.referenceType as 'shortcut' | 'collapsed' | 'full',
         alt: optionalOf<string>(node, 'alt'),
       }
+    case 'footnoteReference':
+      // The model has no footnote nodes; the marker stays as the author
+      // wrote it rather than vanishing along with its leading space.
+      return { type: 'text', value: footnoteMarker(node) }
     default:
       // Unrecognized node kinds degrade to their textual content rather than
       // being silently dropped (data loss the round-trip property would
@@ -185,6 +209,8 @@ function toFlow(node: RemarkNode, depth: number): MdastFlowContent {
         value: textOf(node, 'value'),
         meta: optionalOf<string>(node, 'meta'),
       }
+    case 'footnoteDefinition':
+      return footnoteDefinitionAsParagraph(node, depth)
     default:
       return { type: 'paragraph', children: [{ type: 'text', value: textOf(node, 'value') }] }
   }

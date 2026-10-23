@@ -57,6 +57,9 @@ export function ShortcutHelpSheet({ open, onOpenChange }: ShortcutHelpSheetProps
             </section>
           )
         })}
+        <p data-testid="shortcut-help-menu-only" className="text-sm text-muted-foreground">
+          Align, Distribute, Tidy and Group have no key: right-click the selection or the canvas.
+        </p>
       </DialogContent>
     </Dialog>
   )

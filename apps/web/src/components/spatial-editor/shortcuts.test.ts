@@ -214,3 +214,36 @@ describe('the tool and new-note letters', () => {
     }
   })
 })
+
+describe('node traversal rows', () => {
+  const key = (over: Partial<KeyEventLike>) => event({ code: 'Tab', key: 'Tab', ...over })
+
+  it('Tab and Shift+Tab are two rows, live in the select tool only', () => {
+    expect(findShortcutIn(EDITOR_SHORTCUTS, key({}), 'select')?.id).toBe('select-next-node')
+    expect(findShortcutIn(EDITOR_SHORTCUTS, key({ shiftKey: true }), 'select')?.id).toBe(
+      'select-previous-node',
+    )
+    expect(findShortcutIn(EDITOR_SHORTCUTS, key({}), 'connect')).toBeUndefined()
+  })
+
+  it('Cmd/Ctrl+Arrow selects a neighbour while a bare arrow stays the nudge', () => {
+    const arrow = { code: 'ArrowRight', key: 'ArrowRight' }
+    expect(findShortcutIn(EDITOR_SHORTCUTS, event({ ...arrow, ctrlKey: true }), 'select')?.id).toBe(
+      'select-adjacent-node',
+    )
+    expect(findShortcutIn(EDITOR_SHORTCUTS, event({ ...arrow }), 'select')).toBeUndefined()
+  })
+
+  it('Enter and F2 edit, but Cmd+Enter stays the editor commit', () => {
+    expect(findShortcutIn(EDITOR_SHORTCUTS, event({ code: 'F2', key: 'F2' }), 'select')?.id).toBe(
+      'edit-selected-node',
+    )
+    expect(
+      findShortcutIn(
+        EDITOR_SHORTCUTS,
+        event({ code: 'Enter', key: 'Enter', metaKey: true }),
+        'select',
+      ),
+    ).toBeUndefined()
+  })
+})

@@ -54,6 +54,8 @@ const OWN_HOST: Readonly<Record<string, string>> = {
     'mounts the display-settings inspector, not the editor — there is no SpatialEditor in it',
   'components/spatial-editor/edge-routing-menu.browser.test.tsx':
     'a sibling display-settings panel shares the one canvas state with the editor inside the same frame',
+  'components/spatial-editor/display-selection.browser.test.tsx':
+    'a sibling display panel shares the one canvas state with the editor and follows the editor handle',
   'components/spatial-editor/dialog-target-vanishes.browser.test.tsx':
     'removes a node from outside the editor and bumps externalVersion, which the shared host does not expose',
   'components/spatial-editor/clipboard.browser.test.tsx':

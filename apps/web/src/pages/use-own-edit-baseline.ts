@@ -6,6 +6,7 @@ import {
 import { browserWorkspaceIdOrNull } from '../lib/browser-workspace-id.js'
 import type { UseDocumentSyncOptions } from '../lib/document-sync-types.js'
 import { recordSeenDocument } from '../lib/seen-documents.js'
+import { useDaemonRememberOpen } from './use-remember-open.js'
 
 /**
  * The seen-baseline writer, as the `useDocumentSync` option fragment to spread for the document a page has open.
@@ -54,10 +55,19 @@ export function useDaemonOwnEditBaseline(
   workspaceId: string | null,
   path: string | null,
   contentDocumentId: string | undefined,
-  documents: readonly { readonly path: string; readonly documentId: string }[] | null,
+  documents:
+    | readonly {
+        readonly path: string
+        readonly documentId: string
+        readonly contentDigest?: string
+      }[]
+    | null,
 ): OwnEditOption {
   const documentId =
     contentDocumentId ?? documents?.find((entry) => entry.path === path)?.documentId
+  // Opening a document is when both the baseline and Recent are first
+  // anchored, so they share the id resolved here.
+  useDaemonRememberOpen(daemonBaseUrl, workspaceId, documentId, documents)
   return useBaselineWriter(
     workspaceId === null ? undefined : daemonMemoryScope(daemonBaseUrl, { workspaceId }),
     documentId,

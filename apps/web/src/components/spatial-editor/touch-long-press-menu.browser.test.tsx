@@ -13,7 +13,10 @@ import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { touch } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const withNode: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 60, text: 'hold me' })],
@@ -122,4 +125,39 @@ it('hand mode: a stationary long-press opens the comment verbs, and a finger tha
   touch(root, 'pointermove', 480, 480, 9)
   await vi.waitFor(() => expect(transform()).not.toBe(mid))
   touch(root, 'pointerup', 480, 480, 9)
+})
+
+it('on a coarse pointer the long-press menu opens as the same bottom sheet the ⋯ does', async () => {
+  const realMatchMedia = window.matchMedia.bind(window)
+  vi.stubGlobal('matchMedia', (query: string) =>
+    query.includes('pointer: coarse')
+      ? ({ ...realMatchMedia(query), matches: true } as MediaQueryList)
+      : realMatchMedia(query),
+  )
+  const { container } = mount(withNode)
+  const root = rootOf(container)
+  touch(root, 'pointerdown', 200, 130)
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+  }, 3000)
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  expect(menu.dataset.variant).toBe('sheet')
+  const row = [...menu.querySelectorAll('[role="menuitem"]')].find(
+    (el) => el.textContent?.trim() === 'Delete',
+  ) as HTMLElement
+  expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(48)
+  touch(root, 'pointerup', 200, 130)
+})
+
+it('a fine pointer keeps the long-press menu a point-anchored list', async () => {
+  const { container } = mount(withNode)
+  const root = rootOf(container)
+  touch(root, 'pointerdown', 200, 130)
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+  }, 3000)
+  expect(
+    (container.querySelector('[data-testid="context-menu"]') as HTMLElement).dataset.variant,
+  ).toBe('list')
+  touch(root, 'pointerup', 200, 130)
 })

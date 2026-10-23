@@ -115,8 +115,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     "a vitest internal the comment names to say what the test's mock path goes through",
   'apps/web/src/pages/BrowserIndexPage.back-during-load.browser.test.tsx#resolveManualMock':
     'same sentence',
-  'apps/web/src/scoped-screen-state.test.ts#saveState':
-    'narrates a defect and its fix in the state the code no longer carries under that name',
   'packages/mcp-server/src/server/export/headless-renderer.test.ts#LABEL_APPEARANCE':
     'narrates the verified export defect the test guards, by the constant it involved',
   'tools/arch-lint/src/root-composite-scripts.test.ts#ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT':

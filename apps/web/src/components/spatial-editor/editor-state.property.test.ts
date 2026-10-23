@@ -468,6 +468,16 @@ const SHORTCUT_COVERAGE = {
   'tool-draw': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
   'new-note':
     'not modelled: places a note at the viewport centre — covered by tool-hotkeys.browser.test.tsx',
+  'select-next-node':
+    'not modelled: moves the selection through reading order on the root — covered by node-keyboard-traversal.browser.test.tsx',
+  'select-previous-node':
+    'not modelled: moves the selection through reading order on the root — covered by node-keyboard-traversal.browser.test.tsx',
+  'select-adjacent-node':
+    'not modelled: moves the selection to a neighbour — covered by node-keyboard-traversal.browser.test.tsx',
+  'edit-selected-node':
+    'not modelled: opens the in-place editor the double press opens — covered by node-keyboard-traversal.browser.test.tsx',
+  undo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
+  redo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
   'show-shortcuts': 'not modelled: opens a dialog — covered by shortcut-help.browser.test.tsx',
 } satisfies Record<ShortcutId, SurfaceCoverage>
 

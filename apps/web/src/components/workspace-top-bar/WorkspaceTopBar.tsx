@@ -2,9 +2,11 @@ import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useDaemonApi } from '../../contexts/DaemonApiContext.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { type SaveState, saveIndicatorOf } from '../../lib/save-indicator.js'
 import { cn } from '../../lib/utils.js'
 import { HEADER_BUTTON_CLASS } from '../ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
+import { SaveStatus } from './SaveStatus.js'
 import { useDocumentNames } from './useDocumentNames.js'
 
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
@@ -76,6 +78,12 @@ interface Props {
   titleSlot?: (identity: DocumentIdentity) => ReactNode
   /** The open document's name in the record the page syncs; see `useDocumentNames`. */
   recordedName?: string | null
+  /**
+   * The accounts `saveIndicatorOf` reads to say whether the open document's
+   * edits are safe. Absent for hosts that have none to speak for; the bar then
+   * draws nothing rather than a claim it cannot back.
+   */
+  saveState?: SaveState
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -99,6 +107,7 @@ export default function WorkspaceTopBar({
   preview,
   titleSlot,
   recordedName,
+  saveState,
 }: Props) {
   const keptByBrowser = keeper === 'browser'
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -189,6 +198,9 @@ export default function WorkspaceTopBar({
           name: documentLabel({ name: canvasCustomName, path }, 'path'),
           ...(keptByBrowser ? {} : { onRename: (next: string) => renameDocument(path, next) }),
         })}
+        {saveState && (
+          <SaveStatus indicator={saveIndicatorOf(saveState.persistence, saveState.connection)} />
+        )}
       </div>
     </header>
   )

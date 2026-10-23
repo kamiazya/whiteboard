@@ -102,38 +102,14 @@ export interface ContextMenuProps {
   readonly items: readonly ContextMenuItem[]
   readonly onClose: () => void
   /**
-   * One catalog, three vessels: 'list' is the right-click reading surface
-   * (icon + label rows); 'grid' is the ⋯ object-action popover, which
-   * renders runs of verbs as icon-only buttons (aria-label + tooltip carry
-   * the name); 'sheet' is the same grid content anchored to the bottom
-   * edge, full width with thicker targets — the touch-first form the ⋯
-   * takes in a narrow editor. Property option rows and separators render
-   * identically in all three, so what is learned in one vessel transfers
-   * to the others.
+   * One catalog, three vessels, every verb an icon-and-label row in each:
+   * 'list' is the point-anchored popover; 'grid' (the ⋯ popover) draws the
+   * same rows; 'sheet' is the same rows anchored to the bottom edge, full
+   * width with 48px targets — the touch-first form. A label is never
+   * dropped for density, so what is learned in one vessel transfers to
+   * the others.
    */
   readonly variant?: 'list' | 'grid' | 'sheet'
-}
-
-/** Consecutive action items collapse into one icon row in the grid vessel. */
-type GridChunk =
-  | { readonly kind: 'grid'; readonly actions: readonly ContextMenuActionItem[] }
-  | { readonly kind: 'item'; readonly item: ContextMenuItem }
-
-function chunkForGrid(items: readonly ContextMenuItem[]): readonly GridChunk[] {
-  const chunks: GridChunk[] = []
-  for (const item of items) {
-    if (item.kind === undefined || item.kind === 'action') {
-      const last = chunks[chunks.length - 1]
-      if (last !== undefined && last.kind === 'grid') {
-        chunks[chunks.length - 1] = { kind: 'grid', actions: [...last.actions, item] }
-      } else {
-        chunks.push({ kind: 'grid', actions: [item] })
-      }
-    } else {
-      chunks.push({ kind: 'item', item })
-    }
-  }
-  return chunks
 }
 
 /**
@@ -262,51 +238,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
         }
       }}
     >
-      {(() => {
-        if (variant === 'grid' || variant === 'sheet') {
-          return chunkForGrid(items).map((chunk, index) =>
-            chunk.kind === 'grid' ? (
-              <div
-                key={`grid-${chunk.actions[0]?.label ?? index}`}
-                className={
-                  sheet
-                    ? 'flex flex-wrap gap-1 px-2 py-1'
-                    : 'flex max-w-56 flex-wrap gap-0.5 px-1.5 py-1'
-                }
-              >
-                {chunk.actions.map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    role="menuitem"
-                    aria-label={action.label}
-                    // The visible name is gone in this vessel; the tooltip is
-                    // the desktop fallback for the icon a reader misreads.
-                    title={action.label}
-                    className={cn(
-                      'flex items-center justify-center rounded transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                      // Thumb-zone targets in the sheet, compact in the popover.
-                      sheet ? 'size-12' : 'size-11',
-                      action.danger ? 'text-destructive' : 'text-foreground',
-                    )}
-                    onClick={() => {
-                      onClose()
-                      action.onSelect()
-                    }}
-                  >
-                    <span aria-hidden="true" className="[&>svg]:size-4.5">
-                      {action.icon}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              renderCatalogItem(chunk.item, index)
-            ),
-          )
-        }
-        return items.map(renderCatalogItem)
-      })()}
+      {items.map(renderCatalogItem)}
     </div>
   )
 
@@ -404,9 +336,11 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
         key={item.label}
         type="button"
         role="menuitem"
-        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
-          item.danger ? 'text-destructive' : ''
-        }`}
+        className={cn(
+          'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+          sheet && 'min-h-12 px-4 text-base',
+          item.danger && 'text-destructive',
+        )}
         onClick={() => {
           onClose()
           item.onSelect()

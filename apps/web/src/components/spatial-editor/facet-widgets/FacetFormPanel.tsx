@@ -87,9 +87,10 @@ export interface FacetFormPanelProps {
    * Where the inspector sits: a column beside the canvas, or a sheet under
    * it. Decided from the EDITOR SHELL's width — the panel's own column comes
    * out of the canvas, so a breakpoint read off the canvas re-decides itself
-   * every time it opens.
+   * every time it opens. `inline` is the bare form, for a host that already
+   * supplies the vessel (the Display panel's selection section).
    */
-  readonly variant?: 'dock' | 'sheet'
+  readonly variant?: 'dock' | 'sheet' | 'inline'
   /**
    * Per facet key, per text field: the values the rest of the board already
    * holds (`collectFieldSuggestions`), offered by the derived form as a
@@ -179,6 +180,7 @@ export function FacetFormPanel({
         {POINT_SECTIONS[point].map((section) => (section === 'facets' ? facetGroups : tagRow))}
       </div>
     )
+  if (variant === 'inline') return <div data-testid="facet-form-panel">{body}</div>
   // Same vessel convention as the other canvas overlays: hand-rolled and
   // inline-positioned, so it behaves identically where the app stylesheet
   // is absent (browser-mode component tests), and marked

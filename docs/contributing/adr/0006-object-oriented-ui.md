@@ -64,6 +64,13 @@ that the sheet is never the ONLY path to a verb — the same catalog is
 available as `list` wherever a pointer exists, and the keyboard has its own
 bindings.
 
+**Superseded (2026-10-22): the `grid` and `sheet` vessels are labelled.** The
+icon-only strips were reached for density, and the cost named above landed on
+the people they were meant for: a user learning the ⋯ catalog needed the
+tooltips, and a multi-selection's menu already drew the same verbs as a
+labelled list. Every vessel now draws icon and text for each verb; the sheet
+keeps 48px rows. Point 4 holds without exception.
+
 **A navigation is not an object verb, and does not belong in the catalog.**
 Every entry in the catalog changes the object and leaves you where you are.
 "Open in editor" changes nothing and moves you to another surface. Mixing the

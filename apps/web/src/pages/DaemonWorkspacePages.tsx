@@ -17,7 +17,7 @@
 import { lazy, Suspense } from 'react'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { LazyPageFallback } from '../components/LazyPageFallback.js'
-import { type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
+import { folderOfDocumentPath, type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
 
 // Lazy so the daemon stack (SseBackend, api client) stays out of the entry
 // chunk — only a session with a daemon pays for it; pure browser sessions
@@ -68,7 +68,14 @@ export function DaemonWorkspacePages({
             workspaceId={view.workspace}
             path={view.path}
             serverMode={serverMode}
-            onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
+            // The folder the document sat in, so Back lands where the person was.
+            onNavigateBack={() =>
+              onView({
+                kind: 'index',
+                workspace: view.workspace,
+                folder: folderOfDocumentPath(view.path),
+              })
+            }
           />
         )}
       </Suspense>

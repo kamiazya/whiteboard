@@ -70,7 +70,7 @@ describe('a theme font the user installed', () => {
 
   it('leaves a clean export measured and declared in the bundled family', async () => {
     const clean = await renderSpatialCanvasToSvg(sketched, fontsDir)
-    expect(clean.svg).toContain('font-family="Roboto"')
+    expect(clean.svg).toContain('font-family="Roboto, system-ui, sans-serif"')
     expect(lines(clean.svg)).toEqual([TEXT])
   })
 })

@@ -28,6 +28,7 @@ import {
   type WorkspaceRoute,
   workspacePath,
   workspaceRoutePath,
+  workspaceRouteTarget,
 } from '../lib/app-routes.js'
 import { browserWorkspaceMatches, switchBrowserWorkspace } from '../lib/browser-workspace-id.js'
 import { findReplicaForHandle } from '../lib/replicas.js'
@@ -175,7 +176,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     // one) can read it back into `daemonView` — see `lastRouteSyncPathRef`'s
     // comment above.
     lastRouteSyncPathRef.current = location.pathname
-    navigate(path, { replace: isFirstSync || namingTheSameIndex })
+    navigate(workspaceRouteTarget(daemonView), { replace: isFirstSync || namingTheSameIndex })
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.

@@ -730,3 +730,51 @@ describe('createDaemonFilesSource stored pictures', () => {
     await expect(source.loadImage?.(row, 'asset:f1')).rejects.toThrow('503')
   })
 })
+
+describe('createDaemonFilesSource — importDocument', () => {
+  const created = {
+    workspaceId: 'ws',
+    documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+    path: 'trip',
+  }
+
+  it('creates a markdown document with the file as OKF text and its name', async () => {
+    const bodies: unknown[] = []
+    const fetchLike = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') bodies.push(JSON.parse(init.body as string))
+      return jsonResponse(created, 201)
+    })
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.importDocument?.('trip', {
+      kind: 'markdown',
+      body: '# Trip\n',
+      coreFacets: { type: 'plan' },
+      facets: {},
+      name: 'Trip plan',
+      pathBase: 'trip',
+    })
+
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ path: 'trip', kind: 'markdown', name: 'Trip plan' })
+    const markdown = (bodies[0] as { markdown: string }).markdown
+    expect(markdown).toContain('type: plan')
+    expect(markdown).toContain('# Trip')
+    expect(markdown).not.toContain('title:')
+  })
+
+  it('says a canvas file cannot be imported into a daemon-kept workspace, and sends nothing', async () => {
+    const fetchLike = vi.fn(async () => jsonResponse(created, 201))
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await expect(
+      source.importDocument?.('board', {
+        kind: 'spatial',
+        canvas: { nodes: [], edges: [] },
+        name: 'board',
+        pathBase: 'board',
+      }),
+    ).rejects.toThrow(/canvas/i)
+    expect(fetchLike).not.toHaveBeenCalled()
+  })
+})

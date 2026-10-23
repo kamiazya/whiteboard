@@ -145,4 +145,41 @@ describe('useSceneExport', () => {
     })
     expect(onExported).toHaveBeenCalledExactlyOnceWith('Exported as PNG')
   })
+
+  it('downloads a note as .md and says it was saved as Markdown', async () => {
+    const { downloads } = stubDownloads()
+    const onExported = vi.fn()
+    const onExport = vi.fn().mockResolvedValue(new Blob(['---\ntype: note\n---\n']))
+    const { result } = renderHook(() =>
+      useSceneExport({ onExport, filenameBase: 'my-note', onExported }),
+    )
+    await act(async () => {
+      await result.current.handleExport('md')
+    })
+    expect(downloads).toEqual(['my-note.md'])
+    expect(onExported).toHaveBeenCalledExactlyOnceWith('Saved as Markdown')
+  })
+
+  it('downloads a canvas as .canvas and says images are referenced when it names one', async () => {
+    const { downloads } = stubDownloads()
+    const onExported = vi.fn()
+    const withImage = new Blob(['{"nodes":[{"file":"asset:abc"}]}'])
+    const plain = new Blob(['{"nodes":[],"edges":[]}'])
+    const onExport = vi.fn().mockResolvedValueOnce(withImage).mockResolvedValueOnce(plain)
+    const { result } = renderHook(() =>
+      useSceneExport({ onExport, filenameBase: 'board', onExported }),
+    )
+    await act(async () => {
+      await result.current.handleExport('canvas')
+    })
+    await act(async () => {
+      await result.current.handleExport('canvas')
+    })
+    expect(downloads).toEqual(['board.canvas', 'board.canvas'])
+    expect(onExported).toHaveBeenNthCalledWith(
+      1,
+      'Saved as JSON Canvas — images are referenced, not embedded',
+    )
+    expect(onExported).toHaveBeenNthCalledWith(2, 'Saved as JSON Canvas')
+  })
 })

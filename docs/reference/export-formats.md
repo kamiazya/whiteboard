@@ -18,7 +18,11 @@ an explicitly lossy projection rather than a way to read the stored content
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code
 block. Inline `$…$` math is drawn as its source text everywhere, the web app
-included. In the web app, the note preview, the canvas editor, a past version
+included. Fenced code blocks are syntax-coloured for the languages the layout
+knows (the note preview, the daemon's renders and the exports alike), in the
+light or dark palette of the surface they are drawn on. Footnotes are not
+supported: `[^1]` stays in the text as written and its `[^1]: …` definition
+is drawn as an ordinary paragraph where it was written. In the web app, the note preview, the canvas editor, a past version
 opened from version history, and the SVG/PNG exports of either kind (see
 [Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
 diagrams — in the document's own text, in a note or board it embeds with
@@ -753,8 +757,23 @@ than linked.
 The PNG a browser export produces carries the editor's own font inside the
 image data it rasterises from, so it draws the text the editor showed rather
 than whatever font the operating system offers. A saved `.svg` names the family
-instead of carrying it — a viewer with Roboto renders it identically, and one
-without it gets a smaller file.
+instead of carrying it, as `Roboto, system-ui, sans-serif` — a viewer with Roboto
+renders it identically, and one without it falls back to its system sans-serif face
+(rather than a serif one) and gets a smaller file.
+
+**Save as Markdown (.md)** (More actions → Export…, on a markdown note) downloads
+the note as OKF Markdown: its frontmatter — `type`, tags, facets — and its body.
+The document's name is written as the frontmatter `title`, a projection of the
+workspace's display name, so a document with no name writes none. **Save as JSON Canvas
+(.canvas)** (on a canvas) downloads the extended-mode JSON Canvas document. Both are the
+document's own source rather than a picture. An image on a canvas is saved as an
+`asset:` reference to the workspace's file, not as its pixels, so the notice says
+"images are referenced, not embedded" when the canvas has one; the picture exports above
+are the ones that carry the pixels.
+
+**Import** reads the same two sources back: `.md`/`.markdown` through the OKF parser
+(frontmatter optional) and `.canvas`/`.json` through the JSON Canvas parser, creating one
+document per file; see [Export and import a document](../how-to/export-and-import-a-document.md#bring-a-file-in).
 
 **Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
 document on the clipboard as plain text — the quickest way to hand the exact

@@ -23,6 +23,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
+import { ImportReportLine, useImportFiles } from './use-import-files.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
 import { useTagsInUse } from './use-tags-in-use.js'
 import { useWriteOutcome } from './use-write-outcome.js'
@@ -567,6 +568,13 @@ export function WorkspaceFilesPanel({
     [refreshAndSelect],
   )
   const rename = useRenameDocument({ source, moveDocument, refreshAndSelect: refreshForRename })
+  const importer = useImportFiles({
+    source,
+    folder,
+    documents,
+    refreshAndSelect,
+    openPath,
+  })
   // The scope reset runs ABOVE this (it clears everything a document names
   // the moment the workspace changes), so it reaches the flow through a ref
   // rather than by moving one of the two — both are hooks, and their order
@@ -748,8 +756,10 @@ export function WorkspaceFilesPanel({
     <section
       ref={rootRef}
       aria-label="Documents"
-      className="relative flex min-h-0 flex-1 flex-col gap-2"
+      className="data-[dropping]:ring-ring relative flex min-h-0 flex-1 flex-col gap-2 data-[dropping]:ring-2"
       data-testid="workspace-files-panel"
+      data-dropping={importer.dragging ? '' : undefined}
+      {...importer.dropProps}
     >
       <PanelToolbar
         columns={columns}
@@ -762,10 +772,12 @@ export function WorkspaceFilesPanel({
         derivedNewPath={derivedNewPath}
         outcome={outcome}
         createHere={createHere}
+        onImportFiles={importer.importFiles}
         chooseColumns={chooseColumns}
       />
 
       <PanelRefusals outcome={outcome} />
+      <ImportReportLine report={importer.report} />
 
       {workspaceTags.length > 0 && (
         /* The strip filters via the search box (#tag), so the filter stays

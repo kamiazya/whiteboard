@@ -522,7 +522,7 @@ function useDaemonDocument(
       backend: versionsBackend,
       onVersionCreated: events.onVersionCreated,
     }),
-    topBar: daemonTopBarSlot(canvas, onNavigateBack),
+    topBar: daemonTopBarSlot(canvas, onNavigateBack, { persistence, connection }),
     spatial: {
       editorRef: spatialEditorRef,
       ...agentTouchedProps(agentActivity),

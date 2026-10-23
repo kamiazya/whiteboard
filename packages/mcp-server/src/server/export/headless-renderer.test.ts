@@ -207,7 +207,7 @@ describe('headless-renderer', () => {
     expect(result.svg).toMatch(/viewBox="[^"]+"/)
   })
 
-  it('declares font-family="Roboto" on a label run, never "sans-serif"', async () => {
+  it('names Roboto first in a label run family chain, never a bare "sans-serif"', async () => {
     // Regression guard for the verified export defect: `LABEL_APPEARANCE`
     // used to emit `fontFamily: 'sans-serif'` while the export measurer
     // (measure-text.ts) measured Roboto, so the SVG's coordinates were
@@ -230,8 +230,8 @@ describe('headless-renderer', () => {
       edges: [],
     }
     const { svg } = await renderSpatialCanvasToSvg(canvas)
-    expect(svg).toContain('font-family="Roboto"')
-    expect(svg).not.toContain('sans-serif')
+    expect(svg).toContain('font-family="Roboto, system-ui, sans-serif"')
+    expect(svg).not.toContain('font-family="sans-serif"')
   })
 
   it('renders the same canvas to byte-identical SVG twice, in-process and after a singleton reset', async () => {

@@ -1,6 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { FilePlus2, SlidersHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { FilePlus2, SlidersHorizontal, Upload } from 'lucide-react'
+import { useRef, useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import { IMPORT_ACCEPT } from '../../lib/document-import.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 import { NewDocumentDialog } from './NewDocumentDialog.js'
 
@@ -41,6 +42,7 @@ export function NewDocumentMenu({
   defaultPath,
   createError,
   onDismiss,
+  onImportFiles,
 }: {
   /**
    * `options` arrives only from the dialog. A plain menu entry sends none,
@@ -75,101 +77,141 @@ export function NewDocumentMenu({
    * still being reported once the form carrying it is gone.
    */
   onDismiss?: () => void
+  /**
+   * Files the person picked to bring in as documents. Its absence hides the
+   * entry: a host that cannot write a file's content must not offer to.
+   */
+  onImportFiles?: (files: readonly File[]) => void
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const pickerRef = useRef<HTMLInputElement | null>(null)
   return (
-    <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              // Holds the visible "New" inside it (WCAG 2.5.3), so a voice
-              // user saying "click New" reaches the same control a sighted
-              // one points at.
-              aria-label="New document"
-              className="text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 rounded border p-1.5 sm:pr-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-            >
-              <FilePlus2 aria-hidden="true" className="size-4" />
-              {/* Free where there is room, dropped where the toolbar is
+    <>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                // Holds the visible "New" inside it (WCAG 2.5.3), so a voice
+                // user saying "click New" reaches the same control a sighted
+                // one points at.
+                aria-label="New document"
+                className="text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 rounded border p-1.5 sm:pr-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              >
+                <FilePlus2 aria-hidden="true" className="size-4" />
+                {/* Free where there is room, dropped where the toolbar is
                   already fighting the search box for width. Below `sm` the
                   name is still one press away, on the menu this opens. */}
-              <span className="hidden text-xs font-medium sm:inline">New</span>
-            </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>New document</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end">
-        {/* No description line beside either kind: whoever reaches this menu
+                <span className="hidden text-xs font-medium sm:inline">New</span>
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>New document</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+          {/* No description line beside either kind: whoever reaches this menu
             has already met the empty-state chooser, and re-teaching on every
             create costs a phone two rows of height for nothing. */}
-        {DOCUMENT_KIND_CHOICES.map(({ kind, label, Icon }) => (
-          <DropdownMenuItem
-            key={kind}
-            data-testid={`new-document-${kind}`}
-            disabled={disabled}
-            // Voided through a catch, not bare: the host now REJECTS on a
-            // refusal so the dialog can stay open, and these entries share
-            // that host. An unhandled rejection fails a whole test file, and
-            // the host is already reporting the failure its own way.
-            onSelect={() => void Promise.resolve(onCreate(kind)).catch(() => {})}
-            className="gap-2"
-          >
-            <Icon aria-hidden="true" className="size-4" />
-            {label}
-          </DropdownMenuItem>
-        ))}
-        {defaultPath !== undefined && (
-          <>
-            <DropdownMenuSeparator />
-            {/* The ellipsis belongs HERE and only here: this is the one entry
-                that opens something rather than acting. */}
+          {DOCUMENT_KIND_CHOICES.map(({ kind, label, Icon }) => (
             <DropdownMenuItem
-              data-testid="new-document-specify"
+              key={kind}
+              data-testid={`new-document-${kind}`}
               disabled={disabled}
-              onSelect={() => setDialogOpen(true)}
+              // Voided through a catch, not bare: the host now REJECTS on a
+              // refusal so the dialog can stay open, and these entries share
+              // that host. An unhandled rejection fails a whole test file, and
+              // the host is already reporting the failure its own way.
+              onSelect={() => void Promise.resolve(onCreate(kind)).catch(() => {})}
               className="gap-2"
             >
-              <SlidersHorizontal aria-hidden="true" className="size-4" />
-              {/* Says "folder" because that is the word someone looking for
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+            </DropdownMenuItem>
+          ))}
+          {onImportFiles !== undefined && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="new-document-import"
+                disabled={disabled}
+                onSelect={() => pickerRef.current?.click()}
+                className="gap-2"
+              >
+                <Upload aria-hidden="true" className="size-4" />
+                Import file…
+              </DropdownMenuItem>
+            </>
+          )}
+          {defaultPath !== undefined && (
+            <>
+              <DropdownMenuSeparator />
+              {/* The ellipsis belongs HERE and only here: this is the one entry
+                that opens something rather than acting. */}
+              <DropdownMenuItem
+                data-testid="new-document-specify"
+                disabled={disabled}
+                onSelect={() => setDialogOpen(true)}
+                className="gap-2"
+              >
+                <SlidersHorizontal aria-hidden="true" className="size-4" />
+                {/* Says "folder" because that is the word someone looking for
                   one searches the menu for, and this entry is the only place
                   they can put a document in one. Folders here ARE the path
                   (the dialog's Path help says so, and an emptied one is
                   pruned), so there is no "New folder" to offer instead — a
                   folder with nothing in it cannot exist to be created. */}
-              Name and folder…
-            </DropdownMenuItem>
-          </>
+                Name and folder…
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+        {defaultPath !== undefined && (
+          <NewDocumentDialog
+            open={dialogOpen}
+            workspace={workspace}
+            defaultPath={defaultPath}
+            busy={disabled}
+            error={createError}
+            onCancel={() => {
+              setDialogOpen(false)
+              onDismiss?.()
+            }}
+            // Closed only once the create SUCCEEDS. A refusal — a path
+            // collision, most often — is the one a person can fix, and closing
+            // on submit would throw away the name and path they had typed and
+            // leave the reason behind a dialog that no longer exists. A host that
+            // answers synchronously still closes immediately.
+            onSubmit={(kind, options) => {
+              void Promise.resolve(onCreate(kind, options)).then(
+                () => setDialogOpen(false),
+                () => {
+                  // Left open on purpose; the host reports why through
+                  // `createError`.
+                },
+              )
+            }}
+          />
         )}
-      </DropdownMenuContent>
-      {defaultPath !== undefined && (
-        <NewDocumentDialog
-          open={dialogOpen}
-          workspace={workspace}
-          defaultPath={defaultPath}
-          busy={disabled}
-          error={createError}
-          onCancel={() => {
-            setDialogOpen(false)
-            onDismiss?.()
-          }}
-          // Closed only once the create SUCCEEDS. A refusal — a path
-          // collision, most often — is the one a person can fix, and closing
-          // on submit would throw away the name and path they had typed and
-          // leave the reason behind a dialog that no longer exists. A host that
-          // answers synchronously still closes immediately.
-          onSubmit={(kind, options) => {
-            void Promise.resolve(onCreate(kind, options)).then(
-              () => setDialogOpen(false),
-              () => {
-                // Left open on purpose; the host reports why through
-                // `createError`.
-              },
-            )
+      </DropdownMenu>
+      {/* Outside the menu: its content unmounts the moment an item is chosen,
+        and a picker that closes with it never reports what was picked. */}
+      {onImportFiles !== undefined && (
+        <input
+          ref={pickerRef}
+          type="file"
+          multiple
+          hidden
+          accept={IMPORT_ACCEPT}
+          aria-label="Import file"
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? [])
+            // Cleared so choosing the same file again still fires a change.
+            event.target.value = ''
+            if (files.length > 0) onImportFiles(files)
           }}
         />
       )}
-    </DropdownMenu>
+    </>
   )
 }

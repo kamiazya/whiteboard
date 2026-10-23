@@ -253,20 +253,23 @@ describe('ContextMenu edge clamp', () => {
   })
 })
 
-describe('ContextMenu grid vessel', () => {
-  it('runs consecutive actions into one icon row and keeps every other item in place', () => {
-    const items: ContextMenuItem[] = [
-      { label: 'Edit', onSelect: () => {} },
-      { label: 'Duplicate', onSelect: () => {} },
-      { kind: 'separator' },
-      { kind: 'heading', label: 'Visual' },
-      {
-        kind: 'options',
-        label: 'Shape',
-        options: [{ label: 'Box', selected: true, onSelect: () => {} }],
-      },
-      { label: 'Delete', danger: true, onSelect: () => {} },
-    ]
+describe('ContextMenu labelled vessels', () => {
+  const items: ContextMenuItem[] = [
+    { label: 'Edit', icon: <svg data-testid="edit-icon" />, onSelect: () => {} },
+    { label: 'Duplicate', onSelect: () => {} },
+    { kind: 'separator' },
+    {
+      kind: 'options',
+      label: 'Shape',
+      options: [{ label: 'Box', selected: true, onSelect: () => {} }],
+    },
+    { label: 'Delete', danger: true, onSelect: () => {} },
+  ]
+
+  it.each([
+    'grid',
+    'sheet',
+  ] as const)('the %s vessel draws every verb as an icon-and-label row, like the list', (variant) => {
     render(
       <ContextMenu
         label="Canvas actions"
@@ -274,24 +277,28 @@ describe('ContextMenu grid vessel', () => {
         y={0}
         items={items}
         onClose={vi.fn()}
-        variant="grid"
+        variant={variant}
       />,
     )
-    const menu = screen.getByTestId('context-menu')
-    const children = [...menu.children]
-    // Edit+Duplicate share one row; the separator, heading and options row
-    // break the run; Delete starts a row of its own.
-    expect(children.map((child) => child.tagName.toLowerCase())).toEqual([
-      'div',
-      'hr',
-      'div',
-      'fieldset',
-      'div',
-    ])
-    expect(children[0]?.querySelectorAll('[role="menuitem"]')).toHaveLength(2)
-    expect(children[2]?.textContent).toBe('Visual')
-    expect(children[4]?.querySelector('[role="menuitem"]')?.getAttribute('aria-label')).toBe(
-      'Delete',
+    for (const name of ['Edit', 'Duplicate', 'Delete']) {
+      const row = screen.getByRole('menuitem', { name })
+      expect(row.textContent).toContain(name)
+      expect(row.title).toBe('')
+    }
+    expect(screen.getByTestId('edit-icon')).toBeTruthy()
+  })
+
+  it('the sheet vessel gives each verb a 48px touch row', () => {
+    render(
+      <ContextMenu
+        label="Canvas actions"
+        x={0}
+        y={0}
+        items={items}
+        onClose={vi.fn()}
+        variant="sheet"
+      />,
     )
+    expect(screen.getByRole('menuitem', { name: 'Edit' }).className).toContain('min-h-12')
   })
 })

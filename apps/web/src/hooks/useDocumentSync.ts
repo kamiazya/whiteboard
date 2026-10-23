@@ -19,6 +19,7 @@ import {
   renderMarkdownForExport,
   savedPicture,
 } from '../lib/document-export.js'
+import { markdownDocumentFile, spatialDocumentFile } from '../lib/document-file.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import {
   type BackendErrorReason,
@@ -537,6 +538,15 @@ export function useDocumentSync(
   const exportScene = useCallback(
     async (format: SceneExportFormat, options: SceneExportOptions): Promise<Blob | null> => {
       const session = sessionRef.current
+      if (format === 'md') {
+        return markdownDocumentFile({
+          body: session?.getMarkdownBody() ?? markdownBody,
+          name: documentName,
+          coreFacets: session?.getCoreFacets() ?? coreFacets,
+          facets: session?.getFacets() ?? facets,
+        })
+      }
+      if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
       if (options.kind === 'markdown') {
         const body = session?.getMarkdownBody() ?? markdownBody
         return savedPicture(format, await renderMarkdownForExport(body, options))
@@ -556,7 +566,7 @@ export function useDocumentSync(
         source: () => serializeSpatial(exported, 'extended'),
       })
     },
-    [canvas, markdownBody],
+    [canvas, markdownBody, documentName, coreFacets, facets],
   )
 
   // Keyboard intercept for undo/redo. A window listener, so the editor's own

@@ -7,6 +7,7 @@
  * byte-identical.
  */
 import type { Appearance, BoundingBox } from '@kamiazya/whiteboard-scene'
+import { SPATIAL_THEME_FONT_FAMILY, SPATIAL_THEME_FONT_STACK } from '../theme/font-family.js'
 import type { PaintAttrs, SvgBoxAttrs } from './elements.js'
 import { formatCoord } from './format.js'
 import { el, type SvgDef } from './vnode.js'
@@ -50,7 +51,12 @@ export function appearanceAttrs(appearance?: Appearance): PaintAttrs {
   if (isNonEmptyString(appearance.fill)) attrs.fill = appearance.fill
   if (isNonEmptyString(appearance.stroke)) attrs.stroke = appearance.stroke
   if (isNonNegativeLength(appearance.strokeWidth)) attrs['stroke-width'] = appearance.strokeWidth
-  if (isNonEmptyString(appearance.fontFamily)) attrs['font-family'] = appearance.fontFamily
+  if (isNonEmptyString(appearance.fontFamily)) {
+    attrs['font-family'] =
+      appearance.fontFamily === SPATIAL_THEME_FONT_FAMILY
+        ? SPATIAL_THEME_FONT_STACK
+        : appearance.fontFamily
+  }
   if (isNonNegativeLength(appearance.fontSize)) attrs['font-size'] = appearance.fontSize
   // Emitted after `fill` so the pair reads together; `1` is the SVG initial
   // value, so it is omitted to keep an opacity-free scene byte-identical.

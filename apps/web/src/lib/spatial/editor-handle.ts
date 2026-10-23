@@ -1,9 +1,32 @@
 import type { Viewport } from './viewport.js'
 
+/**
+ * What the canvas has selected: one primary node, the rest of a multi-node
+ * selection, or one edge (an edge selection clears the node one).
+ */
+export interface EditorSelection {
+  readonly selectedId: string | null
+  readonly selectedEdgeId: string | null
+  readonly extraIds: readonly string[]
+}
+
+/**
+ * The read side of the selection, shaped for `useSyncExternalStore`. Kept
+ * apart from the handle so a panel that only follows the selection depends
+ * on this and not on the viewport verbs.
+ */
+export interface SelectionSource {
+  getSelection(): EditorSelection
+  /** Calls `listener` after the selection changes; returns the unsubscribe. */
+  subscribeSelection(listener: () => void): () => void
+}
+
 /** Imperative surface for a page that needs to drive the viewport from
  * outside (e.g. a daemon's `viewport_request`) without owning viewport as
  * its own state. */
 export interface SpatialEditorHandle {
+  /** What the canvas has selected, for surfaces beside it; the mounted editor always supplies it. */
+  readonly selection?: SelectionSource
   setViewport(viewport: Viewport): void
   /** Fits the viewport to the given node ids, or to every node when omitted. */
   fitToContent(nodeIds?: readonly string[]): void

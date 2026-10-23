@@ -1,3 +1,4 @@
+import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import { type DocumentKind, imageRefId } from '@kamiazya/whiteboard-model'
 import {
   createDocument,
@@ -17,6 +18,7 @@ import {
 } from './daemon-api-client.js'
 import { readDaemonImage } from './daemon-image-read.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
+import type { ImportedDocument } from './document-import.js'
 import {
   type DocumentSearchHit,
   type LoadedMarkdown,
@@ -200,6 +202,32 @@ export function createDaemonFilesSource(
 
     createDocument: (path: string, kind: DocumentKind, name?: string) =>
       afterWrite(createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)),
+
+    async importDocument(path: string, imported: ImportedDocument): Promise<void> {
+      // The create route takes a markdown document's text and no canvas
+      // content; a canvas reaches a daemon document only through the editor's
+      // sync session, which an import has no open page to run.
+      if (imported.kind === 'spatial') {
+        throw new Error(
+          'A canvas file cannot be imported into a workspace the daemon keeps yet. Import it into a browser-kept workspace, or paste its nodes into an open canvas.',
+        )
+      }
+      const markdown = serializeOkf({
+        frontmatter: { ...imported.coreFacets, facets: imported.facets },
+        body: imported.body,
+      })
+      await afterWrite(
+        createDocument(
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceId,
+          path,
+          'markdown',
+          imported.name,
+          markdown,
+        ),
+      )
+    },
 
     renameDocumentPath: (path: string, newPath: string) =>
       afterWrite(renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, newPath)),

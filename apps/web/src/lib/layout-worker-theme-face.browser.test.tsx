@@ -44,7 +44,7 @@ it('declares the bundled family until the theme face lands, and the theme family
   const before = await layout()
   expect(before.type).toBe('laid-out')
   if (before.type !== 'laid-out') return
-  expect(before.svg).toContain('font-family="Roboto"')
+  expect(before.svg).toContain('font-family="Roboto, system-ui, sans-serif"')
   expect(before.svg).not.toContain('Yomogi')
   // And it SAYS which family it wanted: a list surface hands over stored
   // bytes and never decodes the canvas, so this reply is how the asking

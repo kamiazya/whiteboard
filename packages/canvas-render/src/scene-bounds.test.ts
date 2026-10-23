@@ -1,8 +1,34 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
+import { renderSceneToSvg } from './svg/backend.js'
 
 describe('sceneBounds', () => {
+  it('contains the halo pill a label run draws around its box', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'textRun',
+          bbox: { x: 0, y: -20, w: 100, h: 16 },
+          text: 'Frame title',
+          appearance: { halo: '#ffffff' },
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })
+    const pill =
+      /<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*fill="#ffffff"/.exec(
+        svg,
+      )
+    expect(pill).not.toBeNull()
+    const [x, y, w, h] = pill!.slice(1).map(Number) as [number, number, number, number]
+    expect(bounds.x).toBeLessThanOrEqual(x)
+    expect(bounds.y).toBeLessThanOrEqual(y)
+    expect(bounds.x + bounds.w).toBeGreaterThanOrEqual(x + w)
+    expect(bounds.y + bounds.h).toBeGreaterThanOrEqual(y + h)
+  })
+
   it('returns the documented fallback for an empty scene', () => {
     const scene: Scene = { nodes: [] }
     expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 1, h: 1 })

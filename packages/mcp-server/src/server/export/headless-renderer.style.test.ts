@@ -50,7 +50,7 @@ describe('export style', () => {
     const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), { style: 'document' })
     expect(sketch.svg).toContain('stroke-linecap="round"')
     expect(sketch.svg).not.toContain('Yomogi')
-    expect(sketch.svg).toContain('font-family="Roboto"')
+    expect(sketch.svg).toContain('font-family="Roboto, system-ui, sans-serif"')
     expect(sketch.unresolvedFamilies).toEqual([])
   })
 })

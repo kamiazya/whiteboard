@@ -38,11 +38,14 @@ import {
   Plus,
   Spline,
   StickyNote,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { cn } from '../../lib/utils.js'
 import { useActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
@@ -88,6 +91,12 @@ interface ToolPaletteProps {
   readonly onToolChange: (tool: EditorTool) => void
   /** Frames every node in the viewport — the touch equivalent of Shift+1. */
   readonly onZoomToFit: () => void
+  /**
+   * One step closer or further, the same step the `+` / `-` keys take. Touch
+   * only: pinch is otherwise the single way to get closer on a phone, while a
+   * pointer has the wheel and the keyboard. Absent hides the pair.
+   */
+  readonly onZoomStep?: (direction: 'in' | 'out') => void
   /** The shortcut sheet's open state; absent hides the dock's Help button. */
   readonly shortcutHelp?: ShortcutHelpControl
 }
@@ -114,7 +123,7 @@ function menuFocusTarget(
   active: Element | null,
 ): HTMLElement | null {
   if (items.length === 0) return null
-  const at = items.findIndex((item) => item === active)
+  const at = active instanceof HTMLElement ? items.indexOf(active) : -1
   if (key === 'Home') return items[0] ?? null
   if (key === 'End') return items[items.length - 1] ?? null
   if (key === 'ArrowDown') return items[(at + 1) % items.length] ?? null
@@ -158,6 +167,35 @@ function ZoomFitButton({ onZoomToFit }: { readonly onZoomToFit: () => void }) {
       </TooltipTrigger>
       <TooltipContent>{withShortcut('Zoom to fit', 'zoom-to-fit')}</TooltipContent>
     </Tooltip>
+  )
+}
+
+function ZoomStepButtons({ onZoomStep }: { readonly onZoomStep?: (d: 'in' | 'out') => void }) {
+  if (onZoomStep === undefined || !hasCoarsePointer()) return null
+  const steps = [
+    { direction: 'in', id: 'zoom-in', label: 'Zoom in', Icon: ZoomIn },
+    { direction: 'out', id: 'zoom-out', label: 'Zoom out', Icon: ZoomOut },
+  ] as const
+  return (
+    <>
+      {steps.map(({ direction, id, label, Icon }) => (
+        <Tooltip key={id}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid={`${id}-button`}
+              aria-label={label}
+              aria-keyshortcuts={shortcutAriaKeysFor(id)}
+              onClick={() => onZoomStep(direction)}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{withShortcut(label, id)}</TooltipContent>
+        </Tooltip>
+      ))}
+    </>
   )
 }
 
@@ -207,6 +245,7 @@ export function ToolPalette({
   tool,
   onToolChange,
   onZoomToFit,
+  onZoomStep,
   shortcutHelp,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
@@ -390,6 +429,7 @@ export function ToolPalette({
           <TooltipContent>Add</TooltipContent>
         </Tooltip>
         <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        <ZoomStepButtons onZoomStep={onZoomStep} />
         <ZoomFitButton onZoomToFit={onZoomToFit} />
         {addOpen && (
           <div

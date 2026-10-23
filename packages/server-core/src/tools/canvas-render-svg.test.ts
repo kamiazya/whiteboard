@@ -332,7 +332,9 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
       style: 'document',
     })
     expect(result.svg).not.toContain('Yomogi')
-    expect(result.svg).toContain(`font-family="${SPATIAL_THEME_FONT_FAMILY}"`)
+    // The bundled family leads the declared stack; the generic fallbacks after
+    // the comma are the SVG's own, not a family the measurer answered for.
+    expect(result.svg).toContain(`font-family="${SPATIAL_THEME_FONT_FAMILY},`)
   })
 
   test('with no measurer supplied, only the bundled family is ever declared', async () => {

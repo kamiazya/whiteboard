@@ -38,6 +38,7 @@ import {
 import type { LoroDoc } from 'loro-crdt'
 import { type ContentClock, idbContentClock } from './browser-document-summary.js'
 import { createTagBearersCache, type ReadDocument } from './browser-files-source-tags.js'
+import { writeImportedContent } from './browser-import-content.js'
 import {
   BrowserWorkspaceDocs,
   openWorkspaceOrNull,
@@ -47,6 +48,7 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
+import type { ImportedDocument } from './document-import.js'
 import {
   type LoadedMarkdown,
   type WorkspaceFilesSource,
@@ -410,6 +412,24 @@ export function createBrowserFilesSource(
         kind,
         ...(name === undefined ? {} : { name }),
       })
+    },
+
+    async importDocument(path: string, imported: ImportedDocument): Promise<void> {
+      const entry = await createSeededDocumentAt(index, loro, {
+        path,
+        kind: imported.kind,
+        ...(imported.name === undefined ? {} : { name: imported.name }),
+      })
+      try {
+        await writeImportedContent(entry.documentId, imported)
+      } catch (err) {
+        // A document the file never reached would sit in the list empty, under
+        // a name that says it holds the file.
+        await index
+          .deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
+          .catch(() => {})
+        throw err
+      }
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {

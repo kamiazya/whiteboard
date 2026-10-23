@@ -46,10 +46,12 @@ import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plug
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
+import type { SelectionSource } from '../../lib/spatial/editor-handle.js'
 import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import { cn } from '../../lib/utils.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
+import { SelectionFacetsSection } from './SelectionFacetsSection.js'
 
 export interface CanvasDisplaySettingsProps {
   readonly canvas: SpatialCanvas
@@ -62,6 +64,12 @@ export interface CanvasDisplaySettingsProps {
   readonly tagSuggestions?: readonly string[]
   /** The workspace's tag library: offered under a key, and refused where it forbids (decision 5). */
   readonly tagLibrary?: TagLibrary
+  /**
+   * The editor's selection (its handle's `selection`). When something is
+   * selected the panel leads with that selection's facets, above the
+   * document's own settings.
+   */
+  readonly selectionSource?: SelectionSource
 }
 
 export function CanvasDisplaySettings({
@@ -71,6 +79,7 @@ export function CanvasDisplaySettings({
   widgets = CANVAS_SETTINGS_WIDGETS,
   tagSuggestions,
   tagLibrary,
+  selectionSource,
 }: CanvasDisplaySettingsProps) {
   // Eager command chaining: two picks from the same open popover can land
   // before a slow parent commits the first, and the second must build on
@@ -157,7 +166,22 @@ export function CanvasDisplaySettings({
 
   return (
     <>
-      {POINT_SECTIONS.canvasSettings.map((section) => (section === 'facets' ? facetRows : tagsRow))}
+      {selectionSource !== undefined && (
+        <SelectionFacetsSection
+          source={selectionSource}
+          canvas={canvas}
+          currentCanvas={() => canvasRef.current}
+          run={run}
+          facetRegistry={facetRegistry}
+          {...(tagSuggestions === undefined ? {} : { tagSuggestions })}
+          {...(tagLibrary === undefined ? {} : { tagLibrary })}
+        />
+      )}
+      <div data-testid="document-settings">
+        {POINT_SECTIONS.canvasSettings.map((section) =>
+          section === 'facets' ? facetRows : tagsRow,
+        )}
+      </div>
     </>
   )
 }

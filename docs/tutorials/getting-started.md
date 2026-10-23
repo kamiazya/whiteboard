@@ -26,9 +26,11 @@ touch screen, tap a card to open the document, and press and hold for its
 actions (open, pin, rename, delete). With a mouse, a click previews a card
 in the pane beside the list, and a double-click — or Enter on a focused
 card — opens it. A **Recent** strip above the cards lists the documents you
-opened last, and appears only once there are more documents than fit in the
+opened last — however you opened them: a card, a link, a reload, search or
+**Create** — and appears only once there are more documents than fit in the
 first row of cards — before that it would show every card twice. Use the
-toolbar to search everything or move a document to a new path.
+toolbar to search everything or move a document to a new path. **Back to
+documents** returns you to the folder the document was in.
 
 **New** in that toolbar opens the same two choices — **Canvas** or **Markdown
 note** — and creates one in whichever folder you are standing in. A kind
@@ -62,6 +64,15 @@ typing in its text editor, so Backspace edits text instead of deleting the
 note). Reload the tab after any of these edits and the change is still
 there — that's your canvas persisting to IndexedDB in your own browser, with
 no server and no account.
+
+A small status beside the document title tells you whether your edits are safe.
+It reads **Saved** (quietly) once the last change has landed, **Saving…** if a
+write takes longer than a moment, **Not saved — storage problem** when the
+browser refuses the write, and **Offline — changes kept here** when a document
+kept by the daemon cannot reach it: your edits stay in this browser and are sent
+when the connection returns. On a phone it shrinks to an icon; hover or long-press
+for the words. A screen reader is told only when a problem appears, never on an
+ordinary save.
 
 **Where to go next:** want your AI agent (Claude Code, Codex, Gemini) to draw with
 you, or durable canvases as files on disk? That's the **Local daemon** — see

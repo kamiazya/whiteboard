@@ -10,6 +10,7 @@ import {
   settingsPath,
   workspacePath,
   workspaceRoutePath,
+  workspaceRouteTarget,
 } from './app-routes.js'
 
 describe('app-routes', () => {
@@ -353,5 +354,18 @@ describe('documentPathPrefix', () => {
 
   it('encodes the address the same way the full URL does', () => {
     expect(documentPathPrefix('me/w 1')).toBe('/w/me/w%201/d/')
+  })
+})
+
+describe('workspaceRouteTarget', () => {
+  it('carries the folder an index route was asked to open as a query', () => {
+    expect(workspaceRouteTarget({ kind: 'index', workspace: 'w1', folder: 'notes/2026' })).toBe(
+      '/w/w1?folder=notes%2F2026',
+    )
+  })
+
+  it('is the plain path when there is no folder, and never part of route equality', () => {
+    expect(workspaceRouteTarget({ kind: 'index', workspace: 'w1', folder: '' })).toBe('/w/w1')
+    expect(workspaceRoutePath({ kind: 'index', workspace: 'w1', folder: 'a' })).toBe('/w/w1')
   })
 })

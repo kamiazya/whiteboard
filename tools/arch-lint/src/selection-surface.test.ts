@@ -71,6 +71,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'the primitive itself — the one definition every other surface composes',
   'apps/web/src/pages/SettingsPage.tsx':
     'CARD GRIDS (an icon over a label, full-width cells) for theme and tab-icon, not property rows: the chip is a 28px inline control beside a label, and collapsing a settings card into one would lose the icon that carries the meaning',
+  'apps/web/src/components/settings/RadioCardGroup.tsx':
+    'the CARD GRID primitive those Settings pickers compose: a roving radiogroup of full-width cells, an icon over a label — the chip is a 28px inline control that would lose the icon carrying the meaning',
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx':
     'a dialog form with native radios and their labels VISIBLE, which is right for a form somebody fills in once — the chip hides its radio because a property row is adjusted repeatedly and reads as a value, not as a question',
   'apps/web/src/components/ui/ContextMenu.tsx':

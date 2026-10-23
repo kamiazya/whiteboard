@@ -10,3 +10,10 @@
 // coordinates were computed from one font's metrics but whose `font-family`
 // attribute named another.
 export const SPATIAL_THEME_FONT_FAMILY = 'Roboto'
+
+// What the SVG backend EMITS for that family. The bare name is what measurers
+// and availability checks compare, so it stays the identity; the generic tail
+// exists for a viewer that holds no Roboto (a plain image viewer, a browser
+// opening the file) and would otherwise draw a serif face. resvg and the
+// editor still resolve the first name, which is the vendored face.
+export const SPATIAL_THEME_FONT_STACK = `${SPATIAL_THEME_FONT_FAMILY}, system-ui, sans-serif`
