@@ -66,6 +66,7 @@ import {
   shortcodeOptionRenderers,
 } from '../markdown-editor/shortcode-completion.js'
 import { EditorExitHint } from '../ui/EditorExitHint.js'
+import { returnFocusToCanvas } from './canvas-focus.js'
 import { EditorExitDescription } from './EditorExitDescription.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
@@ -93,16 +94,6 @@ function nodeEditorTheme(centerContent: boolean): Extension {
     '.cm-line': { padding: '0' },
     '&.cm-focused': { outline: 'none' },
   })
-}
-
-/**
- * An explicit exit (chord or button) hands the keyboard back to the canvas
- * the editor lives in, or Delete, arrows and undo go to <body> and do
- * nothing until the next click. A blur-driven exit does not: focus has
- * already gone where the person pointed it.
- */
-function returnFocusToCanvas(host: HTMLElement | null): void {
-  host?.closest<HTMLElement>('[role="application"]')?.focus({ preventScroll: true })
 }
 
 /**

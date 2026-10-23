@@ -22,6 +22,7 @@ import { type CSSProperties, useEffect, useId, useRef, useState } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { EditorExitHint } from '../ui/EditorExitHint.js'
+import { returnFocusToCanvas } from './canvas-focus.js'
 import { EditorExitDescription } from './EditorExitDescription.js'
 
 export interface TextNodeEditorProps {
@@ -163,6 +164,18 @@ export function TextNodeEditor({
     announceOnCanvas('Discarded')
     onCancel()
   }
+  // An explicit exit hands the keyboard back; a blur commit must not, since
+  // focus has already gone where the person pointed it.
+  const commitAndReturn = () => {
+    const field = textareaRef.current
+    commit()
+    returnFocusToCanvas(field)
+  }
+  const cancelAndReturn = () => {
+    const field = textareaRef.current
+    cancel()
+    returnFocusToCanvas(field)
+  }
 
   return (
     <>
@@ -197,18 +210,18 @@ export function TextNodeEditor({
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault()
-            cancel()
+            cancelAndReturn()
           } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault()
-            commit()
+            commitAndReturn()
           }
         }}
       />
       <EditorExitDescription id={hintId} />
       {refusal !== null && <LengthLimitNotice box={box} testId={testId} text={refusal} />}
       <EditorExitHint
-        onDone={commit}
-        onCancel={cancel}
+        onDone={commitAndReturn}
+        onCancel={cancelAndReturn}
         canvasOverlay
         placement={{
           left: box.x,

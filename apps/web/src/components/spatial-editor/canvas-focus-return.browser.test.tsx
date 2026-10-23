@@ -6,6 +6,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -89,5 +90,31 @@ it('keeps the keyboard on the canvas after Escape closes the link dialog', async
   await expect.element(page.getByRole('dialog')).toBeInTheDocument()
   await userEvent.keyboard('{Escape}')
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
+  await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
+})
+
+it('keeps the keyboard on the canvas after Escape discards an edge label', async () => {
+  const { Host, latest } = makeEditorHost({ initial: withEdge })
+  const { container } = render(<Host />)
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
+  const editor = page.getByRole('textbox', { name: /Label of edge/ })
+  await expect.element(editor).toBeInTheDocument()
+  await userEvent.fill(editor, 'no')
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() =>
+    expect(document.querySelector('[data-testid="edge-label-editor"]')).toBeNull(),
+  )
+  expect(latest.canvas.edges[0]?.label).toBeUndefined()
+  await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
+})
+
+it('keeps the keyboard on the canvas after Escape closes the context menu', async () => {
+  const { Host } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  rootOf(container).focus()
+  rightClick(rootOf(container), 160, 130)
+  await expect.element(page.getByRole('menu')).toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull())
   await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
 })

@@ -52,6 +52,7 @@ import { touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { ShortcutHelpSheet } from './ShortcutHelpSheet.js'
 import { shortcutAriaKeysFor, withShortcut } from './shortcut-labels.js'
+import { useReturnFocusWhenClosed } from './use-canvas-focus-return.js'
 import type { ShortcutHelpControl } from './use-shortcut-help.js'
 
 /**
@@ -99,6 +100,8 @@ interface ToolPaletteProps {
   readonly onZoomStep?: (direction: 'in' | 'out') => void
   /** The shortcut sheet's open state; absent hides the dock's Help button. */
   readonly shortcutHelp?: ShortcutHelpControl
+  /** Puts the keyboard back on the canvas when the Add menu closes and nothing else took it. */
+  readonly onReturnFocus?: () => void
 }
 
 /**
@@ -247,8 +250,10 @@ export function ToolPalette({
   onZoomToFit,
   onZoomStep,
   shortcutHelp,
+  onReturnFocus,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
+  useReturnFocusWhenClosed(addOpen, onReturnFocus)
   const dockRef = useRef<HTMLDivElement | null>(null)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
   const addButtonRef = useRef<HTMLButtonElement | null>(null)

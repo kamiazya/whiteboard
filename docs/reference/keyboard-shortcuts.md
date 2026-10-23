@@ -243,6 +243,11 @@ The controls around a selected node name it ("Resize Review, south-east",
 south-east resize handle (the arrow keys resize from it), the right-hand
 connect handle and the actions button.
 
+Whatever you finish on the canvas leaves the keyboard on it: keeping a label
+with `Ctrl + Enter` or discarding it with `Esc`, completing a connection, choosing
+Group from the dock, and closing a dialog or the context menu with `Esc`.
+`Delete`, the arrow keys and undo work straight away, with no click first.
+
 ## Moving between pages
 
 Opening a document, returning to the list or opening Settings moves keyboard

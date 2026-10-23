@@ -159,6 +159,7 @@ import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { TOOL_ANNOUNCEMENT } from './tool-announcement.js'
+import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
@@ -576,6 +577,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setFacetPanelOpen,
       selectionSource,
     } = useEditSessionState({ canvas, selectedId, extraIds })
+    useCanvasFocusReturn(rootRef, gestureState, linkDialog, canvasPicker)
     const fontsGeneration = useThemeFontsGeneration()
     useThemeFaceFor(canvas)
     const editingFontFamily = useEditingFontFamily(canvas)
@@ -1617,6 +1619,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
         )}
         <ToolPalette
+          onReturnFocus={() => rootRef.current?.focus({ preventScroll: true })}
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
           // for entering hand mode — the host's history cluster stays put and

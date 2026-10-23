@@ -5,14 +5,6 @@ import { readingOrder } from '../../lib/spatial/reading-order.js'
 import { canvasChangeMessage, selectionMessage } from './canvas-announcement-text.js'
 import { edgeA11yName, nodeA11yName } from './node-a11y-name.js'
 
-/**
- * The canvas is drawn, so the accessibility tree has nothing to say about
- * its contents. This is the parallel projection: every node and edge as a
- * named, selectable option, in the order Tab walks them, off-screen. Focus
- * stays on the canvas root, which points at the selected option with
- * `aria-activedescendant` — the same virtual-focus arrangement a listbox uses.
- */
-
 /** The id of the option standing for a node or an edge, under one canvas's prefix. */
 function a11yItemId(prefix: string, kind: 'node' | 'edge', id: string): string {
   return `${prefix}-${kind}-${id}`
@@ -68,6 +60,13 @@ function A11yOption({
   return <div role="option" tabIndex={-1} id={id} aria-label={name} aria-selected={selected} />
 }
 
+/**
+ * The canvas is drawn, so the accessibility tree has nothing to say about
+ * its contents. This is the parallel projection: every node and edge as a
+ * named, selectable option, in the order Tab walks them, off-screen. Focus
+ * stays on the canvas root, which points at the selected option with
+ * `aria-activedescendant` — the same virtual-focus arrangement a listbox uses.
+ */
 export function CanvasA11yTree({
   canvas,
   idPrefix,

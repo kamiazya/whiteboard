@@ -200,14 +200,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 77, // +5: the locked-press notice mount; +2: the empty cue takes its description id
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 78, // +1: the dock hands focus back to the canvas; +5: the locked-press notice mount; +2: the empty cue takes its description id
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 100, // +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 267,
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 112, // +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
