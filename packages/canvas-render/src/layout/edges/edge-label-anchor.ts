@@ -59,12 +59,19 @@ type Rect = LabelObstacle
 
 /**
  * What an edge label must not lie over: every non-container node, the
- * edge's own endpoints included. A frame is a region, not a box.
+ * edge's own endpoints included, and `extra` (a frame's title, which hangs
+ * outside the frame's box). A frame is a region, not a box.
  */
-export function labelObstacles(nodes: readonly SpatialNode[]): LabelObstacle[] {
-  return nodes
-    .filter((node) => !isFrame(node))
-    .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
+export function labelObstacles(
+  nodes: readonly SpatialNode[],
+  extra: readonly LabelObstacle[] = [],
+): LabelObstacle[] {
+  return [
+    ...nodes
+      .filter((node) => !isFrame(node))
+      .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
+    ...extra,
+  ]
 }
 
 /** Offsets tried, in px off the line, and how far the search reaches. */
@@ -77,12 +84,15 @@ const overlaps = (a: Rect, b: Rect): boolean =>
 /**
  * Where a label of `size` sits on an edge: the midpoint, unless a label
  * centred there would lie over one of `obstacles` — the boxes on the board,
- * the edge's own endpoints included — in which case it slides off the line
- * along the segment's normal, nearest clear offset first, above (or left)
- * before below (or right). A label on a 50px edge between two boxes is
- * wider than the gap and covered both on the line; beside the row it covers
- * neither and still reads as that edge's. Nothing clear within reach leaves
- * it at the midpoint, which is at least where a reader looks first.
+ * the edge's own endpoints included — in which case it moves to the nearest
+ * clear spot. Along the line comes first, while the drawn line has room: the
+ * line is drawn from a node's outline but its box is a rectangle, so a label
+ * that only clips that rectangle clears it a few pixels along and stays on
+ * its line. Otherwise it slides off the line along the segment's normal,
+ * above (or left) before below (or right). A label on a 50px edge between two
+ * boxes is wider than the gap and covered both on the line; beside the row it
+ * covers neither and still reads as that edge's. Nothing clear within reach
+ * leaves it at the midpoint, which is at least where a reader looks first.
  *
  * The one producer for the renderer's label box and the editor's inline
  * label editor alike, for the reason the file header gives.
@@ -112,18 +122,38 @@ export function edgeLabelPlacement(
     return !near.some((o) => overlaps(box, o))
   }
   if (clear(mid.point)) return mid.point
+  return slideCandidates(mid).find(clear) ?? mid.point
+}
+
+/**
+ * The spots a blocked label tries, nearest first: at each distance, along the
+ * drawn line while it runs that far (a centre past its end is off the line),
+ * then to either side of it, above (or left) before below (or right).
+ */
+function slideCandidates(mid: { point: Point; from: Point; to: Point }): Point[] {
   const length = Math.hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
-  if (length === 0) return mid.point
+  if (length === 0) return []
   const dir = { x: (mid.to.x - mid.from.x) / length, y: (mid.to.y - mid.from.y) / length }
+  const byPosition = (a: Point, b: Point) => a.y - b.y || a.x - b.x
   const normals = [
     { x: -dir.y, y: dir.x },
     { x: dir.y, y: -dir.x },
-  ].sort((a, b) => a.y - b.y || a.x - b.x)
+  ].sort(byPosition)
+  const runs = [
+    { n: dir, room: Math.hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
+    {
+      n: { x: -dir.x, y: -dir.y },
+      room: Math.hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
+    },
+  ].sort((a, b) => byPosition(a.n, b.n))
+  const at = (n: Point, d: number): Point => ({
+    x: mid.point.x + n.x * d,
+    y: mid.point.y + n.y * d,
+  })
+  const found: Point[] = []
   for (let d = LABEL_SLIDE_STEP_PX; d <= LABEL_SLIDE_REACH_PX; d += LABEL_SLIDE_STEP_PX) {
-    for (const n of normals) {
-      const candidate = { x: mid.point.x + n.x * d, y: mid.point.y + n.y * d }
-      if (clear(candidate)) return candidate
-    }
+    for (const { n, room } of runs) if (d <= room) found.push(at(n, d))
+    for (const n of normals) found.push(at(n, d))
   }
-  return mid.point
+  return found
 }

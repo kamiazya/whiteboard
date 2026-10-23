@@ -68,7 +68,19 @@ function oracle(
     { x: -dir.y, y: dir.x },
     { x: dir.y, y: -dir.x },
   ].sort((a, b) => a.y - b.y || a.x - b.x)
+  const alongLine = [
+    { n: dir, room: Math.hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
+    {
+      n: { x: -dir.x, y: -dir.y },
+      room: Math.hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
+    },
+  ].sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x)
   for (let d = 8; d <= 128; d += 8) {
+    for (const { n, room } of alongLine) {
+      if (d > room) continue
+      const candidate = { x: mid.point.x + n.x * d, y: mid.point.y + n.y * d }
+      if (clear(candidate)) return { at: candidate, blocked: true }
+    }
     for (const n of normals) {
       const candidate = { x: mid.point.x + n.x * d, y: mid.point.y + n.y * d }
       if (clear(candidate)) return { at: candidate, blocked: true }

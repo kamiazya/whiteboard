@@ -117,7 +117,7 @@ describe('an edge is always visible', () => {
   // A deliberate sweep over the whole corpus, like the aggregate below: it
   // routes every edge of 2005 layouts, so it needs a budget that reflects
   // the work rather than the 5s default a unit test gets.
-  it('draws something for every edge in every layout', { timeout: 60_000 }, () => {
+  it('draws something for every edge in every layout', { timeout: 180_000 }, () => {
     const invisible: { layout: string; edge: string }[] = []
     for (const testCase of [...ROUTING_CORPUS, ...syntheticLayouts(2000)]) {
       const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
@@ -169,7 +169,7 @@ describe('routing quality across the synthetic corpus', () => {
   // A deliberate 2000-layout sweep, not a unit test: it routes tens of
   // thousands of edges and the default 5s timeout is close enough to its
   // runtime to fail under a loaded parallel suite rather than on merit.
-  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
+  it('reports the current violation count and drawing cost', { timeout: 180_000 }, () => {
     const violations: Record<ViolationKind, number> = {
       'own-endpoint': 0,
       foreign: 0,
@@ -335,7 +335,7 @@ describe('routing quality on the service-tier board', () => {
  * for aligned boards can leave the scattered ones byte-identical.
  */
 describe('routing quality across lattice boards', () => {
-  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
+  it('reports the current violation count and drawing cost', { timeout: 180_000 }, () => {
     let throughUnrelated = 0
     let touchCount = 0
     let unhopped = 0

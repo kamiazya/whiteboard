@@ -63,7 +63,12 @@ import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import type { Point } from './edges/edge-geometry.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
-import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
+import {
+  edgeLabelPlacement,
+  type LabelObstacle,
+  labelObstacles,
+} from './edges/edge-label-anchor.js'
+import { labelOf, labelRuns } from './node-box.js'
 import { routeEdge } from './edges/edge-router.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { RoutingBudget } from './edges/routing-budget.js'
@@ -232,6 +237,20 @@ function pullEdgeOntoOutlines(
     path = pullEndOntoOutline(path, end, edge, canvas, nodeOutlines, shapes)
   }
   return path === routed.path ? routed : { ...routed, path: [...path] }
+}
+
+/**
+ * Where each frame's title is drawn: above the frame's border, outside the
+ * box a node obstacle covers, yet text a label must not land on.
+ */
+function frameTitleBoxes(
+  nodes: readonly SpatialNode[],
+  options: ResolvedLayoutOptions,
+): LabelObstacle[] {
+  return nodes
+    .filter((node) => isFrame(node))
+    .flatMap((node) => labelRuns(node, labelOf(node, undefined), 'above', options))
+    .flatMap((run) => (run.kind === 'textRun' ? [run.bbox] : []))
 }
 
 /**
@@ -639,7 +658,7 @@ function composeEdgesAndLabels(
           if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
           return { ...edge, jumps }
         })
-  const obstacles = labelObstacles(canvas.nodes)
+  const obstacles = labelObstacles(canvas.nodes, frameTitleBoxes(canvas.nodes, resolved))
   const labelContent = routable
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)
