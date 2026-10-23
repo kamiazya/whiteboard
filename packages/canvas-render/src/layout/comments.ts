@@ -160,8 +160,14 @@ function bubbleObstacles(
   options: ResolvedLayoutOptions,
   visible: readonly CanvasComment[],
   anchorOf: (comment: CanvasComment) => { x: number; y: number },
+  labelBoxes: readonly BoundingBox[],
 ): BoundingBox[] {
   return [
+    // The words set OUTSIDE any node box: a frame's name and an edge's
+    // label. A bubble that only dodged nodes parked itself on them, and a
+    // frame (not an obstacle itself) is the one thing whose name hangs
+    // above it.
+    ...labelBoxes,
     ...canvas.nodes
       .filter((node) => !isFrame(node))
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
@@ -334,6 +340,7 @@ export function composeComments(
   options: ResolvedLayoutOptions,
   edgePathOf: EdgePathLookup,
   bodyLayout: BodyLayoutSeam,
+  labelBoxes: readonly BoundingBox[] = [],
 ): readonly SceneNode[] {
   const comments = options.comments ?? canvas.comments
   if (comments === undefined || comments.length === 0) return []
@@ -351,7 +358,7 @@ export function composeComments(
       ? commentCornerOf(region.rect)
       : commentAnchor(comment, canvas, edgePathOf)
   }
-  const obstacles = bubbleObstacles(canvas, options, visible, anchorOf)
+  const obstacles = bubbleObstacles(canvas, options, visible, anchorOf, labelBoxes)
   const out: SceneNode[] = []
   for (const comment of visible) {
     // Assigned, never invented: a resolved comment's muting comes only from

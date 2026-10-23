@@ -552,6 +552,9 @@ function layoutSpatialCanvasInternal(
     resolved,
     (id) => edgePaths.get(id),
     mdastOptionsFor,
+    [...nodeContent, ...content].flatMap((node) =>
+      node.kind === 'textRun' && node.annotates !== undefined ? [node.bbox] : [],
+    ),
   )
   const proposalContent = composeProposals(
     canvas,
