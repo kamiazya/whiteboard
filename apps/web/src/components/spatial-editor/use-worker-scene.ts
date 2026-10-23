@@ -59,6 +59,15 @@ function worthOffloading(canvas: SpatialCanvas): boolean {
   return canvas.nodes.length + canvas.edges.length >= OFFLOAD_MIN_ELEMENTS
 }
 
+/**
+ * `shownFor` before any layout has been requested, for a canvas that mounted
+ * below the offload threshold and grew past it (a document opened empty, then
+ * filled by its first sync). `null` means the scene `useState` produced was
+ * laid out from the inputs the effect sees; this means it was not, so the
+ * effect must request one rather than treat the stale scene as the first.
+ */
+const NOT_LAID_OUT = Symbol('not-laid-out')
+
 function createLayoutWorker(): Worker | null {
   try {
     const worker = new Worker(new URL('../../lib/layout-worker.ts', import.meta.url), {
@@ -216,8 +225,7 @@ export function useWorkerScene(
   const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
   // is merely stale is distinguishable from one that is current.
-  const shownFor = useRef<unknown>(null)
-
+  const shownFor = useRef<unknown>(offloadable ? null : NOT_LAID_OUT)
   const inputs = useMemo(
     (): SceneInputs => ({
       canvas,

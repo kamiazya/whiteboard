@@ -115,4 +115,8 @@ Offline, or where the source cannot be reached, the theme still draws its hand-d
 the lettering uses the bundled family. The SVG names the family that was actually measured,
 never one that was not, so the coordinates and the face always agree.
 
+On a large board a theme change takes a moment to lay out. The board keeps showing the previous
+look until the new one is ready, and a small **Laying out…** note appears at the top of the
+canvas if that takes longer than about a third of a second; it goes away on its own.
+
 ← Back to [how-to guides](README.md)
