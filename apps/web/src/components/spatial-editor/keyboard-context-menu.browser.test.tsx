@@ -35,14 +35,16 @@ function mount(initial: SpatialCanvas = board) {
 const menuRows = () => [...document.querySelectorAll('[data-testid="context-menu"] button')]
 const openMenu = () => document.querySelector('[data-testid="context-menu"]')
 
-it('Shift+F10 on a selected node opens that node menu with focus on its first item', async () => {
+it('Shift+F10 on a selected node opens that node menu focused on its first action row', async () => {
   const { container } = mount()
   await userEvent.keyboard('{Tab}')
   await userEvent.keyboard('{Shift>}{F10}{/Shift}')
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   expect(openMenu()?.textContent).toContain('Comment on this')
   expect(openMenu()?.textContent).not.toContain('Comment here')
-  expect(document.activeElement).toBe(menuRows()[0])
+  expect(menuRows()).toContain(document.activeElement)
+  expect(document.activeElement?.closest('fieldset,[role="group"]')).toBeNull()
+  expect(document.activeElement?.getAttribute('role')).toBe('menuitem')
   expect(rootOf(container).contains(document.activeElement)).toBe(true)
 })
 

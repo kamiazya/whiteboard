@@ -11,6 +11,15 @@ function enabledItems(menu: HTMLElement): HTMLElement[] {
   )
 }
 
+/**
+ * Where focus lands on open: the first labelled action, not a swatch. A
+ * colour row leads some menus, and landing on one of its swatches hides what
+ * the menu is for; the swatches stay one ArrowUp/ArrowLeft away.
+ */
+function entryItem(items: readonly HTMLElement[]): HTMLElement | undefined {
+  return items.find((el) => el.closest('fieldset,[role="group"]') === null) ?? items[0]
+}
+
 function stepFrom(list: readonly HTMLElement[], current: HTMLElement, step: number) {
   const at = list.indexOf(current)
   return list[(at + step + list.length) % list.length]
@@ -57,7 +66,7 @@ function targetFor(items: readonly HTMLElement[], current: HTMLElement, key: str
 
 /**
  * The WAI-ARIA menu keyboard model over whatever items a menu draws:
- * focus lands on the first item when the menu opens, exactly one item is a
+ * focus lands on the first action row when the menu opens (see `entryItem`), exactly one item is a
  * Tab stop (the others are `tabindex=-1` and reached by arrows), and the
  * returned `onKeyDown` handles Arrow/Home/End/typeahead and Escape (which
  * stops propagating, so an enclosing editor does not also act on it).
@@ -78,14 +87,14 @@ export function useRovingMenu(
     const menu = menuRef.current
     if (menu === null) return
     const items = enabledItems(menu)
-    const active = items.find((el) => el === document.activeElement) ?? items[0]
+    const active = items.find((el) => el === document.activeElement) ?? entryItem(items)
     for (const item of items) item.tabIndex = item === active ? 0 : -1
   })
 
   useEffect(() => {
     const menu = menuRef.current
     if (menu === null) return // An item-less menu still takes focus itself so Escape works.
-    ;(enabledItems(menu)[0] ?? menu).focus()
+    ;(entryItem(enabledItems(menu)) ?? menu).focus()
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement) || !target.matches(ITEM_SELECTOR)) return

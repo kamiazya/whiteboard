@@ -100,6 +100,43 @@ it('focuses the first item on open and walks the items with the arrow keys', asy
   await expect.element(page.getByRole('menuitem', { name: 'Delete' })).toHaveFocus()
 })
 
+it('opens on the first labelled row when a swatch group leads, and ArrowUp reaches the swatches', async () => {
+  function SwatchFirstHost() {
+    const [open, setOpen] = useState(false)
+    return (
+      <div style={{ position: 'relative' }}>
+        <button type="button" onClick={() => setOpen(true)}>
+          Opener
+        </button>
+        {open ? (
+          <ContextMenu
+            x={10}
+            y={30}
+            label="Test actions"
+            items={[
+              {
+                kind: 'options',
+                label: 'Colour',
+                options: [
+                  { label: 'Red', selected: false, onSelect: () => {} },
+                  { label: 'Blue', selected: false, onSelect: () => {} },
+                ],
+              },
+              { label: 'Rename', onSelect: () => {} },
+            ]}
+            onClose={() => setOpen(false)}
+          />
+        ) : null}
+      </div>
+    )
+  }
+  render(<SwatchFirstHost />)
+  await userEvent.click(page.getByRole('button', { name: 'Opener' }))
+  await expect.element(page.getByRole('menuitem', { name: 'Rename' })).toHaveFocus()
+  await userEvent.keyboard('{ArrowUp}')
+  await expect.element(page.getByRole('menuitemradio', { name: 'Blue' })).toHaveFocus()
+})
+
 it('moves within the colour group with left and right and activates with Enter', async () => {
   render(<KeyboardHost />)
   await userEvent.click(page.getByRole('button', { name: 'Opener' }))
