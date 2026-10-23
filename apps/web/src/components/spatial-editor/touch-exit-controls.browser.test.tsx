@@ -35,7 +35,15 @@ afterEach(() => {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
 
 it('Done and Cancel are each at least 44px square, the touch floor', () => {
-  render(<MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />)
+  render(
+    <MarkdownNodeEditor
+      label="Note"
+      box={BOX}
+      initialText="hello"
+      onCommit={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  )
   for (const name of ['Done', 'Cancel']) {
     const rect = screen.getByRole('button', { name }).getBoundingClientRect()
     expect(rect.width).toBeGreaterThanOrEqual(44)
@@ -47,7 +55,13 @@ it('tapping Cancel on a markdown node editor cancels, and never commits', async 
   const onCommit = vi.fn()
   const onCancel = vi.fn()
   render(
-    <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />,
+    <MarkdownNodeEditor
+      label="Note"
+      box={BOX}
+      initialText="hello"
+      onCommit={onCommit}
+      onCancel={onCancel}
+    />,
   )
   await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
 
@@ -61,7 +75,13 @@ it('tapping Done on a markdown node editor commits the text once', async () => {
   const onCommit = vi.fn()
   const onCancel = vi.fn()
   render(
-    <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />,
+    <MarkdownNodeEditor
+      label="Note"
+      box={BOX}
+      initialText="hello"
+      onCommit={onCommit}
+      onCancel={onCancel}
+    />,
   )
   await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
   await userEvent.keyboard(' there')
@@ -76,7 +96,15 @@ it('tapping Done on a markdown node editor commits the text once', async () => {
 it('tapping Cancel on a plain text editor cancels, and never commits', async () => {
   const onCommit = vi.fn()
   const onCancel = vi.fn()
-  render(<TextNodeEditor box={BOX} initialText="label" onCommit={onCommit} onCancel={onCancel} />)
+  render(
+    <TextNodeEditor
+      label="Note"
+      box={BOX}
+      initialText="label"
+      onCommit={onCommit}
+      onCancel={onCancel}
+    />,
+  )
   await vi.waitFor(() => expect(document.activeElement?.tagName).toBe('TEXTAREA'))
 
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))

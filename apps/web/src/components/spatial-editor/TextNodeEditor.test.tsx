@@ -12,7 +12,15 @@ describe('TextNodeEditor', () => {
   it('cancels on Escape without committing', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     fireEvent.keyDown(screen.getByTestId('text-node-editor'), { key: 'Escape' })
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onCommit).not.toHaveBeenCalled()
@@ -21,7 +29,15 @@ describe('TextNodeEditor', () => {
   it('commits on Cmd+Enter (metaKey)', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     fireEvent.change(screen.getByTestId('text-node-editor'), { target: { value: 'edited' } })
     fireEvent.keyDown(screen.getByTestId('text-node-editor'), { key: 'Enter', metaKey: true })
     expect(onCommit).toHaveBeenCalledTimes(1)
@@ -32,7 +48,15 @@ describe('TextNodeEditor', () => {
   it('commits on Ctrl+Enter (ctrlKey)', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     fireEvent.change(screen.getByTestId('text-node-editor'), { target: { value: 'edited' } })
     fireEvent.keyDown(screen.getByTestId('text-node-editor'), { key: 'Enter', ctrlKey: true })
     expect(onCommit).toHaveBeenCalledTimes(1)
@@ -42,14 +66,30 @@ describe('TextNodeEditor', () => {
   it('does not commit on a plain Enter (no modifier)', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     fireEvent.keyDown(screen.getByTestId('text-node-editor'), { key: 'Enter' })
     expect(onCommit).not.toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
   })
 
   it('shows the exit hint below the editing box while open', () => {
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
     const hint = screen.getByTestId('editor-exit-hint')
     expect(hint.textContent).toContain('Done')
     // Rides the same canvas-space coordinates as the editor, just under it.
@@ -60,7 +100,15 @@ describe('TextNodeEditor', () => {
   it('a blur after Escape does not resurrect the cancelled edit as a commit', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     const textarea = screen.getByTestId('text-node-editor')
     fireEvent.change(textarea, { target: { value: 'edited' } })
     fireEvent.keyDown(textarea, { key: 'Escape' })
@@ -72,7 +120,15 @@ describe('TextNodeEditor', () => {
   it('a blur after Cmd+Enter does not duplicate the commit', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    render(
+      <TextNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    )
     const textarea = screen.getByTestId('text-node-editor')
     fireEvent.change(textarea, { target: { value: 'edited' } })
     fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
@@ -89,6 +145,7 @@ describe('TextNodeEditor', () => {
       const onCommit = vi.fn()
       render(
         <TextNodeEditor
+          label="Note"
           box={BOX}
           initialText="abc"
           lengthLimit={limit}
@@ -109,6 +166,7 @@ describe('TextNodeEditor', () => {
     it('lets a draft already past the limit shrink', () => {
       render(
         <TextNodeEditor
+          label="Note"
           box={BOX}
           initialText="abcdefgh"
           lengthLimit={limit}

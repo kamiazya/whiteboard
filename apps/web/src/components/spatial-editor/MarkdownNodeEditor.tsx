@@ -40,7 +40,8 @@ import { EditorState, type Extension, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { GFM } from '@lezer/markdown'
-import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
@@ -65,6 +66,7 @@ import {
   shortcodeOptionRenderers,
 } from '../markdown-editor/shortcode-completion.js'
 import { EditorExitHint } from '../ui/EditorExitHint.js'
+import { EditorExitDescription } from './EditorExitDescription.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -124,6 +126,8 @@ function onPageHide(handler: () => void): () => void {
 export interface MarkdownNodeEditorProps {
   readonly box: Box
   readonly initialText: string
+  /** The field's accessible name: what is being edited, since it is placed over it with no label of its own. */
+  readonly label: string
   /**
    * Vertically centre content that fits, the way the committed render
    * places a SHAPED node's text (placeInNode's diagram-symbol
@@ -172,6 +176,7 @@ export interface MarkdownNodeEditorProps {
 export function MarkdownNodeEditor({
   box,
   initialText,
+  label,
   centerContent = false,
   exitHintTop,
   exitHintScale,
@@ -185,6 +190,7 @@ export function MarkdownNodeEditor({
   lengthLimit = [],
 }: MarkdownNodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const hintId = useId()
   const viewRef = useRef<EditorView | null>(null)
   // Filled once the view exists; the focus/blur handlers read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
@@ -204,6 +210,7 @@ export function MarkdownNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
+    announceOnCanvas('Discarded')
     callbacksRef.current.onCancel()
   }
   const commitAndReturn = (view: EditorView) => {
@@ -319,6 +326,10 @@ export function MarkdownNodeEditor({
           commit(view)
         }),
         nodeEditorTheme(centerContent),
+        EditorView.contentAttributes.of({
+          'aria-label': label,
+          'aria-describedby': hintId,
+        }),
       ],
     })
     mountedRef.current = true
@@ -393,6 +404,7 @@ export function MarkdownNodeEditor({
           ...style,
         }}
       />
+      <EditorExitDescription id={hintId} />
       <EditorExitHint
         onDone={() => {
           const view = viewRef.current

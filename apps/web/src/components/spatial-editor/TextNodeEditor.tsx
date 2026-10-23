@@ -18,13 +18,17 @@
  */
 
 import { growsPast } from '@kamiazya/whiteboard-model'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useId, useRef, useState } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { EditorExitHint } from '../ui/EditorExitHint.js'
+import { EditorExitDescription } from './EditorExitDescription.js'
 
 export interface TextNodeEditorProps {
   readonly box: Box
   readonly initialText: string
+  /** The field's accessible name: what is being edited, since the field is placed over it with no label of its own. */
+  readonly label: string
   /** Overrides the testid for non-node uses (e.g. the edge label editor). */
   readonly testId?: string
   /**
@@ -119,6 +123,7 @@ function LengthLimitNotice({
 export function TextNodeEditor({
   box,
   initialText,
+  label,
   testId = 'text-node-editor',
   exitHintScale,
   style,
@@ -132,6 +137,7 @@ export function TextNodeEditor({
   const mountedRef = useRef(true)
   const finishedRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const hintId = useId()
 
   useEffect(() => {
     mountedRef.current = true
@@ -154,6 +160,7 @@ export function TextNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
+    announceOnCanvas('Discarded')
     onCancel()
   }
 
@@ -161,6 +168,8 @@ export function TextNodeEditor({
     <>
       <textarea
         ref={textareaRef}
+        aria-label={label}
+        aria-describedby={hintId}
         aria-keyshortcuts="Meta+Enter Control+Enter"
         data-testid={testId}
         placeholder={placeholder}
@@ -195,6 +204,7 @@ export function TextNodeEditor({
           }
         }}
       />
+      <EditorExitDescription id={hintId} />
       {refusal !== null && <LengthLimitNotice box={box} testId={testId} text={refusal} />}
       <EditorExitHint
         onDone={commit}

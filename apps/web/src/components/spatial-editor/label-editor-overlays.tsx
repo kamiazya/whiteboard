@@ -22,6 +22,7 @@ import {
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
+import { edgeRoute } from './node-a11y-name.js'
 import { type TextLengthLimit, TextNodeEditor } from './TextNodeEditor.js'
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
@@ -116,6 +117,7 @@ export function EdgeLabelEditorOverlay({
         width: EDGE_LABEL_EDITOR_WIDTH_PX,
         height: EDGE_LABEL_EDITOR_HEIGHT_PX,
       }}
+      label={`Label of edge ${edgeRoute(edge, canvas.nodes)}`}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
       {...labelDraft(palette, fontFamily)}
@@ -163,6 +165,7 @@ export function GroupLabelEditorOverlay({
         width: group.width,
         height: FRAME_TITLE_EDITOR_HEIGHT_PX,
       }}
+      label={`Name of frame${frameLabel(group)?.trim() ? ` ${frameLabel(group)?.trim()}` : ''}`}
       initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
       placeholder="Frame"

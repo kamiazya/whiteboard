@@ -59,7 +59,13 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
 it('follows the visual viewport panning even when no scroll event fires', async () => {
   render(
     <>
-      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />
       <TouchFormattingBar />
     </>,
   )
@@ -85,7 +91,13 @@ it('follows the visual viewport panning even when no scroll event fires', async 
 it('docks to the window bottom on focus, then lifts onto the keyboard and back', async () => {
   render(
     <>
-      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />
       <TouchFormattingBar />
     </>,
   )
@@ -117,7 +129,13 @@ it('docks to the window bottom on focus, then lifts onto the keyboard and back',
 it('steps aside while the visual viewport is panning and returns once it stops', async () => {
   render(
     <>
-      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />
       <TouchFormattingBar />
     </>,
   )
@@ -146,6 +164,7 @@ it('tapping Bold wraps the caret word without committing the editor', async () =
   render(
     <>
       <MarkdownNodeEditor
+        label="Note"
         box={BOX}
         initialText="hello"
         onCommit={onCommit}
@@ -176,6 +195,7 @@ it('"…" opens the overflow sheet, and a verb from it acts on the document', as
   render(
     <>
       <MarkdownNodeEditor
+        label="Note"
         box={BOX}
         initialText=""
         onCommit={vi.fn()}
@@ -202,7 +222,13 @@ it('never shows on a fine pointer', async () => {
   coarse = false
   render(
     <>
-      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText="hello"
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />
       <TouchFormattingBar />
     </>,
   )

@@ -219,6 +219,14 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 
 The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
 
+## On the canvas with a screen reader
+
+The text fields that open over a canvas say what they edit: "Text of Review"
+for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
+to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
+keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
+thrown-away draft is not silent.
+
 ## Moving between pages
 
 Opening a document, returning to the list or opening Settings moves keyboard
