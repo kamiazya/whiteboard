@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { DocumentThumbnail } from './DocumentThumbnail.js'
 import { RecentLane } from './RecentLane.js'
 
 // The lane is an ADDITION beside the grid, never a reordering of it: the grid
@@ -179,5 +180,27 @@ describe('RecentLane', () => {
       />,
     )
     expect(screen.getByTestId('recent-lane')).toBeTruthy()
+  })
+
+  it('draws a tile with the same render a card draws, not the kind icon', async () => {
+    const loadRender = vi.fn(async () => ({
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="10" height="10"/></svg>',
+      bounds: { x: 0, y: 0, w: 400, h: 300 },
+    }))
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d2']}
+        onOpen={() => {}}
+        renderThumbnail={(each) => (
+          <DocumentThumbnail document={each} loadRender={loadRender} className="size-full" />
+        )}
+      />,
+    )
+
+    const picture = screen.getByTestId('document-thumbnail')
+    await waitFor(() => expect(picture.querySelector('[data-kind]')).toBeNull())
+    expect(picture.querySelector('svg rect')).not.toBeNull()
+    expect(loadRender).toHaveBeenCalledWith(documents[1])
   })
 })
