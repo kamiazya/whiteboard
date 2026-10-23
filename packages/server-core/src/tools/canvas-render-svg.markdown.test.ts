@@ -78,6 +78,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -96,6 +97,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -112,6 +114,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -129,6 +132,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
     })
 
@@ -145,6 +149,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
       fragment: 'Plan',
     })
@@ -173,6 +178,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: READER_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -191,6 +197,7 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: BOARD_ID,
       embedReferences: false,
+      comments: false,
       style: 'clean',
       fragment: 'Launch',
     })
@@ -208,6 +215,7 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
         workspaceId: WORKSPACE_ID,
         documentId,
         embedReferences: false,
+        comments: false,
         style: 'clean',
         fragment: 'Nowhere',
       })
@@ -239,6 +247,7 @@ describe('wb_scene_render style on a markdown document (ADR-0030 decisions 5-6)'
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: true,
+      comments: false,
       style: 'document',
     })
 
@@ -253,6 +262,7 @@ describe('wb_scene_render style on a markdown document (ADR-0030 decisions 5-6)'
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: true,
+      comments: false,
       style: 'clean',
     })
 
@@ -278,6 +288,7 @@ describe('wb_scene_render style on a markdown document (ADR-0030 decisions 5-6)'
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: true,
+      comments: false,
       style: 'document' as const,
     }
 

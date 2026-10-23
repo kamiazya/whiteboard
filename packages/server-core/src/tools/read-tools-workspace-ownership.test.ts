@@ -52,6 +52,7 @@ const READS: ReadonlyArray<readonly [string, Read]> = [
         workspaceId,
         documentId: SPATIAL_ID,
         embedReferences: false,
+        comments: false,
         style: 'clean',
       }),
   ],

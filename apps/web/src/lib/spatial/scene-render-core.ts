@@ -96,6 +96,8 @@ export interface RenderCanvasCoreOptions {
    * (committed, worker, drag layers) and is never written to the document.
    */
   readonly showResolved?: boolean
+  /** canvas-render's `commentLayer`; absent draws the annotation layer, as the editor needs. */
+  readonly commentLayer?: boolean
   /**
    * The document's conversations, for the passages inside text nodes
    * (canvas-render's `threads`): a highlight behind the quoted words. Pins
@@ -175,6 +177,7 @@ export function renderCanvasToSvgWith(
     lockedNodeIds: options.lockedNodeIds,
     commentObstacles: options.commentObstacles,
     showResolved: options.showResolved,
+    commentLayer: options.commentLayer,
     threads: options.threads,
     proposals: options.proposals,
     onDegrade: options.onDegrade,

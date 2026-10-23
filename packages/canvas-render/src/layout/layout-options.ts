@@ -301,6 +301,14 @@ export interface SpatialLayoutOptions {
    */
   readonly showResolved?: boolean
   /**
+   * Whether the annotation layer is drawn at all: pins, cards, leaders,
+   * region outlines and passage highlights. Absent/true draws it, which is
+   * what every surface a person edits on needs. A caller producing a
+   * picture to hand someone else switches it off and gets the board
+   * alone, the envelope's own comments included.
+   */
+  readonly commentLayer?: boolean
+  /**
    * Extra boxes a comment bubble must not cover, beyond this canvas's own
    * nodes and earlier bubbles. For a caller laying out ONE comment apart
    * from its canvas (the editor's drag preview renders the dragged comment

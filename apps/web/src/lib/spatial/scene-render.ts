@@ -85,6 +85,11 @@ export interface CanvasExportOptions {
   readonly threads?: readonly CommentThread[]
   /** The workspace's colour by intent (ADR-0040 decision 5), part of the picture. */
   readonly tagLibrary?: TagLibrary
+  /**
+   * Draw the annotation layer (pins, cards, highlights) into the picture.
+   * Absent is off: unlike the editor, a saved file is for someone else.
+   */
+  readonly comments?: boolean
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
   readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
   readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
@@ -102,11 +107,20 @@ export interface CanvasExportOptions {
  */
 export function renderCanvasForExport(
   canvas: SpatialCanvas,
-  { measure, references, threads, tagLibrary, renderMath, renderDiagram }: CanvasExportOptions,
+  {
+    measure,
+    references,
+    threads,
+    tagLibrary,
+    comments,
+    renderMath,
+    renderDiagram,
+  }: CanvasExportOptions,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   return renderCanvasForExportWith(canvas, {
     measure,
     theme: 'light',
+    commentLayer: comments === true,
     ...(references === undefined ? {} : { references, expandFileNode: () => true }),
     ...(threads === undefined ? {} : { threads }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),

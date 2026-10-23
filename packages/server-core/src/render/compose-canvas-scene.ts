@@ -54,6 +54,11 @@ export interface ComposeCanvasSceneOptions {
   /** The document's conversations, for passage highlights inside text nodes. */
   readonly threads?: readonly CommentThread[]
   /**
+   * Whether the annotation layer is drawn (canvas-render's `commentLayer`).
+   * Absent draws it, as the digest and the editor-shaped callers expect.
+   */
+  readonly commentLayer?: boolean
+  /**
    * Which look to draw (ADR-0030 decision 6). Absent is `'clean'` — the
    * layout's own default, kept explicit here because this composer serves
    * the digest too, and a digest must never move because a theme did.
@@ -104,6 +109,7 @@ export function composeCanvasScene(
     ...(options?.style === undefined ? {} : { style: options.style }),
     ...(options?.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
     ...(options?.threads === undefined ? {} : { threads: options.threads }),
+    ...(options?.commentLayer === undefined ? {} : { commentLayer: options.commentLayer }),
     ...(options?.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's

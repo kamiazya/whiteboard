@@ -155,7 +155,7 @@ describe('renderCanvasForExport', () => {
     expect(exported.bounds.x).toBeLessThan(editor.bounds.x)
     expect(exported.bounds.w).toBeGreaterThan(editor.bounds.w)
   })
-  it("draws the highlight behind a thread's passage, as the editor does", () => {
+  it("draws the highlight behind a thread's passage when comments are asked for", () => {
     const board: SpatialCanvas = {
       nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 50, text: 'ship the plan' })],
       edges: [],
@@ -168,8 +168,34 @@ describe('renderCanvasForExport', () => {
     }
     const rects = (svg: string) => svg.match(/<rect /g)?.length ?? 0
     const plain = renderCanvasForExport(board, { measure: fakeMeasure })
-    const threaded = renderCanvasForExport(board, { measure: fakeMeasure, threads: [thread] })
+    const threaded = renderCanvasForExport(board, {
+      measure: fakeMeasure,
+      threads: [thread],
+      comments: true,
+    })
     expect(rects(threaded.svg)).toBeGreaterThan(rects(plain.svg))
+    // Left out by default: the same call without the flag draws the plain board.
+    const defaulted = renderCanvasForExport(board, { measure: fakeMeasure, threads: [thread] })
+    expect(defaulted.svg).toBe(plain.svg)
+  })
+  it('leaves a board its comments sit on exactly as the board alone, unless asked', () => {
+    const bare: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'A' })],
+      edges: [],
+    }
+    const commented: SpatialCanvas = {
+      ...bare,
+      comments: [{ id: 'c1', x: 150, y: 20, text: 'check this' }],
+    }
+    const plain = renderCanvasForExport(bare, { measure: fakeMeasure })
+    expect(renderCanvasForExport(commented, { measure: fakeMeasure }).svg).toBe(plain.svg)
+    expect(renderCanvasForExport(commented, { measure: fakeMeasure, comments: true }).svg).not.toBe(
+      plain.svg,
+    )
+    // The editor's own render keeps drawing them.
+    expect(renderCanvasToSvg(commented, { measure: fakeMeasure }).svg).not.toBe(
+      renderCanvasToSvg(bare, { measure: fakeMeasure }).svg,
+    )
   })
   it('an untagged board exports the same envelope the editor draws', () => {
     const plain: SpatialCanvas = {

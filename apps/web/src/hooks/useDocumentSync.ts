@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import {
   type DocumentExportFormat,
+  isCommentedPicture,
+  pictureFormatOf,
   renderMarkdownForExport,
   savedPicture,
 } from '../lib/document-export.js'
@@ -549,17 +551,18 @@ export function useDocumentSync(
       if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
       if (options.kind === 'markdown') {
         const body = session?.getMarkdownBody() ?? markdownBody
-        return savedPicture(format, await renderMarkdownForExport(body, options))
+        return savedPicture(pictureFormatOf(format), await renderMarkdownForExport(body, options))
       }
       const exported = session?.getCanvas() ?? canvas
       const measure = createBrowserMeasureText()
+      const comments = isCommentedPicture(format)
       // Waits for every math block and diagram fence the layout asks for —
       // a text node's, a file node's note's — so the file is typeset as the screen is.
       const drawn = await layoutWithFragments(
-        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams }),
+        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams, comments }),
         FRAGMENT_ENGINES,
       )
-      return savedPicture(format, drawn, {
+      return savedPicture(pictureFormatOf(format), drawn, {
         // Editable PNG (the draw.io pattern): the extended JSON Canvas
         // document rides in an iTXt chunk under `whiteboard`, so the image
         // carries its own source, exact coordinates included.

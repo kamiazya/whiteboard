@@ -35,7 +35,24 @@ export type PictureFormat = 'png' | 'svg'
  * What ⋮ → Export… can save: a picture, or the document's own file (`md` for
  * a note, `canvas` for a board).
  */
-export type DocumentExportFormat = PictureFormat | 'md' | 'canvas'
+export type DocumentExportFormat = PictureFormat | CommentedPictureFormat | 'md' | 'canvas'
+
+/**
+ * A board's picture with its annotation layer drawn in. The plain pictures
+ * leave it out: a file handed to someone else should not carry the
+ * authors' review conversation unless they chose it.
+ */
+type CommentedPictureFormat = 'png-comments' | 'svg-comments'
+
+/** Whether a picture format asks for the annotation layer to be drawn in. */
+export function isCommentedPicture(format: PictureFormat | CommentedPictureFormat): boolean {
+  return format === 'png-comments' || format === 'svg-comments'
+}
+
+/** The picture a commented format saves, or the format itself when it is already plain. */
+export function pictureFormatOf(format: PictureFormat | CommentedPictureFormat): PictureFormat {
+  return format === 'png-comments' ? 'png' : format === 'svg-comments' ? 'svg' : format
+}
 
 /** A document drawn for saving: the SVG and the box it covers. */
 export interface DrawnDocument {

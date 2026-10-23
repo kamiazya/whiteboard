@@ -148,6 +148,16 @@ function ExportSubmenu({
       <DropdownMenuSubContent>
         <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+        {kind === 'spatial' && (
+          <>
+            <DropdownMenuItem onSelect={() => onExport('png-comments')}>
+              Export as PNG (with comments)
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onExport('svg-comments')}>
+              Export as SVG (with comments)
+            </DropdownMenuItem>
+          </>
+        )}
         {kind === 'markdown' && (
           <DropdownMenuItem onSelect={() => onExport('md')}>
             Save as Markdown (.md)

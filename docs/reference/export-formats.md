@@ -6,7 +6,7 @@ the document's persisted content — neither requires a connected browser client
 | Tool | Output | Notes |
 | --- | --- | --- |
 | `wb_document_get` | The document's own format | A markdown document comes back as OKF Markdown (YAML frontmatter + Markdown body), lossless round-trip with `wb_workspace_edit`'s `document.set` op. A spatial document comes back as JSON Canvas 1.0 with the `x-whiteboard` extension, round-tripping with other JSON Canvas-compatible tools. Either kind also carries the document's comment `threads` beside `content` when it has any; the conversations are not part of either format's content. |
-| `wb_scene_render` | Vector image (`.svg`) | Rendered from the document's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
+| `wb_scene_render` | Vector image (`.svg`) | Rendered from the document's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. A canvas's comments (pins, cards, region outlines, highlighted passages) are left out unless the call passes `comments: true`. |
 
 **The format is not a parameter.** `wb_document_get` answers in whatever
 format the document is in, and says which in its `kind` field; there is no
@@ -734,8 +734,10 @@ display.
 The export draws what the editor shows, including what the document points at:
 
 - **A canvas** exports with its pictures, the note or board a file node points
-  at, what a text node embeds with `![[…]]`, and the highlights of comment
-  threads about a passage. A file node pointing at another board draws its
+  at, and what a text node embeds with `![[…]]`. The comment layer — pins, cards,
+  region outlines and the highlights of threads about a passage — is left out of
+  Export as PNG / SVG and drawn by Export as PNG (with comments) / SVG (with
+  comments). A file node pointing at another board draws its
   miniature whatever its size on screen, as `wb_scene_render` does with
   `embedReferences`. Math
   blocks and Mermaid diagrams are drawn as the editor draws them, in a text

@@ -7,7 +7,10 @@ whether the browser or the daemon keeps the workspace, except where noted.
 
 Open the document, then **More actions → Export…**:
 
-- **Export as PNG** or **Export as SVG** — a picture of the document.
+- **Export as PNG** or **Export as SVG** — a picture of the document. On a canvas the
+  picture leaves out the comments: no pins, cards, region outlines or highlighted passages.
+- **Export as PNG (with comments)** or **Export as SVG (with comments)** — on a canvas: the
+  same picture with the comments drawn in, as the editor shows them.
 - **Save as Markdown (.md)** — on a note: the OKF Markdown source, with the document's name
   as the frontmatter `title`.
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the

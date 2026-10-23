@@ -296,11 +296,15 @@ export function layoutSpatialCanvasWithAnchors(
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // Intent first, so every reader below sees the same colours.
   const canvas = withDeclaredColours(stored, options.tagLibrary)
+  // An empty `comments` is an answer, not a gap (it replaces the envelope's
+  // copy), so switching the layer off needs no branch in the composers.
+  const threads = options.commentLayer === false ? [] : (options.threads ?? [])
   return layoutSpatialCanvasInternal(canvas, {
     ...withSpatialReferenceSeams(options),
     ...resolveContributions(canvas, options),
-    passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
-    regionsByThread: regionsOf(options.threads ?? [], canvas),
+    ...(options.commentLayer === false ? { comments: [] } : {}),
+    passagesByNode: groupPassages(nodePassagesOf(threads)),
+    regionsByThread: regionsOf(threads, canvas),
     messagesByThread: new Map((options.threads ?? []).map((t) => [t.id, t.messages.length])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,

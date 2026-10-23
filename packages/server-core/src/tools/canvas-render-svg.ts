@@ -54,6 +54,12 @@ export const canvasRenderSvgInputSchema = z
       .describe(
         "Render one PART of the document rather than the whole: a heading's text for a markdown document (that section, through the next heading of the same or a higher level), or a group's label for a canvas (the group, the nodes inside its box, and the edges between them). The same names `[[path#...]]` uses; `^` followed by a node id addresses a node durably. Unknown → an error naming it.",
       ),
+    comments: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Draw the review conversation into a canvas: comment pins and cards, region outlines, and the highlight behind a quoted passage. Off by default — a picture handed to someone else carries the board, not the authors' discussion of it. A markdown document has no such layer in its picture.",
+      ),
     style: spatialRenderStyleSchema
       .default('clean')
       .describe(
@@ -145,10 +151,10 @@ async function canvasScene(
     fontAvailable,
     // Colour by intent (ADR-0040 decision 5).
     ...(await drawnTagLibrary(deps, input.workspaceId, [part], loaded?.graph)),
-    // The export draws what the editor draws: a thread about a passage
-    // of a node's text is a highlight behind those words, a node set
-    // an outline around them.
-    threads: readAnnotations(doc),
+    // With comments asked for, the export draws what the editor draws: a
+    // thread about a passage of a node's text is a highlight behind those
+    // words, a node set an outline around them.
+    ...(input.comments ? { threads: readAnnotations(doc) } : { commentLayer: false }),
   })
   return scene
 }
@@ -157,7 +163,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
   return {
     name: 'wb_scene_render' as const,
     description:
-      'Render a document as SVG — a canvas as its laid-out scene, a markdown document as a page. A one-way projection: the SVG cannot be parsed back into a document. `embedReferences` draws what it links to (file nodes, `![[path]]` embeds, `#Heading` / `#Group` parts); `fragment` renders one part on its own.',
+      'Render a document as SVG — a canvas as its laid-out scene, a markdown document as a page. A one-way projection: the SVG cannot be parsed back into a document. `embedReferences` draws what it links to (file nodes, `![[path]]` embeds, `#Heading` / `#Group` parts); `fragment` renders one part on its own. Comments are left out unless `comments` is true.',
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {

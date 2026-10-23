@@ -9,6 +9,7 @@ import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
   onExport?: (format: SceneExportFormat) => void
+  kind?: 'spatial' | 'markdown'
   notice?: string | null
   onBookmark?: () => void
   display?: React.ReactNode
@@ -19,6 +20,7 @@ function renderMenu(props?: {
   return render(
     <DocumentMenu
       onExport={props?.onExport}
+      {...(props?.kind === undefined ? {} : { kind: props.kind })}
       {...(props?.onBookmark === undefined ? {} : { onBookmark: props.onBookmark })}
       {...(props?.notice === undefined ? {} : { notice: props.notice })}
       {...(props?.display === undefined ? {} : { display: props.display })}
@@ -79,6 +81,25 @@ describe('DocumentMenu — export entries', () => {
 
     fireEvent.pointerUp(screen.getByText(`Export as ${format.toUpperCase()}`))
     await waitFor(() => expect(onExport).toHaveBeenCalledWith(format))
+  })
+
+  it('names the annotation layer in the two board entries that carry it', async () => {
+    const onExport = vi.fn()
+    renderMenu({ onExport, kind: 'spatial' })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.getByText('Export as PNG')).toBeTruthy()
+    fireEvent.pointerUp(screen.getByText('Export as SVG (with comments)'))
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('svg-comments'))
+  })
+
+  it('offers no with-comments entry for a note, which has no annotation layer in its picture', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'markdown' })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(screen.queryByText(/with comments/)).toBeNull()
   })
 
   it('carries a polite status region that is mounted before it speaks', () => {

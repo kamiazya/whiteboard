@@ -451,6 +451,21 @@ embed or a wikiLink into another document. It parses as markdown, so it
 already can syntactically; nothing resolves references for a comment body,
 and nothing should until someone asks for it.
 
+## Addendum (2026-10-23): pictures leave the conversation out unless asked
+
+Decision 1b left open whether a picture of a document (PNG, SVG, `wb_scene_render`)
+carries the annotation layer. It had been drawing it by accident of the layout's
+defaults: a lead exporting a board for a meeting got the review chatter and the
+pins baked in, with no choice.
+
+Decided: a picture **excludes the layer by default** — no pins, cards, leaders, region
+outlines or passage highlights — and includes it only when asked. The web app's
+Export… menu offers both ("Export as PNG" / "Export as PNG (with comments)", likewise
+SVG), and `wb_scene_render` takes `comments` (default `false`). The layout's
+`commentLayer` option defaults to drawn, so every editing surface is unchanged; only
+the export entries switch it off. This is about pictures only: the document files
+(`.md`, `.canvas`) still carry content and not the conversation, per decision 1b.
+
 ## Alternatives considered
 
 - **A facet on the document** — rejected in decision 1: wholesale writes lose

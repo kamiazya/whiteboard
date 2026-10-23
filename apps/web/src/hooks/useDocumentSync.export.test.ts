@@ -7,7 +7,7 @@
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -174,5 +174,38 @@ describe('useDocumentSync exportScene carries the document', () => {
     // The library is the only difference, so the declared fill is its doing.
     expect(await (plain as Blob | null)?.text()).not.toContain(`fill="${declared}"`)
     expect(await (coloured as Blob | null)?.text()).toContain(`fill="${declared}"`)
+  })
+
+  it('leaves the conversation out of a saved picture unless the with-comments format is chosen', async () => {
+    const backend = fakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [textNode({ id: 'n-p', x: 0, y: 0, width: 240, height: 60, text: 'ship the plan' })],
+      edges: [],
+    })
+    await deliver(backend, doc)
+    const threads: CommentThread[] = [
+      {
+        id: 't1',
+        anchor: { kind: 'text', nodeId: 'n-p', quote: { exact: 'plan' }, start: 0, end: 1 },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'about it' }],
+      },
+    ]
+
+    let plain: Blob | null = null
+    let commented: Blob | null = null
+    let bare: Blob | null = null
+    await act(async () => {
+      plain = await result.current.exportScene('svg', { kind: 'spatial', threads })
+      commented = await result.current.exportScene('svg-comments', { kind: 'spatial', threads })
+      bare = await result.current.exportScene('svg', { kind: 'spatial' })
+    })
+
+    const text = async (blob: Blob | null) => (await blob?.text()) ?? ''
+    expect(commented).toEqual(expect.objectContaining({ type: 'image/svg+xml' }))
+    expect(await text(plain)).toBe(await text(bare))
+    expect(await text(commented)).not.toBe(await text(plain))
   })
 })
