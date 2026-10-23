@@ -26,6 +26,7 @@ import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
 import { embedTextInPng } from './png-embed.js'
 import { rasterizeSvgToPng } from './rasterize-svg.js'
 import { layoutMarkdownScene } from './render-preview.js'
+import { exportEnvelope } from './spatial/scene-render-core.js'
 import { themeFacesNamedBy } from './theme-fonts.js'
 
 /** The two pictures a document can be saved as. */
@@ -64,6 +65,8 @@ export interface MarkdownExportOptions {
   /** The bundle the preview resolves the body's references and pictures through. */
   readonly references?: ReferenceSeams
   readonly tagLibrary?: TagLibrary
+  /** A fill for the whole note, drawn first; absent leaves the picture transparent. */
+  readonly background?: string
   /** Injection seam for tests; defaults to the real MathJax/mermaid engines. */
   readonly fragments?: FragmentLoaders
 }
@@ -86,7 +89,7 @@ export async function renderMarkdownForExport(
   const scene = await markdownExportScene(body, options)
   const bounds = sceneDocumentBounds(scene)
   return {
-    svg: renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds }),
+    svg: renderSceneToSvg(scene, exportEnvelope(bounds, options.background)),
     bounds,
   }
 }
@@ -100,6 +103,11 @@ export interface SavedPictureOptions {
   readonly source?: () => string
   /** Per-picture ceiling on inlined bytes; defaults to the upload limit. */
   readonly maxImageBytes?: number
+  /**
+   * PNG pixels per canvas unit (default 1). The picture's size in canvas
+   * units is unchanged, so an SVG, which has no pixels, ignores it.
+   */
+  readonly scale?: number
 }
 
 /** The saved file itself; `null` where this environment cannot rasterise. */
@@ -119,6 +127,7 @@ export async function savedPicture(
     await withViewerFontEmbedded(svg, themeFacesNamedBy(svg)),
     Math.max(1, Math.round(drawn.bounds.w)),
     Math.max(1, Math.round(drawn.bounds.h)),
+    options.scale ?? 1,
   )
   if (png === null || options.source === undefined) return png
   const embedded = embedTextInPng(

@@ -20,6 +20,18 @@ describe('renderMarkdownForExport', () => {
     expect(bounds.h).toBeGreaterThan(1)
   })
 
+  it('fills the note with the paper first when asked, and draws the same bytes otherwise', async () => {
+    const plain = await renderMarkdownForExport('# Heading\n\nProse.\n')
+    const paper = await renderMarkdownForExport('# Heading\n\nProse.\n', { background: '#ffffff' })
+    const { x, y, w, h } = paper.bounds
+    const body = paper.svg.slice(paper.svg.indexOf('>') + 1)
+    expect(
+      body.startsWith(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff"`),
+    ).toBe(true)
+    expect(plain.svg).not.toContain('role="presentation"')
+    expect(paper.svg.replace(/<rect[^>]*role="presentation"[^>]*\/>/, '')).toBe(plain.svg)
+  })
+
   it("draws a note's math blocks through the engine, as the preview does", async () => {
     const math = vi.fn(async () => FAKE_FRAGMENT)
     const diagram = vi.fn(async () => undefined)

@@ -35,6 +35,7 @@ describe('a payload written by a build that knows more fields', () => {
     },
     capabilities: { webMcpEnabled: true, newerCapability: 1 },
     appearance: { faviconStyle: 'dot', someFutureKnob: 1 },
+    pictureExport: { doubleResolution: true, someFutureKnob: 1 },
   }
 
   it('reads every field it knows and ignores the one it does not, at every depth', () => {
@@ -47,6 +48,7 @@ describe('a payload written by a build that knows more fields', () => {
     expect(loaded.migration.promotion?.ok).toBe(true)
     expect(loaded.capabilities.webMcpEnabled).toBe(true)
     expect(loaded.appearance?.faviconStyle).toBe('dot')
+    expect(loaded.pictureExport?.doubleResolution).toBe(true)
   })
 
   it('keeps the daemon URL, replicas and promotion record through an unrelated update', () => {

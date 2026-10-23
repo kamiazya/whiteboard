@@ -155,6 +155,18 @@ describe('renderCanvasForExport', () => {
     expect(exported.bounds.x).toBeLessThan(editor.bounds.x)
     expect(exported.bounds.w).toBeGreaterThan(editor.bounds.w)
   })
+  it('fills the whole document with the paper first when asked, and is otherwise untouched', () => {
+    const plain = renderCanvasForExport(tagged, { measure: fakeMeasure })
+    const paper = renderCanvasForExport(tagged, { measure: fakeMeasure, background: '#ffffff' })
+    const { x, y, w, h } = paper.bounds
+    expect(paper.svg).toContain(`viewBox="${x} ${y} ${w} ${h}"`)
+    const body = paper.svg.slice(paper.svg.indexOf('>') + 1)
+    expect(
+      body.startsWith(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff"`),
+    ).toBe(true)
+    expect(plain.svg).not.toContain('role="presentation"')
+    expect(paper.svg.replace(/<rect[^>]*role="presentation"[^>]*\/>/, '')).toBe(plain.svg)
+  })
   it("draws the highlight behind a thread's passage when comments are asked for", () => {
     const board: SpatialCanvas = {
       nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 50, text: 'ship the plan' })],

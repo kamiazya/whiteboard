@@ -208,4 +208,55 @@ describe('useDocumentSync exportScene carries the document', () => {
     expect(await text(plain)).toBe(await text(bare))
     expect(await text(commented)).not.toBe(await text(plain))
   })
+
+  it.each([
+    'spatial',
+    'markdown',
+  ] as const)('fills a %s svg with the paper when asked, and draws the bytes it always did otherwise', async (kind) => {
+    const backend = fakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, TEXT_CANVAS)
+    doc.getText('body').insert(0, 'Weekly notes')
+    doc.commit()
+    await deliver(backend, doc)
+
+    let bare: Blob | null = null
+    let off: Blob | null = null
+    let on: Blob | null = null
+    await act(async () => {
+      bare = await result.current.exportScene('svg', { kind })
+      off = await result.current.exportScene('svg', {
+        kind,
+        picture: { scale: 1, background: false },
+      })
+      on = await result.current.exportScene('svg', {
+        kind,
+        picture: { scale: 1, background: true },
+      })
+    })
+
+    const text = async (blob: Blob | null) => (await blob?.text()) ?? ''
+    expect(await text(off)).toBe(await text(bare))
+    expect(await text(on)).toContain(`fill="${SPATIAL_LIGHT_PALETTE.surface}" role="presentation"`)
+  })
+
+  it('rasterises a png at the asked scale, and a plain one at 1x', async () => {
+    const backend = fakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, TEXT_CANVAS)
+    await deliver(backend, doc)
+    vi.mocked(rasterizeSvgToPng).mockClear()
+
+    await act(async () => {
+      await result.current.exportScene('png', { kind: 'spatial' })
+      await result.current.exportScene('png-comments', {
+        kind: 'spatial',
+        picture: { scale: 2, background: false },
+      })
+    })
+
+    expect(vi.mocked(rasterizeSvgToPng).mock.calls.map((call) => call[3])).toEqual([1, 2])
+  })
 })

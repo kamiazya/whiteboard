@@ -41,3 +41,41 @@ describe('savedPicture', () => {
     expect(await saved?.text()).toContain('href=""')
   })
 })
+
+/** The decoded size and the alpha of the top-left pixel of a PNG. */
+async function decoded(blob: Blob | null): Promise<{ w: number; h: number; alpha: number }> {
+  if (blob === null) throw new Error('no PNG')
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const context = canvas.getContext('2d')
+  if (context === null) throw new Error('no 2D context')
+  context.drawImage(bitmap, 0, 0)
+  return {
+    w: bitmap.width,
+    h: bitmap.height,
+    alpha: context.getImageData(0, 0, 1, 1).data[3] ?? -1,
+  }
+}
+
+const board = (...children: string[]) => ({
+  svg: `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30">${children.join('')}</svg>`,
+  bounds: { x: 0, y: 0, w: 40, h: 30 },
+})
+const paper = '<rect x="0" y="0" width="40" height="30" fill="#ffffff" role="presentation"/>'
+
+describe('savedPicture PNG', () => {
+  it('is as many pixels as the picture is wide at 1x, and twice that at 2x', async () => {
+    expect(await decoded(await savedPicture('png', board()))).toMatchObject({ w: 40, h: 30 })
+    expect(await decoded(await savedPicture('png', board(), { scale: 2 }))).toMatchObject({
+      w: 80,
+      h: 60,
+    })
+  })
+
+  it('is transparent without a background rect and opaque with one', async () => {
+    expect((await decoded(await savedPicture('png', board()))).alpha).toBe(0)
+    expect((await decoded(await savedPicture('png', board(paper)))).alpha).toBe(255)
+  })
+})

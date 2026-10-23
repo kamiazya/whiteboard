@@ -90,6 +90,8 @@ export interface CanvasExportOptions {
    * Absent is off: unlike the editor, a saved file is for someone else.
    */
   readonly comments?: boolean
+  /** A fill for the whole document, drawn first; absent leaves the picture transparent. */
+  readonly background?: string
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
   readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
   readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
@@ -113,18 +115,23 @@ export function renderCanvasForExport(
     threads,
     tagLibrary,
     comments,
+    background,
     renderMath,
     renderDiagram,
   }: CanvasExportOptions,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
-  return renderCanvasForExportWith(canvas, {
-    measure,
-    theme: 'light',
-    commentLayer: comments === true,
-    ...(references === undefined ? {} : { references, expandFileNode: () => true }),
-    ...(threads === undefined ? {} : { threads }),
-    ...(tagLibrary === undefined ? {} : { tagLibrary }),
-    renderMath,
-    renderDiagram,
-  })
+  return renderCanvasForExportWith(
+    canvas,
+    {
+      measure,
+      theme: 'light',
+      commentLayer: comments === true,
+      ...(references === undefined ? {} : { references, expandFileNode: () => true }),
+      ...(threads === undefined ? {} : { threads }),
+      ...(tagLibrary === undefined ? {} : { tagLibrary }),
+      renderMath,
+      renderDiagram,
+    },
+    background,
+  )
 }

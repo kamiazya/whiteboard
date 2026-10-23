@@ -209,12 +209,23 @@ function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
 export function renderCanvasForExportWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
+  background?: string,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   const { scene } = renderCanvasToSvgWith(canvas, options)
   const bounds = sceneDocumentBounds(scene)
   return {
-    svg: renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds }),
+    svg: renderSceneToSvg(scene, exportEnvelope(bounds, background)),
     bounds,
+  }
+}
+
+/** The saved document's envelope; `background` absent leaves the picture transparent. */
+export function exportEnvelope(bounds: BoundingBox, background?: string): SvgDocumentOptions {
+  return {
+    width: bounds.w,
+    height: bounds.h,
+    viewBox: bounds,
+    ...(background === undefined ? {} : { background }),
   }
 }
 
