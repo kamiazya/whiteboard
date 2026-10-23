@@ -209,6 +209,8 @@ export interface SourcePaneProps {
   variant?: SourcePaneVariant
   /** Focus the editor as soon as it mounts (fresh-note flows). */
   autoFocus?: boolean
+  /** What a screen reader calls the editing surface. */
+  accessibleName?: string
   /** Shown while the document is empty. */
   placeholderText?: string
   /** Receives the imperative API while the view is mounted, null after. */
@@ -248,6 +250,7 @@ export function SourcePane({
   className,
   variant = 'document',
   autoFocus = false,
+  accessibleName = 'Markdown document',
   placeholderText,
   apiRef,
   extensions,
@@ -346,7 +349,12 @@ export function SourcePane({
         // Tab is indentation here, so a keyboard user who lands in the editor
         // has no way out unless they are told (WCAG 2.1.2). CodeMirror's own
         // Escape-then-Tab escape hatch is the answer; this names it.
-        EditorView.contentAttributes.of({ 'aria-describedby': leaveHintId }),
+        EditorView.contentAttributes.of({
+          'aria-describedby': leaveHintId,
+          // Without a name a textbox is announced by its content, which turns
+          // every re-focus into a read-out of the document.
+          'aria-label': accessibleName,
+        }),
         ...scrollClearance(variant),
       ],
     })

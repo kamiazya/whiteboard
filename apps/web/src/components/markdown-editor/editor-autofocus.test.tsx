@@ -35,3 +35,10 @@ it('does not take focus from a field the reader already typed in, even after it 
   expect(document.activeElement?.closest('.cm-editor') ?? null).toBeNull()
   expect(container.querySelector('.cm-content')).not.toBeNull()
 })
+
+it('names the editor "Markdown document" rather than by the text it holds', () => {
+  mount('some prose the reader wrote')
+  const box = document.querySelector('.cm-content') as HTMLElement
+  expect(box.getAttribute('role')).toBe('textbox')
+  expect(box.getAttribute('aria-label')).toBe('Markdown document')
+})
