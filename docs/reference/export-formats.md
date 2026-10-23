@@ -382,7 +382,9 @@ crossing, without its arc. Finding crossings has its own bound too: past
 **4,000,000 candidate pairs** examined on one board, the search stops and no
 further hops are drawn, while the hops already found are kept — so a board of
 long, nearly parallel edges that never cross cannot make a render search
-indefinitely. Edges and lines are searched in the order they are drawn.
+indefinitely. Edges and lines are searched in the order they are drawn. The
+later edge hops over the earlier one; where it has no straight run to carry the
+arc (the crossing falls on one of its bends) the earlier edge hops instead.
 
 ## How much referenced content one render loads
 

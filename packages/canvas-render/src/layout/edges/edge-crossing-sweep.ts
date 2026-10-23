@@ -153,24 +153,26 @@ export function sharedCorners(a: readonly Point[], b: readonly Point[]): number 
   return count
 }
 
+const vertexKey = (p: Point): string =>
+  `${Math.round(p.x * COST_QUANTUM)},${Math.round(p.y * COST_QUANTUM)}`
+
+/** The quantized interior vertices of a path, once each. */
+const interiorVertexKeys = (path: readonly Point[]): Set<string> =>
+  new Set(path.slice(1, -1).map(vertexKey))
+
 /** Each pair of edges that share an interior vertex, once per shared vertex. */
 function addSharedCorners(
   paths: readonly (readonly Point[])[],
   scores: Map<number, [number, number, number]>,
 ): void {
   const byVertex = new Map<string, number[]>()
-  for (let edge = 0; edge < paths.length; edge++) {
-    const path = paths[edge]!
-    const own = new Set<string>()
-    for (let v = 1; v < path.length - 1; v++) {
-      const key = `${Math.round(path[v]!.x * COST_QUANTUM)},${Math.round(path[v]!.y * COST_QUANTUM)}`
-      if (own.has(key)) continue
-      own.add(key)
+  paths.forEach((path, edge) => {
+    for (const key of interiorVertexKeys(path)) {
       const at = byVertex.get(key)
       if (at === undefined) byVertex.set(key, [edge])
       else at.push(edge)
     }
-  }
+  })
   for (const edges of byVertex.values()) {
     for (let i = 0; i < edges.length; i++) {
       for (let j = i + 1; j < edges.length; j++) {

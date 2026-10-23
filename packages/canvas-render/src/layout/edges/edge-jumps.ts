@@ -5,7 +5,11 @@
 // 'curved' travels the orthogonal waypoints.
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import type { Point } from './edge-geometry.js'
-import { EDGE_JUMP_RADIUS_PX, segmentIntersection } from './segment-intersection.js'
+import {
+  EDGE_JUMP_RADIUS_PX,
+  END_CLEARANCE_PX,
+  segmentIntersection,
+} from './segment-intersection.js'
 
 export { EDGE_JUMP_RADIUS_PX }
 
@@ -13,6 +17,13 @@ interface Crossing {
   readonly point: Point
   /** Where along the jumping segment it falls, 0 at `a1` and 1 at `a2`. */
   readonly t: number
+}
+
+/** A crossing found on a run, with the run it was found against. */
+interface RunCrossing {
+  readonly point: Point
+  readonly t: number
+  readonly other: IndexedSegment
 }
 
 /**
@@ -39,9 +50,20 @@ const MAX_HOPS_PER_SCENE = 4096
  */
 const MAX_GRID_WORK_PER_SCENE = 4_000_000
 
+/**
+ * A straight RUN of an edge: its consecutive collinear segments, which the
+ * router splits wherever it keeps a waypoint on a straight line (a departure
+ * stub the detour continues along). A crossing that lands on such a split
+ * touches both halves at their ends, and neither draws it; against the run
+ * it is an ordinary interior crossing.
+ */
 interface IndexedSegment {
   readonly a: Point
   readonly b: Point
+  readonly edge: number
+  /** The first and last path segment the run covers. */
+  readonly first: number
+  readonly last: number
 }
 
 /** A segment as the grid files it: its bounds, and the level whose cell suits it. */
@@ -286,16 +308,48 @@ class SegmentGrid {
 }
 
 /** Every proper crossing of `seg` by a candidate segment of an earlier edge. */
-function crossingsOn(seg: IndexedSegment, earlier: readonly IndexedSegment[]): Crossing[] {
+function crossingsOn(seg: IndexedSegment, earlier: readonly IndexedSegment[]): RunCrossing[] {
   const { a: a1, b: a2 } = seg
   const len = Math.hypot(a2.x - a1.x, a2.y - a1.y)
-  const found: Crossing[] = []
+  const found: RunCrossing[] = []
   for (const other of earlier) {
     const hit = segmentIntersection(a1, a2, other.a, other.b)
     if (hit === undefined) continue
-    found.push({ point: hit, t: len === 0 ? 0 : Math.hypot(hit.x - a1.x, hit.y - a1.y) / len })
+    found.push({
+      point: hit,
+      t: len === 0 ? 0 : Math.hypot(hit.x - a1.x, hit.y - a1.y) / len,
+      other,
+    })
   }
   return found
+}
+
+/**
+ * The path segment of `run` that can carry a hop at `point`: the one the
+ * point falls on with a hop's straight run on both sides, which a point on a
+ * split between two segments does not have. The tolerance is the float slack
+ * `segmentIntersection` already allowed the whole run.
+ */
+function segmentCarrying(
+  path: readonly Point[],
+  run: IndexedSegment,
+  point: Point,
+  clearanceChecked: boolean,
+): (Crossing & { readonly segment: number; readonly length: number }) | undefined {
+  for (let segment = run.first; segment <= run.last; segment += 1) {
+    const a = path[segment] as Point
+    const b = path[segment + 1] as Point
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    if (length === 0) continue
+    // A run of one segment was cleared by the intersection itself, in the
+    // jumping segment's own terms; measuring it again would only add rounding.
+    if (!clearanceChecked) {
+      const along = ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / length
+      if (along < END_CLEARANCE_PX - 1e-9 || length - along < END_CLEARANCE_PX - 1e-9) continue
+    }
+    return { point, t: Math.hypot(point.x - a.x, point.y - a.y) / length, segment, length }
+  }
+  return undefined
 }
 
 /**
@@ -327,60 +381,154 @@ function spacedHops(
 const isFinitePoint = (p: Point): boolean => Number.isFinite(p.x) && Number.isFinite(p.y)
 
 /**
- * An edge's segments by index, filed; a non-finite point cannot be drawn,
- * so a segment touching one neither hops nor is hopped.
+ * Whether `q` carries on from `p` to `r` along one axis-aligned line, forward.
+ * Exact comparisons only: a cross product at a board's far extremes rounds,
+ * and a waypoint the router kept on a straight line is always axis-aligned.
  */
-function placedSegmentsOf(edge: ResolvedEdgeNode): (Placed | undefined)[] {
-  const segments: (Placed | undefined)[] = []
-  for (let seg = 0; seg < edge.path.length - 1; seg += 1) {
-    const a = edge.path[seg] as Point
-    const b = edge.path[seg + 1] as Point
-    segments.push(isFinitePoint(a) && isFinitePoint(b) ? place({ a, b }) : undefined)
+function continuesStraight(p: Point, q: Point, r: Point): boolean {
+  if (p.x === q.x && q.x === r.x) return Math.sign(q.y - p.y) * Math.sign(r.y - q.y) > 0
+  if (p.y === q.y && q.y === r.y) return Math.sign(q.x - p.x) * Math.sign(r.x - q.x) > 0
+  return false
+}
+
+/**
+ * An edge's straight runs, filed; a non-finite point cannot be drawn, so a
+ * run touching one neither hops nor is hopped.
+ */
+function placedRunsOf(edge: ResolvedEdgeNode, index: number): (Placed | undefined)[] {
+  const { path } = edge
+  const runs: (Placed | undefined)[] = []
+  let first = 0
+  while (first < path.length - 1) {
+    let end = first + 1
+    while (
+      end < path.length - 1 &&
+      continuesStraight(path[end - 1] as Point, path[end] as Point, path[end + 1] as Point)
+    ) {
+      end += 1
+    }
+    const a = path[first] as Point
+    const b = path[end] as Point
+    runs.push(
+      isFinitePoint(a) && isFinitePoint(b)
+        ? place({ a, b, edge: index, first, last: end - 1 })
+        : undefined,
+    )
+    first = end
   }
-  return segments
+  return runs
+}
+
+/**
+ * Where a run's crossings with earlier edges land: on the run's own segments
+ * (grouped by segment, to be spaced), or, where the run has no room for the
+ * arc, handed to the earlier edge.
+ */
+function placeCrossings(
+  edges: readonly ResolvedEdgeNode[],
+  run: IndexedSegment,
+  candidates: readonly IndexedSegment[],
+  handOver: (
+    target: ResolvedEdgeNode,
+    there: Crossing & { segment: number; length: number },
+  ) => void,
+): Map<number, { crossings: Crossing[]; length: number }> {
+  const own = edges[run.edge] as ResolvedEdgeNode
+  const onSegment = new Map<number, { crossings: Crossing[]; length: number }>()
+  for (const found of crossingsOn(run, candidates)) {
+    const here = segmentCarrying(own.path, run, found.point, run.first === run.last)
+    if (here === undefined) {
+      const theirs = edges[found.other.edge] as ResolvedEdgeNode
+      const there = segmentCarrying(theirs.path, found.other, found.point, false)
+      if (there !== undefined) handOver(theirs, there)
+      continue
+    }
+    const entry = onSegment.get(here.segment) ?? { crossings: [], length: here.length }
+    entry.crossings.push({ point: found.point, t: here.t })
+    onSegment.set(here.segment, entry)
+  }
+  return onSegment
 }
 
 /**
  * Hop points for each edge over every EARLIER edge, keyed by edge id.
  * Later-over-earlier mirrors paint order: the line drawn on top is the one
  * that visibly hops. Jumps on one segment are ordered along its direction.
+ *
+ * A crossing is looked for between straight runs, so one on a waypoint is
+ * found. If the later edge has no room for the arc there (the waypoint is ITS
+ * split) the earlier edge hops instead: either line reads as crossing the
+ * other, and a plain crossing is the worse picture.
  */
 export function computeEdgeJumps(
   edges: readonly ResolvedEdgeNode[],
 ): ReadonlyMap<string, readonly EdgeJumpPoint[]> {
   const result = new Map<string, readonly EdgeJumpPoint[]>()
-  const placed = edges.map(placedSegmentsOf)
+  const placed = edges.map(placedRunsOf)
   const grid = new SegmentGrid(placed.flat().filter((p): p is Placed => p !== undefined))
   let sceneBudget = MAX_HOPS_PER_SCENE
+  // The earlier edge takes a crossing its successor has no room to hop. Its
+  // hops on that segment are spaced again with the new one, and kept only if
+  // the new one is a hop of its own rather than part of a neighbour's.
+  const handOver = (
+    target: ResolvedEdgeNode,
+    there: Crossing & { readonly segment: number; readonly length: number },
+  ): void => {
+    const existing = result.get(target.id) ?? []
+    const start = target.path[there.segment] as Point
+    const onSegment = existing.filter((jump) => jump.segment === there.segment)
+    const hops = spacedHops(
+      [
+        ...onSegment.map((jump) => ({
+          point: { x: jump.x, y: jump.y },
+          t: Math.hypot(jump.x - start.x, jump.y - start.y) / there.length,
+        })),
+        { point: there.point, t: there.t },
+      ],
+      there.length,
+      there.segment,
+      MAX_HOPS_PER_SEGMENT,
+    )
+    const added = hops.length - onSegment.length
+    if (added <= 0 || added > sceneBudget) return
+    sceneBudget -= added
+    result.set(
+      target.id,
+      [...existing.filter((jump) => jump.segment !== there.segment), ...hops].sort(
+        (x, y) => x.segment - y.segment,
+      ),
+    )
+  }
   edges.forEach((edge, e) => {
     if (sceneBudget === 0) return
-    const segments = placed[e] as (Placed | undefined)[]
-    const reached = segments.map((p) => (p === undefined ? undefined : grid.reach(p)))
+    const runs = placed[e] as (Placed | undefined)[]
+    const reached = runs.map((p) => (p === undefined ? undefined : grid.reach(p)))
     const jumps: EdgeJumpPoint[] = []
-    segments.forEach((p, seg) => {
-      const r = reached[seg]
+    runs.forEach((p, run) => {
+      const r = reached[run]
       if (p === undefined || r === undefined || sceneBudget === 0) return
-      const { a, b } = p.seg
       const candidates = grid.candidates(r)
       if (candidates === undefined) {
         // The work budget is spent: no further hops anywhere in the scene,
-        // and the remaining segments are not even filed.
+        // and the remaining runs are not even filed.
         sceneBudget = 0
         return
       }
-      const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
-      const hops = spacedHops(
-        crossingsOn(p.seg, candidates),
-        Math.hypot(b.x - a.x, b.y - a.y),
-        seg,
-        limit,
-      )
-      sceneBudget -= hops.length
-      jumps.push(...hops)
+      const onSegment = placeCrossings(edges, p.seg, candidates, handOver)
+      for (const seg of [...onSegment.keys()].sort((x, y) => x - y)) {
+        const { crossings, length } = onSegment.get(seg) as {
+          crossings: Crossing[]
+          length: number
+        }
+        const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
+        const hops = spacedHops(crossings, length, seg, limit)
+        sceneBudget -= hops.length
+        jumps.push(...hops)
+      }
     })
     if (jumps.length > 0) result.set(edge.id, jumps)
-    segments.forEach((p, seg) => {
-      const r = reached[seg]
+    runs.forEach((p, run) => {
+      const r = reached[run]
       if (p !== undefined && r !== undefined) grid.add(p.seg, r)
     })
   })

@@ -78,6 +78,21 @@ const spokeArb = fc.oneof(
     arbitrary: fc.record({ from: pointArb, to: fc.record({ x: far, y: far }), at: fc.nat() }),
   },
 )
+// The oracle scans segments; the subject scans straight runs, which differ
+// only where a waypoint sits on an axis-aligned line (edge-jumps.test.ts pins
+// that case). Dropping such waypoints keeps this property about the broad phase.
+const withoutStraightWaypoints = (path: readonly Point[]): Point[] =>
+  path.filter((p, i) => {
+    const prev = path[i - 1]
+    const next = path[i + 1]
+    if (prev === undefined || next === undefined) return true
+    const forward = (axis: 'x' | 'y') =>
+      Math.sign(p[axis] - prev[axis]) * Math.sign(next[axis] - p[axis]) > 0
+    const onVertical = prev.x === p.x && p.x === next.x && forward('y')
+    const onHorizontal = prev.y === p.y && p.y === next.y && forward('x')
+    return !onVertical && !onHorizontal
+  })
+
 const edgesArb = fc
   .tuple(
     fc.array(fc.array(pointArb, { minLength: 2, maxLength: 8 }), { minLength: 2, maxLength: 10 }),
@@ -99,7 +114,7 @@ const edgesArb = fc
       (path, i): ResolvedEdgeNode => ({
         kind: 'edge',
         id: `e${i}`,
-        path,
+        path: withoutStraightWaypoints(path),
         fromSide: 'right',
         toSide: 'left',
         fromEnd: 'none',

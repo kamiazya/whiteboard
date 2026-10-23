@@ -224,7 +224,9 @@ describe('routing quality across the synthetic corpus', () => {
       bends: 8046,
       crossings: 494,
       touches: 36,
-      unhoppedCrossings: 54,
+      // 54 -> 22 when a crossing on a waypoint of a straight run started to
+      // hop (the earlier line hops when the later one has no room).
+      unhoppedCrossings: 22,
       length: 1338795,
       shortArrowRunway: 136,
     })
@@ -370,7 +372,8 @@ describe('routing quality across lattice boards', () => {
       // are crossings that land on a collinear waypoint of one path.
       edgesThroughUnrelatedNode: 0,
       touches: 94,
-      unhoppedCrossings: 96,
+      // 96 -> 2 likewise.
+      unhoppedCrossings: 2,
       crossings: 323,
       bends: 3286,
       length: 1488498,

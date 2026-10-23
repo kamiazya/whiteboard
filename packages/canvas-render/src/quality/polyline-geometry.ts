@@ -142,6 +142,24 @@ function runsOf(path: readonly Point[]): Point[] {
   })
 }
 
+/** Where `p`'s and `q`'s straight runs properly cross, one point per crossing. */
+function runCrossingPoints(p: readonly Point[], q: readonly Point[]): Point[] {
+  const found: Point[] = []
+  for (let a = 1; a < p.length; a++) {
+    for (let b = 1; b < q.length; b++) {
+      const a1 = p[a - 1] as Point
+      const a2 = p[a] as Point
+      const b1 = q[b - 1] as Point
+      const b2 = q[b] as Point
+      if (!properlyCross(a1, a2, b1, b2)) continue
+      const denom = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x)
+      const t = ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / denom
+      found.push({ x: a1.x + t * (a2.x - a1.x), y: a1.y + t * (a2.y - a1.y) })
+    }
+  }
+  return found
+}
+
 /**
  * Crossings between two paths' straight RUNS that draw no hop: a waypoint on a
  * straight run is bookkeeping, not a corner, so a crossing that lands on one
@@ -160,20 +178,11 @@ export function unhoppedCrossings(
       const p = runs[i] as readonly Point[]
       const q = runs[j] as readonly Point[]
       if (boundsApart(p, q)) continue
-      for (let a = 1; a < p.length; a++) {
-        for (let b = 1; b < q.length; b++) {
-          const a1 = p[a - 1] as Point
-          const a2 = p[a] as Point
-          const b1 = q[b - 1] as Point
-          const b2 = q[b] as Point
-          if (!properlyCross(a1, a2, b1, b2)) continue
-          const denom = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x)
-          const t = ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / denom
-          const at = { x: a1.x + t * (a2.x - a1.x), y: a1.y + t * (a2.y - a1.y) }
-          const near = (h: Point) => Math.hypot(h.x - at.x, h.y - at.y) <= 0.5
-          if (!(hops[i] ?? []).some(near) && !(hops[j] ?? []).some(near)) count++
-        }
-      }
+      const hopped = (at: Point) =>
+        [...(hops[i] ?? []), ...(hops[j] ?? [])].some(
+          (h) => Math.hypot(h.x - at.x, h.y - at.y) <= 0.5,
+        )
+      count += runCrossingPoints(p, q).filter((at) => !hopped(at)).length
     }
   }
   return count
@@ -218,30 +227,34 @@ export function touches(paths: readonly (readonly Point[])[]): number {
     for (let j = i + 1; j < paths.length; j++) {
       const p = paths[i] as readonly Point[]
       const q = paths[j] as readonly Point[]
-      if (boundsApart(p, q)) continue
-      const ends = [p[0], p[p.length - 1], q[0], q[q.length - 1]]
-      const seen = new Set<string>()
-      for (let a = 1; a < p.length; a++) {
-        for (let b = 1; b < q.length; b++) {
-          const a1 = p[a - 1] as Point
-          const a2 = p[a] as Point
-          const b1 = q[b - 1] as Point
-          const b2 = q[b] as Point
-          if (sharedInk([a1, a2], [b1, b2]) > 0) continue
-          const candidates = [
-            ...[b1, b2].filter((c) => onSegment(c, a1, a2)),
-            ...[a1, a2].filter((c) => onSegment(c, b1, b2)),
-          ]
-          for (const c of candidates) {
-            if (ends.some((e) => e !== undefined && e.x === c.x && e.y === c.y)) continue
-            seen.add(`${c.x},${c.y}`)
-          }
-        }
-      }
-      count += seen.size
+      if (!boundsApart(p, q)) count += touchPoints(p, q).size
     }
   }
   return count
+}
+
+/** The distinct points where `p` and `q` touch without either path ending there. */
+function touchPoints(p: readonly Point[], q: readonly Point[]): Set<string> {
+  const ends = [p[0], p[p.length - 1], q[0], q[q.length - 1]]
+  const seen = new Set<string>()
+  for (let a = 1; a < p.length; a++) {
+    for (let b = 1; b < q.length; b++) {
+      const a1 = p[a - 1] as Point
+      const a2 = p[a] as Point
+      const b1 = q[b - 1] as Point
+      const b2 = q[b] as Point
+      if (sharedInk([a1, a2], [b1, b2]) > 0) continue
+      const candidates = [
+        ...[b1, b2].filter((c) => onSegment(c, a1, a2)),
+        ...[a1, a2].filter((c) => onSegment(c, b1, b2)),
+      ]
+      for (const c of candidates) {
+        if (!ends.some((e) => e !== undefined && e.x === c.x && e.y === c.y))
+          seen.add(`${c.x},${c.y}`)
+      }
+    }
+  }
+  return seen
 }
 
 /**
