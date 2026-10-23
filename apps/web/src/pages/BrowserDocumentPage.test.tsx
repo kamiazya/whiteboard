@@ -620,11 +620,13 @@ describe('BrowserDocumentPage', () => {
     expect(await screen.findByRole('button', { name: 'More actions' })).toBeTruthy()
   })
 
+  // At a path somebody chose, so the rename is the name alone: a generated
+  // path would also move the document, which needs the real stores.
   it('renaming through the title field updates the heading and flushes a save', async () => {
     vi.useRealTimers()
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
+    await store.save({ ...snap, path: 'chosen' })
     await act(async () => {
       renderInRouter(
         <BrowserDocumentPage

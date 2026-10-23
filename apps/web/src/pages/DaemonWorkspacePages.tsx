@@ -14,7 +14,8 @@
  * for the life of the tab (React caches the lazy result), so on THAT route
  * the fallback's Reload is the recovery, not Try again.
  */
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { LazyPageFallback } from '../components/LazyPageFallback.js'
 import { folderOfDocumentPath, type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
@@ -31,6 +32,28 @@ const DaemonDocumentPage = lazy(() =>
 const DaemonIndexPage = lazy(() =>
   import('./DaemonIndexPage.js').then((m) => ({ default: m.DaemonIndexPage })),
 )
+
+/**
+ * A document that moved to its name's path stays the same mount: the page has
+ * already switched in place, so keying on the new path would reload the editor
+ * it is showing. The key keeps the path the mount began with for as long as the
+ * view names the path it moved to, and the address is REPLACED because it names
+ * the same document it did a moment ago.
+ */
+function useDocumentMoveKey(view: WorkspaceRoute) {
+  const navigate = useNavigate()
+  const [moved, setMoved] = useState<{ readonly began: string; readonly now: string } | null>(null)
+  const keyPath =
+    view.kind === 'document' && moved !== null && moved.now === view.path ? moved.began : undefined
+  const onPathMoved = (path: string): void => {
+    if (view.kind !== 'document') return
+    setMoved({ began: keyPath ?? view.path, now: path })
+    navigate(workspaceRoutePath({ kind: 'document', workspace: view.workspace, path }), {
+      replace: true,
+    })
+  }
+  return { keyPath, onPathMoved }
+}
 
 /**
  * `key` on the document mount forces a clean remount (fresh
@@ -50,6 +73,7 @@ export function DaemonWorkspacePages({
   readonly serverMode?: boolean
   readonly waitingMessage: string
 }) {
+  const { keyPath, onPathMoved } = useDocumentMoveKey(view)
   return (
     <ErrorBoundary resetKey={workspaceRoutePath(view)}>
       <Suspense fallback={<LazyPageFallback heightClass="h-full" message={waitingMessage} />}>
@@ -63,11 +87,12 @@ export function DaemonWorkspacePages({
           />
         ) : (
           <DaemonDocumentPage
-            key={`${view.workspace}:${view.path}`}
+            key={`${view.workspace}:${keyPath ?? view.path}`}
             daemonBaseUrl={daemonBaseUrl}
             workspaceId={view.workspace}
             path={view.path}
             serverMode={serverMode}
+            onPathMoved={onPathMoved}
             // The folder the document sat in, so Back lands where the person was.
             onNavigateBack={() =>
               onView({

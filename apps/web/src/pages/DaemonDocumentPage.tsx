@@ -21,7 +21,6 @@ import type { WorkspaceFilesSource } from '../lib/files-source.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
-import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { spatialThreadWrite } from '../lib/spatial-thread-write.js'
@@ -52,6 +51,8 @@ import { useDaemonDocumentController } from './use-daemon-document-controller.js
 import { useDocumentActions } from './use-document-actions.js'
 import { useListFollowsRecord } from './use-follow-workspace-writes.js'
 import { useDaemonOwnEditBaseline } from './use-own-edit-baseline.js'
+import { usePlaceByName } from './use-place-by-name.js'
+import { useReplicaReconcile } from './use-replica-reconcile.js'
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -64,6 +65,9 @@ export interface DaemonDocumentPageProps {
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
   onNavigateBack?: () => void
+  // Told where the open document went when its first rename gave it the name's
+  // path, so the host can point the address there without remounting.
+  onPathMoved?: (path: string) => void
   // Served by a server-mode keeper from its own origin (ADR-0047): it serves
   // SSE only and has no replica routes, and its data is not this browser's to
   // keep — the session cookie authenticates the connection.
@@ -107,6 +111,7 @@ function useDaemonDocument(
     path,
     createBackend,
     onNavigateBack,
+    onPathMoved,
     serverMode = false,
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
@@ -124,34 +129,12 @@ function useDaemonDocument(
   // stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
-  // ADR-0023's replica reconciliation, both directions, at the moment this
-  // browser is working on a daemon workspace. PUSH first (decision 3's
-  // return half — offline edits ship as ordinary ops; a clean replica costs
-  // one IndexedDB read and no network), THEN the pull refresh, so a
-  // merge-back cannot read as an offline edit vanishing between the two.
-  // Both modules dedupe internally, so the effect can fire on every resolve.
-  useEffect(() => {
-    if (controller.workspaceId === null || serverMode) return
-    const cancelPush = scheduleReplicaPush({
-      fetch: daemonFetch,
-      daemonBaseUrl,
-      workspaceId: controller.workspaceId,
-    })
-    const cancelRefresh = scheduleReplicaRefresh({
-      fetch: daemonFetch,
-      daemonBaseUrl,
-      workspaceId: controller.workspaceId,
-    })
-    // Both are scheduled onto an idle callback or a 1.5s timer, so without
-    // this they outlive the page that asked — and fire against a fetch, a
-    // daemon address and a workspace that have all moved on. Cancelling is
-    // free where the run has already begun (it is left alone to finish) and
-    // releases the dedupe where it has not, so the next resolve tries again.
-    return () => {
-      cancelPush()
-      cancelRefresh()
-    }
-  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, serverMode])
+  useReplicaReconcile({
+    daemonFetch,
+    daemonBaseUrl,
+    workspaceId: controller.workspaceId,
+    serverMode,
+  })
 
   // Stable across the page's lifetime — read fresh (not cached in state)
   // wherever the current settings are needed.
@@ -445,6 +428,8 @@ function useDaemonDocument(
   const tagVocabulary = useTagVocabulary(tagsSource)
   const facetRegistry = useStencilRegistry(tagsSource)
 
+  const onNameSettled = usePlaceByName(controller, daemonFetch, daemonBaseUrl, onPathMoved)
+
   const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
@@ -481,6 +466,7 @@ function useDaemonDocument(
     // The NAME is the workspace's — the top bar hands it down from `/names`,
     // the same surface the canvas dropdown renames through.
     title: 'top-bar',
+    onNameSettled,
     properties: {
       ready: true,
       // Facets are OKF frontmatter, so only a markdown document has any —

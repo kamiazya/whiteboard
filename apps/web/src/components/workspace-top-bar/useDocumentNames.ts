@@ -8,6 +8,7 @@ import {
   getWorkspaceNames,
   setDocumentDisplayName,
 } from '../../lib/daemon-api-client.js'
+import { useRenameQueue } from './use-rename-queue.js'
 
 /** `daemonFetch` already resolves a route against the daemon it was built for. */
 const SAME_BASE = ''
@@ -47,6 +48,26 @@ function withRecordedName(
   return { ...names, documents }
 }
 
+/**
+ * One rename commit: null once saved, else why not (the daemon's own reason
+ * when its refusal carried one; anything else — unreached, a reasonless
+ * refusal, a drifted answer — in this module's words).
+ */
+async function writeName(
+  daemonFetch: typeof globalThis.fetch,
+  workspaceId: string,
+  targetPath: string,
+  name: string,
+  setNames: (names: WorkspaceNames) => void,
+): Promise<string | null> {
+  try {
+    setNames(await setDocumentDisplayName(daemonFetch, SAME_BASE, workspaceId, targetPath, name))
+    return null
+  } catch (err) {
+    return (err instanceof DaemonApiError && apiErrorReason(err.body)) || RENAME_REFUSED
+  }
+}
+
 // Single owner of the workspaceNamesSchema-derived names state. Callers get
 // `effectiveNames` and the writer below rather than a setter — keeping the
 // schema-parse boundary in one place is what stops a future caller from
@@ -58,6 +79,7 @@ export function useDocumentNames({
   recorded,
 }: UseDocumentNamesOptions) {
   const [names, setNames] = useState<WorkspaceNames>(EMPTY_NAMES)
+  const { track, afterRenamesLand } = useRenameQueue()
 
   // Load display names. Guard against a stale response for a previous
   // workspaceId landing after a newer request already resolved.
@@ -84,20 +106,16 @@ export function useDocumentNames({
   // Daemon-mode rename commit: null once saved, else why not (the daemon's own
   // reason when it gave one). A browser-kept workspace never reaches it.
   const renameDocument = useCallback(
-    async (targetPath: string, name: string): Promise<string | null> => {
-      try {
-        setNames(
-          await setDocumentDisplayName(daemonFetch, SAME_BASE, workspaceId, targetPath, name),
-        )
-        return null
-      } catch (err) {
-        // The daemon's own reason when its refusal carried one; anything else —
-        // unreached, a reasonless refusal, a drifted answer — in this hook's words.
-        return (err instanceof DaemonApiError && apiErrorReason(err.body)) || RENAME_REFUSED
-      }
-    },
-    [workspaceId, daemonFetch],
+    (targetPath: string, name: string): Promise<string | null> =>
+      track(() => writeName(daemonFetch, workspaceId, targetPath, name, setNames)),
+    [workspaceId, daemonFetch, track],
   )
 
-  return { effectiveNames, renameDocument }
+  /** What the title slot is handed to rename this document with, and to wait on those renames. */
+  const renameFor = (path: string) => ({
+    onRename: (next: string) => renameDocument(path, next),
+    afterRenamesLand,
+  })
+
+  return { effectiveNames, renameDocument, renameFor }
 }

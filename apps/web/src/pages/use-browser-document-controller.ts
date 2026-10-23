@@ -10,10 +10,12 @@ import {
   listBrowserDocuments,
   loadBrowserDocument,
 } from '../lib/browser-document-summary.js'
+import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { pathAfterFirstRename } from '../lib/first-rename-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
@@ -47,6 +49,13 @@ export interface BrowserDocumentController {
    * rename of this page's own that has not landed yet wins.
    */
   followRecordedName(name: string | null): void
+  /**
+   * The person finished naming the open document: moves it from a generated
+   * path to one derived from the name, once. Resolves after the move landed
+   * and the snapshot carries the new path, or at once when nothing moves.
+   * Rejects with the keeper's refusal; the document stays where it was.
+   */
+  placeByName(): Promise<void>
   /**
    * True once a URL named a document that is not there AND the workspace
    * holds none to fall back to. The page leaves for the list then: seeding a
@@ -418,6 +427,31 @@ export function useBrowserDocumentController(
     [flushSave],
   )
 
+  const placeByName = useCallback(async (): Promise<void> => {
+    // The name is read AFTER the pending rename is flushed, so the path is
+    // derived from what the workspace holds rather than from a draft.
+    if (!(await flushSave())) return
+    const base = snapshotRef.current
+    if (base === null || base.name === null || base.documentId === deletedIdRef.current) return
+    const workspaceId = getBrowserWorkspaceId()
+    const held = await indexRef.current.listDocuments({ workspaceId })
+    const to = pathAfterFirstRename(
+      base.path,
+      base.name,
+      held.map((entry) => entry.path),
+    )
+    if (to === null) return
+    // The files source's move, not the index's: it also repoints the
+    // `[[path]]` references other documents wrote to the old path.
+    await createBrowserFilesSource({
+      index: indexRef.current,
+      loro: loroRef.current,
+    }).renameDocumentPath(base.path, to)
+    const moved = { ...(snapshotRef.current ?? base), path: to }
+    snapshotRef.current = moved
+    setSnapshot(moved)
+  }, [flushSave])
+
   const followRecordedName = useCallback((name: string | null) => {
     const base = snapshotRef.current
     if (base === null || pendingSnapshotRef.current !== null || savePromiseRef.current !== null)
@@ -602,6 +636,7 @@ export function useBrowserDocumentController(
     persistence,
     renameDocument,
     followRecordedName,
+    placeByName,
     deleteDocument,
     startFresh,
     listDocuments,

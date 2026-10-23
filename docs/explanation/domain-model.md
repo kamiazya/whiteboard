@@ -106,10 +106,22 @@ its workspace — the store refuses a second document at a path another one hold
 because a duplicate would make that address ambiguous rather than merely
 untidy.
 
-A path is never derived from a display name, in either mode.
-[ADR-0008](../contributing/adr/0008-slug-derivation-and-rename.md) measured
-that and found every non-Latin title collapsing to `untitled-N`, which is
-indistinguishable in the very column a path exists to distinguish.
+A path is not kept in step with a display name. It follows the name exactly
+once: the first time you name a document from its title while its path is still
+the generated one (`untitled`, `untitled-2`, …), the path becomes the name in
+lower case with each run of other characters turned into one hyphen —
+"Checkout Architecture" moves `untitled` to `checkout-architecture`, or
+`checkout-architecture-2` when that path is taken in the same folder. The
+address bar changes in place, with no reload and no extra Back step. After
+that the path is fixed, and later renames change what the document is called,
+never where it lives. A name the path alphabet cannot spell (a title written
+entirely in Japanese, say) gives no path, so the document stays at its
+generated one and the next name may still claim it; the same goes for a name
+that would itself read as generated, like "Untitled 2". A path you chose, in
+**Name and folder…** or by moving the document, is never replaced.
+[ADR-0008](../contributing/adr/0008-slug-derivation-and-rename.md) records why
+paths were not derived from names to begin with: every non-Latin title
+collapsed to `untitled-N`.
 
 The display name can come from the document instead. A note still at a
 generated path (`untitled`, `untitled-2`, …) that nobody has named takes its
@@ -118,14 +130,15 @@ heading while it is being typed. It stops for good once someone names the
 note — when creating it, by renaming it, or through a `title` a document they
 import carries (one equal to the name it already has says nothing new) — or gives it an address of their own in place of `untitled`. A
 name you choose is kept even when the heading starts with it: "Weekly" stays
-"Weekly" under a `# Weekly review` heading. Both keepers do this, and neither
-touches the path.
+"Weekly" under a `# Weekly review` heading. Both keepers do this, and
+neither touches the path: only naming the document from its title does.
 
 A `[[reference]]` between documents is written as a **path** or a
 **document id** — display names never resolve; they label a link at render
 time instead. The id survives everything; a path reference is repointed
-automatically when its target moves, and a rename (of the display name)
-changes what links show, never what they mean.
+automatically when its target moves, which includes the move a first rename
+makes, and a rename (of the display name) changes what links show, never what
+they mean.
 
 ## One store behind every surface
 

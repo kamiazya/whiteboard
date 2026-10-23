@@ -27,6 +27,7 @@ import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import type { DocumentIdentity } from '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { useBrowserToolRegistry } from '../hooks/use-browser-tool-registry.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -203,6 +204,7 @@ function DocumentHeader({
                     key={documentKey}
                     title={model.title === 'top-bar' ? identity.name : model.title.value}
                     onTitleChange={titleWriter(model, identity.onRename)}
+                    {...settledProp(model, identity)}
                     // No save state in the row: the shell mark answers
                     // for the keeper, and only when there is a condition.
                     {...(model.properties.status === undefined
@@ -230,6 +232,18 @@ function DocumentHeader({
 }
 
 type TitleWriter = ComponentProps<typeof DocumentProperties>['onTitleChange']
+
+/** The keeper's settle step, held back behind the bar's renames still on the wire. */
+function settledProp(
+  model: DocumentPageModel,
+  identity: DocumentIdentity,
+): Pick<ComponentProps<typeof DocumentProperties>, 'onTitleSettled'> {
+  const { onNameSettled } = model
+  if (onNameSettled === undefined) return {}
+  const { afterRenamesLand } = identity
+  if (afterRenamesLand === undefined) return { onTitleSettled: onNameSettled }
+  return { onTitleSettled: (name) => afterRenamesLand(() => onNameSettled(name)) }
+}
 
 /**
  * Who takes a rename typed into the title field: the bar's own rename when
