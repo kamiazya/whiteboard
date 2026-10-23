@@ -176,8 +176,8 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // above the hook) can close a dialog left open across a switch.
   renameRef: 'no subject: mirrors the current flow, reassigned every render',
   openRef: 'no subject: mirrors the host’s open handler, reassigned every render',
-  hits: 'cleared on switch',
-  searchDegraded: 'cleared on switch',
+  answer: 'cleared on switch',
+  elapsed: 'cleared on switch',
   staleList: 'cleared on switch',
   pinRefusal: 'cleared on switch',
   // The keeper's vocabulary names the departed workspace's tags; until the
@@ -447,6 +447,8 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  urlSyncedDocumentRef:
+    'no subject: remembers which document the address last followed, so a rename moves the URL once; it names the current document by construction',
   // The one that bit: a bare boolean over the keeper's `deleteDocument()`,
   // which acts on whatever document the controller currently holds.
   // Confirmed after a switch, it deleted the document that had arrived.

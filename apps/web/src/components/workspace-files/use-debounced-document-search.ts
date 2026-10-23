@@ -22,6 +22,13 @@ function useRememberedQuery(memoryScope: string | undefined) {
   return [query, setQuery] as const
 }
 
+/** What the panel needs to draw a search: the rows, why they may be narrow, whether more is coming. */
+export interface SearchState {
+  hits: readonly DocumentSearchHit[] | null
+  searchDegraded: boolean
+  searching: 'idle' | 'waiting' | 'slow'
+}
+
 /**
  * The panel's content search against its source, debounced.
  *
@@ -36,54 +43,41 @@ export function useDebouncedDocumentSearch(
   source: Pick<WorkspaceFilesSource, 'searchDocuments'>,
   /** See WorkspaceFilesPanelProps.revision — content may change behind the panel. */
   revision: unknown,
+  /** The scope whose remembered query refills the box; none keeps the box empty. */
   memoryScope?: string,
 ): {
   query: string
   setQuery: (next: string) => void
-  hits: readonly DocumentSearchHit[] | null
-  searchDegraded: boolean
-  /** The query is typed and its answer has not landed — debounce plus flight. */
-  pending: boolean
-  /** Pending long enough to be worth saying so. */
-  slow: boolean
+  search: SearchState
   /** Workspace switch: results computed against the departed content. */
   resetResults: () => void
 } {
   const [query, setQuery] = useRememberedQuery(memoryScope)
-  const [hits, setHits] = useState<readonly DocumentSearchHit[] | null>(null)
-  const [searchDegraded, setSearchDegraded] = useState(false)
-  // The trimmed query the last answer (or refusal) was for. Pending is the
-  // difference between it and what is typed, so a revision re-read of the
-  // same query keeps showing the rows it has instead of flashing busy.
-  const [settledFor, setSettledFor] = useState<string | null>(null)
-  const [slow, setSlow] = useState(false)
+  // The last answer and the trimmed query it was for. Pending is the
+  // difference between that query and what is typed, so a revision re-read of
+  // the same query keeps showing its rows instead of flashing busy.
+  const [answer, setAnswer] = useState<{
+    forQuery: string
+    hits: readonly DocumentSearchHit[] | null
+  } | null>(null)
+  const trimmed = query.trim()
+  const searchable = trimmed !== '' && !trimmed.startsWith('#')
 
-  // Debounced, and the LATEST query decides: the cleanup marks a superseded
-  // request stale rather than trusting arrival order.
+  // Debounced, and the LATEST query decides: a slower answer for a query
+  // the user has already moved on from must never replace a newer one, so
+  // the cleanup marks its own request stale rather than trusting arrival
+  // order.
   useEffect(() => {
-    const trimmed = query.trim()
-    if (trimmed === '' || trimmed.startsWith('#')) {
-      setHits(null)
-      setSearchDegraded(false)
-      setSettledFor(null)
+    if (!searchable) {
+      setAnswer(null)
       return
     }
     let stale = false
+    const settle = (hits: readonly DocumentSearchHit[] | null) => {
+      if (!stale) setAnswer({ forQuery: trimmed, hits })
+    }
     const timer = setTimeout(() => {
-      source
-        .searchDocuments(trimmed, SEARCH_LIMIT)
-        .then((results) => {
-          if (stale) return
-          setHits(results)
-          setSearchDegraded(false)
-          setSettledFor(trimmed)
-        })
-        .catch(() => {
-          if (stale) return
-          setHits(null)
-          setSearchDegraded(true)
-          setSettledFor(trimmed)
-        })
+      source.searchDocuments(trimmed, SEARCH_LIMIT).then(settle, () => settle(null))
     }, SEARCH_DEBOUNCE_MS)
     return () => {
       stale = true
@@ -92,28 +86,36 @@ export function useDebouncedDocumentSearch(
     // `revision` too: results computed against the old content can name a
     // document that has since been renamed or deleted, and a row that opens
     // nothing is worse than a slower answer.
-  }, [query, source, revision])
+  }, [searchable, trimmed, source, revision])
 
   // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
   // lets scoped-screen-state.test.ts verify the setters from here.
-  const resetResults = useCallback(() => {
-    setHits(null)
-    setSearchDegraded(false)
-    setSettledFor(null)
-  }, [])
+  const resetResults = useCallback(() => setAnswer(null), [])
 
-  const trimmedQuery = query.trim()
-  const pending =
-    trimmedQuery !== '' && !trimmedQuery.startsWith('#') && settledFor !== trimmedQuery
+  const waiting = searchable && answer?.forQuery !== trimmed
+  const slow = useAfter(waiting, SLOW_SEARCH_MS)
+  const searching = waiting ? (slow ? 'slow' : 'waiting') : 'idle'
+  // A refused content search settles with null hits; null for an unsettled
+  // query is just not-yet.
+  const search: SearchState = {
+    hits: answer?.hits ?? null,
+    searchDegraded: answer?.hits === null,
+    searching,
+  }
 
+  return { query, setQuery, search, resetResults }
+}
+
+/** Whether `active` has held for `ms` — a wait shorter than that is not worth saying. */
+function useAfter(active: boolean, ms: number): boolean {
+  const [elapsed, setElapsed] = useState(false)
   useEffect(() => {
-    if (!pending) {
-      setSlow(false)
+    if (!active) {
+      setElapsed(false)
       return
     }
-    const timer = setTimeout(() => setSlow(true), SLOW_SEARCH_MS)
+    const timer = setTimeout(() => setElapsed(true), ms)
     return () => clearTimeout(timer)
-  }, [pending, trimmedQuery])
-
-  return { query, setQuery, hits, searchDegraded, pending, slow, resetResults }
+  }, [active, ms])
+  return elapsed
 }

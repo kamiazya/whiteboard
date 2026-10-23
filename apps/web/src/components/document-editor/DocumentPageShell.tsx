@@ -1,8 +1,9 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, type Ref, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type InspectorPresence,
   InspectorPresenceContext,
 } from '../../contexts/inspector-presence.js'
+import { PageHeading } from '../shell/PageHeading.js'
 
 /**
  * The two-row grid shell both document pages stand in.
@@ -41,12 +42,15 @@ import {
  */
 export function DocumentPageShell({
   srTitle,
+  headingRef,
   header,
   children,
   aside,
 }: {
   /** The page's visually-hidden `<h1>` landmark text. */
   srTitle: string
+  /** Where a route change moves focus: the heading is a target, not a tab stop. */
+  headingRef?: Ref<HTMLHeadingElement>
   /** The header row's contents, after the landmark. */
   header: ReactNode
   /** The editor row, and any banner rows the page stacks above it. */
@@ -111,7 +115,9 @@ export function DocumentPageShell({
   return (
     <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
-        <h1 className="sr-only">{srTitle}</h1>
+        <PageHeading headingRef={headingRef} srOnly>
+          {srTitle}
+        </PageHeading>
         {header}
       </div>
       <div className="relative flex min-h-0 min-w-0">

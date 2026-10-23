@@ -95,7 +95,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
-  'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
+  'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 97,
   'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 139,
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
@@ -265,7 +265,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
   // The two layouts are ONE card with a `layout`. The entry below is that card
   // — the whole of what both layouts draw, counted once.
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 114,
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 116,
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   // The two list effects do not repeat one another on a mount; the lines are the
@@ -278,11 +278,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 804,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 92,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 96,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 97,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 84,
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
-  'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 78,
+  'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 64,
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
@@ -356,7 +356,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 454,
-  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
+  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 523,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
   // under the threshold. Recorded at the measurement rather than left at an old
@@ -364,7 +364,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 355,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 356,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the

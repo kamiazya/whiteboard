@@ -40,6 +40,7 @@ import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
+import { documentHeading } from '../lib/document-title.js'
 import { faviconStatusOf } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
@@ -514,7 +515,7 @@ function useBrowserDocument(
   const model: DocumentPageModel = {
     scopeKey: documentId,
     documentKind,
-    srTitle: label,
+    srTitle: documentHeading(title),
     sync,
     markdown: {
       body: markdownBody,

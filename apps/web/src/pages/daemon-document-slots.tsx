@@ -17,6 +17,7 @@ import { LoadDegradedView } from '../components/document-editor/LoadDegradedView
 import { Button } from '../components/ui/button.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
 import { documentLabel } from '../lib/document-label.js'
+import { documentHeading } from '../lib/document-title.js'
 import type { SaveState } from '../lib/save-indicator.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DaemonPageState } from './daemon-page-state.js'
@@ -182,6 +183,8 @@ export function daemonDocumentLabels(
   documentKey: string
   scopeKey: string | null
   overlayTitle: string
+  /** The name the page's heading carries: the chosen name, else the title box's own placeholder. */
+  headingTitle: string
   exportFilenameBase: string
   registryKey: string | null
   workspaceId: string
@@ -193,6 +196,7 @@ export function daemonDocumentLabels(
       documentKey: 'no-canvas',
       scopeKey: null,
       overlayTitle: 'Untitled',
+      headingTitle: 'Untitled',
       exportFilenameBase: 'canvas',
       registryKey: null,
       workspaceId: '',
@@ -200,14 +204,13 @@ export function daemonDocumentLabels(
       commandCanvas: null,
     }
   }
-  const name = documentLabel(
-    { name: names.recorded === undefined ? names.listed : names.recorded, path: canvas.path },
-    'path',
-  )
+  const chosen = names.recorded === undefined ? names.listed : names.recorded
+  const name = documentLabel({ name: chosen, path: canvas.path }, 'path')
   return {
     documentKey: documentSyncKey(canvas.workspaceId, canvas.path),
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,
     overlayTitle: name,
+    headingTitle: documentHeading(chosen),
     exportFilenameBase: name,
     // Identity key = workspaceId+path, matching this page's own canvas.
     registryKey: documentSyncKey(canvas.workspaceId, canvas.path),

@@ -13,7 +13,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, KeyboardEvent } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -26,7 +26,7 @@ import { FolderContentsList } from './FolderContentsList.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
-import type { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
+import type { SearchState } from './use-debounced-document-search.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
@@ -59,7 +59,7 @@ function searchResultRows({
   query,
 }: {
   activeTag: string | null
-  hits: ReturnType<typeof useDebouncedDocumentSearch>['hits']
+  hits: SearchState['hits']
   documents: readonly WorkspaceDocumentEntry[]
   query: string
 }): ComponentProps<typeof SearchResults>['results'] {
@@ -223,17 +223,7 @@ export function PanelToolbar({
           maxLength={SEARCH_QUERY_MAX_CHARS}
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'ArrowDown') return
-            // The first result is one key away from the box rather than a
-            // Tab walk across every control between them.
-            const first = event.currentTarget
-              .closest('[data-testid="workspace-files-panel"]')
-              ?.querySelector<HTMLElement>('[data-testid="search-results"] button[data-doc-path]')
-            if (first === null || first === undefined) return
-            event.preventDefault()
-            first.focus()
-          }}
+          onKeyDown={focusFirstResult}
           className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
         />
       </div>
@@ -550,12 +540,6 @@ export function BrowseTwoColumns({
   )
 }
 
-/**
- * The results of a search, in place of the columns. They come from
- * everywhere, so neither the folder tree nor the folder's own contents
- * describes them: one flat list, in both column modes — a search that
- * behaved differently per mode would be two features wearing one box.
- */
 /** What a listener hears when a search settles. */
 function resultsAnnouncement(count: number, query: string): string {
   const q = query.trim()
@@ -563,14 +547,37 @@ function resultsAnnouncement(count: number, query: string): string {
   return `${count} ${count === 1 ? 'result' : 'results'} for “${q}”`
 }
 
+/**
+ * ArrowDown in the search box lands on the first result, so reaching it is one
+ * key rather than a Tab walk across every control between the two.
+ */
+function focusFirstResult(event: KeyboardEvent<HTMLInputElement>): void {
+  if (event.key !== 'ArrowDown') return
+  const first = event.currentTarget
+    .closest('[data-testid="workspace-files-panel"]')
+    ?.querySelector<HTMLElement>('[data-testid="search-results"] button[data-doc-path]')
+  if (first === null || first === undefined) return
+  event.preventDefault()
+  first.focus()
+}
+
+function focusSearchBox(): void {
+  document
+    .querySelector<HTMLInputElement>('[data-testid="workspace-files-panel"] input[type="search"]')
+    ?.focus()
+}
+
+/**
+ * The results of a search, in place of the columns. They come from
+ * everywhere, so neither the folder tree nor the folder's own contents
+ * describes them: one flat list, in both column modes — a search that
+ * behaved differently per mode would be two features wearing one box.
+ */
 export function SearchColumn({
   documents,
   query,
   activeTag,
-  hits,
-  searchDegraded,
-  pending,
-  slow,
+  search,
   selectedPath,
   tapOpens,
   onOpenDocument,
@@ -582,10 +589,7 @@ export function SearchColumn({
   documents: readonly WorkspaceDocumentEntry[]
   query: string
   activeTag: string | null
-  hits: ReturnType<typeof useDebouncedDocumentSearch>['hits']
-  searchDegraded: boolean
-  pending: boolean
-  slow: boolean
+  search: SearchState
   selectedPath: string | undefined
   tapOpens: boolean
   onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
@@ -594,6 +598,7 @@ export function SearchColumn({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
 }) {
+  const { hits, searchDegraded, searching } = search
   const rows = searchResultRows({ activeTag, hits, documents, query })
   return (
     // Results come from everywhere, so neither the folder tree nor the
@@ -601,7 +606,7 @@ export function SearchColumn({
     // column modes — a search that behaved differently per mode would
     // be two features wearing one box.
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-      <div data-testid="search-results" aria-busy={pending}>
+      <div data-testid="search-results" aria-busy={searching !== 'idle'}>
         {/* Always mounted, text swapped: a polite live region added to
             the DOM already carrying its message is announced
             inconsistently (see polite-live-region.test.ts). The count is
@@ -612,11 +617,11 @@ export function SearchColumn({
           aria-label="Search results"
           className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
         >
-          {pending ? '' : resultsAnnouncement(rows.length, query)}
+          {searching !== 'idle' ? '' : resultsAnnouncement(rows.length, query)}
           {searchDegraded &&
             ' Searching names and paths only — this workspace’s content search is unavailable.'}
         </p>
-        {slow && (
+        {searching === 'slow' && (
           <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
             Searching…
           </p>
@@ -627,13 +632,7 @@ export function SearchColumn({
           // search contract), not a content search — it never leaves the
           // client. Everything else asks the source.
           results={rows}
-          onLeaveUp={() =>
-            document
-              .querySelector<HTMLInputElement>(
-                '[data-testid="workspace-files-panel"] input[type="search"]',
-              )
-              ?.focus()
-          }
+          onLeaveUp={focusSearchBox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
           selectedPath={selectedPath}

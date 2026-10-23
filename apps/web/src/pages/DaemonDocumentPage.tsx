@@ -458,7 +458,7 @@ function useDaemonDocument(
     scopeKey: labels.scopeKey,
     documentKey,
     documentKind,
-    srTitle: 'Whiteboard (daemon)',
+    srTitle: labels.headingTitle,
     sync,
     markdown: daemonMarkdownSlot({
       body: markdownBody,

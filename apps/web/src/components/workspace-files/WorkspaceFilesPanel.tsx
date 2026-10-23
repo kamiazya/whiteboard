@@ -120,10 +120,7 @@ export function WorkspaceFilesPanel({
   const {
     query,
     setQuery,
-    hits,
-    searchDegraded,
-    pending: searchPending,
-    slow: searchSlow,
+    search,
     resetResults: resetSearchResults,
   } = useDebouncedDocumentSearch(source, revision, memoryScope)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -644,10 +641,7 @@ export function WorkspaceFilesPanel({
             documents={columnView.documents}
             query={query}
             activeTag={activeTag}
-            hits={hits}
-            searchDegraded={searchDegraded}
-            pending={searchPending}
-            slow={searchSlow}
+            search={search}
             selectedPath={selectedPath}
             tapOpens={tapOpens}
             onOpenDocument={onOpenDocument}

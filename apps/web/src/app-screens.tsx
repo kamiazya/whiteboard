@@ -5,6 +5,8 @@ import { AppShellLazy } from './components/AppShellLazy.js'
 import { KeeperNotices } from './components/connection/KeeperNotices.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { LazyPageFallback } from './components/LazyPageFallback.js'
+import { RouteAnnouncer } from './components/shell/RouteAnnouncer.js'
+import { useSettingsRoutePresence } from './hooks/use-route-presence.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
@@ -84,6 +86,7 @@ function ShellFrame({
         {...(workspaces === undefined ? {} : { workspaces })}
         {...(onWorkInBrowser === undefined ? {} : { onWorkInBrowser })}
       />
+      <RouteAnnouncer />
       <KeeperNotices />
       <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
     </div>
@@ -150,6 +153,7 @@ export function SettingsScreen({
   daemonWorkspaces?: AppShellProps['workspaces']
   browserWorkspaces?: AppShellProps['workspaces']
 }) {
+  useSettingsRoutePresence()
   return (
     <ShellFrame
       daemon={daemon !== undefined}

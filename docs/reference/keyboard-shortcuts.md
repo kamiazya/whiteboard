@@ -211,6 +211,15 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 
 The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
 
+## Moving between pages
+
+Opening a document, returning to the list or opening Settings moves keyboard
+focus to the page's heading and has a screen reader say where you are
+("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
+titled the same way ("Roadmap · Whiteboard"). A new, empty note is the
+exception for focus: the editor takes it, so you can type at once, and the
+announcement still plays.
+
 ## Searching the document list
 
 In the document list's search box, the results are one key away, and a screen

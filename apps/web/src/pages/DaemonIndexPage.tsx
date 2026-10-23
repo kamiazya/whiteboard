@@ -6,8 +6,10 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
+import { PageHeading } from '../components/shell/PageHeading.js'
 import { daemonMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useListRoutePresence } from '../hooks/use-route-presence.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
   createDaemonFetch,
@@ -593,10 +595,12 @@ export function DaemonIndexPage({
     workspace ??
     'Documents'
 
+  const headingRef = useListRoutePresence()
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      <div className="flex h-full flex-col overflow-y-auto p-4">
-        <h1 className="mb-3 truncate text-lg font-semibold">{pageHeading}</h1>
+      <main className="flex h-full flex-col overflow-y-auto p-4">
+        <PageHeading headingRef={headingRef}>{pageHeading}</PageHeading>
         {createError && (
           <div role="alert" className="mb-2 text-sm text-destructive">
             {createError}
@@ -632,7 +636,7 @@ export function DaemonIndexPage({
           serverMode={serverMode}
         />
         <DeleteDocumentsDialog {...deleteDialog} />
-      </div>
+      </main>
     </DaemonApiContext.Provider>
   )
 }

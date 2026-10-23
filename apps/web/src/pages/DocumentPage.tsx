@@ -34,6 +34,7 @@ import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
+import { useDocumentRoutePresence } from '../hooks/use-route-presence.js'
 import { useWhiteboardCommands } from '../hooks/use-whiteboard-commands.js'
 import type { SceneExportOptions } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -635,6 +636,7 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
+  const headingRef = useDocumentRoutePresence(model, documentKind)
   // No variation chrome here, and no `?v=`: ADR-0029 retires the surface.
   // A proposal is drawn on the document a person is already looking at, so
   // a lane to switch onto — and an address that names which one — is the
@@ -688,6 +690,7 @@ function DocumentPageBody({
   return (
     <DocumentPageShell
       srTitle={model.srTitle}
+      headingRef={headingRef}
       aside={inspector === null ? undefined : lockedInspector(sync, inspectorPanels[inspector]())}
       header={
         <DocumentHeader
