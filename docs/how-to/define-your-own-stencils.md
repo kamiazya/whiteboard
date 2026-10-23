@@ -20,6 +20,12 @@ projector, a colour-blind reader and a greyscale print, and colour stays free to
 else about the box — healthy or failing, say. That rule is
 [ADR-0036](../contributing/adr/0036-semantic-axes.md) §5.
 
+The editor draws the same six: pick one under **Facets…** on a selected box and the box takes
+its silhouette, with the label centred inside it. `visual.datastore` and `visual.external` also
+carry a symbol (a database, a link). That symbol is not drawn on the box itself — it shows where a
+box is too small to read, such as the minimap and a file row — so on the board the silhouette is
+what tells the six apart.
+
 ## Wearing one
 
 `stencil` sits beside `op`, next to `node`, on `node.add` and `node.patch`:
