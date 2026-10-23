@@ -84,7 +84,10 @@ function focusRootUnlessEditing(root: HTMLElement, target: EventTarget): void {
     active instanceof HTMLElement &&
     root.contains(active) &&
     active !== root &&
-    (active.isContentEditable || active.matches('input, textarea, select'))
+    // A menu a long press opened mid-gesture owns focus past the release.
+    (active.isContentEditable ||
+      active.matches('input, textarea, select') ||
+      active.closest('[data-context-menu]') !== null)
   ) {
     return
   }

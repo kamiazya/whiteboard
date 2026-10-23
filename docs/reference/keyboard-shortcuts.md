@@ -180,6 +180,15 @@ way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
 one, as **Zoom to fit** does.
 
+## Inside a menu
+
+The right-click and **More actions** menus take focus on their first item and
+are one Tab stop. `Up` and `Down` move between items and wrap; `Home` and
+`End` jump to the first and last; typing a letter jumps to the next item that
+starts with it. In a row of choices such as the colour swatches, `Left` and
+`Right` move within the row. `Enter` or `Space` activates the item, and
+`Esc` closes the menu and returns focus to the control that opened it.
+
 ## Writing in a markdown document
 
 These keys work in a markdown document's source and in a canvas node's text

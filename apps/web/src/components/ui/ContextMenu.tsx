@@ -25,6 +25,7 @@ import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { useRestoreFocus } from '../../hooks/use-restore-focus.js'
+import { useRovingMenu } from '../../hooks/use-roving-menu.js'
 import { cn } from '../../lib/utils.js'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
@@ -110,11 +111,6 @@ export interface ContextMenuProps {
    * the others.
    */
   readonly variant?: 'list' | 'grid' | 'sheet'
-  /**
-   * Take focus on the first row instead of on the menu itself — what a
-   * keyboard opening needs, since there is no pointer to land on a row.
-   */
-  readonly focusFirst?: boolean
 }
 
 /**
@@ -155,46 +151,10 @@ function CustomColorPanel({
   )
 }
 
-/** Every control a row of the menu offers, in tab order. */
-function rowsOf(menu: HTMLElement | null): HTMLElement[] {
-  return menu === null ? [] : [...menu.querySelectorAll<HTMLElement>('button:not([disabled])')]
-}
-
-/**
- * The menu keys: arrows step through the rows (wrapping), Home and End jump.
- * They are consumed here so the canvas behind never reads them as a nudge.
- */
-function moveFocusAmongRows(e: React.KeyboardEvent, menu: HTMLElement | null): void {
-  const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
-  const edge = e.key === 'Home' ? 0 : e.key === 'End' ? -1 : undefined
-  if (step === 0 && edge === undefined) return
-  e.preventDefault()
-  e.stopPropagation()
-  const rows = rowsOf(menu)
-  if (rows.length === 0) return
-  const at = rows.indexOf(document.activeElement as HTMLElement)
-  const next =
-    edge !== undefined
-      ? edge
-      : at === -1
-        ? step === 1
-          ? 0
-          : -1
-        : (at + step + rows.length) % rows.length
-  rows.at(next)?.focus()
-}
-
-export function ContextMenu({
-  x,
-  y,
-  items,
-  onClose,
-  variant = 'list',
-  label,
-  focusFirst = false,
-}: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
+  const roving = useRovingMenu(menuRef, onClose)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so it is nudged back inside once measurable, before paint (no visible jump).
   const [pos, setPos] = useState({ x, y })
@@ -223,12 +183,8 @@ export function ContextMenu({
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
 
-  // Focus the menu on open so Escape works without an extra click, and close
-  // on any pointerdown outside — both standard menu dismissal paths. Focus
-  // already on a row (the person moved it there) is left alone.
+  // Close on any pointerdown outside (focus on open is the roving hook's).
   useEffect(() => {
-    const menu = menuRef.current
-    if (menu?.contains(document.activeElement) !== true) menu?.focus()
     const onPointerDownAnywhere = (e: PointerEvent) => {
       if (e.target instanceof Element && e.target.closest('[data-context-menu]') !== null) return
       onClose()
@@ -236,13 +192,6 @@ export function ContextMenu({
     window.addEventListener('pointerdown', onPointerDownAnywhere, true)
     return () => window.removeEventListener('pointerdown', onPointerDownAnywhere, true)
   }, [onClose])
-
-  // The first row is claimed once, at opening, and after the effect above so
-  // a keyboard opening ends with focus on a row rather than on the menu.
-  const focusFirstRef = useRef(focusFirst)
-  useEffect(() => {
-    if (focusFirstRef.current) rowsOf(menuRef.current)[0]?.focus()
-  }, [])
 
   return (
     <div
@@ -282,16 +231,9 @@ export function ContextMenu({
               top: pos.y,
             }
       }
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation()
-          onClose()
-          return
-        }
-        moveFocusAmongRows(e, menuRef.current)
-      }}
+      onKeyDown={roving.onKeyDown}
     >
-      {items.map(renderCatalogItem)}
+      {items.map((item, index) => renderCatalogItem(item, index))}
     </div>
   )
 

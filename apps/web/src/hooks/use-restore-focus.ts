@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { focusedElement } from '../lib/capture-focus.js'
 
 /**
  * For a surface that takes focus when it opens: hands focus back to whatever
@@ -12,7 +11,12 @@ import { focusedElement } from '../lib/capture-focus.js'
  * control moved it there already.
  */
 export function useRestoreFocus(): void {
-  const [opener] = useState(focusedElement)
+  // SVG controls hold focus too (the canvas's own tool handles are shapes),
+  // so the opener is any focusable element, not only an HTMLElement.
+  const [opener] = useState(() => {
+    const active = document.activeElement
+    return active instanceof HTMLElement || active instanceof SVGElement ? active : null
+  })
   useEffect(
     () => () => {
       const active = document.activeElement

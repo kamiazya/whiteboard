@@ -302,3 +302,33 @@ describe('ContextMenu labelled vessels', () => {
     expect(screen.getByRole('menuitem', { name: 'Edit' }).className).toContain('min-h-12')
   })
 })
+
+describe('ContextMenu roving focus', () => {
+  const rows: ContextMenuItem[] = [
+    { label: 'Edit label', onSelect: () => {} },
+    {
+      kind: 'options',
+      label: 'Colour',
+      options: [
+        { label: 'Red', selected: false, onSelect: () => {} },
+        { label: 'Blue', selected: false, onSelect: () => {} },
+      ],
+    },
+    { label: 'Delete', onSelect: () => {} },
+  ]
+
+  it('leaves exactly one item in the Tab order, on the first item', () => {
+    render(<ContextMenu label="Actions" x={0} y={0} items={rows} onClose={() => {}} />)
+    const items = Array.from(
+      screen.getByRole('menu').querySelectorAll<HTMLElement>('[role^="menuitem"]'),
+    )
+    expect(items).toHaveLength(4)
+    expect(items.filter((el) => el.tabIndex === 0)).toEqual([items[0]])
+    expect(document.activeElement).toBe(items[0])
+  })
+
+  it('names the option row as a group', () => {
+    render(<ContextMenu label="Actions" x={0} y={0} items={rows} onClose={() => {}} />)
+    expect(screen.getByRole('group', { name: 'Colour' })).toBeTruthy()
+  })
+})
