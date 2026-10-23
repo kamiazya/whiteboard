@@ -207,5 +207,8 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
 | `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
+| `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
+
+The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
 
 ← Back to [reference](README.md)

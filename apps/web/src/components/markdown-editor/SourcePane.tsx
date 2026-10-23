@@ -490,7 +490,7 @@ export function SourcePane({
         data-testid="markdown-source-pane"
       />
       <span id={leaveHintId} className="sr-only">
-        Press Escape, then Tab, to leave the editor.
+        Press Escape, then Tab or Shift+Tab, to leave the editor.
       </span>
     </>
   )
