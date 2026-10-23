@@ -191,6 +191,57 @@ describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalid
   })
 })
 
+/** The pixel width a PNG's header declares. */
+function pngWidth(bytes: Uint8Array): number {
+  return new DataView(bytes.buffer, bytes.byteOffset).getUint32(16)
+}
+
+describe('BrowserDocumentPage export options', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('fills the SVG with the paper by default, and leaves it transparent once the option is off', async () => {
+    await renderLoaded()
+    expect(await exportSvgText()).toContain('role="presentation"')
+
+    cleanup()
+    vi.restoreAllMocks()
+    await renderLoaded()
+    fireEvent.pointerUp(await openExportMenuItem('With background'))
+    cleanup()
+    await renderLoaded()
+    expect(await exportSvgText()).not.toContain('role="presentation"')
+  })
+
+  it('rasterises a PNG twice as wide once 2× resolution is on', async () => {
+    const widthOfPng = async (): Promise<number> => {
+      const { blobs } = captureExportedBlobs()
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      fireEvent.pointerUp(await openExportMenuItem('Export as PNG'))
+      await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
+      return pngWidth(new Uint8Array(await blobs[blobs.length - 1]!.arrayBuffer()))
+    }
+    await renderLoaded()
+    const at1x = await widthOfPng()
+    cleanup()
+    vi.restoreAllMocks()
+
+    await renderLoaded()
+    fireEvent.pointerUp(await openExportMenuItem('2× resolution (PNG)'))
+    cleanup()
+    await renderLoaded()
+    expect(await widthOfPng()).toBe(at1x * 2)
+  })
+})
+
 /** Seeds a document's content through the same store the page loads it from. */
 async function seedContent(documentId: string, write: (doc: Loro) => void): Promise<void> {
   const doc = new Loro()

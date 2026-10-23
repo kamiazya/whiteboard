@@ -68,7 +68,7 @@ const paper = '<rect x="0" y="0" width="40" height="30" fill="#ffffff" role="pre
 describe('savedPicture PNG', () => {
   it('is as many pixels as the picture is wide at 1x, and twice that at 2x', async () => {
     expect(await decoded(await savedPicture('png', board()))).toMatchObject({ w: 40, h: 30 })
-    expect(await decoded(await savedPicture('png', board(), { scale: 2 }))).toMatchObject({
+    expect(await decoded(await savedPicture('png', { ...board(), scale: 2 }))).toMatchObject({
       w: 80,
       h: 60,
     })

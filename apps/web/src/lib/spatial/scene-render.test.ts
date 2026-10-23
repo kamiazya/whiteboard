@@ -157,7 +157,12 @@ describe('renderCanvasForExport', () => {
   })
   it('fills the whole document with the paper first when asked, and is otherwise untouched', () => {
     const plain = renderCanvasForExport(tagged, { measure: fakeMeasure })
-    const paper = renderCanvasForExport(tagged, { measure: fakeMeasure, background: '#ffffff' })
+    const paper = renderCanvasForExport(tagged, {
+      measure: fakeMeasure,
+      picture: { scale: 1, background: true },
+    })
+    expect(paper.scale).toBe(1)
+    expect(plain.scale).toBeUndefined()
     const { x, y, w, h } = paper.bounds
     expect(paper.svg).toContain(`viewBox="${x} ${y} ${w} ${h}"`)
     const body = paper.svg.slice(paper.svg.indexOf('>') + 1)

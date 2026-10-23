@@ -22,7 +22,11 @@ describe('renderMarkdownForExport', () => {
 
   it('fills the note with the paper first when asked, and draws the same bytes otherwise', async () => {
     const plain = await renderMarkdownForExport('# Heading\n\nProse.\n')
-    const paper = await renderMarkdownForExport('# Heading\n\nProse.\n', { background: '#ffffff' })
+    const paper = await renderMarkdownForExport('# Heading\n\nProse.\n', {
+      picture: { scale: 1, background: true },
+    })
+    expect(paper.scale).toBe(1)
+    expect(plain.scale).toBeUndefined()
     const { x, y, w, h } = paper.bounds
     const body = paper.svg.slice(paper.svg.indexOf('>') + 1)
     expect(

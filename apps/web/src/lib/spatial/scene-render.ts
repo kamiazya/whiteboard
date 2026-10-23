@@ -17,6 +17,7 @@ import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteb
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
+import { backgroundOf, type PictureExportOptions } from './picture-options.js'
 import {
   type RenderCanvasCoreOptions,
   type RenderedCanvas,
@@ -90,8 +91,8 @@ export interface CanvasExportOptions {
    * Absent is off: unlike the editor, a saved file is for someone else.
    */
   readonly comments?: boolean
-  /** A fill for the whole document, drawn first; absent leaves the picture transparent. */
-  readonly background?: string
+  /** Absent is a transparent 1x picture. */
+  readonly picture?: PictureExportOptions
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
   readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
   readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
@@ -115,12 +116,12 @@ export function renderCanvasForExport(
     threads,
     tagLibrary,
     comments,
-    background,
+    picture,
     renderMath,
     renderDiagram,
   }: CanvasExportOptions,
-): { readonly svg: string; readonly bounds: BoundingBox } {
-  return renderCanvasForExportWith(
+): { readonly svg: string; readonly bounds: BoundingBox; readonly scale?: number } {
+  const drawn = renderCanvasForExportWith(
     canvas,
     {
       measure,
@@ -132,6 +133,7 @@ export function renderCanvasForExport(
       renderMath,
       renderDiagram,
     },
-    background,
+    backgroundOf(picture),
   )
+  return picture === undefined ? drawn : { ...drawn, scale: picture.scale }
 }

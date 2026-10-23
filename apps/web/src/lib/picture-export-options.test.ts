@@ -1,6 +1,7 @@
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
-import { PAPER_COLOR, pictureExportOptionsOf } from './picture-export-options.js'
+import { pictureExportOptionsOf } from './picture-export-options.js'
+import { backgroundOf } from './spatial/picture-options.js'
 import { defaultUserSettings } from './user-settings-store.js'
 
 describe('pictureExportOptionsOf', () => {
@@ -21,6 +22,12 @@ describe('pictureExportOptionsOf', () => {
   })
 
   it('paints the paper in the light theme a saved file is pinned to', () => {
-    expect(PAPER_COLOR).toBe(SPATIAL_LIGHT_PALETTE.surface)
+    expect(backgroundOf({ scale: 1, background: true })).toBe(SPATIAL_LIGHT_PALETTE.surface)
+  })
+
+  it('asks for the paper only when the background is on', () => {
+    expect(backgroundOf({ scale: 1, background: true })).toBe(SPATIAL_LIGHT_PALETTE.surface)
+    expect(backgroundOf({ scale: 1, background: false })).toBeUndefined()
+    expect(backgroundOf(undefined)).toBeUndefined()
   })
 })

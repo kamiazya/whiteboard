@@ -731,6 +731,17 @@ export's bytes never depend on a display preference — and with the document's
 theme, if it names one, since that is part of the document rather than of the
 display.
 
+A picture is filled with the light palette's surface (white) by default, as a
+`<rect>` covering the whole viewBox drawn before anything else, so a PNG is
+opaque and an SVG dropped onto a dark slide still reads. The **With background**
+checkbox in the Export… submenu turns the fill off, and the file is then
+transparent, byte for byte what an export without the option draws. The **2×
+resolution (PNG)** checkbox rasterises a PNG at twice the pixels in each
+direction with the same drawing (the viewBox is unchanged); an SVG ignores it.
+Both are remembered per browser and apply to all four picture entries. The
+daemon's `wb_scene_render` and `POST …/export` do not read these checkboxes; the
+PNG route keeps its own `scale` parameter.
+
 The export draws what the editor shows, including what the document points at:
 
 - **A canvas** exports with its pictures, the note or board a file node points

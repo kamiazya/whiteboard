@@ -38,10 +38,11 @@ import type { SceneExportOptions } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { fileRefOptions } from '../lib/link-entries.js'
+import { pictureExportOptionsOf } from '../lib/picture-export-options.js'
 import { applyCommand } from '../lib/spatial/commands.js'
 import type { SelectionSource, SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import type { ResolvedTheme } from '../lib/theme.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { createUserSettingsStore, type UserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import {
@@ -372,15 +373,19 @@ function exportOptions({
   fileSeams,
   threads,
   model,
+  settingsStore,
 }: {
   documentKind: DocumentKind
   references: ReturnType<typeof useReferenceSeams>
   fileSeams: ReturnType<typeof useDocumentFileSeams>
   threads: DocumentPageModel['threads']
   model: DocumentPageModel
+  settingsStore: UserSettingsStore
 }): SceneExportOptions {
   return {
     kind: documentKind,
+    // Read at the click, not at render: the menu writes the store itself.
+    picture: pictureExportOptionsOf(settingsStore.load()),
     references:
       documentKind === 'markdown' ? references : referenceSeamsFromWire(fileSeams.references),
     threads: threads.annotations,
@@ -570,7 +575,7 @@ function DocumentPageBody({
     onExport: (format) =>
       sync.exportScene(
         format,
-        exportOptions({ documentKind, references, fileSeams, threads, model }),
+        exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
       ),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
     onExported: setNotice,

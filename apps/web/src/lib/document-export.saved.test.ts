@@ -71,13 +71,13 @@ describe('savedPicture, resolution', () => {
   it('hands the rasteriser the scale, and 1x when none is asked for', async () => {
     vi.mocked(rasterizeSvgToPng).mockResolvedValue(null)
     await savedPicture('png', drawnWith(svgOf()))
-    await savedPicture('png', drawnWith(svgOf()), { scale: 2 })
+    await savedPicture('png', { ...drawnWith(svgOf()), scale: 2 })
     expect(vi.mocked(rasterizeSvgToPng).mock.calls.map((call) => call[3])).toEqual([1, 2])
   })
 
   it('writes an SVG the same at either scale', async () => {
     const svg = svgOf()
-    const at2 = await savedPicture('svg', drawnWith(svg), { scale: 2 })
+    const at2 = await savedPicture('svg', { ...drawnWith(svg), scale: 2 })
     expect(await at2?.text()).toBe(svg)
     expect(rasterizeSvgToPng).not.toHaveBeenCalled()
   })

@@ -33,9 +33,9 @@ import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-ty
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { layoutWithFragments } from '../lib/fragment-requests.js'
 import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
-import { backgroundOf, type PictureExportOptions, scaleOf } from '../lib/picture-export-options.js'
 import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
+import type { PictureExportOptions } from '../lib/spatial/picture-options.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
@@ -554,11 +554,7 @@ export function useDocumentSync(
       if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
       if (options.kind === 'markdown') {
         const body = session?.getMarkdownBody() ?? markdownBody
-        return savedPicture(
-          pictureFormatOf(format),
-          await renderMarkdownForExport(body, { ...options, ...backgroundOf(options.picture) }),
-          scaleOf(options.picture),
-        )
+        return savedPicture(pictureFormatOf(format), await renderMarkdownForExport(body, options))
       }
       const exported = session?.getCanvas() ?? canvas
       const measure = createBrowserMeasureText()
@@ -566,18 +562,10 @@ export function useDocumentSync(
       // Waits for every math block and diagram fence the layout asks for —
       // a text node's, a file node's note's — so the file is typeset as the screen is.
       const drawn = await layoutWithFragments(
-        (seams) =>
-          renderCanvasForExport(exported, {
-            ...options,
-            ...backgroundOf(options.picture),
-            measure,
-            ...seams,
-            comments,
-          }),
+        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams, comments }),
         FRAGMENT_ENGINES,
       )
       return savedPicture(pictureFormatOf(format), drawn, {
-        ...scaleOf(options.picture),
         // Editable PNG (the draw.io pattern): the extended JSON Canvas
         // document rides in an iTXt chunk under `whiteboard`, so the image
         // carries its own source, exact coordinates included.

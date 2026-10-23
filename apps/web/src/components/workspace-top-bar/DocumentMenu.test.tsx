@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenuItem } from '../../components/ui/dropdown-menu.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
+import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
@@ -48,6 +49,53 @@ async function openExportSubmenu() {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+})
+
+describe('DocumentMenu — picture options', () => {
+  const resolution = () => screen.getByRole('menuitemcheckbox', { name: /2× resolution/ })
+  const background = () => screen.getByRole('menuitemcheckbox', { name: 'With background' })
+
+  it('offers 2× resolution off and With background on, until the person chooses otherwise', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+
+    expect(resolution().getAttribute('aria-checked')).toBe('false')
+    expect(background().getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('remembers a toggle in the user settings, and reads it back on the next open', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(resolution())
+    await waitFor(() =>
+      expect(createUserSettingsStore().load().pictureExport?.doubleResolution).toBe(true),
+    )
+    cleanup()
+
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    expect(resolution().getAttribute('aria-checked')).toBe('true')
+    expect(background().getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('keeps the menu open when a toggle is chosen, so both can be set before exporting', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(background())
+
+    await waitFor(() => expect(background().getAttribute('aria-checked')).toBe('false'))
+    expect(screen.getByRole('menuitem', { name: 'Export as PNG' })).toBeTruthy()
+  })
+
+  it('does not offer the toggles to a document with nothing to export', async () => {
+    renderMenu()
+    await openMenu()
+    expect(screen.queryByRole('menuitemcheckbox')).toBeNull()
+  })
 })
 
 describe('DocumentMenu — export entries', () => {
