@@ -8,6 +8,7 @@ import {
   trashRestoreRefusal,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
+  reconcileSpatialCanvas,
   writeCoreFacets,
   writeFacets,
   writeMarkdownBody,
@@ -441,6 +442,32 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
       { tag: 'q3', documents: 1, boards: 1, nodes: 0, edges: 0 },
       { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
     ])
+  })
+
+  it('lists a board tag added after the first listing, under the real content clock', async () => {
+    const board = await seedLegacyRow({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'home-board',
+      kind: 'spatial',
+    })
+    const store = new LoroStore()
+    const doc = new Loro()
+    writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    await store.save(board.documentId, doc.export({ mode: 'snapshot' }))
+
+    const source = createBrowserFilesSource()
+    expect((await source.listDocuments())[0]?.tags).toBeUndefined()
+    expect(await source.listTagsInUse?.()).toEqual([])
+
+    // The content stamp is a millisecond clock: move it past the first write's.
+    for (const t = Date.now(); Date.now() === t; ) {}
+    reconcileSpatialCanvas(doc, { nodes: [], edges: [] }, { nodes: [], edges: [], tags: ['home'] })
+    expect(
+      await seedWorkspaceDocumentContent(board.documentId, doc.export({ mode: 'snapshot' })),
+    ).toBe(true)
+
+    expect((await source.listDocuments())[0]?.tags).toEqual(['home'])
+    expect((await source.listTagsInUse?.())?.map((row) => row.tag)).toEqual(['home'])
   })
 
   it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
