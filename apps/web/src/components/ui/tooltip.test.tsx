@@ -1,8 +1,9 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.js'
 
 afterEach(() => {
+  cleanup()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -27,6 +28,10 @@ function Fixture() {
   )
 }
 
+// The positive half — keyboard focus still opens one — is a browser test
+// (tooltip.browser.test.tsx): jsdom treats only the FIRST focus in a document
+// as :focus-visible, so under a repeated run the gate would refuse for the
+// wrong reason.
 describe('Tooltip on a coarse pointer', () => {
   it('does not open from a pointer entering the trigger', async () => {
     vi.useFakeTimers()
@@ -46,13 +51,6 @@ describe('Tooltip on a coarse pointer', () => {
     fireEvent.focus(target)
     await tick()
     expect(screen.queryByRole('tooltip')).toBeNull()
-  })
-
-  it('still opens for keyboard focus', async () => {
-    coarsePointer(true)
-    render(<Fixture />)
-    screen.getByRole('button', { name: 'Target' }).focus()
-    expect((await screen.findAllByRole('tooltip')).length).toBeGreaterThan(0)
   })
 
   it('opens on hover with a fine pointer', async () => {

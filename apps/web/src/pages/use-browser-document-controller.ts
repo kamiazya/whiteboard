@@ -19,6 +19,7 @@ import type { BrowserPersistenceState } from '../lib/browser-persistence-state.j
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { WorkspaceMissingError } from '../lib/files-source.js'
 import { pathAfterFirstRename } from '../lib/first-rename-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
@@ -31,6 +32,7 @@ function isGoneError(err: unknown): boolean {
   return (
     err instanceof DocumentNotFoundError ||
     err instanceof WorkspaceNotFoundError ||
+    err instanceof WorkspaceMissingError ||
     isWorkspaceRemovedError(err)
   )
 }
