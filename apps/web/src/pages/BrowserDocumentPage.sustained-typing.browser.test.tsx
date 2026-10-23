@@ -54,9 +54,15 @@ describe('typing a note without pausing, then creating a note from a link', () =
       await new Promise((resolve) => setTimeout(resolve, KEYSTROKE_GAP_MS))
     }
     await userEvent.keyboard(' [[[[Rollback')
-    await waitFor(() => expect(document.querySelector('.cm-tooltip-autocomplete')).not.toBeNull(), {
-      timeout: 10_000,
-    })
+    // The row, not the tooltip: Enter before the Create row is selected
+    // closes the list and leaves the link as typed.
+    await waitFor(
+      () =>
+        expect(
+          document.querySelector('.cm-tooltip-autocomplete li[aria-selected="true"]')?.textContent,
+        ).toContain("Create 'Rollback'"),
+      { timeout: 10_000 },
+    )
     await userEvent.keyboard('{Enter}')
     await waitFor(
       () => {
