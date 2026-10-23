@@ -3,7 +3,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SaveIndicator } from '../../lib/save-indicator.js'
-import { SAVING_SHOWN_AFTER_MS, SaveStatus } from './SaveStatus.js'
+import { PROBLEM_SHOWN_AFTER_MS, SAVING_SHOWN_AFTER_MS, SaveStatus } from './SaveStatus.js'
 
 afterEach(() => {
   cleanup()
@@ -13,6 +13,7 @@ afterEach(() => {
 const saved: SaveIndicator = { tone: 'saved', label: 'Saved' }
 const saving: SaveIndicator = { tone: 'saving', label: 'Saving…' }
 const storage: SaveIndicator = { tone: 'problem', label: 'Not saved — storage problem' }
+const offline: SaveIndicator = { tone: 'problem', label: 'Offline — changes kept here' }
 
 const region = () => screen.getByRole('status')
 const visible = () => screen.getByTestId('save-status')
@@ -25,9 +26,13 @@ describe('SaveStatus', () => {
   })
 
   it('keeps the live region mounted and fills it only on a problem', () => {
+    vi.useFakeTimers()
     const { rerender } = render(<SaveStatus indicator={saved} />)
     const mounted = region()
     rerender(<SaveStatus indicator={storage} />)
+    act(() => {
+      vi.advanceTimersByTime(PROBLEM_SHOWN_AFTER_MS)
+    })
     expect(region()).toBe(mounted)
     expect(region().textContent).toBe('Not saved — storage problem')
     rerender(<SaveStatus indicator={saved} />)
@@ -53,9 +58,55 @@ describe('SaveStatus', () => {
     expect(visible().textContent).toContain('Saved')
   })
 
-  it('shows a problem at once', () => {
+  it('shows a problem the page opens on at once', () => {
     render(<SaveStatus indicator={storage} />)
     expect(visible().textContent).toContain('Not saved — storage problem')
     expect(visible().getAttribute('data-tone')).toBe('problem')
+    expect(region().textContent).toBe('Not saved — storage problem')
+  })
+
+  // A refusal that resolves itself is nothing a person can act on, and a
+  // live region cannot take an announcement back.
+  it('neither shows nor announces a problem that clears within the grace', () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<SaveStatus indicator={saved} />)
+    rerender(<SaveStatus indicator={storage} />)
+    act(() => {
+      vi.advanceTimersByTime(PROBLEM_SHOWN_AFTER_MS / 2)
+    })
+    expect(visible().getAttribute('data-tone')).toBe('saved')
+    expect(region().textContent).toBe('')
+    rerender(<SaveStatus indicator={saved} />)
+    act(() => {
+      vi.advanceTimersByTime(PROBLEM_SHOWN_AFTER_MS * 2)
+    })
+    expect(visible().getAttribute('data-tone')).toBe('saved')
+    expect(region().textContent).toBe('')
+  })
+
+  it('shows and announces a problem once it has lasted the grace, and clears at once', () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<SaveStatus indicator={saved} />)
+    rerender(<SaveStatus indicator={storage} />)
+    act(() => {
+      vi.advanceTimersByTime(PROBLEM_SHOWN_AFTER_MS)
+    })
+    expect(visible().getAttribute('data-tone')).toBe('problem')
+    expect(region().textContent).toBe('Not saved — storage problem')
+    rerender(<SaveStatus indicator={saved} />)
+    expect(visible().getAttribute('data-tone')).toBe('saved')
+    expect(region().textContent).toBe('')
+  })
+
+  it('moves from one problem to another without waiting again', () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<SaveStatus indicator={saved} />)
+    rerender(<SaveStatus indicator={offline} />)
+    act(() => {
+      vi.advanceTimersByTime(PROBLEM_SHOWN_AFTER_MS)
+    })
+    rerender(<SaveStatus indicator={storage} />)
+    expect(visible().textContent).toContain('Not saved — storage problem')
+    expect(region().textContent).toBe('Not saved — storage problem')
   })
 })
