@@ -1,20 +1,9 @@
 /** Swatch/custom-hex color row shared by the edge and node context menus. */
-import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor } from '@kamiazya/whiteboard-model'
 import { SquareDashed } from 'lucide-react'
+import { presetEntries } from '../../../lib/color-presets.js'
 import type { ContextMenuOptionsItem } from '../../ui/ContextMenu.js'
-
-export const presetEntries: readonly {
-  readonly key: SpatialPresetKey
-  readonly name: string
-}[] = [
-  { key: '1', name: 'Red' },
-  { key: '2', name: 'Orange' },
-  { key: '3', name: 'Yellow' },
-  { key: '4', name: 'Green' },
-  { key: '5', name: 'Cyan' },
-  { key: '6', name: 'Purple' },
-]
 
 export function colorRow(
   /** The palette the canvas is DRAWN in — the theme's for the mode, else the bundled one. */

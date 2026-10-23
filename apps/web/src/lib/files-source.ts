@@ -137,6 +137,13 @@ export interface WorkspaceFilesSource {
    */
   readTagLibrary?(): Promise<TagLibrary>
   /**
+   * Replace the library the document at `tags` declares, creating that
+   * document when the workspace has none. OPTIONAL like `setPinned`: the
+   * keeper that cannot write another document's facets omits it, and the
+   * tag chip's colour entry is not offered.
+   */
+  writeTagLibrary?(library: TagLibrary): Promise<void>
+  /**
    * The stencils the workspace's own library document declares (ADR-0034
    * decision 4), or `{}`. The editor's Stencil chips offer them beside the
    * deployment's and its writer accepts them. OPTIONAL for the same reason

@@ -62,7 +62,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/markdown-editor/active-markdown-editor.ts#subscribeActiveMarkdownEditor',
   'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#ghostPresses',
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#TOOL_BUTTON_CLASS',
-  'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#presetEntries',
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace',
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#writeReachesIds',
   'apps/web/src/components/spatial-editor/shortcuts.ts#findShortcutIn',
@@ -362,7 +361,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 149
+const DEBT_CEILING = 148
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 17

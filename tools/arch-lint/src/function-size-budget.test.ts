@@ -336,7 +336,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
-  'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 276,
+  'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 277,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
   // One property on the options object; its reasoning is a named constant

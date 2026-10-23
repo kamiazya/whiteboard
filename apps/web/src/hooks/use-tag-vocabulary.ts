@@ -16,13 +16,23 @@
  * fails, leaves the value absent and the rows complete from the board
  * alone.
  */
+import type { CanvasColor } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
+import { libraryWithTagColour } from '../lib/tag-colour.js'
 
 export interface TagVocabulary {
   readonly library: TagLibrary
   readonly inUse: readonly string[]
+  /**
+   * Colour one tag in the workspace's tag library (`undefined` clears it) and
+   * serve the library as the keeper then holds it. Absent when the keeper
+   * cannot write the library, so a surface omits the entry rather than
+   * offering one that cannot happen. Rejects for a tag with no `key:value`
+   * form to declare.
+   */
+  readonly setTagColour?: (tag: string, colour: CanvasColor | undefined) => Promise<void>
 }
 
 export async function readTagVocabulary(
@@ -36,24 +46,44 @@ export async function readTagVocabulary(
 }
 
 export function useTagVocabulary(source: WorkspaceFilesSource | null): TagVocabulary | undefined {
-  const [vocabulary, setVocabulary] = useState<TagVocabulary | undefined>(undefined)
+  const [read, setRead] = useState<TagVocabulary | undefined>(undefined)
+  // The writer judges against what the page shows NOW, not what it showed
+  // when the writer was made, so two colourings in a row build on each other.
+  const latest = useRef(read)
+  latest.current = read
   useEffect(() => {
     if (source === null) {
-      setVocabulary(undefined)
+      setRead(undefined)
       return
     }
     let cancelled = false
     readTagVocabulary(source).then(
       (next) => {
-        if (!cancelled) setVocabulary(next)
+        if (!cancelled) setRead(next)
       },
       () => {
-        if (!cancelled) setVocabulary(undefined)
+        if (!cancelled) setRead(undefined)
       },
     )
     return () => {
       cancelled = true
     }
   }, [source])
-  return vocabulary
+  const write = source?.writeTagLibrary?.bind(source)
+  const setTagColour = useCallback(
+    async (tag: string, colour: CanvasColor | undefined) => {
+      if (source === null || write === undefined) return
+      const shown = latest.current
+      const next = libraryWithTagColour(shown?.library ?? {}, tag, colour, shown?.inUse ?? [])
+      if (next === undefined)
+        throw new Error(`"${tag}" is not a key:value tag, so it has no colour to declare`)
+      await write(next)
+      setRead(await readTagVocabulary(source))
+    },
+    [source, write],
+  )
+  return useMemo(
+    () => (read === undefined ? undefined : write === undefined ? read : { ...read, setTagColour }),
+    [read, write, setTagColour],
+  )
 }

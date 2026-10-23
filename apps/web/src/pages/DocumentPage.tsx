@@ -22,6 +22,7 @@ import {
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
+import { TagColouringProvider } from '../components/tags/tag-colouring.js'
 import { VersionPreview } from '../components/VersionPreview.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
@@ -110,7 +111,9 @@ export function DocumentPage<Props>({
   const answer = keeper.useDocument(props, events)
   if (answer.kind === 'terminal') return answer.node
   const page: ReactNode = (
-    <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+    <TagColouringProvider setTagColour={answer.model.tags?.setTagColour}>
+      <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+    </TagColouringProvider>
   )
   return answer.wrap === undefined ? page : answer.wrap(page)
 }

@@ -39,6 +39,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { type ContentClock, idbContentClock } from './browser-document-summary.js'
 import { createTagBearersCache, type ReadDocument } from './browser-files-source-tags.js'
 import { writeImportedContent } from './browser-import-content.js'
+import { writeTagLibraryDocument } from './browser-tag-library-write.js'
 import {
   BrowserWorkspaceDocs,
   openWorkspaceOrNull,
@@ -357,6 +358,7 @@ export function createBrowserFilesSource(
     // nothing here can ask the index which document carries a facet either,
     // and the two keepers must agree on where a library lives.
     readTagLibrary: () => readLibrary(index, loadCurrentDoc, TAG_LIBRARY_PATH, readTagLibrary),
+    writeTagLibrary: (library) => writeTagLibraryDocument(index, loro, library),
     readStencilLibrary: () =>
       readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
