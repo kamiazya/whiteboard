@@ -199,8 +199,9 @@ describe('decorated-scene column (outline decorations vs group reuse)', () => {
     const { canvas } = buildCanvas()
     const before = layoutWith(canvas, { n5: 'visual.ellipse', n12: 'visual.hexagon' })
     const after = layoutWith(canvas, { n5: 'visual.diamond', n12: 'visual.hexagon' })
-    // Total is one below the decorate case: the diamond's inscribed box is
-    // smaller than the ellipse's, so n5 fits one block fewer.
-    expect(diffCount(before, after)).toEqual({ changed: 3, total: 177 })
+    // The total matches the decorate case: the inscribed box already stands
+    // back from the node's edge, so no extra padding is charged on top and
+    // n5 keeps every block it kept under the ellipse.
+    expect(diffCount(before, after)).toEqual({ changed: 3, total: 178 })
   })
 })
