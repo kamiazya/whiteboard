@@ -68,13 +68,13 @@ import {
   type LabelObstacle,
   labelObstacles,
 } from './edges/edge-label-anchor.js'
-import { labelOf, labelRuns } from './node-box.js'
 import { routeEdge } from './edges/edge-router.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { RoutingBudget } from './edges/routing-budget.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
+import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import { nodePassagesOf } from './passage-highlight.js'

@@ -1,6 +1,6 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { styleRandomFromSeed } from '../layout/seed.js'
 import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { styleRandomFromSeed } from '../layout/seed.js'
 import { node } from './spatial-node.js'
 
 /**

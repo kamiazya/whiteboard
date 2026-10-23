@@ -1,8 +1,9 @@
 // A frame's title sits above its top border, outside the box a node
 // obstacle covers, so a label whose midpoint fell there landed on the title
 // text. The title is something a label must not cover, the way a node is.
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'

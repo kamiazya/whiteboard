@@ -451,6 +451,43 @@ function placeCrossings(
 }
 
 /**
+ * The earlier edge takes a crossing its successor has no room to hop. Its
+ * hops on that segment are spaced again with the new one, and kept only if the
+ * new one is a hop of its own rather than part of a neighbour's.
+ */
+function handOverHop(
+  result: Map<string, readonly EdgeJumpPoint[]>,
+  budget: { left: number },
+  target: ResolvedEdgeNode,
+  there: Crossing & { readonly segment: number; readonly length: number },
+): void {
+  const existing = result.get(target.id) ?? []
+  const start = target.path[there.segment] as Point
+  const onSegment = existing.filter((jump) => jump.segment === there.segment)
+  const hops = spacedHops(
+    [
+      ...onSegment.map((jump) => ({
+        point: { x: jump.x, y: jump.y },
+        t: Math.hypot(jump.x - start.x, jump.y - start.y) / there.length,
+      })),
+      { point: there.point, t: there.t },
+    ],
+    there.length,
+    there.segment,
+    MAX_HOPS_PER_SEGMENT,
+  )
+  const added = hops.length - onSegment.length
+  if (added <= 0 || added > budget.left) return
+  budget.left -= added
+  result.set(
+    target.id,
+    [...existing.filter((jump) => jump.segment !== there.segment), ...hops].sort(
+      (x, y) => x.segment - y.segment,
+    ),
+  )
+}
+
+/**
  * Hop points for each edge over every EARLIER edge, keyed by edge id.
  * Later-over-earlier mirrors paint order: the line drawn on top is the one
  * that visibly hops. Jumps on one segment are ordered along its direction.
@@ -466,63 +503,33 @@ export function computeEdgeJumps(
   const result = new Map<string, readonly EdgeJumpPoint[]>()
   const placed = edges.map(placedRunsOf)
   const grid = new SegmentGrid(placed.flat().filter((p): p is Placed => p !== undefined))
-  let sceneBudget = MAX_HOPS_PER_SCENE
-  // The earlier edge takes a crossing its successor has no room to hop. Its
-  // hops on that segment are spaced again with the new one, and kept only if
-  // the new one is a hop of its own rather than part of a neighbour's.
-  const handOver = (
-    target: ResolvedEdgeNode,
-    there: Crossing & { readonly segment: number; readonly length: number },
-  ): void => {
-    const existing = result.get(target.id) ?? []
-    const start = target.path[there.segment] as Point
-    const onSegment = existing.filter((jump) => jump.segment === there.segment)
-    const hops = spacedHops(
-      [
-        ...onSegment.map((jump) => ({
-          point: { x: jump.x, y: jump.y },
-          t: Math.hypot(jump.x - start.x, jump.y - start.y) / there.length,
-        })),
-        { point: there.point, t: there.t },
-      ],
-      there.length,
-      there.segment,
-      MAX_HOPS_PER_SEGMENT,
-    )
-    const added = hops.length - onSegment.length
-    if (added <= 0 || added > sceneBudget) return
-    sceneBudget -= added
-    result.set(
-      target.id,
-      [...existing.filter((jump) => jump.segment !== there.segment), ...hops].sort(
-        (x, y) => x.segment - y.segment,
-      ),
-    )
-  }
+  const budget = { left: MAX_HOPS_PER_SCENE }
   edges.forEach((edge, e) => {
-    if (sceneBudget === 0) return
+    if (budget.left === 0) return
     const runs = placed[e] as (Placed | undefined)[]
     const reached = runs.map((p) => (p === undefined ? undefined : grid.reach(p)))
     const jumps: EdgeJumpPoint[] = []
     runs.forEach((p, run) => {
       const r = reached[run]
-      if (p === undefined || r === undefined || sceneBudget === 0) return
+      if (p === undefined || r === undefined || budget.left === 0) return
       const candidates = grid.candidates(r)
       if (candidates === undefined) {
         // The work budget is spent: no further hops anywhere in the scene,
         // and the remaining runs are not even filed.
-        sceneBudget = 0
+        budget.left = 0
         return
       }
-      const onSegment = placeCrossings(edges, p.seg, candidates, handOver)
+      const onSegment = placeCrossings(edges, p.seg, candidates, (target, there) =>
+        handOverHop(result, budget, target, there),
+      )
       for (const seg of [...onSegment.keys()].sort((x, y) => x - y)) {
         const { crossings, length } = onSegment.get(seg) as {
           crossings: Crossing[]
           length: number
         }
-        const limit = Math.min(MAX_HOPS_PER_SEGMENT, sceneBudget)
+        const limit = Math.min(MAX_HOPS_PER_SEGMENT, budget.left)
         const hops = spacedHops(crossings, length, seg, limit)
-        sceneBudget -= hops.length
+        budget.left -= hops.length
         jumps.push(...hops)
       }
     })
