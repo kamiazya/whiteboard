@@ -165,7 +165,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 113,
   'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
   // One branch per item kind instead of a nested JSX ternary.
-  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 229,
+  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
   'apps/web/src/components/spatial-editor/DragPreviewLayer.tsx#DragPreviewLayer': 80,
   'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 102,

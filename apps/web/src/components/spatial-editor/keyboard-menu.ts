@@ -46,7 +46,6 @@ export function selectionMenuTarget(input: KeyboardMenuInputs): ContextMenuTarge
       edgeId: undefined,
       point,
       variant,
-      focusFirst: true,
     }
   }
   if (inkId !== undefined && inkPoint !== undefined) {
@@ -57,7 +56,6 @@ export function selectionMenuTarget(input: KeyboardMenuInputs): ContextMenuTarge
       edgeId: inkId,
       point: inkPoint,
       variant,
-      focusFirst: true,
     }
   }
   const point = {
@@ -70,7 +68,6 @@ export function selectionMenuTarget(input: KeyboardMenuInputs): ContextMenuTarge
     edgeId: undefined,
     point,
     variant,
-    focusFirst: true,
   }
 }
 

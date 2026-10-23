@@ -3,6 +3,8 @@ import { type KeyboardEvent, type RefObject, useEffect } from 'react'
 // Prefix match: menuitem, menuitemradio and menuitemcheckbox all rove alike.
 const ITEM_SELECTOR = '[role^="menuitem"]'
 
+const NAVIGATION_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'])
+
 function enabledItems(menu: HTMLElement): HTMLElement[] {
   return Array.from(menu.querySelectorAll<HTMLElement>(ITEM_SELECTOR)).filter(
     (el) => !(el instanceof HTMLButtonElement && el.disabled),
@@ -104,6 +106,9 @@ export function useRovingMenu(
     const current = document.activeElement
     if (!(current instanceof HTMLElement) || !current.matches(ITEM_SELECTOR)) return
     const target = targetFor(enabledItems(menu), current, event.key)
+    // Navigation keys are the menu's even when they land nowhere, so the
+    // canvas behind never reads them as a nudge.
+    if (NAVIGATION_KEYS.has(event.key)) event.stopPropagation()
     if (target === undefined) return
     target.focus()
     event.preventDefault()
