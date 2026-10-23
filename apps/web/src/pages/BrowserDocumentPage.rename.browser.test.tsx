@@ -142,15 +142,15 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Should not persist' } })
     fireEvent.keyDown(titleInput, { key: 'Escape' })
-    await waitForTitle('untitled')
+    await waitForTitle('Untitled')
 
     // Settle everything still in flight before believing the restore held.
     await new Promise((resolve) => setTimeout(resolve, 400))
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled')
 
     cleanup()
     renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
-    await waitForTitle('untitled')
+    await waitForTitle('Untitled')
   })
 
   it('a whitespace-only commit clears the name, and the remount shows it unnamed', async () => {
@@ -169,12 +169,12 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     titleInput2.focus()
     fireEvent.change(titleInput2, { target: { value: '   ' } })
     titleInput2.blur()
-    await waitForTitle('untitled')
+    await waitForTitle('Untitled')
     await waitForWriteLanded()
 
     cleanup()
     renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
-    await waitForTitle('untitled')
+    await waitForTitle('Untitled')
   })
 
   // `maxLength` stops typing and pasting at the bound; a programmatic change
@@ -191,7 +191,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
       `a display name is at most ${DOCUMENT_NAME_MAX_LENGTH} characters`,
     )
     titleInput.blur()
-    await waitForTitle('untitled')
+    await waitForTitle('Untitled')
     expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 

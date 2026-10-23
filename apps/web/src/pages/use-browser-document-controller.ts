@@ -1,5 +1,9 @@
 import { documentNameSchema } from '@kamiazya/whiteboard-model'
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentIndex,
+  DocumentNotFoundError,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -20,6 +24,16 @@ import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
+
+/** The document, or the workspace that held it, no longer exists. */
+function isGoneError(err: unknown): boolean {
+  return (
+    err instanceof DocumentNotFoundError ||
+    err instanceof WorkspaceNotFoundError ||
+    isWorkspaceRemovedError(err)
+  )
+}
 
 const log = getAppLogger('browser-document-controller')
 
@@ -434,22 +448,31 @@ export function useBrowserDocumentController(
     const base = snapshotRef.current
     if (base === null || base.name === null || base.documentId === deletedIdRef.current) return
     const workspaceId = getBrowserWorkspaceId()
-    const held = await indexRef.current.listDocuments({ workspaceId })
-    const to = pathAfterFirstRename(
-      base.path,
-      base.name,
-      held.map((entry) => entry.path),
-    )
-    if (to === null) return
-    // The files source's move, not the index's: it also repoints the
-    // `[[path]]` references other documents wrote to the old path.
-    await createBrowserFilesSource({
-      index: indexRef.current,
-      loro: loroRef.current,
-    }).renameDocumentPath(base.path, to)
-    const moved = { ...(snapshotRef.current ?? base), path: to }
-    snapshotRef.current = moved
-    setSnapshot(moved)
+    try {
+      const held = await indexRef.current.listDocuments({ workspaceId })
+      const to = pathAfterFirstRename(
+        base.path,
+        base.name,
+        held.map((entry) => entry.path),
+      )
+      if (to === null) return
+      // The files source's move, not the index's: it also repoints the
+      // `[[path]]` references other documents wrote to the old path.
+      await createBrowserFilesSource({
+        index: indexRef.current,
+        loro: loroRef.current,
+      }).renameDocumentPath(base.path, to)
+      const moved = { ...(snapshotRef.current ?? base), path: to }
+      snapshotRef.current = moved
+      setSnapshot(moved)
+    } catch (err: unknown) {
+      // Settling the name shares its flush with a delete or a workspace
+      // teardown: by the time the move runs the row, or the whole workspace,
+      // is gone, and a document that no longer exists has nowhere to be
+      // placed. Anything else is a real failure and is reported.
+      if (isGoneError(err)) return
+      throw err
+    }
   }, [flushSave])
 
   const followRecordedName = useCallback((name: string | null) => {

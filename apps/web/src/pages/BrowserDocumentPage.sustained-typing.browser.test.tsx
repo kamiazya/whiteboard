@@ -60,7 +60,9 @@ describe('typing a note without pausing, then creating a note from a link', () =
     await userEvent.keyboard('{Enter}')
     await waitFor(
       () => {
-        expect(document.querySelector('.cm-content')?.textContent).toContain('[[Rollback]]')
+        expect(document.querySelector('.cm-content')?.textContent).toContain(
+          '[[rollback|Rollback]]',
+        )
         expect(
           document
             .querySelector('[data-testid="persistence-state"]')
