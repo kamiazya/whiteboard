@@ -4,7 +4,7 @@ import type {
   FacetRegistry,
   IconAsset,
 } from '@kamiazya/whiteboard-facet-engine'
-import { Ban, Circle, Cylinder, Diamond, Hexagon, Octagon, Square } from 'lucide-react'
+import { Ban, Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 
 /**
@@ -35,7 +35,21 @@ function shapeGlyph(name: FacetGlyphShape): ReactNode {
     case 'hexagon':
       return <Hexagon />
     case 'octagon':
-      return <Octagon />
+      // lucide's Octagon rounds its corners, which at 16px reads as the
+      // circle beside it; sharp cuts are what name an octagon.
+      return (
+        <svg
+          {...GLYPH_SVG_SIZE}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polygon points="8 3 16 3 21 8 21 16 16 21 8 21 3 16 3 8" />
+        </svg>
+      )
     case 'parallelogram':
       // No lucide glyph for a parallelogram; drawn in the same 24-grid
       // stroke style so a row of these reads as one set.
