@@ -2,7 +2,7 @@
 // walking its nodes: the root is a Tab stop that says what it holds and how
 // to begin, and the walk still works after notes were made by keyboard.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -77,4 +77,25 @@ it('Tab after making two notes by keyboard and pressing Escape selects the first
   expect(latest.canvas.nodes).toHaveLength(2)
   const first = latest.canvas.nodes[0]?.id
   expect(await movedByNudge(latest)).toBe(first)
+})
+
+it('the canvas name follows the board: frames and connections apart from notes, and the walk once something is selected', async () => {
+  const { container } = mountAfterButton({
+    nodes: [
+      textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 400, y: 40, width: 120, height: 60, text: 'B' }),
+      groupNode({ id: 'g', x: 20, y: 300, width: 300, height: 160, label: 'Group' }),
+    ],
+    edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+  })
+  expect(rootOf(container).getAttribute('aria-label')).toBe(
+    'Canvas, 2 notes, 1 frame, 1 connection. Tab selects the first note',
+  )
+  rootOf(container).focus()
+  await userEvent.keyboard('{Tab}')
+  await vi.waitFor(() =>
+    expect(rootOf(container).getAttribute('aria-label')).toBe(
+      'Canvas, 2 notes, 1 frame, 1 connection. Tab selects the next node',
+    ),
+  )
 })
