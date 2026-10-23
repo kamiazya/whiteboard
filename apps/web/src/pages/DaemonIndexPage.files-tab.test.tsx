@@ -13,11 +13,11 @@ import {
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { forgetSearchQueries } from '../lib/search-query-memory.js'
 import { type FakeDaemonRoutes, installFakeDaemonFetch } from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
-import { forgetSearchQueries } from '../lib/search-query-memory.js'
 
 // The page now reads useNavigate (Settings navigation), so every render
 // needs a Router ancestor — wrapping once here keeps the existing
