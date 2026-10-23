@@ -123,7 +123,7 @@ export function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOpti
  * measure to 64 and broke "Payments" mid-word. So the padding only tops the
  * inscribed box's own inset up to the configured amount, per axis.
  */
-export function nodeContentPadding(
+function nodeContentPadding(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): { readonly x: number; readonly y: number } {
@@ -267,6 +267,44 @@ function centreLines(entry: SceneNode & { kind: 'paragraph' }, width: number): S
   return tightenToInk({ ...entry, runs })
 }
 
+/** How far down a shaped node's content moves to sit centred vertically. */
+function verticalCentreOffset(
+  content: Scene,
+  node: SpatialNode,
+  bounds: BoundingBox,
+  padY: number,
+): number {
+  const innerH = bounds.h - 2 * padY
+  const contentH = Math.max(
+    0,
+    ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+  )
+  if (contentH < innerH) return (innerH - contentH) / 2
+  if (contentH > node.height) return 0
+  // Taller than the padded inscribed box yet inside the node: a cylinder's
+  // caps leave little between them, and top-aligning there sits the label
+  // on the floor. Centre on the inscribed box, kept inside the node.
+  const top = bounds.y + (bounds.h - contentH) / 2
+  const clamped = Math.min(Math.max(top, node.y), node.y + node.height - contentH)
+  return clamped - (bounds.y + padY)
+}
+
+/**
+ * A wrapped paragraph is centred LINE by line: shifting the block by its
+ * widest line left a short last line flush with the left edge of a block that
+ * was itself centred. Everything else moves as a block by `dx`.
+ */
+function centreContent(content: Scene, width: number, dx: number): Scene {
+  return {
+    ...content,
+    nodes: content.nodes.map((entry) =>
+      entry.kind === 'paragraph' && entry.runs.length > 0
+        ? centreLines(entry, width)
+        : (translateScene({ nodes: [entry] }, dx, 0).nodes[0] ?? entry),
+    ),
+  }
+}
+
 export function placeInNode(
   node: SpatialNode,
   content: Scene,
@@ -294,42 +332,16 @@ export function placeInNode(
   let lineCentreWidth: number | undefined
   if (options.fitToBox && centres) {
     const innerW = bounds.w - 2 * pad.x
-    const innerH = bounds.h - 2 * pad.y
     const inkW = Math.max(0, ...content.nodes.map(inkRight))
     if (inkW < innerW) dx = (innerW - inkW) / 2
     lineCentreWidth = innerW
-    const contentH = Math.max(
-      0,
-      ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
-    )
-    if (contentH < innerH) dy = (innerH - contentH) / 2
-    else if (contentH <= node.height) {
-      // Taller than the padded inscribed box yet inside the node: a cylinder's
-      // caps leave little between them, and top-aligning there sits the label
-      // on the floor. Centre on the inscribed box, kept inside the node.
-      const top = bounds.y + (bounds.h - contentH) / 2
-      const clamped = Math.min(Math.max(top, node.y), node.y + node.height - contentH)
-      dy = clamped - (bounds.y + pad.y)
-    }
+    dy = verticalCentreOffset(content, node, bounds, pad.y)
   }
   // A paragraph's bbox spans the wrap width; once its ink moves right of
   // the left edge, that bbox would cross the silhouette, so it shrinks to
   // the ink it holds.
-  //
-  // A wrapped paragraph is centred LINE by line: shifting the block by its
-  // widest line left a short last line flush with the left edge of a block
-  // that was itself centred.
   const placed =
-    lineCentreWidth === undefined
-      ? content
-      : {
-          ...content,
-          nodes: content.nodes.map((entry) =>
-            entry.kind === 'paragraph' && entry.runs.length > 0
-              ? centreLines(entry, lineCentreWidth)
-              : (translateScene({ nodes: [entry] }, dx, 0).nodes[0] ?? entry),
-          ),
-        }
+    lineCentreWidth === undefined ? content : centreContent(content, lineCentreWidth, dx)
   return translateScene(placed, bounds.x + pad.x, bounds.y + pad.y + dy).nodes
 }
 
