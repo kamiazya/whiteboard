@@ -66,6 +66,8 @@ export interface SearchResultsProps {
   onActivate?: (document: WorkspaceDocumentEntry) => void
   /** Right-click or touch long-press on a result row — the object-action menu hook. */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
+  /** ArrowUp from the first result: hand focus back to whatever asked. */
+  onLeaveUp?: () => void
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
@@ -251,6 +253,7 @@ export function SearchResults({
   onSelect,
   onActivate,
   onDocumentContextMenu,
+  onLeaveUp,
   renderThumbnail,
   className,
 }: SearchResultsProps) {
@@ -334,6 +337,17 @@ export function SearchResults({
       </div>
       <ul
         {...longPress}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+          const rows = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-doc-path]'),
+          )
+          const at = rows.indexOf(document.activeElement as HTMLButtonElement)
+          if (at === -1) return
+          event.preventDefault()
+          if (event.key === 'ArrowUp' && at === 0) onLeaveUp?.()
+          else rows[event.key === 'ArrowDown' ? Math.min(at + 1, rows.length - 1) : at - 1]?.focus()
+        }}
         data-testid={layout === 'list' ? 'search-results-list' : 'search-results-grid'}
         className={
           layout === 'list' ? 'space-y-1 p-0.5' : 'grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3'

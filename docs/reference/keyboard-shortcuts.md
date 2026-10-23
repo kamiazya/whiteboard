@@ -211,4 +211,17 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 
 The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
 
+## Searching the document list
+
+In the document list's search box, the results are one key away, and a screen
+reader hears how many there are once the search settles ("3 results for
+“map”", or "No results for “map”"). A search that takes longer than a moment
+shows "Searching…".
+
+| Shortcut | Action |
+|---|---|
+| `ArrowDown` in the search box | Move to the first result |
+| `ArrowDown` / `ArrowUp` on a result | Move to the next or previous result; `ArrowUp` on the first returns to the box |
+| `Enter` on a result | Open the document |
+
 ← Back to [reference](README.md)

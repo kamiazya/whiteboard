@@ -6,6 +6,8 @@ import { recallSearchQuery, rememberSearchQuery } from '../../lib/search-query-m
 const SEARCH_LIMIT = 20
 /** Long enough that typing a word is one search, short enough to feel live. */
 const SEARCH_DEBOUNCE_MS = 150
+/** A wait shorter than this is a blink; saying "Searching…" for it is flicker. */
+const SLOW_SEARCH_MS = 300
 
 /** The box's text, refilled from the scope's memory when the panel mounts again. */
 function useRememberedQuery(memoryScope: string | undefined) {
@@ -40,12 +42,21 @@ export function useDebouncedDocumentSearch(
   setQuery: (next: string) => void
   hits: readonly DocumentSearchHit[] | null
   searchDegraded: boolean
+  /** The query is typed and its answer has not landed — debounce plus flight. */
+  pending: boolean
+  /** Pending long enough to be worth saying so. */
+  slow: boolean
   /** Workspace switch: results computed against the departed content. */
   resetResults: () => void
 } {
   const [query, setQuery] = useRememberedQuery(memoryScope)
   const [hits, setHits] = useState<readonly DocumentSearchHit[] | null>(null)
   const [searchDegraded, setSearchDegraded] = useState(false)
+  // The trimmed query the last answer (or refusal) was for. Pending is the
+  // difference between it and what is typed, so a revision re-read of the
+  // same query keeps showing the rows it has instead of flashing busy.
+  const [settledFor, setSettledFor] = useState<string | null>(null)
+  const [slow, setSlow] = useState(false)
 
   // Debounced, and the LATEST query decides: the cleanup marks a superseded
   // request stale rather than trusting arrival order.
@@ -54,6 +65,7 @@ export function useDebouncedDocumentSearch(
     if (trimmed === '' || trimmed.startsWith('#')) {
       setHits(null)
       setSearchDegraded(false)
+      setSettledFor(null)
       return
     }
     let stale = false
@@ -64,11 +76,13 @@ export function useDebouncedDocumentSearch(
           if (stale) return
           setHits(results)
           setSearchDegraded(false)
+          setSettledFor(trimmed)
         })
         .catch(() => {
           if (stale) return
           setHits(null)
           setSearchDegraded(true)
+          setSettledFor(trimmed)
         })
     }, SEARCH_DEBOUNCE_MS)
     return () => {
@@ -85,7 +99,21 @@ export function useDebouncedDocumentSearch(
   const resetResults = useCallback(() => {
     setHits(null)
     setSearchDegraded(false)
+    setSettledFor(null)
   }, [])
 
-  return { query, setQuery, hits, searchDegraded, resetResults }
+  const trimmedQuery = query.trim()
+  const pending =
+    trimmedQuery !== '' && !trimmedQuery.startsWith('#') && settledFor !== trimmedQuery
+
+  useEffect(() => {
+    if (!pending) {
+      setSlow(false)
+      return
+    }
+    const timer = setTimeout(() => setSlow(true), SLOW_SEARCH_MS)
+    return () => clearTimeout(timer)
+  }, [pending, trimmedQuery])
+
+  return { query, setQuery, hits, searchDegraded, pending, slow, resetResults }
 }

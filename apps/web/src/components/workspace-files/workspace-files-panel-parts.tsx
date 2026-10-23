@@ -223,6 +223,17 @@ export function PanelToolbar({
           maxLength={SEARCH_QUERY_MAX_CHARS}
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown') return
+            // The first result is one key away from the box rather than a
+            // Tab walk across every control between them.
+            const first = event.currentTarget
+              .closest('[data-testid="workspace-files-panel"]')
+              ?.querySelector<HTMLElement>('[data-testid="search-results"] button[data-doc-path]')
+            if (first === null || first === undefined) return
+            event.preventDefault()
+            first.focus()
+          }}
           className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
         />
       </div>
@@ -545,12 +556,21 @@ export function BrowseTwoColumns({
  * describes them: one flat list, in both column modes — a search that
  * behaved differently per mode would be two features wearing one box.
  */
+/** What a listener hears when a search settles. */
+function resultsAnnouncement(count: number, query: string): string {
+  const q = query.trim()
+  if (count === 0) return `No results for “${q}”`
+  return `${count} ${count === 1 ? 'result' : 'results'} for “${q}”`
+}
+
 export function SearchColumn({
   documents,
   query,
   activeTag,
   hits,
   searchDegraded,
+  pending,
+  slow,
   selectedPath,
   tapOpens,
   onOpenDocument,
@@ -564,6 +584,8 @@ export function SearchColumn({
   activeTag: string | null
   hits: ReturnType<typeof useDebouncedDocumentSearch>['hits']
   searchDegraded: boolean
+  pending: boolean
+  slow: boolean
   selectedPath: string | undefined
   tapOpens: boolean
   onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
@@ -572,35 +594,46 @@ export function SearchColumn({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
 }) {
+  const rows = searchResultRows({ activeTag, hits, documents, query })
   return (
     // Results come from everywhere, so neither the folder tree nor the
     // folder's own contents describes them. One flat list, in both
     // column modes — a search that behaved differently per mode would
     // be two features wearing one box.
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-      <div data-testid="search-results">
+      <div data-testid="search-results" aria-busy={pending}>
         {/* Always mounted, text swapped: a polite live region added to
             the DOM already carrying its message is announced
-            inconsistently (see polite-live-region.test.ts). */}
+            inconsistently (see polite-live-region.test.ts). The count is
+            withheld while the answer is in flight, so a listener hears the
+            settled number once rather than the name-match one. */}
         <p
           role="status"
+          aria-label="Search results"
           className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
         >
-          {searchDegraded
-            ? 'Searching names and paths only — this workspace’s content search is unavailable.'
-            : ''}
+          {pending ? '' : resultsAnnouncement(rows.length, query)}
+          {searchDegraded &&
+            ' Searching names and paths only — this workspace’s content search is unavailable.'}
         </p>
+        {slow && (
+          <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
+            Searching…
+          </p>
+        )}
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
           // A `#tag` query is a FILTER over what is loaded (the
           // search contract), not a content search — it never leaves the
           // client. Everything else asks the source.
-          results={searchResultRows({
-            activeTag,
-            hits,
-            documents: documents,
-            query,
-          })}
+          results={rows}
+          onLeaveUp={() =>
+            document
+              .querySelector<HTMLInputElement>(
+                '[data-testid="workspace-files-panel"] input[type="search"]',
+              )
+              ?.focus()
+          }
           query={query}
           searchedContents={activeTag === null && hits !== null}
           selectedPath={selectedPath}
