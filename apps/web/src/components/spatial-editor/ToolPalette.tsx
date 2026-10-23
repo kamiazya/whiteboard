@@ -123,7 +123,7 @@ function menuFocusTarget(
   active: Element | null,
 ): HTMLElement | null {
   if (items.length === 0) return null
-  const at = items.findIndex((item) => item === active)
+  const at = active instanceof HTMLElement ? items.indexOf(active) : -1
   if (key === 'Home') return items[0] ?? null
   if (key === 'End') return items[items.length - 1] ?? null
   if (key === 'ArrowDown') return items[(at + 1) % items.length] ?? null

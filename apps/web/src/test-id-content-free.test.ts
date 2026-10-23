@@ -41,7 +41,8 @@ const CONTENT_FREE: Record<string, string> = {
   './components/spatial-editor/CommentThreadCard.tsx message.id': 'a generated message id',
   './components/annotations/thread-row.tsx thread.id': 'a generated thread id',
   './components/spatial-editor/EdgeEndHandles.tsx endpoint': "'from' | 'to'",
-  './components/spatial-editor/ToolPalette.tsx id': "the dock zoom pair's shortcut id, 'zoom-in' | 'zoom-out'",
+  './components/spatial-editor/ToolPalette.tsx id':
+    "the dock zoom pair's shortcut id, 'zoom-in' | 'zoom-out'",
   './components/spatial-editor/BoxTargetOverlay.tsx b.id': 'a node id',
   './components/spatial-editor/TextNodeEditor.tsx testId': 'a test id passed in by the caller',
   './components/spatial-editor/SelectionOverlay.tsx band.kind': 'a resize handle kind, an enum',
