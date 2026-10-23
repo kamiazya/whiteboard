@@ -25,6 +25,12 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
  * alone.
  */
 const SNAP_GRID_CANVAS_PX = 20
+/**
+ * A press that travels less than this (screen px) is a tap, not a drag: a
+ * fingertip jitters that much without meaning to move anything, and snapping
+ * the tapped box to the grid would relocate it by up to the snap threshold.
+ */
+const MOVE_SLOP_SCREEN_PX = 8
 
 export interface SnapGestureInputs {
   gestureState: GestureState
@@ -100,6 +106,13 @@ export function snapGesturePoint(
 ): SnapGestureResult {
   const { gestureState, canvas, boxes, extraIds, isLocked, zoom } = inputs
   const unchanged = { point: raw, guides: { x: [], y: [] } }
+  if (
+    gestureState.kind === 'moving' &&
+    Math.hypot(raw.x - gestureState.startPoint.x, raw.y - gestureState.startPoint.y) * zoom <
+      MOVE_SLOP_SCREEN_PX
+  ) {
+    return { point: gestureState.startPoint, guides: { x: [], y: [] } }
+  }
   if (suspended) return unchanged
   const options = {
     thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / zoom,

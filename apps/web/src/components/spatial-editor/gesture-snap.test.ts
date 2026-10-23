@@ -40,6 +40,23 @@ describe('snapGesturePoint', () => {
     expect(out).toEqual({ point: { x: 152.5, y: 30 }, guides: { x: [], y: [] } })
   })
 
+  it('a press that stays under the tap slop pins the pointer to the press point, however near a snap line', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0), textNode('b', 300, 7)], edges: [] }
+    for (const suspended of [false, true]) {
+      const out = snapGesturePoint({ x: 352, y: 31 }, suspended, inputsFor(canvas, movingB))
+      expect(out).toEqual({ point: movingB.startPoint, guides: { x: [], y: [] } })
+    }
+  })
+
+  it('the tap slop is measured on screen, so zooming in shrinks it in canvas units', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0), textNode('b', 300, 7)], edges: [] }
+    const out = snapGesturePoint({ x: 352, y: 30 }, true, {
+      ...inputsFor(canvas, movingB),
+      zoom: 8,
+    })
+    expect(out.point).toEqual({ x: 352, y: 30 })
+  })
+
   it('idle (non-snapping) gesture → passthrough', () => {
     const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0)], edges: [] }
     const out = snapGesturePoint({ x: 5, y: 5 }, false, inputsFor(canvas, { kind: 'idle' }))
