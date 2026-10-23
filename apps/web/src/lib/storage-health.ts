@@ -23,6 +23,17 @@ export type StorageHealth = 'ok' | 'stuck' | 'failed'
 export const STUCK_AFTER_MS = 5_000
 
 /**
+ * Where the stuck clock counts from: the document becoming unsaved, or a later
+ * write landing behind which edits kept arriving. A write that lands is the
+ * store keeping up, however long typing keeps the document unsaved.
+ */
+export function stuckClockStart(state: BrowserPersistenceState, unsavedSince: number): number {
+  return state.kind === 'pending' && state.landedAt !== undefined
+    ? Math.max(unsavedSince, state.landedAt)
+    : unsavedSince
+}
+
+/**
  * @param unsavedSince when the document last BECAME unsaved (the transition
  *   out of `saved`), or null when the caller has not seen one. A pending
  *   state with no known start is `ok`: there is nothing to count from, and
@@ -36,5 +47,5 @@ export function storageHealthOf(
   if (state.kind === 'degraded') return 'failed'
   if (state.kind === 'saved') return 'ok'
   if (unsavedSince === null) return 'ok'
-  return now - unsavedSince >= STUCK_AFTER_MS ? 'stuck' : 'ok'
+  return now - stuckClockStart(state, unsavedSince) >= STUCK_AFTER_MS ? 'stuck' : 'ok'
 }

@@ -44,4 +44,18 @@ describe('storageHealthOf', () => {
   it('pending with no known start is ok', () => {
     expect(storageHealthOf(pending, null, 999_999)).toBe('ok')
   })
+
+  // A burst of typing is one unbroken unsaved span in which every write
+  // lands. The clock restarts at each landing, so only a store that stops
+  // keeping up reads as stuck.
+  it('counts a pending edit from the last write that landed behind it', () => {
+    const landed: BrowserPersistenceState = { kind: 'pending', lastSavedAt: null, landedAt: 9_000 }
+    expect(storageHealthOf(landed, 1_000, 9_000 + STUCK_AFTER_MS - 1)).toBe('ok')
+    expect(storageHealthOf(landed, 1_000, 9_000 + STUCK_AFTER_MS)).toBe('stuck')
+  })
+
+  it('a landing from before the span began does not move its start', () => {
+    const landed: BrowserPersistenceState = { kind: 'pending', lastSavedAt: null, landedAt: 100 }
+    expect(storageHealthOf(landed, 1_000, 1_000 + STUCK_AFTER_MS)).toBe('stuck')
+  })
 })

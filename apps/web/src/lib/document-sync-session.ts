@@ -71,6 +71,15 @@ const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 /** Edits within this window (ms) of each other coalesce into one commit. */
 export const COMMIT_DEBOUNCE_MS = 300
 
+/**
+ * The longest an edit waits for that quiet period. Typing or dragging that
+ * never pauses for `COMMIT_DEBOUNCE_MS` would otherwise write nothing until
+ * it stops: minutes of work held only in memory, and an unsaved span the shell
+ * rightly reads as stuck (`STUCK_AFTER_MS`). Well under that threshold, so a
+ * sustained burst is written, and reads as saved, long before it could trip.
+ */
+export const COMMIT_MAX_WAIT_MS = 2_000
+
 /** Stable empty set so a lock read before the first snapshot is referentially stable. */
 const EMPTY_LOCKS: ReadonlySet<string> = new Set()
 
@@ -669,6 +678,8 @@ export function createDocumentSyncSession(
   // this edit and be deleted by it.
   let windowStart: SpatialCanvas | null = null
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  // When the edits now waiting began, which `COMMIT_MAX_WAIT_MS` counts from.
+  let debounceStartedAt: number | null = null
   // Body text the editor binding wrote at its positions and has not
   // committed: the ops are in the doc (a read sees them) and ride the same
   // debounce as a canvas edit, so a burst of keystrokes is one commit and
@@ -676,6 +687,7 @@ export function createDocumentSyncSession(
   let bodyOpsPending = false
 
   function commitPendingTargets(): void {
+    debounceStartedAt = null
     const commitBody = bodyOpsPending
     bodyOpsPending = false
     const hasTargets = pendingTargets.size > 0 && latestNext !== null
@@ -733,11 +745,17 @@ export function createDocumentSyncSession(
   }
 
   function armDebounce(): void {
+    const now = Date.now()
+    debounceStartedAt ??= now
     if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null
-      commitPendingTargets()
-    }, COMMIT_DEBOUNCE_MS)
+    const untilMaxWait = debounceStartedAt + COMMIT_MAX_WAIT_MS - now
+    debounceTimer = setTimeout(
+      () => {
+        debounceTimer = null
+        commitPendingTargets()
+      },
+      Math.max(0, Math.min(COMMIT_DEBOUNCE_MS, untilMaxWait)),
+    )
   }
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
@@ -1127,6 +1145,7 @@ export function createDocumentSyncSession(
     if (debounceTimer === null && pendingTargets.size === 0) return false
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = null
+    debounceStartedAt = null
     pendingTargets.clear()
     latestNext = null
     // Nothing is left to land, and `unsaved` is only cleared by something

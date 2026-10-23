@@ -69,6 +69,22 @@ describe('useStorageHealth', () => {
     expect(result.current).toBe('stuck')
   })
 
+  it('stays ok through a long burst whose writes keep landing, then turns stuck once they stop', () => {
+    const { result, rerender } = mount(saved)
+    rerender({ state: pending })
+    for (let elapsed = 0; elapsed < STUCK_AFTER_MS * 3; elapsed += STUCK_AFTER_MS / 4) {
+      act(() => {
+        vi.advanceTimersByTime(STUCK_AFTER_MS / 4)
+      })
+      rerender({ state: { kind: 'pending', lastSavedAt: null, landedAt: Date.now() } })
+      expect(result.current).toBe('ok')
+    }
+    act(() => {
+      vi.advanceTimersByTime(STUCK_AFTER_MS)
+    })
+    expect(result.current).toBe('stuck')
+  })
+
   it('recovers to ok when the write lands', () => {
     const { result, rerender } = mount(pending)
     act(() => {

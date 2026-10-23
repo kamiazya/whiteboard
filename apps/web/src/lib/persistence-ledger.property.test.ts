@@ -80,6 +80,7 @@ const emptyTally = () => ({
   recoveredByCleanPush: 0,
   epochRuleHeld: 0,
   blockedByBusy: 0,
+  landingsWhileUnsaved: 0,
   blockedByInFlight: 0,
   droppedPushes: 0,
   overlappingPushes: 0,
@@ -161,7 +162,12 @@ function judgeSafety(
     } else {
       expect(report.lastSavedAt, `${report.kind} must carry the last saved time`).toBe(lastSavedAt)
     }
-    if (report.kind === 'pending') {
+    if (report.kind === 'pending' && report.landedAt !== undefined) {
+      expect(
+        model.dirty || model.open.length > 0 || model.busy,
+        'landing said with nothing unsaved',
+      ).toBe(true)
+    } else if (report.kind === 'pending') {
       // A refusal is the one exception: it turns an unanswered failure into
       // a wait for the keeper's state, which no later write can answer.
       expect(
@@ -277,6 +283,20 @@ abstract class SettlePush extends Step {
 class ResolvePush extends SettlePush {
   readonly label = 'resolved'
   protected readonly settles = true
+  /**
+   * A write that lands while edits are still unsaved behind it settles
+   * nothing, and is said as progress instead: the one `pending` that may
+   * follow another unsaved report.
+   */
+  protected override settleExpectation(model: Model): Kind[] {
+    const kinds = super.settleExpectation(model)
+    if (kinds.length > 0) return kinds
+    const unsavedBehind =
+      model.dirty && !failureOutstanding(model.log) && !model.awaitingKeeperState && !model.gone
+    if (!unsavedBehind) return kinds
+    tally.landingsWhileUnsaved++
+    return ['pending']
+  }
   protected apply(model: Model, real: Real): Kind[] {
     const { handle, startedAt } = this.take(model, real)
     const outstandingBefore = failureOutstanding(model.log)

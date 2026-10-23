@@ -6,7 +6,12 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
-import { STUCK_AFTER_MS, type StorageHealth, storageHealthOf } from '../lib/storage-health.js'
+import {
+  STUCK_AFTER_MS,
+  type StorageHealth,
+  storageHealthOf,
+  stuckClockStart,
+} from '../lib/storage-health.js'
 
 export function useStorageHealth(state: BrowserPersistenceState): StorageHealth {
   // When the document last left `saved`. Held in a ref rather than derived
@@ -22,7 +27,7 @@ export function useStorageHealth(state: BrowserPersistenceState): StorageHealth 
     if (state.kind === 'saved' || state.kind === 'degraded') return
     const since = unsavedSince.current
     if (since === null) return
-    const remaining = since + STUCK_AFTER_MS - Date.now()
+    const remaining = stuckClockStart(state, since) + STUCK_AFTER_MS - Date.now()
     if (remaining <= 0) return
     const timer = setTimeout(() => setTick((n) => n + 1), remaining)
     return () => clearTimeout(timer)
