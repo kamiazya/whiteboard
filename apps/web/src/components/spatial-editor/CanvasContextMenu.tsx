@@ -14,6 +14,7 @@ import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-ed
 import { verbCatalogItems } from '../markdown-editor/verb-catalog.js'
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu.js'
 import type { CanvasCommands } from './canvas-commands.js'
+import { contextMenuHeading } from './context-menu-heading.js'
 import { annotationVerbItems } from './context-menu-items/annotation-verbs.js'
 import { canvasMenuItems } from './context-menu-items/canvas-menu-items.js'
 import { commentMenuItems } from './context-menu-items/comment-menu-items.js'
@@ -310,9 +311,18 @@ export function CanvasContextMenu({
    * six levels of indentation; as a chain it is the list it always was.
    */
   const items: readonly ContextMenuItem[] = nonContentItems() ?? contentItems()
+  const heading = contextMenuHeading({
+    node,
+    edge,
+    line,
+    comment,
+    editing: activeEditor !== null,
+    nodes: canvas.nodes,
+  })
   return (
     <ContextMenu
-      label="Canvas actions"
+      label={heading.label}
+      title={heading.title}
       x={contextMenu.x}
       y={contextMenu.y}
       variant={contextMenu.variant ?? (hasCoarsePointer() ? 'sheet' : 'list')}

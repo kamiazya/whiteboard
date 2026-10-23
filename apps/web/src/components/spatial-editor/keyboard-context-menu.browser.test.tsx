@@ -48,6 +48,13 @@ it('Shift+F10 on a selected node opens that node menu focused on its first actio
   expect(rootOf(container).contains(document.activeElement)).toBe(true)
 })
 
+it('Shift+F10 on a node labels the menu for that node', async () => {
+  mount()
+  await userEvent.keyboard('{Tab}')
+  await userEvent.keyboard('{Shift>}{F10}{/Shift}')
+  await expect.element(page.getByRole('menu', { name: 'Actions for Note: A' })).toBeInTheDocument()
+})
+
 it('the Menu key opens the same node menu as Shift+F10', async () => {
   mount()
   await userEvent.keyboard('{Tab}')

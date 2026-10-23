@@ -64,7 +64,7 @@ to drop it exactly where you want it. **Group** frames what is selected; with
 nothing selected it makes an empty frame in a free spot and opens its name for
 typing, and an empty frame is drawn with a faint tint so it can be found. In **Select** mode, right-clicking
 (long-pressing on touch) empty space offers the same creations, placed where
-you pressed — Hand mode is navigation only, so it deliberately leaves the
+you pressed. On touch the menu is a sheet titled for what you pressed, dimmed behind, at most half the screen (it scrolls), and the canvas pans so the pressed object stays visible above it; tap the dimmed area to close it. Hand mode is navigation only, so it deliberately leaves the
 right-click menu closed (a tap on a comment still opens its conversation:
 comments are chrome, not content). The
 browser UI also selects, moves, resizes, connects, and edits existing nodes,
