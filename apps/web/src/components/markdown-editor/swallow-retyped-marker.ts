@@ -6,7 +6,13 @@ import { EditorView } from '@codemirror/view'
  * the start of the same kind of marker typed over it. Group 1 is the line's
  * own marker including its trailing space, group 2 what was typed after it.
  */
-const RETYPED_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])[ \t]+)([-*+]|\d+[.)])$/
+const RETYPED_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)([-*+]|\d+[.)])$/
+
+/** A continued task item's own marker, and the checkbox typed after it. */
+const RETYPED_CHECKBOX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])[ \t]+\[[ xX]\][ \t]+)\[[ xX]\]$/
+
+/** A task item: marker kind (group 1 is its indentation and quote prefix). */
+const TASK_RE = /^(\s*(?:>\s?)*)(?:[-*+]|\d+[.)])[ \t]+\[[ xX]\][ \t]/
 
 /** Indentation and quote markers, then the marker's kind — what two sibling items share. */
 const SIBLING_RE = /^(\s*(?:>\s?)*)(?:([-*+])|\d+[.)])[ \t]/
@@ -30,6 +36,18 @@ function swallowRetypedMarker(
   if (text !== ' ' || from !== to) return null
   const line = state.doc.lineAt(from)
   if (from !== line.to) return null
+  const checkbox = RETYPED_CHECKBOX_RE.exec(line.text)
+  if (checkbox !== null && line.number > 1) {
+    const [, own] = checkbox
+    const above = TASK_RE.exec(state.doc.line(line.number - 1).text)
+    const mine = TASK_RE.exec(line.text)
+    if (above === null || mine === null || above[1] !== mine[1]) return null
+    return {
+      changes: { from: line.from + own.length, to: line.to, insert: '' },
+      selection: { anchor: line.from + own.length },
+      userEvent: 'input.type',
+    }
+  }
   const match = RETYPED_RE.exec(line.text)
   if (match === null) return null
   const [, own, typed] = match

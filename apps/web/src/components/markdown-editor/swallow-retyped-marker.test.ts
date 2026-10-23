@@ -42,6 +42,19 @@ describe('the retyped-marker input handler', () => {
     expect(typeSpace('1. one\n2. 2.')).toBe('1. one\n2. ')
   })
 
+  it('drops a bullet and then a checkbox typed over a continued task item', () => {
+    expect(typeSpace('- [ ] one\n- [ ] -')).toBe('- [ ] one\n- [ ] ')
+    expect(typeSpace('- [ ] one\n- [ ] [ ]')).toBe('- [ ] one\n- [ ] ')
+    expect(typeSpace('> - [x] one\n> - [ ] [ ]')).toBe('> - [x] one\n> - [ ] ')
+  })
+
+  it('leaves a checkbox typed on a plain bullet alone', () => {
+    expect(typeSpace('- one\n- [ ]')).toBeNull()
+    expect(typeSpace('- [ ] one\n- [ ] [x')).toBeNull()
+    expect(typeSpace('- one\n- [ ] [ ]')).toBeNull()
+    expect(typeSpace('> - [ ] one\n- [ ] [ ]')).toBeNull()
+  })
+
   it('stands aside for a different kind of marker, so nesting stays possible', () => {
     expect(typeSpace('- one\n- 1.')).toBeNull()
     expect(typeSpace('1. one\n2. -')).toBeNull()
