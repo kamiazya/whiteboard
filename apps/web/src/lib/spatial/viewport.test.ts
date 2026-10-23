@@ -159,6 +159,51 @@ describe('frameViewport', () => {
   })
 })
 
+describe('chrome painted over the container', () => {
+  const containerSize = { width: 800, height: 600 }
+
+  it('frameViewport centres the bounds in the part the panel leaves, and fits that part', () => {
+    const occlusion = { right: 300 }
+    const vp = frameViewport(
+      { minX: 0, minY: 0, maxX: 2000, maxY: 100 },
+      containerSize,
+      1,
+      24,
+      occlusion,
+    )
+    // 500px of the 800 are visible, less 24 a side.
+    expect(vp.zoom).toBeCloseTo((500 - 48) / 2000)
+    expect(canvasToScreen({ x: 1000, y: 50 }, vp).x).toBeCloseTo(250)
+  })
+
+  it('frameViewport honours a top and a left strip as well', () => {
+    const vp = frameViewport({ minX: 0, minY: 0, maxX: 100, maxY: 100 }, containerSize, 1, 24, {
+      top: 100,
+      left: 200,
+    })
+    const mapped = canvasToScreen({ x: 50, y: 50 }, vp)
+    expect(mapped.x).toBeCloseTo(200 + 600 / 2)
+    expect(mapped.y).toBeCloseTo(100 + 500 / 2)
+  })
+
+  it('panToShowTarget moves a box under a right-hand panel by exactly the covered amount', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const next = panToShowTarget({ x: 560, y: 100, width: 100, height: 50 }, vp, containerSize, {
+      right: 300,
+    })
+    // right edge 660 must sit PAN_MARGIN_PX inside 500.
+    expect(next).toEqual({ x: 660 - (500 - PAN_MARGIN_PX), y: 0, zoom: 1 })
+  })
+
+  it('panToShowTarget keeps a box clear of a left-hand strip', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const next = panToShowTarget({ x: 100, y: 100, width: 50, height: 50 }, vp, containerSize, {
+      left: 200,
+    })
+    expect(next?.x).toBe(100 - (200 + PAN_MARGIN_PX))
+  })
+})
+
 describe('panToShowTarget', () => {
   const containerSize = { width: 800, height: 600 }
 

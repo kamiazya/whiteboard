@@ -17,8 +17,12 @@ import {
   type Point,
   panToShowTarget,
   type Viewport,
+  type ViewportOcclusion,
+  visibleSize,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
+import { sameInsets } from '../../lib/spatial/viewport-insets.js'
+import { useVisibleInsets } from './use-visible-insets.js'
 
 /** Margin around framed content, in screen px. */
 const FRAME_MARGIN_PX = 24
@@ -45,9 +49,11 @@ function useOpenOnContent({
   rootRef,
   boxes,
   containerSizeOf,
+  insetsOf,
   viewport,
   setViewport,
 }: Pick<ViewportControlsInputs, 'rootRef' | 'boxes' | 'containerSizeOf'> & {
+  insetsOf: () => ViewportOcclusion
   viewport: Viewport
   setViewport: (next: Viewport) => void
 }) {
@@ -61,10 +67,18 @@ function useOpenOnContent({
     const size = containerSizeOf(rootRef.current)
     if (size === null || size.width <= 0 || size.height <= 0) return
     openedRef.current = true
-    if (anyBoxVisible(boxes, viewport, size)) return
+    const insets = insetsOf()
+    // Visible means in the part no panel covers: the strip it hides is as
+    // blank as paper past the edge.
+    const shifted = {
+      ...viewport,
+      x: viewport.x - (insets.left ?? 0) / viewport.zoom,
+      y: viewport.y - (insets.top ?? 0) / viewport.zoom,
+    }
+    if (anyBoxVisible(boxes, shifted, visibleSize(size, insets))) return
     const bounds = contentBounds(boxes)
     if (bounds === undefined) return
-    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX))
+    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX, insets))
   })
 }
 
@@ -81,23 +95,37 @@ function useKeepSelectionInView({
   boxes,
   selection,
   containerSizeOf,
+  insetsOf,
   viewport,
   setViewport,
 }: Pick<ViewportControlsInputs, 'rootRef' | 'boxes' | 'selection' | 'containerSizeOf'> & {
+  insetsOf: () => ViewportOcclusion
   viewport: Viewport
   setViewport: (next: Viewport) => void
 }) {
-  const lastSizeRef = useRef<ContainerSize | null>(null)
+  const lastRef = useRef<{ size: ContainerSize; insets: ViewportOcclusion } | null>(null)
   useEffect(() => {
     const size = containerSizeOf(rootRef.current)
-    const last = lastSizeRef.current
-    lastSizeRef.current = size
+    const insets = insetsOf()
+    const last = lastRef.current
+    lastRef.current = size === null ? null : { size, insets }
     if (size === null || last === null) return
+    const unchanged =
+      last.size.width === size.width &&
+      last.size.height === size.height &&
+      sameInsets(last.insets, insets)
+    if (unchanged) return
     const box = boxes.find((candidate) => candidate.id === selection?.id)
     if (box === undefined) return
-    const next = panToShowTarget(box.box, viewport, size)
+    const next = panToShowTarget(box.box, viewport, size, insets)
     if (next !== undefined) setViewport(next)
   })
+}
+
+/** Where the viewport settles on its own: on open, and when a panel or resize hides the selection. */
+function usePlacement(inputs: Parameters<typeof useKeepSelectionInView>[0]) {
+  useOpenOnContent(inputs)
+  useKeepSelectionInView(inputs)
 }
 
 export function useViewportControls({
@@ -109,9 +137,10 @@ export function useViewportControls({
   containerSizeOf,
 }: ViewportControlsInputs) {
   const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
+  // Panels over the root are padding for every verb below and for the comment reveal.
+  const { insetsOf } = useVisibleInsets(rootRef)
 
-  useOpenOnContent({ rootRef, boxes, containerSizeOf, viewport, setViewport })
-  useKeepSelectionInView({ rootRef, boxes, selection, containerSizeOf, viewport, setViewport })
+  usePlacement({ rootRef, boxes, selection, containerSizeOf, insetsOf, viewport, setViewport })
 
   /** Keyboard zoom: about the viewport centre, since there is no pointer. */
   const stepZoom = (factor: number): boolean => {
@@ -131,7 +160,8 @@ export function useViewportControls({
     const bounds = contentBounds(boxes, ids)
     if (bounds === undefined) return false
     const containerSize = containerSizeOf(rootRef.current)
-    setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX))
+    const insets = insetsOf()
+    setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX, insets))
     return true
   }
 
@@ -141,5 +171,5 @@ export function useViewportControls({
     return frameContent(new Set([selection.id, ...extraIds]))
   }
 
-  return { viewport, setViewport, stepZoom, frameContent, frameSelection }
+  return { viewport, setViewport, stepZoom, frameContent, frameSelection, insetsOf }
 }

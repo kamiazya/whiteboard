@@ -96,7 +96,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 97,
-  'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 139,
+  'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 140, // +1: it registers itself as chrome over the canvas
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1717, // +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1719, // +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,

@@ -494,14 +494,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // The pan/zoom viewport and its frame/zoom verbs — see
     // use-viewport-controls.ts. Wheel/hand/pinch navigation stays with the
     // pointer wiring below and drives the same setViewport.
-    const { viewport, setViewport, stepZoom, frameContent, frameSelection } = useViewportControls({
-      rootRef,
-      boxes,
-      selection,
-      extraIds,
-      viewportCenterScreen,
-      containerSizeOf,
-    })
+    const { viewport, setViewport, stepZoom, frameContent, frameSelection, insetsOf } =
+      useViewportControls({
+        rootRef,
+        boxes,
+        selection,
+        extraIds,
+        viewportCenterScreen,
+        containerSizeOf,
+      })
     // What THIS canvas can read of the host's wider wire, by identity.
     const {
       wire: canvasWire,
@@ -638,6 +639,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       rootRef,
       containerSizeOf,
       showResolved: () => setShowResolvedComments(true),
+      insetsOf,
     })
     // Named for the TYPE it holds rather than for the state that keys it:
     // `selectedEdgeId` may name a relation or a stroke, because the scene

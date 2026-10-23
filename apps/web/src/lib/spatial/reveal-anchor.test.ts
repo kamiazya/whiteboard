@@ -56,3 +56,15 @@ it('leaves a visible box alone and centres a hidden one', () => {
   expect(at).toEqual({ x: 4050 - 400, y: 3030 - 300, zoom: 1 })
   expect(viewportRevealing({ x: 4000, y: 3000, width: 1, height: 1 }, view, null)).toBeUndefined()
 })
+
+it('centres a revealed box in what a panel leaves, not in the whole container', () => {
+  const view = { x: 0, y: 0, zoom: 1 }
+  const at = viewportRevealing(
+    { x: 4000, y: 3000, width: 100, height: 60 },
+    view,
+    { width: 800, height: 600 },
+    { right: 300, bottom: 100 },
+  )
+  // Visible 500x500 from the origin: its middle is (250, 250).
+  expect(at).toEqual({ x: 4050 - 250, y: 3030 - 250, zoom: 1 })
+})

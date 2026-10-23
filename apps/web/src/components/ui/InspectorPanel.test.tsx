@@ -15,6 +15,7 @@ import {
   type InspectorPresence,
   InspectorPresenceContext,
 } from '../../contexts/inspector-presence.js'
+import { currentOccluders } from '../../lib/spatial/viewport-insets.js'
 import { InspectorPanel } from './InspectorPanel.js'
 
 const frames = new Map<number, FrameRequestCallback>()
@@ -131,5 +132,18 @@ describe('InspectorPanel sheet stage', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(toggle)
     expect(pane.dataset.stage).toBe('peek')
+  })
+})
+
+describe('as a surface over the canvas', () => {
+  it('registers its element for the editor to measure while it is mounted', () => {
+    const { unmount } = render(
+      <InspectorPanel kind="display" onClose={() => {}}>
+        body
+      </InspectorPanel>,
+    )
+    expect(currentOccluders()).toContain(screen.getByTestId('display-panel'))
+    unmount()
+    expect(currentOccluders()).toHaveLength(0)
   })
 })
