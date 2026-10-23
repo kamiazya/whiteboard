@@ -218,11 +218,11 @@ interface ChannelReading {
  * The channels that can say "these two differ in KIND" **on a board**.
  *
  * TWO, not three. `visual.symbol/v0` was counted here and should not have
- * been: `plugin-visual` contributes no node decoration, so a badge draws
- * NOTHING on a canvas — it was deliberately removed once the small surfaces
- * it was designed for existed (a node at full size repeated what its own
- * label already said), and the only thing that draws a node's symbol today
- * is the minimap.
+ * been: `plugin-visual` draws a badge only on a box wearing a stencil, so
+ * a symbol set by hand draws NOTHING on a canvas — it was deliberately
+ * removed once the small surfaces it was designed for existed (a node at full
+ * size repeated what its own label already said), and the only thing that
+ * draws a hand-set symbol today is the minimap.
  *
  * Counting it credited a distinction no reader of this canvas can see. Found
  * by rendering a board a model actually drew and noticing two stencils'

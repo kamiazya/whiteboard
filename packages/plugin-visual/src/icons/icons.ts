@@ -45,6 +45,14 @@ export const LUCIDE_ICONS: Readonly<Record<string, ReadonlyArray<LucideIconEleme
     { tag: 'circle', cx: 9, cy: 9, r: 2 },
     { tag: 'path', d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' },
   ],
+  layers: [
+    {
+      tag: 'path',
+      d: 'M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z',
+    },
+    { tag: 'path', d: 'M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12' },
+    { tag: 'path', d: 'M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17' },
+  ],
   link: [
     { tag: 'path', d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' },
     { tag: 'path', d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' },
@@ -53,11 +61,28 @@ export const LUCIDE_ICONS: Readonly<Record<string, ReadonlyArray<LucideIconEleme
     { tag: 'rect', x: 3, y: 11, width: 18, height: 11, rx: 2 },
     { tag: 'path', d: 'M7 11V7a5 5 0 0 1 10 0v4' },
   ],
+  network: [
+    { tag: 'rect', x: 16, y: 16, width: 6, height: 6, rx: 1 },
+    { tag: 'rect', x: 2, y: 16, width: 6, height: 6, rx: 1 },
+    { tag: 'rect', x: 9, y: 2, width: 6, height: 6, rx: 1 },
+    { tag: 'path', d: 'M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3' },
+    { tag: 'path', d: 'M12 12V8' },
+  ],
+  server: [
+    { tag: 'rect', x: 2, y: 2, width: 20, height: 8, rx: 2 },
+    { tag: 'rect', x: 2, y: 14, width: 20, height: 8, rx: 2 },
+    { tag: 'path', d: 'M6 6h.01' },
+    { tag: 'path', d: 'M6 18h.01' },
+  ],
   star: [
     {
       tag: 'path',
       d: 'M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z',
     },
+  ],
+  user: [
+    { tag: 'path', d: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2' },
+    { tag: 'circle', cx: 12, cy: 7, r: 4 },
   ],
 }
 

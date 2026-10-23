@@ -149,10 +149,10 @@ describe('a contributed decoration', () => {
     expect(glyphs.map((g) => g.glyph)).toEqual(['A', 'B'])
   })
 
-  // The bundled plugin contributes no decoration any more — `visual.symbol`
-  // was its only one, and it is drawn on the surfaces where a node is too
-  // small to read rather than on the node. That the DEFAULT set is still
-  // visual's is pinned through a shape, in render-contribution.test.ts.
+  // The bundled plugin's one decoration marks a box wearing a stencil; a
+  // symbol set by hand is drawn on the surfaces where a node is too small to
+  // read rather than on the node. That the DEFAULT set is still visual's is
+  // pinned through a shape, in render-contribution.test.ts.
   it('composes nothing when no contribution declares a decoration', () => {
     const scene = layoutSpatialCanvas(
       canvasOf({ 'visual.symbol/v0': { kind: 'emoji', char: '⭐' } }),

@@ -6,22 +6,27 @@
  * It lives here, not in `canvas-render`, so the renderer knows nothing of a
  * plugin's business — what its silhouettes are and which facet selects one.
  *
- * It contributes no `decorations`: `visual.symbol` is not drawn as a badge on
- * the node itself. The surfaces the symbol is for (the tab's favicon, the
- * file row, the canvas overview) are where a node is too small to read and a
- * mark is the only thing that can say which one it is. On the node at full
- * size a badge would repeat what the node already shows. The contribution POINT stays — it is how a
- * plugin marks a node, and `contributed-decoration.test.ts` exercises it —
- * with no bundled implementation today.
+ * Its one decoration is the badge a stencil-wearing box carries. A symbol set
+ * by hand is NOT drawn on the node: it reaches the surfaces a node is too
+ * small to read on (the tab's favicon, the file row, the canvas overview),
+ * where a mark is the only thing that can say which box it is. A stencil is a
+ * kind, and the mark is how two kinds with a similar silhouette stay apart.
  *
  * The contract comes from `@kamiazya/whiteboard-scene`, which sits BELOW
  * both this package and the renderer, so there is no package cycle to hold
  * open and no guard to keep honest.
  */
-import type { BoundingBox, RenderContribution, ShapeContribution } from '@kamiazya/whiteboard-scene'
+import type {
+  BoundingBox,
+  NodeDecoration,
+  RenderContribution,
+  ShapeContribution,
+} from '@kamiazya/whiteboard-scene'
+import { resolveNodeStencil } from './apply-stencil.js'
 import {
   resolveCanvasTheme,
   resolveNodeShape,
+  resolveNodeSymbol,
   resolveNodeTextAlign,
   VISUAL_SHAPE_KEY,
 } from './data.js'
@@ -177,6 +182,43 @@ function insetHorizontally(box: BoundingBox): BoundingBox {
   return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
 }
 
+/** Edge of a stencil's badge, and its distance from the node's top edge. */
+const BADGE_SIZE_PX = 16
+const BADGE_INSET_PX = 6
+/** Below this node height the badge would sit on the label, so it is left off. */
+const BADGE_MIN_NODE_HEIGHT_PX = 48
+
+/**
+ * The mark a box wearing a stencil carries, at the top centre where every
+ * silhouette here is at its widest-clear: a corner is outside a diamond, an
+ * ellipse and a parallelogram, the top edge's middle is inside all six.
+ * Only a stencil-wearing box draws it — a symbol set by hand keeps reaching
+ * the minimap, the favicon and the file row alone, so a plain box someone
+ * marked is not redrawn. A stencil is a kind, and two kinds that differ only
+ * by silhouette (octagon beside hexagon) are hard to tell apart at a glance;
+ * the mark is the second signal that does not depend on colour.
+ */
+const stencilBadge: NodeDecoration = (node, { label }) => {
+  if (resolveNodeStencil(node) === undefined) return []
+  const symbol = resolveNodeSymbol(node)
+  if (symbol?.kind !== 'icon' || node.height < BADGE_MIN_NODE_HEIGHT_PX) return []
+  return [
+    {
+      kind: 'icon',
+      icon: symbol.name,
+      // An icon is STROKED, and a `<use>` with no stroke draws nothing: the
+      // label's ink is what the badge shares a box with.
+      appearance: { stroke: label.fill ?? 'currentColor' },
+      bbox: {
+        x: node.x + (node.width - BADGE_SIZE_PX) / 2,
+        y: node.y + BADGE_INSET_PX,
+        w: BADGE_SIZE_PX,
+        h: BADGE_SIZE_PX,
+      },
+    },
+  ]
+}
+
 /**
  * This plugin's whole rendering contribution.
  *
@@ -187,6 +229,7 @@ function insetHorizontally(box: BoundingBox): BoundingBox {
 export const visualRenderContribution: RenderContribution = {
   namespace: VISUAL_SHAPE_KEY.slice(0, VISUAL_SHAPE_KEY.indexOf('.')),
   shapes,
+  decorations: [stencilBadge],
   readShape: resolveNodeShape,
   readTextPlacement: resolveNodeTextAlign,
   // The same objects the plugin registers as assets, so the renderer's

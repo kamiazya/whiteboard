@@ -101,7 +101,7 @@ describe('what a typed query could mean', () => {
     // `file` is exact; `link` merely contains an `i`, and is not offered for
     // a query the exact one answers.
     expect(searchIconShortcodes('file')[0]).toBe('file')
-    expect(searchIconShortcodes('l')).toEqual(['link', 'lock', 'file'])
+    expect(searchIconShortcodes('l')).toEqual(['layers', 'link', 'lock', 'file'])
   })
 
   it('answers nothing for a query no vendored name could be', () => {

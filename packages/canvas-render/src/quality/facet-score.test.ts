@@ -290,8 +290,8 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
   it('does NOT read a badge as a distinction, because a board does not draw one', () => {
     // Corrected after looking at a picture. `visual.symbol` was listed as one
     // of three channels that can say "these differ in kind", and on a BOARD
-    // it says nothing: `plugin-visual` contributes no node decoration — the
-    // badge was deliberately removed once the small surfaces it was designed
+    // it says nothing: `plugin-visual` draws a badge only on a stencil-wearing
+    // box — the hand-set badge was deliberately removed once the small surfaces it was designed
     // for existed, since at full size it repeated what the node already
     // showed. The only thing that draws a node's symbol is the minimap.
     //
