@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2105,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2113, // +8: the locked-press notice mount and its hook call
 }
 
 describe('the path form both ledgers are keyed with', () => {

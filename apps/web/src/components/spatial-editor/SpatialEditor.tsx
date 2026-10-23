@@ -169,6 +169,7 @@ import { useImageIntake } from './use-image-intake.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockBadgeIds, useLockPolicy } from './use-lock-policy.js'
+import { useLockedPress } from './use-locked-press.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
@@ -738,6 +739,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * included. A locked object has to stay right-clickable or Unlock would
      * be unreachable — only the selection side effect is skipped for it.
      */
+    const lockedPress = useLockedPress(pickInputs)
     const menuPickInputs = { ...pickInputs, isNodeLocked: () => false, isEdgeLocked: () => false }
 
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
@@ -1357,6 +1359,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       isOverlayEvent,
       lastStrokeRef,
       menuPickInputs,
+      lockedPress,
       openProposalId,
       pickInputs,
       pressedProposalRef,
@@ -1613,6 +1616,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }
           tool={tool}
           onToolChange={changeTool}
+        />
+        <CanvasNotice
+          testId="locked-notice"
+          notice={lockedPress.notice}
+          onDismiss={lockedPress.dismiss}
         />
         <CanvasNotice
           testId="clipboard-notice"

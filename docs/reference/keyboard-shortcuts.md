@@ -86,6 +86,11 @@ lock the edges attached to it, and an edge between two locked nodes stays
 editable until you lock the edge itself. The lock is editor state — it is
 stored alongside the canvas but never appears in an export.
 
+A locked node takes the press: dragging it moves nothing, not even the frame
+around it, and a brief "Locked — unlock from the menu" notice says why. A
+frame holding an edge gives way to the edge, so you can select, label or
+restyle that edge by pressing it; the frame is selected from its border.
+
 ## Clipboard
 
 | Shortcut | Action |

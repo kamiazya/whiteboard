@@ -185,6 +185,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     extraIds,
     isOverlayEvent,
     lastStrokeRef,
+    lockedPress,
     pickInputs,
     rootRef,
     runNavigation,
@@ -418,6 +419,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // real pointermove instead (`captureOnFirstMove`); overlay handle/connect
     // gestures are the exception and want it immediately.
     if (claimShiftPress(e, pick)) return
+    if (lockedPress.absorb(e, pick, point, screenPoint)) return
 
     recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
     if (hitId === undefined) {
@@ -508,6 +510,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (root === null) return
     cancelLongPressPastSlop(e, root)
     const screenPoint = clientPointToRootLocal(e, root)
+    lockedPress.announceDrag(e, screenPoint)
     captureOnFirstMove(e, root)
     if (startCommentPinDrag(inputs, e, root, screenPoint)) return
     const navigation = runNavigation(
@@ -587,6 +590,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
+    lockedPress.release()
     const navigation = runNavigation(
       root,
       {
@@ -618,6 +622,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
+    lockedPress.release()
     // The machine's own cancel arm emits the long-press clear, the capture
     // release and the gesture cancel, in that order — the three things
     // a handler would otherwise do by hand across four refs.
