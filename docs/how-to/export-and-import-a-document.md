@@ -7,17 +7,16 @@ whether the browser or the daemon keeps the workspace, except where noted.
 
 Open the document, then **More actions → Export…**:
 
-- **Export as PNG** or **Export as SVG** — a picture of the document. On a canvas the
-  picture leaves out the comments: no pins, cards, region outlines or highlighted passages.
+- **Export as PNG** or **Export as SVG** — on a canvas: a picture of it. The picture leaves out the comments: no pins, cards, region outlines or highlighted passages.
 - **Export as PNG (with comments)** or **Export as SVG (with comments)** — on a canvas: the
   same picture with the comments drawn in, as the editor shows them.
-- **2× resolution (PNG)** and **With background** — two checkboxes at the bottom of the
+- **2× resolution (PNG)** and **With background** — on a canvas, two checkboxes at the bottom of the
   submenu, remembered in this browser, that apply to all four picture entries. By default
   a picture is 1×, filled with the white paper of the light theme the export is drawn in.
   Tick **2× resolution** for a PNG twice as many pixels wide and tall (an SVG has no pixels
   and is unaffected); untick **With background** for a transparent picture. The menu stays
   open when you tick one, so you can set both before choosing a format.
-- **Save as Markdown (.md)** — on a note: the OKF Markdown source, with the document's name
+- **Save as Markdown (.md)** — on a note, the only entry its Export… submenu offers: the OKF Markdown source, with the document's name
   as the frontmatter `title`.
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the
   `x-whiteboard` extension.
