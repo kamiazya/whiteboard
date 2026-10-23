@@ -6,6 +6,7 @@ import {
   nodeUrl,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { documentLabel } from '../../lib/document-label.js'
 
 const NAME_MAX_CHARS = 60
 
@@ -38,7 +39,7 @@ export function nodeA11yName(node: SpatialNode): string {
     return line === '' ? 'Empty note' : clip(line)
   }
   const file = nodeFile(node)
-  if (file !== undefined) return `Document ${clip(file.split('/').at(-1) ?? file)}`
+  if (file !== undefined) return `Document ${clip(documentLabel({ path: file }, 'leaf'))}`
   const url = nodeUrl(node)
   if (url !== undefined) return `Link ${clip(url)}`
   return 'Node'

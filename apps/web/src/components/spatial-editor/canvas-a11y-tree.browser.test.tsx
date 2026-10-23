@@ -2,7 +2,7 @@
 // named, selectable items and told what happened as the board changes.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
@@ -68,14 +68,14 @@ it('adding a note from the dock announces it', async () => {
 })
 
 it('grouping a selection announces how many nodes it framed', async () => {
-  mount({
+  const { container } = mount({
     nodes: [
       textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
       textNode({ id: 'b', x: 200, y: 40, width: 120, height: 60, text: 'B' }),
     ],
     edges: [],
   })
-  await userEvent.keyboard('{Control>}a{/Control}')
+  fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
   await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Grouped 2 nodes'))
