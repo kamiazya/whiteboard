@@ -13,7 +13,7 @@ import { IMPORT_ACCEPT } from '../../lib/document-import.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 import { NewDocumentDialog } from './NewDocumentDialog.js'
 import { NewDocumentSheet } from './NewDocumentSheet.js'
-import { useCompactCreate } from './use-compact-create.js'
+import { useCompactSurface } from './use-compact-surface.js'
 
 /**
  * The one door to creating a document, wherever creation is offered.
@@ -94,7 +94,7 @@ export function NewDocumentMenu({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const compact = useCompactCreate()
+  const compact = useCompactSurface()
   const pickerRef = useRef<HTMLInputElement | null>(null)
   const sheetCreates = compact && defaultPath !== undefined
   return (

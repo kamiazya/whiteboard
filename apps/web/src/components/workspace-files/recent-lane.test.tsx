@@ -205,3 +205,31 @@ describe('RecentLane', () => {
     expect(loadRender).toHaveBeenCalledWith(documents[1])
   })
 })
+
+describe('RecentLane on a compact surface', () => {
+  const realMatchMedia = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = realMatchMedia
+  })
+
+  // On a phone the lane repeats the list below it, takes the first screen's
+  // height and cuts its third tile; the list is one scroll away anyway.
+  it('is absent on a coarse pointer or a narrow viewport', () => {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: true,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList
+    render(
+      <RecentLane
+        documents={documents}
+        recentIds={['d3', 'd1']}
+        onSelect={() => {}}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.queryByRole('region', { name: /recent/i })).toBeNull()
+  })
+})
