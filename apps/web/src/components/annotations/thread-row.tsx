@@ -11,7 +11,7 @@ import type {
   CommentThreadStatus,
 } from '@kamiazya/whiteboard-model'
 import { Check, Pencil } from 'lucide-react'
-import { type RefObject, useMemo } from 'react'
+import { type ReactNode, type RefObject, useMemo } from 'react'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
@@ -192,6 +192,29 @@ function ThreadMessages({
   )
 }
 
+function ConversationResolve({
+  status,
+  onPress,
+}: {
+  status: CommentThreadStatus
+  onPress: () => void
+}) {
+  const verb = status === 'resolved' ? 'Reopen' : 'Resolve'
+  return (
+    <button
+      type="button"
+      aria-label={verb}
+      onClick={onPress}
+      className="flex min-h-11 items-center gap-1.5 self-start rounded px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <span className="annotation-dot" data-status={status} aria-hidden="true">
+        <Check aria-hidden="true" />
+      </span>
+      {verb}
+    </button>
+  )
+}
+
 /**
  * The open conversation: its messages, and the box to answer them in.
  *
@@ -206,8 +229,7 @@ function ThreadConversation({
   commitEdit,
   onReply,
   onEditMessage,
-  status,
-  onResolveThread,
+  resolveVerb,
 }: {
   thread: CommentThread
   editing: ThreadEdit | null
@@ -215,9 +237,8 @@ function ThreadConversation({
   commitEdit: (thread: CommentThread) => void
   onReply: CommentsPanelProps['onReply']
   onEditMessage: CommentsPanelProps['onEditMessage']
-  status: CommentThreadStatus
-  /** Absent hides the verb, like the panel's own `onResolve`. */
-  onResolveThread: (() => void) | undefined
+  /** The conversation's own Resolve; absent with the panel's `onResolve`. */
+  resolveVerb: ReactNode
 }) {
   return (
     // ONE column for the whole conversation, standing on the
@@ -258,19 +279,7 @@ function ThreadConversation({
         // half a sentence across.
         <ReplyComposer key={thread.id} compact onReply={(body) => onReply(thread.id, body)} />
       )}
-      {onResolveThread === undefined ? null : (
-        <button
-          type="button"
-          aria-label={status === 'resolved' ? 'Reopen' : 'Resolve'}
-          onClick={onResolveThread}
-          className="flex min-h-11 items-center gap-1.5 self-start rounded px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <span className="annotation-dot" data-status={status} aria-hidden="true">
-            <Check aria-hidden="true" />
-          </span>
-          {status === 'resolved' ? 'Reopen' : 'Resolve'}
-        </button>
-      )}
+      {resolveVerb}
     </div>
   )
 }
@@ -481,8 +490,11 @@ export function ThreadRow({
           commitEdit={commitEdit}
           onReply={onReply}
           onEditMessage={onEditMessage}
-          status={status}
-          onResolveThread={onResolve === undefined ? undefined : () => resolveWithBeat(thread)}
+          resolveVerb={
+            onResolve === undefined ? null : (
+              <ConversationResolve status={status} onPress={() => resolveWithBeat(thread)} />
+            )
+          }
         />
       ) : null}
     </li>

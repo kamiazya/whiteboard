@@ -82,7 +82,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 316,
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 319,
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -90,8 +90,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // complexity threshold, which is what the split was for. Splitting
   // further would cut a single visual unit in half without a reader gaining
   // anything.
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 155,
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 132,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 61,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,

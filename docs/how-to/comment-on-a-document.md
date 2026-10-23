@@ -70,7 +70,7 @@ conversation accumulates is the reason a decision was taken.
 
 In the rail the verb is printed on the row (**Resolve** or **Reopen**); while
 a conversation is expanded, its own button at the foot of the conversation is
-the only one. Pressing it shows **Resolved · Undo** above the list for a few
+the only one. Pressing it shows a *Resolved · Undo* line above the list for a few
 seconds. A message you have rewritten is marked **(edited)**, and a thread on
 an edge is named by the two nodes it joins.
 
