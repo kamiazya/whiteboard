@@ -1,7 +1,7 @@
 import { isMacPlatform } from '../../lib/platform.js'
 
 /** What a screen reader hears after an editor's name: the two ways out, in this platform's key. */
-export function editorExitDescription(): string {
+function editorExitDescription(): string {
   return `Escape discards, ${isMacPlatform() ? 'Command' : 'Ctrl'}+Enter keeps`
 }
 

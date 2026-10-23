@@ -65,3 +65,9 @@ export function edgeA11yName(
   const label = edge.label?.trim()
   return label === undefined || label === '' ? base : `${base}: ${clip(label)}`
 }
+
+/** What the controls around a selection act on: the one node by name, or how many when there are several. */
+export function selectionSubject(primary: SpatialNode | undefined, extraCount: number): string {
+  if (primary === undefined || extraCount > 0) return `${1 + extraCount} nodes`
+  return nodeA11yName(primary)
+}

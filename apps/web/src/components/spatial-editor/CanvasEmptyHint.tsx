@@ -25,3 +25,8 @@ export function CanvasEmptyHint({
     </p>
   )
 }
+
+/** The `aria-describedby` value for the canvas root: the cue's id while the canvas is empty, nothing once it is not. */
+export function emptyHintRef(nodeCount: number, id: string): string | undefined {
+  return nodeCount === 0 ? id : undefined
+}

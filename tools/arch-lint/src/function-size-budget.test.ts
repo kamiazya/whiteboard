@@ -178,7 +178,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapSurface': 112,
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
-  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 323,
+  'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 330, // +7: the controls name their subject and the keyboard gets one stop per job
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
   // The editor's JSX, cut into the layers it always had: canvas space under
   // the pan/zoom transform, screen space above it, the chrome you press, the
@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1726, // +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1740, // +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,

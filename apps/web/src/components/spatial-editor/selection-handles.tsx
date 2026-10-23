@@ -12,6 +12,8 @@ export interface SelectionHandlesProps {
   readonly target: { readonly id: string; readonly box: Box }
   /** The group the handles surround, or `undefined` for a lone node. */
   readonly members: ResizeMembers
+  /** What the controls act on, named for a screen reader. */
+  readonly subject: string
   readonly onHandleKeyDown: (handle: ResizeHandleKind, box: Box, e: KeyboardEvent) => void
   readonly onConnectKeyDown: (e: KeyboardEvent) => void
   readonly onOpenInEditor: (() => void) | undefined
@@ -33,6 +35,7 @@ export function SelectionHandles(props: SelectionHandlesProps) {
       key={target.id}
       box={target.box}
       zoom={gesture.viewport.zoom}
+      subject={props.subject}
       onHandlePointerDown={(handle, _handleBox, e) => {
         const root = gesture.beginOverlay(e)
         if (root === null) return

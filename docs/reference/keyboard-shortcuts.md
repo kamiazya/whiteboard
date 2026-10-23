@@ -231,6 +231,18 @@ On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
 it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
 
+Every node and edge is listed by name for a screen reader, in the order `Tab`
+walks them, and the canvas points at the selected one: a note by its first
+line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
+Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
+and what you do is said back: "Note added", "Connected Review to Ship",
+"Grouped 3 nodes", "Deleted 2 nodes".
+
+The controls around a selected node name it ("Resize Review, south-east",
+"More actions for Review") and add three `Tab` stops, not thirteen: the
+south-east resize handle (the arrow keys resize from it), the right-hand
+connect handle and the actions button.
+
 ## Moving between pages
 
 Opening a document, returning to the list or opening Settings moves keyboard

@@ -121,8 +121,9 @@ import {
 import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
+import { activeDescendantId, CanvasA11yTree } from './CanvasA11yTree.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
-import { CanvasEmptyHint } from './CanvasEmptyHint.js'
+import { CanvasEmptyHint, emptyHintRef } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
@@ -147,6 +148,7 @@ import {
   type NavigationResult,
   reduceNavigation,
 } from './navigation.js'
+import { selectionSubject } from './node-a11y-name.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
@@ -484,6 +486,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       openContextMenuAtRef,
     } = useToolState({ defaultTool, initialTool })
     const emptyHintId = useId()
+    const a11yIdPrefix = useId()
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -1432,6 +1435,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           gesture={gesture}
           target={{ id: selection.id, box: selectionBox }}
           members={isMultiSelection ? selectionMembers : undefined}
+          subject={selectionSubject(selectedNode, extraIds.size)}
           onHandleKeyDown={handleResizeHandleKeyDown}
           onConnectKeyDown={handleConnectKeyDown}
           // Only a single text node has a body to open, and only when the
@@ -1866,7 +1870,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
           aria-label={canvasRootLabel(canvas.nodes.length)}
-          aria-describedby={canvas.nodes.length === 0 ? emptyHintId : undefined}
+          aria-describedby={emptyHintRef(canvas.nodes.length, emptyHintId)}
+          aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
           // walks the nodes (see use-editor-keyboard.ts). Edge selection also
           // focuses it programmatically so key events reach onKeyDown.
@@ -1993,6 +1998,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onLostPointerCapture={handleLostPointerCapture}
           onKeyDown={shortcutHelp.onKeyDown}
         >
+          <CanvasA11yTree
+            canvas={canvas}
+            idPrefix={a11yIdPrefix}
+            primaryId={selectedId}
+            extraIds={extraIds}
+            selectedEdgeId={selectedEdgeId}
+          />
           {revealPulse === null ? null : (
             <CommentRevealPulse
               pulse={revealPulse}
