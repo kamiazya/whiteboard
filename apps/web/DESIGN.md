@@ -1279,6 +1279,14 @@ touch). Key labels (⌘⇧L / Ctrl+Shift+L) are derived from `display` in
 `src/components/spatial-editor/shortcut-labels.ts`, as are a dock tooltip's accelerator suffix and its
 `aria-keyshortcuts`; none is hand-written at a call site.
 
+The keyboard reaches the same menu a right-click does: `Menu` / `Shift+F10`
+opens the SELECTION's menu (node, set, edge or group; the canvas's when
+nothing is selected) anchored at the selection, with focus on its first row
+(`ContextMenu`'s `focusFirst`). While any context menu or sheet is open
+`handleKeyDown` handles nothing — one gate on the menu's open state, not a
+flag per key — so the arrows move through the rows instead of nudging the
+node behind it and the tool and note letters stay silent.
+
 Bindings today: `Cmd/Ctrl+A` select all, `Cmd/Ctrl+C/X/V` copy/cut/paste,
 `Cmd/Ctrl+D` duplicate, `]`/`[`/`Shift+]`/`Shift+[` z-order,
 `Shift+1`/`Shift+2` zoom to fit / to selection, plus the inline-handled

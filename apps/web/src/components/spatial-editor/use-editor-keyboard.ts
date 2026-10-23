@@ -68,6 +68,8 @@ const ROOT_FOCUS_SHORTCUTS: ReadonlySet<ShortcutId> = new Set([
   'select-previous-node',
   'select-adjacent-node',
   'edit-selected-node',
+  'open-context-menu',
+  'open-context-menu-shift-f10',
 ])
 
 export interface EditorKeyboardInputs {
@@ -105,6 +107,14 @@ export interface EditorKeyboardInputs {
   createNodeAtViewportCenter: () => void
   /** Opens a group's label editor; absent when the host has none, which leaves Enter on a group unhandled. */
   setGroupLabelEditId?: ((nodeId: string) => void) | undefined
+  /**
+   * Whether a context menu or sheet is open. The menu owns the keyboard for
+   * as long as it is: a key it does not consume must not reach the board
+   * behind it as a nudge, a tool hotkey or a new note.
+   */
+  menuOpen: boolean
+  /** Opens the menu a right-click on the current selection would, focused. */
+  openSelectionMenu: () => void
 }
 
 export function useEditorKeyboard({
@@ -138,6 +148,8 @@ export function useEditorKeyboard({
   changeTool,
   createNodeAtViewportCenter,
   setGroupLabelEditId,
+  menuOpen,
+  openSelectionMenu,
 }: EditorKeyboardInputs) {
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
@@ -212,6 +224,10 @@ export function useEditorKeyboard({
         return selectAdjacent(e.key)
       case 'edit-selected-node':
         return editSelectedNode()
+      case 'open-context-menu':
+      case 'open-context-menu-shift-f10':
+        openSelectionMenu()
+        return true
       default:
         return false
     }
@@ -528,6 +544,7 @@ export function useEditorKeyboard({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (menuOpen) return
     // Declarative shortcuts first — see shortcuts.ts, the single catalog.
     if (runCatalogShortcut(e)) return
     // Delete/Backspace deletes the current selection — but never while the

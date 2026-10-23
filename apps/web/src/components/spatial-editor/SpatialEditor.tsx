@@ -136,6 +136,7 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
+import { selectionMenuTarget } from './keyboard-menu.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -1197,6 +1198,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameSelection,
       changeTool,
       createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
+      menuOpen: contextMenu !== null,
+      openSelectionMenu: () =>
+        setContextMenu(
+          selectionMenuTarget({
+            nodeSelection:
+              selection !== undefined && selectionBox !== undefined
+                ? { id: selection.id, box: selectionBox }
+                : undefined,
+            selectedInkIds,
+            edgePathOf,
+            viewport,
+            viewCenterScreen: viewportCenterScreen(),
+            variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
+          }),
+        ),
     })
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 

@@ -38,6 +38,8 @@ export interface ContextMenuTarget {
    * long-press) gets the sheet on a coarse pointer and the list otherwise.
    */
   readonly variant?: 'list' | 'grid' | 'sheet'
+  /** Opened from the keyboard: focus lands on the first row rather than on the menu. */
+  readonly focusFirst?: boolean
   /**
    * The hand tool's menu: the annotation layer's verb for what is under the
    * press and nothing else. Panning keeps content out of reach; a
@@ -323,6 +325,7 @@ export function CanvasContextMenu({
       y={contextMenu.y}
       variant={contextMenu.variant ?? (hasCoarsePointer() ? 'sheet' : 'list')}
       onClose={close}
+      focusFirst={contextMenu.focusFirst === true}
       items={items}
     />
   )

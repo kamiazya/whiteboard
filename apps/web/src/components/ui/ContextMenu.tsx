@@ -110,6 +110,11 @@ export interface ContextMenuProps {
    * the others.
    */
   readonly variant?: 'list' | 'grid' | 'sheet'
+  /**
+   * Take focus on the first row instead of on the menu itself — what a
+   * keyboard opening needs, since there is no pointer to land on a row.
+   */
+  readonly focusFirst?: boolean
 }
 
 /**
@@ -150,7 +155,44 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
+/** Every control a row of the menu offers, in tab order. */
+function rowsOf(menu: HTMLElement | null): HTMLElement[] {
+  return menu === null ? [] : [...menu.querySelectorAll<HTMLElement>('button:not([disabled])')]
+}
+
+/**
+ * The menu keys: arrows step through the rows (wrapping), Home and End jump.
+ * They are consumed here so the canvas behind never reads them as a nudge.
+ */
+function moveFocusAmongRows(e: React.KeyboardEvent, menu: HTMLElement | null): void {
+  const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
+  const edge = e.key === 'Home' ? 0 : e.key === 'End' ? -1 : undefined
+  if (step === 0 && edge === undefined) return
+  e.preventDefault()
+  e.stopPropagation()
+  const rows = rowsOf(menu)
+  if (rows.length === 0) return
+  const at = rows.indexOf(document.activeElement as HTMLElement)
+  const next =
+    edge !== undefined
+      ? edge
+      : at === -1
+        ? step === 1
+          ? 0
+          : -1
+        : (at + step + rows.length) % rows.length
+  rows.at(next)?.focus()
+}
+
+export function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+  variant = 'list',
+  label,
+  focusFirst = false,
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
   // A menu opened near the editor's right/bottom edge would clip outside it,
@@ -182,9 +224,11 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
 
   // Focus the menu on open so Escape works without an extra click, and close
-  // on any pointerdown outside — both standard menu dismissal paths.
+  // on any pointerdown outside — both standard menu dismissal paths. Focus
+  // already on a row (the person moved it there) is left alone.
   useEffect(() => {
-    menuRef.current?.focus()
+    const menu = menuRef.current
+    if (menu?.contains(document.activeElement) !== true) menu?.focus()
     const onPointerDownAnywhere = (e: PointerEvent) => {
       if (e.target instanceof Element && e.target.closest('[data-context-menu]') !== null) return
       onClose()
@@ -192,6 +236,13 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
     window.addEventListener('pointerdown', onPointerDownAnywhere, true)
     return () => window.removeEventListener('pointerdown', onPointerDownAnywhere, true)
   }, [onClose])
+
+  // The first row is claimed once, at opening, and after the effect above so
+  // a keyboard opening ends with focus on a row rather than on the menu.
+  const focusFirstRef = useRef(focusFirst)
+  useEffect(() => {
+    if (focusFirstRef.current) rowsOf(menuRef.current)[0]?.focus()
+  }, [])
 
   return (
     <div
@@ -235,7 +286,9 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
         if (e.key === 'Escape') {
           e.stopPropagation()
           onClose()
+          return
         }
+        moveFocusAmongRows(e, menuRef.current)
       }}
     >
       {items.map(renderCatalogItem)}

@@ -247,3 +247,14 @@ describe('node traversal rows', () => {
     ).toBeUndefined()
   })
 })
+
+describe('the keyboard context-menu rows', () => {
+  const find = (over: Partial<KeyEventLike>) =>
+    findShortcutIn(EDITOR_SHORTCUTS, event(over), 'select')?.id
+
+  it('answers the Menu key and Shift+F10, never a bare F10', () => {
+    expect(find({ code: 'ContextMenu', key: 'ContextMenu' })).toBe('open-context-menu')
+    expect(find({ code: 'F10', key: 'F10', shiftKey: true })).toBe('open-context-menu-shift-f10')
+    expect(find({ code: 'F10', key: 'F10' })).toBeUndefined()
+  })
+})

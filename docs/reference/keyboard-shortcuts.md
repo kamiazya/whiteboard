@@ -37,6 +37,7 @@ pinch zooms in every tool.
 | `Shift + Tab` | Select the previous node in reading order |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, or a group's label |
+| `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
 | Double-click | Edit a node's text, an edge's label, or a group's label |
@@ -57,6 +58,14 @@ connect two existing nodes using only the keyboard: while a connect is armed,
 `Tab` moves between the boxes it could attach to, each announced by its text
 (or its kind and a short id when it has none) and outlined while focused, and
 `Enter` attaches.
+
+**The menu from the keyboard.** `Shift + F10` (or the `Menu` key) opens the menu
+for what is selected, a node, a set of nodes, an edge or a group, and puts focus on
+its first row. `Arrow Up` / `Arrow Down` step through the rows, `Home` and
+`End` jump to the first and last, `Enter` runs the one under focus, and `Esc`
+closes the menu and returns focus to the canvas. While a menu is open no other
+canvas key acts: the arrows do not nudge the node behind it, and the tool and
+note letters stay silent.
 
 **Align and distribute** have no shortcut — they live in the right-click
 menu of a multi-node selection, as **Align** (six edges and centre lines)

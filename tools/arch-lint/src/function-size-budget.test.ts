@@ -165,7 +165,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 113,
   'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
   // One branch per item kind instead of a nested JSX ternary.
-  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
+  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 229,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
   'apps/web/src/components/spatial-editor/DragPreviewLayer.tsx#DragPreviewLayer': 80,
   'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 102,
@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1675,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1690,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -231,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 130,
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 528,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 535,
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
