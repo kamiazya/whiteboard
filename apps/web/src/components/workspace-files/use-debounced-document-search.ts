@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { DocumentSearchHit, WorkspaceFilesSource } from '../../lib/files-source.js'
+import { recallSearchQuery, rememberSearchQuery } from '../../lib/search-query-memory.js'
 
 /** One screenful of results; the ranking makes a longer list noise. */
 const SEARCH_LIMIT = 20
 /** Long enough that typing a word is one search, short enough to feel live. */
 const SEARCH_DEBOUNCE_MS = 150
+
+/** The box's text, refilled from the scope's memory when the panel mounts again. */
+function useRememberedQuery(memoryScope: string | undefined) {
+  const [query, setQueryState] = useState(() => recallSearchQuery(memoryScope))
+  const setQuery = useCallback(
+    (next: string) => {
+      rememberSearchQuery(memoryScope, next)
+      setQueryState(next)
+    },
+    [memoryScope],
+  )
+  return [query, setQuery] as const
+}
 
 /**
  * The panel's content search against its source, debounced.
@@ -20,6 +34,7 @@ export function useDebouncedDocumentSearch(
   source: Pick<WorkspaceFilesSource, 'searchDocuments'>,
   /** See WorkspaceFilesPanelProps.revision — content may change behind the panel. */
   revision: unknown,
+  memoryScope?: string,
 ): {
   query: string
   setQuery: (next: string) => void
@@ -28,14 +43,12 @@ export function useDebouncedDocumentSearch(
   /** Workspace switch: results computed against the departed content. */
   resetResults: () => void
 } {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useRememberedQuery(memoryScope)
   const [hits, setHits] = useState<readonly DocumentSearchHit[] | null>(null)
   const [searchDegraded, setSearchDegraded] = useState(false)
 
-  // Debounced, and the LATEST query decides: a slower answer for a query
-  // the user has already moved on from must never replace a newer one, so
-  // the cleanup marks its own request stale rather than trusting arrival
-  // order.
+  // Debounced, and the LATEST query decides: the cleanup marks a superseded
+  // request stale rather than trusting arrival order.
   useEffect(() => {
     const trimmed = query.trim()
     if (trimmed === '' || trimmed.startsWith('#')) {

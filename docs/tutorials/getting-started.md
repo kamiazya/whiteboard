@@ -23,9 +23,11 @@ you can put it on a canvas later) and it opens ready to work in.
 
 Once you have documents, the page lands on your document browser. On a
 touch screen, tap a card to open the document, and press and hold for its
-actions (open, pin, rename, delete). With a mouse, a click previews a card
-in the pane beside the list, and a double-click — or Enter on a focused
-card — opens it. A **Recent** strip above the cards lists the documents you
+actions (open, pin, rename, delete). With a mouse, a click previews a
+document in the pane beside the list, and a double-click — or Enter on a
+focused one — opens it. That holds for the cards, the **Recent** strip and
+search results alike. Search keeps your query in the box when you open a
+result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the
 first row of cards — before that it would show every card twice. Use the

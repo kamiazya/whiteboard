@@ -46,6 +46,7 @@ const sources = import.meta.glob(
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
     './components/workspace-files/use-device-memory.ts',
+    './components/workspace-files/use-panel-opener.ts',
     './components/workspace-files/use-rename-document.ts',
     './components/workspace-files/use-write-outcome.ts',
     './components/workspace-files/use-document-pointers.ts',
@@ -98,6 +99,8 @@ const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-s
 // lane and the changed-dot baselines. Extracted from the panel when its
 // file-size budget said so; same SCREEN by the same rule as the two above.
 const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
+// Every open from the panel, with the ref that mirrors the host's handler.
+const PANEL_OPENER_HOOK = './components/workspace-files/use-panel-opener.ts'
 // The rename dialog's target and its form's in-flight/refusal state; what
 // the panel has to SAY about its last write; the four things it points AT;
 // and the tag vocabulary in use. Same SCREEN by the same rule as the three
@@ -515,6 +518,7 @@ const CASES = [
       PANEL_COLUMNS_HOOK,
       PANEL_SEARCH_HOOK,
       PANEL_DEVICE_MEMORY_HOOK,
+      PANEL_OPENER_HOOK,
       PANEL_RENAME_HOOK,
       PANEL_WRITE_OUTCOME_HOOK,
       PANEL_POINTERS_HOOK,

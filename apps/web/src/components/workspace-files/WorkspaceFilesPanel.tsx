@@ -24,6 +24,7 @@ import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
+import { usePanelOpener } from './use-panel-opener.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
 import { useTagsInUse } from './use-tags-in-use.js'
 import { useWriteOutcome } from './use-write-outcome.js'
@@ -38,39 +39,6 @@ import {
   SearchColumn,
 } from './workspace-files-panel-parts.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
-
-/**
- * Every open from the panel, so each one lands in this device's Recent lane
- * and seen baseline. Nothing is remembered where the host offers no open:
- * selecting a document is looking at it, not opening it. `openPath` takes a
- * null entry when the listing does not hold the path yet, which still opens.
- * `offered` is `openEntry` only where the host offers an open, for the
- * surfaces that hide the verb otherwise.
- */
-function usePanelOpener(
-  onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument'],
-  remember: (entry: WorkspaceDocumentEntry) => void,
-) {
-  // Through a ref so neither opener changes identity with the host's handler:
-  // a host that passes an inline arrow would otherwise re-create both, and
-  // the create callback that calls one, on every render of the page above.
-  const openRef = useRef(onOpenDocument)
-  openRef.current = onOpenDocument
-  const openPath = useCallback(
-    (path: string, entry: WorkspaceDocumentEntry | null) => {
-      const open = openRef.current
-      if (open === undefined) return
-      if (entry !== null) remember(entry)
-      open(path)
-    },
-    [remember],
-  )
-  const openEntry = useCallback(
-    (entry: WorkspaceDocumentEntry) => openPath(entry.path, entry),
-    [openPath],
-  )
-  return { openEntry, openPath, offered: onOpenDocument === undefined ? undefined : openEntry }
-}
 
 /**
  * The workspace document browser (`/api/v1`), in three panes: the folder
@@ -152,7 +120,7 @@ export function WorkspaceFilesPanel({
     hits,
     searchDegraded,
     resetResults: resetSearchResults,
-  } = useDebouncedDocumentSearch(source, revision)
+  } = useDebouncedDocumentSearch(source, revision, memoryScope)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const {
     tags: workspaceTags,
@@ -231,20 +199,14 @@ export function WorkspaceFilesPanel({
   onFolderChangeRef.current = onFolderChange
   const lastReadListRef = useRef(readList)
 
-  /**
-   * Tap-to-open (2026-09-05 redesign). On a coarse pointer a tap on a
-   * document card OPENS it, matching the gallery convention every canvas
-   * product shares (Figma, Miro, Freeform: tap = open, long-press = the
-   * object menu) — the select-then-Open round trip was two taps everywhere
-   * and left the Open button below the fold on a phone. On a fine pointer a
-   * click still selects into the preview; double-click and Enter open.
-   *
-   * Gated on the host actually offering an open: a read-only host keeps the
-   * selection behavior AND the preview column, because looking is all there
-   * is to do.
-   */
-  const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
-  const { openEntry, openPath, offered: offeredOpen } = usePanelOpener(onOpenDocument, rememberOpen)
+  const {
+    tapOpens,
+    openEntry,
+    openPath,
+    selectOrOpen,
+    offered: offeredOpen,
+  } = usePanelOpener(onOpenDocument, rememberOpen, setSelected)
+  const selectedPath = selected?.path
 
   const toggleSelected = useCallback((entry: WorkspaceDocumentEntry) => {
     setSelection((current) => {
@@ -689,7 +651,7 @@ export function WorkspaceFilesPanel({
             activeTag={activeTag}
             hits={hits}
             searchDegraded={searchDegraded}
-            selectedPath={selected?.path}
+            selectedPath={selectedPath}
             tapOpens={tapOpens}
             onOpenDocument={onOpenDocument}
             openEntry={openEntry}
@@ -703,10 +665,10 @@ export function WorkspaceFilesPanel({
           <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
             <WorkspaceFileTree
               documents={columnView.documents}
-              onOpen={tapOpens ? openEntry : setSelected}
+              onOpen={selectOrOpen}
               {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
               onDocumentContextMenu={openCardMenu}
-              selectedPath={selected?.path}
+              selectedPath={selectedPath}
               renderIcon={(entry) => (
                 <DocumentMinimap
                   key={entry.documentId}
@@ -723,7 +685,7 @@ export function WorkspaceFilesPanel({
             documents={columnView.documents}
             folder={folder}
             selectFolder={selectFolder}
-            selectedPath={selected?.path}
+            selectedPath={selectedPath}
             selection={selection}
             changed={changed}
             tapOpens={tapOpens}
@@ -807,6 +769,8 @@ export function WorkspaceFilesPanel({
           documents={documents}
           recentIds={recentIds}
           gridColumns={gridColumns}
+          selectedPath={selectedPath}
+          onSelect={selectOrOpen}
           onOpen={openEntry}
           renderThumbnail={(entry) => (
             <DocumentThumbnail
