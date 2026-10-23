@@ -131,6 +131,8 @@ export function SourceColumn({
   )
 }
 
+const EMPTY_PREVIEW = 'Nothing to preview yet. Switch to Write to start.'
+
 /**
  * The PREVIEW column: the rendered document, its conversation markers, and
  * the header a reader sees in place of the source's title row.
@@ -201,9 +203,7 @@ export function PreviewColumn({
         ))}
         {mode === 'read' && meta !== undefined && <DocumentHeader title={title} meta={meta} />}
         {previewEmpty ? (
-          <p className="text-muted-foreground text-sm">
-            Nothing to preview yet. Switch to Write to start.
-          </p>
+          <p className="text-muted-foreground text-sm">{EMPTY_PREVIEW}</p>
         ) : (
           <PreviewPane
             value={shownBody(value, mode, meta !== undefined, title)}

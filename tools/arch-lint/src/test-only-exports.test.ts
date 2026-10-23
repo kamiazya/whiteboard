@@ -222,7 +222,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/canvas-render/src/quality/drawing-score.ts#DrawingScore',
   'packages/canvas-render/src/quality/facet-score.ts#FacetScore',
   'packages/canvas-render/src/scene-bounds.ts#MIN_SCENE_EXTENT_PX',
-  'packages/codec/src/references/markup.ts#referenceMarkup',
   'packages/codec/src/spatial/census.ts#CensusFacet',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
@@ -366,7 +365,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 149
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 18
+const PUBLISHED_CEILING = 17
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>
