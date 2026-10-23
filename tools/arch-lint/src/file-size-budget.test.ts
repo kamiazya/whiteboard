@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2092,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2103,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -354,7 +354,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no sample size makes safe, and the setup both runs share.
   // +95: R1 (the canvas stays readable through the model's own schema after
   // every step) and the long-stroke command that reaches the bend cap.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2971,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2973,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // The v19 -> v20 upgrade block (the plaintext replica discard): the seed
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical

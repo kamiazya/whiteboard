@@ -1,6 +1,9 @@
+import { commentCornerOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { canvasToScreen, type Point, type Viewport } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
+import type { CommentComposeState } from './canvas-commands.js'
+import { commentOnNodesCompose } from './context-menu-items/annotation-verbs.js'
 
 export interface KeyboardMenuInputs {
   /** The selected node and the box its handles surround (the whole set's, for a multi-selection). */
@@ -68,5 +71,33 @@ export function selectionMenuTarget(input: KeyboardMenuInputs): ContextMenuTarge
     point,
     variant,
     focusFirst: true,
+  }
+}
+
+/**
+ * The composer a "Comment on this" in the selection's menu would open, for
+ * the keyboard shortcut that skips the menu. A set is one conversation about
+ * the set; a stroke has no comment verb, so it answers nothing.
+ */
+export function selectionCommentCompose(input: {
+  readonly canvas: SpatialCanvas
+  /** Selected node ids, the primary first. */
+  readonly nodeIds: readonly string[]
+  readonly selectedInkIds: readonly string[]
+  readonly edgePathOf: (id: string) => readonly Point[] | undefined
+}): CommentComposeState | undefined {
+  const { canvas, nodeIds, selectedInkIds, edgePathOf } = input
+  const primary = canvas.nodes.find((node) => node.id === nodeIds[0])
+  if (primary !== undefined) {
+    return nodeIds.length > 1
+      ? commentOnNodesCompose(canvas, nodeIds, primary)
+      : { point: commentCornerOf(primary), targetNodeId: primary.id }
+  }
+  const edge = canvas.edges.find((entry) => entry.id === selectedInkIds[0])
+  const middle = edge === undefined ? undefined : pathMiddle(edgePathOf(edge.id) ?? [])
+  if (edge === undefined || middle === undefined) return undefined
+  return {
+    point: { x: Math.round(middle.x), y: Math.round(middle.y) },
+    targetEdgeId: edge.id,
   }
 }

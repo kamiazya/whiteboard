@@ -115,6 +115,8 @@ export interface EditorKeyboardInputs {
   menuOpen: boolean
   /** Opens the menu a right-click on the current selection would, focused. */
   openSelectionMenu: () => void
+  /** Opens the comment composer for the selection; false when it has none to comment on. */
+  commentOnSelection: () => boolean
 }
 
 export function useEditorKeyboard({
@@ -150,6 +152,7 @@ export function useEditorKeyboard({
   setGroupLabelEditId,
   menuOpen,
   openSelectionMenu,
+  commentOnSelection,
 }: EditorKeyboardInputs) {
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
@@ -331,6 +334,8 @@ export function useEditorKeyboard({
         return reorderSelection('front')
       case 'reorder-back':
         return reorderSelection('back')
+      case 'comment-on-selection':
+        return commentOnSelection()
       case 'new-note':
         createNodeAtViewportCenter()
         return true

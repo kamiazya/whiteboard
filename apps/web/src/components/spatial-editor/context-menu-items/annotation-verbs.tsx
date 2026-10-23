@@ -11,12 +11,12 @@
  * added to one menu and not the other is the drift the surface-parity
  * matrix exists to catch, one level up.
  */
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { commentCornerOf } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { boundsOf, commentCornerOf } from '@kamiazya/whiteboard-model'
 import { Eye, EyeOff, MessageSquare, MessageSquarePlus } from 'lucide-react'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
-import type { CanvasCommands } from '../canvas-commands.js'
+import type { CanvasCommands, CommentComposeState } from '../canvas-commands.js'
 
 type SetCommentCompose = CanvasCommands['setCommentCompose']
 
@@ -38,6 +38,31 @@ export function commentOnNodeItem(
         point: commentCornerOf(node),
         targetNodeId: node.id,
       }),
+  }
+}
+
+/**
+ * A conversation about the SELECTION, not one member: the spatial arm naming
+ * every member, with the box they occupy stored as the place the thread is
+ * drawn from once they are gone. The bubble opens at the box's top-right
+ * corner, where the layer will pin it.
+ */
+export function commentOnNodesCompose(
+  canvas: SpatialCanvas,
+  nodeIds: readonly string[],
+  fallback: SpatialNode,
+): CommentComposeState {
+  const box = boundsOf(canvas.nodes.filter((entry) => nodeIds.includes(entry.id))) ?? fallback
+  return {
+    point: commentCornerOf(box),
+    threadAnchor: {
+      kind: 'spatial',
+      nodeIds: [...nodeIds],
+      x: Math.round(box.x),
+      y: Math.round(box.y),
+      width: Math.round(box.width),
+      height: Math.round(box.height),
+    },
   }
 }
 

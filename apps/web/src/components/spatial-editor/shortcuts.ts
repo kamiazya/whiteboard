@@ -45,6 +45,7 @@ export type ShortcutId =
   | 'edit-selected-node'
   | 'open-context-menu'
   | 'open-context-menu-shift-f10'
+  | 'comment-on-selection'
   | 'undo'
   | 'redo'
 
@@ -198,6 +199,20 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     shift: true,
     display: 'Cmd+Shift+L',
     description: 'Lock or unlock the selection',
+    tools: ['select'],
+  },
+  // Cmd+Alt+M is the comment chord of the document editors people already
+  // use. The physical key (`codes`) because Option rewrites `key` on macOS;
+  // the markdown editor's chords (B, I, E, K, Enter) are all Cmd-only, so
+  // none collides.
+  {
+    id: 'comment-on-selection',
+    section: 'Edit',
+    codes: ['KeyM'],
+    mod: true,
+    alt: true,
+    display: 'Cmd+Alt+M',
+    description: 'Comment on the selected node, nodes or edge',
     tools: ['select'],
   },
   // Viewport framing (tldraw combos). Live in every tool — navigation is

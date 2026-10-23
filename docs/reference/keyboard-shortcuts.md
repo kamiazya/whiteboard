@@ -39,6 +39,7 @@ pinch zooms in every tool.
 | `Enter` / `F2` | Edit the selected node's text, or a group's label |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
+| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
 | Double-click | Edit a node's text, an edge's label, or a group's label |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |

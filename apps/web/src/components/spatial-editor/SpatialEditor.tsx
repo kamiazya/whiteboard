@@ -136,7 +136,7 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
-import { selectionMenuTarget } from './keyboard-menu.js'
+import { selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -1213,6 +1213,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
           }),
         ),
+      commentOnSelection: () => {
+        const compose = selectionCommentCompose({
+          canvas,
+          nodeIds: selection === undefined ? [] : [selection.id, ...extraIds],
+          selectedInkIds,
+          edgePathOf,
+        })
+        if (compose === undefined) return false
+        setCommentCompose(compose)
+        return true
+      },
     })
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 

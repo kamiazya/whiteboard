@@ -480,6 +480,8 @@ const SHORTCUT_COVERAGE = {
     'not modelled: opens the selection menu — covered by keyboard-context-menu.browser.test.tsx',
   'open-context-menu-shift-f10':
     'not modelled: opens the selection menu — covered by keyboard-context-menu.browser.test.tsx',
+  'comment-on-selection':
+    'not modelled: opens the annotation composer, which writes no canvas, gesture or selection state — covered by comment-shortcut.browser.test.tsx',
   undo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
   redo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',
   'show-shortcuts': 'not modelled: opens a dialog — covered by shortcut-help.browser.test.tsx',

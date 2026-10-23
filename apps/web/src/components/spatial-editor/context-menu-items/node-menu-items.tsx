@@ -8,8 +8,6 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
-  boundsOf,
-  commentCornerOf,
   endIn,
   frameBackground,
   frameBackgroundStyle,
@@ -59,7 +57,7 @@ import type { CanvasCommands } from '../canvas-commands.js'
 import { nodePropertyItems } from '../facet-widgets/index.js'
 import { type GestureState, reduceGesture } from '../gestures.js'
 import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
-import { commentOnNodeItem } from './annotation-verbs.js'
+import { commentOnNodeItem, commentOnNodesCompose } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
 
 export interface NodeMenuItemsInput {
@@ -174,27 +172,11 @@ function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsI
     icon: <Frame />,
     onSelect: () => groupSelection([node.id, ...extraIds]),
   })
-  // A conversation about the SELECTION, not one member: the spatial arm
-  // naming every member, with the box they occupy stored as the place
-  // the thread is drawn from once they are gone. The bubble opens at the
-  // box's top-right corner, where the layer will pin it.
   const nodeIds = [node.id, ...extraIds]
-  const box = boundsOf(canvas.nodes.filter((entry) => nodeIds.includes(entry.id))) ?? node
   verbs.push({
     label: 'Comment on selection',
     icon: <MessageSquarePlus />,
-    onSelect: () =>
-      setCommentCompose({
-        point: commentCornerOf(box),
-        threadAnchor: {
-          kind: 'spatial',
-          nodeIds,
-          x: Math.round(box.x),
-          y: Math.round(box.y),
-          width: Math.round(box.width),
-          height: Math.round(box.height),
-        },
-      }),
+    onSelect: () => setCommentCompose(commentOnNodesCompose(canvas, nodeIds, node)),
   })
 }
 
