@@ -308,10 +308,14 @@ describe('routing quality on the service-tier board', () => {
       unhoppedCrossings: unhoppedCrossings(paths, HOP_CLEARANCE_PX),
       crossings: crossings(paths),
     }).toEqual({
+      // 0/1/0/0 -> 0/0/0/1 when two corners on one point were priced as the
+      // crossing they read as: the Gateway -> Queue detour left the margin
+      // lane it shared with Auth -> Orders and runs under the Gateway, where
+      // the crossing it now makes is hopped.
       edgesThroughUnrelatedNode: 0,
-      touches: 1,
+      touches: 0,
       unhoppedCrossings: 0,
-      crossings: 0,
+      crossings: 1,
     })
   })
 })
@@ -355,12 +359,16 @@ describe('routing quality across lattice boards', () => {
       bends: bendCount,
       length: Math.round(length),
     }).toEqual({
+      // touches 100 -> 94, crossings 320 -> 323, bends 3282 -> 3286, length
+      // 1488552 -> 1488498: six corner kisses became crossings, of which a
+      // reader sees three more and a hop can now break; the other 94 touches
+      // are crossings that land on a collinear waypoint of one path.
       edgesThroughUnrelatedNode: 0,
-      touches: 100,
+      touches: 94,
       unhoppedCrossings: 1,
-      crossings: 320,
-      bends: 3282,
-      length: 1488552,
+      crossings: 323,
+      bends: 3286,
+      length: 1488498,
     })
   })
 })

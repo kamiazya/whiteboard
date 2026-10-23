@@ -142,6 +142,7 @@ export function unhoppedCrossings(paths: readonly (readonly Point[])[], clearanc
     for (let j = i + 1; j < paths.length; j++) {
       const p = paths[i] as readonly Point[]
       const q = paths[j] as readonly Point[]
+      if (boundsApart(p, q)) continue
       for (let a = 1; a < p.length; a++) {
         for (let b = 1; b < q.length; b++) {
           const a1 = p[a - 1] as Point
@@ -158,6 +159,19 @@ export function unhoppedCrossings(paths: readonly (readonly Point[])[], clearanc
     }
   }
   return count
+}
+
+/** Whether two paths' bounding boxes miss each other, so no segment pair can meet. */
+function boundsApart(p: readonly Point[], q: readonly Point[]): boolean {
+  const span = (path: readonly Point[]) => ({
+    minX: Math.min(...path.map((v) => v.x)),
+    maxX: Math.max(...path.map((v) => v.x)),
+    minY: Math.min(...path.map((v) => v.y)),
+    maxY: Math.max(...path.map((v) => v.y)),
+  })
+  const a = span(p)
+  const b = span(q)
+  return a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY
 }
 
 /** Whether `p` lies on the closed segment `a`→`b`. */
@@ -186,6 +200,7 @@ export function touches(paths: readonly (readonly Point[])[]): number {
     for (let j = i + 1; j < paths.length; j++) {
       const p = paths[i] as readonly Point[]
       const q = paths[j] as readonly Point[]
+      if (boundsApart(p, q)) continue
       const ends = [p[0], p[p.length - 1], q[0], q[q.length - 1]]
       const seen = new Set<string>()
       for (let a = 1; a < p.length; a++) {

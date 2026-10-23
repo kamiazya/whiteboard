@@ -125,6 +125,61 @@ export function scoreQuantizedSegmentPair(
   return [0, illegible, 1]
 }
 
+/**
+ * Interior vertices two paths share, on the cost quantum: two corners that
+ * land on one point draw a plus sign, which a reader takes for a crossing
+ * though neither segment pair crosses properly and a corner has no straight
+ * run to hop along. Priced as the crossing it reads as. A path's ends are
+ * left out: edges converging on one anchor share that point by design.
+ */
+export function sharedCorners(a: readonly Point[], b: readonly Point[]): number {
+  let count = 0
+  for (let i = 1; i < a.length - 1; i++) {
+    const x = Math.round(a[i]!.x * COST_QUANTUM)
+    const y = Math.round(a[i]!.y * COST_QUANTUM)
+    let repeated = false
+    for (let k = 1; k < i && !repeated; k++) {
+      repeated =
+        Math.round(a[k]!.x * COST_QUANTUM) === x && Math.round(a[k]!.y * COST_QUANTUM) === y
+    }
+    if (repeated) continue
+    for (let j = 1; j < b.length - 1; j++) {
+      if (Math.round(b[j]!.x * COST_QUANTUM) === x && Math.round(b[j]!.y * COST_QUANTUM) === y) {
+        count++
+        break
+      }
+    }
+  }
+  return count
+}
+
+/** Each pair of edges that share an interior vertex, once per shared vertex. */
+function addSharedCorners(
+  paths: readonly (readonly Point[])[],
+  scores: Map<number, [number, number, number]>,
+): void {
+  const byVertex = new Map<string, number[]>()
+  for (let edge = 0; edge < paths.length; edge++) {
+    const path = paths[edge]!
+    const own = new Set<string>()
+    for (let v = 1; v < path.length - 1; v++) {
+      const key = `${Math.round(path[v]!.x * COST_QUANTUM)},${Math.round(path[v]!.y * COST_QUANTUM)}`
+      if (own.has(key)) continue
+      own.add(key)
+      const at = byVertex.get(key)
+      if (at === undefined) byVertex.set(key, [edge])
+      else at.push(edge)
+    }
+  }
+  for (const edges of byVertex.values()) {
+    for (let i = 0; i < edges.length; i++) {
+      for (let j = i + 1; j < edges.length; j++) {
+        addPairScore(scores, edges[i]! * paths.length + edges[j]!, [0, 0, 1])
+      }
+    }
+  }
+}
+
 function axisLength(dx: number, dy: number): number {
   if (dx === 0) return Math.abs(dy)
   if (dy === 0) return Math.abs(dx)
@@ -239,7 +294,9 @@ export function buildPairwiseScores(
     active.push(segment)
   }
   if (budget !== undefined) budget.pairs -= examined
-  return examined > allowance ? undefined : scores
+  if (examined > allowance) return undefined
+  addSharedCorners(paths, scores)
+  return scores
 }
 
 /** Score `segment` against every active segment of another edge whose y-span meets it. */

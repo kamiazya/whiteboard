@@ -35,6 +35,13 @@ function oracle(
           crossings += c
         }
       }
+      // Two corners on one point draw a plus sign and are priced as the
+      // crossing it reads as. Counted by set intersection of quantized
+      // interior vertices, not by the sweep's bucket-by-vertex walk.
+      const corners = (path: readonly Point[]) =>
+        new Set(path.slice(1, -1).map((p) => `${Math.round(p.x * 4)},${Math.round(p.y * 4)}`))
+      const inB = corners(b)
+      crossings += [...corners(a)].filter((key) => inB.has(key)).length
       scores.set(i * paths.length + j, [overlap, illegible, crossings])
     }
   }
