@@ -91,10 +91,13 @@ const buildsNoSession = (state: DaemonPageState): boolean =>
  */
 function linkTargetCreator(
   source: WorkspaceFilesSource | null,
-): { createLinkTarget: (path: string) => Promise<void> } | Record<string, never> {
+): { createLinkTarget: (path: string, name: string) => Promise<void> } | Record<string, never> {
   return source === null
     ? {}
-    : { createLinkTarget: (path: string) => source.createDocument(path, 'markdown') }
+    : {
+        createLinkTarget: (path: string, name: string) =>
+          source.createDocument(path, 'markdown', name),
+      }
 }
 
 /**

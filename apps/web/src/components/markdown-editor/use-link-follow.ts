@@ -1,5 +1,7 @@
+import { referenceMarkup } from '@kamiazya/whiteboard-codec'
 import { useMemo, useRef } from 'react'
 import type { LinkTarget } from '../../lib/link-target.js'
+import { planLinkTarget } from '../../lib/link-target-plan.js'
 import type { VerbCatalogHost } from './verb-catalog.js'
 import type { LinkTargetCreator } from './wiki-link-completion.js'
 import { referenceAtOffset, wikiLinkFollow } from './wiki-link-follow.js'
@@ -18,8 +20,10 @@ export function useLinkFollow(options: {
   readonly onCreateLinkTarget: LinkTargetCreator | undefined
   /** The open document's path, which the Create row must never offer to make. */
   readonly ownPath: string | undefined
+  /** Writes the body, so the link the note was made for can be pointed at it. */
+  readonly onChange: (next: string) => void
 }) {
-  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath } = options
+  const { linkTargetsRef, onOpenDocument, onCreateLinkTarget, ownPath, onChange } = options
   const ownPathRef = useRef(ownPath)
   ownPathRef.current = ownPath
   const openRef = useRef(onOpenDocument)
@@ -49,9 +53,26 @@ export function useLinkFollow(options: {
       return open === undefined ? {} : { openLink: () => open(found.target.id) }
     }
     const create = onCreateLinkTarget
-    return create === undefined
-      ? {}
-      : { createLinkTarget: { path: found.path, run: () => void create(found.path) } }
+    if (create === undefined) return {}
+    const plan = planLinkTarget(
+      found.path,
+      ownPathRef.current,
+      linkTargetsRef.current.map((target) => target.path),
+    )
+    if (plan === null) return {}
+    return {
+      createLinkTarget: {
+        path: found.path,
+        run: () => {
+          // The link keeps the words it was written with (an alias already
+          // there wins) and gains the address the note was made at.
+          const markup =
+            referenceMarkup({ target: plan.path, alias: found.alias ?? plan.name }) ?? plan.markup
+          onChange(value.slice(0, found.index) + markup + value.slice(found.index + found.length))
+          void Promise.resolve(create(plan.path, plan.name)).catch(() => {})
+        },
+      },
+    }
   }
   return { extension, getCreate, getOwnPath, catalogLinkRows }
 }

@@ -24,11 +24,13 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
 )
 
 const captured = vi.hoisted(() => ({
-  create: undefined as ((path: string) => Promise<void>) | undefined,
+  create: undefined as ((path: string, name: string) => Promise<void>) | undefined,
 }))
 
 vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
-  MarkdownEditor: (props: { onCreateLinkTarget?: (path: string) => Promise<void> }) => {
+  MarkdownEditor: (props: {
+    onCreateLinkTarget?: (path: string, name: string) => Promise<void>
+  }) => {
     captured.create = props.onCreateLinkTarget
     return <div data-testid="markdown-stub" />
   },
@@ -82,10 +84,10 @@ describe('DaemonDocumentPage link-target creation', () => {
     await screen.findByTestId('markdown-stub', undefined, { timeout: 10_000 })
     await waitFor(() => expect(captured.create).toBeTypeOf('function'))
 
-    await captured.create?.('projects/new-idea')
+    await captured.create?.('projects/new-idea', 'New idea')
 
     expect(mockCreateDocument).toHaveBeenCalledTimes(1)
     const args = mockCreateDocument.mock.calls[0]
-    expect(args?.slice(2)).toEqual(['w1', 'projects/new-idea', 'markdown', undefined])
+    expect(args?.slice(2)).toEqual(['w1', 'projects/new-idea', 'markdown', 'New idea'])
   }, 30_000)
 })

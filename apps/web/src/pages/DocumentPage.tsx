@@ -44,7 +44,12 @@ import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
-import { AnnounceNoticeProvider, useTransientNotice } from './document-notice.js'
+import {
+  type AnnounceNotice,
+  AnnounceNoticeProvider,
+  createLinkTargetAnnouncing,
+  useTransientNotice,
+} from './document-notice.js'
 import {
   DocumentInspectorSegment,
   DocumentRowActions,
@@ -312,7 +317,9 @@ function markdownPaneProps({
   commentsRail,
   sync,
   decidePassage,
+  announce,
 }: {
+  announce: AnnounceNotice
   model: DocumentPageModel
   resolvedTheme: ResolvedTheme
   references: ReturnType<typeof useReferenceSeams>
@@ -338,7 +345,9 @@ function markdownPaneProps({
     ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
     linkTargets: files.pickerTargets,
     onOpenDocument: model.openDocument,
-    ...(files.createLinkTarget === undefined ? {} : { onCreateLinkTarget: files.createLinkTarget }),
+    ...(files.createLinkTarget === undefined
+      ? {}
+      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
     ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
@@ -704,6 +713,7 @@ function DocumentPageBody({
                 commentsRail,
                 sync,
                 decidePassage,
+                announce: setNotice,
               })}
               spatial={() => (
                 <SpatialEditorPane

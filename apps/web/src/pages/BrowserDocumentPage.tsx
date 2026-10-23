@@ -543,7 +543,8 @@ function useBrowserDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
-      createLinkTarget: (path: string) => tagsSource.createDocument(path, 'markdown'),
+      createLinkTarget: (path: string, name: string) =>
+        tagsSource.createDocument(path, 'markdown', name),
       loadReference: browserReferenceLoader,
     },
     openDocument: navigateToDocument,

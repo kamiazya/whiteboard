@@ -102,7 +102,7 @@ export interface DocumentPageModel {
      * link that names nothing. Absent for a keeper that cannot make one from
      * here, which hides the offer.
      */
-    readonly createLinkTarget?: (path: string) => Promise<void>
+    readonly createLinkTarget?: (path: string, name: string) => Promise<void>
     /**
      * How this keeper loads a document a body points at. Required: a default
      * here was the BROWSER's loader, so a keeper that forgot to pass one

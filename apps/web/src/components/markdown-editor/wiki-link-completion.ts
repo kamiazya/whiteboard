@@ -1,6 +1,7 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
 import type { EditorView } from '@codemirror/view'
 import { type LinkTarget, linkMarkupFor, rankLinkTargets } from '../../lib/link-target.js'
+import { type LinkTargetPlan, planLinkTarget } from '../../lib/link-target-plan.js'
 
 /**
  * `[[` completion for document references. Accepting a candidate writes the
@@ -42,14 +43,14 @@ export function wikiLinkCompletionSource(
     const targets = getTargets()
     const create = getCreate()
     const query = match.text.slice(2)
-    const wanted = createRowPath(query, targets, getOwnPath())
+    const wanted = createRowPlan(query, targets, getOwnPath())
     if (targets.length === 0 && (create === undefined || wanted === null)) return null
     const ranked = rankLinkTargets(targets, query)
     // Only when nothing matches: a Create row beside real matches reads as
     // "this note does not exist" while it does.
     const createOption =
       create !== undefined && wanted !== null && ranked.length === 0
-        ? [createLinkOption(wanted, create)]
+        ? [createLinkOption(wanted.text, wanted.plan, create)]
         : []
     if (ranked.length === 0 && createOption.length === 0) return null
     return {
@@ -78,26 +79,35 @@ function targetOption(target: LinkTarget): Completion {
   }
 }
 
-/** Creates a markdown note at `path`; the host owns where and how. */
-export type LinkTargetCreator = (path: string) => void | Promise<void>
+/**
+ * Creates a markdown note at `path` called `name`; the host owns where and how.
+ * The name is the workspace's display name for the document, so a note made
+ * from `[[Rollback]]` opens titled "Rollback" rather than "Untitled".
+ */
+export type LinkTargetCreator = (path: string, name: string) => void | Promise<void>
 
 /**
- * The path a Create row would make for `query`, or null when none should be
+ * What a Create row would make for `query`, or null when none should be
  * offered: nothing typed, or the text already IS a target's path (a row
  * making a duplicate would only fail). The open document is not among the
  * targets, so its own path is asked for separately: a self-link is a link,
  * not a document to make.
  */
-function createRowPath(
+function createRowPlan(
   query: string,
   targets: readonly LinkTarget[],
   ownPath: string | undefined,
-): string | null {
-  const path = query.trim()
-  if (path === '' || path === ownPath || targets.some((target) => target.path === path)) {
+): { readonly text: string; readonly plan: LinkTargetPlan } | null {
+  const text = query.trim()
+  if (text === '' || text === ownPath || targets.some((target) => target.path === text)) {
     return null
   }
-  return path
+  const plan = planLinkTarget(
+    text,
+    ownPath,
+    targets.map((target) => target.path),
+  )
+  return plan === null ? null : { text, plan }
 }
 
 /**
@@ -122,17 +132,21 @@ function writeReference(insert: string): Completion['apply'] {
   }
 }
 
-function createLinkOption(path: string, create: LinkTargetCreator): Completion {
-  const write = writeReference(`[[${path}]]`)
+function createLinkOption(
+  text: string,
+  plan: LinkTargetPlan,
+  create: LinkTargetCreator,
+): Completion {
+  const write = writeReference(plan.markup)
   return {
-    label: `Create '${path}'`,
+    label: `Create '${text}'`,
     type: 'text',
     // Under every real match: it is the fallback for text that names nothing.
     boost: -99,
     apply: (view, completion, from, to) => {
       // The match grammar already excludes every character the markup forbids.
       if (typeof write === 'function') write(view, completion, from, to)
-      void Promise.resolve(create(path)).catch(() => {})
+      void Promise.resolve(create(plan.path, plan.name)).catch(() => {})
     },
   }
 }

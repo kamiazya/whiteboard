@@ -133,13 +133,14 @@ describe('wikiLinkCompletionSource', () => {
 })
 
 describe('wikiLinkCompletionSource create row', () => {
-  const created: string[] = []
-  const withCreate = (doc: string) =>
+  const created: string[][] = []
+  const withCreate = (doc: string, ownPath?: string) =>
     wikiLinkCompletionSource(
       () => TARGETS,
-      () => (path: string) => {
-        created.push(path)
+      () => (path: string, name: string) => {
+        created.push([path, name])
       },
+      () => ownPath,
     )(new CompletionContext(EditorState.create({ doc }), doc.length, false))
 
   it('offers a Create row when the typed text matches no target', () => {
@@ -159,8 +160,8 @@ describe('wikiLinkCompletionSource create row', () => {
   it("offers no Create row for the open document's own path", () => {
     const source = wikiLinkCompletionSource(
       () => TARGETS,
-      () => (path: string) => {
-        created.push(path)
+      () => (path: string, name: string) => {
+        created.push([path, name])
       },
       () => 'weekly-sync',
     )
@@ -174,12 +175,20 @@ describe('wikiLinkCompletionSource create row', () => {
     expect(labels?.some((l) => l.startsWith('Create'))).toBe(false)
   })
 
-  it('accepting it creates the note at the typed path and inserts the link', () => {
+  it('accepting it creates the note under the derived address, named for the text, and writes the link to match', () => {
     created.length = 0
-    const doc = 'see [[Nope'
+    const doc = 'See [[Lecture 6 notes'
     const result = withCreate(doc)
-    expect(accept(doc, result!, 0)).toBe('see [[Nope]]')
-    expect(created).toEqual(['Nope'])
+    expect(accept(doc, result!, 0)).toBe('See [[lecture-6-notes|Lecture 6 notes]]')
+    expect(created).toEqual([['lecture-6-notes', 'Lecture 6 notes']])
+  })
+
+  it('makes the note beside the linking document', () => {
+    created.length = 0
+    const doc = '[[Glossary'
+    const result = withCreate(doc, 'design/overview')
+    expect(accept(doc, result!, 0)).toBe('[[design/glossary|Glossary]]')
+    expect(created).toEqual([['design/glossary', 'Glossary']])
   })
 
   it('re-asks the source as the query grows so the row names the current text', () => {

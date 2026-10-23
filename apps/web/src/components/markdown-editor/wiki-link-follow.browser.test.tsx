@@ -115,12 +115,13 @@ describe('following a [[link]] from the source pane (real browser)', () => {
 
   it('the catalog offers Create for an unresolved link and no Open row elsewhere', async () => {
     const onCreateLinkTarget = vi.fn()
+    const onChange = vi.fn()
     const { container, getByRole, queryByRole } = render(
       <MarkdownEditor
         theme="light"
         initialViewMode="write"
         value={VALUE}
-        onChange={() => {}}
+        onChange={onChange}
         linkTargets={TARGETS}
         onOpenDocument={() => {}}
         onCreateLinkTarget={onCreateLinkTarget}
@@ -133,7 +134,9 @@ describe('following a [[link]] from the source pane (real browser)', () => {
     await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     expect(queryByRole('menuitem', { name: 'Open link under caret' })).toBeNull()
     await userEvent.click(getByRole('menuitem', { name: "Create 'Nope'" }))
-    expect(onCreateLinkTarget).toHaveBeenCalledWith('Nope')
+    expect(onCreateLinkTarget).toHaveBeenCalledWith('nope', 'Nope')
+    // The link now names the address the note was made at.
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining('[[nope|Nope]]'))
   })
 })
 
@@ -163,9 +166,9 @@ describe('creating a link target from [[ completion (real browser)', () => {
     })
     await userEvent.keyboard('{Enter}')
     await vi.waitFor(() => {
-      expect(value).toBe('see [[Nope]]')
+      expect(value).toBe('see [[nope|Nope]]')
     })
-    expect(onCreateLinkTarget).toHaveBeenCalledWith('Nope')
+    expect(onCreateLinkTarget).toHaveBeenCalledWith('nope', 'Nope')
   })
 
   it('shows Create only once the text matches nothing, naming the current text', async () => {
