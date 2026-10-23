@@ -17,6 +17,7 @@ import { endNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   clusteredLayout,
+  designerBoard,
   ROUTING_CORPUS,
   syntheticLayouts,
 } from '../../test-utils/routing-corpus.js'
@@ -29,6 +30,8 @@ import {
   interiorInk,
   type MetricRect,
   pathLength,
+  touches,
+  unhoppedCrossings,
 } from '../../test-utils/routing-metrics.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
@@ -43,6 +46,13 @@ type Violation = { edge: string; node: string; ink: number; kind: ViolationKind 
  * is clear.
  */
 type ViolationKind = 'own-endpoint' | 'foreign' | 'degenerate'
+
+/**
+ * `EDGE_JUMP_RADIUS_PX + 1`: the straight run a hop needs on each side of a
+ * crossing. Restated rather than imported so the oracle cannot move with the
+ * router it judges.
+ */
+const HOP_CLEARANCE_PX = 6
 
 const rectOf = (n: SpatialNode): MetricRect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
@@ -129,6 +139,10 @@ describe('routing quality', () => {
  *   already holds to. `own-endpoint` dominating by an order of magnitude is
  *   what says where to start — it is exactly the class `bestCandidate`
  *   cannot see.
+ * - `touches` and `unhoppedCrossings` are DEBT too: two edges meeting at a
+ *   corner draw a plus sign that neither a crossing count nor a hop can
+ *   see, and a crossing too near a segment end draws no hop even when line
+ *   jumps are on.
  * - `borderInk`, `bends`, `crossings` and `length` are PRICE. They have no
  *   target; they are here so a change that buys less tunnelling with a
  *   worse-looking drawing cannot do it silently. A fix that halves interior
@@ -153,6 +167,8 @@ describe('routing quality across the synthetic corpus', () => {
     let border = 0
     let bendCount = 0
     let crossingCount = 0
+    let touchCount = 0
+    let unhopped = 0
     let length = 0
     // Arrowheads drawn on a segment shorter than the arrow itself.
     let shortRunway = 0
@@ -166,6 +182,8 @@ describe('routing quality across the synthetic corpus', () => {
         (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
       )
       crossingCount += crossings(paths)
+      touchCount += touches(paths)
+      unhopped += unhoppedCrossings(paths, HOP_CLEARANCE_PX)
       for (const path of paths) {
         bendCount += bends(path)
         length += pathLength(path)
@@ -179,6 +197,8 @@ describe('routing quality across the synthetic corpus', () => {
       borderInk: Math.round(border),
       bends: bendCount,
       crossings: crossingCount,
+      touches: touchCount,
+      unhoppedCrossings: unhopped,
       length: Math.round(length),
       shortArrowRunway: shortRunway,
     }).toEqual({
@@ -193,6 +213,8 @@ describe('routing quality across the synthetic corpus', () => {
       borderInk: 770,
       bends: 8046,
       crossings: 494,
+      touches: 36,
+      unhoppedCrossings: 20,
       length: 1338795,
       shortArrowRunway: 136,
     })
@@ -257,4 +279,38 @@ describe('routing quality past the side-choice optimizer gate', () => {
       length: 275766,
     })
   }, 120_000)
+})
+
+/**
+ * The board a designer drew: eight boxes in two frames, orthogonal routing,
+ * line jumps on. Its debts are the ones a reader sees, not the ones the
+ * synthetic sweep prices: an edge that reads as connecting a box it only
+ * passes, and two edges meeting at a corner so that they draw a plus sign
+ * no hop can break.
+ */
+describe('routing quality on the service-tier board', () => {
+  const board = designerBoard()
+  const anchors = assignEdgeAnchors(board.nodes, board.edges, 'orthogonal')
+  const paths = board.edges.map(
+    (edge) => routeEdge(board.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
+  )
+
+  it('reports its debt', () => {
+    const throughUnrelated = new Set(
+      avoidableInk(board.nodes, board.edges)
+        .filter((v) => v.kind === 'foreign')
+        .map((v) => v.edge),
+    )
+    expect({
+      edgesThroughUnrelatedNode: throughUnrelated.size,
+      touches: touches(paths),
+      unhoppedCrossings: unhoppedCrossings(paths, HOP_CLEARANCE_PX),
+      crossings: crossings(paths),
+    }).toEqual({
+      edgesThroughUnrelatedNode: 0,
+      touches: 1,
+      unhoppedCrossings: 0,
+      crossings: 0,
+    })
+  })
 })

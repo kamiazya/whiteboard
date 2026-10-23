@@ -1,5 +1,6 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { styleRandomFromSeed } from '../layout/seed.js'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { node } from './spatial-node.js'
 
 /**
@@ -182,4 +183,31 @@ export function clusteredLayout(options: {
     }
   }
   return { name: `clustered ${clusters}x${nodesPerCluster}`, nodes, edges }
+}
+
+/** The two-tier service board (8 nodes in 2 frames) the designer persona reported. */
+export function designerBoard(): { nodes: SpatialNode[]; edges: CanvasEdge[] } {
+  const box = (id: string, x: number, y: number) => node(id, x, y, 200, 100)
+  return {
+    nodes: [
+      groupNode({ id: 'edgeTier', x: 60, y: 60, width: 1120, height: 180, label: 'Edge tier' }),
+      groupNode({ id: 'coreTier', x: 60, y: 280, width: 1120, height: 160, label: 'Core tier' }),
+      box('web', 96, 96),
+      box('api', 384, 96),
+      box('auth', 664, 96),
+      box('payments', 944, 96),
+      box('customer', 96, 312),
+      box('orders', 384, 312),
+      box('queue', 664, 312),
+      box('db', 944, 312),
+    ],
+    edges: [
+      { id: 'e_api_queue', from: { node: 'api' }, to: { node: 'queue' } },
+      { id: 'e_queue_db', from: { node: 'queue' }, to: { node: 'db' }, label: 'persist' },
+      { id: 'e_web_api', from: { node: 'web' }, to: { node: 'api' } },
+      { id: 'e_customer_web', from: { node: 'customer' }, to: { node: 'web' }, label: 'HTTPS' },
+      { id: 'e_orders_queue', from: { node: 'orders' }, to: { node: 'queue' }, label: 'publish' },
+      { id: 'e_auth_orders', from: { node: 'auth' }, to: { node: 'orders' } },
+    ],
+  }
 }

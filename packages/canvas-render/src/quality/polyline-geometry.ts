@@ -131,6 +131,87 @@ export function crossings(paths: readonly (readonly Point[])[]): number {
 }
 
 /**
+ * Proper crossings that draw no hop under line jumps: the crossing sits
+ * closer than `clearance` to an end of the segment that would have to jump
+ * (the LATER path's — the one painted on top). The arc needs that much
+ * straight run on both sides to land back on its line.
+ */
+export function unhoppedCrossings(paths: readonly (readonly Point[])[], clearance: number): number {
+  let count = 0
+  for (let i = 0; i < paths.length; i++) {
+    for (let j = i + 1; j < paths.length; j++) {
+      const p = paths[i] as readonly Point[]
+      const q = paths[j] as readonly Point[]
+      for (let a = 1; a < p.length; a++) {
+        for (let b = 1; b < q.length; b++) {
+          const a1 = p[a - 1] as Point
+          const a2 = p[a] as Point
+          const b1 = q[b - 1] as Point
+          const b2 = q[b] as Point
+          if (!properlyCross(a1, a2, b1, b2)) continue
+          const denom = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x)
+          const u = ((b1.x - a1.x) * (a2.y - a1.y) - (b1.y - a1.y) * (a2.x - a1.x)) / denom
+          const length = segmentLength(b1, b2)
+          if (u * length < clearance || (1 - u) * length < clearance) count++
+        }
+      }
+    }
+  }
+  return count
+}
+
+/** Whether `p` lies on the closed segment `a`→`b`. */
+function onSegment(p: Point, a: Point, b: Point): boolean {
+  if ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) !== 0) return false
+  return (
+    p.x >= Math.min(a.x, b.x) &&
+    p.x <= Math.max(a.x, b.x) &&
+    p.y >= Math.min(a.y, b.y) &&
+    p.y <= Math.max(a.y, b.y)
+  )
+}
+
+/**
+ * Points where two different paths TOUCH without crossing and where neither
+ * path begins or ends: a corner meeting a corner, or a corner resting on the
+ * other's run. A reader sees a crossing (or a junction) there, yet no hop can
+ * be drawn at a corner and no proper-crossing count includes it, so it is the
+ * crossing that escapes both. Paths converging on one anchor end at that
+ * point and are not counted; a stretch where they run on one line is
+ * `sharedInk`'s, not this.
+ */
+export function touches(paths: readonly (readonly Point[])[]): number {
+  let count = 0
+  for (let i = 0; i < paths.length; i++) {
+    for (let j = i + 1; j < paths.length; j++) {
+      const p = paths[i] as readonly Point[]
+      const q = paths[j] as readonly Point[]
+      const ends = [p[0], p[p.length - 1], q[0], q[q.length - 1]]
+      const seen = new Set<string>()
+      for (let a = 1; a < p.length; a++) {
+        for (let b = 1; b < q.length; b++) {
+          const a1 = p[a - 1] as Point
+          const a2 = p[a] as Point
+          const b1 = q[b - 1] as Point
+          const b2 = q[b] as Point
+          if (sharedInk([a1, a2], [b1, b2]) > 0) continue
+          const candidates = [
+            ...[b1, b2].filter((c) => onSegment(c, a1, a2)),
+            ...[a1, a2].filter((c) => onSegment(c, b1, b2)),
+          ]
+          for (const c of candidates) {
+            if (ends.some((e) => e !== undefined && e.x === c.x && e.y === c.y)) continue
+            seen.add(`${c.x},${c.y}`)
+          }
+        }
+      }
+      count += seen.size
+    }
+  }
+  return count
+}
+
+/**
  * Direction reversals per axis: a step whose sign on an axis is opposite
  * to the last non-zero sign on that same axis. Compares RAW coordinates,
  * so a caller feeding it geometry that is elsewhere quantized has to say

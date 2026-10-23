@@ -21,10 +21,12 @@ import {
   type Rect as MetricRect,
   pathLength,
   segmentLength,
+  touches,
+  unhoppedCrossings,
 } from '../quality/polyline-geometry.js'
 
 export type { MetricPoint, MetricRect }
-export { bends, crossings, interiorInk, pathLength }
+export { bends, crossings, interiorInk, pathLength, touches, unhoppedCrossings }
 
 /**
  * Length of `path` lying ON one of `rect`'s four borders — a stroke drawn
