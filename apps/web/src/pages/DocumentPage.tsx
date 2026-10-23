@@ -191,6 +191,7 @@ function DocumentHeader({
   rowActions,
   documentKey,
   preview,
+  headingRef,
 }: {
   topBar: NonNullable<DocumentPageModel['topBar']> | null
   isFullscreen: boolean
@@ -198,6 +199,7 @@ function DocumentHeader({
   rowActions: ReactNode
   documentKey: string
   preview: VersionPreviewSession | null
+  headingRef: RefObject<HTMLElement | null>
 }) {
   return (
     <>
@@ -223,6 +225,7 @@ function DocumentHeader({
                     title={model.title === 'top-bar' ? identity.name : model.title.value}
                     onTitleChange={titleWriter(model, identity.onRename)}
                     {...settledProp(model, identity)}
+                    finishFocusRef={headingRef}
                     // No save state in the row: the shell mark answers
                     // for the keeper, and only when there is a condition.
                     {...(model.properties.status === undefined
@@ -708,6 +711,7 @@ function DocumentPageBody({
           rowActions={rowActions}
           documentKey={documentKey}
           preview={preview}
+          headingRef={headingRef}
         />
       }
     >
