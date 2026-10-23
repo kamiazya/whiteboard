@@ -239,8 +239,14 @@ export function useEditorKeyboard({
   /** Escape's last layer: let go of the selection, then hand Tab back to the browser. */
   const releaseSelectionWithEscape = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (e.key !== 'Escape' || gestureState.kind !== 'idle' || typingInText(e)) return false
-    handOffTabRef.current = true
-    if (selection === undefined) return false
+    if (selection === undefined) {
+      // Nothing left to let go of: this Escape is the way out, so the Tab
+      // after it is the browser's. An Escape that DID release a selection
+      // keeps the walk, or the first Escape would already have left it.
+      handOffTabRef.current = true
+      return false
+    }
+    handOffTabRef.current = false
     e.preventDefault()
     applySelection({ type: 'clear' })
     setSelectedEdgeId(null)

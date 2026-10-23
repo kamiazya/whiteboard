@@ -136,7 +136,7 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
-import { selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
+import { canvasRootLabel, selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -1837,10 +1837,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the same documented tradeoff drawing/whiteboard editors commonly
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
-          aria-label="Spatial canvas editor"
-          // Click-focusable (not tab-reachable): edge selection focuses this
-          // root programmatically so real keyboard events reach onKeyDown.
-          tabIndex={-1}
+          aria-label={canvasRootLabel(canvas.nodes.length)}
+          // A Tab stop: the keyboard's way in to the canvas, where Tab then
+          // walks the nodes (see use-editor-keyboard.ts). Edge selection also
+          // focuses it programmatically so key events reach onKeyDown.
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: role="application" is the interactive surface, and the keyboard reaches the nodes only through it.
+          tabIndex={0}
           style={{
             position: 'relative',
             flex: '1 1 auto',

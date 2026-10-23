@@ -46,11 +46,12 @@ pinch zooms in every tool.
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
 | `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
 
-**Reaching a node without a pointer.** With the canvas focused, `Tab` walks the
+**Reaching a node without a pointer.** The canvas is a Tab stop, announced as
+"Canvas, 5 notes. Tab selects the first note". With it focused, `Tab` walks the
 nodes top to bottom, then left to right (ties by position in the document),
 and wraps at the end, so focus stays on the canvas while you cycle. `Esc`
-clears the selection; the `Tab` after that is the browser's, which is the way
-on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
+clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
 dock. Locked nodes are skipped, since they cannot be selected.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys

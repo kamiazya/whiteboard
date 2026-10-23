@@ -101,3 +101,9 @@ export function selectionCommentCompose(input: {
     targetEdgeId: edge.id,
   }
 }
+
+/** What the canvas root announces: what it holds and how a keyboard user starts. */
+export function canvasRootLabel(nodeCount: number): string {
+  if (nodeCount === 0) return 'Canvas, empty'
+  return `Canvas, ${nodeCount} ${nodeCount === 1 ? 'note' : 'notes'}. Tab selects the first note`
+}
