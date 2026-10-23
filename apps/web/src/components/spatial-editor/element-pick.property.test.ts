@@ -44,6 +44,7 @@ import {
   type ContentKind,
   ELEMENT_PICK_ROLE,
   type ElementCollection,
+  lockedNodeAbsorbsPress,
   type PickInputs,
   pickContentAt,
   pickContentWithin,
@@ -631,4 +632,62 @@ describe('every element kind, through every surface that has to know about it', 
   afterAllFloor('every test', () => {
     assertLedger('element kind x surface', flatLedger, tally)
   })
+})
+
+describe('a frame in the pick order', () => {
+  const frame = { x: 0, y: 0, width: 400, height: 300 }
+  const frameBoxes = [{ id: 'frame', container: true, box: frame }] satisfies readonly NodeBox[]
+  const inside = fc.record({
+    x: fc.integer({ min: TOLERANCE + 1, max: frame.width - TOLERANCE - 1 }),
+    y: fc.integer({ min: TOLERANCE + 1, max: frame.height - TOLERANCE - 1 }),
+  })
+
+  fcTest.prop([inside], withDefaults())(
+    'a relation drawn across a frame interior beats the frame, and the border band stays the frame',
+    (at) => {
+      const path: DrawnPath = {
+        id: 'the-edge',
+        path: [
+          { x: at.x - 30, y: at.y },
+          { x: at.x + 30, y: at.y },
+        ],
+      }
+      const inputs: PickInputs = { ...emptyInputs, boxes: frameBoxes, paths: [path] }
+      expect(pickContentAt(pressProbes(inputs), at)).toEqual({ kind: 'edges', id: 'the-edge' })
+      expect(pickContentAt(pressProbes({ ...emptyInputs, boxes: frameBoxes }), at)).toEqual({
+        kind: 'nodes',
+        id: 'frame',
+      })
+      const onBorder = { x: 1, y: at.y }
+      const across: DrawnPath = {
+        id: 'the-edge',
+        path: [
+          { x: -30, y: at.y },
+          { x: 30, y: at.y },
+        ],
+      }
+      expect(pickContentAt(pressProbes({ ...inputs, paths: [across] }), onBorder)).toEqual({
+        kind: 'nodes',
+        id: 'frame',
+      })
+    },
+  )
+
+  fcTest.prop([inside], withDefaults())(
+    'a locked node absorbs the press over the frame holding it, and a locked frame only on its border',
+    (at) => {
+      const note = { id: 'note', box: { x: at.x - 5, y: at.y - 5, width: 10, height: 10 } }
+      const boxes = [...frameBoxes, note]
+      const inputs: PickInputs = { ...emptyInputs, boxes, isNodeLocked: (id) => id === 'note' }
+      expect(lockedNodeAbsorbsPress(inputs, at)).toBe(true)
+      expect(lockedNodeAbsorbsPress({ ...inputs, isNodeLocked: () => false }, at)).toBe(false)
+      const lockedFrame: PickInputs = {
+        ...emptyInputs,
+        boxes: frameBoxes,
+        isNodeLocked: () => true,
+      }
+      expect(lockedNodeAbsorbsPress(lockedFrame, at)).toBe(false)
+      expect(lockedNodeAbsorbsPress(lockedFrame, { x: 1, y: at.y })).toBe(true)
+    },
+  )
 })
