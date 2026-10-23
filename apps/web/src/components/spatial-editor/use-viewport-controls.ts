@@ -6,7 +6,7 @@
 // this hook has no business holding — but they drive the same setViewport
 // returned here, so there is exactly one viewport.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import {
   anyBoxVisible,
@@ -21,7 +21,7 @@ import {
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import { sameInsets } from '../../lib/spatial/viewport-insets.js'
-import { useRememberedViewport } from './use-viewport-memory.js'
+import { initialViewport, useRememberViewport } from './use-viewport-memory.js'
 import { useVisibleInsets } from './use-visible-insets.js'
 
 /** Margin around framed content, in screen px. */
@@ -139,7 +139,8 @@ export function useViewportControls({
   containerSizeOf,
   memoryKey,
 }: ViewportControlsInputs) {
-  const [viewport, setViewport] = useRememberedViewport(memoryKey)
+  const [viewport, setViewport] = useState<Viewport>(() => initialViewport(memoryKey))
+  useRememberViewport(memoryKey, viewport)
   // Panels over the root are padding for every verb below and for the comment reveal.
   const { insetsOf } = useVisibleInsets(rootRef)
 

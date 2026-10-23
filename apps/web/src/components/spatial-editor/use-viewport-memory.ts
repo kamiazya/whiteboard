@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { IDENTITY_VIEWPORT, type Viewport } from '../../lib/spatial/viewport.js'
 import { readViewport, writeViewport } from '../../lib/spatial/viewport-memory.js'
 
 /**
- * The editor's one viewport state, seeded from what this document last showed
- * and written back as it moves. A remembered position that shows none of the
- * content is not trusted here: the open-on-content check in
- * `use-viewport-controls` frames the content instead. Without a key (a host
- * that has no document identity) nothing is read or kept.
+ * Where the editor's viewport starts: what this document last showed, else the
+ * origin. A remembered position that shows none of the content is not trusted
+ * here — the open-on-content check in `use-viewport-controls` frames the
+ * content instead. Without a key (a host with no document identity) nothing is
+ * read or kept.
  */
-export function useRememberedViewport(memoryKey: string | undefined) {
-  const state = useState<Viewport>(
-    () => (memoryKey === undefined ? null : readViewport(memoryKey)) ?? IDENTITY_VIEWPORT,
-  )
-  const viewport = state[0]
+export function initialViewport(memoryKey: string | undefined): Viewport {
+  return (memoryKey === undefined ? null : readViewport(memoryKey)) ?? IDENTITY_VIEWPORT
+}
+
+/** Keeps the document's last viewport for the next time it opens in this session. */
+export function useRememberViewport(memoryKey: string | undefined, viewport: Viewport): void {
   useEffect(() => {
     if (memoryKey !== undefined) writeViewport(memoryKey, viewport)
   }, [memoryKey, viewport])
-  return state
 }

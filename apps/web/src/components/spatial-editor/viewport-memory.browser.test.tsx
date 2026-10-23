@@ -7,10 +7,15 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 
-beforeEach(() => sessionStorage.clear())
+const KEYS = ['doc-1', 'doc-2', 'doc-3'].map((key) => `wb.viewport:${key}`)
+const forget = () => {
+  for (const key of KEYS) sessionStorage.removeItem(key)
+}
+
+beforeEach(forget)
 afterEach(() => {
   cleanup()
-  sessionStorage.clear()
+  forget()
 })
 
 const canvas: SpatialCanvas = {
