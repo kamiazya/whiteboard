@@ -5,6 +5,7 @@ import {
   CopyPlus,
   ExternalLink,
   Eye,
+  FolderInput,
   List,
   Pencil,
   Pin,
@@ -269,6 +270,23 @@ export function PanelToolbar({
   )
 }
 
+/** Pin or Unpin, offered only where the keeper keeps a pinned list. */
+function pinMenuItem(
+  entry: WorkspaceDocumentEntry,
+  source: WorkspaceFilesSource,
+  togglePinned: (entry: WorkspaceDocumentEntry) => Promise<void> | void,
+): ComponentProps<typeof ContextMenu>['items'] {
+  if (source.setPinned === undefined) return []
+  const pinned = entry.pinOrder !== undefined
+  return [
+    {
+      label: pinned ? 'Unpin' : 'Pin',
+      icon: pinned ? <PinOff /> : <Pin />,
+      onSelect: () => void togglePinned(entry),
+    },
+  ]
+}
+
 /**
  * What a card's own menu offers for one document. Every entry is
  * spread-or-nothing on the HOST's ability to do it, so a build that cannot
@@ -296,6 +314,7 @@ export function cardMenuItemsFor(
     setSelection,
     togglePinned,
     openRename,
+    openMove,
   }: {
     tapOpens: boolean
     source: WorkspaceFilesSource
@@ -307,6 +326,7 @@ export function cardMenuItemsFor(
     setSelection: (next: ReadonlySet<string>) => void
     togglePinned: (entry: WorkspaceDocumentEntry) => Promise<void> | void
     openRename: (entry: WorkspaceDocumentEntry) => void
+    openMove: (entry: WorkspaceDocumentEntry) => void
   },
 ): ComponentProps<typeof ContextMenu>['items'] {
   return [
@@ -337,15 +357,7 @@ export function cardMenuItemsFor(
             onSelect: () => onDuplicateDocument(entry.path),
           },
         ]),
-    ...(source.setPinned === undefined
-      ? []
-      : [
-          {
-            label: entry.pinOrder === undefined ? 'Pin' : 'Unpin',
-            icon: entry.pinOrder === undefined ? <Pin /> : <PinOff />,
-            onSelect: () => void togglePinned(entry),
-          },
-        ]),
+    ...pinMenuItem(entry, source, togglePinned),
     ...(onRequestDeleteMany === undefined
       ? []
       : [
@@ -355,6 +367,11 @@ export function cardMenuItemsFor(
             onSelect: () => setSelection(new Set([entry.path])),
           },
         ]),
+    {
+      label: 'Move to folder…',
+      icon: <FolderInput />,
+      onSelect: () => openMove(entry),
+    },
     {
       label: 'Rename…',
       icon: <Pencil />,
@@ -390,6 +407,34 @@ export type ColumnView =
   | { kind: 'searching'; documents: readonly WorkspaceDocumentEntry[] }
   | { kind: 'browseOne'; documents: readonly WorkspaceDocumentEntry[] }
   | { kind: 'browseTwo'; documents: readonly WorkspaceDocumentEntry[] }
+
+/**
+ * A re-read (a workspace switch, most of all) keeps the toolbar
+ * above and the room below: measured on a real switch, replacing
+ * the whole section with one line of text moved the card area up
+ * 38px and back within 54ms, which is the jolt everything inherits.
+ * `.skeleton-appear` holds it invisible for 300ms, so a fast
+ * re-read shows quiet background rather than a flash of
+ * placeholders.
+ */
+export function LoadingColumns({ cards }: { cards: number }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading documents"
+      className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
+    >
+      {Array.from({ length: Math.max(cards, 1) }, (_, i) => (
+        <div key={i} className="overflow-hidden rounded-md border">
+          <div className="bg-muted/40 aspect-video w-full animate-pulse" />
+          <div className="px-2 py-1.5">
+            <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function columnViewOf(
   documents: readonly WorkspaceDocumentEntry[] | null,

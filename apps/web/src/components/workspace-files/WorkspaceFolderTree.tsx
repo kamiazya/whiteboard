@@ -3,6 +3,7 @@ import { Folder } from 'lucide-react'
 import { useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
+import { useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
 
 export interface WorkspaceFolderTreeProps {
@@ -76,6 +77,7 @@ function FolderItem({
   onSelectFolder: (path: string) => void
   selectedFolder?: string
 }) {
+  const folderProps = useFolderProps(node.path)
   return (
     <TreeItemShell
       name={node.name}
@@ -87,7 +89,8 @@ function FolderItem({
           aria-label={`Open folder ${node.name}`}
           aria-current={node.path === selectedFolder ? 'true' : undefined}
           onClick={() => onSelectFolder(node.path)}
-          className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+          {...folderProps}
+          className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
         >
           <Folder className="text-muted-foreground size-3.5 shrink-0" />
           <span className="truncate">{node.name}</span>
@@ -113,6 +116,7 @@ export function WorkspaceFolderTree({
   className,
 }: WorkspaceFolderTreeProps) {
   const tree = useMemo(() => buildFolderTree(documents), [documents])
+  const rootProps = useFolderProps('')
 
   return (
     <div role="tree" aria-label="Workspace folders" className={cn('space-y-0.5', className)}>
@@ -126,7 +130,8 @@ export function WorkspaceFolderTree({
             aria-label="Open folder Workspace"
             aria-current={selectedFolder === '' ? 'true' : undefined}
             onClick={() => onSelectFolder('')}
-            className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+            {...rootProps}
+            className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
           >
             <Folder className="text-muted-foreground size-3.5 shrink-0" />
             <span className="truncate">Workspace</span>

@@ -11,6 +11,7 @@ import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
+import { FolderActionsContext } from './folder-actions.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { PeekDialog } from './PeekDialog.js'
@@ -23,6 +24,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
+import { useFolderActions } from './use-folder-actions.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
 import { usePanelOpener } from './use-panel-opener.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
@@ -33,6 +35,7 @@ import {
   BrowseTwoColumns,
   cardMenuItemsFor,
   columnViewOf,
+  LoadingColumns,
   PanelPreview,
   PanelRefusals,
   PanelToolbar,
@@ -562,6 +565,17 @@ export function WorkspaceFilesPanel({
     onFolderChangeRef.current?.(path)
   }
 
+  const folderActions = useFolderActions({
+    source,
+    documents,
+    folder,
+    rootRef,
+    selectedPath: selected?.path,
+    moveDocument,
+    refreshAndSelect,
+    goToFolder: selectFolder,
+  })
+
   if (listStatus === 'error') {
     return (
       <p role="alert" className="text-destructive text-sm">
@@ -601,6 +615,7 @@ export function WorkspaceFilesPanel({
           setSelection,
           togglePinned,
           openRename: rename.open,
+          openMove: folderActions.openMovePicker,
         })
 
   /**
@@ -620,29 +635,7 @@ export function WorkspaceFilesPanel({
   const renderColumns = (): ReactNode => {
     switch (columnView.kind) {
       case 'loading':
-        return (
-          // A re-read (a workspace switch, most of all) keeps the toolbar
-          // above and the room below: measured on a real switch, replacing
-          // the whole section with one line of text moved the card area up
-          // 38px and back within 54ms, which is the jolt everything inherits.
-          // `.skeleton-appear` holds it invisible for 300ms, so a fast
-          // re-read shows quiet background rather than a flash of
-          // placeholders.
-          <div
-            role="status"
-            aria-label="Loading documents"
-            className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
-          >
-            {Array.from({ length: Math.max(lastCardCount.current, 1) }, (_, i) => (
-              <div key={i} className="overflow-hidden rounded-md border">
-                <div className="bg-muted/40 aspect-video w-full animate-pulse" />
-                <div className="px-2 py-1.5">
-                  <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )
+        return <LoadingColumns cards={lastCardCount.current} />
       case 'searching':
         return (
           <SearchColumn
@@ -715,138 +708,141 @@ export function WorkspaceFilesPanel({
     // workspace ("Mark as Switcher"). The generic word did not disappear when
     // it left the h1 — it moved to the region that actually holds the list,
     // which is where it was always true.
-    <section
-      ref={rootRef}
-      aria-label="Documents"
-      className="data-[dropping]:ring-ring relative flex min-h-0 flex-1 flex-col gap-2 data-[dropping]:ring-2"
-      data-testid="workspace-files-panel"
-      data-dropping={importer.dragging ? '' : undefined}
-      {...importer.dropProps}
-    >
-      <PanelToolbar
-        columns={columns}
-        query={query}
-        folder={folder}
-        selectFolder={selectFolder}
-        changeQuery={changeQuery}
-        creating={creating}
-        workspace={workspace}
-        derivedNewPath={derivedNewPath}
-        outcome={outcome}
-        createHere={createHere}
-        onImportFiles={importer.importFiles}
-        chooseColumns={chooseColumns}
-      />
-
-      <PanelRefusals outcome={outcome} />
-      <ImportReportLine report={importer.report} />
-
-      {workspaceTags.length > 0 && (
-        /* The strip filters via the search box (#tag), so the filter stays
-           visible, editable state rather than a hidden mode. */
-        <TagStrip
-          tags={workspaceTags}
-          activeTag={activeTag}
-          onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
+    <FolderActionsContext.Provider value={folderActions.actions}>
+      <section
+        ref={rootRef}
+        aria-label="Documents"
+        className="data-[dropping]:ring-ring relative flex min-h-0 flex-1 flex-col gap-2 data-[dropping]:ring-2"
+        data-testid="workspace-files-panel"
+        data-dropping={importer.dragging ? '' : undefined}
+        {...importer.dropProps}
+      >
+        <PanelToolbar
+          columns={columns}
+          query={query}
+          folder={folder}
+          selectFolder={selectFolder}
+          changeQuery={changeQuery}
+          creating={creating}
+          workspace={workspace}
+          derivedNewPath={derivedNewPath}
+          outcome={outcome}
+          createHere={createHere}
+          onImportFiles={importer.importFiles}
+          chooseColumns={chooseColumns}
         />
-      )}
-      {selection !== null && (
-        <div className="px-2 pb-2">
-          <SelectionBar
-            count={selection.size}
-            onDelete={deleteSelected}
-            onCancel={() => setSelection(null)}
+
+        <PanelRefusals outcome={outcome} />
+        <ImportReportLine report={importer.report} />
+
+        {workspaceTags.length > 0 && (
+          /* The strip filters via the search box (#tag), so the filter stays
+           visible, editable state rather than a hidden mode. */
+          <TagStrip
+            tags={workspaceTags}
+            activeTag={activeTag}
+            onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
           />
-        </div>
-      )}
-      {/* Above the columns, and only in the browse view: a search has its
+        )}
+        {selection !== null && (
+          <div className="px-2 pb-2">
+            <SelectionBar
+              count={selection.size}
+              onDelete={deleteSelected}
+              onCancel={() => setSelection(null)}
+            />
+          </div>
+        )}
+        {/* Above the columns, and only in the browse view: a search has its
           own answer to "which one did you mean", and a lane beside it
           would compete with the results the person asked for. Absent on a
           host that cannot open a document, since every tile would be
           inert. */}
-      {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
-        <RecentLane
-          documents={documents}
-          recentIds={recentIds}
-          gridColumns={gridColumns}
-          selectedPath={selectedPath}
-          onSelect={selectOrOpen}
-          onOpen={openEntry}
-          renderThumbnail={(entry) => (
-            <DocumentThumbnail
-              key={entry.documentId}
-              document={entry}
-              loadRender={loadRender}
-              className="size-full"
-            />
-          )}
-        />
-      )}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
-        {renderColumns()}
-        {/* When a tap opens, selection can no longer fill this pane, so it
+        {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
+          <RecentLane
+            documents={documents}
+            recentIds={recentIds}
+            gridColumns={gridColumns}
+            selectedPath={selectedPath}
+            onSelect={selectOrOpen}
+            onOpen={openEntry}
+            renderThumbnail={(entry) => (
+              <DocumentThumbnail
+                key={entry.documentId}
+                document={entry}
+                loadRender={loadRender}
+                className="size-full"
+              />
+            )}
+          />
+        )}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+          {renderColumns()}
+          {/* When a tap opens, selection can no longer fill this pane, so it
             would sit permanently on its empty state — below the grid on a
             phone, where it held the only Open button (the 2-tap bug). The
             long-press menu is the object surface on touch. */}
-        {!tapOpens && (
-          <div className="w-full shrink-0 overflow-y-auto md:w-72">
-            <PanelPreview
-              selected={selected}
-              loadRender={loadRender}
-              findDocument={findListed}
-              onOpen={offeredOpen}
-              onRename={rename.open}
-              onDuplicateDocument={onDuplicateDocument}
-              onRequestDelete={onRequestDelete}
-            />
-          </div>
-        )}
-      </div>
-      {/* Not while the list is loading. The trash is a SECOND list of the
+          {!tapOpens && (
+            <div className="w-full shrink-0 overflow-y-auto md:w-72">
+              <PanelPreview
+                selected={selected}
+                loadRender={loadRender}
+                findDocument={findListed}
+                onOpen={offeredOpen}
+                onRename={rename.open}
+                onDuplicateDocument={onDuplicateDocument}
+                onRequestDelete={onRequestDelete}
+              />
+            </div>
+          )}
+        </div>
+        {/* Not while the list is loading. The trash is a SECOND list of the
           departed workspace's documents and reads on its own, so left
           mounted it keeps showing that workspace's rows under the new
           address until its own read answers — measured with a trash read
           that never answers, which is the window this closes. */}
-      {documents !== null && (
-        <SourceTrashSection
-          source={source}
-          revision={revision}
-          onRestored={() => {
-            // A restore that landed but whose refresh failed leaves the list
-            // stale, not the restore undone — same rule as every other write
-            // here, so the trash section never invents its own error shape.
-            void readList().then(setDocuments, () => undefined)
+        {documents !== null && (
+          <SourceTrashSection
+            source={source}
+            revision={revision}
+            onRestored={() => {
+              // A restore that landed but whose refresh failed leaves the list
+              // stale, not the restore undone — same rule as every other write
+              // here, so the trash section never invents its own error shape.
+              void readList().then(setDocuments, () => undefined)
+            }}
+          />
+        )}
+        <PeekDialog
+          document={peek}
+          loadRender={loadRender}
+          onOpen={openEntry}
+          findDocument={findListed}
+          onClose={() => setPeek(null)}
+        />
+        <RenameDocumentDialog
+          document={rename.renaming}
+          workspace={workspace}
+          busy={rename.busy}
+          error={rename.error}
+          onCancel={rename.cancel}
+          onSubmit={(name, newPath) => {
+            if (rename.renaming === null) return
+            void rename.submit(rename.renaming, name, newPath)
           }}
         />
-      )}
-      <PeekDialog
-        document={peek}
-        loadRender={loadRender}
-        onOpen={openEntry}
-        findDocument={findListed}
-        onClose={() => setPeek(null)}
-      />
-      <RenameDocumentDialog
-        document={rename.renaming}
-        workspace={workspace}
-        busy={rename.busy}
-        error={rename.error}
-        onCancel={rename.cancel}
-        onSubmit={(name, newPath) => {
-          if (rename.renaming === null) return
-          void rename.submit(rename.renaming, name, newPath)
-        }}
-      />
-      {cardMenu !== null && (
-        <ContextMenu
-          x={cardMenu.x}
-          y={cardMenu.y}
-          label="Document actions"
-          items={cardMenuItems}
-          onClose={() => setCardMenu(null)}
-          variant={hasCoarsePointer() ? 'sheet' : 'list'}
-        />
-      )}
-    </section>
+        {cardMenu !== null && (
+          <ContextMenu
+            x={cardMenu.x}
+            y={cardMenu.y}
+            label="Document actions"
+            items={cardMenuItems}
+            onClose={() => setCardMenu(null)}
+            variant={hasCoarsePointer() ? 'sheet' : 'list'}
+          />
+        )}
+        {folderActions.layer}
+      </section>
+    </FolderActionsContext.Provider>
   )
 }

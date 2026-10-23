@@ -31,7 +31,9 @@ result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the
 first row of cards — before that it would show every card twice. Use the
-toolbar to search everything or move a document to a new path. **Back to
+toolbar to search everything or move a document to a new path; to put a
+document in a folder, use **Move to folder…** in its menu or drag it onto the
+folder ([organize into folders](../how-to/organize-into-folders.md)). **Back to
 documents** returns you to the folder the document was in.
 
 **New** in that toolbar opens the same two choices — **Canvas** or **Markdown
