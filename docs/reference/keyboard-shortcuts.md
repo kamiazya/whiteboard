@@ -17,7 +17,7 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you last chose on it |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you were last using on it, chosen or not |
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |

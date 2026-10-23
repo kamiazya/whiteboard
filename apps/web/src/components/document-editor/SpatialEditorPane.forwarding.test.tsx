@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readLastTool } from '../../lib/initial-tool.js'
 import type { SpatialEditorProps } from '../spatial-editor/index.js'
 import { SpatialEditorPane, type SpatialEditorPassedThrough } from './SpatialEditorPane.js'
 
@@ -74,10 +75,18 @@ describe('SpatialEditorPane', () => {
     renderPane({ id: 'n1', text: 'body' })
     expect(seen.overlay?.tagLibrary).toBe(passedThrough.tagLibrary)
   })
+
+  it('remembers the default Select of an empty board when the pane unmounts', () => {
+    sessionStorage.clear()
+    const { unmount } = renderPane(null)
+    expect(readLastTool('doc')).toBeNull()
+    unmount()
+    expect(readLastTool('doc')).toBe('select')
+  })
 })
 
 function renderPane(editing: { id: string; text: string } | null) {
-  render(
+  return render(
     <SpatialEditorPane
       editorKey="doc"
       canvasLoaded
