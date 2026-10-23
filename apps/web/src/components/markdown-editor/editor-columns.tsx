@@ -201,7 +201,9 @@ export function PreviewColumn({
         ))}
         {mode === 'read' && meta !== undefined && <DocumentHeader title={title} meta={meta} />}
         {previewEmpty ? (
-          <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
+          <p className="text-muted-foreground text-sm">
+            Nothing to preview yet. Switch to Write to start.
+          </p>
         ) : (
           <PreviewPane
             value={shownBody(value, mode, meta !== undefined, title)}
