@@ -364,9 +364,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // in `mdast-embed-pending.test.ts` and reached from the browser by
     // `embed-loading-preview.browser.test.tsx`; nothing in it is a cost
     // model or a search a survivor could hide in.
+    //
+    // 117 with `theme/text-halo.ts`, the one constant for a haloed run's
+    // pad, read by the painter and by `sceneBounds` so the pill it draws is
+    // counted in the viewBox. Outside the lane: a constant with no branch,
+    // pinned by `scene-bounds.test.ts`'s haloed-run case and mutated by hand
+    // to 0 against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 116,
+      production: 117,
     })
   })
 
