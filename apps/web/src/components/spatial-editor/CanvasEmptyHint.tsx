@@ -7,9 +7,17 @@
  *
  * `pointer-events-none`: it must never catch the press that creates the note.
  */
-export function CanvasEmptyHint({ coarse }: { readonly coarse: boolean }) {
+export function CanvasEmptyHint({
+  coarse,
+  id,
+}: {
+  readonly coarse: boolean
+  /** What the canvas root's `aria-describedby` names, so the cue is read with it. */
+  readonly id: string
+}) {
   return (
     <p
+      id={id}
       data-testid="canvas-empty-hint"
       className="pointer-events-none absolute inset-x-6 top-1/2 -translate-y-1/2 text-center text-sm text-muted-foreground select-none"
     >

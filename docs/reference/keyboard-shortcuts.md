@@ -227,6 +227,10 @@ to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
 keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
 thrown-away draft is not silent.
 
+On an empty canvas the cue to add a note is part of the canvas's description, so
+it is read with the canvas. Choosing a tool, by key or from the dock, announces
+it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
+
 ## Moving between pages
 
 Opening a document, returning to the list or opening Settings moves keyboard

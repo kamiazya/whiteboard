@@ -174,7 +174,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/LegendOverlay.tsx#LegendOverlay': 73,
   'apps/web/src/components/spatial-editor/LinkEmbedLayer.tsx#LinkEmbedLayer': 98,
   'apps/web/src/components/spatial-editor/LinkUrlDialog.tsx#LinkUrlDialog': 84, // +1 the URL field's maxLength
-  'apps/web/src/components/spatial-editor/MarkdownNodeEditor.tsx#MarkdownNodeEditor': 246,
+  'apps/web/src/components/spatial-editor/MarkdownNodeEditor.tsx#MarkdownNodeEditor': 249, // +3: the editor's accessible name and its discard announcement
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapSurface': 112,
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
@@ -196,20 +196,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1721, // +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1726, // +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 75, // +5: the locked-press notice mount
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 77, // +5: the locked-press notice mount; +2: the empty cue takes its description id
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 94, // +2: the placeholder prop
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 100, // +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 267,
   // +9: the exit hint follows the bubble as it grows.
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 106,
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -220,7 +220,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,
   'apps/web/src/components/spatial-editor/gestures.ts#reduceGesture': 77,
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
-  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 62, // +3: the scene's frame titles join the label obstacles
+  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 63, // +1: the editor's accessible name;  +3: the scene's frame titles join the label obstacles
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
   'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 84, // +1: the press point the primary action needs
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,

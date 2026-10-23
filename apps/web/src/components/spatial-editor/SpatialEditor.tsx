@@ -76,6 +76,7 @@ import {
   forwardRef,
   type ReactNode,
   useCallback,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -86,6 +87,7 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
@@ -154,6 +156,7 @@ import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
+import { TOOL_ANNOUNCEMENT } from './tool-announcement.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
@@ -480,6 +483,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setLongPressPulse,
       openContextMenuAtRef,
     } = useToolState({ defaultTool, initialTool })
+    const emptyHintId = useId()
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -1155,6 +1159,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const changeTool = (next: EditorTool) => {
       setTool(next)
+      announceOnCanvas(TOOL_ANNOUNCEMENT[next])
       toolChosenByUserRef.current = true
       onToolChosen?.(next)
       // A context menu belongs to the mode it opened in; it must not
@@ -1604,7 +1609,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setPendingCut(null)}
           />
         )}
-        {canvas.nodes.length === 0 && <CanvasEmptyHint coarse={hasCoarsePointer()} />}
+        {canvas.nodes.length === 0 && (
+          <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
+        )}
         <ToolPalette
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
@@ -1859,6 +1866,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
           aria-label={canvasRootLabel(canvas.nodes.length)}
+          aria-describedby={canvas.nodes.length === 0 ? emptyHintId : undefined}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
           // walks the nodes (see use-editor-keyboard.ts). Edge selection also
           // focuses it programmatically so key events reach onKeyDown.
