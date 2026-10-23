@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2122, // +2: the viewport's panel insets reach the comment reveal; +4: the resolved-view source and setter on the handle; +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2126, // +4: the viewportKey prop that names the document for viewport memory; +2: the viewport's panel insets reach the comment reveal; +4: the resolved-view source and setter on the handle; +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation
 }
 
 describe('the path form both ledgers are keyed with', () => {

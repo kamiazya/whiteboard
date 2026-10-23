@@ -133,13 +133,21 @@ on screen. The same four moves sit in a node's right-click menu under
 | `Shift + 2` | Zoom to the selection |
 | `+` / `-` | Zoom in or out one step, about the middle of the view |
 | `Cmd/Ctrl` + scroll | Zoom under the pointer |
-
-The view is not remembered between visits. A canvas opens at the origin, and
-when none of its content is in view there it opens framed on the content, as
-**Zoom to fit** would. A canvas that already shows some content opens where it
-is, and later edits never move the view.
 | Scroll / two-finger drag | Pan |
 | Double-tap in Hand mode (touch) | Zoom in on the point you pressed; with a mouse or pen a double-click edits or adds a note instead, and never moves the view |
+
+Each canvas remembers where you were looking, for the rest of the browser
+session: leave it or reload the page and it reopens at the same pan and zoom,
+separately for each document. A new session, or a canvas that has no memory
+yet, opens at the origin, and when none of its content is in view there (or
+in the remembered position) it opens framed on the content, as **Zoom to fit**
+would. Later edits never move the view.
+
+When a panel covers part of the canvas, as the inspector does in a narrow
+window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
+frame their target in the part you can still see, and opening a panel over the
+selected node moves it clear.
+
 
 The dock carries one view control — **zoom to fit** — and it is there in
 every tool. On a touch screen it is joined by **zoom in** and **zoom out**,

@@ -130,6 +130,7 @@ export function SpatialEditorPane({
         key={editorKey}
         initialTool={initialTool}
         onToolChosen={rememberTool}
+        viewportKey={editorKey}
         ref={editorRef}
         {...editorProps}
         onOpenDocument={onOpenDocument}

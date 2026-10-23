@@ -6,14 +6,13 @@
 // this hook has no business holding — but they drive the same setViewport
 // returned here, so there is exactly one viewport.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import {
   anyBoxVisible,
   type ContainerSize,
   contentBounds,
   frameViewport,
-  IDENTITY_VIEWPORT,
   type Point,
   panToShowTarget,
   type Viewport,
@@ -22,6 +21,7 @@ import {
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import { sameInsets } from '../../lib/spatial/viewport-insets.js'
+import { useRememberedViewport } from './use-viewport-memory.js'
 import { useVisibleInsets } from './use-visible-insets.js'
 
 /** Margin around framed content, in screen px. */
@@ -35,12 +35,14 @@ export interface ViewportControlsInputs {
   extraIds: ReadonlySet<string>
   viewportCenterScreen: () => Point
   containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
+  /** Identity of the document, to remember where it was last looked at; omitted = forget. */
+  memoryKey?: string | undefined
 }
 
 /**
- * A document opens on its content, not on the origin: the viewport is not
- * persisted, so a diagram drawn around large coordinates (the centre of a
- * fitted or panned view) would otherwise open on blank paper. Decided once
+ * A document opens on its content, not on the origin: a diagram drawn around
+ * large coordinates (the centre of a fitted or panned view), or a remembered
+ * position the content has since left, would otherwise open on blank paper. Decided once
  * per run of non-empty boxes — the arming resets when the boxes empty, which
  * is how a different document arrives — and only while the container is
  * measurable. A viewport that already shows some content is never moved.
@@ -135,8 +137,9 @@ export function useViewportControls({
   extraIds,
   viewportCenterScreen,
   containerSizeOf,
+  memoryKey,
 }: ViewportControlsInputs) {
-  const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
+  const [viewport, setViewport] = useRememberedViewport(memoryKey)
   // Panels over the root are padding for every verb below and for the comment reveal.
   const { insetsOf } = useVisibleInsets(rootRef)
 

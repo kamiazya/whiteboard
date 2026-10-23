@@ -240,6 +240,8 @@ export interface SpatialEditorProps {
   readonly initialTool?: EditorTool
   /** Reports a tool the user picked with the palette, so the host can remember it. */
   readonly onToolChosen?: (tool: EditorTool) => void
+  /** Names the document for viewport memory: pan and zoom are restored per key within a session. */
+  readonly viewportKey?: string
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -416,6 +418,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       defaultTool = 'hand',
       initialTool,
       onToolChosen,
+      viewportKey,
       lockedNodeIds,
       lockedEdgeIds,
       agentTouchedNodeIds,
@@ -502,6 +505,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         extraIds,
         viewportCenterScreen,
         containerSizeOf,
+        memoryKey: viewportKey,
       })
     // What THIS canvas can read of the host's wider wire, by identity.
     const {

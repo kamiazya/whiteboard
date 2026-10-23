@@ -70,6 +70,11 @@ describe('SpatialEditorPane', () => {
     expect(dropped, 'picked by the pane but never handed to the editor').toEqual([])
   })
 
+  it('names the document to the editor so its viewport is remembered per document', () => {
+    renderPane(null)
+    expect(seen.props?.viewportKey).toBe('doc')
+  })
+
   it(`hands the "open in editor" overlay the tag library the board is drawn with`, () => {
     // A text node's `![[board]]` previews there, and is coloured as on the canvas.
     renderPane({ id: 'n1', text: 'body' })
