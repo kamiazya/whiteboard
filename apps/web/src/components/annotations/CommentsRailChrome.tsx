@@ -10,15 +10,20 @@
  */
 
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import type { JSX } from 'react'
+import { type JSX, useSyncExternalStore } from 'react'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
+import type { ShowResolvedSource } from '../../lib/spatial/editor-handle.js'
 import { InspectorPanel } from '../ui/InspectorPanel.js'
 import { CommentsPanel } from './CommentsPanel.js'
+
+const NO_SUBSCRIBE = (): (() => void) => () => {}
 
 export function CommentsRailAside({
   rail,
   threads,
   writable,
+  showResolved,
+  onShowResolvedChange,
 }: {
   readonly rail: CommentsRail
   readonly threads: readonly CommentThread[]
@@ -29,7 +34,14 @@ export function CommentsRailAside({
    * showing something else entirely.
    */
   readonly writable: boolean
+  /** The canvas's resolved-conversations view state, when a canvas is mounted to follow. */
+  readonly showResolved?: ShowResolvedSource
+  readonly onShowResolvedChange?: (show: boolean) => void
 }): JSX.Element | null {
+  const shown = useSyncExternalStore(
+    showResolved?.subscribe ?? NO_SUBSCRIBE,
+    () => showResolved?.get() ?? false,
+  )
   if (!rail.open) return null
   return (
     <InspectorPanel kind="comments" onClose={rail.toggle}>
@@ -48,6 +60,9 @@ export function CommentsRailAside({
           onResolve={writable ? rail.resolve : undefined}
           onEditMessage={writable ? rail.editMessage : undefined}
           onReturnFocus={rail.returnFocus}
+          {...(showResolved !== undefined && onShowResolvedChange !== undefined
+            ? { showResolvedOnCanvas: shown, onShowResolvedOnCanvasChange: onShowResolvedChange }
+            : {})}
         />
       </div>
     </InspectorPanel>

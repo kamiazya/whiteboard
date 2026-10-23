@@ -26,6 +26,28 @@ import { renderPage } from '../test-utils/daemon-page-harness.js'
 /** Every conversation id the page asked the editor to show. */
 const revealed = vi.hoisted((): string[] => [])
 
+/** The mock editor's resolved-conversations view state, as the real editor's handle exposes it. */
+const resolvedView = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  const view = {
+    shown: false,
+    set(show: boolean) {
+      view.shown = show
+      for (const listener of listeners) listener()
+    },
+    // One object for the editor's life, as the real handle's is: a fresh one
+    // per render would re-render the page that holds it, forever.
+    source: {
+      get: () => view.shown,
+      subscribe(listener: () => void) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+    },
+  }
+  return view
+})
+
 vi.mock('../components/spatial-editor/index.js', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {
@@ -34,6 +56,8 @@ vi.mock('../components/spatial-editor/index.js', async () => {
     // passed against the very layout it exists to reject.
     SpatialEditor: forwardRef((_props: { canvas: SpatialCanvas }, ref) => {
       useImperativeHandle(ref, () => ({
+        showResolved: resolvedView.source,
+        setShowResolved: (show: boolean) => resolvedView.set(show),
         setViewport() {},
         fitToContent() {},
         openProposal: () => false,
@@ -164,6 +188,33 @@ it('takes the canvas to a conversation when its row is pressed in the rail', asy
   await userEvent.click(await screen.findByText('still needs a decision'))
 
   await waitFor(() => expect(revealed).toContain('t-open'), { timeout: 15_000 })
+})
+
+it('lets the rail show resolved conversations on the canvas through the editor handle', async () => {
+  resolvedView.set(false)
+  const store = new BrowserStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
+  await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+  const toggle = await screen.findByRole('button', { name: 'Show resolved on canvas' })
+  expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
+  await userEvent.click(toggle)
+
+  await waitFor(() => expect(resolvedView.shown).toBe(true), { timeout: 15_000 })
+  await waitFor(
+    () =>
+      expect(screen.getByRole('button', { name: 'Show resolved on canvas' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    { timeout: 15_000 },
+  )
 })
 
 it('counts the OPEN conversations on the opener, so the rail need not be open to know', async () => {

@@ -21,13 +21,28 @@ export interface SelectionSource {
   subscribeSelection(listener: () => void): () => void
 }
 
+/**
+ * Whether the canvas draws resolved conversations, shaped for
+ * `useSyncExternalStore`. Per-user view state (ADR-0025 decision 2), so it
+ * lives in the editor and a panel beside it follows it from here.
+ */
+export interface ShowResolvedSource {
+  get(): boolean
+  /** Calls `listener` after the value changes; returns the unsubscribe. */
+  subscribe(listener: () => void): () => void
+}
+
 /** Imperative surface for a page that needs to drive the viewport from
  * outside (e.g. a daemon's `viewport_request`) without owning viewport as
  * its own state. */
 export interface SpatialEditorHandle {
   /** What the canvas has selected, for surfaces beside it; the mounted editor always supplies it. */
   readonly selection?: SelectionSource
+  /** Whether resolved conversations are drawn; the mounted editor always supplies it. */
+  readonly showResolved?: ShowResolvedSource
   setViewport(viewport: Viewport): void
+  /** Draws (muted) or hides the resolved conversations on the canvas. */
+  setShowResolved(show: boolean): void
   /** Fits the viewport to the given node ids, or to every node when omitted. */
   fitToContent(nodeIds?: readonly string[]): void
   /**
@@ -47,7 +62,8 @@ export interface SpatialEditorHandle {
    * its subject is a dead end. Answers false when the conversation points
    * at no place on this canvas (the whole document, a passage of a note) or
    * at something no longer here, so a caller can tell "moved" from "had
-   * nowhere to go".
+   * nowhere to go". Revealing a resolved conversation also turns on
+   * drawing resolved ones, so the place it lands on is not empty.
    */
   revealThread(threadId: string): boolean
 }

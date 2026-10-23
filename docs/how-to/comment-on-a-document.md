@@ -18,6 +18,12 @@ The rail's filter starts on **Open**, because "what still needs an answer"
 is the question a reader usually has. **Resolved** and **All** are one
 press away. Press a row to expand a conversation and read its replies.
 
+On a canvas the pins of resolved conversations are hidden by default. Press
+**Show resolved on canvas** under the filter to draw them (muted), or press
+it again to hide them. Pressing a resolved conversation's row turns it on for
+you, so the pin the canvas pans to is drawn there. The setting is yours alone:
+it is not saved in the document and does not change what anyone else sees.
+
 The rail is the surface a whole document has, so it reaches everything —
 including a conversation whose subject has since been deleted, which is
 marked `anchor gone` rather than hidden.

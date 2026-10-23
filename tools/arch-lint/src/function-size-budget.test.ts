@@ -82,7 +82,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 319,
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 334, // +15: the show-resolved-on-canvas toggle beside the filter
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1713, // +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1717, // +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -226,9 +226,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
+  'apps/web/src/components/spatial-editor/use-comment-reveal.ts#useCommentReveal': 57, // the reveal callback reads eleven inputs through one ref
   'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 124,
   'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 357,
-  'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 130,
+  'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 561,
@@ -364,7 +365,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 356,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 357, // +1: the editor's resolved-view source reaches the inspector
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
@@ -376,7 +377,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
-  'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 152,
+  'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 159, // +7: the comments panel's resolved-on-canvas wiring
   // ADR-0042 decision 6's sixth state — an unlock attempt, the remembered-blob
   // read, and one more render branch — is paid for first: the three action
   // states share ONE `ReplicaActionPanel` instead of a near-identical block

@@ -42,7 +42,11 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { fileRefOptions } from '../lib/link-entries.js'
 import { pictureExportOptionsOf } from '../lib/picture-export-options.js'
 import { applyCommand } from '../lib/spatial/commands.js'
-import type { SelectionSource, SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import type {
+  SelectionSource,
+  ShowResolvedSource,
+  SpatialEditorHandle,
+} from '../lib/spatial/editor-handle.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -137,16 +141,20 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
   // this page on every rebuild and the page's render rebuilt it again; the
   // source is one object for the editor's life, so the setter bails out.
   const [selectionSource, setSelectionSource] = useState<SelectionSource | undefined>(undefined)
+  const [showResolvedSource, setShowResolvedSource] = useState<ShowResolvedSource | undefined>(
+    undefined,
+  )
   const keeperEditorRefLatest = useRef(keeperEditorRef)
   keeperEditorRefLatest.current = keeperEditorRef
   const attachSpatialHandle = useCallback((node: SpatialEditorHandle | null) => {
     spatialHandle.current = node
     setSelectionSource(node?.selection)
+    setShowResolvedSource(node?.showResolved)
     const keeperRef = keeperEditorRefLatest.current
     if (typeof keeperRef === 'function') keeperRef(node)
     else if (keeperRef !== null && keeperRef !== undefined) keeperRef.current = node
   }, [])
-  return { spatialHandle, selectionSource, attachSpatialHandle }
+  return { spatialHandle, selectionSource, showResolvedSource, attachSpatialHandle }
 }
 
 /**
@@ -453,9 +461,8 @@ function DocumentPageBody({
    * the daemon page holds one for MCP viewport requests, and both want the
    * same handle.
    */
-  const { spatialHandle, selectionSource, attachSpatialHandle } = useMergedSpatialHandle(
-    model.spatial.editorRef,
-  )
+  const { spatialHandle, selectionSource, showResolvedSource, attachSpatialHandle } =
+    useMergedSpatialHandle(model.spatial.editorRef)
 
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
@@ -685,6 +692,7 @@ function DocumentPageBody({
     model,
     spatialHandle,
     selectionSource,
+    showResolvedSource,
   })
 
   return (

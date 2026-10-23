@@ -544,6 +544,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const {
       showResolvedComments,
       setShowResolvedComments,
+      showResolvedSource,
       selectedEdgeId,
       setSelectedEdgeId,
       selectedInkIds,
@@ -636,6 +637,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport,
       rootRef,
       containerSizeOf,
+      showResolved: () => setShowResolvedComments(true),
     })
     // Named for the TYPE it holds rather than for the state that keys it:
     // `selectedEdgeId` may name a relation or a stroke, because the scene
@@ -773,6 +775,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       forwardedRef,
       () => ({
         selection: selectionSource,
+        showResolved: showResolvedSource,
+        setShowResolved: setShowResolvedComments,
         setViewport,
         fitToContent: (nodeIds) => frameContent(nodeIds && new Set(nodeIds)),
         openProposal(proposalId) {

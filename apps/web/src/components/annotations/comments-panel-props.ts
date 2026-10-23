@@ -85,4 +85,12 @@ export interface CommentsPanelProps {
    * has nowhere to send them.
    */
   readonly onReturnFocus?: () => void
+  /**
+   * Whether the host's surface draws resolved conversations (the canvas
+   * hides them by default). Per-user view state like the filter. Both this
+   * and its change handler are needed for the toggle to appear: a host with
+   * no surface to dim has nothing to offer, and says so by omission.
+   */
+  readonly showResolvedOnCanvas?: boolean
+  readonly onShowResolvedOnCanvasChange?: (show: boolean) => void
 }

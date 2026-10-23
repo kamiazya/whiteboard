@@ -32,6 +32,12 @@ export function useCommentReveal(inputs: {
   readonly setViewport: (viewport: Viewport) => void
   readonly rootRef: RefObject<HTMLDivElement | null>
   readonly containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
+  /**
+   * Called when the thread asked for is resolved, which the canvas hides
+   * unless told otherwise: a conversation the reader went looking for must
+   * be drawn where the view lands, not pan to an empty spot.
+   */
+  readonly showResolved: () => void
 }): { readonly revealThread: (threadId: string) => boolean; readonly pulse: RevealPulse | null } {
   const latest = useRef(inputs)
   latest.current = inputs
@@ -47,12 +53,21 @@ export function useCommentReveal(inputs: {
   )
 
   const revealThread = useCallback((threadId: string): boolean => {
-    const { threads, canvas, edgePathOf, viewport, setViewport, rootRef, containerSizeOf } =
-      latest.current
+    const {
+      threads,
+      canvas,
+      edgePathOf,
+      viewport,
+      setViewport,
+      rootRef,
+      containerSizeOf,
+      showResolved,
+    } = latest.current
     const thread = threads?.find((entry) => entry.id === threadId)
     if (thread === undefined) return false
     const box = anchorBox(thread.anchor, canvas, edgePathOf)
     if (box === null) return false
+    if (thread.status === 'resolved') showResolved()
     const next = viewportRevealing(box, viewport, containerSizeOf(rootRef.current), {
       bottom: DOCK_OCCLUSION_PX,
     })

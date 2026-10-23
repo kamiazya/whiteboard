@@ -187,6 +187,8 @@ export function CommentsPanel({
   onResolve,
   onEditMessage,
   onReturnFocus,
+  showResolvedOnCanvas = false,
+  onShowResolvedOnCanvasChange,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -403,6 +405,19 @@ export function CommentsPanel({
           </button>
         ))}
       </fieldset>
+      {onShowResolvedOnCanvasChange === undefined ? null : (
+        <button
+          type="button"
+          aria-pressed={showResolvedOnCanvas}
+          onClick={() => onShowResolvedOnCanvasChange(!showResolvedOnCanvas)}
+          className={cn(
+            'self-start rounded px-2 py-1 text-xs text-muted-foreground aria-pressed:font-medium',
+            TOGGLE_STATE_CLASS,
+          )}
+        >
+          Show resolved on canvas
+        </button>
+      )}
 
       {undo === null ? null : (
         <ResolveUndoNotice

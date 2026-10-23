@@ -74,3 +74,34 @@ it('names the anchor in a chip on the row, so two rows can be told apart', () =>
     'whole document',
   )
 })
+
+it('offers no canvas toggle when the host cannot show resolved conversations', () => {
+  const { queryByRole } = render(<CommentsPanel threads={[LONE]} />)
+  expect(queryByRole('button', { name: 'Show resolved on canvas' })).toBeNull()
+})
+
+it('asks the host to show resolved conversations on the canvas, and to hide them again', () => {
+  const calls: boolean[] = []
+  const { getByRole, rerender } = render(
+    <CommentsPanel
+      threads={[LONE]}
+      showResolvedOnCanvas={false}
+      onShowResolvedOnCanvasChange={(show) => calls.push(show)}
+    />,
+  )
+  const toggle = getByRole('button', { name: 'Show resolved on canvas' })
+  expect(toggle.getAttribute('aria-pressed')).toBe('false')
+  fireEvent.click(toggle)
+  rerender(
+    <CommentsPanel
+      threads={[LONE]}
+      showResolvedOnCanvas
+      onShowResolvedOnCanvasChange={(show) => calls.push(show)}
+    />,
+  )
+  expect(
+    getByRole('button', { name: 'Show resolved on canvas' }).getAttribute('aria-pressed'),
+  ).toBe('true')
+  fireEvent.click(getByRole('button', { name: 'Show resolved on canvas' }))
+  expect(calls).toEqual([true, false])
+})
