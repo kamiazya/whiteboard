@@ -1290,7 +1290,7 @@ touch). Key labels (⌘⇧L / Ctrl+Shift+L) are derived from `display` in
 The keyboard reaches the same menu a right-click does: `Menu` / `Shift+F10`
 opens the SELECTION's menu (node, set, edge or group; the canvas's when
 nothing is selected) anchored at the selection, with focus on its first row
-(`ContextMenu`'s `focusFirst`). While any context menu or sheet is open
+(every menu focuses its first row on open, `use-roving-menu`). While any context menu or sheet is open
 `handleKeyDown` handles nothing — one gate on the menu's open state, not a
 flag per key — so the arrows move through the rows instead of nudging the
 node behind it and the tool and note letters stay silent.
