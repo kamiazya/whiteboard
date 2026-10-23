@@ -2008,6 +2008,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             primaryId={selectedId}
             extraIds={extraIds}
             selectedEdgeId={selectedEdgeId}
+            externalVersion={externalVersion}
           />
           {revealPulse === null ? null : (
             <CommentRevealPulse
