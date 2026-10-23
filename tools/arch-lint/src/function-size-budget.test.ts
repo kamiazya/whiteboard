@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1710, // +7: the locked-press notice mount and its hook call
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1713, // +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -206,7 +206,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 94, // +2: the placeholder prop
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 267,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 106,
@@ -222,7 +222,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
   'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 59,
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
-  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 83,
+  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 84, // +1: the press point the primary action needs
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
@@ -240,13 +240,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // that belongs in a module of its own — `pointer-release.ts` is the
   // precedent, and a press-side module beside it is the cut that brings this
   // down rather than a ceiling that keeps rising.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 548,
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 568, // +20: the hand tool's double click, armed at the press and resolved at the release
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
-  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 147,
+  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 152, // +5: Group frames a selection and opens the new frame's name
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
   'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,

@@ -13,7 +13,7 @@ export const FRAME_TITLE_EDITOR_HEIGHT_PX = 40
  * `FRAME_TITLE_OFFSET_PX` above its top edge down to that edge. The one box
  * the name editor sits on and a double-click is judged against.
  */
-export function frameTitleBox(frame: SpatialNode): Box {
+function frameTitleBox(frame: SpatialNode): Box {
   return {
     x: frame.x,
     y: frame.y - FRAME_TITLE_OFFSET_PX,
@@ -28,10 +28,11 @@ export function frameTitleBox(frame: SpatialNode): Box {
  * earlier ones, so the last match wins.
  */
 export function frameTitleAt(nodes: readonly SpatialNode[], at: Point): string | undefined {
-  return nodes.findLast(
+  const named = nodes.filter(
     (node) =>
       isFrame(node) && frameLabel(node) !== undefined && boxContains(frameTitleBox(node), at),
-  )?.id
+  )
+  return named[named.length - 1]?.id
 }
 
 /**

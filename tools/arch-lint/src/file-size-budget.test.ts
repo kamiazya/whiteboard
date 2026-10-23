@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2113, // +8: the locked-press notice mount and its hook call
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2116, // +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -397,7 +397,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
   // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1259, // +19: the empty-frame tint case
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   // +1: the import of `afterAllFloor`, which keeps the reach floor from failing

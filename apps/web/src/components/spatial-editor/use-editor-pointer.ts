@@ -276,12 +276,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
   }
 
-  /**
-   * The hand tool pans on every press, so a double press by a pointer that
-   * can aim (not a finger, whose double press zooms) is judged here and
-   * acted on at its release — and only when the pointer stayed put, since a
-   * drag is a pan, not a second click.
-   */
+  /** The hand tool pans on every press: its double click is judged here, acted on at the release. */
   const armHandDoublePress = (
     e: React.PointerEvent<HTMLDivElement>,
     pressKey: string,
@@ -613,14 +608,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return commitCommentDrag(inputs, e, root)
   }
 
-  const resolveHandDoublePress = (screenPoint: Point) => {
-    const armed = handDoublePressRef.current
-    handDoublePressRef.current = null
-    if (armed === null) return
-    const travelled = Math.hypot(screenPoint.x - armed.screen.x, screenPoint.y - armed.screen.y)
-    if (travelled <= LONG_PRESS_SLOP_PX) releaseHandDoublePress(armed, releaseContext)
-  }
-
   /**
    * A release is offered to each claimant in priority order, the mirror of
    * `handlePointerDown`'s chain: chrome answers before the document, and what
@@ -639,7 +626,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       },
       e.timeStamp,
     )
-    resolveHandDoublePress(clientPointToRootLocal(e, root))
+    releaseHandDoublePress(handDoublePressRef, clientPointToRootLocal(e, root), releaseContext)
     if (chromeClaimsRelease(e, root, navigation.fallThrough)) return
 
     const armed = doublePressRef.current

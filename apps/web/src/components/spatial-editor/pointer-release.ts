@@ -101,15 +101,28 @@ function emptyDoublePress(at: Point, ctx: PointerReleaseContext): void {
   else ctx.createNodeAt(at)
 }
 
+/** How far a hand-tool press may travel and still be a click rather than a pan. */
+const HAND_CLICK_SLOP_PX = 10
+
 /**
- * The double press the hand tool resolves at its release. The press itself
- * only panned, so nothing was selected: each target gets the verb it has under
- * the select tool and no more.
+ * The double press the hand tool resolves at its release, when the pointer
+ * stayed put (a drag is a pan, not a second click). The press itself only
+ * panned, so nothing was selected: each target gets the verb it has under the
+ * select tool and no more.
  */
 export function releaseHandDoublePress(
-  armed: { readonly key: string; readonly point: Point },
+  pending: { current: { key: string; point: Point; screen: Point } | null },
+  screenPoint: Point,
   ctx: PointerReleaseContext,
 ): void {
+  const armed = pending.current
+  pending.current = null
+  if (armed === null) return
+  if (
+    Math.hypot(screenPoint.x - armed.screen.x, screenPoint.y - armed.screen.y) > HAND_CLICK_SLOP_PX
+  ) {
+    return
+  }
   if (armed.key === 'empty') {
     emptyDoublePress(armed.point, ctx)
     return
