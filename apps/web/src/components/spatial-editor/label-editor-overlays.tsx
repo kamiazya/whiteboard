@@ -1,7 +1,9 @@
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import {
   edgeLabelPlacement,
+  frameTitleObstacles,
   labelObstacles,
+  type SceneNode,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -72,6 +74,7 @@ export function EdgeLabelEditorOverlay({
   canvas,
   fontFamily,
   edgePaths,
+  sceneNodes,
   zoom,
   palette,
   applyResult,
@@ -81,6 +84,8 @@ export function EdgeLabelEditorOverlay({
   readonly canvas: SpatialCanvas
   readonly fontFamily: string
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
+  /** The laid-out scene, whose frame titles the draft keeps off as the drawn label does. */
+  readonly sceneNodes: readonly SceneNode[]
   readonly zoom: number
   /** The palette the board is drawn in, so the draft matches the label it becomes. */
   readonly palette: SpatialPalette
@@ -99,7 +104,7 @@ export function EdgeLabelEditorOverlay({
   const mid = edgeLabelPlacement(
     path,
     { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX },
-    labelObstacles(canvas.nodes),
+    labelObstacles(canvas.nodes, frameTitleObstacles(canvas.nodes, sceneNodes)),
   )
   if (mid === undefined) return null
   return (

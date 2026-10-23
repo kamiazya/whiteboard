@@ -11,6 +11,7 @@
 // has no place for a label: a point-count check alone would miss that case
 // and leave a label floating at the canvas origin.
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import type { Point } from './edge-geometry.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
 
@@ -72,6 +73,24 @@ export function labelObstacles(
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
     ...extra,
   ]
+}
+
+/**
+ * The title boxes of the frames in a laid-out scene, for a caller that places
+ * a label against a scene it already holds (the inline label editor) rather
+ * than laying one out: the layout's own placement reads the same boxes, so the
+ * editor and the drawn label agree on what is in the way.
+ */
+export function frameTitleObstacles(
+  nodes: readonly SpatialNode[],
+  sceneNodes: readonly SceneNode[],
+): LabelObstacle[] {
+  const frames = new Set(nodes.filter((node) => isFrame(node)).map((node) => node.id))
+  return sceneNodes.flatMap((entry) =>
+    entry.kind === 'textRun' && entry.annotates?.kind === 'node' && frames.has(entry.annotates.id)
+      ? [{ x: entry.bbox.x, y: entry.bbox.y, w: entry.bbox.w, h: entry.bbox.h }]
+      : [],
+  )
 }
 
 /** Offsets tried, in px off the line, and how far the search reaches. */

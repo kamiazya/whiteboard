@@ -8,6 +8,7 @@ import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
+import { frameTitleObstacles } from './edge-label-anchor.js'
 
 // The edge runs from a box above the frame into one inside it, straight down
 // through the title's row; its midpoint lies on the title.
@@ -55,5 +56,33 @@ describe('an edge label beside a frame title', () => {
     })
     const label = all.find((r) => r.annotates?.kind === 'edge')
     expect(label!.bbox.x + label!.bbox.w / 2).toBe(110)
+  })
+})
+
+describe('frameTitleObstacles', () => {
+  it('reads each frame title box off the laid-out scene, and nothing else', () => {
+    const canvas = board()
+    const scene = layoutSpatialCanvas(canvas, {
+      measure: createFakeMeasure(),
+      parseBody: (text: string) => ({
+        type: 'root',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+      }),
+      appearance: {
+        resolveNode: () => ({}),
+        resolveEdge: () => ({ stroke: '#606060' }),
+        resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
+      },
+      geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
+    })
+    const title = scene.nodes.find(
+      (n): n is TextRunNode =>
+        n.kind === 'textRun' && n.annotates?.kind === 'node' && n.annotates.id === 'tier',
+    )
+    expect(title).toBeDefined()
+    const obstacles = frameTitleObstacles(canvas.nodes, scene.nodes)
+    expect(obstacles).toEqual([
+      { x: title!.bbox.x, y: title!.bbox.y, w: title!.bbox.w, h: title!.bbox.h },
+    ])
   })
 })

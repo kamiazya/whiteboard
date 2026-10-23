@@ -56,6 +56,7 @@ export function InPlaceEditors(props: InPlaceEditorsProps) {
           canvas={canvas}
           fontFamily={fontFamily}
           edgePaths={props.edgePaths}
+          sceneNodes={props.sceneNodes}
           zoom={viewport.zoom}
           palette={palette}
           applyResult={apply}

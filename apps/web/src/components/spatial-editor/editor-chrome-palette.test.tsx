@@ -73,6 +73,7 @@ function renderLabelDraft(palette: ReturnType<typeof resolveCanvasPalette>) {
       canvas={neon}
       fontFamily="sans-serif"
       edgePaths={edgePaths}
+      sceneNodes={[]}
       zoom={1}
       palette={palette}
       applyResult={vi.fn()}

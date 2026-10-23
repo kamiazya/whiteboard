@@ -51,7 +51,11 @@ export {
 } from './layout/canvas-theme.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
-export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
+export {
+  edgeLabelPlacement,
+  frameTitleObstacles,
+  labelObstacles,
+} from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'

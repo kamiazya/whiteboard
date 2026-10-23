@@ -220,7 +220,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,
   'apps/web/src/components/spatial-editor/gestures.ts#reduceGesture': 77,
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
-  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 59,
+  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 62, // +3: the scene's frame titles join the label obstacles
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
   'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 84, // +1: the press point the primary action needs
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
