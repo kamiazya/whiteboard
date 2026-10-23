@@ -33,8 +33,11 @@ import { type GestureResult, type GestureState, reduceGesture } from './gestures
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
 
-/** One keyboard step of zoom — finer than the double press, which jumps. */
-const STEP_ZOOM_FACTOR = 1.25
+/**
+ * One keyboard step of zoom — finer than the double press, which jumps. The
+ * dock's zoom pair on touch steps by the same amount.
+ */
+export const STEP_ZOOM_FACTOR = 1.25
 /** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
 const RESIZE_KEYBOARD_STEP = 8
 const RESIZE_KEYBOARD_STEP_LARGE = 32

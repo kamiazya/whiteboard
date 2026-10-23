@@ -26,6 +26,7 @@ import type { useWhiteboardCommands } from '../hooks/use-whiteboard-commands.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import type { linkTargets } from '../lib/link-entries.js'
+import type { SaveState } from '../lib/save-indicator.js'
 
 export interface DocumentPageModel {
   /**
@@ -132,6 +133,8 @@ export interface DocumentPageModel {
     readonly path: string
     readonly keeper?: 'daemon' | 'browser'
     readonly onNavigateBack?: () => void
+    /** Where an edit stands, for the row's quiet save status; absent draws none. */
+    readonly saveState?: SaveState
   } | null
   readonly spatial: Pick<
     SpatialEditorPaneProps,

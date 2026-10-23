@@ -160,6 +160,8 @@ export function inspectorPanelsFor(deps: {
   documentKind: DocumentPageModel['documentKind']
   model: DocumentPageModel
   spatialHandle: { current: SpatialEditorHandle | null }
+  /** The attached editor, as state, so the Display panel re-renders with its selection. */
+  attachedHandle: SpatialEditorHandle | null
 }): Record<InspectorKind, () => ReactNode> {
   const {
     versions,
@@ -177,6 +179,7 @@ export function inspectorPanelsFor(deps: {
     documentKind,
     model,
     spatialHandle,
+    attachedHandle,
   } = deps
   return {
     history: () =>
@@ -281,6 +284,9 @@ export function inspectorPanelsFor(deps: {
             <CanvasDisplaySettings
               canvas={sync.canvas}
               onChange={sync.onChange}
+              {...(attachedHandle?.selection === undefined
+                ? {}
+                : { selectionSource: attachedHandle.selection })}
               {...(model.tags === undefined
                 ? {}
                 : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}

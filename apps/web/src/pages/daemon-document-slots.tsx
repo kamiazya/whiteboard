@@ -17,6 +17,7 @@ import { LoadDegradedView } from '../components/document-editor/LoadDegradedView
 import { Button } from '../components/ui/button.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
 import { documentLabel } from '../lib/document-label.js'
+import type { SaveState } from '../lib/save-indicator.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DaemonPageState } from './daemon-page-state.js'
 import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
@@ -282,12 +283,14 @@ export function daemonMarkdownSlot({
 export function daemonTopBarSlot(
   canvas: { workspaceId: string; path: string } | null,
   onNavigateBack: (() => void) | undefined,
+  saveState?: SaveState,
 ): DocumentPageModel['topBar'] {
   if (canvas === null) return null
   return {
     workspaceId: canvas.workspaceId,
     path: canvas.path,
     ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
+    ...(saveState === undefined ? {} : { saveState }),
   }
 }
 

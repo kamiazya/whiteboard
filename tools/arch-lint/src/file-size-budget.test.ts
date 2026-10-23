@@ -210,7 +210,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // node go, stop writing, and say so. Raised by three more for a trash
   // restore bringing the node back, which resumes it. Lowered by two when the
   // per-reader guards became one content lookup that answers null meanwhile.
-  'apps/web/src/lib/document-sync-session.ts': 1263,
+  'apps/web/src/lib/document-sync-session.ts': 1266,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -250,7 +250,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2065,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2076,
 }
 
 describe('the path form both ledgers are keyed with', () => {

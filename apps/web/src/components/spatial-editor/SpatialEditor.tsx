@@ -160,7 +160,7 @@ import { useCommentReveal } from './use-comment-reveal.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
 import { useEditSessionState } from './use-edit-session-state.js'
-import { useEditorKeyboard } from './use-editor-keyboard.js'
+import { STEP_ZOOM_FACTOR, useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { useEditorPointer } from './use-editor-pointer.js'
 import { useFileSeamScene } from './use-file-seam-scene.js'
@@ -1569,6 +1569,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the one view control (zoom to fit) is always in the same place.
           leading={paletteLeading}
           onZoomToFit={frameContent}
+          onZoomStep={(direction) =>
+            stepZoom(direction === 'in' ? STEP_ZOOM_FACTOR : 1 / STEP_ZOOM_FACTOR)
+          }
           shortcutHelp={shortcutHelp.palette}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
@@ -1637,8 +1640,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
       projection omits its SVG twin, so the corner is drawn once. */}
         {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
-        {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
+        {boxes.length > 0 && (
           <MinimapOverlay
+            collapsible={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX}
             boxes={minimapNodes}
             viewportRect={{
               x: viewport.x,
@@ -1817,6 +1821,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // a theme carries one per mode, and the bundled palette's is the
             // page background, so an unthemed canvas looks exactly as before.
             backgroundColor: palette.surface,
+            // Layout measures text with `geometricPrecision` and no kerning
+            // (canvas-viewer's measure-text); Chromium's default rendering
+            // hints each glyph advance to a whole pixel, so a label measured
+            // at 'Events DB' painted as 'Event s DB' while the export, painted
+            // from design advances, read right. Inherited, so the live-node
+            // and drag layers get it too. The thumbnails carry the same rule.
+            textRendering: 'geometricPrecision',
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,

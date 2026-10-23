@@ -76,7 +76,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 284,
-  'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
+  'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 106,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
@@ -196,11 +196,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1664,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1675,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 67,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 70,
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
@@ -325,7 +325,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
   // Raised by two more for a trash restore bringing it back, which resumes it.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 901,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 904,
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the
@@ -365,7 +365,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 351,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 354,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
@@ -377,7 +377,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
-  'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 146,
+  'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 152,
   // ADR-0042 decision 6's sixth state — an unlock attempt, the remembered-blob
   // read, and one more render branch — is paid for first: the three action
   // states share ONE `ReplicaActionPanel` instead of a near-identical block
@@ -403,7 +403,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // disconnected one is where it matters most — with no daemon every copy is
   // browser-kept, so a card hidden there would hide the whole list.
   'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 75,
-  'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
+  // The roving radiogroup both Settings card pickers compose: the arrow,
+  // Home/End and Space/Enter handling sits beside the one render loop so the
+  // focused card and the checked card are the same element.
+  'apps/web/src/components/settings/RadioCardGroup.tsx#RadioCardGroup': 58,
+  'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 86,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 287,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
   // Raised by six for `followRecordedName`, which has to sit beside the
@@ -499,8 +503,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,
   'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 172,
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 76,
-  'packages/codec/src/markdown/from-remark.ts#toFlow': 55,
-  'packages/codec/src/markdown/from-remark.ts#toPhrasing': 55,
+  'packages/codec/src/markdown/from-remark.ts#toFlow': 57,
+  'packages/codec/src/markdown/from-remark.ts#toPhrasing': 59,
   'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 52,
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,

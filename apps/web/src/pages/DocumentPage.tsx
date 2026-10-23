@@ -119,9 +119,14 @@ export function DocumentPage<Props>({
  */
 function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['editorRef']) {
   const spatialHandle = useRef<SpatialEditorHandle | null>(null)
+  // State as well as a ref: the Display panel follows the editor's selection
+  // through the handle, and a ref alone would leave it mounted with none
+  // when the panel renders before the editor attaches.
+  const [attachedHandle, setAttachedHandle] = useState<SpatialEditorHandle | null>(null)
   const attachSpatialHandle = useCallback(
     (node: SpatialEditorHandle | null) => {
       spatialHandle.current = node
+      setAttachedHandle(node)
       if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
       else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
         keeperEditorRef.current = node
@@ -129,7 +134,7 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
     },
     [keeperEditorRef],
   )
-  return { spatialHandle, attachSpatialHandle }
+  return { spatialHandle, attachedHandle, attachSpatialHandle }
 }
 
 /**
@@ -211,6 +216,7 @@ function DocumentHeader({
             path={topBar.path}
             recordedName={model.sync.documentName}
             {...(topBar.keeper === undefined ? {} : { keeper: topBar.keeper })}
+            {...(topBar.saveState === undefined ? {} : { saveState: topBar.saveState })}
             {...(topBar.onNavigateBack === undefined
               ? {}
               : { onNavigateBack: topBar.onNavigateBack })}
@@ -414,7 +420,9 @@ function DocumentPageBody({
    * the daemon page holds one for MCP viewport requests, and both want the
    * same handle.
    */
-  const { spatialHandle, attachSpatialHandle } = useMergedSpatialHandle(model.spatial.editorRef)
+  const { spatialHandle, attachedHandle, attachSpatialHandle } = useMergedSpatialHandle(
+    model.spatial.editorRef,
+  )
 
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
@@ -642,6 +650,7 @@ function DocumentPageBody({
     documentKind,
     model,
     spatialHandle,
+    attachedHandle,
   })
 
   return (

@@ -555,6 +555,7 @@ function useBrowserDocument(
       workspaceId,
       path: loadedPath,
       keeper: 'browser',
+      saveState: { persistence: writes, connection },
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.

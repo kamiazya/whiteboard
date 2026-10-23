@@ -7,8 +7,8 @@
  * byte-identical.
  */
 import type { Appearance, BoundingBox } from '@kamiazya/whiteboard-scene'
-import type { PaintAttrs, SvgBoxAttrs } from './elements.js'
 import { SPATIAL_THEME_FONT_FAMILY, SPATIAL_THEME_FONT_STACK } from '../theme/font-family.js'
+import type { PaintAttrs, SvgBoxAttrs } from './elements.js'
 import { formatCoord } from './format.js'
 import { el, type SvgDef } from './vnode.js'
 
