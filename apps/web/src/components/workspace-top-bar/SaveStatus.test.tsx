@@ -25,6 +25,22 @@ describe('SaveStatus', () => {
     expect(region().textContent).toBe('')
   })
 
+  // A bare check below sm read as a confirm button. Saved and Saving are short
+  // enough to stay in the row; a problem keeps its head word visible and the
+  // full explanation for sm and up and for assistive tech.
+  it('keeps a visible word beside the icon at every width', () => {
+    const { unmount } = render(<SaveStatus indicator={saved} />)
+    expect(visible().querySelector('[data-testid="save-status-word"]')?.className).not.toContain(
+      'sr-only',
+    )
+    unmount()
+
+    render(<SaveStatus indicator={offline} />)
+    const phoneWord = visible().querySelector('[data-testid="save-status-short"]')
+    expect(phoneWord?.textContent).toBe('Offline')
+    expect(phoneWord?.className).toContain('sm:hidden')
+  })
+
   it('keeps the live region mounted and fills it only on a problem', () => {
     vi.useFakeTimers()
     const { rerender } = render(<SaveStatus indicator={saved} />)

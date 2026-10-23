@@ -57,6 +57,7 @@ const ICON = {
 export function SaveStatus({ indicator }: { indicator: SaveIndicator }) {
   const shown = useDisplayed(indicator)
   const offline = shown.tone === 'problem' && shown.label.startsWith('Offline')
+  const head = shown.label.split(' — ')[0] ?? shown.label
   const Icon = offline ? CloudOff : ICON[shown.tone]
   return (
     <span
@@ -72,8 +73,19 @@ export function SaveStatus({ indicator }: { indicator: SaveIndicator }) {
         aria-hidden="true"
         className={cn('size-3.5', shown.tone === 'saving' && 'animate-spin')}
       />
-      {/* An icon alone below sm; the words stay in the tree for assistive tech. */}
-      <span className="sr-only sm:not-sr-only">{shown.label}</span>
+      {/* A bare icon below sm reads as a button to confirm, so the head word
+          stays beside it; the full sentence is for sm and up and for assistive
+          tech. Saved and Saving have no longer sentence to hide. */}
+      {head === shown.label ? (
+        <span data-testid="save-status-word">{shown.label}</span>
+      ) : (
+        <>
+          <span aria-hidden="true" data-testid="save-status-short" className="sm:hidden">
+            {head}
+          </span>
+          <span className="sr-only sm:not-sr-only">{shown.label}</span>
+        </>
+      )}
       <span role="status" className="sr-only">
         {shown.tone === 'problem' ? shown.label : ''}
       </span>
