@@ -11,6 +11,7 @@ import { LoroStore } from '../lib/loro-store.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { STORAGE_KEY } from '../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -199,13 +200,13 @@ function pngWidth(bytes: Uint8Array): number {
 describe('BrowserDocumentPage export options', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
-    localStorage.clear()
+    localStorage.removeItem(STORAGE_KEY)
   })
 
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
-    localStorage.clear()
+    localStorage.removeItem(STORAGE_KEY)
   })
 
   it('fills the SVG with the paper by default, and leaves it transparent once the option is off', async () => {

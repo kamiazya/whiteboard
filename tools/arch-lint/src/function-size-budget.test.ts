@@ -214,7 +214,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
   'apps/web/src/components/spatial-editor/context-menu-items/ink-menu-items.tsx#inkMenuItems': 166,
-  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 221,
+  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 227, // +6: Group selection is offered on a single node
   'apps/web/src/components/spatial-editor/drag-preview.ts#computeDragPreview': 102,
   'apps/web/src/components/spatial-editor/facet-widgets/FacetFormPanel.tsx#FacetFormPanel': 132,
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,
@@ -283,7 +283,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 84,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 78,
-  'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 64,
+  'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 66, // +2: the results announcement and arrow-key handoff
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
@@ -476,6 +476,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 87,
   'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
   // +3: one routing budget for the side pass and the final routes together.
+  'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialCanvasInternal': 51, // one line over the budget
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 71,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,

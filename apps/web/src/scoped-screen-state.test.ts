@@ -442,6 +442,8 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
   selectionSource:
     'no subject: the mounted editor’s selection source as state, so the Display panel follows it; set by the editor’s callback ref, which React re-runs with the new instance on a switch',
+  showResolvedSource:
+    'no subject: the mounted editor’s resolved-comments view state as state, so the comments panel follows it; set by the editor’s callback ref like the selection source',
   keeperEditorRefLatest:
     'no subject: the keeper’s own editor ref, read through a ref so the callback ref stays identity-stable; it names no document',
 }

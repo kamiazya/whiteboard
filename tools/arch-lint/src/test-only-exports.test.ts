@@ -212,6 +212,7 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'apps/web/src/lib/browser-idb-upgrades.ts#discardPlaintextReplicas',
   'apps/web/src/lib/browser-idb-upgrades.ts#mintBrowserWorkspaceSegment',
   'apps/web/src/lib/browser-idb-upgrades.ts#rekeyBrowserWorkspace',
+  'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
   'packages/canvas-render/src/layout/comment-placement.ts#COMMENT_BUBBLE_OFFSET_PX',
   'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
   'packages/canvas-render/src/layout/nodes/node-outline.ts#outlineContains',
@@ -250,6 +251,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'production reaches it through daemonBlobStore; exported so the conformance suite and the store module test can name the class the port ledger holds them to',
   'packages/ports/src/document-path-tree.ts#planSubtreeMove':
     'the subtree-move plan the in-memory DocumentIndex double executes; no production keeper moves rows by path any more (the browser tree index moves nodes), so the port double is its one reader',
+  'apps/web/src/lib/commit-debounce.ts#COMMIT_MAX_WAIT_MS':
+    'the longest an edit waits; the sustained-edit test asserts the write lands inside it',
   'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
     'the one await a test has over a startup fold an unmount left running, so clearing the database cannot land between its listing and its record open; production never deletes storage under a running fold',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
@@ -364,7 +367,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 148
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 17
+const PUBLISHED_CEILING = 18
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

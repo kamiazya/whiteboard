@@ -76,7 +76,7 @@ function useOpenSurfaces(source: unknown, clearError: (error: null) => void) {
   const [moving, setMoving] = useState<WorkspaceDocumentEntry | null>(null)
   const [menu, setMenu] = useState<FolderMenu | null>(null)
   const [dialog, setDialog] = useState<FolderDialog | null>(null)
-  // SCOPE RESET — a path of the departed workspace paired with the new keeper.
+  // SCOPE RESET — a path of the departed workspace handed to the new keeper.
   useEffect(() => {
     setMoving(null)
     setMenu(null)
