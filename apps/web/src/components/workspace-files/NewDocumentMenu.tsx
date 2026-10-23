@@ -12,6 +12,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/too
 import { IMPORT_ACCEPT } from '../../lib/document-import.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 import { NewDocumentDialog } from './NewDocumentDialog.js'
+import { NewDocumentSheet } from './NewDocumentSheet.js'
+import { useCompactCreate } from './use-compact-create.js'
 
 /**
  * The one door to creating a document, wherever creation is offered.
@@ -43,6 +45,7 @@ export function NewDocumentMenu({
   createError,
   onDismiss,
   onImportFiles,
+  pathForName,
 }: {
   /**
    * `options` arrives only from the dialog. A plain menu entry sends none,
@@ -82,17 +85,27 @@ export function NewDocumentMenu({
    * entry: a host that cannot write a file's content must not offer to.
    */
   onImportFiles?: (files: readonly File[]) => void
+  /**
+   * The address a typed name earns, for the phone sheet that asks for the
+   * name first. Absent, the sheet creates at `defaultPath` and the name is
+   * stored without moving the address.
+   */
+  pathForName?: (name: string) => string
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const compact = useCompactCreate()
   const pickerRef = useRef<HTMLInputElement | null>(null)
+  const sheetCreates = compact && defaultPath !== undefined
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={sheetCreates ? false : undefined}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                onClick={sheetCreates ? () => setSheetOpen(true) : undefined}
                 // Holds the visible "New" inside it (WCAG 2.5.3), so a voice
                 // user saying "click New" reaches the same control a sighted
                 // one points at.
@@ -166,7 +179,36 @@ export function NewDocumentMenu({
             </>
           )}
         </DropdownMenuContent>
-        {defaultPath !== undefined && (
+        {sheetCreates && (
+          <NewDocumentSheet
+            open={sheetOpen}
+            defaultPath={defaultPath}
+            pathForName={pathForName ?? (() => defaultPath)}
+            busy={disabled}
+            error={createError}
+            onCancel={() => {
+              setSheetOpen(false)
+              onDismiss?.()
+            }}
+            onCreate={(kind, options) => {
+              void Promise.resolve(onCreate(kind, options)).then(
+                () => setSheetOpen(false),
+                () => {
+                  // Left open; the host reports why through `createError`.
+                },
+              )
+            }}
+            onImport={
+              onImportFiles === undefined
+                ? undefined
+                : () => {
+                    setSheetOpen(false)
+                    pickerRef.current?.click()
+                  }
+            }
+          />
+        )}
+        {defaultPath !== undefined && !sheetCreates && (
           <NewDocumentDialog
             open={dialogOpen}
             workspace={workspace}

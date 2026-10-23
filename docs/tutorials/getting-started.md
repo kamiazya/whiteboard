@@ -46,6 +46,12 @@ you give it a name in its title, its path becomes that name (`untitled` to
 it goes, **Name and folder…** in that menu takes both up front; leaving its
 form untouched creates exactly what the plain entries would have.
 
+On a phone, or any touch screen, **New** opens a sheet from the bottom edge
+instead. Its first field is the name, with the keyboard already up; type it and
+press **Canvas** or **Markdown note**, and the document is created under that
+name at the path the name earns (`Meeting notes` becomes `meeting-notes`).
+Leave the name empty and it starts at `untitled` as above.
+
 Either way the new document opens straight away, ready to work in. The folder
 you are standing in is part of the address — the URL carries a `?folder=`
 while you are inside one — so coming back lands you where you were, a reload

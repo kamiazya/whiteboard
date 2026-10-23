@@ -13,11 +13,13 @@ export function DocumentNameField({
   value,
   path,
   onChange,
+  autoFocus,
 }: {
   value: string
   /** The path the field falls back to when left empty. */
   path: string
   onChange: (next: string) => void
+  autoFocus?: boolean
 }) {
   return (
     <label className="flex flex-col gap-1">
@@ -25,10 +27,11 @@ export function DocumentNameField({
       <input
         type="text"
         value={value}
+        autoFocus={autoFocus}
         maxLength={DOCUMENT_NAME_MAX_LENGTH}
         onChange={(event) => onChange(event.target.value)}
         placeholder={documentLabel({ path }, 'leaf')}
-        className="rounded-md border bg-background px-2 py-1.5 text-sm"
+        className="rounded-md border bg-background px-2 py-1.5 text-sm pointer-coarse:min-h-11"
       />
       <span className="text-muted-foreground text-xs">
         What it is called, everywhere it appears. Leave empty to show the last part of the path
