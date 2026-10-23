@@ -787,6 +787,25 @@ describe('layoutSpatialCanvas', () => {
     expect(sceneNoLabel.nodes.every((n) => n.kind !== 'textRun')).toBe(true)
   })
 
+  it('tints an empty frame faintly so it stays visible, and leaves a frame that holds something unfilled', () => {
+    const inked: SpatialAppearanceResolver = {
+      ...fakeAppearance,
+      resolveNode: () => ({
+        radius: NODE_CORNER_RADIUS_PX,
+        appearance: { fill: 'none', stroke: '#737373' },
+      }),
+    }
+    const options = baseOptions({ appearance: inked })
+    const empty = groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 200 })
+    const chromeOf = (nodes: SpatialNode[]) =>
+      shapesOf(layoutSpatialCanvas(canvas(nodes), options)).find((shape) => shape.id === 'g')
+
+    expect(chromeOf([empty])?.appearance).toMatchObject({ fill: '#737373', fillOpacity: 0.06 })
+
+    const member = textNode({ id: 'm', x: 40, y: 40, width: 120, height: 60, text: 'in' })
+    expect(chromeOf([empty, member])?.appearance).toEqual({ fill: 'none', stroke: '#737373' })
+  })
+
   it('paints a group behind the nodes its box contains, whatever order the canvas lists them in', () => {
     // Stored order is the id order of a map, not the order a caller wrote,
     // so a group whose id sorts AFTER a member's used to paint over it: a

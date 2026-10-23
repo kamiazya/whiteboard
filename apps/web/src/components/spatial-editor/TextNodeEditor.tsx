@@ -53,6 +53,8 @@ export interface TextNodeEditorProps {
    * can still be shortened.
    */
   readonly lengthLimit?: TextLengthLimit
+  /** Shown while the draft is empty: what an empty field here is asking for. */
+  readonly placeholder?: string
 }
 
 export interface TextLengthLimit {
@@ -124,6 +126,7 @@ export function TextNodeEditor({
   onCancel,
   onChange,
   lengthLimit,
+  placeholder,
 }: TextNodeEditorProps) {
   const { value, offer, refusal } = useLimitedDraft(initialText, lengthLimit)
   const mountedRef = useRef(true)
@@ -160,6 +163,7 @@ export function TextNodeEditor({
         ref={textareaRef}
         aria-keyshortcuts="Meta+Enter Control+Enter"
         data-testid={testId}
+        placeholder={placeholder}
         value={value}
         style={{
           position: 'absolute',

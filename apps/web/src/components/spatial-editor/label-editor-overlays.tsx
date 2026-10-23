@@ -160,6 +160,7 @@ export function GroupLabelEditorOverlay({
       }}
       initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
+      placeholder="Frame"
       {...labelDraft(palette, fontFamily)}
       onCommit={(label) => {
         applyResult({

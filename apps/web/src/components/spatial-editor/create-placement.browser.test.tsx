@@ -27,7 +27,7 @@ function soleNodeCentre(canvas: SpatialCanvas) {
   return { x: node.x + node.width / 2, y: node.y + node.height / 2 }
 }
 
-it('Group creates a frame and leaves no editor open', () => {
+it('Group creates a frame and opens no note editor', () => {
   const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
 
@@ -36,8 +36,8 @@ it('Group creates a frame and leaves no editor open', () => {
 
   expect(latest.canvas.nodes).toHaveLength(1)
   expect(latest.canvas.nodes[0] !== undefined && isFrame(latest.canvas.nodes[0])).toBe(true)
-  // Group is the creation that needs no typing, which is what makes it the
-  // one these placement tests drive: no editor to dismiss between steps.
+  // Group opens its name editor, not a note editor, which keeps it the
+  // creation these placement tests can drive without a note to dismiss.
   expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull()
 })
 

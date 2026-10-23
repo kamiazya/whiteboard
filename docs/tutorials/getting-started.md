@@ -51,9 +51,12 @@ to.
 ![The document browser for a workspace kept in this browser](../assets/browser-local-list.png)
 
 A fresh canvas starts empty, with a one-line hint ("Double-click to add a note", or "Tap + to add a note" on a touch screen) that disappears with the first node. Double-click empty canvas space to make a note
-and start typing immediately, or open the **+** menu in the bottom dock: tap
+and start typing immediately (this works in Hand mode too, and never moves the
+view), or open the **+** menu in the bottom dock: tap
 an entry to place it in the middle of the view, or drag one onto the canvas
-to drop it exactly where you want it. In **Select** mode, right-clicking
+to drop it exactly where you want it. **Group** frames what is selected; with
+nothing selected it makes an empty frame in a free spot and opens its name for
+typing, and an empty frame is drawn with a faint tint so it can be found. In **Select** mode, right-clicking
 (long-pressing on touch) empty space offers the same creations, placed where
 you pressed — Hand mode is navigation only, so it deliberately leaves the
 right-click menu closed (a tap on a comment still opens its conversation:

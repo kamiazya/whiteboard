@@ -360,6 +360,13 @@ export interface SpatialContentCache {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /**
+   * The frames that hold nothing, derived from the canvas being laid out. An
+   * empty frame is its own outline and nothing else, so it is tinted to stay
+   * findable; one with members stays unfilled, since a fill emitted ahead of
+   * its members would otherwise risk covering them.
+   */
+  readonly emptyFrameIds?: ReadonlySet<string>
   /** `threads`'s node passages, grouped by the node they are about. */
   readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
   /**

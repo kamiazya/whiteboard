@@ -35,7 +35,7 @@ import {
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endNode, isFrame } from '@kamiazya/whiteboard-model'
+import { endNode, isFrame, membersOf } from '@kamiazya/whiteboard-model'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
@@ -510,11 +510,22 @@ export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNod
   return [...groups, ...nodes.filter((node) => !isFrame(node))]
 }
 
+function emptyFrameIdsOf(canvas: SpatialCanvas): ReadonlySet<string> {
+  return new Set(
+    canvas.nodes
+      .filter((node) => isFrame(node) && membersOf(canvas.nodes, node).length === 0)
+      .map((node) => node.id),
+  )
+}
+
 function layoutSpatialCanvasInternal(
   canvas: SpatialCanvas,
   incoming: ResolvedLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const resolved = withCanvasTheme(canvas, incoming)
+  const resolved: ResolvedLayoutOptions = {
+    ...withCanvasTheme(canvas, incoming),
+    emptyFrameIds: emptyFrameIdsOf(canvas),
+  }
   const nodeContent = paintOrderOf(canvas.nodes).flatMap((node) => [
     ...composeNode(node, resolved),
     ...composeDecorations(node, resolved),

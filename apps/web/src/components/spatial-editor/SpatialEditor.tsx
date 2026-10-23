@@ -1279,6 +1279,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
+      selectedId,
+      extraIds,
+      openGroupLabel: setGroupLabelEditId,
     })
     const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({
       onAddImage,
@@ -1605,7 +1608,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           shortcutHelp={shortcutHelp.palette}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
-          onCreateGroup={createGroupAtViewportCenter}
+          onCreateGroup={() => createGroupAtViewportCenter()}
           onCreateDocumentRef={
             fileRefOptions === undefined ? undefined : () => setDocumentPicker({ mode: 'create' })
           }
