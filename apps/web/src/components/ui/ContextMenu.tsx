@@ -246,7 +246,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
       <Fragment key={item.label}>
         <fieldset
           aria-label={item.label}
-          className="m-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-0 p-0 px-3 py-1"
+          className="m-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-0 p-0 px-3 py-1 pointer-coarse:[&_button]:min-h-11! pointer-coarse:[&_button]:min-w-11!"
         >
           <span className="text-xs text-muted-foreground">{item.label}</span>
           {/* An options row is a PICKER, so an option pushed past the edge is
@@ -332,7 +332,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
         type="button"
         role="menuitem"
         className={cn(
-          'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+          'flex w-full items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
           sheet && 'min-h-12 px-4 text-base',
           item.danger && 'text-destructive',
         )}
