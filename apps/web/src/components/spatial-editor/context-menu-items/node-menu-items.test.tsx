@@ -117,11 +117,18 @@ describe('nodeMenuItems', () => {
     expect(onToggleNodeLock).toHaveBeenCalledWith('a', false)
   })
 
-  it('offers Group selection only when a multi-selection exists (extraIds non-empty)', () => {
+  it('offers Group selection on a single node, framing just that node', () => {
     const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
-    const without = nodeMenuItems(baseInput(textNode, canvas))
-    expect(without.some((item) => labelOf(item) === 'Group selection')).toBe(false)
+    const groupSelection = vi.fn()
+    const items = nodeMenuItems(baseInput(textNode, canvas, { groupSelection }))
+    const groupItem = items.find((item) => labelOf(item) === 'Group selection')
+    expect(groupItem).toBeDefined()
+    ;(groupItem as { onSelect: () => void }).onSelect()
+    expect(groupSelection).toHaveBeenCalledWith(['a'])
+  })
 
+  it('offers Group selection over a multi-selection, framing every member', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
     const groupSelection = vi.fn()
     const withExtra = nodeMenuItems(
       baseInput(textNode, canvas, { extraIds: new Set(['b']), groupSelection }),

@@ -153,16 +153,11 @@ function pushFrameBands(
 }
 
 /**
- * What a MULTI-selection offers: verbs that act on the whole set rather
+ * What a MULTI-selection adds: verbs that act on the whole set rather
  * than on the node the menu was opened over.
  */
 function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput): void {
-  const { node, canvas, extraIds, groupSelection, setCommentCompose } = input
-  verbs.push({
-    label: 'Group selection',
-    icon: <Frame />,
-    onSelect: () => groupSelection([node.id, ...extraIds]),
-  })
+  const { node, canvas, extraIds, setCommentCompose } = input
   const nodeIds = [node.id, ...extraIds]
   verbs.push({
     label: 'Comment on selection',
@@ -257,10 +252,16 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
   if (isFrame(node)) {
     pushFrameBands(properties, verbs, input)
   }
-  // Framing an existing multi-selection is reached from any of
-  // its members — the frame encloses every selected node,
-  // including group frames: nesting is geometric in JSON Canvas,
-  // and containment moves already handle nested frames.
+  // Framing the selection is reached from any of its members — the frame
+  // encloses every selected node, including group frames: nesting is
+  // geometric in JSON Canvas, and containment moves already handle nested
+  // frames. A lone node is a selection of one, framed the way the dock's
+  // Group frames it.
+  verbs.push({
+    label: 'Group selection',
+    icon: <Frame />,
+    onSelect: () => input.groupSelection([node.id, ...extraIds]),
+  })
   if (extraIds.size > 0) {
     pushMultiSelectionBands(verbs, input)
   }

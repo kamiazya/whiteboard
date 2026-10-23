@@ -195,13 +195,14 @@ it('a context-menu press on a non-member collapses the selection to it', async (
   )
   await frame()
 
-  // No surviving extras: the menu offers no multi-selection actions.
+  // No surviving extras: the menu offers no multi-selection actions (Group
+  // selection stays, as a selection of one).
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull(),
   )
   const items = [...container.querySelectorAll('[data-testid="context-menu"] [role="menuitem"]')]
   expect(items.length).toBeGreaterThan(0)
-  expect(items.some((el) => (el.textContent ?? '').includes('Group selection'))).toBe(false)
+  expect(items.some((el) => (el.textContent ?? '').includes('Comment on selection'))).toBe(false)
 })
 
 // Creating from the palette while a multi-selection exists selects ONLY
