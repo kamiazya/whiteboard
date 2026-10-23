@@ -1,6 +1,7 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import * as React from 'react'
 
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { cn } from '../../lib/utils.js'
 
 // A tooltip here is a label, never a surface to move into, so it closes the
@@ -26,6 +27,19 @@ const TriggerNodeContext = React.createContext<React.MutableRefObject<HTMLElemen
   null,
 )
 
+// A touch has no hover to explain a control, and the tooltip a tap raises
+// would stay on screen until something else is tapped. On a coarse pointer
+// only keyboard focus may open one; a trigger that is not :focus-visible
+// (a tap's focus) is not keyboard focus.
+function mayOpen(trigger: HTMLElement | null): boolean {
+  if (!hasCoarsePointer()) return true
+  try {
+    return trigger?.matches(':focus-visible') ?? false
+  } catch {
+    return false
+  }
+}
+
 // Radix closes a tooltip on blur, but a trigger that is REPLACED or removed
 // while its tooltip is showing (a toggle that swaps its button, a route that
 // unmounts it) fires no blur at all, and the tooltip would stay on screen
@@ -41,6 +55,7 @@ function Tooltip({
   const triggerNode = React.useRef<HTMLElement | null>(null)
   const change = React.useCallback(
     (next: boolean) => {
+      if (next && !mayOpen(triggerNode.current)) return
       setInnerOpen(next)
       onOpenChange?.(next)
     },
