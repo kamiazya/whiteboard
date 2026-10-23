@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clusteredLayout,
   designerBoard,
+  latticeLayouts,
   ROUTING_CORPUS,
   syntheticLayouts,
 } from '../../test-utils/routing-corpus.js'
@@ -311,6 +312,55 @@ describe('routing quality on the service-tier board', () => {
       touches: 1,
       unhoppedCrossings: 0,
       crossings: 0,
+    })
+  })
+})
+
+/**
+ * The same columns over boxes on a lattice, where lanes coincide. Measured
+ * apart from the synthetic corpus so neither number hides the other: a fix
+ * for aligned boards can leave the scattered ones byte-identical.
+ */
+describe('routing quality across lattice boards', () => {
+  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
+    let throughUnrelated = 0
+    let touchCount = 0
+    let unhopped = 0
+    let crossingCount = 0
+    let bendCount = 0
+    let length = 0
+    for (const testCase of latticeLayouts(400)) {
+      throughUnrelated += new Set(
+        avoidableInk(testCase.nodes, testCase.edges)
+          .filter((v) => v.kind === 'foreign')
+          .map((v) => v.edge),
+      ).size
+      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
+      const paths = testCase.edges.map(
+        (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
+      )
+      touchCount += touches(paths)
+      unhopped += unhoppedCrossings(paths, HOP_CLEARANCE_PX)
+      crossingCount += crossings(paths)
+      for (const path of paths) {
+        bendCount += bends(path)
+        length += pathLength(path)
+      }
+    }
+    expect({
+      edgesThroughUnrelatedNode: throughUnrelated,
+      touches: touchCount,
+      unhoppedCrossings: unhopped,
+      crossings: crossingCount,
+      bends: bendCount,
+      length: Math.round(length),
+    }).toEqual({
+      edgesThroughUnrelatedNode: 0,
+      touches: 100,
+      unhoppedCrossings: 1,
+      crossings: 320,
+      bends: 3282,
+      length: 1488552,
     })
   })
 })

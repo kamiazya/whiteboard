@@ -114,6 +114,42 @@ export function syntheticLayouts(count: number): readonly RoutingCase[] {
 }
 
 /**
+ * Boards a person lays out: equal boxes on a lattice, edges between random
+ * pairs. Alignment is the point. Random positions almost never put two
+ * detours on the same lane, so the synthetic corpus cannot show the defects
+ * that appear only when boxes line up - two edges bending at one corner,
+ * runs sharing a margin lane - and those are what a tidy diagram is full of.
+ */
+export function latticeLayouts(count: number): readonly RoutingCase[] {
+  const random = styleRandomFromSeed(0x1a771ce)
+  const int = (max: number) => Math.floor(random() * max)
+  const COLUMNS = 5
+  const ROWS = 3
+  const cases: RoutingCase[] = []
+  for (let i = 0; cases.length < count; i++) {
+    const sites = Array.from({ length: COLUMNS * ROWS }, (_, site) => site)
+    const size = 5 + int(4)
+    const chosen: number[] = []
+    for (let n = 0; n < size; n++) chosen.push(sites.splice(int(sites.length), 1)[0] as number)
+    const nodes = chosen.map((site, n) =>
+      node(`n${n}`, (site % COLUMNS) * 288 + 96, Math.floor(site / COLUMNS) * 200 + 96, 200, 100),
+    )
+    const edges: CanvasEdge[] = []
+    const seen = new Set<string>()
+    for (let e = 0; e < size + 2; e++) {
+      const a = int(size)
+      const b = int(size)
+      const key = `${a}->${b}`
+      if (a === b || seen.has(key)) continue
+      seen.add(key)
+      edges.push({ id: `e${a}_${b}`, from: { node: `n${a}` }, to: { node: `n${b}` } })
+    }
+    if (edges.length > 1) cases.push({ name: `lattice ${i}`, nodes, edges })
+  }
+  return cases
+}
+
+/**
  * One large canvas with REAL LOCALITY — the shape an AI-authored document
  * grows into, and the case every other instrument in this package is blind
  * to.
