@@ -46,12 +46,12 @@ function drag(root: HTMLElement, from: [number, number], to: [number, number]) {
 }
 
 /** Two presses on the same spot inside the double-press window. */
-function doublePress(root: HTMLElement, at: [number, number]) {
+function doublePress(root: HTMLElement, at: [number, number], pointerType = 'mouse') {
   const r = root.getBoundingClientRect()
   const point = { clientX: r.left + at[0], clientY: r.top + at[1] }
   for (const pointerId of [1, 2]) {
-    fireEvent.pointerDown(root, { button: 0, pointerId, ...point })
-    fireEvent.pointerUp(root, { pointerId, ...point })
+    fireEvent.pointerDown(root, { button: 0, pointerId, pointerType, ...point })
+    fireEvent.pointerUp(root, { pointerId, pointerType, ...point })
   }
 }
 
@@ -148,7 +148,7 @@ it('the dock carries zoom-to-fit in every mode, and no zoom percentage anywhere'
   expect(Math.abs(svgRect.y + svgRect.height / 2 - r.y - r.height / 2)).toBeLessThan(2)
 })
 
-it('hand mode: a double press zooms in and holds the pressed canvas point still', () => {
+it('hand mode: a double TAP zooms in and holds the pressed canvas point still', () => {
   const { Host, latest } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -162,7 +162,7 @@ it('hand mode: a double press zooms in and holds the pressed canvas point still'
     container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
   ).getBoundingClientRect()
 
-  doublePress(root, at)
+  doublePress(root, at, 'touch')
 
   expect(zoomOf()).toBeGreaterThan(1)
   const svgRectAfter = (

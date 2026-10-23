@@ -78,12 +78,12 @@ it('dragging a member inside the frame moves only that member', async () => {
   expect(nodeById(latest, 'b')).toMatchObject({ x: 280, y: 200 })
 })
 
-it('a real double-click on the frame edits its label; empty commit removes it', async () => {
+it('a real double-click on the frame name edits it; empty commit removes it', async () => {
   const { Host, latest } = makeEditorHost({ initial: grouped })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
-  await userEvent.dblClick(root, { position: { x: 100, y: 100 } })
+  await userEvent.dblClick(root, { position: { x: 100, y: 60 } })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="group-label-editor"]')).not.toBeNull(),
   )
@@ -100,7 +100,7 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
   // Clearing the label through the SAME UI path (fill empty + blur-commit)
   // removes the field — the reducer's empty-removes rule reached from the
   // editor, not only from commands.test.ts.
-  await userEvent.dblClick(root, { position: { x: 100, y: 100 } })
+  await userEvent.dblClick(root, { position: { x: 100, y: 60 } })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="group-label-editor"]')).not.toBeNull(),
   )

@@ -41,7 +41,7 @@ pinch zooms in every tool.
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
-| Double-click | Edit a node's text, an edge's label, or a group's label |
+| Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
 | `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
@@ -137,7 +137,7 @@ when none of its content is in view there it opens framed on the content, as
 **Zoom to fit** would. A canvas that already shows some content opens where it
 is, and later edits never move the view.
 | Scroll / two-finger drag | Pan |
-| Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
+| Double-tap in Hand mode (touch) | Zoom in on the point you pressed; with a mouse or pen a double-click edits or adds a note instead, and never moves the view |
 
 The dock carries one view control — **zoom to fit** — and it is there in
 every tool. On a touch screen it is joined by **zoom in** and **zoom out**,

@@ -13,6 +13,10 @@ import {
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { labelNotice } from '../../lib/limit-notice.js'
+import {
+  FRAME_TITLE_EDITOR_HEIGHT_PX,
+  FRAME_TITLE_OFFSET_PX,
+} from '../../lib/spatial/frame-interior.js'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
@@ -148,7 +152,12 @@ export function GroupLabelEditorOverlay({
   return (
     <TextNodeEditor
       exitHintScale={1 / zoom}
-      box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
+      box={{
+        x: group.x,
+        y: group.y - FRAME_TITLE_OFFSET_PX,
+        width: group.width,
+        height: FRAME_TITLE_EDITOR_HEIGHT_PX,
+      }}
       initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
       {...labelDraft(palette, fontFamily)}

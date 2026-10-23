@@ -70,6 +70,7 @@
  * diagram that needs a shape uses an image node.
  */
 
+import { useRef } from 'react'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
@@ -97,7 +98,12 @@ import {
   dismissProposalCard,
   releaseProposalPress,
 } from './pointer-proposal-claim.js'
-import { commitRelease, releaseDrawing, releaseMarquee } from './pointer-release.js'
+import {
+  commitRelease,
+  releaseDrawing,
+  releaseHandDoublePress,
+  releaseMarquee,
+} from './pointer-release.js'
 
 /**
  * The navigation machine distinguishes touch from everything else; pen
@@ -142,6 +148,8 @@ function commitPendingText(
 }
 
 export function useEditorPointer(inputs: EditorPointerInputs) {
+  /** A hand-tool double press waiting for its release; see `armHandDoublePress`. */
+  const handDoublePressRef = useRef<{ key: string; point: Point; screen: Point } | null>(null)
   const {
     createNodeAt,
     pasteClipboard,
@@ -266,6 +274,26 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       at - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
     lastPressRef.current = isDoublePress ? null : { key: pressKey, at, point: screenPoint }
     doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
+  }
+
+  /**
+   * The hand tool pans on every press, so a double press by a pointer that
+   * can aim (not a finger, whose double press zooms) is judged here and
+   * acted on at its release — and only when the pointer stayed put, since a
+   * drag is a pan, not a second click.
+   */
+  const armHandDoublePress = (
+    e: React.PointerEvent<HTMLDivElement>,
+    pressKey: string,
+    screenPoint: Point,
+    point: Point,
+  ) => {
+    if (tool !== 'hand' || e.pointerType === 'touch' || e.button !== 0) return
+    if (spaceDownRef.current || commentHoldsPress(inputs)) return
+    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    const armed = doublePressRef.current
+    doublePressRef.current = null
+    handDoublePressRef.current = armed === null ? null : { ...armed, screen: screenPoint }
   }
 
   /**
@@ -411,7 +439,10 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     const pick = pickContentAt(pressProbes(pickInputs), point)
     const { hitId, hitPathId, pressKey } = describePress(pick)
 
-    if (chromeClaimsPress(e, root, point, screenPoint, hitId)) return
+    if (chromeClaimsPress(e, root, point, screenPoint, hitId)) {
+      armHandDoublePress(e, pressKey, screenPoint, point)
+      return
+    }
     if (beginDrawStroke(inputs, e, root, point)) return
     // Deliberately NO pointer capture below. Capturing on the press retargets
     // the subsequent clicks to the capturing root, so a control the press
@@ -582,6 +613,14 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return commitCommentDrag(inputs, e, root)
   }
 
+  const resolveHandDoublePress = (screenPoint: Point) => {
+    const armed = handDoublePressRef.current
+    handDoublePressRef.current = null
+    if (armed === null) return
+    const travelled = Math.hypot(screenPoint.x - armed.screen.x, screenPoint.y - armed.screen.y)
+    if (travelled <= LONG_PRESS_SLOP_PX) releaseHandDoublePress(armed, releaseContext)
+  }
+
   /**
    * A release is offered to each claimant in priority order, the mirror of
    * `handlePointerDown`'s chain: chrome answers before the document, and what
@@ -600,6 +639,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       },
       e.timeStamp,
     )
+    resolveHandDoublePress(clientPointToRootLocal(e, root))
     if (chromeClaimsRelease(e, root, navigation.fallThrough)) return
 
     const armed = doublePressRef.current
