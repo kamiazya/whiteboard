@@ -141,7 +141,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Tab'],
     shift: false,
     display: 'Tab',
-    description: 'Select the next node in reading order (the first, when none is selected)',
+    description:
+      'Select the next node in reading order (the first, when none is selected); past the last node Tab leaves the canvas',
     tools: ['select'],
   },
   {
@@ -150,7 +151,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Tab'],
     shift: true,
     display: 'Shift+Tab',
-    description: 'Select the previous node in reading order',
+    description:
+      'Select the previous node in reading order; before the first node Shift+Tab leaves the canvas',
     tools: ['select'],
   },
   {

@@ -44,17 +44,30 @@ it('Tab selects the first node in reading order and keeps focus on the canvas', 
   expect(document.activeElement === rootOf(container)).toBe(true)
 })
 
-it('Tab and Shift+Tab cycle through the nodes and wrap', async () => {
+it('Tab and Shift+Tab walk the nodes and step back', async () => {
   const { latest } = mount()
   await userEvent.keyboard('{Tab}')
   await userEvent.keyboard('{Tab}')
   expect(await selectedId(latest)).toBe('right')
   await userEvent.keyboard('{Tab}')
   expect(await selectedId(latest)).toBe('low')
-  await userEvent.keyboard('{Tab}')
-  expect(await selectedId(latest)).toBe('left')
   await userEvent.keyboard('{Shift>}{Tab}{/Shift}')
-  expect(await selectedId(latest)).toBe('low')
+  expect(await selectedId(latest)).toBe('right')
+})
+
+it('Tab past the last node leaves the canvas for the dock', async () => {
+  const { container } = mount()
+  for (let i = 0; i < 3; i++) await userEvent.keyboard('{Tab}')
+  expect(document.activeElement === rootOf(container)).toBe(true)
+  await userEvent.keyboard('{Tab}')
+  expect(document.activeElement === rootOf(container)).toBe(false)
+})
+
+it('Shift+Tab before the first node leaves the canvas backwards', async () => {
+  const { container } = mount()
+  await userEvent.keyboard('{Tab}')
+  await userEvent.keyboard('{Shift>}{Tab}{/Shift}')
+  expect(document.activeElement === rootOf(container)).toBe(false)
 })
 
 it('Ctrl+Arrow moves the selection to the nearest node that way without nudging', async () => {

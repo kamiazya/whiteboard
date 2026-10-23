@@ -49,7 +49,9 @@ pinch zooms in every tool.
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
 "Canvas, 5 notes. Tab selects the first note". With it focused, `Tab` walks the
 nodes top to bottom, then left to right (ties by position in the document),
-and wraps at the end, so focus stays on the canvas while you cycle. `Esc`
+and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
+the canvas for the next control (the bottom dock, or the header before the
+canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
 selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
 dock. Locked nodes are skipped, since they cannot be selected.
