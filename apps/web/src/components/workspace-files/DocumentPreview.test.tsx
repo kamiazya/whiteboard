@@ -186,6 +186,18 @@ describe('DocumentPreview', () => {
       expect(onRename).toHaveBeenCalledWith(doc)
     })
 
+    it('puts Rename beside the name and a separate Change address beside the path', async () => {
+      const onRename = vi.fn()
+      render(<DocumentPreview document={doc} loadRender={async () => drawn} onRename={onRename} />)
+      await act(async () => {})
+      const heading = screen.getByRole('heading', { level: 2 })
+      expect(heading.parentElement?.querySelector('button')?.textContent).toBe('Rename…')
+      const address = screen.getByRole('button', { name: 'Change address…' })
+      expect(address.parentElement?.textContent).toContain(doc.path)
+      fireEvent.click(address)
+      expect(onRename).toHaveBeenCalledWith(doc)
+    })
+
     it('has no rename affordance when the caller supplies no way to rename', async () => {
       render(<DocumentPreview document={doc} loadRender={async () => drawn} />)
       await act(async () => {})

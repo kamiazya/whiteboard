@@ -127,11 +127,22 @@ export function DocumentPreview({
       </div>
 
       <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="truncate text-sm font-medium">{documentLabel(document, 'leaf')}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-sm font-medium">{documentLabel(document, 'leaf')}</h2>
+          {onRename !== undefined && (
+            <button
+              type="button"
+              onClick={() => onRename(document)}
+              className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline"
+            >
+              Rename…
+            </button>
+          )}
+        </div>
         {/* The path is the address, not the name — so it goes here, quietly,
-            where someone who needs it can read it. BOTH are edited in the
-            Rename dialog, which is the one place that explains how they
-            differ. */}
+            where someone who needs it can read it. Each control names what
+            it edits; both open the one dialog that explains how name and
+            address differ. */}
         {document.shadowed && (
           <p
             data-testid="preview-shadowed-notice"
@@ -149,7 +160,7 @@ export function DocumentPreview({
               onClick={() => onRename(document)}
               className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline"
             >
-              Rename…
+              Change address…
             </button>
           )}
         </div>
