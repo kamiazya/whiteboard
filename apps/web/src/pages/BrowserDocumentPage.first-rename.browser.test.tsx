@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
@@ -132,6 +133,18 @@ describe('BrowserDocumentPage first rename (real IndexedDB)', () => {
     await waitForWriteLanded()
     expect(move).not.toHaveBeenCalled()
     expect(address().textContent).toMatch(/\/d\/untitled$/)
+  })
+
+  it('keeps the title field mounted and focused through every keystroke of a fresh document', async () => {
+    await renderLoaded()
+    const field = (await titleField()) as HTMLInputElement
+    await userEvent.click(field)
+
+    await userEvent.keyboard('Roadmap')
+
+    expect(field.isConnected).toBe(true)
+    expect(field.value).toBe('Roadmap')
+    expect(document.activeElement).toBe(field)
   })
 
   it('leaves the path alone on every later rename', async () => {
