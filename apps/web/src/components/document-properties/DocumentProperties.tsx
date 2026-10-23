@@ -164,7 +164,7 @@ export function DocumentProperties({
             onTitleSettled?.(typed.trim())
           }}
           placeholder="Untitled"
-          className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate pointer-coarse:min-h-11 rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
             inline ? 'text-sm' : 'text-base'
           }`}
         />

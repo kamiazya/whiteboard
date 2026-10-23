@@ -14,8 +14,8 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { routeAnnouncementSnapshot } from '../../lib/route-announcer.js'
 import { mayAutofocus, noteFocusPlaced } from '../../lib/focus-claim.js'
+import { routeAnnouncementSnapshot } from '../../lib/route-announcer.js'
 import { DocumentFacetsEditor, DocumentProperties } from './DocumentProperties.js'
 
 // An `<input list=...>` maps to role combobox, not textbox — the datalist
@@ -31,6 +31,15 @@ function textboxValue(name: RegExp): string {
 afterEach(() => {
   cleanup()
   noteFocusPlaced(Number.NEGATIVE_INFINITY)
+})
+
+// Chromium cannot emulate the coarse pointer for CSS, so the class is the
+// contract (as for the toolbar and the New menu).
+it('gives the title box a 44px touch target on a coarse pointer', () => {
+  render(<DocumentProperties {...titleProps({ title: 'Draft' })} />)
+  expect(screen.getByRole('textbox', { name: /title/i }).className).toMatch(
+    /pointer-coarse:min-h-11/,
+  )
 })
 
 it('records that the reader typed in the title, so the editor will not claim focus', () => {
