@@ -6,6 +6,41 @@
  */
 export const CONTEXT_RADIUS = 60
 
+/** Stands in for the match while its surroundings are stripped. */
+const MATCH_SLOT = '\uE000'
+
+/**
+ * The words markdown typesets, without the typesetting: fence lines, quote /
+ * list / task / heading markers, table delimiter rows and cell pipes, and
+ * inline emphasis, code ticks and link syntax. Anchored on lines, so it runs
+ * over the excerpt before whitespace is collapsed.
+ */
+function stripMarkup(chunk: string): string {
+  return chunk
+    .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, '')
+    .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, '')
+    .replace(
+      /^[ \t]*(?:#{1,6}[ \t]+|(?:>[ \t]?)+|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+][ \t]+|\d+[.)][ \t]+)/gm,
+      '',
+    )
+    .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|__|~~|`/g, '')
+    .replace(/[ \t]*\|[ \t]*/g, ' ')
+}
+
+/**
+ * The excerpt with its markup stripped everywhere but the match itself, which
+ * stays as written so a caller can still find and highlight it.
+ */
+function plainExcerpt(value: string, start: number, end: number, index: number, length: number) {
+  const matchStart = Math.max(start, Math.min(end, index))
+  const matchEnd = Math.max(matchStart, Math.min(end, index + length))
+  const slotted = `${value.slice(start, matchStart)}${MATCH_SLOT}${value.slice(matchEnd, end)}`
+  const [head = '', tail = ''] = stripMarkup(slotted).split(MATCH_SLOT)
+  return `${head}${value.slice(matchStart, matchEnd)}${tail}`
+}
+
 /**
  * A short plain-text excerpt around [index, index+length), whitespace
  * collapsed, ellipsised at cut edges. Shared by reference extraction and
@@ -22,7 +57,8 @@ export function snippetAround(value: string, index: number, length: number): str
   // one the document contains.
   const start = clusterStartAtOrAfter(value, Math.max(0, index - CONTEXT_RADIUS))
   const end = clusterEndAtOrBefore(value, Math.min(value.length, index + length + CONTEXT_RADIUS))
-  const text = start < end ? value.slice(start, end).replace(/\s+/g, ' ').trim() : ''
+  const text =
+    start < end ? plainExcerpt(value, start, end, index, length).replace(/\s+/g, ' ').trim() : ''
   return `${start > 0 ? '…' : ''}${text}${end < value.length ? '…' : ''}`
 }
 

@@ -95,6 +95,44 @@ describe('snippetAround', () => {
   })
 })
 
+/** A reader wants the words around a hit, not the markup that typeset them. */
+describe('snippetAround strips markdown markup around the match', () => {
+  const NOTE = [
+    '- [ ] email the TA',
+    '',
+    '```js',
+    'const x = 1',
+    '```',
+    '',
+    '> Rollbacks are cheap if planned.',
+    '',
+    '| Step | Owner |',
+    '| --- | --- |',
+    '| **Deploy** | [[ops/team|Ops]] |',
+  ].join('\n')
+
+  const excerpt = (needle: string) => snippetAround(NOTE, NOTE.indexOf(needle), needle.length)
+
+  it('drops fences, quote and task markers and table scaffolding', () => {
+    const out = excerpt('Rollbacks')
+    expect(out).toContain('Rollbacks are cheap if planned.')
+    expect(out).not.toMatch(/```|> |- \[ \]|\||---/)
+    expect(out).not.toContain('js const')
+  })
+
+  it('keeps the matched text exactly as written', () => {
+    expect(excerpt('Rollbacks')).toContain('Rollbacks')
+    const star = snippetAround('a **bold** b', 2, 8)
+    expect(star).toContain('**bold**')
+  })
+
+  it('shows emphasis and link markup as the words they carry', () => {
+    const out = excerpt('Deploy')
+    expect(out).not.toMatch(/\*\*|\[\[|\]\]/)
+    expect(out).toContain('Ops')
+  })
+})
+
 /**
  * The cut falls between GRAPHEMES, not code points.
  *
