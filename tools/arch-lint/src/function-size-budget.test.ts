@@ -231,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 130,
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 538,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 555,
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in

@@ -548,8 +548,25 @@ export function useEditorKeyboard({
     return handled
   }
 
+  /**
+   * While a connect or re-attach is live its targets are the only thing
+   * Tab can mean from the canvas root. They sit after the dock in document
+   * order, so the browser's own Tab would reach Undo first and the
+   * keyboard path to a target would exist only on paper.
+   */
+  const focusFirstAttachTarget = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Tab' || e.shiftKey || e.target !== e.currentTarget) return false
+    if (gestureState.kind !== 'connecting' && gestureState.kind !== 'reattaching') return false
+    const target = e.currentTarget.querySelector<SVGElement>('[data-testid^="connect-target-"]')
+    if (target === null) return false
+    e.preventDefault()
+    target.focus()
+    return true
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (menuOpen) return
+    if (focusFirstAttachTarget(e)) return
     // Declarative shortcuts first — see shortcuts.ts, the single catalog.
     if (runCatalogShortcut(e)) return
     // Delete/Backspace deletes the current selection — but never while the
