@@ -1220,6 +1220,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameSelection,
       changeTool,
       createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
+      setGroupLabelEditId,
       menuOpen: contextMenu !== null,
       openSelectionMenu: () =>
         setContextMenu(

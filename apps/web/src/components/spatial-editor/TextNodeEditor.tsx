@@ -60,6 +60,8 @@ export interface TextNodeEditorProps {
   readonly lengthLimit?: TextLengthLimit
   /** Shown while the draft is empty: what an empty field here is asking for. */
   readonly placeholder?: string
+  /** A name rather than prose: a bare Enter commits instead of starting a second line. */
+  readonly singleLine?: boolean
 }
 
 export interface TextLengthLimit {
@@ -133,6 +135,7 @@ export function TextNodeEditor({
   onChange,
   lengthLimit,
   placeholder,
+  singleLine = false,
 }: TextNodeEditorProps) {
   const { value, offer, refusal } = useLimitedDraft(initialText, lengthLimit)
   const mountedRef = useRef(true)
@@ -211,7 +214,10 @@ export function TextNodeEditor({
           if (e.key === 'Escape') {
             e.preventDefault()
             cancelAndReturn()
-          } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          } else if (
+            e.key === 'Enter' &&
+            (e.metaKey || e.ctrlKey || (singleLine && !e.shiftKey && !e.nativeEvent.isComposing))
+          ) {
             e.preventDefault()
             commitAndReturn()
           }

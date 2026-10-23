@@ -36,7 +36,7 @@ pinch zooms in every tool.
 | `Tab` | Select the next node in reading order; with nothing selected, the first |
 | `Shift + Tab` | Select the previous node in reading order |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
-| `Enter` / `F2` | Edit the selected node's text, or a group's label |
+| `Enter` / `F2` | Edit the selected node's text, or a frame's label (a frame label is one line: `Enter` saves it) |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
