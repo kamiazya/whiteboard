@@ -66,6 +66,8 @@ const OWN_HOST: Readonly<Record<string, string>> = {
     'rerenders the one mounted Host with a new height to resize the frame while the canvas state lives on; the shared host fixes its frame when it is made',
   'components/spatial-editor/worker-scene-responsiveness.browser.test.tsx':
     'a button beside the editor replaces the canvas from outside, so the canvas state is shared with something other than the editor',
+  'components/spatial-editor/theme-switch-keeps-scene.browser.test.tsx':
+    'replaces the canvas from outside, as a sync or a facet panel does, and watches the paper across the swap',
   'components/document-editor/canvas-verb-bar.browser.test.tsx':
     'the frame also holds a sibling CanvasVerbBar, positioned against the same box as the editor',
 }
