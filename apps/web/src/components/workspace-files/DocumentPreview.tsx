@@ -121,7 +121,11 @@ export function DocumentPreview({
           />
         ) : (
           <p className="text-muted-foreground text-sm">
-            {state.kind === 'loading' ? 'Drawing…' : 'Nothing to draw yet.'}
+            {state.kind === 'loading'
+              ? 'Drawing…'
+              : (document.kind ?? 'markdown') === 'markdown'
+                ? 'Nothing written yet.'
+                : 'Nothing to draw yet.'}
           </p>
         )}
       </div>

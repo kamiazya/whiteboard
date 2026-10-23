@@ -100,8 +100,16 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
+  })
+
+  it('says a canvas has nothing to draw, not nothing written', async () => {
+    render(<DocumentPreview document={{ ...doc, kind: 'spatial' }} loadRender={async () => null} />)
+    await act(async () => {})
+
+    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.queryByText('Nothing written yet.')).toBeNull()
   })
 
   it('keeps them when the render throws outright', async () => {
@@ -116,7 +124,7 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
   })
 
