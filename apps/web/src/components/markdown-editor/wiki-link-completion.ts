@@ -75,9 +75,20 @@ function targetOption(target: LinkTarget): Completion {
     // Resolution is by path, so the alias only changes how the source
     // READS: a note that said `[[untitled]]` for a document the popup
     // showed as "Weekly sync" taught nobody what it linked.
-    apply: writeReference(linkMarkupFor(target, target.name)),
+    apply: (view, completion, from, to) => {
+      const line = view.state.doc.lineAt(from)
+      const above = line.number > 1 ? view.state.doc.line(line.number - 1).text : ''
+      // The alias pipe would be read as a cell edge on a table row, and on the
+      // line right under one (GFM continues the table without a blank line).
+      const inTable = TABLE_ROW.test(line.text) || TABLE_ROW.test(above)
+      const markup = linkMarkupFor(target, inTable ? '' : target.name)
+      const write = writeReference(markup)
+      if (typeof write === 'function') write(view, completion, from, to)
+    },
   }
 }
+
+const TABLE_ROW = /^\s*\|/
 
 /**
  * Creates a markdown note at `path` called `name`; the host owns where and how.
