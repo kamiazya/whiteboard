@@ -191,6 +191,7 @@ describe('RecentLane', () => {
       <RecentLane
         documents={documents}
         recentIds={['d2']}
+        onSelect={() => {}}
         onOpen={() => {}}
         renderThumbnail={(each) => (
           <DocumentThumbnail document={each} loadRender={loadRender} className="size-full" />
