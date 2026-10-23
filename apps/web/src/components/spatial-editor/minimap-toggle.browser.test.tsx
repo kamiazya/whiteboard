@@ -3,11 +3,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../../index.css'
+import { writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import { TooltipProvider } from '../ui/tooltip.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { ToolPalette } from './ToolPalette.js'
 
-beforeEach(() => sessionStorage.clear())
+beforeEach(() => writeMinimapOpen(false))
 afterEach(cleanup)
 
 const boxes = [

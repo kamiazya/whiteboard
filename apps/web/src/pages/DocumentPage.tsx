@@ -121,19 +121,21 @@ function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['e
   const spatialHandle = useRef<SpatialEditorHandle | null>(null)
   // State as well as a ref: the Display panel follows the editor's selection
   // through the handle, and a ref alone would leave it mounted with none
-  // when the panel renders before the editor attaches.
+  // when the panel renders before the editor attaches. The callback is
+  // identity-stable (the keeper's ref is read through a ref of its own), so
+  // React attaches once per editor instead of re-attaching on every render —
+  // a setState from a callback ref that changes identity each render is a
+  // render loop.
   const [attachedHandle, setAttachedHandle] = useState<SpatialEditorHandle | null>(null)
-  const attachSpatialHandle = useCallback(
-    (node: SpatialEditorHandle | null) => {
-      spatialHandle.current = node
-      setAttachedHandle(node)
-      if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
-      else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
-        keeperEditorRef.current = node
-      }
-    },
-    [keeperEditorRef],
-  )
+  const keeperEditorRefLatest = useRef(keeperEditorRef)
+  keeperEditorRefLatest.current = keeperEditorRef
+  const attachSpatialHandle = useCallback((node: SpatialEditorHandle | null) => {
+    spatialHandle.current = node
+    setAttachedHandle(node)
+    const keeperRef = keeperEditorRefLatest.current
+    if (typeof keeperRef === 'function') keeperRef(node)
+    else if (keeperRef !== null && keeperRef !== undefined) keeperRef.current = node
+  }, [])
   return { spatialHandle, attachedHandle, attachSpatialHandle }
 }
 
