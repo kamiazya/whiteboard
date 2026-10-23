@@ -196,7 +196,13 @@ export function FacetFormPanel({
         const root = event.currentTarget.closest('[data-testid="spatial-editor"]')
         if (root instanceof HTMLElement) root.focus()
       }}
-      className={cn('bg-background p-3 shadow-lg', variant === 'sheet' ? 'border-t' : 'border-l')}
+      className={cn(
+        'bg-background p-3 shadow-lg',
+        variant === 'sheet' ? 'border-t' : 'border-l',
+        // facet-ui draws its controls with inline sizes (a workspace package
+        // generates no classes), so the touch floor is imposed from here.
+        'pointer-coarse:[&_button]:min-h-11! pointer-coarse:[&_label:has(>input[type=radio])]:min-h-11! pointer-coarse:[&_select]:min-h-11!',
+      )}
       // A SIBLING of the canvas, not an overlay on it: the editor root is the
       // pointer surface, so a panel drawn over it swallows the press that
       // would have selected what is underneath. Measured at 540..892 of a
