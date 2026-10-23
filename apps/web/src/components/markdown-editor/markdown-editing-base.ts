@@ -115,7 +115,7 @@ export function followCaret(
  * previous caret, or `focus()` snap the new one away.
  */
 function adoptDomSelection(view: EditorView): void {
-  const selection = view.root.getSelection()
+  const selection = view.contentDOM.ownerDocument.getSelection()
   const { anchorNode, focusNode } = selection ?? {}
   if (!selection || !anchorNode || !focusNode) return
   if (!view.contentDOM.contains(anchorNode) || !view.contentDOM.contains(focusNode)) return

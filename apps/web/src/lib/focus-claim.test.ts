@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mayAutofocus, noteFocusPlaced, resetFocusClaim } from './focus-claim.js'
+import { mayAutofocus, noteFocusPlaced } from './focus-claim.js'
 
-afterEach(resetFocusClaim)
+afterEach(() => noteFocusPlaced(Number.NEGATIVE_INFINITY))
 
 describe('mayAutofocus', () => {
   it('allows a claim when nothing the user placed focus on is recent', () => {

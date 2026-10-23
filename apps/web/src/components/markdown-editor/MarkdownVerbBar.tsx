@@ -1,10 +1,5 @@
 import type { StateCommand } from '@codemirror/state'
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  useEffect,
-  useState,
-} from 'react'
+import { type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import {
@@ -15,6 +10,7 @@ import {
   VERB_BAR_ORDER,
   verb,
 } from './editor-verbs.js'
+import { useRovingStop } from './use-roving-stop.js'
 import { DESKTOP_BAR_METRICS, layoutVerbBar } from './verb-bar-layout.js'
 import { VERB_ICONS } from './verb-icons.js'
 
@@ -48,6 +44,21 @@ function useMeasuredWidth(): [(node: HTMLDivElement | null) => void, number] {
   // `setNode` is a stable setState function, so React attaches this ref once
   // rather than on every render.
   return [setNode, width]
+}
+
+function pressVerb(
+  id: MarkdownVerbId,
+  run: (command: StateCommand) => void,
+  openLinkPicker: (() => boolean) | undefined,
+): void {
+  const spec = verb(id)
+  if (spec.action.kind === 'levels') {
+    run(cycleHeadingLevel)
+    return
+  }
+  if (spec.action.kind === 'interactive' && openLinkPicker?.() === true) return
+  const command = selfContainedCommand(spec)
+  if (command !== null) run(command)
 }
 
 export interface MarkdownVerbBarProps {
@@ -90,36 +101,9 @@ export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerb
   // editor's selection, and a focused button would take it away first.
   const keepCaret = (event: ReactMouseEvent) => event.preventDefault()
 
-  // One Tab stop for the whole row: the sixteen buttons would otherwise be
-  // sixteen Tabs between the title and the editor. The stop is the button
-  // last focused, so Shift+Tab back into the bar lands where the reader was.
-  const [stopId, setStopId] = useState<MarkdownVerbId | null>(null)
-  const stop = stopId !== null && visible.includes(stopId) ? stopId : visible[0]
-  const moveWithin = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const buttons = Array.from(event.currentTarget.querySelectorAll('button'))
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (at < 0) return
-    const target = {
-      ArrowRight: (at + 1) % buttons.length,
-      ArrowLeft: (at - 1 + buttons.length) % buttons.length,
-      Home: 0,
-      End: buttons.length - 1,
-    }[event.key]
-    if (target === undefined) return
-    event.preventDefault()
-    buttons[target]?.focus()
-  }
-
-  const press = (id: MarkdownVerbId) => {
-    const spec = verb(id)
-    if (spec.action.kind === 'levels') {
-      run(cycleHeadingLevel)
-      return
-    }
-    if (spec.action.kind === 'interactive' && openLinkPicker?.() === true) return
-    const command = selfContainedCommand(spec)
-    if (command !== null) run(command)
-  }
+  // One Tab stop for the whole row: sixteen buttons would otherwise be
+  // sixteen Tabs between the title and the editor.
+  const { stop, onFocusItem, onKeyDown } = useRovingStop(visible)
 
   return (
     <div
@@ -128,7 +112,7 @@ export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerb
       role="toolbar"
       aria-label="Formatting"
       className={cn('flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden', className)}
-      onKeyDown={moveWithin}
+      onKeyDown={onKeyDown}
     >
       {visible.map((id, index) => {
         const spec = verb(id)
@@ -144,9 +128,9 @@ export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerb
                   type="button"
                   aria-label={spec.label}
                   tabIndex={id === stop ? 0 : -1}
-                  onFocus={() => setStopId(id)}
+                  onFocus={() => onFocusItem(id)}
                   onMouseDown={keepCaret}
-                  onClick={() => press(id)}
+                  onClick={() => pressVerb(id, run, openLinkPicker)}
                   className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <span aria-hidden="true" className="[&>svg]:size-4">

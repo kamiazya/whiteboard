@@ -100,7 +100,6 @@ export function DocumentProperties({
           size={Math.min(Math.max((draftTitle ?? title).length + 2, 14), 44)}
           onChange={(event) => {
             if (onTitleChange === undefined) return
-            noteFocusPlaced()
             setDraftTitle(event.target.value)
             typedRef.current = event.target.value
             commit(event.target.value)
@@ -110,7 +109,6 @@ export function DocumentProperties({
           aria-invalid={refusal === null ? undefined : true}
           aria-describedby={refusal === null ? undefined : `${suggestionsId}-refusal`}
           onFocus={() => {
-            noteFocusPlaced()
             editBaselineRef.current = title
           }}
           // stopPropagation is belt-and-braces: the editor binds its shortcuts
@@ -215,6 +213,7 @@ function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange'])
   const latestRef = useRef(0)
   const commit = (next: string) => {
     if (onTitleChange === undefined) return
+    noteFocusPlaced()
     const ticket = ++latestRef.current
     void onTitleChange(next).then((answer) => {
       if (ticket === latestRef.current) setRefusal(answer)

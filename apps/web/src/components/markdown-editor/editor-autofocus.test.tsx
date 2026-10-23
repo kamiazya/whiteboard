@@ -1,11 +1,11 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { noteFocusPlaced, resetFocusClaim } from '../../lib/focus-claim.js'
+import { noteFocusPlaced } from '../../lib/focus-claim.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {
   cleanup()
-  resetFocusClaim()
+  noteFocusPlaced(Number.NEGATIVE_INFINITY)
 })
 
 const mount = (value: string) =>

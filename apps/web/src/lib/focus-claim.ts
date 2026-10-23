@@ -25,7 +25,3 @@ export function noteFocusPlaced(now: number = Date.now()): void {
 export function mayAutofocus(now: number = Date.now()): boolean {
   return lastPlacedAt === null || now - lastPlacedAt >= PLACEMENT_WINDOW_MS
 }
-
-export function resetFocusClaim(): void {
-  lastPlacedAt = null
-}

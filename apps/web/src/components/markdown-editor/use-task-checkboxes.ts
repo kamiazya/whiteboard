@@ -12,6 +12,52 @@ import { taskItemText, taskLineNumbers } from '../../lib/task-toggle.js'
 
 const CHECKBOX = '[role="checkbox"]'
 
+/** Makes the drawn boxes focusable and names each from its source item. */
+function prepareBoxes(host: HTMLElement | null, source: string): Element[] {
+  const boxes = Array.from(host?.querySelectorAll(CHECKBOX) ?? [])
+  const lines = taskLineNumbers(source)
+  boxes.forEach((box, index) => {
+    box.setAttribute('tabindex', '0')
+    // A rect has no text of its own: its words sit in a sibling <text>.
+    const line = lines[index]
+    if (boxes.length === lines.length && line !== undefined) {
+      box.setAttribute('aria-label', taskItemText(source, line))
+    }
+  })
+  return boxes
+}
+
+/** The drawn box under `target` and the source line behind it, if they agree. */
+function locateBox(
+  host: HTMLElement | null,
+  source: string,
+  target: EventTarget | null,
+): { index: number; line: number } | null {
+  const box = target instanceof Element ? target.closest(CHECKBOX) : null
+  if (host === null || box === null) return null
+  const drawn = Array.from(host.querySelectorAll(CHECKBOX))
+  const lines = taskLineNumbers(source)
+  const index = drawn.indexOf(box)
+  const line = lines[index]
+  return drawn.length === lines.length && line !== undefined ? { index, line } : null
+}
+
+/**
+ * Puts focus back on the box that was toggled. Answers what to announce once
+ * the repaint carrying the new state has arrived, and null until then.
+ */
+function settleToggle(
+  boxes: readonly Element[],
+  waiting: { index: number; keyed: KeyedSvgRender },
+  keyed: KeyedSvgRender,
+): string | null {
+  const box = boxes[waiting.index]
+  if (box instanceof SVGElement && document.activeElement !== box) box.focus()
+  if (keyed === waiting.keyed || box === undefined) return null
+  const done = box.getAttribute('aria-checked') === 'true'
+  return `${box.getAttribute('aria-label') ?? 'Task'}: ${done ? 'checked' : 'not checked'}`
+}
+
 /**
  * Makes the task checkboxes the preview drew into `hostRef` operable: a click
  * or Enter/Space on one reports the source line of its item.
@@ -40,15 +86,10 @@ export function useTaskCheckboxes(
   const [announcement, setAnnouncement] = useState('')
   const toggleFrom = useCallback(
     (target: EventTarget | null): boolean => {
-      const host = hostRef.current
-      const box = target instanceof Element ? target.closest(CHECKBOX) : null
-      if (host === null || box === null || onToggleTask === undefined) return false
-      const drawn = Array.from(host.querySelectorAll(CHECKBOX))
-      const lines = taskLineNumbers(source)
-      const line = lines[drawn.indexOf(box)]
-      if (drawn.length !== lines.length || line === undefined) return false
-      pending.current = { index: drawn.indexOf(box), keyed }
-      onToggleTask(line)
+      const hit = onToggleTask && locateBox(hostRef.current, source, target)
+      if (!hit) return false
+      pending.current = { index: hit.index, keyed }
+      onToggleTask(hit.line)
       return true
     },
     [keyed, onToggleTask, source],
@@ -57,40 +98,24 @@ export function useTaskCheckboxes(
   // so the boxes it just painted are the ones made focusable.
   useEffect(() => {
     if (onToggleTask === undefined) return
-    const boxes = Array.from(hostRef.current?.querySelectorAll(CHECKBOX) ?? [])
-    const lines = taskLineNumbers(source)
-    boxes.forEach((box, index) => {
-      box.setAttribute('tabindex', '0')
-      // A rect has no text of its own: its words sit in a sibling <text>.
-      const line = lines[index]
-      if (boxes.length === lines.length && line !== undefined) {
-        box.setAttribute('aria-label', taskItemText(source, line))
-      }
-    })
-    const waiting = pending.current
-    if (waiting === null) return
-    const box = boxes[waiting.index]
-    if (box instanceof SVGElement && document.activeElement !== box) box.focus()
-    if (keyed === waiting.keyed || box === undefined) return
+    const boxes = prepareBoxes(hostRef.current, source)
+    const said = pending.current === null ? null : settleToggle(boxes, pending.current, keyed)
+    if (said === null) return
     pending.current = null
-    const done = box.getAttribute('aria-checked') === 'true'
-    setAnnouncement(
-      `${box.getAttribute('aria-label') ?? 'Task'}: ${done ? 'checked' : 'not checked'}`,
-    )
+    setAnnouncement(said)
   }, [keyed, onToggleTask, source])
-  if (onToggleTask === undefined) return { hostRef, announcement, handlers: {} }
+  return { hostRef, announcement, handlers: onToggleTask ? activationHandlers(toggleFrom) : {} }
+}
+
+function activationHandlers(toggleFrom: (target: EventTarget | null) => boolean) {
   return {
-    hostRef,
-    announcement,
-    handlers: {
-      onClick: (event) => {
-        toggleFrom(event.target)
-      },
-      onKeyDown: (event) => {
-        if ((event.key === 'Enter' || event.key === ' ') && toggleFrom(event.target)) {
-          event.preventDefault()
-        }
-      },
+    onClick: (event: MouseEvent<HTMLDivElement>) => {
+      toggleFrom(event.target)
+    },
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+      if ((event.key === 'Enter' || event.key === ' ') && toggleFrom(event.target)) {
+        event.preventDefault()
+      }
     },
   }
 }
