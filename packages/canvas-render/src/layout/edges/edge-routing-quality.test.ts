@@ -14,6 +14,7 @@
 // it, and only the side-choice penalties upstream ever priced it.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import {
   clusteredLayout,
@@ -34,6 +35,7 @@ import {
   touches,
   unhoppedCrossings,
 } from '../../test-utils/routing-metrics.js'
+import { computeEdgeJumps } from './edge-jumps.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
@@ -48,12 +50,20 @@ type Violation = { edge: string; node: string; ink: number; kind: ViolationKind 
  */
 type ViolationKind = 'own-endpoint' | 'foreign' | 'degenerate'
 
-/**
- * `EDGE_JUMP_RADIUS_PX + 1`: the straight run a hop needs on each side of a
- * crossing. Restated rather than imported so the oracle cannot move with the
- * router it judges.
- */
-const HOP_CLEARANCE_PX = 6
+/** Every edge routed as the layout would route it, anchors assigned together. */
+function routeAll(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[]) {
+  const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+  return edges.map((edge) => routeEdge(nodes, edge, 'orthogonal', anchors.get(edge.id)))
+}
+
+/** Crossings of these routed edges that line jumps leave undrawn. */
+function undrawnHops(routed: readonly ResolvedEdgeNode[]): number {
+  const jumps = computeEdgeJumps(routed)
+  return unhoppedCrossings(
+    routed.map((r) => r.path),
+    routed.map((r) => (jumps.get(r.id) ?? []).map((j) => ({ x: j.x, y: j.y }))),
+  )
+}
 
 const rectOf = (n: SpatialNode): MetricRect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
@@ -143,7 +153,8 @@ describe('routing quality', () => {
  * - `touches` and `unhoppedCrossings` are DEBT too: two edges meeting at a
  *   corner draw a plus sign that neither a crossing count nor a hop can
  *   see, and a crossing too near a segment end draws no hop even when line
- *   jumps are on.
+ *   jumps are on. Read from the hops `computeEdgeJumps` actually emits, against
+ *   crossings found between straight runs rather than between waypoints.
  * - `borderInk`, `bends`, `crossings` and `length` are PRICE. They have no
  *   target; they are here so a change that buys less tunnelling with a
  *   worse-looking drawing cannot do it silently. A fix that halves interior
@@ -178,13 +189,11 @@ describe('routing quality across the synthetic corpus', () => {
         violations[v.kind]++
         interior += v.ink
       }
-      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
-      const paths = testCase.edges.map(
-        (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
-      )
+      const routed = routeAll(testCase.nodes, testCase.edges)
+      const paths = routed.map((r) => r.path)
       crossingCount += crossings(paths)
       touchCount += touches(paths)
-      unhopped += unhoppedCrossings(paths, HOP_CLEARANCE_PX)
+      unhopped += undrawnHops(routed)
       for (const path of paths) {
         bendCount += bends(path)
         length += pathLength(path)
@@ -215,7 +224,7 @@ describe('routing quality across the synthetic corpus', () => {
       bends: 8046,
       crossings: 494,
       touches: 36,
-      unhoppedCrossings: 20,
+      unhoppedCrossings: 54,
       length: 1338795,
       shortArrowRunway: 136,
     })
@@ -291,10 +300,8 @@ describe('routing quality past the side-choice optimizer gate', () => {
  */
 describe('routing quality on the service-tier board', () => {
   const board = designerBoard()
-  const anchors = assignEdgeAnchors(board.nodes, board.edges, 'orthogonal')
-  const paths = board.edges.map(
-    (edge) => routeEdge(board.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
-  )
+  const routed = routeAll(board.nodes, board.edges)
+  const paths = routed.map((r) => r.path)
 
   it('reports its debt', () => {
     const throughUnrelated = new Set(
@@ -305,7 +312,7 @@ describe('routing quality on the service-tier board', () => {
     expect({
       edgesThroughUnrelatedNode: throughUnrelated.size,
       touches: touches(paths),
-      unhoppedCrossings: unhoppedCrossings(paths, HOP_CLEARANCE_PX),
+      unhoppedCrossings: undrawnHops(routed),
       crossings: crossings(paths),
     }).toEqual({
       // 0/1/0/0 -> 0/0/0/1 when two corners on one point were priced as the
@@ -339,12 +346,10 @@ describe('routing quality across lattice boards', () => {
           .filter((v) => v.kind === 'foreign')
           .map((v) => v.edge),
       ).size
-      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
-      const paths = testCase.edges.map(
-        (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
-      )
+      const routed = routeAll(testCase.nodes, testCase.edges)
+      const paths = routed.map((r) => r.path)
       touchCount += touches(paths)
-      unhopped += unhoppedCrossings(paths, HOP_CLEARANCE_PX)
+      unhopped += undrawnHops(routed)
       crossingCount += crossings(paths)
       for (const path of paths) {
         bendCount += bends(path)
@@ -365,7 +370,7 @@ describe('routing quality across lattice boards', () => {
       // are crossings that land on a collinear waypoint of one path.
       edgesThroughUnrelatedNode: 0,
       touches: 94,
-      unhoppedCrossings: 1,
+      unhoppedCrossings: 96,
       crossings: 323,
       bends: 3286,
       length: 1488498,

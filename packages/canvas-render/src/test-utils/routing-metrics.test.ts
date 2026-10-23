@@ -318,29 +318,50 @@ describe('unhoppedCrossings', () => {
     { x: 0, y: 50 },
     { x: 100, y: 50 },
   ]
-  const vertical = (x: number) => [
-    { x, y: 0 },
-    { x, y: 100 },
+  const vertical = [
+    { x: 50, y: 0 },
+    { x: 50, y: 100 },
   ]
 
-  it('counts a crossing mid-segment as hoppable', () => {
-    expect(unhoppedCrossings([horizontal, vertical(50)], 6)).toBe(0)
+  it('counts a crossing nobody hops', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], []])).toBe(1)
   })
 
-  it("counts a crossing too near an end of the later path's segment", () => {
-    const nearEnd = [
+  it('counts nothing for a crossing either path hops', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], [{ x: 50, y: 50 }]])).toBe(0)
+    expect(unhoppedCrossings([horizontal, vertical], [[{ x: 50, y: 50 }], []])).toBe(0)
+  })
+
+  it('does not take a hop elsewhere on the path for this crossing', () => {
+    expect(unhoppedCrossings([horizontal, vertical], [[], [{ x: 50, y: 80 }]])).toBe(1)
+  })
+
+  it('counts a crossing that lands on a waypoint of a straight run', () => {
+    const split = [
       { x: 50, y: 0 },
-      { x: 50, y: 52 },
+      { x: 50, y: 50 },
+      { x: 50, y: 100 },
     ]
-    expect(unhoppedCrossings([horizontal, nearEnd], 6)).toBe(1)
+    expect(unhoppedCrossings([horizontal, split], [[], []])).toBe(1)
   })
 
-  it('judges the later path, not the earlier', () => {
-    const shortEarlier = [
-      { x: 0, y: 50 },
-      { x: 52, y: 50 },
-    ]
-    expect(unhoppedCrossings([shortEarlier, vertical(50)], 6)).toBe(0)
-    expect(unhoppedCrossings([vertical(50), shortEarlier], 6)).toBe(1)
+  it('leaves two corners on one point to touches', () => {
+    expect(
+      unhoppedCrossings(
+        [
+          [
+            { x: 0, y: 50 },
+            { x: 50, y: 50 },
+            { x: 50, y: 0 },
+          ],
+          [
+            { x: 100, y: 50 },
+            { x: 50, y: 50 },
+            { x: 50, y: 100 },
+          ],
+        ],
+        [[], []],
+      ),
+    ).toBe(0)
   })
 })

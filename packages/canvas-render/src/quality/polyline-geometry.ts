@@ -130,18 +130,35 @@ export function crossings(paths: readonly (readonly Point[])[]): number {
   return count
 }
 
+/** The path with every point on a straight run between its neighbours dropped. */
+function runsOf(path: readonly Point[]): Point[] {
+  return path.filter((point, i) => {
+    const prev = path[i - 1]
+    const next = path[i + 1]
+    if (prev === undefined || next === undefined) return true
+    const turn = (point.x - prev.x) * (next.y - point.y) - (point.y - prev.y) * (next.x - point.x)
+    const ahead = (point.x - prev.x) * (next.x - point.x) + (point.y - prev.y) * (next.y - point.y)
+    return turn !== 0 || ahead <= 0
+  })
+}
+
 /**
- * Proper crossings that draw no hop under line jumps: the crossing sits
- * closer than `clearance` to an end of the segment that would have to jump
- * (the LATER path's — the one painted on top). The arc needs that much
- * straight run on both sides to land back on its line.
+ * Crossings between two paths' straight RUNS that draw no hop: a waypoint on a
+ * straight run is bookkeeping, not a corner, so a crossing that lands on one
+ * is still a crossing. `hops[k]` are the points where path `k` was drawn
+ * hopping; a crossing is hopped when either path hops within half a pixel of
+ * it (the arc may sit on whichever line has room for it).
  */
-export function unhoppedCrossings(paths: readonly (readonly Point[])[], clearance: number): number {
+export function unhoppedCrossings(
+  paths: readonly (readonly Point[])[],
+  hops: readonly (readonly Point[])[],
+): number {
   let count = 0
-  for (let i = 0; i < paths.length; i++) {
-    for (let j = i + 1; j < paths.length; j++) {
-      const p = paths[i] as readonly Point[]
-      const q = paths[j] as readonly Point[]
+  const runs = paths.map(runsOf)
+  for (let i = 0; i < runs.length; i++) {
+    for (let j = i + 1; j < runs.length; j++) {
+      const p = runs[i] as readonly Point[]
+      const q = runs[j] as readonly Point[]
       if (boundsApart(p, q)) continue
       for (let a = 1; a < p.length; a++) {
         for (let b = 1; b < q.length; b++) {
@@ -151,9 +168,10 @@ export function unhoppedCrossings(paths: readonly (readonly Point[])[], clearanc
           const b2 = q[b] as Point
           if (!properlyCross(a1, a2, b1, b2)) continue
           const denom = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x)
-          const u = ((b1.x - a1.x) * (a2.y - a1.y) - (b1.y - a1.y) * (a2.x - a1.x)) / denom
-          const length = segmentLength(b1, b2)
-          if (u * length < clearance || (1 - u) * length < clearance) count++
+          const t = ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / denom
+          const at = { x: a1.x + t * (a2.x - a1.x), y: a1.y + t * (a2.y - a1.y) }
+          const near = (h: Point) => Math.hypot(h.x - at.x, h.y - at.y) <= 0.5
+          if (!(hops[i] ?? []).some(near) && !(hops[j] ?? []).some(near)) count++
         }
       }
     }
