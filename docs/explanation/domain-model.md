@@ -185,7 +185,7 @@ addenda of
   trash, with its content as it stood before the update and the documents
   below it carried along, before it keeps the update — and if that content
   cannot be stored, the update is refused and nothing of it is kept. The trash
-  section appears only when it holds something. **Delete permanently** on a
+  section appears only when it holds something, and a delete shows a short "Deleted <name> — Undo" line that restores it. **Delete permanently** on a
   trash row is the one step with no way back: after a confirmation that names the
   document by the name it had (its path if it had none), it removes
   the row, the evacuated content and the document's saved versions, so the

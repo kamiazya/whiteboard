@@ -21,7 +21,7 @@ export function TrashRowItem({
   onPurgeSettled,
 }: Readonly<TrashRowItemProps>) {
   return (
-    <li className="flex items-center justify-between gap-2">
+    <li className="flex items-center justify-between gap-2 pointer-coarse:min-h-11 pointer-coarse:gap-3">
       <span className="min-w-0 truncate" title={row.path}>
         {documentLabel(row, 'path')}
         {row.name !== undefined && (
@@ -35,7 +35,7 @@ export function TrashRowItem({
         type="button"
         disabled={busy}
         onClick={onRestore}
-        className="text-muted-foreground hover:text-foreground shrink-0 rounded border px-2 py-0.5 text-xs"
+        className="text-muted-foreground hover:text-foreground shrink-0 rounded border px-2 py-0.5 text-xs pointer-coarse:min-h-11 pointer-coarse:px-3"
       >
         Restore
       </button>
