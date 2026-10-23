@@ -35,6 +35,7 @@ pinch zooms in every tool.
 | `Shift` + click | Add or remove a node from the selection |
 | `Tab` | Select the next node in reading order; with nothing selected, the first |
 | `Shift + Tab` | Select the previous node in reading order |
+| `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, or a frame's label (a frame label is one line: `Enter` saves it) |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
@@ -57,11 +58,16 @@ selected makes the next `Tab` the browser's, which is the way on to the bottom d
 dock. Locked nodes are skipped, since they cannot be selected.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys
-still nudge. Together with `Enter` and the connect handle this is enough to
-connect two existing nodes using only the keyboard: while a connect is armed,
-`Tab` from the canvas moves to the first box it could attach to and on between them, `Esc` cancels, each announced by its text
-(or its kind and a short id when it has none) and outlined while focused, and
-`Enter` attaches.
+still nudge.
+
+**Connecting two nodes without a pointer.** Select a node and press `C`: the
+connect starts from it and the canvas announces "Connecting from ...". The arrow
+keys then choose the target in reading order (`Right`/`Down` forward,
+`Left`/`Up` back), each outlined and announced as "Connect to ...", with its
+text, or its kind and a short id when it has none. `Enter` makes the connection
+and announces it, `Esc` cancels. `Tab` from the canvas still reaches the same
+targets one by one. With nothing selected, `C` switches to the Connect tool as
+before.
 
 **The menu from the keyboard.** `Shift + F10` (or the `Menu` key) opens the menu
 for what is selected, a node, a set of nodes, an edge or a group, and puts focus on

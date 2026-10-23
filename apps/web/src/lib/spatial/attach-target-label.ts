@@ -10,15 +10,18 @@ export function nodeNoun(node: SpatialNode): string {
 }
 
 /**
- * What an assistive-tech user hears for a box a connect could land on: the
- * node's own words when it has any, otherwise its kind and a short id so two
- * unnamed boxes stay distinguishable.
+ * What an assistive-tech user hears a box called while choosing it: the
+ * node's own words, quoted, when it has any, otherwise its kind and a short
+ * id so two unnamed boxes stay distinguishable.
  */
-export function attachTargetLabel(node: SpatialNode): string {
+export function attachTargetName(node: SpatialNode): string {
   const named = (nodeText(node) ?? frameLabel(node) ?? '').trim().split('\n')[0]?.trim() ?? ''
-  if (named === '') {
-    return `Attach to ${nodeNoun(node)} ${node.id.slice(0, SHORT_ID_CHARS)}`
-  }
+  if (named === '') return `${nodeNoun(node)} ${node.id.slice(0, SHORT_ID_CHARS)}`
   const clipped = named.length > MAX_NAME_CHARS ? `${named.slice(0, MAX_NAME_CHARS)}…` : named
-  return `Attach to '${clipped}'`
+  return `'${clipped}'`
+}
+
+/** The accessible name of a box a connect or a re-attach could land on. */
+export function attachTargetLabel(node: SpatialNode): string {
+  return `Attach to ${attachTargetName(node)}`
 }
