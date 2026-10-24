@@ -24,8 +24,9 @@ catalog:
   # model's `arbitraryForSchema` reads its internals, so a zod bump is a
   # deliberate change (Dependabot proposes it, the scoreboard and the generator
   # move with it) rather than something `pnpm dedupe` does in passing — which is
-  # how 4.4.3 became 4.6.5 once, failing both.
-  zod: "4.4.3"
+  # how 4.4.3 became 4.6.5 once, failing both. 4.6.7 is the deliberate move:
+  # GHSA-mrhx-c7xc-m3w5 (high) is cleared at 4.6.6 and 4.4.x has no fix.
+  zod: "4.6.7"
   loro-crdt: "1.13.6"
   # shared build/test tooling
   # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
@@ -85,7 +86,13 @@ minimumReleaseAge: 10080
 # `minimum-release-age-exclude.test.ts` fails once that day arrives, because a
 # hole nobody closes is a hole in the supply-chain hardening above. Empty is
 # the healthy state: every locked version has aged past the window.
-minimumReleaseAgeExclude: []
+minimumReleaseAgeExclude:
+  # GHSA-27r3-jxmh-p828 (high) is cleared only in 2.4.0, published 2026-10-22;
+  # the prod audit gates every merge. prune on or after 2026-10-30
+  - body-parser@2.4.0
+  # GHSA-w74x-v6f9-j3xg and three more fast-uri advisories are cleared only in
+  # 3.1.9, published 2026-10-19. prune on or after 2026-10-27
+  - fast-uri@3.1.9
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 
@@ -114,8 +121,10 @@ overrides:
   # (published-overrides.test.ts ledgers every such edge).
   protobufjs@<8.6.6: ^8.6.6
   # GHSA-hrr3-gc8f-f4qj (moderate): cleared at 3.1.8. Reached via ajv <-
-  # @modelcontextprotocol/sdk, inside ajv's own ^3 range.
-  fast-uri@<3.1.8: ^3.1.8
+  # @modelcontextprotocol/sdk, inside ajv's own ^3 range. GHSA-w74x-v6f9-j3xg,
+  # GHSA-wjr9-j795-jxcr (moderate) and GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
+  # (low) moved the floor to 3.1.9, same range.
+  fast-uri@<3.1.9: ^3.1.9
   kysely@<0.28.17: ^0.28.17
   # GHSA-m9gg-hp2v-232j (high): getAuthContext can report an unauthorized
   # certificate as authorized, cleared at 1.14.5. Reached only through the
@@ -150,17 +159,21 @@ overrides:
   # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc + GHSA-j6r3-76f7-8jcv +
   # GHSA-h3mg-xc3c-68pw (moderate x4): all cleared at 10.7.1. Reached via
   # express-rate-limit <- @modelcontextprotocol/sdk; one entry covers every
-  # earlier ip-address advisory too.
+  # earlier ip-address advisory too. GHSA-rxp7-6hxx-x8q5 (moderate) moved the
+  # floor to 10.7.4, same path.
   # The locked express-rate-limit pins 10.1.0 exactly, so this one is
   # cross-range; a fresh npm resolution picks a later express-rate-limit
   # that asks for ^10.2.0 and lands on a fixed version without it.
-  ip-address@<10.7.1: ^10.7.1
+  ip-address@<10.7.4: ^10.7.4
   # GHSA-2883-xcg3-v3hh (high): unbounded CPU on empty merge sources,
   # cleared at 4.3.2. Reaches the published runtime via
   # mcp-server <- cosmiconfig, so this is a real path and not only the SBOM
   # tooling's.
   js-yaml@>=4.0.0 <4.3.2: ^4.3.2
-  body-parser@<2.3.0: ^2.3.0
+  # GHSA-27r3-jxmh-p828 (high): trailing bytes after a compressed body is a
+  # denial of service, cleared at 2.4.0. Reached via express <-
+  # @modelcontextprotocol/sdk, inside express's own ^2 range.
+  body-parser@<2.4.0: ^2.4.0
   mermaid@<11.15.0: ^11.16.0
   # GHSA-p98j-92pf-mc4p + GHSA-6688-9rhm-gjv2 (low): cleared at 3.4.16.
   # Reached via apps/web <- mermaid, inside mermaid's own ^3 range.
