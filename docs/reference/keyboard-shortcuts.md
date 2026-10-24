@@ -269,9 +269,11 @@ Group from the dock, and closing a dialog or the context menu with `Esc`.
 Opening a document, returning to the list or opening Settings moves keyboard
 focus to the page's heading and has a screen reader say where you are
 ("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
-titled the same way ("Roadmap · Whiteboard"). A new, empty note is the
-exception for focus: the editor takes it, so you can type at once, and the
-announcement still plays.
+titled the same way ("Roadmap · Whiteboard"). An empty document is the
+exception for focus, and the announcement still plays: a new, empty note's
+editor takes it, so you can type at once, and an empty canvas's surface takes
+it, so a shortcut such as `N` works the moment the canvas appears — straight
+after **Create a canvas**, with no click first.
 
 ## Searching the document list
 

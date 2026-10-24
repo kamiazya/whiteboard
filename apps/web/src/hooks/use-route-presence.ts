@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type RefObject, useEffect, useRef } from 'react'
 import { documentArrival, pageTitle } from '../lib/document-title.js'
 import { announceRoute, routeAnnouncementSnapshot } from '../lib/route-announcer.js'
@@ -98,12 +98,15 @@ interface DocumentArrivalModel {
     readonly hydrating: boolean
     readonly body: string | null
   }
+  readonly sync: { readonly loaded: boolean; readonly canvas: SpatialCanvas }
 }
 
 /**
  * An open document. A fresh note's editor claims focus itself and declines
  * when anything else already holds it, so the heading stands aside for exactly
- * that case. Returns the heading's ref.
+ * that case. A blank canvas is the same case for the canvas: its surface takes
+ * the keyboard from the heading, so the first key after creating one (N for a
+ * note) acts on the canvas. Returns the heading's ref.
  */
 export function useDocumentRoutePresence(
   model: DocumentArrivalModel,
@@ -118,5 +121,28 @@ export function useDocumentRoutePresence(
     headingRef,
     claimsFocus: !(kind === 'markdown' && autoFocus === true && (hydrating || body === '')),
   })
+  const { loaded, canvas } = model.sync
+  const blank = kind === 'spatial' && loaded && canvas.nodes.length === 0 && !canvas.lines?.length
+  useBlankCanvasTakesFocus(model.scopeKey, blank, headingRef)
   return headingRef
+}
+
+/**
+ * Once per arrival, and only from the heading or from nowhere: a canvas
+ * emptied later, or a person who has already moved on, keeps its focus.
+ */
+function useBlankCanvasTakesFocus(
+  routeKey: string | null,
+  blank: boolean,
+  headingRef: RefObject<HTMLElement | null>,
+): void {
+  const handled = useRef<string | null>(null)
+  useEffect(() => {
+    if (routeKey === null || handled.current === routeKey || !blank) return
+    handled.current = routeKey
+    const holder = document.activeElement
+    if (holder !== null && holder !== document.body && holder !== headingRef.current) return
+    // The page has one main, and one canvas surface in it.
+    document.querySelector<HTMLElement>('main [role="application"]')?.focus({ preventScroll: true })
+  }, [routeKey, blank, headingRef])
 }
