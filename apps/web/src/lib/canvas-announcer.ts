@@ -4,8 +4,9 @@
  * announcement lives in a store the always-mounted region reads.
  *
  * One canvas is on screen per page, so a single module-level channel is
- * enough; the text clears after a beat so announcing the same words twice in
- * a row is still a change the reader's software sees.
+ * enough; the text clears after a beat, and the same words repeated inside
+ * that beat alternate a trailing no-break space so they still read as a
+ * change to the reader's software.
  */
 const CLEAR_AFTER_MS = 2000
 
@@ -20,7 +21,8 @@ function set(next: string): void {
 
 export function announceOnCanvas(message: string): void {
   clearTimeout(timer)
-  set(message)
+  const repeated = message !== '' && message === text.trim()
+  set(repeated && text === message ? `${message}\u00a0` : message)
   timer = setTimeout(() => set(''), CLEAR_AFTER_MS)
 }
 
