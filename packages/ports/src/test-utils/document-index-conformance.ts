@@ -9,6 +9,7 @@ import {
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '../index.js'
+import { describeDuplicateDocumentName } from './document-index-duplicate-name-conformance.js'
 import { describeRefusedInput } from './document-index-input-conformance.js'
 import { describeRenameHeldBy } from './document-index-rename-held-conformance.js'
 
@@ -420,6 +421,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
 function describeDocumentNaming(withIndex: WithIndex): void {
   describeSetDocumentName(withIndex)
   describeBlankDocumentName(withIndex)
+  describeDuplicateDocumentName(withIndex, WS)
 }
 
 function describeWorkspacesAndInput(makeIndex: MakeIndex, withIndex: WithIndex): void {

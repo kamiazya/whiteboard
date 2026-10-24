@@ -2,6 +2,7 @@ import {
   deriveCopyName,
   deriveCopyPath,
   generateDocumentId,
+  isSiblingDisplayNameTaken,
   isSelfOrDescendant,
   SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'
@@ -30,6 +31,7 @@ import {
   createWorkspaceInputSchema,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
+  DisplayNameTakenError,
   DocumentNotFoundError,
   DocumentPathTakenError,
   duplicateDocumentInputSchema,
@@ -160,6 +162,9 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       throw new DocumentPathTakenError(workspaceId, path)
     }
     refuseNewDocuments(documents.size)
+    if (name !== undefined && isSiblingDisplayNameTaken(documents.values(), { path, name })) {
+      throw new DisplayNameTakenError('document', path, name)
+    }
     const entry: DocumentEntry = {
       documentId: generateDocumentId(),
       path,
@@ -192,6 +197,10 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     const documents = this.#inWorkspace(workspaceId)
     for (const [path, entry] of documents) {
       if (entry.documentId !== documentId) continue
+      const others = [...documents.values()].filter((other) => other.documentId !== documentId)
+      if (name?.trim() && isSiblingDisplayNameTaken(others, { path, name })) {
+        throw new DisplayNameTakenError('document', path, name)
+      }
       const { name: _dropped, ...rest } = entry
       documents.set(path, { ...rest, ...(name?.trim() ? { name } : {}) })
       return

@@ -71,6 +71,8 @@ function describeOffGrammarPaths(withIndex: WithIndex, WS: string): void {
  */
 const OVER_BOUND_NAME = 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
 const AT_BOUND_NAME = 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH)
+// A second name at the bound: two siblings may not show one name.
+const OTHER_AT_BOUND_NAME = 'm'.repeat(DOCUMENT_NAME_MAX_LENGTH)
 
 function describeBoundedDocumentName(withIndex: WithIndex, WS: string): void {
   describe('a document name past the bound', () => {
@@ -125,9 +127,9 @@ function describeDocumentNameAtBound(withIndex: WithIndex, WS: string): void {
         path: 'renamed',
         kind: 'markdown',
       })
-      await index.setDocumentName({ workspaceId: WS, documentId, name: AT_BOUND_NAME })
+      await index.setDocumentName({ workspaceId: WS, documentId, name: OTHER_AT_BOUND_NAME })
       expect((await index.resolveDocumentById({ workspaceId: WS, documentId }))?.name).toBe(
-        AT_BOUND_NAME,
+        OTHER_AT_BOUND_NAME,
       )
     })
   })
