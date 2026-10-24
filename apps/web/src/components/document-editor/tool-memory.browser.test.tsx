@@ -6,7 +6,8 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
 import { SpatialEditorPane } from './SpatialEditorPane.js'
 
-beforeEach(() => sessionStorage.clear())
+// Only this file's own key: session storage is shared by browser files running in parallel.
+beforeEach(() => sessionStorage.removeItem('wb.lastTool:doc'))
 afterEach(cleanup)
 
 function Pane({ initial }: { initial: SpatialCanvas }) {

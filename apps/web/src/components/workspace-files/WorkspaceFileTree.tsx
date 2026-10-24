@@ -1,5 +1,5 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
-import { FileText, Folder, LayoutGrid } from 'lucide-react'
+import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -204,8 +204,9 @@ function FolderRow({
         aria-expanded={expanded}
         onClick={onToggle}
         {...folderProps}
-        className="text-muted-foreground hover:text-foreground data-[dropping]:ring-ring flex min-w-0 data-[dropping]:ring-2 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+        className="text-muted-foreground hover:text-foreground data-[dropping]:ring-ring flex min-w-0 data-[dropping]:ring-2 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm [&_svg:first-child]:transition-transform aria-expanded:[&_svg:first-child]:rotate-90"
       >
+        <ChevronRight aria-hidden className="size-3 shrink-0" />
         <Folder className="size-3.5 shrink-0" />
         <span className="truncate">{name}</span>
       </button>
