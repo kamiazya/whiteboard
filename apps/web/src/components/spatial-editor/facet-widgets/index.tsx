@@ -87,6 +87,12 @@ function edgeSegments(
   return { label: found.label, options: found.control.options, layout: found.control.layout }
 }
 
+/** The panel sits beside the board, so a reader on it hears nothing of the redraw a pick causes. */
+function pickAloud(pick: () => void, announcement: string): void {
+  pick()
+  announceOnCanvas(announcement)
+}
+
 function EdgeSegmentRow({
   registry,
   field,
@@ -126,12 +132,7 @@ function EdgeSegmentRow({
               label={option.label}
               layout={row.layout}
               selected={current === value}
-              onSelect={() => {
-                onPick(value)
-                // The panel sits beside the board, so a reader on it hears
-                // nothing of the redraw a pick causes.
-                announceOnCanvas(`${row.label}: ${option.label}`)
-              }}
+              onSelect={() => pickAloud(() => onPick(value), `${row.label}: ${option.label}`)}
               {...(glyph === undefined ? {} : { glyph })}
             />
           )

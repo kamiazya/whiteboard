@@ -396,8 +396,7 @@ export function MarkdownNodeEditor({
           ...(centerContent
             ? { display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }
             : {}),
-          // Explicit, because the canvas root turns selection OFF and this
-          // inherits from it.
+          // Explicit: the canvas root turns selection OFF and this inherits it.
           userSelect: 'text',
           ...style,
         }}
