@@ -8,6 +8,7 @@
 
 import type {
   linkifyMentionsInputSchema,
+  setTagLibraryInputSchema,
   wbDocumentCreateInputSchema,
 } from '@kamiazya/whiteboard-server-core/contracts'
 import type { z } from 'zod'
@@ -29,3 +30,6 @@ export type LinkifyMentionsV1Request = Omit<
   z.input<typeof linkifyMentionsInputSchema>,
   'workspaceId' | 'documentId'
 >
+
+/** `PUT /api/v1/workspaces/:workspaceId/tag-library` — the workspace comes from the path. */
+export type SetTagLibraryV1Request = Omit<z.input<typeof setTagLibraryInputSchema>, 'workspaceId'>

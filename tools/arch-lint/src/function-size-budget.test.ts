@@ -310,7 +310,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/spatial/clipboard-fragment.ts#remintClipboardFragment': 55,
-  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 112,
+  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 122,
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
@@ -618,7 +618,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.
-  'packages/server-core/src/create-server.ts#createServer': 223,
+  'packages/server-core/src/create-server.ts#createServer': 238,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls

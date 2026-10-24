@@ -46,3 +46,7 @@ export {
   linkifyMentionsInputSchema,
   linkifyMentionsOutputSchema,
 } from './tools/linkify-mentions.schemas.js'
+export {
+  setTagLibraryInputSchema,
+  setTagLibraryOutputSchema,
+} from './tools/tag-library-write.schemas.js'

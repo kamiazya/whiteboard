@@ -40,4 +40,8 @@ export { promoteWorkspaceResponseSchema } from './promotion.js'
 // tolerant of a newer daemon's added fields (see v1-answers.ts).
 export * from './v1-answers.js'
 // The bodies the two /api/v1 writes send, derived from the inputs the routes parse.
-export type { CreateDocumentV1Request, LinkifyMentionsV1Request } from './v1-requests.js'
+export type {
+  CreateDocumentV1Request,
+  LinkifyMentionsV1Request,
+  SetTagLibraryV1Request,
+} from './v1-requests.js'

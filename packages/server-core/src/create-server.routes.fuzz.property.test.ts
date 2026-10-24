@@ -55,6 +55,7 @@ import {
   linkifyMentionsInputSchema,
   linkifyMentionsOutputSchema,
 } from './tools/linkify-mentions.js'
+import { setTagLibraryInputSchema, setTagLibraryOutputSchema } from './tools/tag-library-write.js'
 
 /**
  * A path segment the URL parser leaves alone. `.` and `..` are resolved
@@ -147,7 +148,7 @@ const searchQueryArb = arbitraryForSchema(documentSearchInputSchema, { override 
 
 interface Route {
   readonly name: string
-  readonly method: 'GET' | 'POST' | 'DELETE'
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   /** The pattern Hono registers, so the table is checked against what the app actually serves. */
   readonly pattern: string
   /** The schema the route parses with — one per row, and the row's own generator draws from it. */
@@ -235,6 +236,20 @@ const ROUTES: readonly Route[] = [
       path: `${ws(w)}/document-tags`,
       seeded: w === SEEDED_WORKSPACE_ID,
     })),
+  },
+  {
+    name: 'PUT tag-library',
+    method: 'PUT',
+    pattern: '/api/v1/workspaces/:workspaceId/tag-library',
+    schema: setTagLibraryInputSchema,
+    response: setTagLibraryOutputSchema,
+    request: fc
+      .tuple(workspaceArb, bodyArb(setTagLibraryInputSchema, ['workspaceId']))
+      .map(([w, body]) => ({
+        path: `${ws(w)}/tag-library`,
+        body,
+        seeded: w === SEEDED_WORKSPACE_ID,
+      })),
   },
   {
     name: 'POST documents/:id/linkify-mentions',

@@ -203,6 +203,7 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'okf', method: 'GET', url: daemonUrls.documentOkfApiUrl(WS, 'doc1') },
   ],
   documentTagsApiUrl: [{ label: 'tags', method: 'GET', url: daemonUrls.documentTagsApiUrl(WS) }],
+  tagLibraryApiUrl: [{ label: 'set', method: 'PUT', url: daemonUrls.tagLibraryApiUrl(WS) }],
   searchApiUrl: [
     {
       label: 'search',

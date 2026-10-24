@@ -13,6 +13,7 @@ import {
   searchWorkspaceDocuments,
   setDocumentDisplayName,
   setDocumentPinned,
+  setWorkspaceTagLibrary,
 } from './daemon-api-client.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
@@ -78,6 +79,11 @@ describe('daemon-api-client request URLs', () => {
       'linkifyDocumentMentions',
       (f: typeof fetch) => linkifyDocumentMentions(f, BASE, WS, 'd/1', 'd/2'),
       `${BASE}/api/v1/workspaces/ws%20a/documents/d%2F1/linkify-mentions`,
+    ],
+    [
+      'setWorkspaceTagLibrary',
+      (f: typeof fetch) => setWorkspaceTagLibrary(f, BASE, WS, {}),
+      `${BASE}/api/v1/workspaces/ws%20a/tag-library`,
     ],
     [
       'getDocumentOkfV1',

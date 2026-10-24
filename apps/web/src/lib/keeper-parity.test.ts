@@ -425,13 +425,7 @@ describe('each answer is checked, so none of them can be a word in front of an o
 const FILES_SOURCE_OMISSIONS: Record<
   string,
   { readonly missing: string; readonly followUp: string }
-> = {
-  'writeTagLibrary@daemon': {
-    missing:
-      "colouring a tag from its chip writes the workspace tag library, and the daemon keeper has no web writer for another document's facets yet, so the chip menu offers no colour there",
-    followUp: 'issues/daemon-tag-library-writer',
-  },
-}
+> = {}
 
 const FILES_SOURCE_KEEPERS = {
   daemon: '/src/lib/daemon-files-source.ts',

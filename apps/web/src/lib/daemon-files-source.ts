@@ -15,6 +15,7 @@ import {
   searchWorkspaceDocuments,
   setDocumentDisplayName,
   setDocumentPinned,
+  setWorkspaceTagLibrary,
 } from './daemon-api-client.js'
 import { readDaemonImage } from './daemon-image-read.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
@@ -198,6 +199,16 @@ export function createDaemonFilesSource(
     listTagsInUse: async () => (await tags.read()).inUse,
     readTagLibrary: async () => (await tags.read()).library,
     readStencilLibrary: async () => (await tags.read()).stencils,
+    async writeTagLibrary(library) {
+      try {
+        await setWorkspaceTagLibrary(daemonFetch, daemonBaseUrl, workspaceId, library)
+      } finally {
+        // The library rides with the tag projection, and the write may have
+        // created the library document, which the list then shows.
+        tags.forget()
+        list.forget()
+      }
+    },
     listDocuments: () => list.read(),
 
     createDocument: (path: string, kind: DocumentKind, name?: string) =>
