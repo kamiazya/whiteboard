@@ -201,6 +201,12 @@ addenda of
   or a `wb_workspace_edit` `document.move` op. An agent asking for a
   contested path gets an error pointing at resolution by `documentId` or a
   rename, never a silent suffix.
+- A **folder** is a path part documents hang from, and it can carry a display
+  name apart from that path, as a document does: renaming a folder changes
+  what it reads as, never where anything is. Display names are refused when
+  they would repeat a name a sibling of the same kind already shows, but only
+  when the writer can see the sibling — two names that collide because two
+  replicas merged are both kept, for the same reason a shadowed path is.
 - The workspace record accumulates every edit's history, and the daemon
   periodically **compacts** it: history older than anything still reachable
   is folded into the snapshot. What stays reachable is exactly what your

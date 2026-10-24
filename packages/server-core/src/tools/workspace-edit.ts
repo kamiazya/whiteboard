@@ -3,12 +3,14 @@ import {
   documentIdSchema,
   documentNameSchema,
   documentPathSchema,
+  folderNameSchema,
   markdownInputSchema,
   OPS_PER_CALL_LIMIT_PHRASE,
   OPS_PER_CALL_MAX,
   okfActorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import { hasDocumentFolders } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { resolveWorkspaceFor } from './caller-namespace.js'
@@ -27,6 +29,14 @@ class DocumentMoveNeedsTargetError extends Error {
   constructor() {
     super('a move needs a `path` to move it, a `name` to rename it, or both')
     this.name = 'DocumentMoveNeedsTargetError'
+  }
+}
+
+/** A `folder.rename` against a keeper whose index keeps no folders to name. */
+class FoldersNotNamedError extends Error {
+  constructor() {
+    super('This keeper does not name folders')
+    this.name = 'FoldersNotNamedError'
   }
 }
 
@@ -144,6 +154,13 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
     })
     .strict(),
   z.object({ op: z.literal('document.delete'), documentId: documentIdSchema }).strict(),
+  z
+    .object({
+      op: z.literal('folder.rename'),
+      path: documentPathSchema.describe('The folder; nothing moves.'),
+      name: folderNameSchema.optional().describe('Omit to clear; no `/`.'),
+    })
+    .strict(),
 ])
 
 export const workspaceEditInputSchema = z
@@ -362,6 +379,19 @@ const WORKSPACE_EDIT_HANDLERS: {
     }
   },
 
+  // The index refuses a path no folder stands at and a name a sibling
+  // folder already shows; this op only reaches it.
+  'folder.rename': async (ctx, op) => {
+    const index = ctx.deps.documentIndex
+    if (!hasDocumentFolders(index)) throw new FoldersNotNamedError()
+    await index.setFolderName({
+      workspaceId: ctx.workspaceId,
+      path: op.path,
+      ...(op.name === undefined ? {} : { name: op.name }),
+    })
+    return { result: { op: op.op, path: op.path } }
+  },
+
   'document.delete': async (ctx, op) => {
     await wbDocumentDelete(ctx.deps, {
       workspaceId: ctx.workspaceId,
@@ -414,7 +444,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
     description:
-      'Create, replace, move (or rename) and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
+      'Create, replace, move (or rename) and delete several documents, and name folders, in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
     inputSchema: workspaceEditInputSchema,
     outputSchema: workspaceEditOutputSchema,
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {

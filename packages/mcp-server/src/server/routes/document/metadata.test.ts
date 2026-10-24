@@ -111,3 +111,28 @@ describe('metadata routes over a workspace record this server cannot read', () =
     await expect(res.json()).resolves.toMatchObject({ error: 'corrupt_stored_data' })
   })
 })
+
+describe('PUT …/documents/:path/name with a name a sibling already shows', () => {
+  beforeEach(async () => {
+    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'week/plan', name: 'Plan' })
+    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'week/other' })
+    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'month/plan' })
+  })
+
+  it('answers 409 display_name_taken and leaves the name as it was', async () => {
+    const app = createDocumentMetadataRouter({ scope: testStoreScope() })
+
+    const res = await put(app, '/api/workspaces/ws1/documents/week/other/name', { name: 'plan' })
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: 'display_name_taken' })
+    const names = await (await app.request('/api/workspaces/ws1/names')).json()
+    expect(Object.values(names.documents)).toEqual(['Plan'])
+  })
+
+  it('lets the same name through in another folder', async () => {
+    const app = createDocumentMetadataRouter({ scope: testStoreScope() })
+    const res = await put(app, '/api/workspaces/ws1/documents/month/plan/name', { name: 'Plan' })
+    expect(res.status).toBe(200)
+  })
+})

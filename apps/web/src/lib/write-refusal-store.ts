@@ -36,6 +36,8 @@ export function dismissWriteRefusal(): void {
 const WHY: Record<SyncWriteRefusalCode, string> = {
   ...KEEPER_LIMIT_REASON,
   document_name_too_long: 'It would give a document a name longer than a name may be.',
+  folder_name_refused:
+    'It would give a folder a name no folder may have: blank, longer than a name may be, or holding a "/".',
   invalid_path:
     'It would put a document or a folder at a path that is too long, or that holds something other than letters, digits and hyphens.',
   container_name_too_long:

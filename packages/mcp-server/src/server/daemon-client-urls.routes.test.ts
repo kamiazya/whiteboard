@@ -132,6 +132,9 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   workspaceNamesApiUrl: [
     { label: 'names', method: 'GET', url: daemonUrls.workspaceNamesApiUrl(WS) },
   ],
+  workspaceFolderNameApiUrl: [
+    { label: 'folder name', method: 'PUT', url: daemonUrls.workspaceFolderNameApiUrl(WS) },
+  ],
   workspaceDocumentsApiUrl: [
     { label: 'list', method: 'GET', url: daemonUrls.workspaceDocumentsApiUrl(WS) },
   ],

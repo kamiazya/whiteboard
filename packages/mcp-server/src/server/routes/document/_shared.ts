@@ -14,6 +14,7 @@ import {
   DocumentMoveIntoSelfError,
   DocumentPathTakenError,
   hasDocumentTrash,
+  isDisplayNameTakenError,
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
   TooManyDocumentsError,
@@ -136,6 +137,15 @@ export const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
   handleDocumentNotFound,
   handleCorruptStoredData,
 ]
+
+/**
+ * A display name a sibling of the same kind already shows: only the caller
+ * can pick another, and the message names the folder it collided in.
+ */
+export const displayNameTaken: ErrorAnswer = (err) =>
+  isDisplayNameTakenError(err)
+    ? { status: 409, body: errorBody('display_name_taken', err.message) }
+    : null
 
 /**
  * A new document or folder past the workspace's ceiling for it, in the code

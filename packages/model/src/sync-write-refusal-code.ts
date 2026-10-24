@@ -27,6 +27,7 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'reserved_map_key',
   'document_kind_changed',
   'document_name_too_long',
+  'folder_name_refused',
   'invalid_path',
   'too_many_documents',
   'too_many_folders',

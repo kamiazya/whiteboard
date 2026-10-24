@@ -477,6 +477,8 @@ const OP_REACH: Record<string, OpReach> = {
   'wb_workspace_edit/document.set': 'answers',
   'wb_workspace_edit/document.move': 'answers',
   'wb_workspace_edit/document.delete': 'answers',
+  'wb_workspace_edit/folder.rename':
+    'refused-only: the seeded index is the row-backed in-memory one, which keeps no folders to name; the tree index answers it in workspace-index and mcp-node',
   'wb_body_edit/body.replace': 'answers',
   'wb_canvas_edit/node.add': 'answers',
   'wb_canvas_edit/node.patch': 'answers',

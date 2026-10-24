@@ -22,6 +22,8 @@ import {
   restoreVersionResponseSchema,
   saveVersionRequestSchema,
   saveVersionResponseSchema,
+  setFolderNameRequestSchema,
+  setFolderNameResponseSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
   storageReportPayloadSchema,
@@ -114,6 +116,11 @@ export const RULES: Record<string, Rule> = {
   'POST /api/workspaces/:workspaceId/documents/*/duplicate': {
     answers: 'json',
     response: duplicateDocumentResponseSchema,
+  },
+  'PUT /api/workspaces/:workspaceId/folders/name': {
+    answers: 'json',
+    body: setFolderNameRequestSchema,
+    response: setFolderNameResponseSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/pin': {
     answers: 'json',
