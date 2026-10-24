@@ -32,6 +32,12 @@ describe('fitSvgToBox', () => {
     expect(out).toContain('<svg width="8" height="8" viewBox="0 0 8 8"/>')
   })
 
+  it('can fill the box from the top-left corner instead of fitting inside it', () => {
+    const out = fitSvgToBox('<svg viewBox="0 0 600 20" width="600"></svg>', 'cover-start')
+    expect(out).toContain('preserveAspectRatio="xMinYMin slice"')
+    expect(out).not.toContain('meet')
+  })
+
   it('replaces an aspect rule the renderer had already written', () => {
     const out = fitSvgToBox('<svg viewBox="0 0 4 4" preserveAspectRatio="none" width="4"></svg>')
     expect(out).toContain('preserveAspectRatio="xMidYMid meet"')

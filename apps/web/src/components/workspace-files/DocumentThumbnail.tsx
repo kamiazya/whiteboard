@@ -54,6 +54,14 @@ function keepLinksInert(event: MouseEvent): void {
   if (event.target instanceof Element && event.target.closest('a') !== null) event.preventDefault()
 }
 
+/** Wider than this, a note's picture is a line of text, not a page. */
+const STRIP_ASPECT = 2.5
+
+function fitFor(document: WorkspaceDocumentEntry, bounds: DocumentRender['bounds']) {
+  const isStrip = bounds.h > 0 && bounds.w / bounds.h > STRIP_ASPECT
+  return document.kind !== 'spatial' && isStrip ? 'cover-start' : 'contain'
+}
+
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
   const [drawn, setDrawn] = useState<DocumentRender | null>(null)
@@ -120,7 +128,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
               their opacities sum to 1.00 across the whole 220ms. */}
           <SceneSvg
             as="span"
-            svg={fitSvgToBox(drawn.svg)}
+            svg={fitSvgToBox(drawn.svg, fitFor(document, drawn.bounds))}
             onClickCapture={keepLinksInert}
             className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
           />
