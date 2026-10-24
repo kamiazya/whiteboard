@@ -65,7 +65,11 @@ interface ZodDef {
 }
 interface ZodInternals {
   readonly def: ZodDef
-  /** `'optional'` when the key may be absent on input: optional, default, prefault, catch. */
+  /**
+   * Set when the key may be absent on input: `'optional'` for optional and
+   * catch, `'defaulted'` for a default (zod 4.6 split the two). Any value
+   * means the key may be left out; only `undefined` means it is required.
+   */
   readonly optin?: string
   /** A lazy schema's resolved inner schema, cached by zod on first access. */
   readonly innerType?: z.ZodTypeAny
@@ -161,7 +165,7 @@ function stringArbitrary(def: ZodDef, path: string): fc.Arbitrary<string> {
     if (format === 'url') return fc.webUrl()
     const pattern = formats.find((c) => c.pattern !== undefined)?.pattern
     // fast-check builds a generator from the regex itself; a format whose
-    // pattern it cannot express (email's lookaheads) or that carries none
+    // pattern it cannot express (a duration's lookaheads) or that carries none
     // is refused with the format's name rather than approximated. A second
     // format on the same string is honoured by the schema filter.
     try {
@@ -209,7 +213,7 @@ function canTerminate(schema: z.ZodTypeAny, memo: Map<z.ZodTypeAny, boolean>): b
       break
     case 'object':
       answer = Object.values(def.shape ?? {}).every(
-        (field) => internalsOf(field).optin === 'optional' || canTerminate(field, memo),
+        (field) => internalsOf(field).optin !== undefined || canTerminate(field, memo),
       )
       break
     case 'optional':
@@ -318,7 +322,7 @@ function walkShape(
       const fields: Record<string, fc.Arbitrary<unknown>> = {}
       for (const [name, field] of Object.entries(def.shape ?? {})) {
         const fieldPath = `${path}.${name}`
-        if (internalsOf(field).optin === 'optional') {
+        if (internalsOf(field).optin !== undefined) {
           // A pruned key is always absent; any other optional key is absent
           // half the time. Drawn here rather than through `fc.record`'s
           // `requiredKeys`, which keeps an optional key present four draws

@@ -223,8 +223,8 @@ describe('arbitraryForSchema', () => {
       /"set" at \$\.items\[\]/,
     )
     // A format whose regex fast-check cannot build a generator from (lookaheads).
-    expect(() => arbitraryForSchema(z.object({ to: z.string().email() }))).toThrow(
-      /string format "email" at \$\.to/,
+    expect(() => arbitraryForSchema(z.object({ to: z.string().duration() }))).toThrow(
+      /string format "duration" at \$\.to/,
     )
   })
 
