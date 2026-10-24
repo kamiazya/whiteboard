@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react'
  * picks. A runtime without `matchMedia` (jsdom) answers false, the
  * fine-pointer default.
  */
-export const COMPACT_SURFACE_QUERY = '(pointer: coarse), (max-width: 639px)'
+const COMPACT_SURFACE_QUERY = '(pointer: coarse), (max-width: 639px)'
 
 function subscribe(notify: () => void): () => void {
   if (typeof matchMedia === 'undefined') return () => {}

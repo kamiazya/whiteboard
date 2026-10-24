@@ -226,7 +226,7 @@ export function PanelToolbar({
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
           onKeyDown={focusFirstResult}
-          className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
+          className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
         />
       </div>
       <NewDocumentMenu
@@ -239,37 +239,41 @@ export function PanelToolbar({
         {...(onImportFiles === undefined ? {} : { onImportFiles })}
         onDismiss={outcome.dismissCreateRefusal}
       />
-      <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
-        <legend className="sr-only">Column layout</legend>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="One column"
-              aria-pressed={columns === 'one'}
-              onClick={() => chooseColumns('one')}
-              className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
-            >
-              <List className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>One column</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Two columns"
-              aria-pressed={columns === 'two'}
-              onClick={() => chooseColumns('two')}
-              className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
-            >
-              <Columns2 className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Two columns</TooltipContent>
-        </Tooltip>
-      </fieldset>
+      {/* Absent while searching: the results carry their own list/grid
+        choice, and two pairs side by side answered one question twice. */}
+      {query.trim() === '' && (
+        <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
+          <legend className="sr-only">Column layout</legend>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="One column"
+                aria-pressed={columns === 'one'}
+                onClick={() => chooseColumns('one')}
+                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              >
+                <List className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>One column</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Two columns"
+                aria-pressed={columns === 'two'}
+                onClick={() => chooseColumns('two')}
+                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              >
+                <Columns2 className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Two columns</TooltipContent>
+          </Tooltip>
+        </fieldset>
+      )}
     </div>
   )
 }

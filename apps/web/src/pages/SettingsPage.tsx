@@ -595,7 +595,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
                     type="button"
                     onClick={handleBackToApp}
                     aria-label="Back"
-                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center"
                   >
                     <ChevronLeft className="size-4" />
                   </button>
@@ -648,7 +648,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
                 type="button"
                 onClick={handleBackToApp}
                 aria-label="Back"
-                className="mb-4 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="mb-4 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center"
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -690,7 +690,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
                     replace
                     state={location.state}
                     aria-label="Back to settings"
-                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden pointer-coarse:max-sm:flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center"
                   >
                     <ChevronLeft className="size-4" />
                   </Link>

@@ -1,8 +1,8 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { useCompactSurface } from './use-compact-surface.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
+import { useCompactSurface } from './use-compact-surface.js'
 
 export interface RecentLaneProps {
   /** The listing as loaded. Recorded ids are resolved against it. */

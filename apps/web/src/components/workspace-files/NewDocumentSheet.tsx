@@ -20,6 +20,9 @@ import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
  * address stay out of the way; the document lands in the folder being
  * browsed, and moving it later is one menu entry.
  *
+ * The name field is the first tabbable thing in the sheet, which is what the
+ * dialog focuses on open.
+ *
  * A kind is still confirmed against a word, never an unlabeled glyph (the
  * reason `NewDocumentMenu` gives).
  */
@@ -75,7 +78,7 @@ export function NewDocumentSheet({
               {folder === '' ? 'Added to the workspace root.' : `Added to ${folder}.`}
             </DialogDescription>
           </DialogHeader>
-          <DocumentNameField value={name} path={defaultPath} onChange={setName} autoFocus />
+          <DocumentNameField value={name} path={defaultPath} onChange={setName} />
           {error !== null && error !== undefined && error !== '' && (
             <p role="alert" className="text-destructive text-sm">
               {error}
