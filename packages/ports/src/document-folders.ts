@@ -7,7 +7,7 @@ import type { DocumentIndex, ListDocumentsInput } from './document-index.js'
  * path and name — for the reason every reader is: a name some other writer
  * stored must still list rather than fail the listing.
  */
-export const folderNameEntrySchema = z
+const folderNameEntrySchema = z
   .object({ path: z.string().min(1), name: z.string().min(1) })
   .strict()
 export type FolderNameEntry = z.infer<typeof folderNameEntrySchema>
