@@ -81,6 +81,23 @@ describe('canvas CRUD routes', () => {
     expect(res.status).toBe(409)
   })
 
+  it('POST naming a document as a sibling is already named returns 409 display_name_taken', async () => {
+    const app = makeApp()
+    const create = (path: string, name: string) =>
+      app.request('/api/v1/workspaces/ws-1/documents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path, name, kind: 'markdown', createWorkspace: true }),
+      })
+    expect((await create('week/plan', 'Plan')).status).toBe(201)
+
+    const res = await create('week/other', 'plan')
+
+    expect(res.status).toBe(409)
+    expect(apiErrorReason(await res.json())).toMatch(/already called "plan"/)
+    expect((await create('month/plan', 'Plan')).status).toBe(201)
+  })
+
   // This route shares `wbDocumentCreate`'s semantics, so it accepts a bare
   // body for the same reason the tool does — a caller who sends prose gets a
   // note rather than a parse error about a block they never wrote.

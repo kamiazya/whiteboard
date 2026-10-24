@@ -1,6 +1,7 @@
 import { ReservedKeyWriteError, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
 import {
   DocumentHasDescendantsError,
+  DisplayNameTakenError,
   DocumentPathTakenError,
   isDatabaseBusy,
   isDocumentNotFoundError,
@@ -549,6 +550,9 @@ const REFUSALS: readonly Refusal[] = [
     status: 404,
   },
   refusalOf(DocumentPathTakenError, 'document_path_taken', 409),
+  // A create naming the display name a sibling document already shows; the
+  // message names the folder, and only the caller can pick another name.
+  refusalOf(DisplayNameTakenError, 'display_name_taken', 409),
   // A create into a workspace at its document ceiling, in the code the sync
   // routes answer the same refusal with.
   refusalOf(TooManyDocumentsError, (err: TooManyDocumentsError) => err.code, 413),

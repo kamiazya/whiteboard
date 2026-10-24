@@ -42,6 +42,7 @@ import {
   CausalGapError,
   DocumentKindChangedError,
   DocumentNameTooLongError,
+  FolderNameRefusedError,
   OffGrammarPathError,
   RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
@@ -60,6 +61,8 @@ const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
   RootNoDocumentHoldsError: () => new RootNoDocumentHoldsError(['nameChosen']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
+  FolderNameRefusedError: () =>
+    new FolderNameRefusedError(['week'], 'A folder name cannot be blank.'),
   TooManyDocumentsError: () => new TooManyDocumentsError(2001),
   TooManyFoldersError: () => new TooManyFoldersError(4001),
   CausalGapError: () => new CausalGapError(),

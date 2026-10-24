@@ -11,6 +11,7 @@ import {
   DOCUMENT_PATH_MAX_LENGTH,
   type DocumentKind,
   documentPathSchema,
+  folderNameRefusal,
 } from '@kamiazya/whiteboard-model'
 import type { ContainerID, Frontiers, LoroDoc } from 'loro-crdt'
 import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
@@ -19,6 +20,7 @@ import {
   CausalGapError,
   DocumentKindChangedError,
   DocumentNameTooLongError,
+  FolderNameRefusedError,
   isSyncWriteRefusal,
   OffGrammarPathError,
   RootNoDocumentHoldsError,
@@ -55,6 +57,8 @@ interface Placement {
   }>
   /** Folders have no id, so a folder is known by its path. */
   readonly folders: readonly string[]
+  /** Each named folder node's path and name, one entry per node. */
+  readonly folderNames: ReadonlyArray<{ readonly path: string; readonly name: string }>
   /** The tree ids every listing skips, with their subtrees. */
   readonly unreadable: ReadonlySet<string>
 }
@@ -66,16 +70,19 @@ interface Placement {
 function placementOf(doc: LoroDoc): Placement {
   const documents: Array<Placement['documents'][number]> = []
   const folders: string[] = []
+  const folderNames: Array<Placement['folderNames'][number]> = []
   for (const node of readWorkspaceNodes(doc)) {
-    if (node.type === 'folder') folders.push(node.path)
-    else
+    if (node.type === 'folder') {
+      folders.push(node.path)
+      if (node.name !== undefined) folderNames.push({ path: node.path, name: node.name })
+    } else
       documents.push({
         documentId: node.meta.documentId,
         path: node.path,
         nameLength: node.meta.name?.length ?? 0,
       })
   }
-  return { documents, folders, unreadable: new Set(unreadableWorkspaceNodes(doc)) }
+  return { documents, folders, folderNames, unreadable: new Set(unreadableWorkspaceNodes(doc)) }
 }
 
 /**
@@ -101,7 +108,8 @@ function longestNames(placement: Placement): ReadonlyMap<string, number> {
  * The refusal an update's placement writes earn: a record it grew past
  * `WORKSPACE_MAX_DOCUMENTS` or `WORKSPACE_MAX_FOLDERS`, a node it left
  * unreadable, a document or folder it put at a path the grammar refuses, or
- * a name it grew past the bound. What was already so before the update is
+ * a name it grew past the bound, or a folder name `folderNameRefusal`
+ * refuses. What was already so before the update is
  * not its doing — and deleting documents, moving one off a bad path, or
  * shortening a long name is how it gets repaired — so each is judged against
  * the state before.
@@ -126,6 +134,9 @@ function placementRefusal(
   const longNames = after.documents.filter(
     ({ nameLength }) => nameLength > DOCUMENT_NAME_MAX_LENGTH,
   )
+  const refusedFolderNames = after.folderNames.filter(
+    ({ name }) => folderNameRefusal(name) !== null,
+  )
   const crowded = after.documents.length > WORKSPACE_MAX_DOCUMENTS
   const crowdedFolders = after.folders.length > WORKSPACE_MAX_FOLDERS
   if (
@@ -134,6 +145,7 @@ function placementRefusal(
     offGrammar.length === 0 &&
     offGrammarFolders.length === 0 &&
     longNames.length === 0 &&
+    refusedFolderNames.length === 0 &&
     after.unreadable.size === 0
   )
     return null
@@ -160,6 +172,17 @@ function placementRefusal(
   const earlierNames = longestNames(earlier)
   const grown = longNames.filter((d) => d.nameLength > (earlierNames.get(d.documentId) ?? 0))
   if (grown.length > 0) return new DocumentNameTooLongError(grown.map(({ path }) => path))
+  const earlierFolderNames = new Set(earlier.folderNames.map((f) => placedAt(f.path, f.name)))
+  const newlyRefused = refusedFolderNames.filter(
+    (f) => !earlierFolderNames.has(placedAt(f.path, f.name)),
+  )
+  const [first] = newlyRefused
+  if (first !== undefined) {
+    return new FolderNameRefusedError(
+      newlyRefused.map(({ path }) => path),
+      folderNameRefusal(first.name) ?? '',
+    )
+  }
   return null
 }
 

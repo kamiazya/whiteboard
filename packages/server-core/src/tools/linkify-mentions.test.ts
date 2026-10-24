@@ -96,7 +96,8 @@ describe('POST /linkify-mentions', () => {
     const deps = makeDeps()
     const h = await harness(deps)
     const target = await h.create('target', 'markdown', 'Dup')
-    await h.create('rival', 'markdown', 'Dup')
+    // In another folder: siblings may not share a name.
+    await h.create('other/rival', 'markdown', 'Dup')
     const src = await h.create('src', 'markdown')
     await h.writeBody(src.documentId, 'about Dup here')
     expect((await h.linkify(src.documentId, target.documentId)).body).toEqual({ linked: 1 })

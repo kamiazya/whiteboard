@@ -125,7 +125,9 @@ describe('GET /backlinks', () => {
     // truth is that NO rename can create or kill a link.
     const deps = makeDeps()
     const { create, writeBody } = await seed(deps)
-    const other = await create('gamma', 'spatial', 'Note')
+    // In another folder: siblings may not share a name, and this test is
+    // about a name shared across the workspace.
+    const other = await create('elsewhere/gamma', 'spatial', 'Note')
     const author = await create('alpha', 'markdown', 'Plan')
     await writeBody(author.documentId, 'see [[Plan]]')
     expect((await backlinksOf(deps, author.documentId)).backlinks).toHaveLength(0)

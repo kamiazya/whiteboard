@@ -66,6 +66,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 const EXEMPT: Readonly<Record<string, string>> = {
   CausalGapError:
     'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
+  FolderNameRefusedError:
+    'raised only by the sync update routes judging a folder name in imported Loro bytes; /api/v1 names no folder',
   UnjudgedImportError:
     'a judge that threw rather than answered, which is the keeper failing and not the caller; it reaches /api/v1 only through a trash restore and is answered as the 500 it is',
   WorkspaceNotHeldError:
