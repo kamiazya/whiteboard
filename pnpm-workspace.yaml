@@ -39,7 +39,7 @@ catalog:
   # reached it. That pin is gone — mcp-server builds with tsdown, whose dts
   # plugin has a `tsgo` generator that reads TypeScript 7 directly.
   typescript: "^7.0.2"
-  vite: "^8.2.2"
+  vite: "^8.2.4"
   vitest: "^5.0.0"
   "@vitest/browser-playwright": "^5.0.0"
   # Exact pin, shared by four workspaces: the browser binary a Playwright
