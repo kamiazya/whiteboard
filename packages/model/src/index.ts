@@ -10,6 +10,12 @@ export { compareCodeUnit } from './compare.js'
 // the stable public surface.
 export { deriveCopyName, deriveCopyPath } from './derive-copy.js'
 export { deriveWorkspaceSegment } from './derive-workspace-segment.js'
+export {
+  displayNameKey,
+  folderNameRefusal,
+  folderNameSchema,
+  isDisplayNameTaken,
+} from './display-name.js'
 export * from './document-kind.js'
 export { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
 export {
