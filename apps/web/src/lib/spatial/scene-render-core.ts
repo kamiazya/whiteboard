@@ -206,13 +206,19 @@ function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
  * draws it as an overlay — so an export taken from that string would lose
  * what the screen shows.
  */
+/**
+ * The blank band a saved picture keeps around what it draws, the same on
+ * every side. Without it a frame's stroke sat on the picture's last row.
+ */
+export const EXPORT_MARGIN_PX = 16
+
 export function renderCanvasForExportWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
   background?: string,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   const { scene } = renderCanvasToSvgWith(canvas, options)
-  const bounds = sceneDocumentBounds(scene)
+  const bounds = sceneDocumentBounds(scene, EXPORT_MARGIN_PX)
   return {
     svg: renderSceneToSvg(scene, exportEnvelope(bounds, background)),
     bounds,

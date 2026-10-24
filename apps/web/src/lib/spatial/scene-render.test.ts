@@ -6,6 +6,7 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { renderCanvasForExport, renderCanvasToSvg } from './scene-render.js'
+import { EXPORT_MARGIN_PX } from './scene-render-core.js'
 
 const fakeMeasure = createFixedMeasure({
   advance: (text) => text.length * 6,
@@ -152,8 +153,9 @@ describe('renderCanvasForExport', () => {
     expect(editor.svg).not.toContain('data-wb-legend')
     expect(exported.svg).toContain('data-wb-legend')
     expect(exported.svg).toContain('>health<')
-    expect(exported.bounds.x).toBeLessThan(editor.bounds.x)
-    expect(exported.bounds.w).toBeGreaterThan(editor.bounds.w)
+    // The legend's band is reserved UNDER the drawing, so it adds height, not width.
+    expect(exported.bounds.x).toBe(editor.bounds.x - EXPORT_MARGIN_PX)
+    expect(exported.bounds.h).toBeGreaterThan(editor.bounds.h + EXPORT_MARGIN_PX * 2)
   })
   it('fills the whole document with the paper first when asked, and is otherwise untouched', () => {
     const plain = renderCanvasForExport(tagged, { measure: fakeMeasure })
@@ -214,13 +216,17 @@ describe('renderCanvasForExport', () => {
       renderCanvasToSvg(bare, { measure: fakeMeasure }).svg,
     )
   })
-  it('an untagged board exports the same envelope the editor draws', () => {
+  it("an untagged board exports the editor's envelope with the margin on every side", () => {
     const plain: SpatialCanvas = {
       nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'A' })],
       edges: [],
     }
-    expect(renderCanvasForExport(plain, { measure: fakeMeasure }).bounds).toEqual(
-      renderCanvasToSvg(plain, { measure: fakeMeasure }).bounds,
-    )
+    const editor = renderCanvasToSvg(plain, { measure: fakeMeasure }).bounds
+    expect(renderCanvasForExport(plain, { measure: fakeMeasure }).bounds).toEqual({
+      x: editor.x - EXPORT_MARGIN_PX,
+      y: editor.y - EXPORT_MARGIN_PX,
+      w: editor.w + EXPORT_MARGIN_PX * 2,
+      h: editor.h + EXPORT_MARGIN_PX * 2,
+    })
   })
 })

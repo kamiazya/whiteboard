@@ -7,7 +7,7 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { layoutWithFragments } from '../fragment-requests.js'
 import { renderCanvasForExport } from './scene-render.js'
-import { renderCanvasToSvgWith } from './scene-render-core.js'
+import { renderCanvasForExportWith, renderCanvasToSvgWith } from './scene-render-core.js'
 
 const measure = createFixedMeasure({ advance: (text) => text.length * 6, ascent: 10, descent: 2 })
 
@@ -82,5 +82,22 @@ describe('renderCanvasForExport through layoutWithFragments', () => {
     expect(diagram).toHaveBeenCalledWith('mermaid', 'graph TD; C-->D')
     expect(svg).toContain('math-drawn')
     expect(svg).toContain('diagram-drawn')
+  })
+})
+
+describe('renderCanvasForExportWith', () => {
+  it('leaves the same margin on every side of what it draws', () => {
+    const board: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 40, y: 30, width: 200, height: 80, text: 'Box' })],
+      edges: [],
+    }
+    const { bounds } = renderCanvasForExportWith(board, { measure })
+    const left = 40 - bounds.x
+    const top = 30 - bounds.y
+    const right = bounds.x + bounds.w - 240
+    const bottom = bounds.y + bounds.h - 110
+    expect(Math.min(left, top, right, bottom)).toBeGreaterThanOrEqual(16)
+    expect(right).toBeCloseTo(left)
+    expect(bottom).toBeCloseTo(top)
   })
 })
