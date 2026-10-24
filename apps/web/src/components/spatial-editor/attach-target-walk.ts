@@ -26,7 +26,7 @@ export function stepAttachTarget(
   const targets = Array.from(
     root.querySelectorAll<SVGElement>(`[data-testid^="${ATTACH_TARGET_PREFIX}"]`),
   ).sort((a, b) => (order.get(targetIdOf(a)) ?? 0) - (order.get(targetIdOf(b)) ?? 0))
-  const at = targets.findIndex((t) => t === from)
+  const at = targets.indexOf(from as SVGElement)
   const index =
     at < 0 ? (step > 0 ? 0 : targets.length - 1) : (at + step + targets.length) % targets.length
   const element = targets[index]

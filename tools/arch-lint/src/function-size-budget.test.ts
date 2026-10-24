@@ -82,7 +82,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 334, // +15: the show-resolved-on-canvas toggle beside the filter
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 350, // +15: the show-resolved-on-canvas toggle beside the filter; +16: the focus handoff between a pressed Resolve, its Undo and the conversation row
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -90,7 +90,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // complexity threshold, which is what the split was for. Splitting
   // further would cut a single visual unit in half without a reader gaining
   // anything.
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 132,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 137, // +5: the conversation's subject reaches its Resolve verbs
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 61,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
@@ -206,7 +206,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 112, // +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 116, // +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
@@ -231,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 561,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 602, // +41: C arms a connect from the selection and the arrows walk its targets
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in

@@ -105,7 +105,12 @@ const countOf = (n: number, one: string, many: string) => `${n} ${n === 1 ? one 
  * What the canvas root announces: what it holds, frames and connections
  * apart from notes, and how a keyboard user continues from where they are.
  */
-export function canvasRootLabel(canvas: SpatialCanvas, hasSelection: boolean): string {
+export function canvasRootLabel(
+  canvas: SpatialCanvas,
+  selectedId: string | null,
+  selectedEdgeId: string | null,
+): string {
+  const hasSelection = selectedId !== null || selectedEdgeId !== null
   if (canvas.nodes.length === 0) return 'Canvas, empty'
   const frames = canvas.nodes.filter(isFrame).length
   const parts = [

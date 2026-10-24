@@ -1873,7 +1873,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the same documented tradeoff drawing/whiteboard editors commonly
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
-          aria-label={canvasRootLabel(canvas, selectedId !== null || selectedEdgeId !== null)}
+          aria-label={canvasRootLabel(canvas, selectedId, selectedEdgeId)}
           aria-describedby={emptyHintRef(canvas.nodes.length, emptyHintId)}
           aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
