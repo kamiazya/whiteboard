@@ -7,6 +7,8 @@ import {
   type RenameDocumentPathResponse,
   renameDocumentPathRequestSchema,
   renameWorkspaceRequestSchema,
+  type SetFolderNameResponse,
+  setFolderNameRequestSchema,
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
@@ -20,6 +22,7 @@ import {
   type DocumentIndex,
   DocumentPathContestedError,
   hasDocumentDuplicates,
+  hasDocumentFolders,
   isDatabaseBusy,
   isWorkspaceNotFoundError,
   isWorkspaceNotHeldError,
@@ -54,9 +57,11 @@ import {
 import { readJsonBody } from '../read-json-body.js'
 import {
   corruptStored,
+  displayNameTaken,
   type ErrorAnswer,
   firstOwned,
   hasDescendants,
+  invalidBodyRefusal,
   moveIntoSelf,
   notFoundAs,
   pastNamespaceCeiling,
@@ -376,7 +381,15 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // fields here is how `pinned` went unanswered while the tool and
       // `/api/v1` carried it.
       const { documents } = await wbDocumentList(deps, { workspaceId })
-      const response: ListDocumentsResponse = { documents }
+      // A second walk of the record's META only — no content digest — and
+      // absent when no folder is named, the keeper's silence about names.
+      const folderNames = hasDocumentFolders(deps.documentIndex)
+        ? await deps.documentIndex.listFolderNames({ workspaceId })
+        : undefined
+      const response: ListDocumentsResponse = {
+        documents,
+        ...(folderNames === undefined || folderNames.length === 0 ? {} : { folderNames }),
+      }
       return c.json(response)
     } catch (err) {
       // "Empty" and "never registered" are different answers, and conflating
@@ -389,6 +402,42 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // exists and holds nothing answers 200 with an empty array, and only an
       // ABSENT one answers 404. A 404 here therefore means gone, never empty.
       const owned = firstOwned(err, [workspaceNotFound, corruptStored])
+      if (owned) return c.json(owned.body, owned.status)
+      throw err
+    }
+  })
+
+  // Name a folder, or clear its name: the display name a reader shows for the
+  // folder instead of its segment. Straight to the PORT (ADR-0018), as the
+  // workspace rename is — naming is the port call and nothing else. The
+  // folder's path never changes here: its address is fixed when it is made.
+  app.put('/api/workspaces/:workspaceId/folders/name', async (c) => {
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
+    const body = await readJsonBody(c, setFolderNameRequestSchema, {
+      voice: 'code',
+      refuseShape: (error) => invalidBodyRefusal(error, 'path is required'),
+    })
+    if ('refusal' in body) return body.refusal
+    const index = options.serverDeps.documentIndex
+    if (!hasDocumentFolders(index)) {
+      return c.json({ title: 'This keeper does not name folders.' } satisfies ApiErrorBody, 501)
+    }
+    try {
+      await index.setFolderName({
+        workspaceId,
+        path: body.data.path,
+        ...(body.data.name === undefined ? {} : { name: body.data.name }),
+      })
+      const response: SetFolderNameResponse = { ok: true }
+      return c.json(response)
+    } catch (err) {
+      const owned = firstOwned(err, [
+        displayNameTaken,
+        notFoundAs(`No folder "${body.data.path}" to name`),
+        corruptStored,
+      ])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }

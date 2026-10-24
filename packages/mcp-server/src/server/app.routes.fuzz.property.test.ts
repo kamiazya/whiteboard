@@ -201,7 +201,8 @@ function overrideFor(seed: Seeded): Override {
     if (path.endsWith('workspaceId')) return fc.constantFrom(seed.workspace, 'nowhere')
     if (path.endsWith('documentId')) return fc.constantFrom(seed.spatialId, seed.markdownId, 'nope')
     if (path.endsWith('.path') || path === 'path' || path.endsWith('doc')) {
-      return fc.constantFrom(SPATIAL_PATH, MARKDOWN_PATH, 'fresh', 'notes/other')
+      // `notes` is the folder MARKDOWN_PATH hangs from, which a folder-name body names.
+      return fc.constantFrom(SPATIAL_PATH, MARKDOWN_PATH, 'fresh', 'notes/other', 'notes')
     }
     if (path.endsWith('markdown')) return OKF_OR_NOT
     if (path.endsWith('nonce')) return fc.constantFrom(...NONCES)

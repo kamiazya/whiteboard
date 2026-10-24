@@ -1,19 +1,14 @@
 import type { WorkspaceNames } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  readWorkspaceDocuments,
-  resolveWorkspaceDocument,
-  setWorkspaceDocumentName,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { isDocumentNotFoundError } from '@kamiazya/whiteboard-ports'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import {
   openWorkspaceDocIfStored,
   requireDocumentAtPath,
-  saveWorkspaceDoc,
   workspaceTreeIndex,
 } from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
-import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export type { WorkspaceNames }
 
@@ -96,20 +91,21 @@ export async function setDocumentDisplayName(
   validateDocumentPath(path)
   const trimmed = name.trim()
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
-  // The workspace record is the only home this write has: the rows are
-  // not maintained, so a failure here surfaces to the caller. Under
-  // the workspace write lock like every other read-modify-write of the
-  // record — the open and the save must see no concurrent tree write.
-  await withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-    if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
-      setWorkspaceDocumentName(workspaceDoc, {
-        documentId,
-        ...(trimmed.length > 0 ? { name: trimmed } : {}),
-      })
-      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
-    }
-  })
+  // Through the index, as the pin below is: it takes the workspace write lock
+  // itself, and it is where a name a sibling already shows is refused
+  // (`DisplayNameTakenError`), so this route refuses what every other name
+  // write refuses.
+  try {
+    await (await workspaceTreeIndex(scope)).setDocumentName({
+      workspaceId,
+      documentId,
+      ...(trimmed.length > 0 ? { name: trimmed } : {}),
+    })
+  } catch (err) {
+    // Removed while this write waited for the lock: there is nothing left to
+    // name, and the answer below says what the workspace now holds.
+    if (!isDocumentNotFoundError(err)) throw err
+  }
   return loadWorkspaceNames(workspaceId, scope)
 }
 

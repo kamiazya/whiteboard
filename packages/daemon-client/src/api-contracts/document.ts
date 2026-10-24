@@ -474,6 +474,7 @@ export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
 export type FolderNameSummary = z.infer<typeof folderNameSummarySchema>
 export type SetFolderNameRequest = z.infer<typeof setFolderNameRequestSchema>
+export type SetFolderNameResponse = z.infer<typeof setFolderNameResponseSchema>
 export type DuplicateDocumentResponse = z.infer<typeof duplicateDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>

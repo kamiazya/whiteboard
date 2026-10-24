@@ -12,7 +12,12 @@ import {
 import type { StoreScope } from '../../store/store-scope.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
 import { readJsonBody } from '../read-json-body.js'
-import { firstOwned, invalidBodyRefusal, STORED_DOCUMENT_ANSWERS } from './_shared.js'
+import {
+  displayNameTaken,
+  firstOwned,
+  invalidBodyRefusal,
+  STORED_DOCUMENT_ANSWERS,
+} from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 // User-facing workspace / document names.
@@ -73,7 +78,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
       const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name, scope)
       return c.json(updated)
     } catch (err) {
-      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      const owned = firstOwned(err, [displayNameTaken, ...STORED_DOCUMENT_ANSWERS])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }
