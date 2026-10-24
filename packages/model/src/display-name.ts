@@ -59,3 +59,28 @@ export function isDisplayNameTaken(name: string, siblings: Iterable<string>): bo
   for (const sibling of siblings) if (displayNameKey(sibling) === key) return true
   return false
 }
+
+/**
+ * Whether `target.name` duplicates what a sibling of `target.path` shows —
+ * the siblings being the entries of `others` directly under the same parent,
+ * each showing its name or, unnamed, its own segment. `others` is one KIND of
+ * entry (folders, or documents: the two are compared separately) and leaves
+ * the target itself out, which only the caller can identify.
+ */
+export function isSiblingDisplayNameTaken(
+  others: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+  target: { readonly path: string; readonly name: string },
+): boolean {
+  const parent = parentOf(target.path)
+  const shown: string[] = []
+  for (const other of others) {
+    if (parentOf(other.path) !== parent) continue
+    shown.push(other.name ?? other.path.slice(other.path.lastIndexOf('/') + 1))
+  }
+  return isDisplayNameTaken(target.name, shown)
+}
+
+function parentOf(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut === -1 ? '' : path.slice(0, cut)
+}

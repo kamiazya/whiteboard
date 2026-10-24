@@ -4,6 +4,7 @@ import {
   folderNameRefusal,
   folderNameSchema,
   isDisplayNameTaken,
+  isSiblingDisplayNameTaken,
 } from './display-name.js'
 import { DOCUMENT_NAME_MAX_LENGTH } from './ids.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -70,4 +71,29 @@ describe('isDisplayNameTaken', () => {
       expect(isDisplayNameTaken(name.toUpperCase(), [name])).toBe(true)
     },
   )
+})
+
+describe('isSiblingDisplayNameTaken', () => {
+  const siblings = [
+    { path: 'a/week-6', name: 'Week 6' },
+    { path: 'a/plans' },
+    { path: 'a/deep/inner', name: 'Inner' },
+    { path: 'b/elsewhere', name: 'Elsewhere' },
+    { path: 'top', name: 'Top' },
+  ]
+
+  it('compares against what each direct sibling shows: its name, else its segment', () => {
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'week 6' })).toBe(true)
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Plans' })).toBe(true)
+  })
+
+  it('looks only under the same parent, never deeper or in another folder', () => {
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Inner' })).toBe(false)
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Elsewhere' })).toBe(false)
+  })
+
+  it('treats the workspace root as a parent like any other', () => {
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'top' })).toBe(true)
+    expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'Week 6' })).toBe(false)
+  })
 })

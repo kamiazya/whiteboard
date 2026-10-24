@@ -126,7 +126,6 @@ export {
   setWorkspaceFolderName,
   setWorkspaceLastCompactedAt,
   setWorkspacePinned,
-  siblingDisplayNames,
   unreadableWorkspaceNodes,
   updateWorkspaceDocumentMeta,
   WORKSPACE_META_KEY,

@@ -484,8 +484,8 @@ export function readWorkspaceFolderNames(
  * from every folder node at the path, since a name left on a second node
  * would show again the moment the first one stopped being first. Stored
  * trimmed, and refused for what `folderNameRefusal` refuses. Whether the name
- * duplicates a sibling's is the caller's question (`siblingDisplayNames`):
- * this writes what it is given.
+ * duplicates a sibling's is the caller's question (model's
+ * `isSiblingDisplayNameTaken`): this writes what it is given.
  */
 export function setWorkspaceFolderName(
   doc: LoroDoc,
@@ -508,31 +508,6 @@ export function setWorkspaceFolderName(
   }
   doc.commit()
   return true
-}
-
-/**
- * What each folder, or each document, directly under `parentPath` shows: its
- * name, or its segment when it has none — the names a new or renamed one is
- * compared against for a duplicate. `parentPath` undefined is the workspace
- * root. Documents and folders are separate questions: a folder may share a
- * name with a document beside it.
- */
-export function siblingDisplayNames(
-  nodes: readonly WorkspaceNode[],
-  query: {
-    readonly parentPath: string | undefined
-    readonly type: WorkspaceNode['type']
-    readonly exclude?: (node: WorkspaceNode) => boolean
-  },
-): string[] {
-  const prefix = query.parentPath === undefined ? '' : `${query.parentPath}/`
-  return nodes.flatMap((node) => {
-    if (node.type !== query.type || !node.path.startsWith(prefix)) return []
-    const leaf = node.path.slice(prefix.length)
-    if (leaf.includes('/') || query.exclude?.(node) === true) return []
-    const name = node.type === 'document' ? node.meta.name : node.name
-    return [name ?? leaf]
-  })
 }
 
 /**

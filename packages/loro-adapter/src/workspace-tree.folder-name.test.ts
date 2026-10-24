@@ -13,19 +13,16 @@ import { describe, expect, it } from 'vitest'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
-  ensureFolderPath,
   moveWorkspaceNodeToPath,
   pruneEmptyFolders,
   readWorkspaceDocuments,
   readWorkspaceFolderNames,
   readWorkspaceNodes,
   setWorkspaceFolderName,
-  siblingDisplayNames,
 } from './workspace-tree.js'
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const ID_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
-const ID_C = '01CX5ZZKBKACTAV9WEVGEMMVRZ'
 
 function workspace(peer = 1n): LoroDoc {
   const doc = new LoroDoc()
@@ -183,42 +180,5 @@ describe('two folder nodes at one path', () => {
     setWorkspaceFolderName(view, { path: 'a' })
 
     expect(readWorkspaceFolderNames(view)).toEqual([])
-  })
-})
-
-describe('siblingDisplayNames', () => {
-  it('answers what each folder or document under one parent shows, its name or its segment', () => {
-    const doc = workspace()
-    withNote(doc, 'a/x/n1', ID_A)
-    withNote(doc, 'a/y/n2', ID_B)
-    withNote(doc, 'a/doc', ID_C)
-    ensureFolderPath(doc, ['b', 'z'])
-    setWorkspaceFolderName(doc, { path: 'a/x', name: 'Week 6' })
-    const nodes = readWorkspaceNodes(doc)
-
-    expect(siblingDisplayNames(nodes, { parentPath: 'a', type: 'folder' }).sort()).toEqual([
-      'Week 6',
-      'y',
-    ])
-    expect(siblingDisplayNames(nodes, { parentPath: 'a', type: 'document' })).toEqual(['doc'])
-    expect(siblingDisplayNames(nodes, { parentPath: undefined, type: 'folder' }).sort()).toEqual([
-      'a',
-      'b',
-    ])
-  })
-
-  it('leaves out the nodes the caller excludes, so a rename is not its own duplicate', () => {
-    const doc = workspace()
-    withNote(doc, 'a/x/n1', ID_A)
-    withNote(doc, 'a/y/n2', ID_B)
-    const nodes = readWorkspaceNodes(doc)
-
-    expect(
-      siblingDisplayNames(nodes, {
-        parentPath: 'a',
-        type: 'folder',
-        exclude: (node) => node.path === 'a/x',
-      }),
-    ).toEqual(['y'])
   })
 })
