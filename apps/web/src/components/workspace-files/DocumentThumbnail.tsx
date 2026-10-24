@@ -111,8 +111,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
     loadRender(document)
       .then((render) => {
         if (!live) return
-        // Only an empty document says so; one the loader could not draw
-        // keeps its plain kind icon, since that says nothing about content.
+        // Not drawn is not empty: only EMPTY_DOCUMENT says anything about content.
         setEmpty(render === EMPTY_DOCUMENT)
         if (render !== null && render !== EMPTY_DOCUMENT) setDrawn(render)
       })
