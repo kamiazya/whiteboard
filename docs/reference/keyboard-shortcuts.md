@@ -251,7 +251,9 @@ it is read with the canvas. Choosing a tool, by key or from the dock, announces
 it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
 
 Every node and edge is listed by name for a screen reader, in the order `Tab`
-walks them, and the canvas points at the selected one: a note by its first
+walks them: by where they sit, top to bottom and then left to right, not by
+the order they were added, so a note placed above another is read first. The
+canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
