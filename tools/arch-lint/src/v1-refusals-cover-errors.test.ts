@@ -108,6 +108,7 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the restore operation, which wb_version_restore and the daemon restore route call; /api/v1 mounts no restore',
   UnknownRenderStyleError: CANVAS_TOOLS,
   DocumentMoveNeedsTargetError: WORKSPACE_EDIT,
+  FoldersNotNamedError: WORKSPACE_EDIT,
   WorkspaceEditError: WORKSPACE_EDIT,
   DocumentKindUnknownError: 'raised by wb_document_get reading a document of no known kind',
   MarkdownBodyTooLargeError:

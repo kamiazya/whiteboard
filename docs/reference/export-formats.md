@@ -122,7 +122,10 @@ not:
   value; deleting one a record already holds lands. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
-  still be kept or shortened. The workspace document's `update` and `promote`
+  still be kept or shortened. It refuses, with
+  `400 {"error":"folder_name_refused"}`, an update that gives a folder a name
+  that is blank, holds a `/` or is longer than 200 characters; a folder name
+  stored before can still be kept or repaired. The workspace document's `update` and `promote`
   refuse, with `413 {"error":"too_many_documents"}`, an update or record that
   would leave the workspace holding more than 2000 documents; a workspace that
   already holds more still takes edits that add no document, and deleting is
@@ -297,6 +300,33 @@ over-long `title` is refused before anything is written — `document.create`
 creates nothing, and through `/api/v1` the answer is
 `400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A
 blank name still clears it, and a name stored before the limit still lists.
+
+A folder can carry a display name of its own, kept apart from its path the
+way a document's is: naming a folder moves nothing, and the folder keeps the
+path it was made with. A folder name holds the same 200-character bound, and
+may not be blank or contain `/`, which is what separates folders in a path.
+It is written by `wb_workspace_edit`'s `folder.rename` op and by
+`PUT /api/workspaces/{id}/folders/name` with `{"path": …, "name": …}` (no
+`name` clears it), and `GET /api/workspaces/{id}/documents` lists it as
+`folderNames: [{"path", "name"}]` beside `documents` when any folder is
+named. The name travels with the folder when it moves, and goes with it
+when the folder empties and is removed. Only a folder can be named: the
+path of a document that has documents below it is a document, not a folder,
+and naming it answers `404`.
+
+Two documents in the same folder may not show the same name, and neither
+may two folders in the same folder. A create, a rename, or a markdown
+document's frontmatter `title` that would give a document the name another
+document beside it already shows — its name, or its last path segment when
+it has none — is refused, and so is a folder name another folder beside it
+shows; names are compared ignoring case, surrounding spaces and Unicode
+composition, so `Week 6`, ` week 6 ` and `WEEK 6` are one name. The refusal
+answers `409 {"error":"display_name_taken"}` from `/api/v1` and the daemon's
+name routes, and stops a `wb_workspace_edit` batch at that op. A folder and a
+document may share a name, and so may two documents in different folders.
+Two names that only meet when two copies of a workspace merge — each named
+while the other could not see it — are both kept: nothing renames either,
+and either can keep its own name in a later write.
 
 A board declares at most **64** semantic axes in `visual.axes/v0` (the facet
 keys it treats as meaning, which the legend scores on every layout).
