@@ -7,6 +7,12 @@
 // list — was strictly better on every tier. Neither number was visible to a
 // search that never aligns, so the fix is the second, fully-aligned run
 // `assignEdgeAnchors` makes over the settled configuration.
+//
+// A and B overlap, so left unnamed they are drawn as their contact mark
+// (`edge-contact.ts`) and never reach the search; A's departure is named to
+// keep the pair routed. This canvas reaches its route without the aligned
+// run, which `edge-routing-quality.test.ts`'s lattice boards hold instead —
+// they go red without it.
 
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -23,7 +29,9 @@ const nodes: SpatialNode[] = [
 const edges: CanvasEdge[] = [
   {
     id: 'A->B',
-    from: { node: 'A' },
+    // Overlapping boxes left to themselves are drawn as their contact
+    // (`edge-contact.ts`); a named departure face keeps the pair routed.
+    from: { node: 'A', side: 'bottom' },
     to: { node: 'B' },
   },
   {

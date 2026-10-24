@@ -108,19 +108,19 @@ describe('drawing quality across the corpus', () => {
         edgeOverlaps: 0,
         sharedInkPx: 0,
         crossings: 0,
-        bends: 2,
-        edgeLengthPx: 2680,
+        // api->auth, Auth overlapping API gateway, is drawn as its contact
+        // mark rather than as a loop under both boxes.
+        bends: 0,
+        edgeLengthPx: 2495,
         // The Clients row's gaps differ by 14px; the Services row has an
         // overlap where a gap should be.
         unevenGaps: 2,
         envelopePx: { w: 842, h: 752 },
-        // Only api->auth loops; api->search is drawn straight, because Auth
-        // moved onto API gateway and the line starts inside it.
-        reversals: 1,
+        reversals: 0,
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
-        bendsPerEdge: 0.25,
+        bendsPerEdge: 0,
         overlapsPerPair: 0.04,
         density: 0.2,
       },

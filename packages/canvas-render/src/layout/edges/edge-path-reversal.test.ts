@@ -74,11 +74,13 @@ it('keeps T->A and T->B reversal-free on the same canvas (the fix must not buy t
 it('keeps a deliberate U-hook reachable for an interpenetrating pair with no valid alternative', () => {
   // Same-axis interpenetrating boxes: no zero-bend facing pair, no L-pair,
   // no gap-valid opposing pair — u-hook-when-degenerate's exact geometry.
+  // Left to itself the pair is drawn as its contact; naming a departure
+  // face the contact does not use is what hands it to the search.
   const nodes = [box('A2', 0, 0, 100, 100), box('B2', 50, 0, 100, 100)]
   const edges: CanvasEdge[] = [
     {
       id: 'ab2',
-      from: { node: 'A2' },
+      from: { node: 'A2', side: 'top' },
       to: { node: 'B2' },
     },
   ]

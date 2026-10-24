@@ -122,23 +122,24 @@ describe('routing budget', () => {
     expect(reached.grid / reached.runs).toBeGreaterThan(0.1)
     expect(reached.pairs / reached.runs).toBeGreaterThan(0.5)
     // The trial account: 72 of 80. The repair account is reached by no
-    // generated board — it needs boxes stacked flush — so the example below
+    // generated board — it needs a box flush with a border of one holding
+    // it — so the example below
     // holds it instead.
     expect(reached.trials / reached.runs).toBeGreaterThan(0.5)
   })
 
   it('an account holding exactly what the coincident-ends repair spends repairs the same edges', () => {
-    // Two boxes of one width stacked flush, no side named: every edge's ends
-    // meet on the shared border, so every one goes through the repair.
+    // A member flush with the bottom of a box of its width that holds it,
+    // its bottom side named: both ends land on the middle of the shared
+    // border, so the edge goes through the repair. (Boxes that merely touch
+    // are drawn as a contact mark and never reach the search.)
     const nodes = [
-      textNode({ id: 'A', x: 0, y: 0, width: 200, height: 100, text: '' }),
+      textNode({ id: 'A', x: 0, y: 0, width: 200, height: 200, text: '' }),
       textNode({ id: 'B', x: 0, y: 100, width: 200, height: 100, text: '' }),
     ]
-    const edges: CanvasEdge[] = Array.from({ length: 6 }, (_, i) => ({
-      id: `e${i}`,
-      from: { node: 'A' },
-      to: { node: 'B' },
-    }))
+    const edges: CanvasEdge[] = [
+      { id: 'e', from: { node: 'A' }, to: { node: 'B', side: 'bottom' as const } },
+    ]
     const collided = (anchors: ReturnType<typeof assignEdgeAnchors>) =>
       [...anchors.values()].filter(
         (a) =>

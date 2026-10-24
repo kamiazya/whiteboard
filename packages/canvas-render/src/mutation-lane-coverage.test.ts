@@ -370,9 +370,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // counted in the viewBox. Outside the lane: a constant with no branch,
     // pinned by `scene-bounds.test.ts`'s haloed-run case and mutated by hand
     // to 0 against it.
+    //
+    // 118 with `layout/edges/edge-contact.ts`, the contact mark two touching
+    // boxes are drawn as instead of a route. Outside the lane: a predicate
+    // and one small geometry, pinned by example and by a property over
+    // touching pairs in `edge-touching-boxes.test.ts`, its guards each
+    // mutated by hand against them; nothing in it is a cost model or a search.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 117,
+      production: 118,
     })
   })
 
