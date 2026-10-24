@@ -847,6 +847,7 @@ export function WorkspaceFilesPanel({
             x={cardMenu.x}
             y={cardMenu.y}
             label="Document actions"
+            title={documentLabel(cardMenu.entry, 'leaf')}
             items={cardMenuItems}
             onClose={() => setCardMenu(null)}
             variant={hasCoarsePointer() ? 'sheet' : 'list'}

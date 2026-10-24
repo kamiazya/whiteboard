@@ -51,6 +51,21 @@ describe('a touch user reaches the actions without a gesture', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Rename…' })).toBeTruthy()
   })
 
+  it('the action sheet names the document and the folder it acts on', async () => {
+    renderPanel()
+    const grid = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(grid).getByRole('button', { name: 'Notes actions' }))
+    expect(
+      within(await screen.findByRole('menu', { name: 'Document actions' })).getByText('Notes'),
+    ).toBeTruthy()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    fireEvent.click(within(grid).getByRole('button', { name: 'design actions' }))
+    expect(
+      within(await screen.findByRole('menu', { name: 'Folder actions' })).getByText('design'),
+    ).toBeTruthy()
+  })
+
   it('a pointer that can hover is not given the button', async () => {
     coarse = false
     renderPanel()
