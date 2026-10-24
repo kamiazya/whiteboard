@@ -144,6 +144,12 @@ export interface MarkdownNodeEditorProps {
   readonly testId?: string
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
+  /**
+   * What Escape is announced as. Defaults to "Discarded"; a host whose
+   * cancel KEEPS what was typed says so instead, read at the moment of the
+   * cancel rather than at mount.
+   */
+  readonly cancelAnnouncement?: string
   readonly onChange?: (text: string) => void
   /**
    * The catalog's Comment seam: the selection as a text anchor over this
@@ -175,6 +181,7 @@ export function MarkdownNodeEditor({
   testId = 'text-node-editor',
   onCommit,
   onCancel,
+  cancelAnnouncement = 'Discarded',
   onChange,
   onRequestComment,
   threads,
@@ -190,8 +197,8 @@ export function MarkdownNodeEditor({
   const onRequestCommentRef = useRef(onRequestComment)
   onRequestCommentRef.current = onRequestComment
   // Latest callbacks without recreating the EditorView per parent render.
-  const callbacksRef = useRef({ onCommit, onCancel, onChange })
-  callbacksRef.current = { onCommit, onCancel, onChange }
+  const callbacksRef = useRef({ onCommit, onCancel, onChange, cancelAnnouncement })
+  callbacksRef.current = { onCommit, onCancel, onChange, cancelAnnouncement }
 
   const commit = (view: EditorView) => {
     if (!mountedRef.current || finishedRef.current) return
@@ -201,7 +208,7 @@ export function MarkdownNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
-    announceOnCanvas('Discarded')
+    announceOnCanvas(callbacksRef.current.cancelAnnouncement)
     callbacksRef.current.onCancel()
   }
   const commitAndReturn = (view: EditorView) => {

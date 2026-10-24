@@ -241,7 +241,10 @@ The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
 to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
 keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent.
+thrown-away draft is not silent. The one exception is a note you have just
+added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
+because a typed note lost to the key that closes the editor would have no
+undo. Press `Esc` on a new note before typing and it is removed.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces

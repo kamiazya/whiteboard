@@ -6,7 +6,7 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
+import { canvasAnnouncement, subscribeCanvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -69,4 +69,36 @@ it('Escape in the frame name editor announces that the draft was discarded', asy
   await expect.element(page.getByRole('textbox', { name: 'Name of frame cluster' })).toBeVisible()
   await userEvent.keyboard('{Escape}')
   await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Discarded'))
+})
+
+it('Escape on a new typed note announces that the note was kept', async () => {
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
+  rootOf(container).focus()
+  await userEvent.keyboard('n')
+  await expect.element(page.getByRole('textbox', { name: 'Text of Empty note' })).toBeVisible()
+  await userEvent.keyboard('Zed{Escape}')
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull(),
+  )
+  expect(latest.canvas.nodes).toHaveLength(1)
+  expect(canvasAnnouncement()).toBe('Note kept: Zed')
+})
+
+it('Escape on a new empty note removes it without claiming it was kept', async () => {
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
+  rootOf(container).focus()
+  await userEvent.keyboard('n')
+  await expect.element(page.getByRole('textbox', { name: 'Text of Empty note' })).toBeVisible()
+  const heard: string[] = []
+  const stop = subscribeCanvasAnnouncement(() => heard.push(canvasAnnouncement()))
+  try {
+    await userEvent.keyboard('{Escape}')
+    await expect.poll(() => latest.canvas.nodes.length).toBe(0)
+  } finally {
+    stop()
+  }
+  expect(heard).toContain('Discarded')
+  expect(heard.join(' | ')).not.toMatch(/kept/i)
 })
