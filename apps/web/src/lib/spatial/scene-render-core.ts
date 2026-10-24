@@ -226,7 +226,7 @@ export function renderCanvasForExportWith(
 }
 
 /** The saved document's envelope; `background` absent leaves the picture transparent. */
-export function exportEnvelope(bounds: BoundingBox, background?: string): SvgDocumentOptions {
+function exportEnvelope(bounds: BoundingBox, background?: string): SvgDocumentOptions {
   return {
     width: bounds.w,
     height: bounds.h,
