@@ -85,6 +85,7 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
       ref={railRef}
       data-testid="markdown-minimap-rail"
       aria-hidden="true"
+      title="Document map — click or drag to jump"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       style={{ width: RAIL_WIDTH_PX }}
