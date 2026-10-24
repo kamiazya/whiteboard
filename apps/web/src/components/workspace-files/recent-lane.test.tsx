@@ -135,7 +135,7 @@ describe('RecentLane', () => {
       />,
     )
 
-    expect(screen.getByRole('button').textContent).toBe('untitled-2')
+    expect(screen.getByRole('button').textContent).toBe('Untitled 2')
   })
 
   it('draws each tile through the thumbnail renderer it is given', () => {

@@ -43,7 +43,9 @@ documents** returns you to the folder the document was in.
 note** — and creates one in whichever folder you are standing in. A kind
 cannot be changed later, which is why you pick it by name rather than by
 icon; everything else about a document is editable afterwards, so nothing
-else is asked for. A new document starts at the path `untitled`; the first time
+else is asked for. A new document starts at the path `untitled`, and until it
+has a name the lists call it **Untitled** (**Untitled 2** for `untitled-2`), the
+word its title box shows; the first time
 you give it a name in its title, its path becomes that name (`untitled` to
 `checkout-architecture`), and from then on the path stays put. If you already know what the document is called and where
 it goes, **Name and folder…** in that menu takes both up front; leaving its

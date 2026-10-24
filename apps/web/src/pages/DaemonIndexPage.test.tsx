@@ -1035,7 +1035,7 @@ describe('DaemonIndexPage', () => {
     const onOpenDocument = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
-    await screen.findByText('untitled')
+    await screen.findByText('Untitled')
 
     await pickNewDocumentKind('spatial')
 
@@ -1206,7 +1206,7 @@ describe('DaemonIndexPage', () => {
     // The failed create re-reads the list, which now shows the colliding
     // canvas — the page leaves the onboarding state and mounts the panel,
     // whose own create button must not repeat the losing path.
-    await screen.findByText('untitled')
+    await screen.findByText('Untitled')
     await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual(['untitled', 'untitled-2']))
