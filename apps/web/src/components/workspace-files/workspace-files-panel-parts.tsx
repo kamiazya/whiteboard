@@ -163,6 +163,49 @@ export function PanelPreview({
   )
 }
 
+/** One column or two, as a pressed-state pair. */
+function ColumnToggle({
+  columns,
+  chooseColumns,
+}: {
+  columns: 'one' | 'two'
+  chooseColumns: (next: 'one' | 'two') => void
+}) {
+  return (
+    <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
+      <legend className="sr-only">Column layout</legend>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="One column"
+            aria-pressed={columns === 'one'}
+            onClick={() => chooseColumns('one')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          >
+            <List className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>One column</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Two columns"
+            aria-pressed={columns === 'two'}
+            onClick={() => chooseColumns('two')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          >
+            <Columns2 className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Two columns</TooltipContent>
+      </Tooltip>
+    </fieldset>
+  )
+}
+
 /**
  * The row above the columns: where you are, what you are looking for, and
  * the two things you can change about the view.
@@ -241,39 +284,7 @@ export function PanelToolbar({
       />
       {/* Absent while searching: the results carry their own list/grid
         choice, and two pairs side by side answered one question twice. */}
-      {query.trim() === '' && (
-        <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
-          <legend className="sr-only">Column layout</legend>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="One column"
-                aria-pressed={columns === 'one'}
-                onClick={() => chooseColumns('one')}
-                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-              >
-                <List className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>One column</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="Two columns"
-                aria-pressed={columns === 'two'}
-                onClick={() => chooseColumns('two')}
-                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-              >
-                <Columns2 className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Two columns</TooltipContent>
-          </Tooltip>
-        </fieldset>
-      )}
+      {query.trim() === '' && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
     </div>
   )
 }
