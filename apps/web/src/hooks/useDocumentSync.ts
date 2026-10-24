@@ -18,7 +18,6 @@ import {
   type DocumentExportFormat,
   isCommentedPicture,
   pictureFormatOf,
-  renderMarkdownForExport,
   savedPicture,
 } from '../lib/document-export.js'
 import { markdownDocumentFile, spatialDocumentFile } from '../lib/document-file.js'
@@ -552,10 +551,8 @@ export function useDocumentSync(
         })
       }
       if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
-      if (options.kind === 'markdown') {
-        const body = session?.getMarkdownBody() ?? markdownBody
-        return savedPicture(pictureFormatOf(format), await renderMarkdownForExport(body, options))
-      }
+      // A note's export is its .md file; a picture is of a canvas.
+      if (options.kind === 'markdown') return null
       const exported = session?.getCanvas() ?? canvas
       const measure = createBrowserMeasureText()
       const comments = isCommentedPicture(format)

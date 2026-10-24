@@ -20,6 +20,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { useLongPressMenu } from './use-long-press.js'
+import { type SearchCombobox, searchOptionId } from './use-search-combobox.js'
 
 /**
  * A row: the document, and the excerpts that say why it is here. Empty
@@ -68,6 +69,8 @@ export interface SearchResultsProps {
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   /** ArrowUp from the first result: hand focus back to whatever asked. */
   onLeaveUp?: () => void
+  /** The search box this list is the popup of: its ids and its highlight. */
+  combobox?: Pick<SearchCombobox, 'listboxId' | 'activeDocumentId'>
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
@@ -121,7 +124,7 @@ function MatchReason({
 }
 
 /**
- * One result, in either layout. The two differ in exactly three things — the
+ * One result, in either layout, as its list item. The two differ in exactly three things — the
  * button's own class, the thumbnail's size, and nothing else — so they are
  * one card with a `layout` rather than two trees that have to be kept
  * saying the same thing. They had already drifted: the grid carried a
@@ -139,6 +142,7 @@ function SearchResultCard({
   onActivate,
   onDocumentContextMenu,
   thumbnail,
+  combobox,
 }: {
   row: SearchResultRow
   layout: 'list' | 'grid'
@@ -148,76 +152,109 @@ function SearchResultCard({
   onActivate: SearchResultsProps['onActivate']
   onDocumentContextMenu: SearchResultsProps['onDocumentContextMenu']
   thumbnail: (entry: WorkspaceDocumentEntry, sizeClass: string) => ReactNode
+  combobox: SearchResultsProps['combobox']
 }) {
   const uid = useId()
   const pathId = `${uid}-path`
   const excerptId = `${uid}-excerpt`
   return (
-    <button
-      type="button"
-      data-doc-path={entry.path}
-      // Label and kind are the name; where it lives and why it matched (the
-      // excerpt is body text) are the description.
-      aria-label={documentAccessibleName(entry, 'leaf')}
-      aria-describedby={(contexts?.length ?? 0) > 0 ? `${pathId} ${excerptId}` : pathId}
-      aria-current={entry.path === selectedPath ? 'true' : undefined}
-      onClick={() => onSelect(entry)}
-      onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
-      onKeyDown={
-        onActivate === undefined
-          ? undefined
-          : (event) => {
-              if (event.key === 'Enter') {
-                // Without this the keydown ALSO fires the native button
-                // click, selecting after the open.
-                event.preventDefault()
-                onActivate(entry)
+    <li role={combobox === undefined ? undefined : 'none'}>
+      <button
+        type="button"
+        {...optionProps(combobox, entry)}
+        data-doc-path={entry.path}
+        // Label and kind are the name; where it lives and why it matched (the
+        // excerpt is body text) are the description.
+        aria-label={documentAccessibleName(entry, 'leaf')}
+        aria-describedby={(contexts?.length ?? 0) > 0 ? `${pathId} ${excerptId}` : pathId}
+        aria-current={entry.path === selectedPath ? 'true' : undefined}
+        onClick={() => onSelect(entry)}
+        onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
+        onKeyDown={
+          onActivate === undefined
+            ? undefined
+            : (event) => {
+                if (event.key === 'Enter') {
+                  // Without this the keydown ALSO fires the native button
+                  // click, selecting after the open.
+                  event.preventDefault()
+                  onActivate(entry)
+                }
               }
-            }
-      }
-      onContextMenu={
-        onDocumentContextMenu === undefined
-          ? undefined
-          : (event) => {
-              event.preventDefault()
-              onDocumentContextMenu(entry, event.clientX, event.clientY)
-            }
-      }
-      className={cn(
-        'hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 rounded-md border text-left aria-[current]:ring-1',
-        layout === 'list' ? 'items-center gap-2 p-1.5' : 'flex-col gap-1.5 p-2',
-      )}
-    >
-      {/* In the list, 80x44 and not smaller: measured on a real document, a
+        }
+        onContextMenu={
+          onDocumentContextMenu === undefined
+            ? undefined
+            : (event) => {
+                event.preventDefault()
+                onDocumentContextMenu(entry, event.clientX, event.clientY)
+              }
+        }
+        className={cn(
+          'hover:bg-accent/40 aria-selected:bg-accent aria-selected:ring-ring aria-selected:ring-2 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 rounded-md border text-left aria-[current]:ring-1',
+          layout === 'list' ? 'items-center gap-2 p-1.5' : 'flex-col gap-1.5 p-2',
+        )}
+      >
+        {/* In the list, 80x44 and not smaller: measured on a real document, a
           faithful render is a smear below roughly this and only here do the
           heading and the blocks separate. Recognising the document is the
           whole job of a search result, so this is the one list that pays for
           the height. */}
-      {thumbnail(entry, layout === 'list' ? 'h-11 w-20' : 'aspect-[16/9] w-full')}
-      <span className="flex min-w-0 flex-col">
-        <span data-testid="result-title" className="truncate text-sm">
-          <Highlighted text={titleOf(entry)} query={query} />
-        </span>
-        <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
-          <Highlighted text={entry.path} query={query} />
-        </span>
-        {(entry.tags?.length ?? 0) > 0 && (
-          /* A #tag query matches nothing visible in title or path, so the
-             row must show the tag that put it here. */
-          <span className="text-muted-foreground truncate text-[11px]">
-            {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+        {thumbnail(entry, layout === 'list' ? 'h-11 w-20' : 'aspect-[16/9] w-full')}
+        <span className="flex min-w-0 flex-col">
+          <span data-testid="result-title" className="truncate text-sm">
+            <Highlighted text={titleOf(entry)} query={query} />
           </span>
-        )}
-        <MatchReason
-          contexts={contexts}
-          lexicalRank={lexicalRank}
-          semanticRank={semanticRank}
-          query={query}
-          excerptId={excerptId}
-        />
-      </span>
-    </button>
+          <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
+            <Highlighted text={entry.path} query={query} />
+          </span>
+          {(entry.tags?.length ?? 0) > 0 && (
+            /* A #tag query matches nothing visible in title or path, so the
+             row must show the tag that put it here. */
+            <span className="text-muted-foreground truncate text-[11px]">
+              {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+            </span>
+          )}
+          <MatchReason
+            contexts={contexts}
+            lexicalRank={lexicalRank}
+            semanticRank={semanticRank}
+            query={query}
+            excerptId={excerptId}
+          />
+        </span>
+      </button>
+    </li>
   )
+}
+
+/**
+ * A row as an option of the search box's listbox: the box keeps focus and
+ * names the highlighted one, and the row stays a button for Tab, click and
+ * Enter. Without a box the list is a plain list of buttons.
+ */
+function optionProps(combobox: SearchResultsProps['combobox'], entry: WorkspaceDocumentEntry) {
+  if (combobox === undefined) return {}
+  return {
+    role: 'option',
+    id: searchOptionId(combobox.listboxId, entry.documentId),
+    'aria-selected': combobox.activeDocumentId === entry.documentId,
+  } as const
+}
+
+/** The list's own keys, and its listbox role when a search box owns it. */
+function listProps(
+  combobox: SearchResultsProps['combobox'],
+  onLeaveUp: SearchResultsProps['onLeaveUp'],
+) {
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => walkResults(event, onLeaveUp)
+  if (combobox === undefined) return { onKeyDown }
+  return {
+    onKeyDown,
+    role: 'listbox',
+    id: combobox.listboxId,
+    'aria-label': 'Search results',
+  } as const
 }
 
 /**
@@ -272,6 +309,7 @@ export function SearchResults({
   onLeaveUp,
   renderThumbnail,
   className,
+  combobox,
 }: SearchResultsProps) {
   const longPress = useLongPressMenu(
     onDocumentContextMenu === undefined
@@ -353,25 +391,25 @@ export function SearchResults({
       </div>
       <ul
         {...longPress}
-        onKeyDown={(event) => walkResults(event, onLeaveUp)}
+        {...listProps(combobox, onLeaveUp)}
         data-testid={layout === 'list' ? 'search-results-list' : 'search-results-grid'}
         className={
           layout === 'list' ? 'space-y-1 p-0.5' : 'grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3'
         }
       >
         {results.map((row) => (
-          <li key={row.document.documentId}>
-            <SearchResultCard
-              row={row}
-              layout={layout}
-              query={query}
-              selectedPath={selectedPath}
-              onSelect={onSelect}
-              onActivate={onActivate}
-              onDocumentContextMenu={onDocumentContextMenu}
-              thumbnail={thumbnail}
-            />
-          </li>
+          <SearchResultCard
+            key={row.document.documentId}
+            row={row}
+            layout={layout}
+            query={query}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onDocumentContextMenu={onDocumentContextMenu}
+            thumbnail={thumbnail}
+            combobox={combobox}
+          />
         ))}
       </ul>
     </div>

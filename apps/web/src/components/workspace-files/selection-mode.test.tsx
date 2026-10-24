@@ -227,7 +227,7 @@ describe('selection mode', () => {
     renderPanel({ onRequestDeleteMany: vi.fn() })
     await enterSelection('Roadmap')
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'tok' },
     })
 

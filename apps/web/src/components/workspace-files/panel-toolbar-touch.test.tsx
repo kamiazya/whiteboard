@@ -24,7 +24,7 @@ describe('document browser toolbar on touch', () => {
   it('gives the search field and both column toggles a 44px target', async () => {
     renderPanel()
     const targets = [
-      await screen.findByRole('searchbox', { name: 'Search documents' }),
+      await screen.findByRole('combobox', { name: 'Search documents' }),
       screen.getByRole('button', { name: 'One column' }),
       screen.getByRole('button', { name: 'Two columns' }),
     ]
@@ -35,7 +35,7 @@ describe('document browser toolbar on touch', () => {
   // asked the same question twice with two different answers.
   it('shows one view choice while searching, the results own', async () => {
     renderPanel()
-    fireEvent.change(await screen.findByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'seed' },
     })
     await screen.findByRole('button', { name: 'List results' })

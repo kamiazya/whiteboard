@@ -29,6 +29,7 @@ import { useFolderActions } from './use-folder-actions.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
 import { usePanelOpener } from './use-panel-opener.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
+import { useSearchCombobox } from './use-search-combobox.js'
 import { useTagsInUse } from './use-tags-in-use.js'
 import { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
@@ -124,6 +125,7 @@ export function WorkspaceFilesPanel({
     search,
     resetResults: resetSearchResults,
   } = useDebouncedDocumentSearch(source, revision, memoryScope)
+  const combobox = useSearchCombobox(query)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const {
     tags: workspaceTags,
@@ -661,6 +663,7 @@ export function WorkspaceFilesPanel({
             setSelected={setSelected}
             openCardMenu={openCardMenu}
             loadRender={loadRender}
+            combobox={combobox}
           />
         )
       case 'browseOne':
@@ -741,6 +744,7 @@ export function WorkspaceFilesPanel({
           createHere={createHere}
           onImportFiles={importer.importFiles}
           chooseColumns={chooseColumns}
+          combobox={combobox}
         />
 
         <PanelRefusals outcome={outcome} />

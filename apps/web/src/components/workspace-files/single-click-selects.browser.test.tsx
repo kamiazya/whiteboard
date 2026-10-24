@@ -116,7 +116,7 @@ describe('search results: click selects, double-click or Enter opens', () => {
     renderPanel(open)
     await gridCard('Roadmap')
     await userEvent.type(screen.getByLabelText('Search documents'), 'roadmap')
-    return await screen.findByRole('button', { name: /Roadmap/ })
+    return await screen.findByRole('option', { name: /Roadmap/ })
   }
 
   it('a single click selects and does not open', async () => {

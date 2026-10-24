@@ -1,3 +1,4 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { announceRoute, routeAnnouncementSnapshot } from '../lib/route-announcer.js'
@@ -8,11 +9,14 @@ afterEach(() => {
   announceRoute('')
 })
 
+const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
+
 function model(srTitle: string) {
   return {
     scopeKey: 'doc-1',
     srTitle,
     markdown: { hydrating: false, body: 'x' },
+    sync: { loaded: true, canvas: EMPTY_CANVAS },
   } as const
 }
 

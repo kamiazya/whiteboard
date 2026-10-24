@@ -102,7 +102,7 @@ describe('useDocumentSync exportScene carries the document', () => {
     expect(source).toContain('hello')
   })
 
-  it('draws a markdown document from its body, not from a canvas it does not have', async () => {
+  it('saves a note as its markdown file, and draws no picture of it', async () => {
     const backend = fakeBackend()
     const { result } = renderHook(() => useDocumentSync(backend))
     const doc = new LoroDoc()
@@ -110,16 +110,15 @@ describe('useDocumentSync exportScene carries the document', () => {
     doc.commit()
     await deliver(backend, doc)
 
-    let markdown: Blob | null = null
-    let spatial: Blob | null = null
+    let picture: Blob | null = null
+    let file: Blob | null = null
     await act(async () => {
-      markdown = await result.current.exportScene('svg', { kind: 'markdown' })
-      spatial = await result.current.exportScene('svg', { kind: 'spatial' })
+      picture = await result.current.exportScene('svg', { kind: 'markdown' })
+      file = await result.current.exportScene('md', { kind: 'markdown' })
     })
 
-    expect(markdown).toEqual(expect.objectContaining({ type: 'image/svg+xml' }))
-    expect(await (markdown as Blob | null)?.text()).toContain('Weekly')
-    expect(await (spatial as Blob | null)?.text()).not.toContain('Weekly')
+    expect(picture).toBeNull()
+    expect(await (file as Blob | null)?.text()).toContain('Weekly')
   })
 
   it("typesets a text node's math block in the saved canvas", async () => {
@@ -209,10 +208,8 @@ describe('useDocumentSync exportScene carries the document', () => {
     expect(await text(commented)).not.toBe(await text(plain))
   })
 
-  it.each([
-    'spatial',
-    'markdown',
-  ] as const)('fills a %s svg with the paper when asked, and draws the bytes it always did otherwise', async (kind) => {
+  it('fills a spatial svg with the paper when asked, and draws the bytes it always did otherwise', async () => {
+    const kind = 'spatial'
     const backend = fakeBackend()
     const { result } = renderHook(() => useDocumentSync(backend))
     const doc = new LoroDoc()

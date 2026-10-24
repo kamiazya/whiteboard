@@ -13,7 +13,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps, KeyboardEvent } from 'react'
+import type { ComponentProps } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -27,6 +27,7 @@ import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { SearchState } from './use-debounced-document-search.js'
+import { type SearchCombobox, usePublishSearchResults } from './use-search-combobox.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
@@ -230,6 +231,7 @@ export function PanelToolbar({
   createHere,
   onImportFiles,
   chooseColumns,
+  combobox,
 }: {
   columns: 'one' | 'two'
   query: string
@@ -244,6 +246,7 @@ export function PanelToolbar({
   createHere: ComponentProps<typeof NewDocumentMenu>['onCreate']
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']
   chooseColumns: (next: 'one' | 'two') => void
+  combobox: SearchCombobox
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -268,7 +271,7 @@ export function PanelToolbar({
           maxLength={SEARCH_QUERY_MAX_CHARS}
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
-          onKeyDown={focusFirstResult}
+          {...combobox.boxProps}
           className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
         />
       </div>
@@ -565,20 +568,6 @@ function resultsAnnouncement(count: number, query: string): string {
   return `${count} ${count === 1 ? 'result' : 'results'} for “${q}”`
 }
 
-/**
- * ArrowDown in the search box lands on the first result, so reaching it is one
- * key rather than a Tab walk across every control between the two.
- */
-function focusFirstResult(event: KeyboardEvent<HTMLInputElement>): void {
-  if (event.key !== 'ArrowDown') return
-  const first = event.currentTarget
-    .closest('[data-testid="workspace-files-panel"]')
-    ?.querySelector<HTMLElement>('[data-testid="search-results"] button[data-doc-path]')
-  if (first === null || first === undefined) return
-  event.preventDefault()
-  first.focus()
-}
-
 function focusSearchBox(): void {
   document
     .querySelector<HTMLInputElement>('[data-testid="workspace-files-panel"] input[type="search"]')
@@ -603,6 +592,7 @@ export function SearchColumn({
   setSelected,
   openCardMenu,
   loadRender,
+  combobox,
 }: {
   documents: readonly WorkspaceDocumentEntry[]
   query: string
@@ -615,14 +605,12 @@ export function SearchColumn({
   setSelected: (entry: WorkspaceDocumentEntry) => void
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
+  combobox: SearchCombobox
 }) {
   const { hits, searchDegraded, searching } = search
   const rows = searchResultRows({ activeTag, hits, documents, query })
+  usePublishSearchResults(combobox, rows, onOpenDocument === undefined ? undefined : openEntry)
   return (
-    // Results come from everywhere, so neither the folder tree nor the
-    // folder's own contents describes them. One flat list, in both
-    // column modes — a search that behaved differently per mode would
-    // be two features wearing one box.
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
       <div data-testid="search-results" aria-busy={searching !== 'idle'}>
         {/* Always mounted, text swapped: a polite live region added to
@@ -651,6 +639,7 @@ export function SearchColumn({
           // client. Everything else asks the source.
           results={rows}
           onLeaveUp={focusSearchBox}
+          combobox={combobox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
           selectedPath={selectedPath}

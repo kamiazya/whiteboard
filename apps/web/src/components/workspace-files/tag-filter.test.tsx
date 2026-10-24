@@ -33,7 +33,7 @@ describe('tag filter strip', () => {
 
     fireEvent.click(release)
     // The search box carries the filter, so it is visible, editable state.
-    expect(screen.getByRole('searchbox', { name: /search documents/i })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: /search documents/i })).toHaveProperty(
       'value',
       '#release',
     )
@@ -43,7 +43,7 @@ describe('tag filter strip', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '#release' }))
-    expect(screen.getByRole('searchbox', { name: /search documents/i })).toHaveProperty('value', '')
+    expect(screen.getByRole('combobox', { name: /search documents/i })).toHaveProperty('value', '')
     await waitFor(() => {
       expect(screen.getByText('Misc')).toBeTruthy()
     })
@@ -73,7 +73,7 @@ describe('tag filter strip', () => {
 describe('search result rows', () => {
   it('a #tag hit shows the tag that put it in the results', async () => {
     renderPanel()
-    fireEvent.change(await screen.findByRole('searchbox', { name: /search documents/i }), {
+    fireEvent.change(await screen.findByRole('combobox', { name: /search documents/i }), {
       target: { value: '#q3' },
     })
     const list = await screen.findByTestId('search-results-list')
@@ -112,7 +112,7 @@ describe('tag filter strip from the keeper’s vocabulary', () => {
     // answer is the vocabulary, and the entries were only the fallback.
     expect(screen.queryByRole('button', { name: '#q3' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '#health:ok' }))
-    expect(screen.getByRole('searchbox', { name: /search documents/i })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: /search documents/i })).toHaveProperty(
       'value',
       '#health:ok',
     )

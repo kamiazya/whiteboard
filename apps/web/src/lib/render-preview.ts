@@ -185,12 +185,8 @@ function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[
   return anchors
 }
 
-/**
- * The note's scene itself, for a surface that draws it whole rather than
- * as the pane's padded, keyed projection — the saved export. Shared so the
- * picture a person saves is laid out by exactly what the preview paints.
- */
-export function layoutMarkdownScene(
+/** The note's scene itself, before the pane pads and keys it. */
+function layoutMarkdownScene(
   value: string,
   {
     measure,

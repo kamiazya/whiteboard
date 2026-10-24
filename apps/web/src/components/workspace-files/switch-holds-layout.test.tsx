@@ -58,7 +58,7 @@ describe('a re-read holds the panel’s layout', () => {
 
     const loading = await screen.findByRole('status', { name: 'Loading documents' })
     // The toolbar is what sits ABOVE the cards; losing it is what moved them.
-    expect(screen.getByRole('searchbox', { name: 'Search documents' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Search documents' })).toBeTruthy()
     // Room for what is coming, in the same grid the cards use, and as many
     // placeholders as the list it is replacing.
     expect(loading.className).toContain('grid')

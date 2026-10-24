@@ -499,7 +499,7 @@ describe('DaemonIndexPage tree view', () => {
     // Standing at the root, where `notes/design` is NOT listed.
     expect(contents.textContent).not.toContain('design')
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'design' },
     })
 
@@ -516,11 +516,11 @@ describe('DaemonIndexPage tree view', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
-    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    const box = screen.getByRole('combobox', { name: 'Search documents' })
     fireEvent.change(box, { target: { value: 'design' } })
     const results = await screen.findByTestId('search-results')
 
-    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    fireEvent.click(within(results).getByRole('option', { name: /design/ }))
     await waitFor(() => {
       expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
     })
@@ -538,10 +538,10 @@ describe('DaemonIndexPage tree view', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
-    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    const box = screen.getByRole('combobox', { name: 'Search documents' })
     fireEvent.change(box, { target: { value: 'design' } })
     const results = await screen.findByTestId('search-results')
-    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    fireEvent.click(within(results).getByRole('option', { name: /design/ }))
     await waitFor(() => {
       expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
     })
@@ -563,10 +563,10 @@ describe('DaemonIndexPage tree view', () => {
       expect(screen.getByTestId('folder-contents').textContent).toContain('design')
     })
 
-    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    const box = screen.getByRole('combobox', { name: 'Search documents' })
     fireEvent.change(box, { target: { value: 'design' } })
     const results = await screen.findByTestId('search-results')
-    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    fireEvent.click(within(results).getByRole('option', { name: /design/ }))
     await waitFor(() => {
       expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
     })
@@ -581,7 +581,7 @@ describe('DaemonIndexPage tree view', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'zzzz' },
     })
     expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')

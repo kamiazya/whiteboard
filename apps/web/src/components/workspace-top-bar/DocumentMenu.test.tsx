@@ -40,10 +40,10 @@ async function openMenu() {
 
 // A submenu opens on pointerMove over its trigger (Radix's hover intent) —
 // keyboard would work too, but the whole menu is driven by pointer here.
-async function openExportSubmenu() {
+async function openExportSubmenu(firstItem = 'Export as PNG') {
   const trigger = screen.getByRole('menuitem', { name: 'Export…' })
   fireEvent.pointerMove(trigger, { pointerType: 'mouse' })
-  return waitFor(() => expect(screen.getByRole('menuitem', { name: 'Export as PNG' })).toBeTruthy())
+  return waitFor(() => expect(screen.getByRole('menuitem', { name: firstItem })).toBeTruthy())
 }
 
 afterEach(() => {
@@ -145,7 +145,7 @@ describe('DocumentMenu — export entries', () => {
   it('offers no with-comments entry for a note, which has no annotation layer in its picture', async () => {
     renderMenu({ onExport: vi.fn(), kind: 'markdown' })
     await openMenu()
-    await openExportSubmenu()
+    await openExportSubmenu('Save as Markdown (.md)')
 
     expect(screen.queryByText(/with comments/)).toBeNull()
   })
@@ -261,11 +261,11 @@ describe('DocumentMenu — no link handout', () => {
 })
 
 describe('DocumentMenu — saving the document itself', () => {
-  it('offers the markdown file for a note, beside the pictures', async () => {
+  it('offers the markdown file for a note', async () => {
     const onExport = vi.fn()
     render(<DocumentMenu onExport={onExport} kind="markdown" />, { container: document.body })
     await openMenu()
-    await openExportSubmenu()
+    await openExportSubmenu('Save as Markdown (.md)')
 
     expect(screen.queryByRole('menuitem', { name: 'Save as JSON Canvas (.canvas)' })).toBeNull()
     fireEvent.pointerUp(screen.getByRole('menuitem', { name: 'Save as Markdown (.md)' }))
@@ -281,5 +281,17 @@ describe('DocumentMenu — saving the document itself', () => {
     expect(screen.queryByRole('menuitem', { name: 'Save as Markdown (.md)' })).toBeNull()
     fireEvent.pointerUp(screen.getByRole('menuitem', { name: 'Save as JSON Canvas (.canvas)' }))
     await waitFor(() => expect(onExport).toHaveBeenCalledWith('canvas'))
+  })
+})
+
+describe('DocumentMenu — export for a markdown note', () => {
+  it('offers only the Markdown save, with no picture formats or picture options', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'markdown' })
+    await openMenu()
+    await openExportSubmenu('Save as Markdown (.md)')
+    expect(screen.queryByRole('menuitem', { name: 'Export as PNG' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Export as SVG' })).toBeNull()
+    expect(screen.queryByRole('menuitemcheckbox', { name: /resolution/ })).toBeNull()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'With background' })).toBeNull()
   })
 })

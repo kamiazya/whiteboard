@@ -276,21 +276,27 @@ Group from the dock, and closing a dialog or the context menu with `Esc`.
 Opening a document, returning to the list or opening Settings moves keyboard
 focus to the page's heading and has a screen reader say where you are
 ("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
-titled the same way ("Roadmap · Whiteboard"). A new, empty note is the
-exception for focus: the editor takes it, so you can type at once, and the
-announcement still plays.
+titled the same way ("Roadmap · Whiteboard"). An empty document is the
+exception for focus, and the announcement still plays: a new, empty note's
+editor takes it, so you can type at once, and an empty canvas's surface takes
+it, so a shortcut such as `N` works the moment the canvas appears — straight
+after **Create a canvas**, with no click first.
 
 ## Searching the document list
 
 In the document list's search box, the results are one key away, and a screen
 reader hears how many there are once the search settles ("3 results for
 “map”", or "No results for “map”"). A search that takes longer than a moment
-shows "Searching…".
+shows "Searching…". The box is a combobox over its results: focus stays in it
+while the arrow keys highlight a result, so you can keep typing, and a screen
+reader names the highlighted one.
 
 | Shortcut | Action |
 |---|---|
-| `ArrowDown` in the search box | Move to the first result |
-| `ArrowDown` / `ArrowUp` on a result | Move to the next or previous result; `ArrowUp` on the first returns to the box |
+| `ArrowDown` / `ArrowUp` in the search box | Highlight the next or previous result; `ArrowUp` on the first highlights none |
+| `Enter` in the search box | Open the highlighted result, or the first when none is highlighted |
+| `Escape` in the search box | Drop the highlight; with none, clear the search |
+| `ArrowDown` / `ArrowUp` on a result reached with `Tab` | Move to the next or previous result; `ArrowUp` on the first returns to the box |
 | `Enter` on a result | Open the document |
 
 ← Back to [reference](README.md)
