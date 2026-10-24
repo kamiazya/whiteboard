@@ -108,7 +108,7 @@ describe('the card list follows a workspace switch', () => {
     try {
       renderPage(store)
       await waitFor(() => expect(titles()).toContain('Left behind'))
-      fireEvent.change(await screen.findByRole('searchbox', { name: 'Search documents' }), {
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Search documents' }), {
         target: { value: 'e' },
       })
       const results = await screen.findByTestId('search-results')

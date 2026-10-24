@@ -132,7 +132,7 @@ describe('coarse pointer: tap opens', () => {
     renderPanel({ onOpenDocument })
     await cardButton('Meeting notes')
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'Roadmap' },
     })
     const results = await screen.findByTestId('search-results')
@@ -252,7 +252,7 @@ describe('one-column tree: object actions stay reachable', () => {
 
 describe('search results: activation and long-press', () => {
   async function searchHit(query: string) {
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: query },
     })
     const results = await screen.findByTestId('search-results')

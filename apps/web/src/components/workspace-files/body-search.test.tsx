@@ -168,8 +168,8 @@ describe('body search', () => {
     // index-keyed assertion reads whichever row happens to be first.
     const rowOf = (path: string) =>
       within(list)
-        .getAllByRole('listitem')
-        .find((li) => li.querySelector(`[data-doc-path="${path}"]`)) as HTMLElement
+        .getAllByRole('option')
+        .find((row) => row.getAttribute('data-doc-path') === path) as HTMLElement
     expect(within(rowOf('plans/roadmap')).getByTestId('semantic-hit')).toBeTruthy()
     // The keyword hit carries a semantic rank too — every embedded document
     // does — and must NOT be labelled: a word in it did produce the row.
