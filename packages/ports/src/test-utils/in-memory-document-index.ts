@@ -2,8 +2,8 @@ import {
   deriveCopyName,
   deriveCopyPath,
   generateDocumentId,
-  isSiblingDisplayNameTaken,
   isSelfOrDescendant,
+  isSiblingDisplayNameTaken,
   SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'
 import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
@@ -29,9 +29,9 @@ import {
   compareDocumentPaths,
   createDocumentInputSchema,
   createWorkspaceInputSchema,
+  DisplayNameTakenError,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
-  DisplayNameTakenError,
   DocumentNotFoundError,
   DocumentPathTakenError,
   duplicateDocumentInputSchema,

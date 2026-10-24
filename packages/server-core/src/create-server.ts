@@ -1,7 +1,7 @@
 import { ReservedKeyWriteError, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  DocumentHasDescendantsError,
   DisplayNameTakenError,
+  DocumentHasDescendantsError,
   DocumentPathTakenError,
   isDatabaseBusy,
   isDocumentNotFoundError,
