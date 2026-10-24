@@ -22,15 +22,14 @@
 
 import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import { canvasColorSchema } from '@kamiazya/whiteboard-model'
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { useEdgeClampedPosition } from '../../hooks/use-edge-clamped-position.js'
 import { useOccluder } from '../../hooks/use-occluder.js'
 import { useRestoreFocus } from '../../hooks/use-restore-focus.js'
 import { useRovingMenu } from '../../hooks/use-roving-menu.js'
 import { cn } from '../../lib/utils.js'
-
-/** Gap kept between the menu and the editor edge when nudging it inside. */
-const MENU_EDGE_MARGIN_PX = 4
+import { SheetHeader, SheetScrim } from './context-menu-sheet.js'
 
 interface ContextMenuActionItem {
   readonly kind?: 'action'
@@ -171,33 +170,11 @@ export function ContextMenu({
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
   const roving = useRovingMenu(menuRef, onClose)
-  // A menu opened near the editor's right/bottom edge would clip outside it,
-  // so it is nudged back inside once measurable, before paint (no visible jump).
-  const [pos, setPos] = useState({ x, y })
+  const pos = useEdgeClampedPosition(menuRef, x, y, variant === 'sheet')
   const sheet = variant === 'sheet'
   // A sheet covers a strip of the editor: registering it lets every viewport
   // verb treat that strip as padding, so the pressed node is panned clear.
   useOccluder(menuRef)
-  useLayoutEffect(() => {
-    // A sheet is edge-anchored, not point-anchored — nothing to clamp.
-    if (sheet) return
-    const el = menuRef.current
-    const parent = el?.offsetParent
-    if (el == null || !(parent instanceof HTMLElement)) {
-      setPos((prev) => (prev.x === x && prev.y === y ? prev : { x, y }))
-      return
-    }
-    const clamp = (value: number, max: number) =>
-      Math.max(MENU_EDGE_MARGIN_PX, Math.min(value, max))
-    // Ceil the measured box: offsetWidth/Height round to integers, so a
-    // fractional menu width would overshoot the margin by a subpixel.
-    const menuRect = el.getBoundingClientRect()
-    const next = {
-      x: clamp(x, parent.clientWidth - Math.ceil(menuRect.width) - MENU_EDGE_MARGIN_PX),
-      y: clamp(y, parent.clientHeight - Math.ceil(menuRect.height) - MENU_EDGE_MARGIN_PX),
-    }
-    setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [x, y, sheet])
 
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
@@ -214,17 +191,7 @@ export function ContextMenu({
 
   return (
     <>
-      {sheet && (
-        // Dims what the sheet covers and gives the dismissal a target: the
-        // window-level outside-press listener closes on a press here.
-        <div
-          aria-hidden="true"
-          data-editor-overlay
-          data-testid="context-menu-scrim"
-          className="bg-black/30"
-          style={{ position: 'absolute', zIndex: 19, inset: 0 }}
-        />
-      )}
+      {sheet && <SheetScrim />}
       <div
         ref={menuRef}
         data-editor-overlay
@@ -266,18 +233,7 @@ export function ContextMenu({
         }
         onKeyDown={roving.onKeyDown}
       >
-        {sheet && (
-          <div role="presentation" className="sticky top-0 z-10 bg-background px-4 pt-2 pb-1">
-            <div
-              data-sheet-handle
-              aria-hidden="true"
-              className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-muted-foreground/40"
-            />
-            {title !== undefined && (
-              <div className="truncate text-sm font-medium text-muted-foreground">{title}</div>
-            )}
-          </div>
-        )}
+        {sheet && <SheetHeader title={title} />}
         {items.map((item, index) => renderCatalogItem(item, index))}
       </div>
     </>

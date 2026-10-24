@@ -6,9 +6,6 @@ interface HeadingSubject {
   readonly edge: Parameters<typeof edgeA11yName>[0] | undefined
   readonly line: object | undefined
   readonly comment: object | undefined
-  /** The menu is the open text editor's own catalog. */
-  readonly editing: boolean
-  readonly nodes: readonly SpatialNode[]
 }
 
 /**
@@ -18,8 +15,12 @@ interface HeadingSubject {
  * Orders" — rather than naming the surface for every press; a press on
  * empty space keeps the surface's own name.
  */
-export function contextMenuHeading(subject: HeadingSubject): { label: string; title: string } {
-  if (subject.editing) return { label: 'Text actions', title: 'Text' }
+export function contextMenuHeading(
+  subject: HeadingSubject,
+  nodes: readonly SpatialNode[],
+  editing: boolean,
+): { label: string; title: string } {
+  if (editing) return { label: 'Text actions', title: 'Text' }
   if (subject.comment !== undefined) return { label: 'Comment actions', title: 'Comment' }
   if (subject.node !== undefined) {
     const name = nodeA11yName(subject.node)
@@ -28,7 +29,7 @@ export function contextMenuHeading(subject: HeadingSubject): { label: string; ti
     return { label: `Actions for ${title}`, title }
   }
   if (subject.edge !== undefined) {
-    const title = edgeA11yName(subject.edge, subject.nodes)
+    const title = edgeA11yName(subject.edge, nodes)
     return { label: `Actions for ${title}`, title }
   }
   if (subject.line !== undefined) return { label: 'Actions for Line', title: 'Line' }

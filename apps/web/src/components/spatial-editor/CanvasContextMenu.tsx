@@ -163,7 +163,8 @@ export function CanvasContextMenu({
   // hidden rather than offering a lock that can never be released.
   const lockEnabled = onToggleNodeLock !== undefined
   const edgeLockEnabled = onToggleEdgeLock !== undefined
-  const { node, edge, line, comment } = menuSubject(contextMenu, canvas, canvasRef.current)
+  const subject = menuSubject(contextMenu, canvas, canvasRef.current)
+  const { node, edge, line, comment } = subject
 
   const activeEditor = contextMenu.editor ?? null
   // The catalog took the caret's focus for its rows; closing gives it back,
@@ -307,22 +308,12 @@ export function CanvasContextMenu({
    * An open text editor owns the press outright (the catalog is the note
    * editor's own), then a comment — not content, so none of the node, edge or
    * canvas verbs apply — then the annotation-only set hand mode asks for, then
-   * the object under the pointer. Written as one nested ternary the order was
-   * six levels of indentation; as a chain it is the list it always was.
+   * the object under the pointer.
    */
   const items: readonly ContextMenuItem[] = nonContentItems() ?? contentItems()
-  const heading = contextMenuHeading({
-    node,
-    edge,
-    line,
-    comment,
-    editing: activeEditor !== null,
-    nodes: canvas.nodes,
-  })
   return (
     <ContextMenu
-      label={heading.label}
-      title={heading.title}
+      {...contextMenuHeading(subject, canvas.nodes, activeEditor !== null)}
       x={contextMenu.x}
       y={contextMenu.y}
       variant={contextMenu.variant ?? (hasCoarsePointer() ? 'sheet' : 'list')}
