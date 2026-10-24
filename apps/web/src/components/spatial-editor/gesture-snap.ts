@@ -87,6 +87,15 @@ function snapResize(
   return { point, guides }
 }
 
+const NO_GUIDES = { x: [], y: [] } as const
+
+/** The press point when a move has not travelled past the tap slop, else undefined. */
+function tapPin(gestureState: GestureState, raw: Point, zoom: number): Point | undefined {
+  if (gestureState.kind !== 'moving') return undefined
+  const travelled = Math.hypot(raw.x - gestureState.startPoint.x, raw.y - gestureState.startPoint.y)
+  return travelled * zoom < MOVE_SLOP_SCREEN_PX ? gestureState.startPoint : undefined
+}
+
 /**
  * Nudges the POINTER, not the emitted command, so preview and commit see
  * the same value: the reducer derives both from `point`, and adjusting
@@ -106,13 +115,8 @@ export function snapGesturePoint(
 ): SnapGestureResult {
   const { gestureState, canvas, boxes, extraIds, isLocked, zoom } = inputs
   const unchanged = { point: raw, guides: { x: [], y: [] } }
-  if (
-    gestureState.kind === 'moving' &&
-    Math.hypot(raw.x - gestureState.startPoint.x, raw.y - gestureState.startPoint.y) * zoom <
-      MOVE_SLOP_SCREEN_PX
-  ) {
-    return { point: gestureState.startPoint, guides: { x: [], y: [] } }
-  }
+  const pinned = tapPin(gestureState, raw, zoom)
+  if (pinned !== undefined) return { point: pinned, guides: NO_GUIDES }
   if (suspended) return unchanged
   const options = {
     thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / zoom,

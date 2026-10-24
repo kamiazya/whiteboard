@@ -240,7 +240,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // that belongs in a module of its own — `pointer-release.ts` is the
   // precedent, and a press-side module beside it is the cut that brings this
   // down rather than a ceiling that keeps rising.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 568, // +20: the hand tool's double click, armed at the press and resolved at the release
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 585, // +37: the hand tool's double click, armed at the press and resolved at the release; a frame-interior drag becoming a band
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,

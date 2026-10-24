@@ -66,7 +66,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#writeReachesIds',
   'apps/web/src/components/spatial-editor/shortcuts.ts#findShortcutIn',
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#EXIT_HINT_ALLOWANCE_PX',
-  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#keyboardAvoidanceSubject',
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#keyboardOccludedBottomPx',
   'apps/web/src/hooks/use-daemon-reconnect.ts#storedDaemonForReconnect',
   'apps/web/src/hooks/use-document-file-seams.ts#toFacetCard',
@@ -366,7 +365,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 148
+const DEBT_CEILING = 147
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

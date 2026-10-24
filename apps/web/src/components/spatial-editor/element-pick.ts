@@ -26,6 +26,7 @@ import {
   type CanvasEdge,
   type CanvasLine,
   endNode,
+  frameHolds,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { type Box, distanceToPolyline, hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
@@ -234,13 +235,11 @@ export function pointableBoxes(
  * person marquees among its members.
  */
 function contains(box: Box, band: { x: number; y: number; w: number; h: number }): boolean {
-  return (
-    box.x <= band.x &&
-    box.y <= band.y &&
-    box.x + box.width >= band.x + band.w &&
-    box.y + box.height >= band.y + band.h
-  )
+  return frameHolds(box, { x: band.x, y: band.y, width: band.w, height: band.h })
 }
+
+/** Travel (screen px) after which a press in a frame's interior is a band, not a tap. */
+const FRAME_BAND_SLOP_PX = 8
 
 /**
  * Whether `at` lies in a frame's border band: inside the box, within
@@ -296,9 +295,26 @@ export function lockedNodeAbsorbsPress(inputs: PickInputs, at: Point): boolean {
  * instead of carrying the frame, so a frame stays easy to select around and
  * its border remains the handle that moves it.
  */
-export function pressedFrameInterior(inputs: PickInputs, nodeId: string, at: Point): boolean {
+function pressedFrameInterior(inputs: PickInputs, nodeId: string, at: Point): boolean {
   const frame = frameBox(inputs, nodeId)
   return frame !== undefined && !onFrameBorder(frame.box, at, inputs.tolerance)
+}
+
+/**
+ * Where the band starts when a move that began at `startPoint` on `nodeId`
+ * has, at `here`, become a drag from a frame's interior; null while it is
+ * still a tap, or when the press was not in an interior at all.
+ */
+export function frameBandStart(
+  inputs: PickInputs,
+  nodeId: string,
+  startPoint: Point,
+  here: Point,
+  zoom: number,
+): Point | null {
+  if (!pressedFrameInterior(inputs, nodeId, startPoint)) return null
+  const travelled = Math.hypot(here.x - startPoint.x, here.y - startPoint.y) * zoom
+  return travelled < FRAME_BAND_SLOP_PX ? null : startPoint
 }
 
 /** The probes a PRESS contends with, in `CONTENT_PICK_ORDER`. */
