@@ -93,6 +93,12 @@ around it, and a brief "Locked — unlock from the menu" notice says why. A
 frame holding an edge gives way to the edge, so you can select, label or
 restyle that edge by pressing it; the frame is selected from its border.
 
+A frame is carried by its border band and its name strip. A drag that starts on
+the frame's empty interior sweeps a selection band instead, so you can pick up
+the notes inside without moving the frame; a tap there still selects the frame.
+A press that moves less than a few pixels is a tap: the node stays exactly where
+it was.
+
 ## Clipboard
 
 | Shortcut | Action |
@@ -160,6 +166,8 @@ A corner **overview** of the whole canvas shows whenever the editor is wide
 enough to hold it beside the dock. In a narrower editor, such as a phone held
 upright, it sits behind a map button just above the dock, hidden until you tap
 it and hidden again on a second tap; the choice lasts for the browser session.
+While you type into a note, label or comment the overview steps aside, so it
+never sits under the formatting bar or the on-screen keyboard.
 
 Zooming to the selection sits in a node's right-click menu as **Zoom to
 selection**; it frames every selected node, not only the one you pressed.

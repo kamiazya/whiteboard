@@ -149,10 +149,10 @@ const framedCanvas: SpatialCanvas = {
   ],
   edges: [],
 }
-// Grab the frame chrome above `inner` and move 10 right (past the tap slop).
+// Grab the frame's left border band and move 10 right (past the tap slop).
 // 410 is 10 from the nearest grid line, so only the member can decide where this lands.
-const FRAME_GRAB = { x: 450, y: 420 }
-const FRAME_DROP = { x: 460, y: 420 }
+const FRAME_GRAB = { x: 402, y: 420 }
+const FRAME_DROP = { x: 412, y: 420 }
 
 it('never snaps a group frame to a member it is carrying', () => {
   const { Host, latest } = makeEditorHost({ initial: framedCanvas, size: SIZE, lockedNodes: [] })

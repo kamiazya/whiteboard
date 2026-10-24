@@ -229,6 +229,20 @@ export function pointableBoxes(
 }
 
 /**
+ * A frame the band lies wholly inside is the surface it was drawn on, not
+ * something it swept: gathering it would select the frame every time a
+ * person marquees among its members.
+ */
+function contains(box: Box, band: { x: number; y: number; w: number; h: number }): boolean {
+  return (
+    box.x <= band.x &&
+    box.y <= band.y &&
+    box.x + box.width >= band.x + band.w &&
+    box.y + box.height >= band.y + band.h
+  )
+}
+
+/**
  * Whether `at` lies in a frame's border band: inside the box, within
  * `tolerance` of one of its sides. A frame's interior is padding around what
  * it holds, so only this band and the frame's own chrome mean "the frame".
@@ -276,6 +290,17 @@ export function lockedNodeAbsorbsPress(inputs: PickInputs, at: Point): boolean {
   return frame === undefined || onFrameBorder(frame.box, at, inputs.tolerance)
 }
 
+/**
+ * Whether a press at `at` that resolved to `nodeId` landed in a frame's
+ * interior, away from its border band. A drag from there sweeps a band
+ * instead of carrying the frame, so a frame stays easy to select around and
+ * its border remains the handle that moves it.
+ */
+export function pressedFrameInterior(inputs: PickInputs, nodeId: string, at: Point): boolean {
+  const frame = frameBox(inputs, nodeId)
+  return frame !== undefined && !onFrameBorder(frame.box, at, inputs.tolerance)
+}
+
 /** The probes a PRESS contends with, in `CONTENT_PICK_ORDER`. */
 export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe | SkippedProbe> {
   return {
@@ -302,6 +327,7 @@ export function bandProbes(inputs: PickInputs): Record<ContentKind, BandProbe | 
     lines: (band) => inkWithin(inputs.paths, band, inputs.isEdgeLocked),
     nodes: (band) =>
       pointableBoxes(inputs.boxes, inputs.isNodeLocked)
+        .filter((entry) => !(entry.container === true && contains(entry.box, band)))
         .filter(
           (entry) =>
             entry.box.x < band.x + band.w &&

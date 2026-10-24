@@ -72,7 +72,7 @@
 
 import { useRef } from 'react'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
-import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
+import { pickContentAt, pressedFrameInterior, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -115,6 +115,8 @@ function navigationPointerKind(pointerType: string): PointerKind {
 }
 
 const LONG_PRESS_SLOP_PX = 10
+/** Travel (screen px) after which a press in a frame's interior is a band, not a tap. */
+const FRAME_BAND_SLOP_PX = 8
 
 /**
  * What a press landed on, as the three answers every claimant asks for.
@@ -495,11 +497,32 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return true
   }
 
+  /**
+   * A move gesture that began in a frame's interior becomes a band once the
+   * pointer travels past the tap slop: the press selected the frame (a tap
+   * still does), and the drag is the person sweeping an area, not carrying it.
+   */
+  const convertFrameInteriorDrag = (screenPoint: Point): boolean => {
+    if (gestureState.kind !== 'moving') return false
+    const { nodeId, startPoint } = gestureState
+    if (!pressedFrameInterior(pickInputs, nodeId, startPoint)) return false
+    const here = screenToCanvas(screenPoint, viewport)
+    if (
+      Math.hypot(here.x - startPoint.x, here.y - startPoint.y) * viewport.zoom <
+      FRAME_BAND_SLOP_PX
+    )
+      return false
+    applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+    setMarquee({ start: startPoint, current: here })
+    return true
+  }
+
   /** Every other gesture: snap the point, show the guides, reduce. */
   const advanceSnappedGesture = (
     e: React.PointerEvent<HTMLDivElement>,
     screenPoint: Point,
   ): void => {
+    if (convertFrameInteriorDrag(screenPoint)) return
     const snapped = snapGesturePoint(
       screenToCanvas(screenPoint, viewport),
       e.metaKey || e.ctrlKey,

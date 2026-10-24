@@ -242,15 +242,15 @@ it('dragging a group leaves a locked member behind', () => {
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
 
-  // Grab the frame on its own chrome (above both children) and drag it.
+  // Grab the frame on its border band (its interior sweeps a band) and drag it.
   fireEvent.pointerDown(root, {
     button: 0,
     pointerId: 3,
-    clientX: r.left + 60,
+    clientX: r.left + 42,
     clientY: r.top + 60,
   })
-  fireEvent.pointerMove(root, { pointerId: 3, clientX: r.left + 160, clientY: r.top + 60 })
-  fireEvent.pointerUp(root, { pointerId: 3, clientX: r.left + 160, clientY: r.top + 60 })
+  fireEvent.pointerMove(root, { pointerId: 3, clientX: r.left + 142, clientY: r.top + 60 })
+  fireEvent.pointerUp(root, { pointerId: 3, clientX: r.left + 142, clientY: r.top + 60 })
 
   const byId = (id: string) => latest.canvas.nodes.find((n) => n.id === id)
   expect(byId('frame')).toMatchObject({ x: 140 })
