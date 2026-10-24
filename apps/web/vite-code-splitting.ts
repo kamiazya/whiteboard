@@ -19,6 +19,11 @@ const NODE_MODULES = /node_modules[\\/]/
 // entry chunk itself.
 const STAYS_WITH_ENTRY = /\.(?:css|html)(?:\?.*)?$/
 const DYNAMIC_IMPORT = /\bimport\s*\(/
+// A comment that mentions `import()` is not a call: zod 4.6.7 carries one, and
+// matching it took every module that reaches zod off first paint. Only a
+// whole-line `//` comment is dropped, so a `//` inside a string on the same
+// line as a real call (a URL) never hides that call.
+const COMMENTS = /\/\*[\s\S]*?\*\/|^[ \t]*\/\/.*$/gm
 
 type ModuleGraph = Pick<Rolldown.ChunkingContext, 'getModuleInfo'>
 
@@ -42,7 +47,8 @@ type ModuleGraph = Pick<Rolldown.ChunkingContext, 'getModuleInfo'>
 function staticClosureIsSync(): (id: string, graph: ModuleGraph) => boolean {
   const clean = new Map<string, boolean>()
   const holdsDynamicImport = (info: Rolldown.ModuleInfo) =>
-    info.dynamicallyImportedIds.length > 0 || DYNAMIC_IMPORT.test(info.code ?? '')
+    info.dynamicallyImportedIds.length > 0 ||
+    DYNAMIC_IMPORT.test((info.code ?? '').replace(COMMENTS, ''))
   /** Every module `id` statically reaches, or null once one holds a dynamic import. */
   const walk = (id: string, graph: ModuleGraph): Set<string> | null => {
     const visited = new Set<string>()
