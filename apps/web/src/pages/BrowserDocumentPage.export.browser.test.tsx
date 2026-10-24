@@ -251,10 +251,10 @@ async function seedContent(documentId: string, write: (doc: Loro) => void): Prom
 }
 
 /** Exports SVG through the menu and answers the downloaded document's text. */
-async function exportSvgText(remount?: () => Promise<void>): Promise<string> {
+async function exportSvgText(): Promise<string> {
   const { blobs } = captureExportedBlobs()
   const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-  fireEvent.pointerUp(await openExportMenuItem('Export as SVG', remount))
+  fireEvent.pointerUp(await openExportMenuItem('Export as SVG'))
   await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
   const blob = blobs[blobs.length - 1]
   expect(blob?.type).toBe('image/svg+xml')
@@ -311,18 +311,22 @@ describe('BrowserDocumentPage export draws what the screen shows', () => {
     vi.restoreAllMocks()
   })
 
-  it('a markdown note exports its body, not an empty 1x1 picture', async () => {
+  it('a markdown note exports as its .md source, and offers no picture', async () => {
     const noteId = await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     await seedContent(noteId, (doc) => {
       doc.getText('body').insert(0, '# Exportedheading\n\nSome exported prose.\n')
     })
     await renderNoteLoaded()
+    const { blobs } = captureExportedBlobs()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
-    const svg = await exportSvgText(renderNoteLoaded)
-    const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement
-    expect(root.textContent).toContain('Exportedheading')
-    expect(Number(root.getAttribute('width'))).toBeGreaterThan(1)
-    expect(Number(root.getAttribute('height'))).toBeGreaterThan(1)
+    const save = await openExportMenuItem('Save as Markdown (.md)', renderNoteLoaded)
+    expect(screen.queryByText('Export as PNG')).toBeNull()
+    expect(screen.queryByText('Export as SVG')).toBeNull()
+    fireEvent.pointerUp(save)
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
+    expect(await blobs[blobs.length - 1]?.text()).toContain('# Exportedheading')
   })
 
   it('a stored image exports as inline bytes, not its asset id', async () => {

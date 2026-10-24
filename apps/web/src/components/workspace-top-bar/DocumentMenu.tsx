@@ -149,8 +149,14 @@ function ExportSubmenu({
         Export…
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+        {/* A note is text: its export is the .md file. The pictures are of the
+            canvas, and so are the options that shape them. */}
+        {kind !== 'markdown' && (
+          <>
+            <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
+          </>
+        )}
         {kind === 'spatial' && (
           <>
             <DropdownMenuItem onSelect={() => onExport('png-comments')}>
@@ -171,7 +177,7 @@ function ExportSubmenu({
             Save as JSON Canvas (.canvas)
           </DropdownMenuItem>
         )}
-        <PictureOptionItems />
+        {kind !== 'markdown' && <PictureOptionItems />}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   )

@@ -23,7 +23,7 @@ knows (the note preview, the daemon's renders and the exports alike), in the
 light or dark palette of the surface they are drawn on. Footnotes are not
 supported: `[^1]` stays in the text as written and its `[^1]: …` definition
 is drawn as an ordinary paragraph where it was written. In the web app, the note preview, the canvas editor, a past version
-opened from version history, and the SVG/PNG exports of either kind (see
+opened from version history, and a canvas's SVG/PNG exports (see
 [Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
 diagrams — in the document's own text, in a note or board it embeds with
 `![[…]]`, and in the note a canvas file node shows. A past version resolves no
@@ -728,8 +728,9 @@ next start.
 
 ## Web app exports
 
-The web editor's document row (More actions → Export) saves the open document
-as SVG or PNG, rendered with the light palette regardless of the UI mode so an
+The web editor's document row (More actions → Export) saves an open canvas
+as SVG or PNG (a markdown note's Export… offers only **Save as Markdown (.md)**,
+below), rendered with the light palette regardless of the UI mode so an
 export's bytes never depend on a display preference — and with the document's
 theme, if it names one, since that is part of the document rather than of the
 display.
@@ -745,23 +746,15 @@ Both are remembered per browser and apply to all four picture entries. The
 daemon's `wb_scene_render` and `POST …/export` do not read these checkboxes; the
 PNG route keeps its own `scale` parameter.
 
-The export draws what the editor shows, including what the document points at:
-
-- **A canvas** exports with its pictures, the note or board a file node points
-  at, and what a text node embeds with `![[…]]`. The comment layer — pins, cards,
-  region outlines and the highlights of threads about a passage — is left out of
-  Export as PNG / SVG and drawn by Export as PNG (with comments) / SVG (with
-  comments). A file node pointing at another board draws its
-  miniature whatever its size on screen, as `wb_scene_render` does with
-  `embedReferences`. Math
-  blocks and Mermaid diagrams are drawn as the editor draws them, in a text
-  node and in the note a file node or an embed shows; `wb_scene_render` draws
-  the same canvas with them as source.
-- **A markdown note** exports as its laid-out body, at the 720-pixel page
-  width `wb_scene_render` uses, with its math blocks, Mermaid diagrams,
-  pictures and embeds drawn as the preview draws them — including a math
-  block or a diagram inside a quote, a list item or an embedded note. `wb_scene_render` draws
-  the same note with math and diagrams as source.
+The export draws what the editor shows, including what the canvas points at:
+its pictures, the note or board a file node points at, and what a text node
+embeds with `![[…]]`. The comment layer — pins, cards, region outlines and the
+highlights of threads about a passage — is left out of Export as PNG / SVG and
+drawn by Export as PNG (with comments) / SVG (with comments). A file node
+pointing at another board draws its miniature whatever its size on screen, as
+`wb_scene_render` does with `embedReferences`. Math blocks and Mermaid diagrams
+are drawn as the editor draws them, in a text node and in the note a file node
+or an embed shows; `wb_scene_render` draws the same canvas with them as source.
 
 Stored pictures are written into the file as PNG `data:` URIs, so a saved SVG
 shows them anywhere it is opened. They are re-encoded from the pixels the
@@ -801,8 +794,7 @@ the `whiteboard` keyword — the same pattern
 draw.io uses. A shared PNG therefore carries its exact node coordinates and edges, not just
 pixels; any PNG chunk reader can recover the document, and image viewers ignore
 the chunk. Unlike draw.io, the app does not open such a PNG back as an
-editable canvas: a PNG dropped into the editor is inserted as an image. A
-markdown note has no JSON Canvas form, so its PNG is the picture alone.
+editable canvas: a PNG dropped into the editor is inserted as an image.
 
 There is currently no raster (PNG) export tool and no tool that returns image
 bytes as MCP `ImageContent` — `wb_scene_render` is the closest equivalent for
