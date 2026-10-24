@@ -359,7 +359,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutation-checked by hand against them.
     //
     // 116 with `layout/nodes/mdast-embed-pending.ts`, the framed "Loading…"
-    // a block embed draws while its target is still being fetched. Outside
+    // a block embed draws while its target is still being fetched, and the
+    // "Empty canvas" line a canvas embed with nothing on it draws. Outside
     // the lane: three guards and one small layout, each pinned by example
     // in `mdast-embed-pending.test.ts` and reached from the browser by
     // `embed-loading-preview.browser.test.tsx`; nothing in it is a cost

@@ -41,6 +41,7 @@ import { createInlineJunction, headCharacter } from './inline-junction.js'
 import { longestFittingCount } from './longest-fit.js'
 import { layoutCodeBlock } from './mdast-code-block.js'
 import {
+  canvasEmbedBody,
   embedTitle,
   layoutPendingEmbed,
   tryIsEmbedPending,
@@ -1109,10 +1110,8 @@ function layoutCanvasEmbedBlock(
   } catch {
     miniature = undefined
   }
-  // An empty or unfittable canvas leaves the panel at the title's height;
-  // the second pad is the gap above a miniature, so it is only paid for one.
-  const contentBottom = miniature === undefined ? startY + pad + titleHeight : box.y + miniature.h
-  const height = contentBottom + pad - startY
+  const body = canvasEmbedBody(canvas, miniature, box, startY + pad + titleHeight, options)
+  const height = body.bottom + pad - startY
   const frame: ShapeSceneNode = {
     kind: 'shape',
     bbox: { x: startX, y: startY, w: options.maxWidth, h: height },
@@ -1124,7 +1123,7 @@ function layoutCanvasEmbedBlock(
     kind: 'embedResolved',
     bbox: { x: startX, y: startY, w: options.maxWidth, h: height },
     documentId,
-    children: [frame, ...title.runs, ...(miniature?.nodes ?? [])],
+    children: [frame, ...title.runs, ...body.nodes],
   }
 }
 

@@ -58,7 +58,8 @@ so type `![[` and pick the document:
 - A **canvas** target renders as a framed miniature of the whole canvas,
   scaled to the column, under its display name. The name is a link that
   opens the canvas. File nodes inside the miniature keep their card form;
-  only the canvas you open expands them.
+  only the canvas you open expands them. A canvas with nothing on it shows
+  a muted "Empty canvas" line under its name instead of a miniature.
 
 While the target is still loading, the embed shows its name in a frame with
 a muted "Loading…" line; the content replaces it when it arrives. A target
