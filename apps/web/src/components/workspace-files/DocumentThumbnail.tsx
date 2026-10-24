@@ -77,6 +77,24 @@ function thumbnailSvg(document: WorkspaceDocumentEntry, drawn: DocumentRender): 
   })
 }
 
+/**
+ * The kind icon, before a picture lands or in place of one. An empty
+ * document says so under it: a blank pane reads as a picture that failed to
+ * draw.
+ */
+function Undrawn({ document, empty }: { document: WorkspaceDocumentEntry; empty: boolean }) {
+  const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
+  return (
+    <span className="flex size-full flex-col items-center justify-center gap-1">
+      <KindIcon
+        data-kind={document.kind ?? 'markdown'}
+        className={cn('text-muted-foreground min-h-0 w-full flex-1', empty && 'opacity-60')}
+      />
+      {empty && <span className="text-muted-foreground text-xs leading-none">Empty</span>}
+    </span>
+  )
+}
+
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
   const [drawn, setDrawn] = useState<DocumentRender | null>(null)
@@ -119,16 +137,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
         // Sole content, and the only place `data-kind` appears: its ABSENCE
         // is how a test knows the render landed, so the copy that stays
         // behind during the cross-fade below must not carry it.
-        //
-        // An empty document says so: a blank pane reads as a picture that
-        // failed to draw.
-        <span className="flex size-full flex-col items-center justify-center gap-1">
-          <KindIcon
-            data-kind={document.kind ?? 'markdown'}
-            className={cn('text-muted-foreground min-h-0 w-full flex-1', empty && 'opacity-60')}
-          />
-          {empty && <span className="text-muted-foreground text-xs leading-none">Empty</span>}
-        </span>
+        <Undrawn document={document} empty={empty} />
       ) : (
         <>
           {/* The render comes FIRST in document order, and rides above the
