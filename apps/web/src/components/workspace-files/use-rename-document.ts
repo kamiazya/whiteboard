@@ -1,6 +1,7 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useState } from 'react'
 import { z } from 'zod'
+import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 
@@ -47,16 +48,35 @@ export function refusalMessage(err: unknown): string {
   return messageOf(err, 'Could not rename it.')
 }
 
+/**
+ * Write the name unless a sibling already shows it — judged where the name is
+ * written, at the current path and before any move.
+ */
+async function nameIfFree(
+  source: WorkspaceFilesSource,
+  listed: readonly WorkspaceDocumentEntry[],
+  entry: WorkspaceDocumentEntry,
+  name: string | undefined,
+): Promise<void> {
+  refuseTakenDocumentName(listed, { path: entry.path, name, documentId: entry.documentId })
+  await source.setDocumentName(entry, name)
+}
+
+interface RenameDocumentDeps {
+  readonly source: WorkspaceFilesSource
+  /** Moves the document and decides where the panel lands; the caller's. */
+  readonly moveDocument: (entry: WorkspaceDocumentEntry, newPath: string) => Promise<void>
+  readonly refreshAndSelect: (path: string) => Promise<unknown>
+  /** The documents listed now, so a name a sibling already shows is refused before sending. */
+  readonly listed: { readonly current: readonly WorkspaceDocumentEntry[] }
+}
+
 export function useRenameDocument({
   source,
   moveDocument,
   refreshAndSelect,
-}: {
-  readonly source: WorkspaceFilesSource
-  /** Moves the document and decides where the panel lands; the caller's. */
-  readonly moveDocument: (entry: WorkspaceDocumentEntry, newPath: string) => Promise<void>
-  readonly refreshAndSelect: (path: string) => Promise<void>
-}): RenameDocument {
+  listed,
+}: RenameDocumentDeps): RenameDocument {
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +99,7 @@ export function useRenameDocument({
       setError(null)
       try {
         if ((entry.name ?? undefined) !== name) {
-          await source.setDocumentName(entry, name)
+          await nameIfFree(source, listed.current, entry, name)
         }
         if (newPath !== entry.path) {
           await moveDocument(entry, newPath)
@@ -105,7 +125,7 @@ export function useRenameDocument({
         setBusy(false)
       }
     },
-    [source, moveDocument, refreshAndSelect],
+    [source, moveDocument, refreshAndSelect, listed],
   )
 
   return { renaming, busy, error, open, cancel, submit }

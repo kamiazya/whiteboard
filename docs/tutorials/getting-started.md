@@ -57,6 +57,12 @@ press **Canvas** or **Markdown note**, and the document is created under that
 name at the path the name earns (`Meeting notes` becomes `meeting-notes`).
 Leave the name empty and it starts at `untitled` as above.
 
+Two documents side by side in one folder cannot share a name: the sheet, the
+**Name and folder…** form and **Rename…** each refuse a name another document
+in the same folder already shows — ignoring case and surrounding spaces — and
+say so beside the field before anything is saved. The same name in another
+folder is fine.
+
 Either way the new document opens straight away, ready to work in. The folder
 you are standing in is part of the address — the URL carries a `?folder=`
 while you are inside one — so coming back lands you where you were, a reload

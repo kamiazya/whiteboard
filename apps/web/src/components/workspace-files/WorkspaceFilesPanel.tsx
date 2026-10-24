@@ -2,6 +2,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
@@ -408,6 +409,7 @@ export function WorkspaceFilesPanel({
         // that collides with what was just made — from the dialog, while the
         // form is still open holding the path that now exists.
         try {
+          refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
           await source.createDocument(path, kind, options?.name)
         } catch (err) {
           outcome.reportCreateRefusal({
@@ -541,12 +543,8 @@ export function WorkspaceFilesPanel({
   )
   // The rename flow owns its own three states (see use-rename-document.ts)
   // and takes `moveDocument` directly — it is declared above, so no ref
-  // bridges the two. It has no use for the row the re-read selected.
-  const refreshForRename = useCallback(
-    (path: string) => refreshAndSelect(path).then(() => undefined),
-    [refreshAndSelect],
-  )
-  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect: refreshForRename })
+  // bridges the two.
+  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect, listed: listedRef })
   const importer = useImportFiles({
     source,
     folder,
