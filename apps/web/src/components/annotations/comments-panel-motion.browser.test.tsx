@@ -86,7 +86,7 @@ it('crosses the WHOLE row to the resolved look, not just the marker beside it', 
 
 it('holds the resolved row on screen long enough to be read, then lets it leave', async () => {
   render(<StatefulPanel />)
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
 
   // Still there, and already SAYING resolved: this beat is the whole fix.
   // The host has not answered yet in this test, so what holds the row is
@@ -120,7 +120,7 @@ it('glides the rows below into the gap rather than snapping them up', async () =
 
   try {
     render(<StatefulPanel />)
-    await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+    await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
     await vi.waitFor(() => expect(rowOf('t-1')).toBeNull(), { timeout: 4000 })
 
     // A POSITIVE offset: the survivor starts the animation displaced
@@ -136,12 +136,12 @@ it('glides the rows below into the gap rather than snapping them up', async () =
 it('leaves the row alone under the All filter, where resolving does not remove it', async () => {
   render(<StatefulPanel />)
   await userEvent.click(page.getByRole('button', { name: 'All' }))
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
 
   // Nothing to hold it FOR: the row stays in this list either way, so the
   // crossing is the whole transition and the beat would just be a delay.
   await vi.waitFor(() => expect(rowOf('t-1')?.dataset.status).toBe('resolved'))
-  await expect.element(page.getByRole('button', { name: 'Reopen' })).toBeInTheDocument()
+  await expect.element(page.getByRole('button', { name: /^Reopen(:|$)/ })).toBeInTheDocument()
   expect(rowOf('t-1')).not.toBeNull()
 })
 
@@ -150,6 +150,6 @@ it('writes to the document at once, and only the PRESENTATION waits', async () =
   // and a reader who navigates away mid-beat would lose it entirely.
   const resolved: [string, boolean][] = []
   render(<StatefulPanel onResolve={(id, flag) => resolved.push([id, flag])} />)
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
   expect(resolved).toEqual([['t-1', true]])
 })

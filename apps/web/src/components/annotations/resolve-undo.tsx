@@ -1,5 +1,5 @@
 import type { CommentThreadStatus } from '@kamiazya/whiteboard-model'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react'
 
 /** Long enough to notice a wrong press and reach the Undo. */
 const UNDO_WINDOW_MS = 6000
@@ -28,9 +28,12 @@ export function useResolveUndo(): {
 export function ResolveUndoNotice({
   to,
   onUndo,
+  undoRef,
 }: {
   readonly to: CommentThreadStatus
   readonly onUndo: () => void
+  /** The Undo button, so the panel can hand it the focus the pressed verb just lost. */
+  readonly undoRef?: Ref<HTMLButtonElement>
 }) {
   return (
     <div
@@ -40,12 +43,24 @@ export function ResolveUndoNotice({
       <span>{to === 'resolved' ? 'Resolved' : 'Reopened'}</span>
       <span aria-hidden="true">&middot;</span>
       <button
+        ref={undoRef}
         type="button"
+        aria-label={to === 'resolved' ? 'Undo resolve' : 'Undo reopen'}
         onClick={onUndo}
         className="min-h-11 rounded px-1 font-medium text-foreground underline underline-offset-2 hover:bg-accent"
       >
         Undo
       </button>
     </div>
+  )
+}
+
+/** Whether the keyboard focus is on a conversation's control or on the Undo notice. */
+export function focusIsInRail(): boolean {
+  const held = document.activeElement
+  return (
+    held instanceof HTMLElement &&
+    (held.closest('[data-thread-id]') !== null ||
+      held.closest('[data-testid="comments-panel-undo"]') !== null)
   )
 }

@@ -341,7 +341,7 @@ it('closes and reopens a conversation from the rail, which is where a note can d
     <CommentsPanel threads={[OPEN]} onResolve={(id, flag) => resolved.push([id, flag])} />,
   )
   await userEvent.click(page.getByText('tighten the copy here'))
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }))
   expect(resolved).toEqual([['t-open', true]])
 
   // The document answers with the new status; the same row now offers Reopen.
@@ -352,7 +352,7 @@ it('closes and reopens a conversation from the rail, which is where a note can d
       onResolve={(id, flag) => resolved.push([id, flag])}
     />,
   )
-  await userEvent.click(page.getByRole('button', { name: 'Reopen' }))
+  await userEvent.click(page.getByRole('button', { name: /^Reopen(:|$)/ }))
   expect(resolved).toEqual([
     ['t-open', true],
     ['t-open', false],
@@ -397,7 +397,7 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
 it('offers neither verb on a host with no write path', async () => {
   render(<CommentsPanel threads={[OPEN]} />)
   await userEvent.click(page.getByText('tighten the copy here'))
-  expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
+  expect(page.getByRole('button', { name: /^Resolve(:|$)/ }).query()).toBeNull()
   expect(page.getByTestId('edit-m1').query()).toBeNull()
 })
 

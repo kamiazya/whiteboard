@@ -9,7 +9,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../../index.css'
 import { CommentsPanel } from './CommentsPanel.js'
@@ -52,7 +52,7 @@ const TWO = [threadOf('t-1', 'tighten the copy here'), threadOf('t-2', 'the Frid
 
 it('prints the verb on the row instead of leaving an unlabelled dot', async () => {
   render(<Host initial={TWO} />)
-  const verbs = page.getByRole('button', { name: 'Resolve' })
+  const verbs = page.getByRole('button', { name: /^Resolve(:|$)/ })
   expect(verbs.elements()).toHaveLength(2)
   for (const el of verbs.elements()) expect(el.textContent?.trim()).toBe('Resolve')
 })
@@ -60,26 +60,26 @@ it('prints the verb on the row instead of leaving an unlabelled dot', async () =
 it('offers exactly one Resolve while a conversation is open, and it is inside that conversation', async () => {
   render(<Host initial={TWO} />)
   await userEvent.click(page.getByText('tighten the copy here'))
-  const verbs = page.getByRole('button', { name: 'Resolve' }).elements()
+  const verbs = page.getByRole('button', { name: /^Resolve(:|$)/ }).elements()
   // The collapsed neighbour keeps its own; the expanded one carries it in
   // its conversation rather than twice.
   expect(verbs).toHaveLength(2)
   const inside = verbs.filter((el) => el.closest('#thread-t-1') !== null)
   expect(inside).toHaveLength(1)
   const rowOfOpen = document.querySelector('[data-thread-id="t-1"]') as HTMLElement
-  expect(rowOfOpen.querySelectorAll('button[aria-label="Resolve"]')).toHaveLength(1)
+  expect(rowOfOpen.querySelectorAll('button[aria-label^="Resolve"]')).toHaveLength(1)
 })
 
 it('says Resolved with an Undo, and Undo reopens the conversation', async () => {
   render(<Host initial={TWO} />)
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
   const notice = document.querySelector('[data-testid="comments-panel-undo"]')
   expect(notice?.textContent).toContain('Resolved')
-  await userEvent.click(page.getByRole('button', { name: 'Undo' }))
+  await userEvent.click(page.getByRole('button', { name: /^Undo/ }))
   await userEvent.click(page.getByRole('button', { name: 'All' }))
   const row = document.querySelector('[data-thread-id="t-1"]') as HTMLElement
   expect(row.dataset.status).toBe('open')
-  expect(page.getByRole('button', { name: 'Undo' }).query()).toBeNull()
+  expect(page.getByRole('button', { name: /^Undo/ }).query()).toBeNull()
 })
 
 it('keeps a two-message row meta on one line at rail width', async () => {
@@ -94,4 +94,31 @@ it('keeps a two-message row meta on one line at rail width', async () => {
   await userEvent.click(page.getByRole('button', { name: 'All' }))
   const activity = document.querySelector('[data-testid="thread-message-count-t-3"]') as HTMLElement
   expect(activity.getBoundingClientRect().height).toBeLessThanOrEqual(18)
+})
+
+it('names each Resolve for its conversation, and the notice Undo for what it undoes', async () => {
+  render(<Host initial={TWO} />)
+  const names = page
+    .getByRole('button', { name: /^Resolve(:|$)/ })
+    .elements()
+    .map((el) => el.getAttribute('aria-label'))
+  expect(new Set(names).size).toBe(2)
+  expect(names[0]).toContain('tighten the copy here')
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }).nth(0))
+  await expect.element(page.getByRole('button', { name: 'Undo resolve' })).toBeInTheDocument()
+})
+
+it('keeps focus in the rail through Resolve and Undo instead of dropping it to the page', async () => {
+  render(<Host initial={TWO} />)
+  ;(
+    page
+      .getByRole('button', { name: /^Resolve(:|$)/ })
+      .nth(0)
+      .element() as HTMLElement
+  ).focus()
+  await userEvent.keyboard('{Enter}')
+  await expect.element(page.getByRole('button', { name: 'Undo resolve' })).toHaveFocus()
+  await userEvent.keyboard('{Enter}')
+  await vi.waitFor(() => expect(document.activeElement).not.toBe(document.body))
+  expect(document.activeElement?.closest('[data-thread-id="t-1"]')).not.toBeNull()
 })

@@ -192,10 +192,26 @@ function ThreadMessages({
   )
 }
 
+const SUBJECT_EXCERPT_CHARS = 40
+
+/**
+ * A verb's accessible name for one conversation: several rows carry the same
+ * verb, so the name must say which, and still begins with the visible word.
+ */
+function verbLabel(verb: string, thread: CommentThread): string {
+  const body = (thread.messages[0]?.body ?? '').trim().replace(/\s+/g, ' ')
+  if (body === '') return verb
+  const excerpt =
+    body.length > SUBJECT_EXCERPT_CHARS ? `${body.slice(0, SUBJECT_EXCERPT_CHARS)}…` : body
+  return `${verb}: ${excerpt}`
+}
+
 function ConversationResolve({
+  thread,
   status,
   onPress,
 }: {
+  thread: CommentThread
   status: CommentThreadStatus
   onPress: () => void
 }) {
@@ -203,7 +219,7 @@ function ConversationResolve({
   return (
     <button
       type="button"
-      aria-label={verb}
+      aria-label={verbLabel(verb, thread)}
       onClick={onPress}
       className="flex min-h-11 items-center gap-1.5 self-start rounded px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
     >
@@ -336,10 +352,12 @@ function RowMeta({
 }
 
 function RowResolve({
+  thread,
   status,
   interactive,
   onPress,
 }: {
+  thread: CommentThread
   status: CommentThreadStatus
   interactive: boolean
   onPress: () => void
@@ -355,7 +373,7 @@ function RowResolve({
   return (
     <button
       type="button"
-      aria-label={verb}
+      aria-label={verbLabel(verb, thread)}
       title={verb}
       onClick={onPress}
       className={ROW_VERB_CLASS}
@@ -432,6 +450,7 @@ export function ThreadRow({
             accessibility tree, which is why merging the two
             restructured the row rather than adding a class. */}
         <RowResolve
+          thread={thread}
           status={status}
           // While the conversation is open its own Resolve is the one target:
           // two identical ones, a row apart, is how the wrong thread got
@@ -492,7 +511,11 @@ export function ThreadRow({
           onEditMessage={onEditMessage}
           resolveVerb={
             onResolve === undefined ? null : (
-              <ConversationResolve status={status} onPress={() => resolveWithBeat(thread)} />
+              <ConversationResolve
+                thread={thread}
+                status={status}
+                onPress={() => resolveWithBeat(thread)}
+              />
             )
           }
         />
