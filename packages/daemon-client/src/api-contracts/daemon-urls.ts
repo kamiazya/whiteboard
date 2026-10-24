@@ -35,6 +35,11 @@ export function workspaceNamesApiUrl(workspaceId: string): string {
   return `${workspaceApiUrl(workspaceId)}/names`
 }
 
+/** PUT a folder's display name; the body names the folder by path. */
+export function workspaceFolderNameApiUrl(workspaceId: string): string {
+  return `${workspaceApiUrl(workspaceId)}/folders/name`
+}
+
 /** The workspace's document list (GET) and legacy create (POST). */
 export function workspaceDocumentsApiUrl(workspaceId: string): string {
   return `${workspaceApiUrl(workspaceId)}/documents`

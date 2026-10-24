@@ -2,6 +2,8 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentNameSchema,
+  documentPathSchema,
+  folderNameSchema,
   namespaceHandleSchema,
   spatialCanvasSchema,
   versionLabelSchema,
@@ -37,6 +39,19 @@ export const setPinnedRequestSchema = z
     pinned: z.boolean(),
   })
   .strict()
+
+// PUT /api/workspaces/:workspaceId/folders/name — names the folder at `path`,
+// or clears its name when `name` is absent. The folder's path never changes:
+// its address is fixed when it is made. Held to model's `folderNameSchema`
+// (non-blank, no "/", bounded), the rule every folder-name writer shares.
+export const setFolderNameRequestSchema = z
+  .object({
+    path: documentPathSchema,
+    name: folderNameSchema.optional(),
+  })
+  .strict()
+
+export const setFolderNameResponseSchema = z.object({ ok: z.literal(true) })
 
 // OperatorInfo is declared in server-core beside the VersionHistory seam
 // and re-exported here so this barrel stays the one place apps/web reads a
@@ -425,8 +440,19 @@ export const documentSummarySchema = z.object({
   pinned: z.boolean().optional(),
 })
 
+// One named folder: what a reader shows for the folder at `path` instead of
+// its segment. An unnamed folder is not listed.
+export const folderNameSummarySchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+})
+
 export const listDocumentsResponseSchema = z.object({
   documents: z.array(documentSummarySchema),
+  // ABSENT when the keeper names no folders, as `pinned` is absent when it
+  // keeps no pins — and read as absent when malformed, so a newer keeper's
+  // folder rows can cost a reader the names, never the documents.
+  folderNames: unknownIsAbsent(z.array(folderNameSummarySchema)),
 })
 
 // POST /api/workspaces/:workspaceId/documents/<path>/duplicate — the copy the
@@ -446,6 +472,8 @@ export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
+export type FolderNameSummary = z.infer<typeof folderNameSummarySchema>
+export type SetFolderNameRequest = z.infer<typeof setFolderNameRequestSchema>
 export type DuplicateDocumentResponse = z.infer<typeof duplicateDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>
