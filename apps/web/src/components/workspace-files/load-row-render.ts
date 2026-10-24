@@ -183,6 +183,9 @@ async function renderSpatialInPool(
   // of fifty boards naming one theme fetches once: the loader refuses a face
   // that is held or already in flight.
   for (const family of reply.fontsMissing ?? []) void loadThemeFontFromSource(family)
+  // A board with nothing on it has no picture, as a blank note has none:
+  // its empty viewBox drew a blank pane in the row and the preview alike.
+  if (reply.scene.nodes.length === 0) return null
   return {
     svg: reply.svg,
     bounds: reply.bounds,

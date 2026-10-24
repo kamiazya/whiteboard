@@ -116,7 +116,11 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
   // shape falls through to the kind icon, one chain with no dead end.
   const symbol = outline?.symbol
   const drawsSymbol = symbol !== undefined && canDrawSymbol(symbol)
-  const projected = drawsSymbol || outline === null ? null : projectForIcon(outline.rects)
+  // A note of one block is a single dash at icon size — a grey bar where
+  // every other note has its page — so it keeps the page.
+  const oneBlockNote = document.kind === 'markdown' && (outline?.rects.length ?? 0) < 2
+  const projected =
+    drawsSymbol || outline === null || oneBlockNote ? null : projectForIcon(outline.rects)
 
   return (
     <span

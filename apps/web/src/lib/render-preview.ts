@@ -20,6 +20,7 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromScene } from './document-outline.js'
+import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
 import type { ResolvedTheme } from './theme.js'
@@ -77,7 +78,7 @@ export interface RenderedMarkdownPreview {
   readonly blocks: readonly RailBlock[]
 }
 
-export const PREVIEW_PADDING_PX = 8
+export { PREVIEW_PADDING_PX }
 
 /**
  * Parse -> layout -> serialize, backing the preview pane. This is the ONLY

@@ -359,6 +359,27 @@ describe('the theme face a row needs', () => {
 
   // The worker already draws by a library it is handed; this is the seam
   // that hands it one.
+  // An empty board draws an empty viewBox: a blank pane in the row and the
+  // preview. It answers nothing, as a blank note does, so both say so.
+  it('answers null for a board with nothing on it', async () => {
+    pool.run.mockResolvedValue({
+      type: 'laid-out',
+      id: 1,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
+      bounds: { x: 0, y: 0, w: 1, h: 1 },
+      scene: { nodes: [] },
+    })
+
+    const drawn = await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => [],
+    })(board)
+
+    expect(drawn).toBeNull()
+  })
+
   it('posts the workspace tag library on the layout request', async () => {
     pool.run.mockResolvedValue({ type: 'laid-out', id: 1, svg: SVG, bounds: BOUNDS })
 
