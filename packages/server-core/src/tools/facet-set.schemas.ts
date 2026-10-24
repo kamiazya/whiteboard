@@ -13,6 +13,7 @@ import {
   TAGS_PER_ELEMENT_MAX,
   tagListWriteSchema,
   tagWriteSchema,
+  utf16Max,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
@@ -28,10 +29,11 @@ const MAX_DOCUMENTS = 50
  * A tag named to find what is stored, so held to no grammar — only to the
  * length a tag is written under, since no longer one can be matched.
  */
-const storedTagNameSchema = z
-  .string()
-  .min(1)
-  .max(TAG_MAX_CHARS, `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`)
+const storedTagNameSchema = utf16Max(
+  z.string().min(1),
+  TAG_MAX_CHARS,
+  `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`,
+)
 
 /**
  * Tags are OKF core frontmatter, and "tag this note" is the thing a caller

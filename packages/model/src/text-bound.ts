@@ -10,9 +10,10 @@ export function growsPast(max: number, before: number, after: number): boolean {
 }
 
 /**
- * `text` cut to at most `max` UTF-16 units — the unit a Zod `.max()` counts,
- * so the result parses under the bound it was cut for — never through a
- * surrogate pair: when the bound falls inside one, the whole character goes.
+ * `text` cut to at most `max` UTF-16 units — the unit `String#length` and
+ * `utf16Max` count (Zod's own `.max()` counts code points), so the result
+ * parses under the bound it was cut for — never through a surrogate pair:
+ * when the bound falls inside one, the whole character goes.
  *
  * Read with `charCodeAt` on the original rather than `codePointAt` on a
  * slice: Node 24.21's optimised `codePointAt` at a slice's last index reads

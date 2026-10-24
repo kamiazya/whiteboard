@@ -1,5 +1,5 @@
 import { tolerantAnswer } from '@kamiazya/whiteboard-daemon-client/api-contracts/tolerant-answer'
-import { fitToLength } from '@kamiazya/whiteboard-model'
+import { fitToLength, utf16Max } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-local-storage.js'
 
@@ -197,7 +197,7 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
        * from before the reasons were kept.
        */
       leftBehind: z
-        .array(z.string().max(LEFT_BEHIND_MAX_CHARS))
+        .array(utf16Max(z.string(), LEFT_BEHIND_MAX_CHARS))
         .max(LEFT_BEHIND_MAX_ENTRIES)
         .optional(),
     })

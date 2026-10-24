@@ -6,6 +6,7 @@ import { ID_LIMIT_PHRASE, ID_MAX_CHARS, nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import type { CanvasComment } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The annotation layer's identifiers (ADR-0026). Same deliberate looseness as
@@ -21,7 +22,8 @@ export const annotationIdSchema = z.string().min(1, 'annotation id must not be e
  * it is held to `ID_MAX_CHARS` where it is written. One stored longer before
  * the limit still reads, and is still named by a reply or a verdict.
  */
-export const annotationIdInputSchema = annotationIdSchema.max(
+export const annotationIdInputSchema = utf16Max(
+  annotationIdSchema,
   ID_MAX_CHARS,
   `an id is longer than ${ID_LIMIT_PHRASE}`,
 )
@@ -96,20 +98,18 @@ const textQuoteSelectorSchema = textQuoteSelector(z.string(), z.string())
  * anchor written before the limit must still read, and resolution judges it
  * on its nearest characters anyway.
  */
-const quoteContextInputSchema = z
-  .string()
-  .max(
-    TEXT_ANCHOR_CONTEXT_MAX_CHARS,
-    `a text anchor's context is longer than the ${TEXT_ANCHOR_CONTEXT_MAX_CHARS}-character limit; keep the characters nearest the passage`,
-  )
+const quoteContextInputSchema = utf16Max(
+  z.string(),
+  TEXT_ANCHOR_CONTEXT_MAX_CHARS,
+  `a text anchor's context is longer than the ${TEXT_ANCHOR_CONTEXT_MAX_CHARS}-character limit; keep the characters nearest the passage`,
+)
 
 /** A quote's passage as a tool accepts it; stored quotes stay unbounded, as context does. */
-const quoteExactInputSchema = z
-  .string()
-  .max(
-    TEXT_ANCHOR_QUOTE_MAX_CHARS,
-    `a text anchor's quote is longer than ${TEXT_ANCHOR_QUOTE_LIMIT_PHRASE}`,
-  )
+const quoteExactInputSchema = utf16Max(
+  z.string(),
+  TEXT_ANCHOR_QUOTE_MAX_CHARS,
+  `a text anchor's quote is longer than ${TEXT_ANCHOR_QUOTE_LIMIT_PHRASE}`,
+)
 
 export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
 

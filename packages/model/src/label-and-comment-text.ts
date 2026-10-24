@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The most characters (UTF-16 code units) one label may carry when it is
@@ -25,9 +26,11 @@ export const LABEL_LIMIT_PHRASE = `the ${LABEL_MAX_CHARS}-character limit; a lon
  * one written before the limit must still read, and still take an edit that
  * leaves it alone.
  */
-export const labelInputSchema = z
-  .string()
-  .max(LABEL_MAX_CHARS, `a label is longer than ${LABEL_LIMIT_PHRASE}`)
+export const labelInputSchema = utf16Max(
+  z.string(),
+  LABEL_MAX_CHARS,
+  `a label is longer than ${LABEL_LIMIT_PHRASE}`,
+)
 
 /**
  * The most characters one comment message may carry when it is written.
@@ -48,10 +51,8 @@ export const COMMENT_MESSAGE_MAX_CHARS = 4 * 1024
 export const COMMENT_MESSAGE_LIMIT_PHRASE = `the ${COMMENT_MESSAGE_MAX_CHARS}-character limit; split it across replies`
 
 /** A comment message as a tool or route accepts it. Stored messages stay unbounded. */
-export const commentMessageInputSchema = z
-  .string()
-  .min(1, 'a comment message must not be empty')
-  .max(
-    COMMENT_MESSAGE_MAX_CHARS,
-    `a comment message is longer than ${COMMENT_MESSAGE_LIMIT_PHRASE}`,
-  )
+export const commentMessageInputSchema = utf16Max(
+  z.string().min(1, 'a comment message must not be empty'),
+  COMMENT_MESSAGE_MAX_CHARS,
+  `a comment message is longer than ${COMMENT_MESSAGE_LIMIT_PHRASE}`,
+)

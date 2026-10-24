@@ -16,6 +16,7 @@ import {
   spatialNodeSchema,
 } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
+import { utf16Max } from './utf16-max.js'
 
 // The proposal layer (ADR-0029): a change somebody wants made, carried on the
 // live document until a person adopts or dismisses it.
@@ -216,10 +217,11 @@ const bodyReplaceChangeSchema = z
 export const bodyReplaceChangeInputSchema = bodyReplaceChangeSchema.omit({ status: true }).extend({
   id: annotationIdInputSchema.describe(CHANGE_ID_DESCRIPTION),
   anchor: textAnchorInputSchema.describe('Which passage to replace.'),
-  assumed: z
-    .string()
-    .max(MARKDOWN_MAX_CHARS, `a passage's prior text is longer than ${MARKDOWN_LIMIT_PHRASE}`)
-    .describe(ASSUMED_PASSAGE_DESCRIPTION),
+  assumed: utf16Max(
+    z.string(),
+    MARKDOWN_MAX_CHARS,
+    `a passage's prior text is longer than ${MARKDOWN_LIMIT_PHRASE}`,
+  ).describe(ASSUMED_PASSAGE_DESCRIPTION),
 })
 
 /**

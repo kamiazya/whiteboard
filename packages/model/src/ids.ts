@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 // Canonical ULID: 26 chars of Crockford base32 (excludes I, L, O, U to avoid
 // visual confusion with 1, 1, 0, V). The first character is additionally
@@ -51,7 +52,8 @@ export const ID_MAX_CHARS = 256
 export const ID_LIMIT_PHRASE = `the ${ID_MAX_CHARS}-character limit for one id`
 
 /** A node's, edge's or line's id as a tool accepts it for an element it creates. */
-export const nodeIdInputSchema = nodeIdSchema.max(
+export const nodeIdInputSchema = utf16Max(
+  nodeIdSchema,
   ID_MAX_CHARS,
   `an id is longer than ${ID_LIMIT_PHRASE}`,
 )
@@ -125,14 +127,10 @@ export const DOCUMENT_PATH_MAX_LENGTH = 1024
  * a leading, trailing or repeated one is rejected: it would name an empty
  * segment.
  */
-export const documentPathSchema = z
-  .string()
-  .min(1)
-  .max(DOCUMENT_PATH_MAX_LENGTH)
-  .refine(
-    (path) => path.split('/').every((segment) => DOCUMENT_PATH_SEGMENT_PATTERN.test(segment)),
-    'each segment must be non-empty and contain only ASCII letters, digits and interior hyphens',
-  )
+export const documentPathSchema = utf16Max(z.string().min(1), DOCUMENT_PATH_MAX_LENGTH).refine(
+  (path) => path.split('/').every((segment) => DOCUMENT_PATH_SEGMENT_PATTERN.test(segment)),
+  'each segment must be non-empty and contain only ASCII letters, digits and interior hyphens',
+)
 
 /**
  * A workspace's canonical identifier (ADR-0019): a bare ULID, the same
@@ -177,9 +175,7 @@ export const WORKSPACE_SEGMENT_MAX_LENGTH = 200
  * `01ARZ...` — so rejecting only the uppercase form would leave the
  * lowercase spelling resolvable as a segment.
  */
-export const workspaceSegmentSchema = z
-  .string()
-  .max(WORKSPACE_SEGMENT_MAX_LENGTH)
+export const workspaceSegmentSchema = utf16Max(z.string(), WORKSPACE_SEGMENT_MAX_LENGTH)
   .regex(
     DOCUMENT_PATH_SEGMENT_PATTERN,
     'workspace segment must be ASCII letters, digits and interior hyphens',
@@ -196,14 +192,13 @@ export const workspaceSegmentSchema = z
  * (empty-after-trim means "unset", stored as no value at all, not the empty
  * string) — rather than inventing a stronger rule nothing enforces today.
  */
-export const workspaceDisplayNameSchema = z
-  .string()
-  .min(1)
-  .max(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
-  .refine(
-    (name) => name === name.trim(),
-    'workspace display name must not have leading/trailing whitespace',
-  )
+export const workspaceDisplayNameSchema = utf16Max(
+  z.string().min(1),
+  WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
+).refine(
+  (name) => name === name.trim(),
+  'workspace display name must not have leading/trailing whitespace',
+)
 
 /**
  * The longest document display name a write may carry. A sibling of
@@ -220,9 +215,11 @@ export const DOCUMENT_NAME_MAX_LENGTH = 200
  * contract, and a name stored before the bound must still list, so readers do
  * not take this schema.
  */
-export const documentNameSchema = z
-  .string()
-  .max(DOCUMENT_NAME_MAX_LENGTH, `a display name is at most ${DOCUMENT_NAME_MAX_LENGTH} characters`)
+export const documentNameSchema = utf16Max(
+  z.string(),
+  DOCUMENT_NAME_MAX_LENGTH,
+  `a display name is at most ${DOCUMENT_NAME_MAX_LENGTH} characters`,
+)
 
 export type DocumentId = z.infer<typeof documentIdSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>

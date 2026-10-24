@@ -10,6 +10,8 @@
  * the hosted app's origins, and the host still reads every message through
  * `pageToHostSchema` and attaches the daemon's credentials itself.
  */
+
+import { utf16Max } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { BRIDGE_PROTOCOL_VERSION, WINDOW_BRIDGE_CHANNEL } from './extension-names.js'
 
@@ -19,7 +21,7 @@ import { BRIDGE_PROTOCOL_VERSION, WINDOW_BRIDGE_CHANNEL } from './extension-name
  */
 export const BRIDGE_CHUNK_BYTES = 512 * 1024
 
-const idSchema = z.string().min(1).max(64)
+const idSchema = utf16Max(z.string().min(1), 64)
 
 /**
  * A path the URL parser leaves exactly as written, under `/api/`. Anything it

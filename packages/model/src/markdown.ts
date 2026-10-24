@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * Markdown-format documents carry a plain-text body — no structural schema.
@@ -42,6 +43,8 @@ export const MARKDOWN_LIMIT_PHRASE = `the ${MARKDOWN_MAX_CHARS}-character limit 
  * frontmatter and body together. One definition so a write is refused the same
  * way whichever surface it arrives through.
  */
-export const markdownInputSchema = z
-  .string()
-  .max(MARKDOWN_MAX_CHARS, `markdown is longer than ${MARKDOWN_LIMIT_PHRASE}`)
+export const markdownInputSchema = utf16Max(
+  z.string(),
+  MARKDOWN_MAX_CHARS,
+  `markdown is longer than ${MARKDOWN_LIMIT_PHRASE}`,
+)

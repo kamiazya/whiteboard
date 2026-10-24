@@ -41,7 +41,7 @@
  */
 import { RECEIVE_TRANSFER_PAGE_PATH } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
+import { uint8ArrayAnyRealmSchema, utf16Max } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { LEFT_BEHIND_MAX_CHARS, LEFT_BEHIND_MAX_ENTRIES } from './user-settings-store.js'
 
@@ -69,7 +69,7 @@ export const CROSS_ORIGIN_TRANSFER_PROTOCOL = 2
  * window open, or open two, and a result landing against the wrong attempt
  * would report one transfer's outcome as another's.
  */
-const transferNonceSchema = z.string().min(16).max(128)
+const transferNonceSchema = utf16Max(z.string().min(16), 128)
 
 export const transferRequestSchema = z.discriminatedUnion('type', [
   /**
@@ -115,7 +115,7 @@ export const transferRequestSchema = z.discriminatedUnion('type', [
  * by the bound the sender's settings keep it under.
  */
 const leftBehindSchema = z
-  .array(z.string().min(1).max(LEFT_BEHIND_MAX_CHARS))
+  .array(utf16Max(z.string().min(1), LEFT_BEHIND_MAX_CHARS))
   .max(LEFT_BEHIND_MAX_ENTRIES)
 
 /**

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 // OKF v0.2's trust family (SPEC §5.2): `generated` records how the current
 // content was produced, `verified` records who or what has confirmed it.
@@ -53,7 +54,8 @@ const OKF_ACTOR_LIMIT_PHRASE = `the ${OKF_ACTOR_MAX_CHARS}-character limit`
  * `okfActorSchema`, unbounded: a document written before the bound, or by
  * another producer, must still read.
  */
-export const okfActorInputSchema = okfActorSchema.max(
+export const okfActorInputSchema = utf16Max(
+  okfActorSchema,
   OKF_ACTOR_MAX_CHARS,
   `an actor is longer than ${OKF_ACTOR_LIMIT_PHRASE}`,
 )

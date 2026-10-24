@@ -18,6 +18,7 @@
  * schema arms.
  */
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 const URI_LIST = 'text/uri-list'
 
@@ -85,21 +86,32 @@ const tooLong = (what: string) => `${what} is longer than ${NODE_LOCATION_LIMIT_
  * them. The STORED resource stays unbounded: one written before the limit
  * must still read, and still take an edit that leaves it alone.
  */
-export const nodeUrlInputSchema = z.url().max(NODE_LOCATION_MAX_CHARS, tooLong("a link's URL"))
-export const nodeFileInputSchema = z.string().max(NODE_LOCATION_MAX_CHARS, tooLong("a file's path"))
-export const nodeSubpathInputSchema = z
-  .string()
-  .startsWith('#')
-  .max(NODE_LOCATION_MAX_CHARS, tooLong("a file's subpath"))
+export const nodeUrlInputSchema = utf16Max(
+  z.url(),
+  NODE_LOCATION_MAX_CHARS,
+  tooLong("a link's URL"),
+)
+export const nodeFileInputSchema = utf16Max(
+  z.string(),
+  NODE_LOCATION_MAX_CHARS,
+  tooLong("a file's path"),
+)
+export const nodeSubpathInputSchema = utf16Max(
+  z.string().startsWith('#'),
+  NODE_LOCATION_MAX_CHARS,
+  tooLong("a file's subpath"),
+)
 
 /**
  * A group's background image as a tool or route accepts it. It is a location
  * like a file's path — the image a frame draws behind its members, which
  * every reader of image references follows — so it shares that bound.
  */
-export const nodeBackgroundInputSchema = z
-  .string()
-  .max(NODE_LOCATION_MAX_CHARS, tooLong("a group's background"))
+export const nodeBackgroundInputSchema = utf16Max(
+  z.string(),
+  NODE_LOCATION_MAX_CHARS,
+  tooLong("a group's background"),
+)
 
 export interface ResourceKindSpec {
   /** What a resource of this kind is emitted with. */

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The most characters (UTF-16 code units, which `z.string().max` counts) one
@@ -31,6 +32,8 @@ export const NODE_TEXT_LIMIT_PHRASE = `the ${NODE_TEXT_MAX_CHARS}-character limi
  * STORED node stays unbounded: a node written before the limit must still
  * read, and still take an edit that does not grow it.
  */
-export const nodeTextInputSchema = z
-  .string()
-  .max(NODE_TEXT_MAX_CHARS, `node text is longer than ${NODE_TEXT_LIMIT_PHRASE}`)
+export const nodeTextInputSchema = utf16Max(
+  z.string(),
+  NODE_TEXT_MAX_CHARS,
+  `node text is longer than ${NODE_TEXT_LIMIT_PHRASE}`,
+)
