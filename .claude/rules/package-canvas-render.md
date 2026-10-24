@@ -1485,7 +1485,8 @@ each planted defect moves only the column that names it.
 
 The second reading was a router finding: the hand-drawn architecture
 reference owes three `reversals`, because the router draws a same-row
-edge inside a frame as a loop under both boxes with no side pinned. The
+edge inside a frame as a loop under both boxes with no side pinned. (A same-row pair that TOUCHES no
+longer loops: it draws the contact mark below.) The
 column exists so that a change to the side choice is judged by it.
 
 **An edge label that would lie over a box slides off the line** —
@@ -1545,6 +1546,25 @@ flush-stacked pair named `bottom/top` used to draw the shared point (an
 invisible edge, honouring a degenerate request); the spike its trial
 path makes is a route through its own boxes, so it is overruled into a
 visible route around the pair.
+
+**Touching boxes are not routed at all** (`layout/edges/edge-contact.ts`,
+owner decision 2026-10-24). The paragraph above stopped describing a flush
+pair: two boxes that share a border, or overlap, with no stored bends and no
+named side the contact does not use, draw one arrowhead-length mark ending
+on the target's facing side, centred on the stretch the two sides share, in
+every routing style — and the side search leaves those edges out, so they
+take no slot on a side. Every side pair between such boxes leaves one and
+comes back round, so the cheapest candidate was always a U; the owner chose
+the mark over that loop. A positive gap still routes
+(`edge-near-boxes.test.ts`), as do corner-only contact and one box inside
+the other. Two consequences worth knowing: the coincident-ends repair and
+the U-hook preference are now reachable only in narrow cases (a box flush
+inside the frame that holds it, a named side the contact cannot honour),
+and several parallel edges between one touching pair draw as one mark.
+Pinned by `edge-touching-boxes.test.ts`; the synthetic scoreboard moved with
+it (bends 8046 to 5087, crossings 494 to 352), and the marks' own arrowheads
+sit inside the source box, which is what `interiorInk` and the short-runway
+column now count for them.
 ## The facet score judges what the board SAYS, not where it puts things
 
 `quality/facet-score.ts` (`scoreFacets(canvas)`, from `/scoring`) is
