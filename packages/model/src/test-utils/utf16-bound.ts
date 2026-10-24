@@ -62,7 +62,7 @@ function childrenOf(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
 }
 
 /** Every string schema under `root` that carries a maximum length. */
-export function boundedStringsIn(root: z.ZodTypeAny): readonly BoundedString[] {
+function boundedStringsIn(root: z.ZodTypeAny): readonly BoundedString[] {
   const seen = new Set<z.ZodTypeAny>()
   const found: BoundedString[] = []
   const visit = (schema: z.ZodTypeAny): void => {
@@ -82,7 +82,7 @@ export function boundedStringsIn(root: z.ZodTypeAny): readonly BoundedString[] {
  * Its code-point count is half that, so a bound counting code points lets it
  * through.
  */
-export function astralOverUtf16(max: number): string {
+function astralOverUtf16(max: number): string {
   return '😀'.repeat(Math.floor(max / 2) + 1)
 }
 
