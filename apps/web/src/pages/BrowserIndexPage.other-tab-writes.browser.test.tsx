@@ -44,14 +44,14 @@ async function openTabs() {
       <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={vi.fn()} />
     </MemoryRouter>,
   )
-  await waitFor(() => expect(titles()).toEqual(['untitled']), { timeout: 15_000 })
+  await waitFor(() => expect(titles()).toEqual(['Untitled']), { timeout: 15_000 })
   return { tabB, first }
 }
 
 it('shows a document another tab creates', async () => {
   const { tabB } = await openTabs()
   await seed(tabB)
-  await waitFor(() => expect(titles()).toEqual(['untitled', 'untitled-2']), { timeout: 15_000 })
+  await waitFor(() => expect(titles()).toEqual(['Untitled', 'Untitled 2']), { timeout: 15_000 })
 })
 
 it('shows a copy another tab duplicates', async () => {
@@ -77,6 +77,28 @@ it('shows a pin another tab sets', async () => {
       expect(card).not.toBeNull()
       expect(within(card as HTMLElement).getByLabelText('Pinned')).toBeTruthy()
     },
+    { timeout: 15_000 },
+  )
+})
+
+it('shows a folder name another tab gives', async () => {
+  const { tabB } = await openTabs()
+  const workspaceId = getBrowserWorkspaceId()
+  await tabB.createDocument({ workspaceId, path: 'class/notes', kind: 'markdown' })
+  await waitFor(
+    () => expect(screen.getAllByRole('button', { name: 'Open folder class' })).toBeTruthy(),
+    {
+      timeout: 15_000,
+    },
+  )
+  await tabB.setFolderName({ workspaceId, path: 'class', name: 'Class of 2026' })
+  await waitFor(
+    () =>
+      expect(
+        within(screen.getByTestId('folder-contents')).getByRole('button', {
+          name: 'Open folder Class of 2026',
+        }),
+      ).toBeTruthy(),
     { timeout: 15_000 },
   )
 })
