@@ -18,6 +18,33 @@ const TASK_RE = /^(\s*(?:>\s?)*)(?:[-*+]|\d+[.)])[ \t]+\[[ xX]\][ \t]/
 const SIBLING_RE = /^(\s*(?:>\s?)*)(?:([-*+])|\d+[.)])[ \t]/
 
 /**
+ * The checkbox half: a `[ ]` typed over a continued task item's own. Answers
+ * undefined when the line is not that shape, null when it is but nothing is to
+ * be swallowed (no sibling task above), else the edit.
+ */
+function swallowRetypedCheckbox(
+  state: EditorState,
+  line: {
+    readonly number: number
+    readonly from: number
+    readonly to: number
+    readonly text: string
+  },
+): TransactionSpec | null | undefined {
+  const checkbox = RETYPED_CHECKBOX_RE.exec(line.text)
+  if (checkbox === null || line.number <= 1) return undefined
+  const [, own] = checkbox
+  const above = TASK_RE.exec(state.doc.line(line.number - 1).text)
+  const mine = TASK_RE.exec(line.text)
+  if (above === null || mine === null || above[1] !== mine[1]) return null
+  return {
+    changes: { from: line.from + own.length, to: line.to, insert: '' },
+    selection: { anchor: line.from + own.length },
+    userEvent: 'input.type',
+  }
+}
+
+/**
  * Typing a space after a marker the user typed by habit over the one the
  * editor already continued onto the line (`- ` then `-`, ` `) would leave
  * `- - `, a nested empty item nobody asked for. The retyped marker and its
@@ -36,18 +63,8 @@ function swallowRetypedMarker(
   if (text !== ' ' || from !== to) return null
   const line = state.doc.lineAt(from)
   if (from !== line.to) return null
-  const checkbox = RETYPED_CHECKBOX_RE.exec(line.text)
-  if (checkbox !== null && line.number > 1) {
-    const [, own] = checkbox
-    const above = TASK_RE.exec(state.doc.line(line.number - 1).text)
-    const mine = TASK_RE.exec(line.text)
-    if (above === null || mine === null || above[1] !== mine[1]) return null
-    return {
-      changes: { from: line.from + own.length, to: line.to, insert: '' },
-      selection: { anchor: line.from + own.length },
-      userEvent: 'input.type',
-    }
-  }
+  const checkbox = swallowRetypedCheckbox(state, line)
+  if (checkbox !== undefined) return checkbox
   const match = RETYPED_RE.exec(line.text)
   if (match === null) return null
   const [, own, typed] = match
