@@ -465,6 +465,8 @@ const SHORTCUT_COVERAGE = {
   'tool-hand': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
   'tool-connect':
     'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'connect-pick-target':
+    'not modelled: moves keyboard focus between attach targets — covered by connect-from-keyboard.browser.test.tsx',
   'tool-draw': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
   'new-note':
     'not modelled: places a note at the viewport centre — covered by tool-hotkeys.browser.test.tsx',

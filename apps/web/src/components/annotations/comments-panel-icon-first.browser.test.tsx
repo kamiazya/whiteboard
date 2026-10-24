@@ -58,9 +58,12 @@ it('draws the object verbs icon-only, with the name spoken rather than printed',
 
 it('prints Resolve, the one verb a misfire on cost a reader the wrong conversation', async () => {
   render(<CommentsPanel threads={[OPEN]} onResolve={vi.fn()} />)
-  expect(page.getByRole('button', { name: 'Resolve' }).element().textContent?.trim()).toBe(
-    'Resolve',
-  )
+  expect(
+    page
+      .getByRole('button', { name: /^Resolve(:|$)/ })
+      .element()
+      .textContent?.trim(),
+  ).toBe('Resolve')
 })
 
 it('gives every verb the 44px the rule names, which is the half that must not be dropped', async () => {
@@ -69,8 +72,8 @@ it('gives every verb the 44px the rule names, which is the half that must not be
 
   // Reported as one object so a failure names WHICH verb is short and by how
   // much, rather than a bare "expected 22 to be >= 44".
-  const undersized = ['Resolve', 'Edit message']
-    .map((name) => ({ name, ...box(page.getByRole('button', { name }).element()) }))
+  const undersized = [/^Resolve(:|$)/, 'Edit message']
+    .map((name) => ({ name: String(name), ...box(page.getByRole('button', { name }).element()) }))
     .filter((one) => one.w < MIN_TARGET || one.h < MIN_TARGET)
   expect(undersized).toEqual([])
 })
@@ -80,15 +83,15 @@ it('makes the status dot the Resolve toggle, reachable without opening the conve
   render(<CommentsPanel threads={[OPEN]} onResolve={(id, flag) => resolved.push([id, flag])} />)
   // Collapsed: no row has been opened, and the verb is already there.
   expect(page.getByRole('button', { expanded: true }).query()).toBeNull()
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }))
+  await userEvent.click(page.getByRole('button', { name: /^Resolve(:|$)/ }))
   expect(resolved).toEqual([['t-open', true]])
 })
 
 it('shows which state each conversation is in, on the row, without opening it', async () => {
   render(<CommentsPanel threads={[OPEN, DONE]} onResolve={vi.fn()} />)
   await userEvent.click(page.getByRole('button', { name: 'All' }))
-  const open = page.getByRole('button', { name: 'Resolve' }).element()
-  const done = page.getByRole('button', { name: 'Reopen' }).element()
+  const open = page.getByRole('button', { name: /^Resolve(:|$)/ }).element()
+  const done = page.getByRole('button', { name: /^Reopen(:|$)/ }).element()
   expect(open.querySelector('.annotation-dot')?.getAttribute('data-status')).toBe('open')
   expect(done.querySelector('.annotation-dot')?.getAttribute('data-status')).toBe('resolved')
 })
@@ -98,14 +101,14 @@ it('keeps the toggle a SIBLING of the row, never nested inside it', async () => 
   // tree — the row used to be the `<button aria-expanded>` that everything
   // else sat in, so merging the dot into it had to restructure the row.
   render(<CommentsPanel threads={[OPEN]} onResolve={vi.fn()} />)
-  const toggle = page.getByRole('button', { name: 'Resolve' }).element()
+  const toggle = page.getByRole('button', { name: /^Resolve(:|$)/ }).element()
   expect(toggle.closest('button[aria-expanded]')).toBeNull()
   expect(page.getByRole('button', { expanded: false }).query()).not.toBeNull()
 })
 
 it('leaves the dot un-pressable, and still shown, for a host with no write path', async () => {
   render(<CommentsPanel threads={[OPEN]} />)
-  expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
+  expect(page.getByRole('button', { name: /^Resolve(:|$)/ }).query()).toBeNull()
   // The STATE is not a write, so it is still drawn.
   expect(document.querySelector('.annotation-dot')).not.toBeNull()
 })

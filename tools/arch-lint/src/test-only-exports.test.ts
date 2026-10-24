@@ -66,7 +66,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#writeReachesIds',
   'apps/web/src/components/spatial-editor/shortcuts.ts#findShortcutIn',
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#EXIT_HINT_ALLOWANCE_PX',
-  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#keyboardAvoidanceSubject',
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#keyboardOccludedBottomPx',
   'apps/web/src/hooks/use-daemon-reconnect.ts#storedDaemonForReconnect',
   'apps/web/src/hooks/use-document-file-seams.ts#toFacetCard',
@@ -231,6 +230,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/model/src/utf16-max.ts#UTF16_MAX_PARAM':
+    'the tag utf16Max puts on its refusal issue; production writes it in its own module, and the bounded-string probe in model/test-utils recognises a length refusal by it rather than by a copied literal',
   'packages/loro-adapter/src/content-digest.ts#stableStringify':
     "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
   'packages/loro-adapter/src/workspace-tree.ts#ensureFolderPath':
@@ -366,7 +367,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 148
+const DEBT_CEILING = 147
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

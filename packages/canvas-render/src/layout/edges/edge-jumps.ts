@@ -501,7 +501,7 @@ export function computeEdgeJumps(
   edges: readonly ResolvedEdgeNode[],
 ): ReadonlyMap<string, readonly EdgeJumpPoint[]> {
   const result = new Map<string, readonly EdgeJumpPoint[]>()
-  const placed = edges.map(placedRunsOf)
+  const placed = edges.map((edge, index) => placedRunsOf(edge, index))
   const grid = new SegmentGrid(placed.flat().filter((p): p is Placed => p !== undefined))
   const budget = { left: MAX_HOPS_PER_SCENE }
   edges.forEach((edge, e) => {

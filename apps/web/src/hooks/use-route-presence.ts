@@ -1,7 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type RefObject, useEffect, useRef } from 'react'
 import { documentArrival, pageTitle } from '../lib/document-title.js'
-import { announceRoute } from '../lib/route-announcer.js'
+import { announceRoute, routeAnnouncementSnapshot } from '../lib/route-announcer.js'
 
 /** Sets the tab title while the page is mounted, and gives the tab back to the app after. */
 function useTabTitle(name: string): void {
@@ -42,14 +42,25 @@ function useRoutePresence({
   useTabTitle(title)
   const latest = useRef({ announcement, claimsFocus })
   latest.current = { announcement, claimsFocus }
+  // What this page last said on arrival. A name that resolves or changes
+  // afterwards would leave that text stale, so it is replaced — but only while
+  // it is still what the region holds: a later message (a rename receipt)
+  // stays.
+  const arrivalSaid = useRef<string | null>(null)
   useEffect(() => {
     if (routeKey === null) return
     announceRoute(latest.current.announcement)
+    arrivalSaid.current = latest.current.announcement
     const holder = document.activeElement
     if (latest.current.claimsFocus && (holder === null || holder === document.body)) {
       headingRef.current?.focus({ preventScroll: true })
     }
   }, [routeKey, headingRef])
+  useEffect(() => {
+    if (arrivalSaid.current === null || arrivalSaid.current === announcement) return
+    if (routeAnnouncementSnapshot() === arrivalSaid.current) announceRoute(announcement)
+    arrivalSaid.current = announcement
+  }, [announcement])
 }
 
 /** The document list: its heading takes focus. Returns the heading's ref. */

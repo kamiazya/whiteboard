@@ -1220,6 +1220,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       frameSelection,
       changeTool,
       createNodeAtViewportCenter: () => createNodeAtViewportCenter(),
+      setGroupLabelEditId,
       menuOpen: contextMenu !== null,
       openSelectionMenu: () =>
         setContextMenu(
@@ -1872,7 +1873,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the same documented tradeoff drawing/whiteboard editors commonly
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
-          aria-label={canvasRootLabel(canvas.nodes.length)}
+          aria-label={canvasRootLabel(canvas, selectedId, selectedEdgeId)}
           aria-describedby={emptyHintRef(canvas.nodes.length, emptyHintId)}
           aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
@@ -2007,6 +2008,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             primaryId={selectedId}
             extraIds={extraIds}
             selectedEdgeId={selectedEdgeId}
+            externalVersion={externalVersion}
           />
           {revealPulse === null ? null : (
             <CommentRevealPulse

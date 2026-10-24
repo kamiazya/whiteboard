@@ -100,8 +100,16 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
+  })
+
+  it('says a canvas has nothing to draw, not nothing written', async () => {
+    render(<DocumentPreview document={{ ...doc, kind: 'spatial' }} loadRender={async () => null} />)
+    await act(async () => {})
+
+    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.queryByText('Nothing written yet.')).toBeNull()
   })
 
   it('keeps them when the render throws outright', async () => {
@@ -116,7 +124,7 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
+    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
   })
 
@@ -183,6 +191,18 @@ describe('DocumentPreview', () => {
       render(<DocumentPreview document={doc} loadRender={async () => drawn} onRename={onRename} />)
       await act(async () => {})
       fireEvent.click(screen.getByRole('button', { name: /Rename/ }))
+      expect(onRename).toHaveBeenCalledWith(doc)
+    })
+
+    it('puts Rename beside the name and a separate Change address beside the path', async () => {
+      const onRename = vi.fn()
+      render(<DocumentPreview document={doc} loadRender={async () => drawn} onRename={onRename} />)
+      await act(async () => {})
+      const heading = screen.getByRole('heading', { level: 2 })
+      expect(heading.parentElement?.querySelector('button')?.textContent).toBe('Rename…')
+      const address = screen.getByRole('button', { name: 'Change address…' })
+      expect(address.parentElement?.textContent).toContain(doc.path)
+      fireEvent.click(address)
       expect(onRename).toHaveBeenCalledWith(doc)
     })
 

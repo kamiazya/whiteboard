@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The most characters (UTF-16 code units) one search query may carry.
@@ -19,7 +20,8 @@ export const SEARCH_QUERY_MAX_CHARS = 1024
 const SEARCH_QUERY_LIMIT_PHRASE = `the ${SEARCH_QUERY_MAX_CHARS}-character limit`
 
 /** A search query as a tool or route accepts it. */
-export const searchQueryInputSchema = z
-  .string()
-  .min(1)
-  .max(SEARCH_QUERY_MAX_CHARS, `a search query is longer than ${SEARCH_QUERY_LIMIT_PHRASE}`)
+export const searchQueryInputSchema = utf16Max(
+  z.string().min(1),
+  SEARCH_QUERY_MAX_CHARS,
+  `a search query is longer than ${SEARCH_QUERY_LIMIT_PHRASE}`,
+)

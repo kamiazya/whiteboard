@@ -18,6 +18,7 @@ import {
   documentOkfV1ResponseSchema,
   documentSearchResponseSchema,
   linkifyMentionsResponseSchema,
+  setTagLibraryResponseSchema,
   workspaceDocumentTagsResponseSchema,
 } from './index.js'
 
@@ -73,6 +74,12 @@ const ANSWERS = [
     schema: linkifyMentionsResponseSchema,
     known: { linked: 2 },
     withExtras: { linked: 2, ...extra },
+  },
+  {
+    name: 'setTagLibraryResponseSchema',
+    schema: setTagLibraryResponseSchema,
+    known: { documentId: DOCUMENT_ID },
+    withExtras: { documentId: DOCUMENT_ID, ...extra },
   },
   {
     name: 'documentOkfV1ResponseSchema',

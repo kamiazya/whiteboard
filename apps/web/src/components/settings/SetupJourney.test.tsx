@@ -103,3 +103,11 @@ describe('SetupJourney — storage evidence on the steps', () => {
     expect(text).toMatch(/AI assistants on this computer/)
   })
 })
+
+describe('SetupJourney — wording', () => {
+  it('says documents, not canvases, live in the browser profile', () => {
+    renderJourney()
+    expect(screen.getByText(/Your documents live in this browser profile/)).toBeTruthy()
+    expect(screen.queryByText(/Canvases live/)).toBeNull()
+  })
+})

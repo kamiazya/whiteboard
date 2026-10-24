@@ -110,6 +110,20 @@ describe('createCodeSplittingGroups', () => {
     ).toBeUndefined()
   })
 
+  it('reads a comment that mentions import() as no dynamic import', () => {
+    // zod 4.6.7 ships one such comment, and matching it took every module
+    // that reaches zod off first paint: 22 preloaded files instead of 9.
+    const lib = `${SRC}/lib/a.ts`
+    const graph = {
+      [lib]: { importedIds: [ZOD] },
+      [ZOD]: {
+        code: '// emits an indexed access rather than an inline `import()` of a path\n/* or import("x") */\nexport const z = 1',
+      },
+    }
+    expect(chunkOf(lib, true, graph)).toBe('shell')
+    expect(chunkOf(ZOD, true, graph)).toBe('vendor-shell')
+  })
+
   it('leaves out a module whose static imports reach a dynamic import', () => {
     const lib = `${SRC}/lib/a.ts`
     const lazyHolder = `${SRC}/lib/b.ts`

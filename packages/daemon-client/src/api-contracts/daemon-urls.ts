@@ -255,6 +255,10 @@ export function documentTagsApiUrl(workspaceId: string): string {
   return `${v1WorkspaceUrl(workspaceId)}/document-tags`
 }
 
+export function tagLibraryApiUrl(workspaceId: string): string {
+  return `${v1WorkspaceUrl(workspaceId)}/tag-library`
+}
+
 /** The query string comes from the route's own contract, so its names cannot drift from the parser's. */
 export function searchApiUrl(workspaceId: string, input: SearchQueryInput): string {
   return `${v1WorkspaceUrl(workspaceId)}/search?${searchQueryString(input)}`

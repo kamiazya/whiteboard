@@ -199,6 +199,12 @@ function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
 }
 
 /**
+ * The blank band a saved picture keeps around what it draws, the same on
+ * every side. Without it a frame's stroke sat on the picture's last row.
+ */
+const EXPORT_MARGIN_PX = 16
+
+/**
  * The document a person SAVES: the same layout as the editor surface, drawn
  * as a whole document with its legend (ADR-0040 decision 6) in the band
  * `sceneDocumentBounds` reserves for it. The editor's own string above is
@@ -212,7 +218,7 @@ export function renderCanvasForExportWith(
   background?: string,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   const { scene } = renderCanvasToSvgWith(canvas, options)
-  const bounds = sceneDocumentBounds(scene)
+  const bounds = sceneDocumentBounds(scene, EXPORT_MARGIN_PX)
   return {
     svg: renderSceneToSvg(scene, exportEnvelope(bounds, background)),
     bounds,

@@ -27,7 +27,7 @@ import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
 import { AnnouncerRegion, useAnnouncer } from './announcer.js'
 import { CommentComposer } from './CommentComposer.js'
 import type { CommentsPanelProps, ThreadFilter } from './comments-panel-props.js'
-import { ResolveUndoNotice, useResolveUndo } from './resolve-undo.js'
+import { focusIsInRail, ResolveUndoNotice, useResolveUndo } from './resolve-undo.js'
 import { ComposeAbout, type ThreadEdit, ThreadRow } from './thread-row.js'
 
 const FILTERS: readonly { readonly value: ThreadFilter; readonly label: string }[] = [
@@ -313,9 +313,24 @@ export function CommentsPanel({
     pending.get(thread.id) ?? thread.status
 
   const { offer: undo, offerUndo } = useResolveUndo()
+  const undoRef = useRef<HTMLButtonElement | null>(null)
+  const refocusUndo = useRef(false)
+
+  // The verb that was just pressed is replaced by the Undo notice, so a reader
+  // who pressed it with the keyboard would be dropped onto the page.
+  useEffect(() => {
+    if (undo === null || !refocusUndo.current) return
+    refocusUndo.current = false
+    undoRef.current?.focus()
+  }, [undo])
 
   function resolveWithBeat(thread: CommentThread, withUndo = true): void {
     if (onResolve === undefined) return
+    const inRail = focusIsInRail()
+    if (inRail && withUndo) refocusUndo.current = true
+    // Undo is about to unmount under the reader's focus: hand it to the
+    // conversation it restored.
+    if (inRail && !withUndo) rowRefs.current.get(thread.id)?.focus()
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
     offerUndo(withUndo ? { threadId: thread.id, to: next } : null)
@@ -422,6 +437,7 @@ export function CommentsPanel({
       {undo === null ? null : (
         <ResolveUndoNotice
           to={undo.to}
+          undoRef={undoRef}
           onUndo={() => {
             const target = threads.find((entry) => entry.id === undo.threadId)
             if (target !== undefined) resolveWithBeat(target, false)

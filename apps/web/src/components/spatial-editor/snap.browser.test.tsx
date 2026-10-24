@@ -143,16 +143,16 @@ it('snaps to the grid when no neighbour edge is in range', () => {
 
 const framedCanvas: SpatialCanvas = {
   nodes: [
-    groupNode({ id: 'frame', x: 407, y: 400, width: 200, height: 200, label: 'F' }),
+    groupNode({ id: 'frame', x: 400, y: 400, width: 200, height: 200, label: 'F' }),
     // Sits 5 inside the frame's left edge — close enough to attract.
-    textNode({ id: 'inner', x: 412, y: 460, width: 60, height: 40, text: 'I' }),
+    textNode({ id: 'inner', x: 405, y: 460, width: 60, height: 40, text: 'I' }),
   ],
   edges: [],
 }
-// Grab the frame chrome above `inner` and move 3 right. 410 is 10 from the
-// nearest grid line, so only the member can decide where this lands.
-const FRAME_GRAB = { x: 450, y: 420 }
-const FRAME_DROP = { x: 453, y: 420 }
+// Grab the frame's left border band and move 10 right (past the tap slop).
+// 410 is 10 from the nearest grid line, so only the member can decide where this lands.
+const FRAME_GRAB = { x: 402, y: 420 }
+const FRAME_DROP = { x: 412, y: 420 }
 
 it('never snaps a group frame to a member it is carrying', () => {
   const { Host, latest } = makeEditorHost({ initial: framedCanvas, size: SIZE, lockedNodes: [] })
@@ -177,9 +177,9 @@ it('DOES snap a group frame to a LOCKED member, which stays put', () => {
 
   drag(rootOf(container), FRAME_GRAB, FRAME_DROP)
 
-  expect(byId(latest.canvas, 'frame').x).toBe(412)
+  expect(byId(latest.canvas, 'frame').x).toBe(405)
   // ...and the lock still holds: the member did not travel.
-  expect(byId(latest.canvas, 'inner').x).toBe(412)
+  expect(byId(latest.canvas, 'inner').x).toBe(405)
 })
 
 // Resizing snaps the DRAGGED EDGE. Handles are real DOM elements with their
@@ -251,4 +251,14 @@ it('leaves a resized edge where the pointer stopped while Cmd is held', () => {
   })
 
   expect(byId(latest.canvas, 'b').x).toBe(235)
+})
+
+it('a press with fingertip jitter selects without relocating the off-grid node', () => {
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
+  const { container } = render(<Host />)
+
+  // `a` sits 3 canvas px from a grid line, so a snapped release would move it.
+  drag(rootOf(container), { x: 187, y: 143 }, { x: 190, y: 141 })
+
+  expect(byId(latest.canvas, 'a')).toMatchObject({ x: 137, y: 113 })
 })

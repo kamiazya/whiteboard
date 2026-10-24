@@ -40,6 +40,40 @@ describe('snapGesturePoint', () => {
     expect(out).toEqual({ point: { x: 152.5, y: 30 }, guides: { x: [], y: [] } })
   })
 
+  it('a press that stays under the tap slop pins the pointer to the press point, however near a snap line', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0), textNode('b', 300, 7)], edges: [] }
+    for (const suspended of [false, true]) {
+      const out = snapGesturePoint({ x: 352, y: 31 }, suspended, inputsFor(canvas, movingB))
+      expect(out).toEqual({ point: movingB.startPoint, guides: { x: [], y: [] } })
+    }
+  })
+
+  it('a tap on a resize band pins the handle too, so selecting a node never snaps its edge', () => {
+    // A coarse pointer's resize band reaches well inside the box: a tap there
+    // starts a resize, and a zero-travel resize used to pull the top edge
+    // (y 6) up onto the grid line at 0.
+    const canvas: SpatialCanvas = { nodes: [textNode('b', 300, 6)], edges: [] }
+    const resizingTop: GestureState = {
+      kind: 'resizing',
+      nodeId: 'b',
+      startType: 'text',
+      handle: 'n',
+      startPoint: { x: 350, y: 6 },
+      startBox: { x: 300, y: 6, width: 100, height: 50 },
+    }
+    const out = snapGesturePoint({ x: 351, y: 7 }, false, inputsFor(canvas, resizingTop))
+    expect(out).toEqual({ point: resizingTop.startPoint, guides: { x: [], y: [] } })
+  })
+
+  it('the tap slop is measured on screen, so zooming in shrinks it in canvas units', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0), textNode('b', 300, 7)], edges: [] }
+    const out = snapGesturePoint({ x: 352, y: 30 }, true, {
+      ...inputsFor(canvas, movingB),
+      zoom: 8,
+    })
+    expect(out.point).toEqual({ x: 352, y: 30 })
+  })
+
   it('idle (non-snapping) gesture → passthrough', () => {
     const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0)], edges: [] }
     const out = snapGesturePoint({ x: 5, y: 5 }, false, inputsFor(canvas, { kind: 'idle' }))
@@ -73,7 +107,7 @@ describe('snapGesturePoint', () => {
 
   it('resizing snaps only the edge under the handle, never the anchored axis', () => {
     const canvas: SpatialCanvas = {
-      nodes: [textNode('a', 410, 0), textNode('b', 300, 0)],
+      nodes: [textNode('a', 420, 0), textNode('b', 300, 0)],
       edges: [],
     }
     const resizingB: GestureState = {
@@ -84,8 +118,9 @@ describe('snapGesturePoint', () => {
       startPoint: { x: 400, y: 25 },
       startBox: { x: 300, y: 0, width: 100, height: 50 },
     }
-    const out = snapGesturePoint({ x: 407, y: 25 }, false, inputsFor(canvas, resizingB))
-    expect(out).toEqual({ point: { x: 410, y: 25 }, guides: { x: [410], y: [] } })
+    // Travels 17px, past the tap slop, and lands 3px short of a's left edge.
+    const out = snapGesturePoint({ x: 417, y: 25 }, false, inputsFor(canvas, resizingB))
+    expect(out).toEqual({ point: { x: 420, y: 25 }, guides: { x: [420], y: [] } })
   })
 
   it('a bottom-edge resize snaps the trailing edge to a neighbour top edge', () => {

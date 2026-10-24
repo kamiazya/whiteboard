@@ -13,7 +13,7 @@ import {
   readMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { documentIdSchema, LABEL_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, LABEL_MAX_CHARS, utf16Max } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -45,11 +45,12 @@ export const canvasRenderSvgInputSchema = z
       .describe(
         "Resolve what this document references against the workspace: a file node's target renders inside the node (a markdown document as its body, a canvas as a miniature), a `![[path]]` embed in any markdown body renders the document or the `#Heading` / `#Group` part it names, and every reference shows its readable name instead of its raw id. Off by default so the render stays a pure function of this document alone; off, an embed renders as its address.",
       ),
-    fragment: z
-      .string()
-      .min(1)
-      // A group label is written under this bound, and a heading is one line.
-      .max(LABEL_MAX_CHARS, `a fragment is longer than the ${LABEL_MAX_CHARS}-character limit`)
+    // A group label is written under this bound, and a heading is one line.
+    fragment: utf16Max(
+      z.string().min(1),
+      LABEL_MAX_CHARS,
+      `a fragment is longer than the ${LABEL_MAX_CHARS}-character limit`,
+    )
       .optional()
       .describe(
         "Render one PART of the document rather than the whole: a heading's text for a markdown document (that section, through the next heading of the same or a higher level), or a group's label for a canvas (the group, the nodes inside its box, and the edges between them). The same names `[[path#...]]` uses; `^` followed by a node id addresses a node durably. Unknown → an error naming it.",

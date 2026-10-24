@@ -21,9 +21,11 @@ export function readingOrder<T extends PlacedNode>(nodes: readonly T[]): T[] {
 }
 
 /**
- * The id one step from `currentId` in reading order, wrapping at both ends.
- * With no current node a forward step lands on the first and a backward step
- * on the last; an id that is no longer on the board counts as no node.
+ * The id one step from `currentId` in reading order. It does NOT wrap: a step
+ * off either end answers undefined so the caller can hand Tab back to the
+ * browser, or a keyboard user could never leave the walk. With no current node
+ * a forward step lands on the first and a backward step on the last; an id
+ * that is no longer on the board counts as no node.
  */
 export function nextInReadingOrder(
   nodes: readonly PlacedNode[],
@@ -34,7 +36,7 @@ export function nextInReadingOrder(
   if (ordered.length === 0) return undefined
   const at = currentId === null ? -1 : ordered.findIndex((n) => n.id === currentId)
   if (at < 0) return (step === 1 ? ordered[0] : ordered[ordered.length - 1])?.id
-  return ordered[(at + step + ordered.length) % ordered.length]?.id
+  return ordered[at + step]?.id
 }
 
 /** Off-axis distance costs double: a node straight ahead beats a nearer one off to the side. */

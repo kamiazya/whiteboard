@@ -58,6 +58,23 @@ describe('wikiLinkCompletionSource', () => {
     expect(accept(doc, result!, 0)).toBe('詳細は [[release-plan|Release plan]]')
   })
 
+  // GFM reads an unescaped `|` on a table row, or on the line right under
+  // one, as a cell edge — an alias there splits the link across cells.
+  it('writes the bare path where the alias pipe would split a table cell', () => {
+    const row = '| Step | Owner |\n| --- | --- |\n| See [[Re'
+    expect(accept(row, complete(row, row.length)!, 0)).toBe(
+      '| Step | Owner |\n| --- | --- |\n| See [[release-plan]]',
+    )
+    const first = '| See [[Re'
+    expect(accept(first, complete(first, first.length)!, 0)).toBe('| See [[release-plan]]')
+    const under = '| a | b |\nSee [[Re'
+    expect(accept(under, complete(under, under.length)!, 0)).toBe('| a | b |\nSee [[release-plan]]')
+    const prose = 'Plain line\nSee [[Re'
+    expect(accept(prose, complete(prose, prose.length)!, 0)).toBe(
+      'Plain line\nSee [[release-plan|Release plan]]',
+    )
+  })
+
   it('keeps a preceding ! so an embed stays an embed', () => {
     const doc = '![[Re'
     const result = complete(doc, doc.length)

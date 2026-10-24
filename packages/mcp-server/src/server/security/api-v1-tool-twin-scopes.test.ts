@@ -38,6 +38,7 @@ const V1_ROUTE_SCOPES: Readonly<Record<string, V1RouteScope>> = {
     noTwin: 'the connections panel; answers a context excerpt of each referring document',
     scopes: ['canvas:read'],
   },
+  [`PUT ${WS}/tag-library`]: { twin: 'wb_facet_set' },
   [`POST ${DOC}/linkify-mentions`]: {
     noTwin: 'the connections panel’s Link action; rewrites a document’s body and text nodes',
     scopes: ['canvas:write'],

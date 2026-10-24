@@ -6,10 +6,15 @@
  */
 import {
   linkifyMentionsInputSchema,
+  setTagLibraryInputSchema,
   wbDocumentCreateInputSchema,
 } from '@kamiazya/whiteboard-server-core/contracts'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import type { CreateDocumentV1Request, LinkifyMentionsV1Request } from './index.js'
+import type {
+  CreateDocumentV1Request,
+  LinkifyMentionsV1Request,
+  SetTagLibraryV1Request,
+} from './index.js'
 
 const WORKSPACE_ID = '01HZX3K9Q5V8N2M4P6R7S8T9WA'
 const SOURCE_ID = '01HZX3K9Q5V8N2M4P6R7S8T9WB'
@@ -24,6 +29,15 @@ describe('LinkifyMentionsV1Request', () => {
       workspaceId: WORKSPACE_ID,
       documentId: SOURCE_ID,
     })
+    expect(parsed.success).toBe(true)
+  })
+})
+
+describe('SetTagLibraryV1Request', () => {
+  it('is the input without the workspace the path carries', () => {
+    expectTypeOf<keyof SetTagLibraryV1Request>().toEqualTypeOf<'library'>()
+    const body: SetTagLibraryV1Request = { library: { health: { values: { ok: { color: '4' } } } } }
+    const parsed = setTagLibraryInputSchema.safeParse({ ...body, workspaceId: WORKSPACE_ID })
     expect(parsed.success).toBe(true)
   })
 })

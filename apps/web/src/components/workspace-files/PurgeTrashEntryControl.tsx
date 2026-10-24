@@ -54,7 +54,7 @@ export function PurgeTrashEntryControl({
           setError(null)
           setOpen(true)
         }}
-        className="text-destructive hover:bg-destructive/10 shrink-0 rounded border px-2 py-0.5 text-xs"
+        className="text-destructive hover:bg-destructive/10 shrink-0 rounded border px-2 py-0.5 text-xs pointer-coarse:min-h-11 pointer-coarse:px-3"
       >
         Delete permanently
       </button>

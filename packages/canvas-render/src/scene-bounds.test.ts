@@ -626,7 +626,7 @@ describe('sceneDocumentBounds', () => {
   it('is the scene’s bounds when there is no legend', () => {
     expect(sceneDocumentBounds({ nodes })).toEqual(sceneBounds({ nodes }))
   })
-  it('adds the legend’s band on the left and grows the height to hold the panel', () => {
+  it('adds the legend’s room BELOW the content, at the content’s left edge', () => {
     const legend = {
       keys: [
         {
@@ -641,9 +641,31 @@ describe('sceneDocumentBounds', () => {
       uncarried: { boxes: false, edges: false },
     }
     // Panel: widest word 'failing' (7 glyphs at 7px) → 16+16+6+49 = 87 wide;
-    // three rows → 16+54 = 70 tall; band = 87 + 24 = 111; height holds
-    // the panel plus its margins (94) since the content is only 10 tall.
-    expect(sceneDocumentBounds({ nodes, legend })).toEqual({ x: 50 - 111, y: 20, w: 311, h: 94 })
+    // three rows → 16+54 = 70 tall. The content is 200 wide, so the width is
+    // the content's; the height is content (10) + margin + panel + margin.
+    expect(sceneDocumentBounds({ nodes, legend })).toEqual({
+      x: 50,
+      y: 20,
+      w: 200,
+      h: 10 + 12 + 70 + 12,
+    })
+  })
+  it('widens to the legend when the legend is wider than the content', () => {
+    const narrow: Scene['nodes'] = [{ kind: 'thematicBreak', bbox: { x: 50, y: 20, w: 40, h: 10 } }]
+    const legend = {
+      keys: [
+        {
+          key: 'health',
+          of: 'boxes' as const,
+          entries: [{ value: 'failing', count: 1, swatch: {} }],
+        },
+      ],
+      uncarried: { boxes: false, edges: false },
+    }
+    expect(sceneDocumentBounds({ nodes: narrow, legend }).w).toBe(87 + 24)
+  })
+  it('pads every side by the same amount', () => {
+    expect(sceneDocumentBounds({ nodes }, 16)).toEqual({ x: 34, y: 4, w: 232, h: 42 })
   })
   // The producer never attaches a legend with nothing to say, but the type
   // admits one, and a panel of no rows must reserve no band — not the bare

@@ -5,6 +5,7 @@ import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
+import { pathAfterFirstRename } from '../../lib/first-rename-path.js'
 import { newDocumentPathIn } from '../../lib/new-document-path.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
@@ -362,6 +363,17 @@ export function WorkspaceFilesPanel({
         (documents ?? []).map((row) => row.path),
       ),
     [folder, documents],
+  )
+
+  /** The address a name typed at creation earns — what the first rename would give it. */
+  const pathForName = useCallback(
+    (name: string) =>
+      pathAfterFirstRename(
+        derivedNewPath,
+        name,
+        (documents ?? []).map((row) => row.path),
+      ) ?? derivedNewPath,
+    [derivedNewPath, documents],
   )
 
   /**
@@ -724,6 +736,7 @@ export function WorkspaceFilesPanel({
           creating={creating}
           workspace={workspace}
           derivedNewPath={derivedNewPath}
+          pathForName={pathForName}
           outcome={outcome}
           createHere={createHere}
           onImportFiles={importer.importFiles}
@@ -834,6 +847,7 @@ export function WorkspaceFilesPanel({
             x={cardMenu.x}
             y={cardMenu.y}
             label="Document actions"
+            title={documentLabel(cardMenu.entry, 'leaf')}
             items={cardMenuItems}
             onClose={() => setCardMenu(null)}
             variant={hasCoarsePointer() ? 'sheet' : 'list'}

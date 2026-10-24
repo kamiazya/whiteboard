@@ -67,13 +67,13 @@ const LEDGER: Record<string, { verdict: Verdict; reason: string }> = {
     verdict: 'outside-selector',
     reason: 'sdk-node pins 2.10.0, above the selector',
   },
-  'body-parser@<2.3.0 <- express ^2.2.1': {
+  'body-parser@<2.4.0 <- express ^2.2.1': {
     verdict: 'in-range',
-    reason: '^2.2.1 admits 2.3.0',
+    reason: '^2.2.1 admits 2.4.0',
   },
-  'fast-uri@<3.1.8 <- ajv ^3.0.1': {
+  'fast-uri@<3.1.9 <- ajv ^3.0.1': {
     verdict: 'in-range',
-    reason: '^3.0.1 admits 3.1.8',
+    reason: '^3.0.1 admits 3.1.9',
   },
   'hono@<4.13.7 <- @hono/node-server ^4': {
     verdict: 'in-range',
@@ -87,7 +87,7 @@ const LEDGER: Record<string, { verdict: Verdict; reason: string }> = {
     verdict: 'in-range',
     reason: '^4.11.4 admits 4.13.7, and the daemon declares ^4.13.7 at the top',
   },
-  'ip-address@<10.7.1 <- express-rate-limit 10.1.0': {
+  'ip-address@<10.7.4 <- express-rate-limit 10.1.0': {
     verdict: 'cross-range',
     reason:
       'the LOCKED express-rate-limit (8.3.2) pins 10.1.0; a fresh npm resolution picks a ' +
@@ -125,9 +125,9 @@ const LEDGER: Record<string, { verdict: Verdict; reason: string }> = {
     verdict: 'in-range',
     reason: '^2.0.7 admits 2.0.8',
   },
-  'qs@<6.16.0 <- body-parser ^6.15.2': {
-    verdict: 'in-range',
-    reason: '^6.15.2 admits 6.16.0',
+  'qs@<6.16.0 <- body-parser ^6.16.1': {
+    verdict: 'outside-selector',
+    reason: 'body-parser 2.4.0 asks ^6.16.1, whose floor is above the selector',
   },
   'qs@<6.16.0 <- express ^6.14.0': {
     verdict: 'in-range',

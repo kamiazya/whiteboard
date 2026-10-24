@@ -1,10 +1,11 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
-import { FileText, Folder, LayoutGrid } from 'lucide-react'
-import { type KeyboardEvent, type ReactNode, useMemo } from 'react'
+import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
-import { useDocumentDragProps, useFolderProps } from './folder-actions.js'
+import { ActionsButton } from './ActionsButton.js'
+import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -94,6 +95,27 @@ function activateOnEnter(
   }
 }
 
+/** The row's open and menu gestures, each present only when the host handles it. */
+function rowGestures(
+  document: WorkspaceDocumentEntry,
+  onActivate: ((document: WorkspaceDocumentEntry) => void) | undefined,
+  onDocumentContextMenu:
+    | ((entry: WorkspaceDocumentEntry, x: number, y: number) => void)
+    | undefined,
+) {
+  return {
+    onDoubleClick: onActivate === undefined ? undefined : () => onActivate(document),
+    onKeyDown: onActivate === undefined ? undefined : activateOnEnter(onActivate, document),
+    onContextMenu:
+      onDocumentContextMenu === undefined
+        ? undefined
+        : (event: MouseEvent) => {
+            event.preventDefault()
+            onDocumentContextMenu(document, event.clientX, event.clientY)
+          },
+  }
+}
+
 /**
  * The document row: a button, because opening one is the point of the tree.
  *
@@ -119,32 +141,31 @@ function DocumentRow({
 }) {
   const dragProps = useDocumentDragProps(document.path)
   return (
-    <button
-      type="button"
-      data-doc-path={document.path}
-      {...dragProps}
-      aria-current={document.path === selectedPath ? 'true' : undefined}
-      onClick={() => onOpen(document)}
-      onContextMenu={
-        onDocumentContextMenu === undefined
-          ? undefined
-          : (event) => {
-              event.preventDefault()
-              onDocumentContextMenu(document, event.clientX, event.clientY)
-            }
-      }
-      onDoubleClick={onActivate === undefined ? undefined : () => onActivate(document)}
-      onKeyDown={onActivate === undefined ? undefined : activateOnEnter(onActivate, document)}
-      className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
-    >
-      {/* A caller-supplied miniature when there is one; otherwise the
+    <>
+      <button
+        type="button"
+        data-doc-path={document.path}
+        {...dragProps}
+        aria-current={document.path === selectedPath ? 'true' : undefined}
+        onClick={() => onOpen(document)}
+        {...rowGestures(document, onActivate, onDocumentContextMenu)}
+        className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+      >
+        {/* A caller-supplied miniature when there is one; otherwise the
           kind, which the list already carries. */}
-      {renderIcon?.(document) ?? <KindIcon kind={document.kind} />}
-      {/* The display name, which is what every other surface shows and
+        {renderIcon?.(document) ?? <KindIcon kind={document.kind} />}
+        {/* The display name, which is what every other surface shows and
           what a `[[reference]]` resolves by. The segment is the
           fallback, not the label. */}
-      <span className="truncate">{documentLabel(document, 'leaf')}</span>
-    </button>
+        <span className="truncate">{documentLabel(document, 'leaf')}</span>
+      </button>
+      {onDocumentContextMenu !== undefined && (
+        <ActionsButton
+          name={documentLabel(document, 'leaf')}
+          onOpen={(x, y) => onDocumentContextMenu(document, x, y)}
+        />
+      )}
+    </>
   )
 }
 
@@ -157,35 +178,54 @@ function KindIcon({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
   )
 }
 
-/** A folder: a label to open nothing, but a drop target and menu for the documents it holds. */
-function FolderRow({ name, path }: { name: string; path: string }) {
+/**
+ * A folder: a drop target and menu for the documents it holds, and a Tab
+ * stop that opens and closes its group — a row a keyboard cannot reach is a
+ * row whose documents are reachable only by the toggle beside it.
+ */
+function FolderRow({
+  name,
+  path,
+  expanded,
+  onToggle,
+}: {
+  name: string
+  path: string
+  expanded: boolean
+  onToggle: () => void
+}) {
   const folderProps = useFolderProps(path)
+  const actions = useContext(FolderActionsContext)
   return (
-    <span
-      {...folderProps}
-      className="text-muted-foreground data-[dropping]:ring-ring flex data-[dropping]:ring-2 items-center gap-1.5 px-1.5 py-0.5 text-sm"
-    >
-      <Folder className="size-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
-    </span>
+    <>
+      <button
+        type="button"
+        data-folder-path={path}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        {...folderProps}
+        className="text-muted-foreground hover:text-foreground data-[dropping]:ring-ring flex min-w-0 data-[dropping]:ring-2 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm [&_svg:first-child]:transition-transform aria-expanded:[&_svg:first-child]:rotate-90"
+      >
+        <ChevronRight aria-hidden className="size-3 shrink-0" />
+        <Folder className="size-3.5 shrink-0" />
+        <span className="truncate">{name}</span>
+      </button>
+      {actions !== undefined && (
+        <ActionsButton name={name} onOpen={(x, y) => actions.openFolderMenu(path, x, y)} />
+      )}
+    </>
   )
 }
 
-function TreeItem({
-  node,
-  onOpen,
-  onActivate,
-  onDocumentContextMenu,
-  renderIcon,
-  selectedPath,
-}: {
-  node: TreeNode
+interface TreeRowProps {
   onOpen: (document: WorkspaceDocumentEntry) => void
   onActivate?: (document: WorkspaceDocumentEntry) => void
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   selectedPath?: string
-}) {
+}
+
+function TreeItem({ node, ...shared }: { node: TreeNode } & TreeRowProps) {
   return (
     <TreeItemShell
       name={node.name}
@@ -193,29 +233,16 @@ function TreeItem({
       hasChildren={node.children.length > 0}
       row={
         node.canvas === null ? (
-          <FolderRow name={node.name} path={node.path} />
+          ({ toggle, expanded }) => (
+            <FolderRow name={node.name} path={node.path} expanded={expanded} onToggle={toggle} />
+          )
         ) : (
-          <DocumentRow
-            document={node.canvas}
-            onOpen={onOpen}
-            onActivate={onActivate}
-            onDocumentContextMenu={onDocumentContextMenu}
-            renderIcon={renderIcon}
-            selectedPath={selectedPath}
-          />
+          <DocumentRow document={node.canvas} {...shared} />
         )
       }
     >
       {node.children.map((child) => (
-        <TreeItem
-          key={child.path}
-          node={child}
-          onOpen={onOpen}
-          onActivate={onActivate}
-          onDocumentContextMenu={onDocumentContextMenu}
-          renderIcon={renderIcon}
-          selectedPath={selectedPath}
-        />
+        <TreeItem key={child.path} node={child} {...shared} />
       ))}
     </TreeItemShell>
   )

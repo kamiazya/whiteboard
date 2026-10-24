@@ -80,7 +80,7 @@ function ColourMenu({
     <DropdownMenu onOpenChange={(open) => open && setView('root')}>
       <DropdownMenuTrigger
         aria-label={`Tag ${tag} menu`}
-        className="inline-flex items-center gap-1 hover:text-foreground"
+        className="inline-flex items-center gap-1 pointer-coarse:min-h-11 hover:text-foreground"
       >
         {isPreset(declared) && <Swatch preset={declared} />}
         {tag}
@@ -127,7 +127,7 @@ export function TagChip({
     )
   }
   return (
-    <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs">
+    <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 pointer-coarse:gap-2 text-xs">
       {scoped !== undefined && setTagColour !== null ? (
         <ColourMenu tag={tag} declared={declared} apply={apply} />
       ) : (
@@ -137,7 +137,7 @@ export function TagChip({
         type="button"
         aria-label={`Remove tag ${tag}`}
         onClick={onRemove}
-        className="hover:text-foreground"
+        className="hover:text-foreground flex items-center justify-center pointer-coarse:size-11"
       >
         <X aria-hidden className="size-3" />
       </button>

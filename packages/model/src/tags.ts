@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { compareCodeUnit } from './compare.js'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * Half of a scoped tag: the facet-name grammar
@@ -66,17 +67,17 @@ export const TAG_COUNT_LIMIT_PHRASE = `the ${TAGS_PER_ELEMENT_MAX}-tag limit for
  * extension key, so a document another tool wrote is never refused for its
  * tags while nothing here can write a tag that reads as scoped and is not.
  */
-export const tagWriteSchema = z
-  .string()
-  .min(1)
-  .max(TAG_MAX_CHARS, `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`)
-  .superRefine((tag, ctx) => {
-    if (!tag.includes(':') || parseScopedTag(tag) !== undefined) return
-    ctx.addIssue({
-      code: 'custom',
-      message: `tag "${tag}" is not a scoped tag: ${SCOPED_TAG_RULE}`,
-    })
+export const tagWriteSchema = utf16Max(
+  z.string().min(1),
+  TAG_MAX_CHARS,
+  `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`,
+).superRefine((tag, ctx) => {
+  if (!tag.includes(':') || parseScopedTag(tag) !== undefined) return
+  ctx.addIssue({
+    code: 'custom',
+    message: `tag "${tag}" is not a scoped tag: ${SCOPED_TAG_RULE}`,
   })
+})
 
 /**
  * A list of tags one write carries, held to both bounds. Stored tags stay

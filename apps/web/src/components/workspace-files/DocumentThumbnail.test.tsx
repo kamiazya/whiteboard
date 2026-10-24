@@ -94,6 +94,37 @@ describe('DocumentThumbnail', () => {
     })
   })
 
+  // A one-line note fitted inside a thumbnail box is a strip a pixel tall.
+  it('fills the box from the corner for a note that is a single line', async () => {
+    const observers = installObserver()
+    const line = {
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="24" viewBox="0 0 600 24"><rect/></svg>',
+      bounds: { x: 0, y: 0, w: 600, h: 24 },
+    }
+    const note = { ...doc, kind: 'markdown' as const }
+    const { getByTestId } = render(
+      <DocumentThumbnail document={note} loadRender={async () => line} />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => {
+      const svg = getByTestId('document-thumbnail').querySelector('svg')
+      expect(svg?.getAttribute('preserveAspectRatio')).toBe('xMinYMin slice')
+    })
+  })
+
+  it('keeps a wide canvas whole inside the box', async () => {
+    const observers = installObserver()
+    const wide = { ...drawn, bounds: { x: 0, y: 0, w: 1200, h: 100 } }
+    const { getByTestId } = render(
+      <DocumentThumbnail document={doc} loadRender={async () => wide} />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => {
+      const svg = getByTestId('document-thumbnail').querySelector('svg')
+      expect(svg?.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet')
+    })
+  })
+
   // `waitFor` is wrong for both of these: the icon is on screen from the
   // first render, so it succeeds before the load has settled and never
   // observes the state under test. Flush the promise, then assert once.

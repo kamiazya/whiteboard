@@ -84,6 +84,23 @@ const node = (facets?: Record<string, unknown>): SpatialNode =>
   })
 
 describe('FacetFormPanel', () => {
+  it('steps its pickers, buttons and selects up to 44px on a coarse pointer', () => {
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node' as const, node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+        onTagsChange={() => {}}
+      />,
+    )
+    // Chromium cannot emulate `pointer: coarse`; the controls come from
+    // facet-ui with inline sizes, so the panel overrides them by selector.
+    const panel = screen.getByTestId('facet-form-panel').className
+    for (const target of ['button', 'label:has(>input[type=radio])', 'select']) {
+      expect(panel).toContain(`pointer-coarse:[&_${target}]:min-h-11!`)
+    }
+  })
+
   it('lists every node-target facet under its plugin heading, widget or not', () => {
     render(
       <FacetFormPanel

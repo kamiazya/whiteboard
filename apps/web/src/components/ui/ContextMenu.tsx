@@ -22,14 +22,14 @@
 
 import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import { canvasColorSchema } from '@kamiazya/whiteboard-model'
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { useEdgeClampedPosition } from '../../hooks/use-edge-clamped-position.js'
+import { useOccluder } from '../../hooks/use-occluder.js'
 import { useRestoreFocus } from '../../hooks/use-restore-focus.js'
 import { useRovingMenu } from '../../hooks/use-roving-menu.js'
 import { cn } from '../../lib/utils.js'
-
-/** Gap kept between the menu and the editor edge when nudging it inside. */
-const MENU_EDGE_MARGIN_PX = 4
+import { SheetHeader, SheetScrim } from './context-menu-sheet.js'
 
 interface ContextMenuActionItem {
   readonly kind?: 'action'
@@ -111,6 +111,13 @@ export interface ContextMenuProps {
    * the others.
    */
   readonly variant?: 'list' | 'grid' | 'sheet'
+  /**
+   * What the menu is about, drawn at the head of a sheet ("Note: Orders",
+   * "Canvas"). A point-anchored popover sits beside its subject and needs no
+   * caption; a sheet covers the bottom of the screen and has to say whose
+   * actions these are.
+   */
+  readonly title?: string
 }
 
 /**
@@ -151,34 +158,23 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: ContextMenuProps) {
+export function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+  variant = 'list',
+  label,
+  title,
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   useRestoreFocus()
   const roving = useRovingMenu(menuRef, onClose)
-  // A menu opened near the editor's right/bottom edge would clip outside it,
-  // so it is nudged back inside once measurable, before paint (no visible jump).
-  const [pos, setPos] = useState({ x, y })
+  const pos = useEdgeClampedPosition(menuRef, x, y, variant === 'sheet')
   const sheet = variant === 'sheet'
-  useLayoutEffect(() => {
-    // A sheet is edge-anchored, not point-anchored — nothing to clamp.
-    if (sheet) return
-    const el = menuRef.current
-    const parent = el?.offsetParent
-    if (el == null || !(parent instanceof HTMLElement)) {
-      setPos((prev) => (prev.x === x && prev.y === y ? prev : { x, y }))
-      return
-    }
-    const clamp = (value: number, max: number) =>
-      Math.max(MENU_EDGE_MARGIN_PX, Math.min(value, max))
-    // Ceil the measured box: offsetWidth/Height round to integers, so a
-    // fractional menu width would overshoot the margin by a subpixel.
-    const menuRect = el.getBoundingClientRect()
-    const next = {
-      x: clamp(x, parent.clientWidth - Math.ceil(menuRect.width) - MENU_EDGE_MARGIN_PX),
-      y: clamp(y, parent.clientHeight - Math.ceil(menuRect.height) - MENU_EDGE_MARGIN_PX),
-    }
-    setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [x, y, sheet])
+  // A sheet covers a strip of the editor: registering it lets every viewport
+  // verb treat that strip as padding, so the pressed node is panned clear.
+  useOccluder(menuRef)
 
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
@@ -194,47 +190,53 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
   }, [onClose])
 
   return (
-    <div
-      ref={menuRef}
-      data-editor-overlay
-      data-context-menu
-      data-testid="context-menu"
-      data-variant={variant}
-      role="menu"
-      aria-label={label}
-      tabIndex={-1}
-      className={
-        sheet
-          ? 'rounded-t-xl border-t bg-background py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg focus:outline-none'
-          : 'min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none'
-      }
-      // Positioning (incl. stacking) is inline, not utility classes: the
-      // edge-clamping above measures the absolutely-positioned box, and it
-      // must behave the same where the app stylesheet is absent
-      // (browser-mode component tests).
-      // width: max-content keeps the measured size intrinsic — an absolute
-      // box otherwise shrinks to fit the space left of the containing-block
-      // edge, so a menu opened near the edge would measure (and wrap) narrow
-      // and the clamp would compute from the wrong width.
-      style={
-        sheet
-          ? { position: 'absolute', zIndex: 20, left: 0, right: 0, bottom: 0 }
-          : {
-              position: 'absolute',
-              zIndex: 20,
-              width: 'max-content',
-              // max-content alone lets a long options row set a box wider
-              // than the editor, and no clamp can place a box that does not
-              // fit. Measured at 390px: the menu came out 434.6px.
-              maxWidth: '100%',
-              left: pos.x,
-              top: pos.y,
-            }
-      }
-      onKeyDown={roving.onKeyDown}
-    >
-      {items.map((item, index) => renderCatalogItem(item, index))}
-    </div>
+    <>
+      {sheet && <SheetScrim />}
+      <div
+        ref={menuRef}
+        data-editor-overlay
+        data-context-menu
+        data-testid="context-menu"
+        data-variant={variant}
+        role="menu"
+        aria-label={label}
+        tabIndex={-1}
+        className={
+          sheet
+            ? 'overflow-y-auto overscroll-contain rounded-t-xl border-t bg-background pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg focus:outline-none'
+            : 'min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none'
+        }
+        // Positioning (incl. stacking) is inline, not utility classes: the
+        // edge-clamping above measures the absolutely-positioned box, and it
+        // must behave the same where the app stylesheet is absent
+        // (browser-mode component tests).
+        // width: max-content keeps the measured size intrinsic — an absolute
+        // box otherwise shrinks to fit the space left of the containing-block
+        // edge, so a menu opened near the edge would measure (and wrap) narrow
+        // and the clamp would compute from the wrong width.
+        style={
+          sheet
+            ? // Half the editor at most, scrolling inside: the object the press
+              // was about stays on screen above it.
+              { position: 'absolute', zIndex: 20, left: 0, right: 0, bottom: 0, maxHeight: '50%' }
+            : {
+                position: 'absolute',
+                zIndex: 20,
+                width: 'max-content',
+                // max-content alone lets a long options row set a box wider
+                // than the editor, and no clamp can place a box that does not
+                // fit. Measured at 390px: the menu came out 434.6px.
+                maxWidth: '100%',
+                left: pos.x,
+                top: pos.y,
+              }
+        }
+        onKeyDown={roving.onKeyDown}
+      >
+        {sheet && <SheetHeader title={title} />}
+        {items.map((item, index) => renderCatalogItem(item, index))}
+      </div>
+    </>
   )
 
   /**
@@ -246,7 +248,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
       <Fragment key={item.label}>
         <fieldset
           aria-label={item.label}
-          className="m-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-0 p-0 px-3 py-1"
+          className="m-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-0 p-0 px-3 py-1 pointer-coarse:[&_button]:min-h-11! pointer-coarse:[&_button]:min-w-11!"
         >
           <span className="text-xs text-muted-foreground">{item.label}</span>
           {/* An options row is a PICKER, so an option pushed past the edge is
@@ -332,7 +334,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list', label }: C
         type="button"
         role="menuitem"
         className={cn(
-          'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+          'flex w-full items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
           sheet && 'min-h-12 px-4 text-base',
           item.danger && 'text-destructive',
         )}

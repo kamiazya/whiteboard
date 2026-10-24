@@ -438,7 +438,8 @@ the same things through either surface:
 they say. Over HTTP, reading content needs `canvas:read`: a document's OKF
 projection (`GET /api/v1/workspaces/<id>/documents/<id>/okf`), search
 results, backlinks, and the tags documents carry. Linking a document's
-mentions (`POST …/linkify-mentions`) rewrites its content, so it needs
+mentions (`POST …/linkify-mentions`) rewrites its content, and writing the
+tag library (`PUT …/tag-library`) writes a document's facets, so both need
 `canvas:write`.
 
 Writing a document's body is content too, so it needs `canvas:write` as well

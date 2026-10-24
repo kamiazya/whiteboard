@@ -40,9 +40,9 @@ describe('nextInReadingOrder', () => {
     expect(nextInReadingOrder(nodes, null, -1)).toBe('c')
   })
 
-  it('wraps at both ends', () => {
-    expect(nextInReadingOrder(nodes, 'c', 1)).toBe('a')
-    expect(nextInReadingOrder(nodes, 'a', -1)).toBe('c')
+  it('stops at both ends so the caller can let focus leave the walk', () => {
+    expect(nextInReadingOrder(nodes, 'c', 1)).toBeUndefined()
+    expect(nextInReadingOrder(nodes, 'a', -1)).toBeUndefined()
     expect(nextInReadingOrder(nodes, 'a', 1)).toBe('b')
   })
 

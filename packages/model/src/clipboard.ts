@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { isImageRef } from './asset-ref.js'
 import { NODE_LOCATION_MAX_CHARS } from './node-resource.js'
 import { canvasEdgeSchema, canvasLineSchema, endNode, spatialNodeSchema } from './spatial.js'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The most picture bytes one fragment carries inline, summed over its files.
@@ -40,7 +41,7 @@ function base64ByteLength(data: string): number {
 const clipboardFileAssetSchema = z
   .object({
     mimeType: z.string().min(1),
-    dataBase64: z.string().max(CLIPBOARD_FILES_MAX_BASE64),
+    dataBase64: utf16Max(z.string(), CLIPBOARD_FILES_MAX_BASE64),
   })
   .strict()
 
@@ -53,12 +54,12 @@ const clipboardFileAssetSchema = z
  */
 const clipboardSourceSchema = z
   .object({
-    fileScope: z.string().min(1).max(NODE_LOCATION_MAX_CHARS),
+    fileScope: utf16Max(z.string().min(1), NODE_LOCATION_MAX_CHARS),
     /**
      * Minted per copy, so a paste that received this fragment as clipboard
      * TEXT can still find the bytes the same tab read after the copy event.
      */
-    copyId: z.string().min(1).max(128),
+    copyId: utf16Max(z.string().min(1), 128),
   })
   .strict()
 
@@ -78,7 +79,10 @@ function fileBoundIssues(files: Readonly<Record<string, { dataBase64: string }>>
 
 const clipboardFilesSchema = z
   .record(
-    z.string().max(NODE_LOCATION_MAX_CHARS).refine(isImageRef, 'not a stored-picture reference'),
+    utf16Max(z.string(), NODE_LOCATION_MAX_CHARS).refine(
+      isImageRef,
+      'not a stored-picture reference',
+    ),
     clipboardFileAssetSchema,
   )
   .superRefine((files, ctx) => {

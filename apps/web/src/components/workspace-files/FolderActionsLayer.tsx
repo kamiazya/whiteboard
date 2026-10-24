@@ -33,6 +33,7 @@ function FolderMenuView({
       x={menu.x}
       y={menu.y}
       label="Folder actions"
+      title={menu.folder === '' ? 'Workspace' : leafOf(menu.folder)}
       items={[...rename, { label: 'New subfolder…', icon: <FolderPlus />, onSelect: onSubfolder }]}
       onClose={onClose}
       variant={hasCoarsePointer() ? 'sheet' : 'list'}

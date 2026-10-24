@@ -37,6 +37,7 @@ export type ShortcutId =
   | 'tool-select'
   | 'tool-hand'
   | 'tool-connect'
+  | 'connect-pick-target'
   | 'tool-draw'
   | 'new-note'
   | 'select-next-node'
@@ -116,7 +117,17 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     section: 'Tools',
     keys: ['c'],
     display: 'C',
-    description: 'Connect tool',
+    description: 'Connect tool; with a node selected, connect from that node',
+  },
+  // Live only while a connect or re-attach is armed, so the arrows keep
+  // meaning "nudge" everywhere else; dispatched ahead of the table.
+  {
+    id: 'connect-pick-target',
+    section: 'Navigate',
+    keys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+    display: 'Arrows',
+    description: 'While connecting, choose the target (Enter connects, Esc cancels)',
+    handledInline: true,
   },
   {
     id: 'tool-draw',
@@ -141,7 +152,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Tab'],
     shift: false,
     display: 'Tab',
-    description: 'Select the next node in reading order (the first, when none is selected)',
+    description:
+      'Select the next node in reading order (the first, when none is selected); past the last node Tab leaves the canvas',
     tools: ['select'],
   },
   {
@@ -150,7 +162,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Tab'],
     shift: true,
     display: 'Shift+Tab',
-    description: 'Select the previous node in reading order',
+    description:
+      'Select the previous node in reading order; before the first node Shift+Tab leaves the canvas',
     tools: ['select'],
   },
   {

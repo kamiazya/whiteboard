@@ -78,6 +78,7 @@ import {
   NamelessLinkifyTargetError,
 } from './tools/linkify-mentions.js'
 import { TagLibraryError } from './tools/tag-library.js'
+import { setTagLibrary, setTagLibraryInputSchema } from './tools/tag-library-write.js'
 import { createThreadEditTool } from './tools/thread-edit.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
@@ -366,6 +367,25 @@ export function createServer(deps: ServerDeps) {
     }
     try {
       return c.json(await computeDocumentTags(deps, parsed.data, factsCache))
+    } catch (err) {
+      return refuse(c, err)
+    }
+  })
+
+  // The workspace's declared tag vocabulary, written whole. The URL carries the
+  // workspace and the body may not, as every /api/v1 write here.
+  app.put('/api/v1/workspaces/:workspaceId/tag-library', async (c) => {
+    const read = await readWriteBody(c)
+    if ('refusal' in read) return c.json(read.refusal, 400)
+    const parsed = setTagLibraryInputSchema.safeParse({
+      ...read.body,
+      workspaceId: c.get('workspaceId'),
+    })
+    if (!parsed.success) {
+      return c.json(invalidRequestBody(parsed.error), 400)
+    }
+    try {
+      return c.json(await setTagLibrary(deps, parsed.data))
     } catch (err) {
       return refuse(c, err)
     }

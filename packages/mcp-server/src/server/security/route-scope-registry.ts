@@ -316,14 +316,14 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // The /api/v1 routes that answer with, or rewrite, what documents SAY: the
   // OKF projection, ranked hits with excerpts, backlinks with context, the
   // tags documents carry beside the tag and stencil libraries, and the
-  // linkify rewrite of a body. Content is the canvas scopes' on every other
+  // linkify rewrite of a body, and the write of the tag library. Content is the canvas scopes' on every other
   // surface — the snapshot route, wb_document_get, wb_document_search — so
   // workspace:read, which lists and resolves documents, must not read it here.
   // Above 'workspaces (rest)', which would otherwise claim them first.
   {
     name: 'v1 document content',
     claims: matching(
-      /^\/api\/v1\/workspaces\/[^/]+\/(?:search|document-tags|documents\/[^/]+\/(?:okf|backlinks|linkify-mentions))$/,
+      /^\/api\/v1\/workspaces\/[^/]+\/(?:search|document-tags|tag-library|documents\/[^/]+\/(?:okf|backlinks|linkify-mentions))$/,
     ),
     decide: byAccess('canvas:write', 'canvas:read'),
     workspace: workspacesHandle,

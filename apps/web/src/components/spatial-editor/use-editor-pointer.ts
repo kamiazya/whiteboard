@@ -72,7 +72,7 @@
 
 import { useRef } from 'react'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
-import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
+import { frameBandStart, pickContentAt, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -495,11 +495,28 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return true
   }
 
+  /**
+   * A move gesture that began in a frame's interior becomes a band once the
+   * pointer travels past the tap slop: the press selected the frame (a tap
+   * still does), and the drag is the person sweeping an area, not carrying it.
+   */
+  const convertFrameInteriorDrag = (screenPoint: Point): boolean => {
+    if (gestureState.kind !== 'moving') return false
+    const here = screenToCanvas(screenPoint, viewport)
+    const { nodeId, startPoint } = gestureState
+    const start = frameBandStart(pickInputs, nodeId, startPoint, here, viewport.zoom)
+    if (start === null) return false
+    applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+    setMarquee({ start, current: here })
+    return true
+  }
+
   /** Every other gesture: snap the point, show the guides, reduce. */
   const advanceSnappedGesture = (
     e: React.PointerEvent<HTMLDivElement>,
     screenPoint: Point,
   ): void => {
+    if (convertFrameInteriorDrag(screenPoint)) return
     const snapped = snapGesturePoint(
       screenToCanvas(screenPoint, viewport),
       e.metaKey || e.ctrlKey,

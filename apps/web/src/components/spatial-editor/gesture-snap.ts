@@ -25,6 +25,12 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
  * alone.
  */
 const SNAP_GRID_CANVAS_PX = 20
+/**
+ * A press that travels less than this (screen px) is a tap, not a drag: a
+ * fingertip jitters that much without meaning to move anything, and snapping
+ * the tapped box to the grid would relocate it by up to the snap threshold.
+ */
+const MOVE_SLOP_SCREEN_PX = 8
 
 export interface SnapGestureInputs {
   gestureState: GestureState
@@ -81,6 +87,15 @@ function snapResize(
   return { point, guides }
 }
 
+const NO_GUIDES = { x: [], y: [] } as const
+
+/** The press point when a move or resize has not travelled past the tap slop, else undefined. */
+function tapPin(gestureState: GestureState, raw: Point, zoom: number): Point | undefined {
+  if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
+  const travelled = Math.hypot(raw.x - gestureState.startPoint.x, raw.y - gestureState.startPoint.y)
+  return travelled * zoom < MOVE_SLOP_SCREEN_PX ? gestureState.startPoint : undefined
+}
+
 /**
  * Nudges the POINTER, not the emitted command, so preview and commit see
  * the same value: the reducer derives both from `point`, and adjusting
@@ -100,6 +115,8 @@ export function snapGesturePoint(
 ): SnapGestureResult {
   const { gestureState, canvas, boxes, extraIds, isLocked, zoom } = inputs
   const unchanged = { point: raw, guides: { x: [], y: [] } }
+  const pinned = tapPin(gestureState, raw, zoom)
+  if (pinned !== undefined) return { point: pinned, guides: NO_GUIDES }
   if (suspended) return unchanged
   const options = {
     thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / zoom,

@@ -98,6 +98,10 @@ function NewFolderField({ value, onChange }: { value: string; onChange: (next: s
     <div className="flex flex-col gap-1 text-sm">
       <label htmlFor="move-new-folder-name">Folder name</label>
       <input
+        // This step replaces the list inside an already-open dialog, so the
+        // dialog's own focus-on-open never runs for it.
+        // biome-ignore lint/a11y/noAutofocus: the step exists to ask this one question
+        autoFocus
         id="move-new-folder-name"
         aria-describedby="move-new-folder-hint"
         value={value}

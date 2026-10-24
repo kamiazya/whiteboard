@@ -1,4 +1,4 @@
-import { commentCornerOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { commentCornerOf, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { canvasToScreen, type Point, type Viewport } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
@@ -99,8 +99,24 @@ export function selectionCommentCompose(input: {
   }
 }
 
-/** What the canvas root announces: what it holds and how a keyboard user starts. */
-export function canvasRootLabel(nodeCount: number): string {
-  if (nodeCount === 0) return 'Canvas, empty'
-  return `Canvas, ${nodeCount} ${nodeCount === 1 ? 'note' : 'notes'}. Tab selects the first note`
+const countOf = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * What the canvas root announces: what it holds, frames and connections
+ * apart from notes, and how a keyboard user continues from where they are.
+ */
+export function canvasRootLabel(
+  canvas: SpatialCanvas,
+  selectedId: string | null,
+  selectedEdgeId: string | null,
+): string {
+  const hasSelection = selectedId !== null || selectedEdgeId !== null
+  if (canvas.nodes.length === 0) return 'Canvas, empty'
+  const frames = canvas.nodes.filter(isFrame).length
+  const parts = [
+    countOf(canvas.nodes.length - frames, 'note', 'notes'),
+    ...(frames > 0 ? [countOf(frames, 'frame', 'frames')] : []),
+    ...(canvas.edges.length > 0 ? [countOf(canvas.edges.length, 'connection', 'connections')] : []),
+  ]
+  return `Canvas, ${parts.join(', ')}. ${hasSelection ? 'Tab selects the next node' : 'Tab selects the first note'}`
 }

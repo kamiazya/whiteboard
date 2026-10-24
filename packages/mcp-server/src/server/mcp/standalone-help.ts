@@ -17,6 +17,7 @@ import {
   LABEL_MAX_CHARS,
   NODE_TEXT_LIMIT_PHRASE,
   NODE_TEXT_MAX_CHARS,
+  utf16Max,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -28,13 +29,16 @@ export const WHITEBOARD_DRAW_PROMPT = 'whiteboard.draw_diagram'
  * goal like a node's text, the type hint like a label.
  */
 export const drawDiagramPromptArgsSchema = z.object({
-  goal: z
-    .string()
-    .max(NODE_TEXT_MAX_CHARS, `a goal is longer than ${NODE_TEXT_LIMIT_PHRASE}`)
-    .describe('What the diagram should explain or align on.'),
-  diagramType: z
-    .string()
-    .max(LABEL_MAX_CHARS, `a diagram type is longer than the ${LABEL_MAX_CHARS}-character limit`)
+  goal: utf16Max(
+    z.string(),
+    NODE_TEXT_MAX_CHARS,
+    `a goal is longer than ${NODE_TEXT_LIMIT_PHRASE}`,
+  ).describe('What the diagram should explain or align on.'),
+  diagramType: utf16Max(
+    z.string(),
+    LABEL_MAX_CHARS,
+    `a diagram type is longer than the ${LABEL_MAX_CHARS}-character limit`,
+  )
     .optional()
     .describe('Optional diagram type hint such as architecture, sequence, review, or comparison.'),
 })

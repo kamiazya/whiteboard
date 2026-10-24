@@ -22,15 +22,16 @@ you can put it on a canvas later) and it opens ready to work in.
 ![Onboarding chooser](../assets/onboarding-chooser.png)
 
 Once you have documents, the page lands on your document browser. On a
-touch screen, tap a card to open the document, and press and hold for its
-actions (open, pin, rename, delete). With a mouse, a click previews a
+touch screen, tap a card to open the document, and tap its **…** button (or press
+and hold the card) for its actions (open, pin, rename, delete). With a mouse, a click previews a
 document in the pane beside the list, and a double-click — or Enter on a
 focused one — opens it. That holds for the cards, the **Recent** strip and
 search results alike. Search keeps your query in the box when you open a
 result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the
-first row of cards — before that it would show every card twice. Use the
+first row of cards — before that it would show every card twice. On a phone
+or a narrow window the strip is left out altogether, since the list is right below. Use the
 toolbar to search everything or move a document to a new path; to put a
 document in a folder, use **Move to folder…** in its menu or drag it onto the
 folder ([organize into folders](../how-to/organize-into-folders.md)). **Back to
@@ -45,6 +46,12 @@ you give it a name in its title, its path becomes that name (`untitled` to
 `checkout-architecture`), and from then on the path stays put. If you already know what the document is called and where
 it goes, **Name and folder…** in that menu takes both up front; leaving its
 form untouched creates exactly what the plain entries would have.
+
+On a phone, or any touch screen, **New** opens a sheet from the bottom edge
+instead. Its first field is the name, with the keyboard already up; type it and
+press **Canvas** or **Markdown note**, and the document is created under that
+name at the path the name earns (`Meeting notes` becomes `meeting-notes`).
+Leave the name empty and it starts at `untitled` as above.
 
 Either way the new document opens straight away, ready to work in. The folder
 you are standing in is part of the address — the URL carries a `?folder=`
@@ -64,7 +71,7 @@ to drop it exactly where you want it. **Group** frames what is selected; with
 nothing selected it makes an empty frame in a free spot and opens its name for
 typing, and an empty frame is drawn with a faint tint so it can be found. In **Select** mode, right-clicking
 (long-pressing on touch) empty space offers the same creations, placed where
-you pressed — Hand mode is navigation only, so it deliberately leaves the
+you pressed. On touch the menu is a sheet titled for what you pressed, dimmed behind, at most half the screen (it scrolls), and the canvas pans so the pressed object stays visible above it; tap the dimmed area to close it. Hand mode is navigation only, so it deliberately leaves the
 right-click menu closed (a tap on a comment still opens its conversation:
 comments are chrome, not content). The
 browser UI also selects, moves, resizes, connects, and edits existing nodes,

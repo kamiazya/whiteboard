@@ -7,6 +7,7 @@
  */
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { FolderActionsContext } from './folder-actions.js'
 import { LONG_PRESS_MS, useLongPressMenu } from './use-long-press.js'
 
 afterEach(() => {
@@ -126,4 +127,80 @@ it("another finger's movement does not cancel the hold", () => {
   fireEvent.pointerMove(card, { ...touch, pointerId: 8, clientX: 400, clientY: 600 })
   vi.advanceTimersByTime(500)
   expect(onLongPress).toHaveBeenCalledTimes(1)
+})
+
+// The menu opened by a hold is a sheet over the finger, OUTSIDE the list, so
+// the click a release dispatches can land on the item beneath the thumb.
+it('the release of a hold does not activate a menu item outside the list', () => {
+  vi.useFakeTimers()
+  const onLongPress = vi.fn()
+  const onItem = vi.fn()
+  const { getByText } = render(
+    <>
+      <Host onLongPress={onLongPress} onOpen={vi.fn()} />
+      <button type="button" onClick={onItem}>
+        sheet item
+      </button>
+    </>,
+  )
+  const item = getByText('sheet item')
+
+  fireEvent.pointerDown(getByText('card'), touch)
+  vi.advanceTimersByTime(LONG_PRESS_MS)
+  fireEvent.click(item)
+  expect(onItem).not.toHaveBeenCalled()
+
+  // The next real tap on the item goes through.
+  fireEvent.pointerDown(item, touch)
+  fireEvent.pointerUp(item, touch)
+  fireEvent.click(item)
+  expect(onItem).toHaveBeenCalledTimes(1)
+})
+
+it('a hold that produced no click leaves the next tap alone', () => {
+  vi.useFakeTimers()
+  const onItem = vi.fn()
+  const { getByText } = render(
+    <>
+      <Host onLongPress={vi.fn()} onOpen={vi.fn()} />
+      <button type="button" onClick={onItem}>
+        sheet item
+      </button>
+    </>,
+  )
+  fireEvent.pointerDown(getByText('card'), touch)
+  vi.advanceTimersByTime(LONG_PRESS_MS)
+  fireEvent.pointerCancel(getByText('card'), touch)
+
+  const item = getByText('sheet item')
+  fireEvent.pointerDown(item, touch)
+  fireEvent.pointerUp(item, touch)
+  fireEvent.click(item)
+  expect(onItem).toHaveBeenCalledTimes(1)
+})
+
+it('a held folder opens the folder menu the panel offers through context', () => {
+  vi.useFakeTimers()
+  const openFolderMenu = vi.fn()
+  function Surface() {
+    const longPress = useLongPressMenu(undefined)
+    return (
+      <div {...longPress}>
+        <button type="button" data-folder-path="design">
+          folder
+        </button>
+      </div>
+    )
+  }
+  function FolderHost() {
+    return (
+      <FolderActionsContext.Provider value={{ dropInto: vi.fn(), openFolderMenu }}>
+        <Surface />
+      </FolderActionsContext.Provider>
+    )
+  }
+  const { getByText } = render(<FolderHost />)
+  fireEvent.pointerDown(getByText('folder'), touch)
+  vi.advanceTimersByTime(LONG_PRESS_MS)
+  expect(openFolderMenu).toHaveBeenCalledWith('design', 40, 60)
 })

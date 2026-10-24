@@ -14,7 +14,9 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { useRef } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { attachTargetName } from '../../lib/spatial/attach-target-label.js'
 import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import {
@@ -29,6 +31,7 @@ import {
   nearestInDirection,
   nextInReadingOrder,
 } from '../../lib/spatial/reading-order.js'
+import { isAttachTarget, stepAttachTarget } from './attach-target-walk.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
@@ -54,6 +57,13 @@ const TOOL_SHORTCUTS: Partial<Record<ShortcutId, EditorTool>> = {
   'tool-hand': 'hand',
   'tool-connect': 'connect',
   'tool-draw': 'draw',
+}
+
+const ATTACH_TARGET_STEP: Record<string, 1 | -1> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
 }
 
 /** The catalog rows that move or act on the selection through the canvas root's own focus. */
@@ -345,6 +355,9 @@ export function useEditorKeyboard({
       case 'new-note':
         createNodeAtViewportCenter()
         return true
+      case 'tool-connect':
+        if (!connectFromSelection()) changeTool('connect')
+        return true
       default: {
         const nextTool = TOOL_SHORTCUTS[id]
         if (nextTool === undefined) return false
@@ -570,9 +583,47 @@ export function useEditorKeyboard({
     return true
   }
 
+  /**
+   * C with a node selected arms a connect FROM it, the keyboard twin of
+   * pressing its connect handle; with nothing selected it stays the tool
+   * switch. A locked node is never selected, so the source is always free.
+   */
+  const connectFromSelection = (): boolean => {
+    if (tool !== 'select' || selectedNode === undefined || gestureState.kind !== 'idle') {
+      return false
+    }
+    handleConnectKeyDown()
+    announceOnCanvas(
+      `Connecting from ${attachTargetName(selectedNode)}. Arrow keys choose a target, Enter connects, Escape cancels`,
+    )
+    return true
+  }
+
+  /**
+   * While a connect or re-attach is live, the arrows walk its targets in
+   * reading order (from the canvas root or from a target already reached),
+   * moving the focus the outline and Enter/Escape already follow.
+   */
+  const cycleAttachTarget = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    const step = ATTACH_TARGET_STEP[e.key]
+    if (step === undefined || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return false
+    if (gestureState.kind !== 'connecting' && gestureState.kind !== 'reattaching') return false
+    const origin = e.target as Element
+    if (e.target !== e.currentTarget && !isAttachTarget(origin)) return false
+    const next = stepAttachTarget(e.currentTarget, canvasRef.current.nodes, origin, step)
+    if (next === undefined) return false
+    e.preventDefault()
+    next.element.focus()
+    announceOnCanvas(
+      `${gestureState.kind === 'connecting' ? 'Connect' : 'Attach'} to ${attachTargetName(next.node)}`,
+    )
+    return true
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (menuOpen) return
     if (focusFirstAttachTarget(e)) return
+    if (cycleAttachTarget(e)) return
     // Declarative shortcuts first — see shortcuts.ts, the single catalog.
     if (runCatalogShortcut(e)) return
     // Delete/Backspace deletes the current selection — but never while the

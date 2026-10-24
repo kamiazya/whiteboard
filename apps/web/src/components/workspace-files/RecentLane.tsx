@@ -2,6 +2,7 @@ import { FileText, LayoutGrid } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
+import { useCompactSurface } from './use-compact-surface.js'
 
 export interface RecentLaneProps {
   /** The listing as loaded. Recorded ids are resolved against it. */
@@ -88,6 +89,7 @@ export function RecentLane({
   renderThumbnail,
   gridColumns,
 }: RecentLaneProps) {
+  const compact = useCompactSurface()
   const entries = recentIds
     .map((id) => documents.find((each) => each.documentId === id))
     .filter((each): each is WorkspaceDocumentEntry => each !== undefined)
@@ -96,7 +98,7 @@ export function RecentLane({
   // absent rather than empty. An empty strip is a row of chrome explaining
   // that there is nothing to show, which is the wordiness this redesign is
   // removing everywhere else.
-  if (entries.length === 0) return null
+  if (compact || entries.length === 0) return null
   if (gridColumns !== undefined && documents.length <= gridColumns) return null
 
   return (

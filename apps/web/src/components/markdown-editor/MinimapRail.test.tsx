@@ -112,6 +112,13 @@ describe('MinimapRail', () => {
     expect(getByTestId('markdown-minimap-rail').getAttribute('aria-hidden')).toBe('true')
   })
 
+  // The strip of grey bars beside a note read as a rendering glitch; hovering
+  // it says what it is for.
+  it('says on hover that it is the document map', () => {
+    const { getByTestId } = renderRail()
+    expect(getByTestId('markdown-minimap-rail').getAttribute('title')).toMatch(/document map/i)
+  })
+
   it('renders nothing but the marker for an empty document', () => {
     const { container } = renderRail({ blocks: [] })
     const rail = container.querySelector('[data-testid="markdown-minimap-rail"]')

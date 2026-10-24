@@ -111,6 +111,7 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
       urls.documentTagsApiUrl(WS),
       `/api/v1/workspaces/${ENC_WS}/document-tags`,
     ],
+    ['tagLibraryApiUrl', urls.tagLibraryApiUrl(WS), `/api/v1/workspaces/${ENC_WS}/tag-library`],
     [
       'searchApiUrl',
       urls.searchApiUrl(WS, { query: 'plan x', limit: 10 }),

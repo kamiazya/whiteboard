@@ -4,6 +4,7 @@ import {
   documentTagsOutputSchema,
   exportOkfOutputSchema,
   linkifyMentionsOutputSchema,
+  setTagLibraryOutputSchema,
   wbDocumentCreateOutputSchema,
 } from '@kamiazya/whiteboard-server-core/contracts'
 import type { z } from 'zod'
@@ -22,10 +23,12 @@ export const documentSearchResponseSchema = tolerantAnswer(documentSearchOutputS
 export const workspaceDocumentTagsResponseSchema = tolerantAnswer(documentTagsOutputSchema)
 export const documentOkfV1ResponseSchema = tolerantAnswer(exportOkfOutputSchema)
 export const linkifyMentionsResponseSchema = tolerantAnswer(linkifyMentionsOutputSchema)
+export const setTagLibraryResponseSchema = tolerantAnswer(setTagLibraryOutputSchema)
 export const createDocumentV1ResponseSchema = tolerantAnswer(wbDocumentCreateOutputSchema)
 
 export type DocumentBacklinksResponse = z.infer<typeof documentBacklinksResponseSchema>
 export type DocumentSearchResponse = z.infer<typeof documentSearchResponseSchema>
 export type WorkspaceDocumentTagsResponse = z.infer<typeof workspaceDocumentTagsResponseSchema>
 export type DocumentOkfV1Response = z.infer<typeof documentOkfV1ResponseSchema>
+export type SetTagLibraryResponse = z.infer<typeof setTagLibraryResponseSchema>
 export type LinkifyMentionsResponse = z.infer<typeof linkifyMentionsResponseSchema>

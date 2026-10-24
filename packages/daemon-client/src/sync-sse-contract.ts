@@ -7,7 +7,11 @@
  * the daemon's route and the browser's hub import, is what lets the two ends
  * use the same declaration.
  */
-import { DOCUMENT_PATH_MAX_LENGTH, WORKSPACE_SEGMENT_MAX_LENGTH } from '@kamiazya/whiteboard-model'
+import {
+  DOCUMENT_PATH_MAX_LENGTH,
+  utf16Max,
+  WORKSPACE_SEGMENT_MAX_LENGTH,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { clientTextMessageSchema } from './sync-frames.js'
 import { workspaceHandleOfSyncKey } from './sync-key.js'
@@ -85,13 +89,12 @@ const SYNC_DOC_KEY_MAX_LENGTH = WORKSPACE_SEGMENT_MAX_LENGTH + 1 + DOCUMENT_PATH
  * A key naming none is no key the client writes, and the membership gate
  * could decide nothing for it, so it is refused here rather than held.
  */
-const syncDocKeySchema = z
-  .string()
-  .min(1)
-  .max(SYNC_DOC_KEY_MAX_LENGTH)
-  .refine((key) => workspaceHandleOfSyncKey(key) !== null, {
+const syncDocKeySchema = utf16Max(z.string().min(1), SYNC_DOC_KEY_MAX_LENGTH).refine(
+  (key) => workspaceHandleOfSyncKey(key) !== null,
+  {
     message: 'a doc key is `workspace:<id>` or `<handle>/<path>`',
-  })
+  },
+)
 
 export const syncSubscribeRequestSchema = z
   .object({

@@ -50,12 +50,12 @@ it('dragging the frame moves its contained members and leaves outsiders alone', 
   const { container } = render(<Host />)
   const root = rootOf(container)
 
-  // Press inside the frame but OUTSIDE both members (frame padding area),
-  // so the hit resolves to the group, then drag it 60,40.
-  await userEvent.click(root, { position: { x: 100, y: 100 } })
-  fireEvent.pointerDown(root, { pointerId: 1, clientX: 100, clientY: 100, buttons: 1 })
-  fireEvent.pointerMove(root, { pointerId: 1, clientX: 160, clientY: 140, buttons: 1 })
-  fireEvent.pointerUp(root, { pointerId: 1, clientX: 160, clientY: 140 })
+  // Press on the frame's border band, so the hit resolves to the group
+  // (its interior sweeps a band instead), then drag it 60,40.
+  await userEvent.click(root, { position: { x: 82, y: 100 } })
+  fireEvent.pointerDown(root, { pointerId: 1, clientX: 82, clientY: 100, buttons: 1 })
+  fireEvent.pointerMove(root, { pointerId: 1, clientX: 142, clientY: 140, buttons: 1 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: 142, clientY: 140 })
 
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).toMatchObject({ x: 140, y: 120 }))
   expect(nodeById(latest, 'a')).toMatchObject({ x: 180, y: 160 })

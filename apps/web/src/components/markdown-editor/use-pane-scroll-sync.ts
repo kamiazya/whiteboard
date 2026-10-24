@@ -9,6 +9,7 @@ import {
   totalSourceLines,
 } from './preview-geometry.js'
 import type { SourcePaneApi } from './SourcePane.js'
+import { usePreviewScrollMemory } from './use-preview-scroll-memory.js'
 
 /**
  * Keeps the two panes pointing at the same place: the preview follows the
@@ -34,6 +35,7 @@ export interface PaneSeeks {
 
 export function usePaneScrollSync(input: PaneScrollSyncInput): PaneSeeks {
   const { value, sourceWrapRef, previewScrollRef, sourceApiRef, anchorsRef, blocksRef } = input
+  usePreviewScrollMemory(previewScrollRef)
   // Source -> preview. Line-accurate through the anchors; the proportional
   // map is the fallback while they are unavailable (an unparseable mid-edit
   // body, the first render), which keeps the preview in the neighbourhood —

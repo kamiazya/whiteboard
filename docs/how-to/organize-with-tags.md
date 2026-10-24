@@ -126,8 +126,8 @@ What the library changes:
 
 ## Colour a tag
 
-In a browser-kept workspace, a tag can be coloured without writing the
-library by hand. In the **Display** panel's **Tags** row (and the same row
+A tag can be coloured without writing the library by hand, in a workspace the
+browser keeps and in one the daemon keeps. In the **Display** panel's **Tags** row (and the same row
 in a note's header), open a `key:value` chip's menu and choose **Set
 colour…**, then one of the six swatches the box colour row uses, or **No
 colour** to take the colour back. The colour is written into the workspace's
@@ -151,8 +151,10 @@ A few things worth knowing:
   them is drawn in its colour but never listed.
 - The colour is an edit to the `tags` document, not to the board you are on:
   it does not join the board's undo. **No colour** reverses it.
-- A workspace the daemon keeps cannot be coloured this way yet; the menu is
-  not offered there. Write the library with `wb_facet_set` as above.
+- In a workspace the daemon keeps, the colour is written to the daemon, so a
+  daemon that is not reachable refuses it. Over HTTP the same write is
+  `PUT /api/v1/workspaces/<id>/tag-library` with `{ "library": { … } }`, the
+  whole library, and it needs `canvas:write` like `wb_facet_set`.
 
 ## Find by tag
 

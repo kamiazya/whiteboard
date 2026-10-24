@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { WorkspaceCapacityReachedError } from '../../lib/browser-keeper-capacity.js'
 import type { TrashRow } from '../../lib/files-source.js'
 import { TrashRowItem } from './TrashRowItem.js'
+import { UndoDeleteToast, useUndoDelete } from './UndoDeleteToast.js'
 
 export interface TrashSectionProps {
   listTrash: () => Promise<readonly TrashRow[]>
@@ -34,6 +35,47 @@ function restoreFailureMessage(err: unknown): string {
     : 'Could not restore this document.'
 }
 
+function TrashDetails({
+  rows,
+  error,
+  busy,
+  purge,
+  onRestore,
+  onPurgeSettled,
+}: {
+  rows: readonly TrashRow[]
+  error: string | null
+  busy: string | null
+  purge: TrashSectionProps['purgeFromTrash']
+  onRestore: (documentId: string) => void
+  onPurgeSettled: () => void
+}) {
+  return (
+    <details className="border-t px-2 py-1 text-sm" data-testid="trash-section">
+      <summary className="text-muted-foreground cursor-pointer text-xs font-medium pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:items-center">
+        Trash ({rows.length})
+      </summary>
+      {error !== null && (
+        <p role="alert" className="text-destructive text-xs">
+          {error}
+        </p>
+      )}
+      <ul className="flex flex-col gap-1 pt-1 pointer-coarse:gap-2">
+        {rows.map((row) => (
+          <TrashRowItem
+            key={row.documentId}
+            row={row}
+            busy={busy === row.documentId}
+            onRestore={() => onRestore(row.documentId)}
+            purge={purge}
+            onPurgeSettled={onPurgeSettled}
+          />
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 export function TrashSection({
   listTrash,
   restoreFromTrash,
@@ -44,7 +86,7 @@ export function TrashSection({
   const [rows, setRows] = useState<readonly TrashRow[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
+  const { arrived, noteRead, undo } = useUndoDelete(restoreFromTrash)
   // Only the NEWEST read may write: a slow pre-restore list resolving after
   // the post-restore reload would put the restored row back in the section.
   const readSeq = useRef(0)
@@ -55,13 +97,15 @@ export function TrashSection({
     // failure from an auxiliary one.
     listTrash().then(
       (next) => {
-        if (seq === readSeq.current) setRows(next)
+        if (seq !== readSeq.current) return
+        noteRead(next)
+        setRows(next)
       },
       () => {
         if (seq === readSeq.current) setRows([])
       },
     )
-  }, [listTrash])
+  }, [listTrash, noteRead])
 
   useEffect(reload, [reload, revision])
 
@@ -85,27 +129,28 @@ export function TrashSection({
   if (rows.length === 0) return null
 
   return (
-    <details className="border-t px-2 py-1 text-sm" data-testid="trash-section">
-      <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
-        Trash ({rows.length})
-      </summary>
-      {error !== null && (
-        <p role="alert" className="text-destructive text-xs">
-          {error}
-        </p>
-      )}
-      <ul className="flex flex-col gap-1 pt-1">
-        {rows.map((row) => (
-          <TrashRowItem
-            key={row.documentId}
-            row={row}
-            busy={busy === row.documentId}
-            onRestore={() => void restore(row.documentId)}
-            purge={purgeFromTrash}
-            onPurgeSettled={reload}
-          />
-        ))}
-      </ul>
-    </details>
+    <>
+      <UndoDeleteToast
+        arrived={arrived}
+        onUndo={() => {
+          setError(null)
+          void undo(
+            () => {
+              reload()
+              onRestored()
+            },
+            (err) => setError(restoreFailureMessage(err)),
+          )
+        }}
+      />
+      <TrashDetails
+        rows={rows}
+        error={error}
+        busy={busy}
+        purge={purgeFromTrash}
+        onRestore={(documentId) => void restore(documentId)}
+        onPurgeSettled={reload}
+      />
+    </>
   )
 }

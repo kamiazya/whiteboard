@@ -1,9 +1,11 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { useId, useRef, useState } from 'react'
+import { documentHeading } from '../../lib/document-title.js'
 import { noteFocusPlaced } from '../../lib/focus-claim.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
+import { announceRoute } from '../../lib/route-announcer.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 
 export interface DocumentPropertiesProps {
@@ -37,6 +39,12 @@ export interface DocumentPropertiesProps {
    */
   readonly onTitleSettled?: (name: string) => void
   /**
+   * Where focus goes when Enter finishes the edit. Blurring alone drops it to
+   * `<body>`, which leaves a screen-reader user without a place; the page
+   * passes its own heading.
+   */
+  readonly finishFocusRef?: RefObject<HTMLElement | null>
+  /**
    * Save-state indicator, rendered LEFT of the title — the canvas's "am I
    * safe" signal reads before its name, like a title-bar dirty dot.
    */
@@ -63,6 +71,7 @@ export function DocumentProperties({
   title,
   onTitleChange,
   onTitleSettled,
+  finishFocusRef,
   status,
   actions,
 }: DocumentPropertiesProps) {
@@ -127,6 +136,7 @@ export function DocumentProperties({
               if (isImeComposingKeydown(event.nativeEvent)) return
               event.preventDefault()
               event.currentTarget.blur()
+              finishFocusRef?.current?.focus({ preventScroll: true })
               return
             }
             if (event.key !== 'Escape' || onTitleChange === undefined) return
@@ -150,10 +160,11 @@ export function DocumentProperties({
             const typed = typedRef.current
             typedRef.current = null
             if (typed === null || typed.trim() === editBaselineRef.current.trim()) return
+            announceRoute(`Renamed to ${documentHeading(typed.trim())}`)
             onTitleSettled?.(typed.trim())
           }}
           placeholder="Untitled"
-          className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate pointer-coarse:min-h-11 rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
             inline ? 'text-sm' : 'text-base'
           }`}
         />

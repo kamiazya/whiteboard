@@ -7,9 +7,9 @@ document keeps its id, its links and its history through either.
 
 ## Move a document to a folder
 
-Open the document's menu — right-click its card or row, or long-press it on a
-touch screen, or press Shift+F10 on a focused card — and choose **Move to
-folder…**. The picker lists the workspace root and every folder, plus **New
+Open the document's menu — right-click its card or row, tap the **…** button
+on it (shown on a touch screen), long-press it, or press Shift+F10 on a focused
+card — and choose **Move to folder…**. The picker lists the workspace root and every folder, plus **New
 folder…**:
 
 - Arrow keys walk the list, **Enter** picks, **Escape** cancels.
@@ -24,12 +24,13 @@ folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the
 start of a drag.
 
-A move is announced to screen readers as "Moved *name* to *folder*".
+A move is announced to screen readers as "Moved _name_ to _folder_".
 
 ## Rename a folder
 
-Right-click a folder (a card in the list or an entry in the tree) and choose
-**Rename…**. Type the new name — a single segment, no `/` — and press **Enter**;
+Right-click a folder (a card in the list, an entry in the tree, or a segment of
+the folder path above the list) and choose **Rename…**. On a touch screen use
+the **…** button beside the folder, or long-press it. Type the new name — a single segment, no `/` — and press **Enter**;
 **Escape** cancels. Every document under the folder moves with it, and links
 that named the old paths are repointed the same way a document's own rename
 repoints them.

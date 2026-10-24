@@ -21,8 +21,8 @@ it('keeps a polite status region mounted and empty before anything happens', () 
 
 it('announces a resolved conversation, and a reopened one', () => {
   render(<CommentsPanel threads={[OPEN]} onResolve={() => {}} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+  fireEvent.click(screen.getByRole('button', { name: /^Resolve(:|$)/ }))
   expect(screen.getByRole('status').textContent).toBe('Conversation resolved')
-  fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
+  fireEvent.click(screen.getByRole('button', { name: /^Reopen(:|$)/ }))
   expect(screen.getByRole('status').textContent).toBe('Conversation reopened')
 })

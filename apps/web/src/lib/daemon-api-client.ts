@@ -47,9 +47,12 @@ import {
   type RestoreTrashResponse,
   renameDocumentPathResponseSchema,
   restoreTrashResponseSchema,
+  type SetTagLibraryV1Request,
   searchApiUrl,
   type setNameRequestSchema,
   type setPinnedRequestSchema,
+  setTagLibraryResponseSchema,
+  tagLibraryApiUrl,
   trashApiUrl,
   trashEntryApiUrl,
   trashRestoreApiUrl,
@@ -434,6 +437,28 @@ export function getWorkspaceDocumentTags(
     fetchImpl,
     `${daemonBaseUrl}${documentTagsApiUrl(workspaceId)}`,
     workspaceDocumentTagsResponseSchema,
+  )
+}
+
+/**
+ * Replace the workspace's declared tag vocabulary (the document at `tags`,
+ * created by the daemon when the workspace has none).
+ */
+export function setWorkspaceTagLibrary(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  library: SetTagLibraryV1Request['library'],
+) {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}${tagLibraryApiUrl(workspaceId)}`,
+    setTagLibraryResponseSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ library } satisfies SetTagLibraryV1Request),
+    },
   )
 }
 

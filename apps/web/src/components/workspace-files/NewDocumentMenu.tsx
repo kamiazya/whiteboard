@@ -1,17 +1,17 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { FilePlus2, SlidersHorizontal, Upload } from 'lucide-react'
+import { FilePlus2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { IMPORT_ACCEPT } from '../../lib/document-import.js'
-import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 import { NewDocumentDialog } from './NewDocumentDialog.js'
+import { NewDocumentMenuItems } from './NewDocumentMenuItems.js'
+import { NewDocumentSheet } from './NewDocumentSheet.js'
+import { useCompactSurface } from './use-compact-surface.js'
 
 /**
  * The one door to creating a document, wherever creation is offered.
@@ -43,6 +43,7 @@ export function NewDocumentMenu({
   createError,
   onDismiss,
   onImportFiles,
+  pathForName,
 }: {
   /**
    * `options` arrives only from the dialog. A plain menu entry sends none,
@@ -82,17 +83,27 @@ export function NewDocumentMenu({
    * entry: a host that cannot write a file's content must not offer to.
    */
   onImportFiles?: (files: readonly File[]) => void
+  /**
+   * The address a typed name earns, for the phone sheet that asks for the
+   * name first. Absent, the sheet creates at `defaultPath` and the name is
+   * stored without moving the address.
+   */
+  pathForName?: (name: string) => string
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const compact = useCompactSurface()
   const pickerRef = useRef<HTMLInputElement | null>(null)
+  const sheetCreates = compact && defaultPath !== undefined
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={sheetCreates ? false : undefined}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                onClick={sheetCreates ? () => setSheetOpen(true) : undefined}
                 // Holds the visible "New" inside it (WCAG 2.5.3), so a voice
                 // user saying "click New" reaches the same control a sighted
                 // one points at.
@@ -110,63 +121,44 @@ export function NewDocumentMenu({
           <TooltipContent>New document</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
-          {/* No description line beside either kind: whoever reaches this menu
-            has already met the empty-state chooser, and re-teaching on every
-            create costs a phone two rows of height for nothing. */}
-          {DOCUMENT_KIND_CHOICES.map(({ kind, label, Icon }) => (
-            <DropdownMenuItem
-              key={kind}
-              data-testid={`new-document-${kind}`}
-              disabled={disabled}
-              // Voided through a catch, not bare: the host now REJECTS on a
-              // refusal so the dialog can stay open, and these entries share
-              // that host. An unhandled rejection fails a whole test file, and
-              // the host is already reporting the failure its own way.
-              onSelect={() => void Promise.resolve(onCreate(kind)).catch(() => {})}
-              className="gap-2"
-            >
-              <Icon aria-hidden="true" className="size-4" />
-              {label}
-            </DropdownMenuItem>
-          ))}
-          {onImportFiles !== undefined && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                data-testid="new-document-import"
-                disabled={disabled}
-                onSelect={() => pickerRef.current?.click()}
-                className="gap-2"
-              >
-                <Upload aria-hidden="true" className="size-4" />
-                Import file…
-              </DropdownMenuItem>
-            </>
-          )}
-          {defaultPath !== undefined && (
-            <>
-              <DropdownMenuSeparator />
-              {/* The ellipsis belongs HERE and only here: this is the one entry
-                that opens something rather than acting. */}
-              <DropdownMenuItem
-                data-testid="new-document-specify"
-                disabled={disabled}
-                onSelect={() => setDialogOpen(true)}
-                className="gap-2"
-              >
-                <SlidersHorizontal aria-hidden="true" className="size-4" />
-                {/* Says "folder" because that is the word someone looking for
-                  one searches the menu for, and this entry is the only place
-                  they can put a document in one. Folders here ARE the path
-                  (the dialog's Path help says so, and an emptied one is
-                  pruned), so there is no "New folder" to offer instead — a
-                  folder with nothing in it cannot exist to be created. */}
-                Name and folder…
-              </DropdownMenuItem>
-            </>
-          )}
+          <NewDocumentMenuItems
+            disabled={disabled}
+            onCreate={onCreate}
+            canSpecify={defaultPath !== undefined}
+            onSpecify={() => setDialogOpen(true)}
+            onImport={onImportFiles === undefined ? undefined : () => pickerRef.current?.click()}
+          />
         </DropdownMenuContent>
-        {defaultPath !== undefined && (
+        {sheetCreates && (
+          <NewDocumentSheet
+            open={sheetOpen}
+            defaultPath={defaultPath}
+            pathForName={pathForName ?? (() => defaultPath)}
+            busy={disabled}
+            error={createError}
+            onCancel={() => {
+              setSheetOpen(false)
+              onDismiss?.()
+            }}
+            onCreate={(kind, options) => {
+              void Promise.resolve(onCreate(kind, options)).then(
+                () => setSheetOpen(false),
+                () => {
+                  // Left open; the host reports why through `createError`.
+                },
+              )
+            }}
+            onImport={
+              onImportFiles === undefined
+                ? undefined
+                : () => {
+                    setSheetOpen(false)
+                    pickerRef.current?.click()
+                  }
+            }
+          />
+        )}
+        {defaultPath !== undefined && !sheetCreates && (
           <NewDocumentDialog
             open={dialogOpen}
             workspace={workspace}

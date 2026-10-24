@@ -31,21 +31,25 @@ function useCanvasAnnouncements(
   canvas: SpatialCanvas,
   selectedNodeIds: readonly string[],
   selectedEdgeId: string | null,
+  externalVersion: number | undefined,
 ): void {
   const selectionKey = `${selectedNodeIds.join('\u0000')}\u0001${selectedEdgeId ?? ''}`
-  const previous = useRef({ canvas, selectionKey })
+  const previous = useRef({ canvas, selectionKey, externalVersion })
   useEffect(() => {
     const before = previous.current
-    previous.current = { canvas, selectionKey }
+    previous.current = { canvas, selectionKey, externalVersion }
+    // A document arriving from outside (opened, synced) onto an empty board is
+    // a load, not something the person just added.
+    const loaded = before.externalVersion !== externalVersion && before.canvas.nodes.length === 0
     const changed =
-      before.canvas === canvas ? undefined : canvasChangeMessage(before.canvas, canvas)
+      before.canvas === canvas || loaded ? undefined : canvasChangeMessage(before.canvas, canvas)
     const selected =
       before.selectionKey === selectionKey
         ? undefined
         : selectionMessage(canvas, selectedNodeIds, selectedEdgeId)
     const message = changed ?? selected
     if (message !== undefined) announceOnCanvas(message)
-  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId])
+  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId, externalVersion])
 }
 
 function A11yOption({
@@ -73,8 +77,11 @@ export function CanvasA11yTree({
   primaryId,
   extraIds,
   selectedEdgeId,
+  externalVersion,
 }: {
   readonly canvas: SpatialCanvas
+  /** The editor's external-replacement counter; a bump marks the canvas as arriving rather than edited. */
+  readonly externalVersion?: number | undefined
   readonly idPrefix: string
   readonly primaryId: string | null
   readonly extraIds: ReadonlySet<string>
@@ -84,7 +91,7 @@ export function CanvasA11yTree({
     () => (primaryId === null ? [] : [primaryId, ...extraIds]),
     [primaryId, extraIds],
   )
-  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId)
+  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion)
   const nodes = useMemo(() => readingOrder(canvas.nodes), [canvas.nodes])
   const selectedSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds])
   return (

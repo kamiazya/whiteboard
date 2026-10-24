@@ -32,6 +32,9 @@ export interface MinimapRailProps {
   readonly className?: string
 }
 
+// The title is for the pointer: the column of bars is otherwise unexplained.
+const RAIL_ATTRS = { 'aria-hidden': true, title: 'Document map — click or drag to jump' } as const
+
 export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
   const [railHeight, setRailHeight] = useState(0)
@@ -84,7 +87,7 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
     <div
       ref={railRef}
       data-testid="markdown-minimap-rail"
-      aria-hidden="true"
+      {...RAIL_ATTRS}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       style={{ width: RAIL_WIDTH_PX }}

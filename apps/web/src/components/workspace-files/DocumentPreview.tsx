@@ -52,6 +52,27 @@ type State =
   | { kind: 'drawn'; path: string; svg: string }
   | { kind: 'blank'; path: string }
 
+/** What the picture's place says while nothing is drawn: a note is written, a canvas is drawn. */
+function undrawnText(document: WorkspaceDocumentEntry, loading: boolean): string {
+  if (loading) return 'Drawing…'
+  return (document.kind ?? 'markdown') === 'markdown'
+    ? 'Nothing written yet.'
+    : 'Nothing to draw yet.'
+}
+
+/** A text button beside a name or an address; both open the one rename dialog. */
+function RenameLink({ label, onClick }: { readonly label: string; readonly onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline"
+    >
+      {label}
+    </button>
+  )
+}
+
 export function DocumentPreview({
   document,
   loadRender,
@@ -121,17 +142,22 @@ export function DocumentPreview({
           />
         ) : (
           <p className="text-muted-foreground text-sm">
-            {state.kind === 'loading' ? 'Drawing…' : 'Nothing to draw yet.'}
+            {undrawnText(document, state.kind === 'loading')}
           </p>
         )}
       </div>
 
       <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="truncate text-sm font-medium">{documentLabel(document, 'leaf')}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-sm font-medium">{documentLabel(document, 'leaf')}</h2>
+          {onRename !== undefined && (
+            <RenameLink label="Rename…" onClick={() => onRename(document)} />
+          )}
+        </div>
         {/* The path is the address, not the name — so it goes here, quietly,
-            where someone who needs it can read it. BOTH are edited in the
-            Rename dialog, which is the one place that explains how they
-            differ. */}
+            where someone who needs it can read it. Each control names what
+            it edits; both open the one dialog that explains how name and
+            address differ. */}
         {document.shadowed && (
           <p
             data-testid="preview-shadowed-notice"
@@ -144,13 +170,7 @@ export function DocumentPreview({
         <div className="flex min-w-0 items-center gap-2">
           <p className="text-muted-foreground truncate font-mono text-xs">{document.path}</p>
           {onRename !== undefined && (
-            <button
-              type="button"
-              onClick={() => onRename(document)}
-              className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline"
-            >
-              Rename…
-            </button>
+            <RenameLink label="Change address…" onClick={() => onRename(document)} />
           )}
         </div>
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 text-xs">

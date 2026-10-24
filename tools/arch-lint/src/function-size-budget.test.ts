@@ -82,7 +82,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   // +5: the rail draft box asks for focus on mount, and the row chip takes its label source.
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 334, // +15: the show-resolved-on-canvas toggle beside the filter
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 350, // +15: the show-resolved-on-canvas toggle beside the filter; +16: the focus handoff between a pressed Resolve, its Undo and the conversation row
   // The row the panel's list is made of, split three ways: the row and its
   // verbs, the open conversation, and the messages inside it. Each is a
   // block of JSX rather than a branch — the shape a size budget cannot tell
@@ -90,7 +90,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // complexity threshold, which is what the split was for. Splitting
   // further would cut a single visual unit in half without a reader gaining
   // anything.
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 132,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 137, // +5: the conversation's subject reaches its Resolve verbs
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 61,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
@@ -206,7 +206,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 112, // +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 116, // +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
@@ -231,7 +231,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 561,
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 602, // +41: C arms a connect from the selection and the arrows walk its targets
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
@@ -240,7 +240,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // that belongs in a module of its own — `pointer-release.ts` is the
   // precedent, and a press-side module beside it is the cut that brings this
   // down rather than a ceiling that keeps rising.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 568, // +20: the hand tool's double click, armed at the press and resolved at the release
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 585, // +37: the hand tool's double click, armed at the press and resolved at the release; a frame-interior drag becoming a band
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,
@@ -259,7 +259,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // A document's card, and the picture with the two things drawn ON it, are
   // their own components. The two below are those.
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
-  'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 102,
+  'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 62,
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx#NewDocumentDialog': 165,
   'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 180,
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
@@ -310,7 +310,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/spatial/clipboard-fragment.ts#remintClipboardFragment': 55,
-  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 112,
+  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 122,
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
@@ -364,12 +364,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 357, // +1: the editor's resolved-view source reaches the inspector
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 358, // +1: the editor's resolved-view source reaches the inspector; +1: the page heading reaches the header row
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 67, // +2: the page heading is where Enter in the title hands focus
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
   // The row's controls in one JSX run; the notice prop is one more spread.
   'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 53,
@@ -618,7 +618,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.
-  'packages/server-core/src/create-server.ts#createServer': 223,
+  'packages/server-core/src/create-server.ts#createServer': 238,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls

@@ -81,7 +81,7 @@ function journeySteps({
       kind: 'done',
       title: 'Draw in your browser',
       state: "you're here",
-      desc: 'Canvases live in this browser profile, no account needed.',
+      desc: 'Your documents live in this browser profile, no account needed.',
     },
     protectStep(persist, protectDeclined, protecting, onProtect, usageDetail),
     installStep(install, onInstall),

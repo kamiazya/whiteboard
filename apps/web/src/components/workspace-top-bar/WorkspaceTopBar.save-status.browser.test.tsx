@@ -40,13 +40,14 @@ function renderBar() {
 }
 
 describe('the top bar save status', () => {
-  it('shows an icon only on a phone and stays beside a truncated title', async () => {
+  it('shows a short word on a phone and stays beside a truncated title', async () => {
     await setViewport(390, 800)
     renderBar()
     const status = screen.getByTestId('save-status')
     const header = screen.getByRole('banner')
     const box = status.getBoundingClientRect()
-    expect(box.width).toBeLessThan(24)
+    expect(box.width).toBeLessThan(90)
+    expect(screen.getByTestId('save-status-short').getBoundingClientRect().width).toBeGreaterThan(0)
     expect(box.right).toBeLessThanOrEqual(header.getBoundingClientRect().right)
     expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth)
     expect(status.getAttribute('title')).toBe('Offline — changes kept here')

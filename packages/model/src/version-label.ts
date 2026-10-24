@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { utf16Max } from './utf16-max.js'
 
 /**
  * The words a person or an agent gives a saved version.
@@ -11,4 +12,4 @@ import { z } from 'zod'
  */
 export const VERSION_LABEL_MAX_LENGTH = 200
 
-export const versionLabelSchema = z.string().min(1).max(VERSION_LABEL_MAX_LENGTH)
+export const versionLabelSchema = utf16Max(z.string().min(1), VERSION_LABEL_MAX_LENGTH)

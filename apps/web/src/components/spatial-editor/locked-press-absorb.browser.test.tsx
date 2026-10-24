@@ -70,11 +70,11 @@ it('a plain click on a locked note stays quiet', () => {
   expect(container.querySelector('[data-testid="locked-notice"]')?.textContent ?? '').toBe('')
 })
 
-it('the frame interior beside a locked note still drags the frame', () => {
+it('the frame border beside a locked note still drags the frame', () => {
   const { Host, latest } = makeEditorHost({ initial: framed, lockedNodes: ['locked'] })
   const { container } = render(<Host />)
 
-  drag(rootOf(container), { x: 60, y: 60 }, 50)
+  drag(rootOf(container), { x: 42, y: 100 }, 50)
 
   expect(latest.canvas.nodes.find((n) => n.id === 'frame')).toMatchObject({ x: 90, y: 90 })
 })

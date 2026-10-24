@@ -1130,8 +1130,9 @@ describe('renderSceneToSvg — legend', () => {
     expect(legend).toContain('stroke="#c60"')
     // The uncarried line, muted, for the population it is about.
     expect(legend).toContain('edge colour: no key carries it')
-    // Anchored at the viewBox corner, not at the scene's origin.
-    expect(svg).toMatch(/<g data-wb-legend="" transform="translate\(112 212\)"/)
+    // Anchored at the viewBox's bottom-left corner, not at the scene's origin:
+    // 124 tall panel, 12 margin → y = 200 + 300 - 12 - 124.
+    expect(svg).toMatch(/<g data-wb-legend="" transform="translate\(112 364\)"/)
   })
 
   it('is not drawn into a fragment, and is skipped when asked', () => {
@@ -1163,12 +1164,12 @@ describe('renderSceneToSvg — the legend’s band', () => {
     legend,
   }
 
-  it('a derived envelope reserves a band on the left, so the legend covers no content', () => {
+  it('a derived envelope reserves room below the content, so the legend covers none', () => {
     const svg = renderSceneToSvg(scene, { padding: 0 })
-    // The panel: 16+16+6+6*7=80 wide, 16+2*18=52 tall; the band adds two
-    // margins (104), and the height grows to hold the panel and its margins.
-    expect(svg).toContain('viewBox="-4 200 204 76"')
-    expect(svg).toContain('<g data-wb-legend="" transform="translate(8 212)"')
+    // The panel: 16+16+6+6*7=80 wide, 16+2*18=52 tall; the content is narrower, so the width follows the panel,
+    // and the height grows by a margin, the panel and a margin.
+    expect(svg).toContain('viewBox="100 200 104 86"')
+    expect(svg).toContain('<g data-wb-legend="" transform="translate(112 222)"')
     // The content itself did not move.
     expect(svg).toContain('<rect x="100" y="200" width="100" height="10"')
   })

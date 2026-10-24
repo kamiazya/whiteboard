@@ -140,3 +140,23 @@ it('after a pinch ends, the remaining finger does not keep panning the viewport'
 
   expect(getTransform(container)).toBe(atPinchEnd)
 })
+
+it('a stepped 2.5x pinch zooms by 2.5x, however many moves it arrives in', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const before = parseTransform(getTransform(container))
+
+  touch(root, 'pointerdown', 1, 350, 300)
+  touch(root, 'pointerdown', 2, 450, 300)
+  // Half-gap 50 -> 125 in uneven steps; each move reports only one finger,
+  // as the platform delivers them.
+  for (const half of [55, 70, 80, 95, 110, 125]) {
+    touch(root, 'pointermove', 1, 400 - half, 300)
+    touch(root, 'pointermove', 2, 400 + half, 300)
+  }
+  touch(root, 'pointerup', 1, 275, 300)
+  touch(root, 'pointerup', 2, 525, 300)
+
+  const after = parseTransform(getTransform(container))
+  expect(after.zoom / before.zoom).toBeCloseTo(2.5, 3)
+})
