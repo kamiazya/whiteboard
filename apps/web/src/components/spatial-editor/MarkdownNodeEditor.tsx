@@ -145,9 +145,10 @@ export interface MarkdownNodeEditorProps {
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
   /**
-   * What Escape is announced as. Defaults to "Discarded"; a host whose
-   * cancel KEEPS what was typed says so instead, read at the moment of the
-   * cancel rather than at mount.
+   * What Escape is announced as. Absent means Escape discards ("Discarded");
+   * a host whose cancel KEEPS what was typed passes what it keeps, read at the
+   * moment of the cancel rather than at mount, and the editor's description
+   * says so too.
    */
   readonly cancelAnnouncement?: string
   readonly onChange?: (text: string) => void
@@ -181,7 +182,7 @@ export function MarkdownNodeEditor({
   testId = 'text-node-editor',
   onCommit,
   onCancel,
-  cancelAnnouncement = 'Discarded',
+  cancelAnnouncement,
   onChange,
   onRequestComment,
   threads,
@@ -208,7 +209,7 @@ export function MarkdownNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
-    announceOnCanvas(callbacksRef.current.cancelAnnouncement)
+    announceOnCanvas(callbacksRef.current.cancelAnnouncement ?? 'Discarded')
     callbacksRef.current.onCancel()
   }
   const commitAndReturn = (view: EditorView) => {
@@ -401,7 +402,7 @@ export function MarkdownNodeEditor({
           ...style,
         }}
       />
-      <EditorExitDescription id={hintId} />
+      <EditorExitDescription id={hintId} escapeKeeps={cancelAnnouncement !== undefined} />
       <EditorExitHint
         onDone={() => {
           const view = viewRef.current

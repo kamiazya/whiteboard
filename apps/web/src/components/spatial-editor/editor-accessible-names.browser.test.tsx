@@ -85,6 +85,21 @@ it('Escape on a new typed note announces that the note was kept', async () => {
   expect(canvasAnnouncement()).toBe('Note kept: Zed')
 })
 
+it('a new note with text is described as kept by Escape, not discarded', async () => {
+  const { Host } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
+  rootOf(container).focus()
+  await userEvent.keyboard('n')
+  const editor = page.getByRole('textbox', { name: 'Text of Empty note' })
+  await expect.element(editor).toBeVisible()
+  const hint = () =>
+    document.getElementById(editor.element().getAttribute('aria-describedby') as string)
+      ?.textContent
+  expect(hint()).toMatch(/Escape discards/)
+  await userEvent.keyboard('Zed')
+  await expect.poll(hint).toMatch(/Escape or .*\+Enter keeps the note/)
+})
+
 it('Escape on a new empty note removes it without claiming it was kept', async () => {
   const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
