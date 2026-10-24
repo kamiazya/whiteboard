@@ -51,7 +51,7 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
         aria-expanded={open}
         aria-label="Toggle legend"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-2 py-1 font-medium [&_svg]:transition-transform aria-expanded:[&_svg]:rotate-180"
+        className="flex w-full items-center justify-between gap-2 px-2 py-1 font-medium pointer-coarse:min-h-11 pointer-coarse:px-3 [&_svg]:transition-transform aria-expanded:[&_svg]:rotate-180"
       >
         <span>Legend</span>
         <ChevronDown aria-hidden className="size-3" />

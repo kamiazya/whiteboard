@@ -36,6 +36,14 @@ const legend: SceneLegend = {
 }
 
 describe('LegendOverlay', () => {
+  // Chromium cannot emulate pointer: coarse, so the floor is pinned by its class.
+  it('raises its toggle to a 44px target on a coarse pointer', () => {
+    render(<LegendOverlay legend={legend} />)
+    expect(screen.getByRole('button', { name: /legend/i }).className).toContain(
+      'pointer-coarse:min-h-11',
+    )
+  })
+
   it('lists each key’s values with the swatch the class is drawn in, the untagged class named', () => {
     render(<LegendOverlay legend={legend} />)
     expect(screen.getByText('health')).not.toBeNull()
