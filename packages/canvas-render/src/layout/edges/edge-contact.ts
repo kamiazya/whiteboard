@@ -13,6 +13,7 @@ import type { EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endSide } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { type Point, type Rect, rectAtEnd } from './edge-geometry.js'
+import { fullyContains } from './edge-rules.js'
 
 /** How long the contact mark runs, in px: one arrowhead (`edge-arrows.ts`). */
 const CONTACT_MARK_PX = 10
@@ -37,12 +38,6 @@ const spanY = (r: Rect): AxisSpan => ({ near: r.y, far: r.y + r.h })
 /** How far two spans overlap; zero when they only meet, negative when apart. */
 const overlap = (a: AxisSpan, b: AxisSpan) => Math.min(a.far, b.far) - Math.max(a.near, b.near)
 
-const holds = (outer: Rect, inner: Rect) =>
-  inner.x >= outer.x &&
-  inner.y >= outer.y &&
-  inner.x + inner.w <= outer.x + outer.w &&
-  inner.y + inner.h <= outer.y + outer.h
-
 /**
  * The contact between `from` and `to`, or `undefined` when the two are
  * apart, meet only at a corner, or one holds the other (a frame and its
@@ -58,7 +53,7 @@ function contactBetween(from: Rect, to: Rect): Contact | undefined {
   const ox = overlap(spanX(from), spanX(to))
   const oy = overlap(spanY(from), spanY(to))
   if (ox < 0 || oy < 0) return undefined
-  if (holds(from, to) || holds(to, from)) return undefined
+  if (fullyContains(from, to) || fullyContains(to, from)) return undefined
   const xFirst = ox / (from.w + to.w) <= oy / (from.h + to.h)
   const order = xFirst ? ([true, false] as const) : ([false, true] as const)
   for (const alongX of order) {
