@@ -89,9 +89,9 @@ function snapResize(
 
 const NO_GUIDES = { x: [], y: [] } as const
 
-/** The press point when a move has not travelled past the tap slop, else undefined. */
+/** The press point when a move or resize has not travelled past the tap slop, else undefined. */
 function tapPin(gestureState: GestureState, raw: Point, zoom: number): Point | undefined {
-  if (gestureState.kind !== 'moving') return undefined
+  if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
   const travelled = Math.hypot(raw.x - gestureState.startPoint.x, raw.y - gestureState.startPoint.y)
   return travelled * zoom < MOVE_SLOP_SCREEN_PX ? gestureState.startPoint : undefined
 }
