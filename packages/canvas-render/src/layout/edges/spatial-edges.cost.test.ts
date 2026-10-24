@@ -247,16 +247,18 @@ function hubBoard(count: number, bystanders: number): SpatialCanvas {
 }
 
 /**
- * `count` edges between two boxes of one width stacked flush, no side named:
- * every edge's ends meet on the shared border, so every edge is collided.
+ * `count` edges from a box to a member of its width flush with its bottom,
+ * the member's bottom side named: the ends meet on the shared border, so
+ * edges collide. (Boxes that merely touch are drawn as a contact mark and
+ * never reach the search.)
  */
 function flushBoard(count: number): SpatialCanvas {
   return {
-    nodes: [sized('A', 0, 0, 200, 100), sized('B', 0, 100, 200, 100)],
+    nodes: [sized('A', 0, 0, 200, 200), sized('B', 0, 100, 200, 100)],
     edges: Array.from({ length: count }, (_, i) => ({
       id: `e${i}`,
       from: { node: 'A' },
-      to: { node: 'B' },
+      to: { node: 'B', side: 'bottom' as const },
     })),
     facets: ORTHOGONAL,
   }

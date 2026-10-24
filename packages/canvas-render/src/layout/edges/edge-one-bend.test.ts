@@ -51,8 +51,15 @@ function bendCount(path: readonly { x: number; y: number }[]): number {
 }
 
 it('meets perpendicular sides at one corner instead of stubbing out of both', () => {
+  // The boxes overlap, so the sides are named: left to itself the pair is
+  // drawn as its contact (`edge-contact.ts`), not routed.
   const nodes = [node('A', 100, 570, 200, 100), node('B', 246, 510, 200, 100)]
-  const edges = [edge('e', 'A', 'B')]
+  const edges = [
+    edge('e', 'A', 'B', {
+      from: { node: 'A', side: 'right' },
+      to: { node: 'B', side: 'bottom' },
+    }),
+  ]
   const anchors = assignEdgeAnchors(
     nodes,
     edges,

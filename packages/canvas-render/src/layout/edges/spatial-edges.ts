@@ -25,6 +25,7 @@ import {
   patchAnchorGroups,
   patchWork,
 } from './edge-anchors.js'
+import { marksContact } from './edge-contact.js'
 import {
   buildPairwiseScores,
   scoreQuantizedSegmentPair,
@@ -1033,7 +1034,7 @@ function optimizeAcrossRegions(
  */
 export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
-  edges: readonly RoutableElement[],
+  allEdges: readonly RoutableElement[],
   // One style for the whole set, or an answer per edge. Both, because both
   // are real: a caller with a canvas-wide setting has nothing to look up,
   // and one honouring per-edge overrides cannot say it in a single value.
@@ -1049,6 +1050,7 @@ export function assignEdgeAnchors(
   // edges again afterwards passes the same one.
   budget: RoutingBudget = createRoutingBudget(),
 ): ReadonlyMap<string, EdgeAnchorPair> {
+  const edges = allEdges.filter((edge) => !marksContact(nodes, edge))
   const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
   const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) =>

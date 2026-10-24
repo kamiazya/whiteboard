@@ -14,6 +14,15 @@ format the document is in, and says which in its `kind` field; there is no
 an explicitly lossy projection rather than a way to read the stored content
 (see [ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
 
+**An edge between two boxes that touch is drawn as a mark, not a route.**
+When the boxes share a stretch of border, or overlap without one holding the
+other, there is no distance to route through, so the edge is drawn as one
+arrowhead whose tip sits on the target's facing side, centred on the stretch
+the two facing sides share. Every routing style draws it the same way, on
+the canvas, in the exports and in `wb_scene_render`. An edge that names a
+side the contact does not use, or stores its own bends, is routed as before.
+Boxes any distance apart, however small, are routed as usual.
+
 **The daemon does not typeset math or draw diagrams.** `wb_scene_render`, the
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code

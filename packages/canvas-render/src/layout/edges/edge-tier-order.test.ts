@@ -61,7 +61,10 @@ it('never routes through a node body when a border-tracing route would avoid it'
   const edges: CanvasEdge[] = [
     {
       id: 'e_AB',
-      from: { node: 'A' },
+      // Overlapping boxes left to themselves are drawn as their contact
+      // (`edge-contact.ts`); a named departure face hands the pair to the
+      // search this pins.
+      from: { node: 'A', side: 'bottom' },
       to: { node: 'B' },
     },
     {

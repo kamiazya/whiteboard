@@ -15,6 +15,7 @@ import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboa
 import { endNode, endSide, isSelfLoop } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { bendRoute } from './bend-route.js'
+import { contactRoute } from './edge-contact.js'
 import type { Point, Rect } from './edge-geometry.js'
 import {
   boundingBoxOf,
@@ -408,10 +409,10 @@ function routeOrthogonal(
   budget: RoutingBudget | undefined,
 ): Point[] {
   let start = startAnchor
-  // Boxes that touch exactly can put both anchors on the same point — two
-  // flush-stacked nodes wired bottom-to-top land on the shared corner of
-  // their fan-out spans. There is no distance to route: the connection IS
-  // that point. Everything below assumes a direction to leave and arrive
+  // Both anchors can land on the same point — a member flush with a border
+  // of the box holding it, wired to that border. (Boxes that merely touch
+  // never get here: `contactRoute` draws them.) There is no distance to
+  // route: the connection IS that point. Everything below assumes a direction to leave and arrive
   // along, and with none it built a stub each way, drawing a spike 20px
   // into one box and 40px back through both.
   //
@@ -742,6 +743,9 @@ export function routeEdge(
   if (authored !== undefined) return authored
 
   if (isSelfLoop(edge)) return selfLoopRoute(edge, fromRect, toRect, anchors, fromEnd, toEnd)
+
+  const contact = contactRoute(edge, fromRect, toRect, fromEnd, toEnd)
+  if (contact !== undefined) return contact
 
   const { fromSide, toSide } = resolvedSides(nodes, edge, fromRect, toRect, anchors)
 

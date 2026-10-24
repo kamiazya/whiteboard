@@ -74,6 +74,17 @@ function projectForIcon(
   }))
 }
 
+/**
+ * The shape to draw, or null for the kind icon. A note of one block is a
+ * single dash at icon size — a grey bar where every other note has its
+ * page — so it keeps the page.
+ */
+function shapeOf(document: WorkspaceDocumentEntry, outline: RowOutline | null) {
+  if (outline === null) return null
+  if (document.kind === 'markdown' && outline.rects.length < 2) return null
+  return projectForIcon(outline.rects)
+}
+
 export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
   const [outline, setOutline] = useState<RowOutline | null>(null)
@@ -116,7 +127,7 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
   // shape falls through to the kind icon, one chain with no dead end.
   const symbol = outline?.symbol
   const drawsSymbol = symbol !== undefined && canDrawSymbol(symbol)
-  const projected = drawsSymbol || outline === null ? null : projectForIcon(outline.rects)
+  const projected = drawsSymbol ? null : shapeOf(document, outline)
 
   return (
     <span

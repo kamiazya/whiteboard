@@ -112,6 +112,25 @@ describe('DocumentThumbnail', () => {
     })
   })
 
+  // A note is laid out at a column's width; fitted whole, two words sit in
+  // the corner of a picture that is mostly the empty rest of the column.
+  it('crops a note to the text it holds, not the column it was laid out in', async () => {
+    const observers = installObserver()
+    const short = {
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" width="656" height="89.6" viewBox="-8 -8 656 89.6"><rect/></svg>',
+      bounds: { x: 0, y: 0, w: 174, h: 81.6 },
+    }
+    const note = { ...doc, kind: 'markdown' as const }
+    const { getByTestId } = render(
+      <DocumentThumbnail document={note} loadRender={async () => short} />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => {
+      const svg = getByTestId('document-thumbnail').querySelector('svg')
+      expect(svg?.getAttribute('viewBox')).toBe('-8 -8 182 89.6')
+    })
+  })
+
   it('keeps a wide canvas whole inside the box', async () => {
     const observers = installObserver()
     const wide = { ...drawn, bounds: { x: 0, y: 0, w: 1200, h: 100 } }
@@ -141,6 +160,20 @@ describe('DocumentThumbnail', () => {
     expect(getByTestId('document-thumbnail').querySelector('[data-kind]')).not.toBeNull()
   })
 
+  // A blank grey pane reads as a picture that failed to draw. The loader
+  // answers nothing for a document with nothing in it — a blank note, a
+  // board with no node — and the card says so under its kind.
+  it('says a document with nothing to draw is empty', async () => {
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentThumbnail document={doc} loadRender={async () => null} />,
+    )
+    await act(async () => {
+      observers[0]?.fire()
+    })
+    expect(getByTestId('document-thumbnail').textContent).toBe('Empty')
+  })
+
   it('keeps the kind icon when the read throws outright', async () => {
     const observers = installObserver()
     const loadRender = vi.fn(async () => {
@@ -154,6 +187,8 @@ describe('DocumentThumbnail', () => {
 
     expect(loadRender).toHaveBeenCalled()
     expect(getByTestId('document-thumbnail').querySelector('[data-kind]')).not.toBeNull()
+    // A read that failed says nothing about the document's content.
+    expect(getByTestId('document-thumbnail').textContent).toBe('')
   })
 
   it('is hidden from assistive technology — the row’s name already says which document it is', () => {

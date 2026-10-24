@@ -88,6 +88,34 @@ describe('DocumentMinimap', () => {
     )
   })
 
+  // One block of a note fitted to a square is a single dash: a grey bar
+  // where every other note in the tree has its page icon.
+  it('keeps the page icon for a note of one block', async () => {
+    const observers = installObserver()
+    const note = { ...doc, kind: 'markdown' as const }
+    const line = [{ x: 8, y: 8, w: 166, h: 26, color: '#909090' }]
+    const { getByTestId } = render(
+      <DocumentMinimap document={note} loadOutline={async () => ({ rects: line })} />,
+    )
+    await act(async () => {
+      observers[0]?.fire()
+    })
+    expect(getByTestId('document-minimap').querySelector('[data-kind="markdown"]')).not.toBeNull()
+    expect(getByTestId('document-minimap').querySelectorAll('span.absolute')).toHaveLength(0)
+  })
+
+  it('draws the shape of a note of several blocks', async () => {
+    const observers = installObserver()
+    const note = { ...doc, kind: 'markdown' as const }
+    const { getByTestId } = render(
+      <DocumentMinimap document={note} loadOutline={async () => ({ rects })} />,
+    )
+    await act(async () => {
+      observers[0]?.fire()
+    })
+    expect(getByTestId('document-minimap').querySelectorAll('span.absolute')).toHaveLength(2)
+  })
+
   it('is hidden from assistive technology — the row’s name already says which document it is', () => {
     installObserver()
     const { getByTestId } = render(

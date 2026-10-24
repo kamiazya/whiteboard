@@ -1,5 +1,11 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastPhrasingContent } from '@kamiazya/whiteboard-model/mdast'
-import type { EmbedResolvedNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
+import type {
+  EmbedResolvedNode,
+  SceneNode,
+  ShapeSceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
 import {
@@ -7,6 +13,8 @@ import {
   bodyFont,
   bodyLineHeightPx,
   type Cursor,
+  type EmbeddedCanvasBox,
+  type EmbeddedCanvasMiniature,
   type PhrasingLayout,
   panelPaint,
   type ResolvedMdastOptions,
@@ -59,25 +67,50 @@ export function embedTitle(options: ResolvedMdastOptions, documentId: string): s
 }
 
 const LOADING_NOTICE = 'Loading…'
+const EMPTY_CANVAS_NOTICE = 'Empty canvas'
 
-/** The muted line under a pending embed's name. */
-function loadingNotice(options: ResolvedMdastOptions, x: number, y: number): TextRunNode {
+/** A muted line of chrome under an embed's name — never a link. */
+function embedNotice(
+  options: ResolvedMdastOptions,
+  text: string,
+  x: number,
+  y: number,
+): TextRunNode {
   const lineHeight = bodyLineHeightPx(options.theme)
-  const metrics = options.measure(
-    LOADING_NOTICE,
-    bodyFont(options.fontFamily, options.theme.bodyFontSizePx),
-  )
+  const metrics = options.measure(text, bodyFont(options.fontFamily, options.theme.bodyFontSizePx))
   return {
     kind: 'textRun',
     bbox: { x, y, w: clampAdvance(metrics.advanceWidth), h: lineHeight },
     baseline: clampAdvance(baselineIn(lineHeight, options.theme.bodyFontSizePx, metrics.ascent)),
-    text: LOADING_NOTICE,
+    text,
     appearance: {
       fill: options.theme.chromeColor,
       fontFamily: options.fontFamily,
       fontSize: options.theme.bodyFontSizePx,
     },
   }
+}
+
+/**
+ * What a canvas embed's panel holds under its name, and where that ends. A
+ * canvas with nothing on it says so: a bare panel under a link reads as a
+ * preview that failed to draw. One that could not be fitted leaves the panel
+ * at the title's height; the second pad is the gap above a miniature, so it
+ * is only paid for one.
+ */
+export function canvasEmbedBody(
+  canvas: SpatialCanvas,
+  miniature: EmbeddedCanvasMiniature | undefined,
+  box: EmbeddedCanvasBox,
+  titleBottom: number,
+  options: ResolvedMdastOptions,
+): { readonly nodes: readonly SceneNode[]; readonly bottom: number } {
+  if (canvas.nodes.length === 0 && canvas.edges.length === 0 && (canvas.lines ?? []).length === 0) {
+    const notice = embedNotice(options, EMPTY_CANVAS_NOTICE, box.x, titleBottom)
+    return { nodes: [notice], bottom: titleBottom + notice.bbox.h }
+  }
+  if (miniature === undefined) return { nodes: [], bottom: titleBottom }
+  return { nodes: miniature.nodes, bottom: box.y + miniature.h }
 }
 
 /**
@@ -114,7 +147,7 @@ export function layoutPendingEmbed(
   cursor.x = startX
   const lineHeight = bodyLineHeightPx(options.theme)
   const titleHeight = title.lineCount * lineHeight
-  const notice = loadingNotice(options, startX + pad, startY + pad + titleHeight)
+  const notice = embedNotice(options, LOADING_NOTICE, startX + pad, startY + pad + titleHeight)
   const height = pad + titleHeight + lineHeight + pad
   const frame: ShapeSceneNode = {
     kind: 'shape',
