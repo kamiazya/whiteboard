@@ -7,15 +7,17 @@ import {
   DialogTitle,
 } from '../ui/dialog.js'
 import { DialogActions, ErrorLine } from './FolderDialogParts.js'
-import { folderNameRefusal } from './folder-moves.js'
 
 interface FolderNameDialogProps {
   open: boolean
   title: string
   description: string
   initialName: string
-  /** The folder the named one will sit in, for the grammar check. */
-  parent: string
+  /**
+   * Why a name cannot be used, or null: the folder-name rule and the
+   * duplicate check, asked before anything is sent.
+   */
+  refuse: (name: string) => string | null
   submitLabel: string
   busy: boolean
   error: string | null
@@ -27,7 +29,7 @@ function FolderNameForm({
   title,
   description,
   initialName,
-  parent,
+  refuse,
   submitLabel,
   busy,
   error,
@@ -41,7 +43,7 @@ function FolderNameForm({
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        const refusal = folderNameRefusal(name, parent)
+        const refusal = refuse(name)
         setIssue(refusal)
         if (refusal === null) onSubmit(name.trim())
       }}
@@ -75,8 +77,8 @@ function FolderNameForm({
  * One folder name, asked for: the rename of a folder and a new subfolder are
  * the same question with different titles. Enter commits, Escape cancels.
  *
- * The name is one path segment, checked against the path grammar before the
- * keeper is asked, so a refusal is worded here beside the field. The form is
+ * What is asked for is the folder's display name, never its address, and a
+ * refusal is worded here beside the field before the keeper is asked. The form is
  * mounted only while open, so each opening starts from `initialName`, and
  * the dialog's first focusable is the field.
  */

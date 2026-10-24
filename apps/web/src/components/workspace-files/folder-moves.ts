@@ -1,6 +1,5 @@
-import { compareCodeUnit, isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { documentPathRefusal } from './document-path-refusal.js'
 
 /** The folder a path sits in; `''` is the workspace root. */
 export function folderOf(path: string): string {
@@ -33,35 +32,4 @@ export function foldersOf(documents: readonly WorkspaceDocumentEntry[]): string[
 /** Where a document lands when it is put in `folder`: same last segment, new parent. */
 export function pathInFolder(documentPath: string, folder: string): string {
   return joinPath(folder, leafOf(documentPath))
-}
-
-/** The display of a folder path, with the root named as the workspace. */
-export function folderLabel(folder: string): string {
-  return folder === '' ? 'Workspace' : folder
-}
-
-/**
- * Why a folder name cannot be used under `parent`, or null. A name is ONE
- * segment: a slash would quietly nest, which is a different action from the
- * rename or subfolder the person asked for.
- */
-export function folderNameRefusal(name: string, parent: string): string | null {
-  const trimmed = name.trim()
-  if (trimmed === '') return 'Give the folder a name.'
-  if (trimmed.includes('/')) return 'A folder name is one segment; it cannot contain “/”.'
-  return documentPathRefusal(joinPath(parent, trimmed))
-}
-
-/** `path` after the folder `from` has been renamed to `to`; unchanged when it is elsewhere. */
-export function pathAfterFolderMove(path: string, from: string, to: string): string {
-  return isSelfOrDescendant(path, from) ? rebasePath(path, from, to) : path
-}
-
-/** What a person typed as a new folder, without the slashes that bracket it. */
-export function typedFolderPath(typed: string): string {
-  return typed
-    .trim()
-    .split('/')
-    .filter((segment) => segment !== '')
-    .join('/')
 }

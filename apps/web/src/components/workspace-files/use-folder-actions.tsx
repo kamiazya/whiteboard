@@ -1,12 +1,14 @@
+import { folderNameRefusal } from '@kamiazya/whiteboard-model'
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react'
+import { displayNameTakenMessage } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import type { WorkspaceFilesSource } from '../../lib/files-source.js'
+import { isFolderNameTaken, newFolderSegmentIn, planNestedFolder } from '../../lib/folder-names.js'
 import { useAnnouncer } from '../annotations/announcer.js'
 import { FolderActionsLayer, type FolderDialog, type FolderMenu } from './FolderActionsLayer.js'
 import type { FolderActions } from './folder-actions.js'
-import { joinPath } from './folder-moves.js'
 import { useFolderMoves } from './use-folder-moves.js'
-
-type FolderMovesDeps = Parameters<typeof useFolderMoves>[0]
+import { type FolderNamesState, useFolderNames } from './use-folder-names.js'
 
 /**
  * What the folder surfaces ask of the panel through context: a drop moves,
@@ -36,8 +38,70 @@ function useFolderSurfaceActions(
 
 type Moves = ReturnType<typeof useFolderMoves>
 
+/** Every address a new folder may not take: the documents' and the folders' known here. */
+function takenPaths(
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  folderNames: FolderNamesState,
+): string[] {
+  return [...(documents ?? []).map((entry) => entry.path), ...folderNames.folders]
+}
+
+/**
+ * Where a folder the dialog names would stand: the folder itself on a rename,
+ * the address a new subfolder would be given otherwise.
+ */
+function namedPath(
+  open: FolderDialog,
+  name: string,
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  folderNames: FolderNamesState,
+): string {
+  return open.kind === 'rename'
+    ? open.folder
+    : newFolderSegmentIn(open.folder, name, takenPaths(documents, folderNames))
+}
+
+/**
+ * Why the folder dialog's name cannot be used, before anything is sent: the
+ * one folder-name rule every keeper holds, then a name a sibling folder
+ * already shows, worded as the keeper words it.
+ */
+function folderDialogRefusal(
+  open: FolderDialog,
+  name: string,
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  folderNames: FolderNamesState,
+): string | null {
+  const rule = folderNameRefusal(name)
+  if (rule !== null) return rule
+  const path = namedPath(open, name, documents, folderNames)
+  const target = { path, name: name.trim() }
+  return isFolderNameTaken(folderNames.folders, folderNames.names, target)
+    ? displayNameTakenMessage('folder', path, target.name)
+    : null
+}
+
+/** What the layer asks before a folder is named or made: the refusal, and a typed folder's plan. */
+function namingChecks(
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  folderNames: FolderNamesState,
+) {
+  return {
+    refuseName: (open: FolderDialog, name: string) =>
+      folderDialogRefusal(open, name, documents, folderNames),
+    planNewFolder: (typed: string) =>
+      planNestedFolder(typed, {
+        folders: folderNames.folders,
+        names: folderNames.names,
+        taken: takenPaths(documents, folderNames),
+      }),
+  }
+}
+
 /** What the layer's dialogs and menu do when answered, in terms of the moves and the open dialogs. */
 function layerHandlers({
+  documents,
+  folderNames,
   moveInto,
   renameFolder,
   goToFolder,
@@ -45,6 +109,8 @@ function layerHandlers({
   setMoving,
   setDialog,
 }: Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
+  documents: readonly WorkspaceDocumentEntry[] | null
+  folderNames: FolderNamesState
   goToFolder: (folder: string) => void
   setMoving: (entry: WorkspaceDocumentEntry | null) => void
   setDialog: (dialog: FolderDialog | null) => void
@@ -55,20 +121,43 @@ function layerHandlers({
       setDialog(null)
       setError(null)
     },
-    onMoveTo: async (entry: WorkspaceDocumentEntry, folder: string) => {
+    onMoveTo: async (
+      entry: WorkspaceDocumentEntry,
+      folder: string,
+      created: readonly { readonly path: string; readonly name: string }[] = [],
+    ) => {
+      // Named before the move, so the flush finds them once the document lands.
+      for (const each of created) folderNames.remember(each.path, each.name)
       if (await moveInto(entry, folder)) setMoving(null)
     },
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
+        const path = namedPath(open, name, documents, folderNames)
+        folderNames.remember(path, name)
         setDialog(null)
-        goToFolder(joinPath(open.folder, name))
+        goToFolder(path)
       } else if (await renameFolder(open.folder, name)) setDialog(null)
     },
+    ...namingChecks(documents, folderNames),
     onMenuChoice: (kind: FolderDialog['kind'], folder: string) => {
       setError(null)
       setDialog({ kind, folder })
     },
   }
+}
+
+/** The card menu's way into the move picker, clearing the last refusal. */
+function useMovePickerOpener(
+  setError: (error: null) => void,
+  setMoving: (entry: WorkspaceDocumentEntry) => void,
+) {
+  return useCallback(
+    (entry: WorkspaceDocumentEntry) => {
+      setError(null)
+      setMoving(entry)
+    },
+    [setError, setMoving],
+  )
 }
 
 /** Which surface is open, each naming a path — cleared when the workspace changes. */
@@ -86,6 +175,15 @@ function useOpenSurfaces(source: unknown, clearError: (error: null) => void) {
   return { moving, setMoving, menu, setMenu, dialog, setDialog }
 }
 
+interface FolderActionsDeps {
+  source: WorkspaceFilesSource
+  documents: readonly WorkspaceDocumentEntry[] | null
+  rootRef: RefObject<HTMLElement | null>
+  /** The panel's own move: it follows the previewed document and re-reads. */
+  moveDocument: (entry: WorkspaceDocumentEntry, newPath: string) => Promise<void>
+  goToFolder: (folder: string) => void
+}
+
 /**
  * Moving documents between folders and renaming folders, for the panel: the
  * pointer (drop on a folder) and menu (Move to folder…, a folder's own menu)
@@ -95,35 +193,33 @@ function useOpenSurfaces(source: unknown, clearError: (error: null) => void) {
  * menu's entry.
  *
  * There is no stored folder to create — a new folder exists once something
- * is moved into it, and "New subfolder…" only opens the (empty) place.
+ * is moved into it, and "New subfolder…" only opens the (empty) place, its
+ * name held until a document lands there (`useFolderNames`).
  */
 export function useFolderActions({
+  source,
   documents,
   rootRef,
-  ...deps
-}: {
-  documents: readonly WorkspaceDocumentEntry[] | null
-  rootRef: RefObject<HTMLElement | null>
-} & Omit<FolderMovesDeps, 'announce'>) {
+  moveDocument,
+  goToFolder,
+}: FolderActionsDeps) {
   const { announcement, announce } = useAnnouncer()
-  const { busy, error, setError, moveInto, renameFolder } = useFolderMoves({ ...deps, announce })
-  const { moving, setMoving, menu, setMenu, dialog, setDialog } = useOpenSurfaces(
-    deps.source,
-    setError,
-  )
+  const folderNames = useFolderNames(source, documents)
+  const { busy, error, setError, moveInto, renameFolder } = useFolderMoves({
+    moveDocument,
+    announce,
+    folderNames,
+  })
+  const { moving, setMoving, menu, setMenu, dialog, setDialog } = useOpenSurfaces(source, setError)
 
   const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu)
-  const openMovePicker = useCallback(
-    (entry: WorkspaceDocumentEntry) => {
-      setError(null)
-      setMoving(entry)
-    },
-    [setError],
-  )
+  const openMovePicker = useMovePickerOpener(setError, setMoving)
   const handlers = layerHandlers({
+    documents,
+    folderNames,
     moveInto,
     renameFolder,
-    goToFolder: deps.goToFolder,
+    goToFolder,
     setError,
     setMoving,
     setDialog,
@@ -131,7 +227,7 @@ export function useFolderActions({
 
   const layer = (
     <FolderActionsLayer
-      documents={documents}
+      folderNames={folderNames}
       announcement={announcement}
       moving={moving}
       menu={menu}
@@ -143,5 +239,5 @@ export function useFolderActions({
     />
   )
 
-  return { actions, openMovePicker, layer }
+  return { actions, names: folderNames.names, openMovePicker, layer }
 }

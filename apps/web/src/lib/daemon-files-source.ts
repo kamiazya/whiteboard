@@ -15,6 +15,7 @@ import {
   searchWorkspaceDocuments,
   setDocumentDisplayName,
   setDocumentPinned,
+  setFolderName,
   setWorkspaceTagLibrary,
 } from './daemon-api-client.js'
 import { readDaemonImage } from './daemon-image-read.js'
@@ -22,6 +23,7 @@ import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import type { ImportedDocument } from './document-import.js'
 import {
   type DocumentSearchHit,
+  type FolderName,
   type LoadedMarkdown,
   type TrashRow,
   type WorkspaceFilesSource,
@@ -68,6 +70,15 @@ function heldRead<T>(ask: () => Promise<T>) {
 }
 
 /**
+ * One listing: the documents, and the folder names the same response
+ * carried — held together so naming the folders costs no second request.
+ */
+interface Listing {
+  readonly entries: readonly WorkspaceDocumentEntry[]
+  readonly folderNames: readonly FolderName[]
+}
+
+/**
  * The workspace's list as the panel renders it: the documents, with each
  * one's pin order (from `names`) and tags (from the tag projection) folded in.
  *
@@ -86,7 +97,7 @@ async function readListing(
   daemonBaseUrl: string,
   workspaceId: string,
   refreshTags: () => ReturnType<typeof getWorkspaceDocumentTags>,
-): Promise<readonly WorkspaceDocumentEntry[]> {
+): Promise<Listing> {
   try {
     // Names ride alongside the list for their pinned[] — pin order is
     // workspace state the /documents response does not carry. A failed
@@ -105,7 +116,7 @@ async function readListing(
     // What a board's boxes and edges carry, so the `#tag` filter finds
     // the board a chip counted from boxes is about (ADR-0040 decision 3).
     const carriedById = new Map((tagRes?.contents ?? []).map((doc) => [doc.documentId, doc.tags]))
-    return res.documents.map((entry) => ({
+    const entries = res.documents.map((entry) => ({
       documentId: entry.documentId,
       path: entry.path,
       kind: entry.kind,
@@ -117,6 +128,7 @@ async function readListing(
       ...optional('carriedTags', carriedById.get(entry.documentId)),
       ...optional('pinOrder', pinIndex.get(entry.path)),
     }))
+    return { entries, folderNames: res.folderNames ?? [] }
   } catch (err) {
     if (err instanceof DaemonApiError && err.status === 404) {
       throw new WorkspaceMissingError(workspaceId)
@@ -167,6 +179,24 @@ function searchResultOf(
   }
 }
 
+/**
+ * The two reads one listing answers, and the folder-name write beside them:
+ * naming a folder reads back through the same held listing.
+ */
+function listingMembers(
+  list: { read: () => Promise<Listing> },
+  afterWrite: (write: Promise<unknown>) => Promise<void>,
+  daemon: { daemonFetch: typeof globalThis.fetch; daemonBaseUrl: string; workspaceId: string },
+): Pick<WorkspaceFilesSource, 'listDocuments' | 'listFolderNames' | 'setFolderName'> {
+  const { daemonFetch, daemonBaseUrl, workspaceId } = daemon
+  return {
+    listDocuments: async () => (await list.read()).entries,
+    listFolderNames: async () => (await list.read()).folderNames,
+    setFolderName: (path, name) =>
+      afterWrite(setFolderName(daemonFetch, daemonBaseUrl, workspaceId, path, name)),
+  }
+}
+
 export function createDaemonFilesSource(
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -190,11 +220,11 @@ export function createDaemonFilesSource(
   }
   return {
     async refresh() {
-      const [entries, trashRows] = await Promise.all([
+      const [listing, trashRows] = await Promise.all([
         list.refresh(),
         trash.refresh().catch(() => null),
       ])
-      return { entries, trash: trashRows }
+      return { entries: listing.entries, trash: trashRows }
     },
     listTagsInUse: async () => (await tags.read()).inUse,
     readTagLibrary: async () => (await tags.read()).library,
@@ -209,7 +239,7 @@ export function createDaemonFilesSource(
         list.forget()
       }
     },
-    listDocuments: () => list.read(),
+    ...listingMembers(list, afterWrite, { daemonFetch, daemonBaseUrl, workspaceId }),
 
     createDocument: (path: string, kind: DocumentKind, name?: string) =>
       afterWrite(createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)),

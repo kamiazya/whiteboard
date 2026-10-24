@@ -230,8 +230,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#workspaceFolderNameApiUrl':
-    "the folder-name route's URL, published with its contract so the web keeper's daemon source names it from here; its first shipped importer is that source, which lands in the web half after this one",
   'packages/model/src/utf16-max.ts#UTF16_MAX_PARAM':
     'the tag utf16Max puts on its refusal issue; production writes it in its own module, and the bounded-string probe in model/test-utils recognises a length refusal by it rather than by a copied literal',
   'packages/loro-adapter/src/content-digest.ts#stableStringify':

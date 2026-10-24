@@ -1,4 +1,7 @@
-import type { WorkspaceDocumentTagsResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type {
+  FolderNameSummary,
+  WorkspaceDocumentTagsResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
@@ -72,6 +75,21 @@ export interface WorkspaceFilesSource {
    * member by member.
    */
   setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>
+  /**
+   * Every NAMED folder, once per path — what a folder is called apart from
+   * its segment, which stays its address. Read beside `listDocuments` and
+   * after it, so a keeper that answers both from one read pays for one.
+   * OPTIONAL like `setPinned`: a keeper whose index names no folders omits
+   * both members, and every folder shows its segment.
+   */
+  listFolderNames?(): Promise<readonly FolderName[]>
+  /**
+   * Call the folder at `path` `name`, or clear it (undefined). Moves nothing:
+   * a folder's address is fixed when it is made. Rejects where no folder
+   * stands — a document used as a folder has none — and for a name a sibling
+   * folder already shows, in the keeper's own words.
+   */
+  setFolderName?(path: string, name: string | undefined): Promise<void>
   /**
    * Documents whose CONTENT answers the query, best first — the search a
    * name-and-path filter cannot do.
@@ -151,6 +169,9 @@ export interface WorkspaceFilesSource {
    */
   readStencilLibrary?(): Promise<WorkspaceStencils>
 }
+
+/** One named folder: the daemon-client contract's own row shape, which both keepers answer. */
+export type FolderName = FolderNameSummary
 
 /** One row of the vocabulary: the daemon-client contract's own row shape. */
 export type TagInUse = WorkspaceDocumentTagsResponse['inUse'][number]

@@ -1,6 +1,8 @@
 import { useContext } from 'react'
+import { folderTrail } from '../../lib/folder-names.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext } from './folder-actions.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 /**
@@ -20,6 +22,7 @@ export function FolderBreadcrumb({
   onSelect: (path: string) => void
 }) {
   const segments = folder === '' ? [] : folder.split('/')
+  const trail = folderTrail(folder, useContext(FolderNamesContext))
   const longPress = useLongPressMenu(undefined)
   return (
     <nav
@@ -32,7 +35,7 @@ export function FolderBreadcrumb({
         <span key={segments.slice(0, i + 1).join('/')} className="flex items-center gap-0.5">
           <span className="text-muted-foreground">/</span>
           <Crumb
-            label={segment}
+            label={trail[i] ?? segment}
             path={segments.slice(0, i + 1).join('/')}
             current={i === segments.length - 1}
             onSelect={onSelect}

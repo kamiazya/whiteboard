@@ -47,8 +47,10 @@ import {
   type RestoreTrashResponse,
   renameDocumentPathResponseSchema,
   restoreTrashResponseSchema,
+  type SetFolderNameRequest,
   type SetTagLibraryV1Request,
   searchApiUrl,
+  setFolderNameResponseSchema,
   type setNameRequestSchema,
   type setPinnedRequestSchema,
   setTagLibraryResponseSchema,
@@ -62,6 +64,7 @@ import {
   workspaceApiUrl,
   workspaceDocumentsApiUrl,
   workspaceDocumentTagsResponseSchema,
+  workspaceFolderNameApiUrl,
   workspaceNamesApiUrl,
   workspaceNamesSchema,
   workspaceSummarySchema,
@@ -392,6 +395,31 @@ export function setDocumentDisplayName(
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name } satisfies z.infer<typeof setNameRequestSchema>),
+    },
+  )
+}
+
+/**
+ * Name the folder at `path`, or clear it with `undefined`. The address stays:
+ * a folder's path is fixed when it is made. 409 `display_name_taken` when a
+ * sibling folder already shows the name, 404 where no folder stands.
+ */
+export async function setFolderName(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  path: string,
+  name: string | undefined,
+): Promise<void> {
+  const body: SetFolderNameRequest = name === undefined ? { path } : { path, name }
+  await fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${workspaceFolderNameApiUrl(workspaceId)}`,
+    setFolderNameResponseSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     },
   )
 }

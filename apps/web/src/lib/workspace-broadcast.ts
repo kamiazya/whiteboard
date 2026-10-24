@@ -71,6 +71,12 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     type: z.literal('document-pinned'),
     documentId: z.string().min(1),
   }),
+  // The index named or un-named a folder. Placement, like a pin: only a list
+  // shows it.
+  z.object({
+    type: z.literal('folder-renamed'),
+    path: z.string().min(1),
+  }),
   // The whole workspace left this browser, so a page holding its record has
   // nowhere to write to and locks.
   z.object({ type: z.literal('workspace-removed') }),
@@ -169,6 +175,11 @@ export function announceDocumentCreated(workspaceId: string, path: string): void
 /** A pin set or cleared, so a list in this tab or another moves the row. */
 export function announceDocumentPinned(workspaceId: string, documentId: string): void {
   announce(workspaceId, { type: 'document-pinned', documentId })
+}
+
+/** A folder named or its name cleared, so a list in this tab or another shows it. */
+export function announceFolderRenamed(workspaceId: string, path: string): void {
+  announce(workspaceId, { type: 'folder-renamed', path })
 }
 
 /** The workspace was removed from this browser, so every page holding its record locks. */

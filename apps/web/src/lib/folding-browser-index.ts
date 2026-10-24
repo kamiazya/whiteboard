@@ -32,11 +32,13 @@ import {
   type DeleteDocumentInput,
   type DocumentDuplicates,
   type DocumentEntry,
+  type DocumentFolders,
   DocumentHasDescendantsError,
   type DocumentIndex,
   type DocumentPins,
   type DocumentTrash,
   type DuplicateDocumentInput,
+  type FolderNameEntry,
   findDescendantPath,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
@@ -47,6 +49,7 @@ import {
   type ResolveDocumentInput,
   type SetDocumentNameInput,
   type SetDocumentPinnedInput,
+  type SetFolderNameInput,
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
@@ -71,13 +74,14 @@ import {
   announceDocumentRemoved,
   announceDocumentRenamed,
   announceDocumentRestored,
+  announceFolderRenamed,
 } from './workspace-broadcast.js'
 import { documentIdsInRecord } from './workspace-record-ids.js'
 
 const log = getAppLogger('folding-browser-index')
 
 export class FoldingBrowserIndex
-  implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates
+  implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates, DocumentFolders
 {
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
@@ -311,6 +315,17 @@ export class FoldingBrowserIndex
     await this.ensureFolded()
     await this.inner.setDocumentPinned(input)
     announceDocumentPinned(input.workspaceId, input.documentId)
+  }
+
+  async listFolderNames(input: ListDocumentsInput): Promise<FolderNameEntry[]> {
+    await this.ensureFolded()
+    return this.inner.listFolderNames(input)
+  }
+
+  async setFolderName(input: SetFolderNameInput): Promise<void> {
+    await this.ensureFolded()
+    await this.inner.setFolderName(input)
+    announceFolderRenamed(input.workspaceId, input.path)
   }
 
   /** What deletes evacuated; not on the port — callers hold this class. */

@@ -7,7 +7,8 @@
  *
  * A folder is only ever a shared prefix in this model — there is no record
  * for one — so a folder's identity is the prefix itself and its name is the
- * last segment of it. That also means a document can be a folder at the same
+ * last segment of it — what it is CALLED is a separate display name, read by
+ * path. That also means a document can be a folder at the same
  * time: `design` may exist while `design/login` does. It appears in BOTH
  * roles rather than the pane picking one, because both are true.
  */
@@ -15,7 +16,7 @@
 export interface FolderChild {
   /** The prefix, which is the only identity a folder has. */
   readonly path: string
-  /** Its last segment — a folder has no display name of its own. */
+  /** Its last segment; what the folder is CALLED is read by path from `FolderNamesContext`. */
   readonly name: string
   /** How many documents live below it, at any depth. */
   readonly count: number

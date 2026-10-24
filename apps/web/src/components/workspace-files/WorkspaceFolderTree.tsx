@@ -2,10 +2,12 @@ import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
 import { useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { folderDisplayName } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext, useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFolderTreeProps {
@@ -18,7 +20,7 @@ export interface WorkspaceFolderTreeProps {
 }
 
 interface FolderNode {
-  /** The path segment — a folder has no name of its own. */
+  /** The path segment; what the folder is CALLED is read by path from `FolderNamesContext`. */
   readonly name: string
   /** The prefix, which is the only identity a folder has. */
   readonly path: string
@@ -70,6 +72,41 @@ function buildFolderTree(documents: readonly WorkspaceDocumentEntry[]): FolderNo
   return freeze(root)
 }
 
+/** A folder's own row: the button that opens it, and its actions on a touch screen. */
+function FolderRowButton({
+  node,
+  shown,
+  onSelectFolder,
+  selectedFolder,
+}: {
+  node: FolderNode
+  shown: string
+  onSelectFolder: (path: string) => void
+  selectedFolder?: string
+}) {
+  const folderProps = useFolderProps(node.path)
+  const actions = useContext(FolderActionsContext)
+  return (
+    <>
+      <button
+        type="button"
+        data-folder-path={node.path}
+        aria-label={`Open folder ${shown}`}
+        aria-current={node.path === selectedFolder ? 'true' : undefined}
+        onClick={() => onSelectFolder(node.path)}
+        {...folderProps}
+        className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+      >
+        <Folder className="text-muted-foreground size-3.5 shrink-0" />
+        <span className="truncate">{shown}</span>
+      </button>
+      {actions !== undefined && (
+        <ActionsButton name={shown} onOpen={(x, y) => actions.openFolderMenu(node.path, x, y)} />
+      )}
+    </>
+  )
+}
+
 function FolderItem({
   node,
   onSelectFolder,
@@ -79,34 +116,19 @@ function FolderItem({
   onSelectFolder: (path: string) => void
   selectedFolder?: string
 }) {
-  const folderProps = useFolderProps(node.path)
-  const actions = useContext(FolderActionsContext)
+  const shown = folderDisplayName(node.path, useContext(FolderNamesContext))
   return (
     <TreeItemShell
-      name={node.name}
-      label={node.name}
+      name={shown}
+      label={shown}
       hasChildren={node.children.length > 0}
       row={
-        <>
-          <button
-            type="button"
-            data-folder-path={node.path}
-            aria-label={`Open folder ${node.name}`}
-            aria-current={node.path === selectedFolder ? 'true' : undefined}
-            onClick={() => onSelectFolder(node.path)}
-            {...folderProps}
-            className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
-          >
-            <Folder className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="truncate">{node.name}</span>
-          </button>
-          {actions !== undefined && (
-            <ActionsButton
-              name={node.name}
-              onOpen={(x, y) => actions.openFolderMenu(node.path, x, y)}
-            />
-          )}
-        </>
+        <FolderRowButton
+          node={node}
+          shown={shown}
+          onSelectFolder={onSelectFolder}
+          selectedFolder={selectedFolder}
+        />
       }
     >
       {node.children.map((child) => (

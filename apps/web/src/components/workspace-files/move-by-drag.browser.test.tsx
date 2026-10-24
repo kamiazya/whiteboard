@@ -149,7 +149,7 @@ describe('moving a document from the keyboard', () => {
 })
 
 describe('renaming a folder from its menu', () => {
-  it('moves everything under it by one path move, keeping each id', async () => {
+  it('changes only what it is called: nothing under it moves', async () => {
     const { source, ids } = await seedAndRender()
     const folder = within(screen.getByTestId('folder-contents')).getByRole('button', {
       name: 'Open folder design',
@@ -162,12 +162,16 @@ describe('renaming a folder from its menu', () => {
     await userEvent.keyboard('{Enter}')
 
     const dialog = await screen.findByRole('dialog', { name: 'Rename folder' })
-    await userEvent.fill(within(dialog).getByLabelText('Folder name'), 'plans')
+    await userEvent.fill(within(dialog).getByLabelText('Folder name'), 'Plans')
     await userEvent.keyboard('{Enter}')
 
-    await waitFor(async () =>
-      expect((await pathsOf(source))[ids['design/login'] as string]).toBe('plans/login'),
-    )
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      await within(screen.getByTestId('folder-contents')).findByRole('button', {
+        name: 'Open folder Plans',
+      }),
+    ).toBeTruthy()
+    expect(await source.listFolderNames?.()).toEqual([{ path: 'design', name: 'Plans' }])
+    expect((await pathsOf(source))[ids['design/login'] as string]).toBe('design/login')
   })
 })

@@ -1,11 +1,14 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { FolderPlus, Pencil } from 'lucide-react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { folderDisplayName, type NestedFolderPlan } from '../../lib/folder-names.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { ContextMenu } from '../ui/ContextMenu.js'
 import { ErrorLine } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
-import { folderOf, foldersOf, leafOf } from './folder-moves.js'
+import { folderOf } from './folder-moves.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
+import type { FolderNamesState } from './use-folder-names.js'
 
 export type FolderDialog = { readonly kind: 'rename' | 'subfolder'; readonly folder: string }
 export interface FolderMenu {
@@ -16,24 +19,27 @@ export interface FolderMenu {
 
 function FolderMenuView({
   menu,
+  title,
+  canRename,
   onRename,
   onSubfolder,
   onClose,
 }: {
   menu: FolderMenu
+  title: string
+  /** False for the root, which has no name of its own, and a document used as a folder, which has no folder to name. */
+  canRename: boolean
   onRename: () => void
   onSubfolder: () => void
   onClose: () => void
 }) {
-  // The root has no name of its own to change.
-  const rename =
-    menu.folder === '' ? [] : [{ label: 'Rename…', icon: <Pencil />, onSelect: onRename }]
+  const rename = canRename ? [{ label: 'Rename…', icon: <Pencil />, onSelect: onRename }] : []
   return (
     <ContextMenu
       x={menu.x}
       y={menu.y}
       label="Folder actions"
-      title={menu.folder === '' ? 'Workspace' : leafOf(menu.folder)}
+      title={title}
       items={[...rename, { label: 'New subfolder…', icon: <FolderPlus />, onSelect: onSubfolder }]}
       onClose={onClose}
       variant={hasCoarsePointer() ? 'sheet' : 'list'}
@@ -41,14 +47,13 @@ function FolderMenuView({
   )
 }
 
-/** The folder dialog's wording and the folder its name will sit in, by what it was opened for. */
-function nameDialogCopy(dialog: FolderDialog | null) {
+/** The folder dialog's wording, by what it was opened for. */
+function nameDialogCopy(dialog: FolderDialog | null, names: FolderNamesState['names']) {
   if (dialog?.kind === 'rename') {
     return {
       title: 'Rename folder',
-      description: 'Everything in it moves with the new name; links and history are kept.',
-      initialName: leafOf(dialog.folder),
-      parent: folderOf(dialog.folder),
+      description: 'Only its name changes. Its address, and every link into it, stay as they are.',
+      initialName: folderDisplayName(dialog.folder, names),
       submitLabel: 'Rename',
     }
   }
@@ -57,7 +62,6 @@ function nameDialogCopy(dialog: FolderDialog | null) {
     description:
       'A folder exists while a document is in it. Open it, then add or move a document in.',
     initialName: '',
-    parent: dialog?.folder ?? '',
     submitLabel: 'Open folder',
   }
 }
@@ -65,21 +69,26 @@ function nameDialogCopy(dialog: FolderDialog | null) {
 /** The folder dialog, worded by what it was opened for; closed when `dialog` is null. */
 function NameDialog({
   dialog,
+  names,
   busy,
   error,
+  refuseName,
   onCancel,
   onSubmitName,
 }: {
   dialog: FolderDialog | null
+  names: FolderNamesState['names']
   busy: boolean
   error: string | null
+  refuseName: (dialog: FolderDialog, name: string) => string | null
   onCancel: () => void
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
 }) {
   return (
     <FolderNameDialog
       open={dialog !== null}
-      {...nameDialogCopy(dialog)}
+      {...nameDialogCopy(dialog, names)}
+      refuse={(name) => (dialog === null ? null : refuseName(dialog, name))}
       busy={busy}
       error={error}
       onCancel={onCancel}
@@ -108,7 +117,7 @@ function StatusLines({ announcement, refusal }: { announcement: string; refusal:
 }
 
 interface FolderActionsLayerProps {
-  documents: readonly WorkspaceDocumentEntry[] | null
+  folderNames: FolderNamesState
   announcement: string
   moving: WorkspaceDocumentEntry | null
   menu: FolderMenu | null
@@ -116,8 +125,14 @@ interface FolderActionsLayerProps {
   busy: boolean
   error: string | null
   onCancel: () => void
-  onMoveTo: (entry: WorkspaceDocumentEntry, folder: string) => void | Promise<void>
+  onMoveTo: (
+    entry: WorkspaceDocumentEntry,
+    folder: string,
+    created?: readonly { readonly path: string; readonly name: string }[],
+  ) => void | Promise<void>
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
+  refuseName: (dialog: FolderDialog, name: string) => string | null
+  planNewFolder: (typed: string) => NestedFolderPlan
   onMenuChoice: (kind: FolderDialog['kind'], folder: string) => void
   onCloseMenu: () => void
 }
@@ -127,12 +142,15 @@ interface FolderActionsLayerProps {
  * dialog, the folder's own menu and the status lines.
  */
 export function FolderActionsLayer(props: FolderActionsLayerProps) {
-  const { documents, announcement, moving, menu, dialog, busy, error } = props
-  const { onCancel, onMoveTo, onSubmitName, onMenuChoice, onCloseMenu } = props
+  const { folderNames, announcement, moving, menu, dialog, busy, error } = props
+  const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
+    props
   const destinations =
     moving === null
       ? []
-      : ['', ...foldersOf(documents ?? [])].filter((each) => each !== folderOf(moving.path))
+      : ['', ...[...folderNames.folders].sort(compareCodeUnit)].filter(
+          (each) => each !== folderOf(moving.path),
+        )
 
   return (
     <>
@@ -143,13 +161,17 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
       <MoveToFolderDialog
         document={moving}
         folders={destinations}
+        names={folderNames.names}
+        planNewFolder={planNewFolder}
         busy={busy}
         error={error}
         onCancel={onCancel}
-        onPick={(folder) => moving !== null && onMoveTo(moving, folder)}
+        onPick={(folder, created) => moving !== null && onMoveTo(moving, folder, created)}
       />
       <NameDialog
         dialog={dialog}
+        names={folderNames.names}
+        refuseName={refuseName}
         busy={busy}
         error={error}
         onCancel={onCancel}
@@ -158,6 +180,8 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
       {menu !== null && (
         <FolderMenuView
           menu={menu}
+          title={folderDisplayName(menu.folder, folderNames.names)}
+          canRename={folderNames.canRename(menu.folder)}
           onRename={() => onMenuChoice('rename', menu.folder)}
           onSubfolder={() => onMenuChoice('subfolder', menu.folder)}
           onClose={onCloseMenu}

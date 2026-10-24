@@ -3,10 +3,12 @@ import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { folderDisplayName } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFileTreeProps {
@@ -184,18 +186,17 @@ function KindIcon({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
  * row whose documents are reachable only by the toggle beside it.
  */
 function FolderRow({
-  name,
   path,
   expanded,
   onToggle,
 }: {
-  name: string
   path: string
   expanded: boolean
   onToggle: () => void
 }) {
   const folderProps = useFolderProps(path)
   const actions = useContext(FolderActionsContext)
+  const shown = folderDisplayName(path, useContext(FolderNamesContext))
   return (
     <>
       <button
@@ -208,10 +209,10 @@ function FolderRow({
       >
         <ChevronRight aria-hidden className="size-3 shrink-0" />
         <Folder className="size-3.5 shrink-0" />
-        <span className="truncate">{name}</span>
+        <span className="truncate">{shown}</span>
       </button>
       {actions !== undefined && (
-        <ActionsButton name={name} onOpen={(x, y) => actions.openFolderMenu(path, x, y)} />
+        <ActionsButton name={shown} onOpen={(x, y) => actions.openFolderMenu(path, x, y)} />
       )}
     </>
   )
@@ -226,15 +227,20 @@ interface TreeRowProps {
 }
 
 function TreeItem({ node, ...shared }: { node: TreeNode } & TreeRowProps) {
+  const names = useContext(FolderNamesContext)
   return (
     <TreeItemShell
-      name={node.name}
-      label={node.canvas === null ? node.name : documentLabel(node.canvas, 'leaf')}
+      name={node.canvas === null ? folderDisplayName(node.path, names) : node.name}
+      label={
+        node.canvas === null
+          ? folderDisplayName(node.path, names)
+          : documentLabel(node.canvas, 'leaf')
+      }
       hasChildren={node.children.length > 0}
       row={
         node.canvas === null ? (
           ({ toggle, expanded }) => (
-            <FolderRow name={node.name} path={node.path} expanded={expanded} onToggle={toggle} />
+            <FolderRow path={node.path} expanded={expanded} onToggle={toggle} />
           )
         ) : (
           <DocumentRow document={node.canvas} {...shared} />
