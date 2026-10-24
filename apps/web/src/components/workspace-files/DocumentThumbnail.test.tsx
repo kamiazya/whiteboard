@@ -1,6 +1,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
+import { EMPTY_DOCUMENT } from './load-row-render.js'
 
 // The tab's face set, as the component reads it. Hoisted because the
 // component imports the hook at collection time.
@@ -161,9 +162,22 @@ describe('DocumentThumbnail', () => {
   })
 
   // A blank grey pane reads as a picture that failed to draw. The loader
-  // answers nothing for a document with nothing in it — a blank note, a
-  // board with no node — and the card says so under its kind.
+  // answers EMPTY_DOCUMENT for a document with nothing in it — a blank note,
+  // a board with no node — and the card says so under its kind.
   it('says a document with nothing to draw is empty', async () => {
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentThumbnail document={doc} loadRender={async () => EMPTY_DOCUMENT} />,
+    )
+    await act(async () => {
+      observers[0]?.fire()
+    })
+    expect(getByTestId('document-thumbnail').textContent).toBe('Empty')
+  })
+
+  // A null answer is a document the loader could not draw, which says
+  // nothing about what is in it.
+  it('does not call a document it could not draw empty', async () => {
     const observers = installObserver()
     const { getByTestId } = render(
       <DocumentThumbnail document={doc} loadRender={async () => null} />,
@@ -171,7 +185,8 @@ describe('DocumentThumbnail', () => {
     await act(async () => {
       observers[0]?.fire()
     })
-    expect(getByTestId('document-thumbnail').textContent).toBe('Empty')
+    expect(getByTestId('document-thumbnail').querySelector('[data-kind]')).not.toBeNull()
+    expect(getByTestId('document-thumbnail').textContent).toBe('')
   })
 
   it('keeps the kind icon when the read throws outright', async () => {

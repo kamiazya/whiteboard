@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../componen
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { DocumentPreview } from './DocumentPreview.js'
-import type { DocumentRender } from './load-row-render.js'
+import type { RowRender } from './load-row-render.js'
 
 /**
  * The peek: look at a document without committing to it.
@@ -25,7 +25,7 @@ export function PeekDialog({
 }: {
   /** The document being peeked at, or null when closed. */
   readonly document: WorkspaceDocumentEntry | null
-  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
+  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<RowRender | null>
   readonly onOpen: (document: WorkspaceDocumentEntry) => void
   readonly findDocument: (documentId: string) => WorkspaceDocumentEntry | undefined
   readonly onClose: () => void

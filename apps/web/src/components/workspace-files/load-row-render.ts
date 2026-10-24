@@ -67,6 +67,17 @@ export interface DocumentRender {
 }
 
 /**
+ * The loader's answer for a document with nothing in it — a blank note, a
+ * board with no node. Kept apart from `null`, which is a document the loader
+ * could not draw: "Empty" is a claim about the content, and a failed render
+ * makes no claim at all.
+ */
+export const EMPTY_DOCUMENT = 'empty'
+
+/** A picture, or the word that a document has nothing to picture. */
+export type RowRender = DocumentRender | typeof EMPTY_DOCUMENT
+
+/**
  * What a note's picture needs once it draws what it embeds. A board inside a
  * note bakes its palette and its tag colours into the SVG as a board on the
  * canvas does, so the note's picture takes both — where a note that embeds
@@ -123,7 +134,7 @@ export interface RowRenderDeps {
     tagLibrary: TagLibrary,
     cacheKey?: string,
     references?: ReferenceWire,
-  ) => Promise<RowPicture | null>
+  ) => Promise<RowPicture | typeof EMPTY_DOCUMENT | null>
 }
 
 // `cacheKey` rides ON the request rather than being applied around the call:
@@ -157,7 +168,7 @@ async function renderSpatialInPool(
   tagLibrary: TagLibrary,
   cacheKey?: string,
   references?: ReferenceWire,
-): Promise<RowPicture | null> {
+): Promise<RowPicture | typeof EMPTY_DOCUMENT | null> {
   const reply = await sharedLayoutWorkerPool().run(
     {
       type: 'layout',
@@ -185,7 +196,7 @@ async function renderSpatialInPool(
   for (const family of reply.fontsMissing ?? []) void loadThemeFontFromSource(family)
   // A board with nothing on it has no picture, as a blank note has none:
   // its empty viewBox drew a blank pane in the row and the preview alike.
-  if (reply.scene.nodes.length === 0) return null
+  if (reply.scene.nodes.length === 0) return EMPTY_DOCUMENT
   return {
     svg: reply.svg,
     bounds: reply.bounds,
@@ -259,10 +270,10 @@ async function produce(
   tagLibrary: TagLibrary,
   cacheKey: string | undefined,
   references?: ReferenceWire,
-): Promise<RowPicture | null> {
+): Promise<RowPicture | typeof EMPTY_DOCUMENT | null> {
   if (renderedKind(document) === 'markdown') {
     const { body } = await deps.source.loadMarkdown(document)
-    if (body.trim() === '') return null
+    if (body.trim() === '') return EMPTY_DOCUMENT
     // Passed only when there are some, so a render without them is the call
     // it always was.
     const embeds =
@@ -291,8 +302,9 @@ async function produce(
 }
 
 /** The picture alone: whether it omitted anything is this module's business. */
-function pictureOf(drawn: RowPicture | null): DocumentRender | null {
-  return drawn === null ? null : { svg: drawn.svg, bounds: drawn.bounds }
+function pictureOf(drawn: RowPicture | typeof EMPTY_DOCUMENT | null): RowRender | null {
+  if (drawn === null || drawn === EMPTY_DOCUMENT) return drawn
+  return { svg: drawn.svg, bounds: drawn.bounds }
 }
 
 /** Everything a row's key names besides the document itself. */
@@ -331,7 +343,7 @@ async function withReferences(
   reads: { readonly library: () => Promise<KeyedLibrary>; readonly references: RowReferenceReader },
   document: WorkspaceDocumentEntry,
   first: RowPicture,
-): Promise<RowPicture | null> {
+): Promise<RowPicture | typeof EMPTY_DOCUMENT | null> {
   let references: RowReferences
   try {
     references = await reads.references(document)
@@ -357,7 +369,7 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
     references: createRowReferenceReader(deps.source, deps.documents),
   }
 
-  return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
+  return async (document: WorkspaceDocumentEntry): Promise<RowRender | null> => {
     // The catch stays OUTSIDE the broker: a rejection must not be remembered
     // as an answer, so the broker is allowed to see it and forget the entry,
     // and the totality this loader promises is restored here.
@@ -371,7 +383,9 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
       const first = await deps.broker.render(bare, () =>
         produce(deps, document, library, cacheKeyFor(bare)),
       )
-      if (first?.referencesOmitted !== true) return pictureOf(first)
+      if (first === null || first === EMPTY_DOCUMENT || first.referencesOmitted !== true) {
+        return pictureOf(first)
+      }
       return pictureOf(await withReferences(deps, reads, document, first))
     } catch {
       return null

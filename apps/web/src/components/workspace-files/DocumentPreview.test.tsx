@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentPreview } from './DocumentPreview.js'
+import { EMPTY_DOCUMENT } from './load-row-render.js'
 
 // The tab's face set, as the pane reads it. Hoisted because the pane
 // imports the hook at collection time.
@@ -100,12 +101,27 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
+    // A document that would not draw is not an empty one: saying "Nothing
+    // written yet" about a note full of text is the wrong thing to tell its author.
+    expect(screen.getByText('No preview.')).not.toBeNull()
+    expect(screen.queryByText('Nothing written yet.')).toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
   })
 
+  it('says an empty note has nothing written', async () => {
+    render(<DocumentPreview document={doc} loadRender={async () => EMPTY_DOCUMENT} />)
+    await act(async () => {})
+
+    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
+  })
+
   it('says a canvas has nothing to draw, not nothing written', async () => {
-    render(<DocumentPreview document={{ ...doc, kind: 'spatial' }} loadRender={async () => null} />)
+    render(
+      <DocumentPreview
+        document={{ ...doc, kind: 'spatial' }}
+        loadRender={async () => EMPTY_DOCUMENT}
+      />,
+    )
     await act(async () => {})
 
     expect(screen.getByText('Nothing to draw yet.')).not.toBeNull()
@@ -124,7 +140,7 @@ describe('DocumentPreview', () => {
     await act(async () => {})
 
     expect(screen.queryByTestId('preview-render')).toBeNull()
-    expect(screen.getByText('Nothing written yet.')).not.toBeNull()
+    expect(screen.getByText('No preview.')).not.toBeNull()
     expect(screen.getByRole('heading').textContent).toBe('Login flow')
   })
 

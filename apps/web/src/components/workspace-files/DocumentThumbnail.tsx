@@ -20,7 +20,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { PREVIEW_PADDING_PX } from '../../lib/preview-padding.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
-import type { DocumentRender } from './load-row-render.js'
+import { type DocumentRender, EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
 
 export interface DocumentThumbnailProps {
   readonly document: WorkspaceDocumentEntry
@@ -29,7 +29,7 @@ export interface DocumentThumbnailProps {
    * stays free of the daemon client, and so a test can answer without a
    * network or a worker.
    */
-  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
+  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<RowRender | null>
   readonly className?: string
 }
 
@@ -111,9 +111,10 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
     loadRender(document)
       .then((render) => {
         if (!live) return
-        if (render !== null) setDrawn(render)
-        // The loader answers nothing for a document with nothing in it.
-        setEmpty(render === null)
+        // Only an empty document says so; one the loader could not draw
+        // keeps its plain kind icon, since that says nothing about content.
+        setEmpty(render === EMPTY_DOCUMENT)
+        if (render !== null && render !== EMPTY_DOCUMENT) setDrawn(render)
       })
       // A row that cannot be drawn keeps its kind icon. A picture is a
       // convenience; failing to make one must not cost the row itself.
