@@ -241,18 +241,25 @@ The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
 to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
 keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent.
+thrown-away draft is not silent. The one exception is a note you have just
+added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
+because a typed note lost to the key that closes the editor would have no
+undo. Press `Esc` on a new note before typing and it is removed.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
 it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
 
 Every node and edge is listed by name for a screen reader, in the order `Tab`
-walks them, and the canvas points at the selected one: a note by its first
+walks them: by where they sit, top to bottom and then left to right, not by
+the order they were added, so a note placed above another is read first. The
+canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes".
+"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+Display panel is said back the same way ("Edge routing: Orthogonal", "Line
+jumps: On").
 
 The controls around a selected node name it ("Resize Review, south-east",
 "More actions for Review") and add three `Tab` stops, not thirteen: the

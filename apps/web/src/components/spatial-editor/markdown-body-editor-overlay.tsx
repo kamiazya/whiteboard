@@ -10,6 +10,7 @@ import {
 import {
   type CommentThread,
   nodeText,
+  RESOURCE_KINDS,
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
@@ -38,6 +39,21 @@ function contentBoxOf(
   }
   const inner = outlineContentBox(shapeId, bbox)
   return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
+}
+
+/**
+ * Escape on a note created for this edit keeps it once something was typed
+ * (the reducer's `cancel-text-edit` rule), so "Discarded" would send a
+ * reader back to make it a second time.
+ */
+function cancelAnnouncementFor(node: SpatialNode, gestureState: GestureState): string | undefined {
+  if (gestureState.kind !== 'editing-text' || gestureState.createdForEdit !== true) return undefined
+  if (gestureState.pendingText === '') return undefined
+  const kept = {
+    ...node,
+    resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: gestureState.pendingText },
+  }
+  return `Note kept: ${nodeA11yName(kept)}`
 }
 
 /**
@@ -142,6 +158,7 @@ export function MarkdownBodyEditorOverlay({
         draft.stop()
         applyResult(reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }))
       }}
+      cancelAnnouncement={cancelAnnouncementFor(node, gestureState)}
       onCancel={() => {
         draft.stop()
         const cancelled = reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' })
