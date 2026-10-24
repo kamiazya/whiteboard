@@ -18,8 +18,10 @@ describe('New document sheet at phone width', () => {
 
     const sheet = page.getByTestId('new-document-sheet')
     await expect.element(sheet).toBeVisible()
-    const box = (await sheet.element().getBoundingClientRect()).bottom
-    expect(Math.round(box)).toBe(window.innerHeight)
+    // Polled: the sheet's entrance animation is still settling at first paint.
+    await expect
+      .poll(() => Math.round(sheet.element().getBoundingClientRect().bottom))
+      .toBe(window.innerHeight)
 
     await expect.element(page.getByLabelText(/^Name/)).toHaveFocus()
     await userEvent.keyboard('Plan')

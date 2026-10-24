@@ -156,7 +156,7 @@ export function NewDocumentSheet({
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
       <DialogContent
         data-testid="new-document-sheet"
-        className="top-auto bottom-0 left-0 max-h-[85dvh] max-w-none translate-x-0 translate-y-0 gap-3 overflow-y-auto rounded-b-none px-4 pt-4 pb-6 sm:max-w-none"
+        className="top-auto bottom-0 left-0 max-h-[85dvh] max-w-none translate-x-0 translate-y-0 gap-3 overflow-y-auto rounded-b-none data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 px-4 pt-4 pb-6 sm:max-w-none"
         showCloseButton={false}
       >
         <form className="flex min-w-0 flex-col gap-3" onSubmit={keepPage}>
