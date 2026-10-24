@@ -6,7 +6,6 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { renderCanvasForExport, renderCanvasToSvg } from './scene-render.js'
-import { EXPORT_MARGIN_PX } from './scene-render-core.js'
 
 const fakeMeasure = createFixedMeasure({
   advance: (text) => text.length * 6,
@@ -121,6 +120,9 @@ describe('the editor draws the theme the document names (ADR-0030 decision 6)', 
 // and carries no legend (the editor draws it as an overlay); the SAVED
 // document carries it, in the band reserved for it, so an export shows what
 // the screen showed.
+/** The margin a saved picture keeps on every side; the product's number, pinned here. */
+const EXPORT_MARGIN_PX = 16
+
 describe('renderCanvasForExport', () => {
   const tagged: SpatialCanvas = {
     nodes: [
