@@ -15,12 +15,11 @@ import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { readWorkspaceFolderNames, setWorkspaceFolderName } from './workspace-folder-name.js'
 import {
   createWorkspaceDocumentAtPath,
   moveWorkspaceNodeToPath,
-  readWorkspaceFolderNames,
   readWorkspaceNodes,
-  setWorkspaceFolderName,
 } from './workspace-tree.js'
 
 const NAMES = ['Week 6', 'Archive', 'Plans'] as const

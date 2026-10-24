@@ -10,15 +10,14 @@
  */
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { readWorkspaceFolderNames, setWorkspaceFolderName } from './workspace-folder-name.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   moveWorkspaceNodeToPath,
   pruneEmptyFolders,
   readWorkspaceDocuments,
-  readWorkspaceFolderNames,
   readWorkspaceNodes,
-  setWorkspaceFolderName,
 } from './workspace-tree.js'
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

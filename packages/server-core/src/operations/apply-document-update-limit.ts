@@ -134,9 +134,6 @@ function placementRefusal(
   const longNames = after.documents.filter(
     ({ nameLength }) => nameLength > DOCUMENT_NAME_MAX_LENGTH,
   )
-  const refusedFolderNames = after.folderNames.filter(
-    ({ name }) => folderNameRefusal(name) !== null,
-  )
   const crowded = after.documents.length > WORKSPACE_MAX_DOCUMENTS
   const crowdedFolders = after.folders.length > WORKSPACE_MAX_FOLDERS
   if (
@@ -145,7 +142,7 @@ function placementRefusal(
     offGrammar.length === 0 &&
     offGrammarFolders.length === 0 &&
     longNames.length === 0 &&
-    refusedFolderNames.length === 0 &&
+    !after.folderNames.some(({ name }) => folderNameRefusal(name) !== null) &&
     after.unreadable.size === 0
   )
     return null
@@ -172,18 +169,21 @@ function placementRefusal(
   const earlierNames = longestNames(earlier)
   const grown = longNames.filter((d) => d.nameLength > (earlierNames.get(d.documentId) ?? 0))
   if (grown.length > 0) return new DocumentNameTooLongError(grown.map(({ path }) => path))
-  const earlierFolderNames = new Set(earlier.folderNames.map((f) => placedAt(f.path, f.name)))
-  const newlyRefused = refusedFolderNames.filter(
-    (f) => !earlierFolderNames.has(placedAt(f.path, f.name)),
+  return folderNamesRefusal(after, earlier)
+}
+
+/** The refused folder names the update wrote: one the record held before is not its doing. */
+function folderNamesRefusal(after: Placement, earlier: Placement): FolderNameRefusedError | null {
+  const before = new Set(earlier.folderNames.map((f) => placedAt(f.path, f.name)))
+  const written = after.folderNames.filter(
+    (f) => folderNameRefusal(f.name) !== null && !before.has(placedAt(f.path, f.name)),
   )
-  const [first] = newlyRefused
-  if (first !== undefined) {
-    return new FolderNameRefusedError(
-      newlyRefused.map(({ path }) => path),
-      folderNameRefusal(first.name) ?? '',
-    )
-  }
-  return null
+  const [first] = written
+  if (first === undefined) return null
+  return new FolderNameRefusedError(
+    written.map(({ path }) => path),
+    folderNameRefusal(first.name) ?? '',
+  )
 }
 
 /**

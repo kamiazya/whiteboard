@@ -25,7 +25,6 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import {
   documentIdSchema,
   documentKindSchema,
-  folderNameRefusal,
   isSelfOrDescendant,
 } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroMap, LoroMovableList, type LoroTreeNode, type TreeID } from 'loro-crdt'
@@ -100,13 +99,9 @@ export type WorkspaceNodeMeta = z.infer<typeof workspaceNodeMetaSchema>
  * changes what a user can do (no creating a deep path in one step). Modelling
  * the folder keeps the port's behaviour and gives later folder operations —
  * move, rename, collapse — something to act on.
- *
- * A folder may carry a display `name`, kept apart from its segment the way a
- * document's is: the segment is the address and is never derived again, the
- * name is what a person reads. The READ takes the document name's own loose
- * schema, not the write rule (`folderNameRefusal`), for the reason readers
- * never take a write bound: a name some other writer stored must cost the
- * name at worst, never the folder and every document under it.
+ * Its optional `name` is what a person reads, kept apart from the segment as
+ * a document's is; read loosely, never by the write rule, so a stored name
+ * costs the name at worst and never the folder's subtree.
  */
 export const workspaceFolderMetaSchema = z
   .object({ segment: z.string().min(1), name: workspaceNodeMetaSchema.shape.name })
@@ -197,10 +192,7 @@ function readMeta(node: LoroTreeNode): Read | null {
   const asDocument = workspaceNodeMetaSchema.safeParse(raw)
   if (asDocument.success) return { type: 'document', meta: asDocument.data }
   const asFolder = workspaceFolderMetaSchema.safeParse(raw)
-  if (asFolder.success) {
-    const { segment, name } = asFolder.data
-    return name === undefined ? { type: 'folder', segment } : { type: 'folder', segment, name }
-  }
+  if (asFolder.success) return { type: 'folder', ...asFolder.data }
   return null
 }
 
@@ -246,7 +238,8 @@ function pushChildren<T>(
   for (let i = children.length - 1; i >= 0; i--) stack.push(item(children[i] as LoroTreeNode))
 }
 
-function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
+/** Exported for the sibling modules that read the tree whole. */
+export function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
   const stack: Array<{ node: LoroTreeNode; prefix: string; above: string | undefined }> = []
   pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '', above: undefined }))
@@ -446,68 +439,8 @@ export function readWorkspaceNodes(doc: LoroDoc): WorkspaceNode[] {
   return walk(doc).map(({ read, path }) =>
     read.type === 'document'
       ? ({ type: 'document', meta: read.meta, path } as const)
-      : ({
-          type: 'folder',
-          segment: read.segment,
-          path,
-          ...(read.name === undefined ? {} : { name: read.name }),
-        } as const),
+      : ({ ...read, path } as const),
   )
-}
-
-/**
- * Every named folder path, once, with the name it shows: the first NAMED
- * folder node at that path in tree order. Concurrent creation can leave two
- * folder nodes at one path, and either may be the one somebody named — so
- * the rule reads past an unnamed first node rather than letting it hide the
- * name, and every peer picks the same one because tree order is shared.
- */
-export function readWorkspaceFolderNames(
-  doc: LoroDoc,
-): Array<{ readonly path: string; readonly name: string }> {
-  const out: Array<{ readonly path: string; readonly name: string }> = []
-  const seen = new Set<string>()
-  for (const { read, path } of walk(doc)) {
-    if (read.type !== 'folder' || read.name === undefined || seen.has(path)) continue
-    seen.add(path)
-    out.push({ path, name: read.name })
-  }
-  return out
-}
-
-/**
- * Names the folder at `path`, or clears its name when `name` is absent —
- * false, with nothing written, when no FOLDER node stands there (a document
- * used as a folder has no folder node to carry one).
- *
- * A set writes the first folder node in tree order; a clear deletes the name
- * from every folder node at the path, since a name left on a second node
- * would show again the moment the first one stopped being first. Stored
- * trimmed, and refused for what `folderNameRefusal` refuses. Whether the name
- * duplicates a sibling's is the caller's question (model's
- * `isSiblingDisplayNameTaken`): this writes what it is given.
- */
-export function setWorkspaceFolderName(
-  doc: LoroDoc,
-  input: { readonly path: string; readonly name?: string },
-): boolean {
-  const refusal = input.name === undefined ? null : folderNameRefusal(input.name)
-  if (refusal !== null) throw new Error(refusal)
-  const name = input.name?.trim()
-  const folders = walk(doc).filter(
-    ({ read, path }) => read.type === 'folder' && path === input.path,
-  )
-  const first = folders[0]
-  if (first === undefined) return false
-  if (name === undefined) {
-    for (const { node, read } of folders) {
-      if (read.type === 'folder' && read.name !== undefined) node.data.delete('name')
-    }
-  } else {
-    first.node.data.set('name', name)
-  }
-  doc.commit()
-  return true
 }
 
 /**
@@ -810,8 +743,7 @@ export function createWorkspaceDocumentAtPath(
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind)
   if (meta.name !== undefined) setChosenName(node, meta.name)
-  // A promoted folder's name was the FOLDER's: left on the node it would read
-  // as a name somebody chose for the document.
+  // A promoted folder's name was the folder's, not one chosen for the document.
   else if (existing !== null && existing.node.data.get('name') !== undefined) {
     node.data.delete('name')
   }

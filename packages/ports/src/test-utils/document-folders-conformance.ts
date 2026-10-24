@@ -42,6 +42,7 @@ export function describeDocumentFoldersConformance(makeIndex: MakeFolderIndex): 
 
   describe('DocumentFolders', () => {
     describeFolderNaming(withIndex)
+    describeFolderNameLifetime(withIndex)
     describeFolderRefusals(withIndex)
     describeFolderDuplicates(withIndex)
   })
@@ -82,7 +83,9 @@ function describeFolderNaming(withIndex: WithIndex): void {
       ])
     })
   })
+}
 
+function describeFolderNameLifetime(withIndex: WithIndex): void {
   it('clears a name when given none', async () => {
     await withIndex(async (index) => {
       await create(index, 'a/x')

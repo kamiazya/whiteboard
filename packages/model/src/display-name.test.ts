@@ -3,7 +3,6 @@ import {
   displayNameKey,
   folderNameRefusal,
   folderNameSchema,
-  isDisplayNameTaken,
   isSiblingDisplayNameTaken,
 } from './display-name.js'
 import { DOCUMENT_NAME_MAX_LENGTH } from './ids.js'
@@ -43,7 +42,14 @@ describe('folderNameRefusal', () => {
   })
 })
 
-describe('isDisplayNameTaken', () => {
+/** The comparison alone: every sibling at the workspace root, where `x` is the target's path. */
+const isDisplayNameTaken = (name: string, siblings: string[]) =>
+  isSiblingDisplayNameTaken(
+    siblings.map((shown, i) => ({ path: `s${i}`, name: shown })),
+    { path: 'x', name },
+  )
+
+describe('the display-name comparison', () => {
   it('compares trimmed, case-insensitively', () => {
     expect(isDisplayNameTaken('week 6', ['Week 6'])).toBe(true)
     expect(isDisplayNameTaken('  WEEK 6 ', ['Week 6'])).toBe(true)

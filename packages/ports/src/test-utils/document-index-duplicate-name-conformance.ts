@@ -42,8 +42,21 @@ export function describeDuplicateDocumentName(withIndex: WithIndex, workspaceId:
         await expect(create(index, 'week/other', 'Plan')).rejects.toThrow(DisplayNameTakenError)
       })
     })
+  })
+  describeDuplicateDocumentRename(withIndex, workspaceId, create)
+}
 
-    it('is refused on rename, and leaves the name as it was', async () => {
+function describeDuplicateDocumentRename(
+  withIndex: WithIndex,
+  workspaceId: string,
+  create: (
+    index: DocumentIndex,
+    path: string,
+    name?: string,
+  ) => Promise<{ documentId: string; name?: string }>,
+): void {
+  describe('a document renamed to a name a sibling already shows', () => {
+    it('is refused, and leaves the name as it was', async () => {
       await withIndex(async (index) => {
         await create(index, 'week/plan', 'Plan')
         const { documentId } = await create(index, 'week/other', 'Other')

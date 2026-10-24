@@ -54,7 +54,7 @@ export function displayNameKey(name: string): string {
  * two replicas' edits is kept, since nothing could have refused it and a
  * rename nobody made would be worse than two equal names.
  */
-export function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
+function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
   const key = displayNameKey(name)
   for (const sibling of siblings) if (displayNameKey(sibling) === key) return true
   return false
