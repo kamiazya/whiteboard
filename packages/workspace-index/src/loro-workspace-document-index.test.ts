@@ -13,6 +13,8 @@ import {
   documentContainers,
   readMarkdownBody,
   resolveWorkspaceDocument,
+  setWorkspaceDocumentName,
+  setWorkspaceFolderName,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
@@ -24,6 +26,7 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
+  DisplayNameTakenError,
   DocumentPathTakenError,
   documentEntrySchema,
   matchesWorkspaceLookup,
@@ -34,6 +37,7 @@ import {
 import {
   describeDocumentDuplicatesConformance,
   describeDocumentIndexConformance,
+  describeDocumentFoldersConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
@@ -180,6 +184,16 @@ describe('LoroWorkspaceDocumentIndex', () => {
 
 describe('LoroWorkspaceDocumentIndex pins', () => {
   describeDocumentPinsConformance(async () => {
+    const docs = inMemoryWorkspaceDocs()
+    return {
+      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      dispose: async () => {},
+    }
+  })
+})
+
+describe('LoroWorkspaceDocumentIndex folders', () => {
+  describeDocumentFoldersConformance(async () => {
     const docs = inMemoryWorkspaceDocs()
     return {
       index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
@@ -342,5 +356,65 @@ describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
     const listed = await index.listDocuments({ workspaceId: WS })
     expect(listed.map((entry) => entry.path)).toEqual(['meeting-notes'])
     expect(listed.every((entry) => documentEntrySchema.safeParse(entry).success)).toBe(true)
+  })
+})
+
+/**
+ * A duplicate the keeper could not have seen — two replicas naming siblings
+ * alike before they met — arrives by merge and is kept: both names list,
+ * re-saving either one's own name is no refusal, and only a third write
+ * taking the name is compared.
+ */
+describe('LoroWorkspaceDocumentIndex names that collide in a merge', () => {
+  const WS = 'ws-merge'
+
+  async function mergedDuplicates() {
+    const docs = inMemoryWorkspaceDocs()
+    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
+    await index.createWorkspace({ workspaceId: WS })
+    for (const path of ['term/a/x', 'term/b/x', 'term/c/x']) {
+      await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+    }
+    const plan = await index.createDocument({ workspaceId: WS, path: 'term/p1', kind: 'markdown' })
+    const other = await index.createDocument({ workspaceId: WS, path: 'term/p2', kind: 'markdown' })
+    const base = await docs.open(WS)
+    if (base === null) throw new Error('no workspace record')
+    const replica = LoroDoc.fromSnapshot(base.export({ mode: 'snapshot' }))
+    replica.setPeerId(99n)
+    // Each side names a different sibling alike, unaware of the other.
+    setWorkspaceFolderName(base, { path: 'term/a', name: 'Week 6' })
+    setWorkspaceDocumentName(base, { documentId: plan.documentId, name: 'Plan' })
+    setWorkspaceFolderName(replica, { path: 'term/b', name: 'week 6' })
+    setWorkspaceDocumentName(replica, { documentId: other.documentId, name: 'PLAN' })
+    base.import(replica.export({ mode: 'update' }))
+    await docs.save(WS, base)
+    return { index, plan, other }
+  }
+
+  it('keeps both folder names and both document names as they arrived', async () => {
+    const { index } = await mergedDuplicates()
+
+    await expect(index.listFolderNames({ workspaceId: WS })).resolves.toEqual([
+      { path: 'term/a', name: 'Week 6' },
+      { path: 'term/b', name: 'week 6' },
+    ])
+    const named = (await index.listDocuments({ workspaceId: WS })).flatMap((entry) =>
+      entry.name === undefined ? [] : [entry.name],
+    )
+    expect(named.sort()).toEqual(['PLAN', 'Plan'])
+  })
+
+  it('lets either one keep its own name, and refuses a third taking it', async () => {
+    const { index, other } = await mergedDuplicates()
+
+    await index.setFolderName({ workspaceId: WS, path: 'term/b', name: 'Week 6' })
+    await index.setDocumentName({ workspaceId: WS, documentId: other.documentId, name: 'Plan' })
+
+    await expect(
+      index.setFolderName({ workspaceId: WS, path: 'term/c', name: 'Week 6' }),
+    ).rejects.toThrow(DisplayNameTakenError)
+    await expect(
+      index.createDocument({ workspaceId: WS, path: 'term/p3', kind: 'markdown', name: 'plan' }),
+    ).rejects.toThrow(DisplayNameTakenError)
   })
 })

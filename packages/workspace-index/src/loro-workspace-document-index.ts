@@ -29,18 +29,23 @@ import {
   readPinnedDocumentIds,
   readTrashEntries,
   readWorkspaceDocuments,
+  readWorkspaceFolderNames,
   readWorkspaceNodes,
   recordTrashEntry,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  setWorkspaceFolderName,
   setWorkspacePinned,
+  type WorkspaceNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   deriveCopyName,
   deriveCopyPath,
+  displayNameKey,
   generateDocumentId,
   isSelfOrDescendant,
+  isSiblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
 import type {
   BlobRef,
@@ -50,10 +55,12 @@ import type {
   DeleteDocumentInput,
   DocumentDuplicates,
   DocumentEntry,
+  DocumentFolders,
   DocumentIndex,
   DocumentPins,
   DocumentTrash,
   DuplicateDocumentInput,
+  FolderNameEntry,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
@@ -61,6 +68,7 @@ import type {
   ResolveDocumentInput,
   SetDocumentNameInput,
   SetDocumentPinnedInput,
+  SetFolderNameInput,
   TrashEntryInput,
   WorkspaceEntry,
   WorkspaceLookup,
@@ -70,6 +78,7 @@ import {
   compareDocumentPaths,
   createDocumentInputSchema,
   createWorkspaceInputSchema,
+  DisplayNameTakenError,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
@@ -87,6 +96,7 @@ import {
   renameWorkspaceInputSchema,
   resolveWorkspaceHandleBy,
   setDocumentNameInputSchema,
+  setFolderNameInputSchema,
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
@@ -142,7 +152,7 @@ export interface LoroWorkspaceDocumentIndexOptions {
 }
 
 export class LoroWorkspaceDocumentIndex
-  implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates
+  implements DocumentIndex, DocumentPins, DocumentFolders, DocumentTrash, DocumentDuplicates
 {
   /**
    * `blobs` is required, not optional.
@@ -364,6 +374,7 @@ export class LoroWorkspaceDocumentIndex
       const nodes = readWorkspaceNodes(doc)
       refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
       refuseNewFoldersAt(nodes, input.path)
+      if (input.name !== undefined) refuseSiblingDocumentName(nodes, input.path, input.name)
       const created = createWorkspaceDocumentAtPath(doc, {
         path: input.path,
         documentId: generateDocumentId(),
@@ -488,8 +499,14 @@ export class LoroWorkspaceDocumentIndex
     const input = setDocumentNameInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.#open(input.workspaceId)
-      if (resolveWorkspaceDocumentById(doc, input.documentId) === null) {
-        throw new DocumentNotFoundError(input.workspaceId, input.documentId)
+      const nodes = readWorkspaceNodes(doc)
+      const self = nodes.find(
+        (node): node is Extract<WorkspaceNode, { type: 'document' }> =>
+          node.type === 'document' && node.meta.documentId === input.documentId,
+      )
+      if (self === undefined) throw new DocumentNotFoundError(input.workspaceId, input.documentId)
+      if (input.name?.trim() && !sameDisplayName(self.meta.name, input.name)) {
+        refuseSiblingDocumentName(nodes, self.path, input.name, input.documentId)
       }
       setWorkspaceDocumentName(doc, {
         documentId: input.documentId,
@@ -517,6 +534,46 @@ export class LoroWorkspaceDocumentIndex
         throw new DocumentNotFoundError(input.workspaceId, input.documentId)
       }
       setWorkspacePinned(doc, input.documentId, input.pinned)
+      await this.docs.save(input.workspaceId, doc)
+    })
+  }
+
+  /**
+   * One walk of the tree's meta, and no content digest: a listing that asks
+   * for folder names beside its documents pays for reading where nodes sit,
+   * never for what any document says.
+   */
+  async listFolderNames(input: ListDocumentsInput): Promise<FolderNameEntry[]> {
+    const doc = await this.#open(input.workspaceId)
+    return readWorkspaceFolderNames(doc)
+      .map(({ path, name }) => ({ path, name }))
+      .sort((left, right) => compareDocumentPaths(left.path, right.path))
+  }
+
+  /**
+   * The duplicate refused here is the one this keeper can see: siblings
+   * merged in from a replica that named them alike offline are kept as they
+   * arrived, and only a further write naming one of them is compared.
+   */
+  async setFolderName(raw: SetFolderNameInput): Promise<void> {
+    const input = setFolderNameInputSchema.parse(raw)
+    return this.#serialise(input.workspaceId, async () => {
+      const doc = await this.#open(input.workspaceId)
+      const nodes = readWorkspaceNodes(doc)
+      const atPath = nodes.filter((node) => node.type === 'folder' && node.path === input.path)
+      if (atPath.length === 0) throw new DocumentNotFoundError(input.workspaceId, input.path)
+      const current = atPath.find((node) => node.type === 'folder' && node.name !== undefined)
+      const currentName = current?.type === 'folder' ? current.name : undefined
+      if (input.name !== undefined && !sameDisplayName(currentName, input.name)) {
+        const others = nodes.filter((node) => node.type === 'folder' && node.path !== input.path)
+        if (isSiblingDisplayNameTaken(others, { path: input.path, name: input.name })) {
+          throw new DisplayNameTakenError('folder', input.path, input.name)
+        }
+      }
+      setWorkspaceFolderName(doc, {
+        path: input.path,
+        ...(input.name === undefined ? {} : { name: input.name }),
+      })
       await this.docs.save(input.workspaceId, doc)
     })
   }
@@ -574,6 +631,37 @@ export class LoroWorkspaceDocumentIndex
       pruneEmptyFolders(doc)
       await this.docs.save(input.workspaceId, doc)
     })
+  }
+}
+
+/**
+ * Whether a write keeps the name its target already shows. Such a write is
+ * never refused as a duplicate: a sibling that merged in under the same name
+ * is one this keeper could not have refused, and re-saving a form must not
+ * fail over it.
+ */
+function sameDisplayName(current: string | undefined, next: string): boolean {
+  return current !== undefined && displayNameKey(current) === displayNameKey(next)
+}
+
+/**
+ * Refuses `name` for the document at `path` when another document directly
+ * under the same parent already shows it. `documentId` leaves the document
+ * itself out, so keeping its own name is no duplicate.
+ */
+function refuseSiblingDocumentName(
+  nodes: readonly WorkspaceNode[],
+  path: string,
+  name: string,
+  documentId?: string,
+): void {
+  const others = nodes.flatMap((node) =>
+    node.type === 'document' && node.meta.documentId !== documentId
+      ? [{ path: node.path, name: node.meta.name }]
+      : [],
+  )
+  if (isSiblingDisplayNameTaken(others, { path, name })) {
+    throw new DisplayNameTakenError('document', path, name)
   }
 }
 
