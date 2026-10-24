@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
-import { layoutMarkdownScene } from '../lib/render-preview.js'
+import { layoutMarkdownOutline } from '../lib/render-preview.js'
 import { fakeMeasure } from '../test-utils/fake-measure.js'
 import { useMarkdownFragments } from './use-markdown-fragments.js'
 
@@ -23,7 +23,7 @@ function useLaidOutFragments({
   references?: ReferenceSeams
 }): FragmentSeams {
   const { seams } = useMarkdownFragments(loaders)
-  layoutMarkdownScene(body, { ...LAYOUT, ...(references ? { references } : {}), ...seams })
+  layoutMarkdownOutline(body, { ...LAYOUT, ...(references ? { references } : {}), ...seams })
   return seams
 }
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
