@@ -259,7 +259,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // A document's card, and the picture with the two things drawn ON it, are
   // their own components. The two below are those.
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
-  'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 102,
+  'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 62,
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx#NewDocumentDialog': 165,
   'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 180,
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,

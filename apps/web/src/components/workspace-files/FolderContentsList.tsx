@@ -1,10 +1,18 @@
 import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useMemo } from 'react'
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useContext,
+  useId,
+  useMemo,
+} from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
-import { useDocumentDragProps, useFolderProps } from './folder-actions.js'
+import { ActionsButton } from './ActionsButton.js'
+import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { folderContents } from './folder-contents.js'
 import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -203,6 +211,76 @@ function cardHandlers(
   }
 }
 
+/** A card's first line: kind, name, and the badges that qualify it. */
+function CardHeading({
+  entry,
+  ids,
+}: {
+  entry: WorkspaceDocumentEntry
+  ids: ReturnType<typeof cardDescription>['ids']
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <KindBadge kind={entry.kind} />
+      <span data-testid="card-title" className="truncate text-sm">
+        {documentLabel(entry, 'leaf')}
+      </span>
+      {entry.shadowed && (
+        <span
+          id={ids.conflict}
+          data-testid="card-shadowed-badge"
+          title="Another document owns this path. Rename this one to resolve the conflict."
+          className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+        >
+          Path conflict
+        </span>
+      )}
+      {entry.pinOrder !== undefined && (
+        /* The pin is on the row, not only a sort position — state a
+           reader could not otherwise see on its object. */
+        <Pin
+          id={ids.pin}
+          role="img"
+          aria-label="Pinned"
+          className="text-muted-foreground ml-auto size-3 shrink-0"
+        />
+      )}
+    </span>
+  )
+}
+
+/** The text under a card's picture: name, state badges, age and tags. */
+function CardCaption({
+  entry,
+  ids,
+}: {
+  entry: WorkspaceDocumentEntry
+  ids: ReturnType<typeof cardDescription>['ids']
+}) {
+  return (
+    <span className="flex min-w-0 flex-col px-2 py-1.5 pointer-coarse:pr-11">
+      {/* The display name is the label everywhere else; the segment
+          is the fallback for a document nobody named, never a name
+          invented from the path. */}
+      <CardHeading entry={entry} ids={ids} />
+      {entry.updatedAt !== undefined && (
+        <span
+          id={ids.age}
+          data-testid="card-subtitle"
+          className="text-muted-foreground truncate text-xs"
+        >
+          {formatRelative(entry.updatedAt)}
+        </span>
+      )}
+      {(entry.tags?.length ?? 0) > 0 && (
+        <span id={ids.tags} className="text-muted-foreground truncate text-[11px]">
+          {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+        </span>
+      )}
+    </span>
+  )
+}
+
 /**
  * A document, as a card. Everything it shows beyond the name is a fact the
  * ROW carries — a kind, a path conflict, a pin, when it last moved, its tags
@@ -230,79 +308,44 @@ function DocumentCard({
   const { ids, describedBy } = cardDescription(useId(), entry, changed)
   const dragProps = useDocumentDragProps(entry.path)
   return (
-    <button
-      type="button"
-      data-doc-path={entry.path}
-      {...dragProps}
-      // The name is the label and kind alone; the picture, state badges, age
-      // and tags are the description, so a reader hears what the document is
-      // before anything about it.
-      aria-label={documentAccessibleName(entry, 'leaf')}
-      aria-describedby={describedBy === '' ? undefined : describedBy}
-      aria-current={entry.path === selectedPath ? 'true' : undefined}
-      aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
-      onClick={() => onOpen({ kind: 'document', document: entry })}
-      {...cardHandlers(entry, onActivateDocument, onDocumentContextMenu)}
-      // `group` + `aria-pressed:` so the SELECTED look is derived from
-      // the attribute a screen reader reads, rather than written a
-      // second time from `selection.has(...)`. toggle-state-surface
-      // enforces that, and caught this card doing exactly the doubled
-      // thing it forbids.
-      className="group hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 aria-pressed:border-primary aria-pressed:bg-accent/30 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
-    >
-      <CardThumbnail
-        entry={entry}
-        selection={selection}
-        changed={changed}
-        renderThumbnail={renderThumbnail}
-        changedId={ids.changed}
-      />
-      <span className="flex min-w-0 flex-col px-2 py-1.5">
-        {/* The display name is the label everywhere else; the segment
-              is the fallback for a document nobody named, never a name
-              invented from the path. */}
-        <span className="flex min-w-0 items-center gap-1">
-          <KindBadge kind={entry.kind} />
-          <span data-testid="card-title" className="truncate text-sm">
-            {documentLabel(entry, 'leaf')}
-          </span>
-          {entry.shadowed && (
-            <span
-              id={ids.conflict}
-              data-testid="card-shadowed-badge"
-              title="Another document owns this path. Rename this one to resolve the conflict."
-              className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
-            >
-              Path conflict
-            </span>
-          )}
-          {entry.pinOrder !== undefined && (
-            /* The pin is on the row, not only a sort position — state a
-                 reader could not otherwise see on its object. */
-            <Pin
-              id={ids.pin}
-              role="img"
-              aria-label="Pinned"
-              className="text-muted-foreground ml-auto size-3 shrink-0"
-            />
-          )}
-        </span>
-        {entry.updatedAt !== undefined && (
-          <span
-            id={ids.age}
-            data-testid="card-subtitle"
-            className="text-muted-foreground truncate text-xs"
-          >
-            {formatRelative(entry.updatedAt)}
-          </span>
-        )}
-        {(entry.tags?.length ?? 0) > 0 && (
-          <span id={ids.tags} className="text-muted-foreground truncate text-[11px]">
-            {entry.tags?.map((tag) => `#${tag}`).join(' ')}
-          </span>
-        )}
-      </span>
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        data-doc-path={entry.path}
+        {...dragProps}
+        // The name is the label and kind alone; the picture, state badges, age
+        // and tags are the description, so a reader hears what the document is
+        // before anything about it.
+        aria-label={documentAccessibleName(entry, 'leaf')}
+        aria-describedby={describedBy === '' ? undefined : describedBy}
+        aria-current={entry.path === selectedPath ? 'true' : undefined}
+        aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
+        onClick={() => onOpen({ kind: 'document', document: entry })}
+        {...cardHandlers(entry, onActivateDocument, onDocumentContextMenu)}
+        // `group` + `aria-pressed:` so the SELECTED look is derived from
+        // the attribute a screen reader reads, rather than written a
+        // second time from `selection.has(...)`. toggle-state-surface
+        // enforces that, and caught this card doing exactly the doubled
+        // thing it forbids.
+        className="group hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 aria-pressed:border-primary aria-pressed:bg-accent/30 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
+      >
+        <CardThumbnail
+          entry={entry}
+          selection={selection}
+          changed={changed}
+          renderThumbnail={renderThumbnail}
+          changedId={ids.changed}
+        />
+        <CardCaption entry={entry} ids={ids} />
+      </button>
+      {onDocumentContextMenu !== undefined && (
+        <ActionsButton
+          name={documentLabel(entry, 'leaf')}
+          onOpen={(x, y) => onDocumentContextMenu(entry, x, y)}
+          className="absolute right-0 bottom-0"
+        />
+      )}
+    </div>
   )
 }
 
@@ -334,29 +377,40 @@ function FolderCard({
   onOpen: FolderContentsListProps['onOpen']
 }) {
   const folderProps = useFolderProps(child.path)
+  const actions = useContext(FolderActionsContext)
   return (
-    <button
-      type="button"
-      aria-label={`Open folder ${child.name}`}
-      onClick={() => onOpen({ kind: 'folder', path: child.path })}
-      {...folderProps}
-      className="hover:bg-accent data-[dropping]:ring-ring data-[dropping]:bg-accent flex data-[dropping]:ring-2 w-full flex-col overflow-hidden rounded-md border text-left"
-    >
-      <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
-        <Folder className="size-7" />
-      </span>
-      <span className="flex min-w-0 items-center gap-1 px-2 py-1.5">
-        <span data-testid="card-title" className="truncate text-sm">
-          {child.name}
+    <div className="relative">
+      <button
+        type="button"
+        data-folder-path={child.path}
+        aria-label={`Open folder ${child.name}`}
+        onClick={() => onOpen({ kind: 'folder', path: child.path })}
+        {...folderProps}
+        className="hover:bg-accent data-[dropping]:ring-ring data-[dropping]:bg-accent flex data-[dropping]:ring-2 w-full flex-col overflow-hidden rounded-md border text-left"
+      >
+        <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
+          <Folder className="size-7" />
         </span>
-        {/* How much is inside, so a folder is not a blind alley to
+        <span className="flex min-w-0 items-center gap-1 px-2 py-1.5 pointer-coarse:pr-11">
+          <span data-testid="card-title" className="truncate text-sm">
+            {child.name}
+          </span>
+          {/* How much is inside, so a folder is not a blind alley to
                   click into — and the chevron says this card navigates. */}
-        <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
-          {child.count}
+          <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+            {child.count}
+          </span>
+          <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
         </span>
-        <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
-      </span>
-    </button>
+      </button>
+      {actions !== undefined && (
+        <ActionsButton
+          name={child.name}
+          onOpen={(x, y) => actions.openFolderMenu(child.path, x, y)}
+          className="absolute right-0 bottom-0"
+        />
+      )}
+    </div>
   )
 }
 

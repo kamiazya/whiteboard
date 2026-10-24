@@ -22,8 +22,8 @@ you can put it on a canvas later) and it opens ready to work in.
 ![Onboarding chooser](../assets/onboarding-chooser.png)
 
 Once you have documents, the page lands on your document browser. On a
-touch screen, tap a card to open the document, and press and hold for its
-actions (open, pin, rename, delete). With a mouse, a click previews a
+touch screen, tap a card to open the document, and tap its **…** button (or press
+and hold the card) for its actions (open, pin, rename, delete). With a mouse, a click previews a
 document in the pane beside the list, and a double-click — or Enter on a
 focused one — opens it. That holds for the cards, the **Recent** strip and
 search results alike. Search keeps your query in the box when you open a

@@ -184,7 +184,7 @@ describe('fine pointer: click previews, double-click and Enter open', () => {
       renderPanel({ onOpenDocument })
 
       const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
-      const button = within(row).getByRole('button', { name: /Meeting notes/ })
+      const button = within(row).getByRole('button', { name: /^Meeting notes$/ })
       fireEvent.keyDown(button, { key: 'Enter' })
       expect(onOpenDocument).toHaveBeenCalledWith('meeting-notes')
     } finally {
@@ -205,7 +205,7 @@ describe('one-column tree: object actions stay reachable', () => {
       renderPanel({ onOpenDocument })
 
       const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
-      const button = within(row).getByRole('button', { name: /Meeting notes/ })
+      const button = within(row).getByRole('button', { name: /^Meeting notes$/ })
       fireEvent.pointerDown(button, {
         pointerType: 'touch',
         clientX: 30,
@@ -228,7 +228,7 @@ describe('one-column tree: object actions stay reachable', () => {
     try {
       renderPanel({ onOpenDocument: vi.fn() })
       const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
-      const button = within(row).getByRole('button', { name: /Meeting notes/ })
+      const button = within(row).getByRole('button', { name: /^Meeting notes$/ })
       fireEvent.contextMenu(button, { clientX: 30, clientY: 30 })
       expect(await screen.findByRole('menu', { name: 'Document actions' })).toBeTruthy()
     } finally {
@@ -242,7 +242,7 @@ describe('one-column tree: object actions stay reachable', () => {
       const onOpenDocument = vi.fn()
       renderPanel({ onOpenDocument })
       const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
-      fireEvent.doubleClick(within(row).getByRole('button', { name: /Meeting notes/ }))
+      fireEvent.doubleClick(within(row).getByRole('button', { name: /^Meeting notes$/ }))
       expect(onOpenDocument).toHaveBeenCalledWith('meeting-notes')
     } finally {
       localStorage.removeItem('whiteboard.document-browser.columns.v1')

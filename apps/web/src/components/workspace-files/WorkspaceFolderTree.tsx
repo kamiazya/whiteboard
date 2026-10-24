@@ -1,10 +1,12 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import { useFolderProps } from './folder-actions.js'
+import { ActionsButton } from './ActionsButton.js'
+import { FolderActionsContext, useFolderProps } from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
+import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFolderTreeProps {
   documents: readonly WorkspaceDocumentEntry[]
@@ -78,23 +80,33 @@ function FolderItem({
   selectedFolder?: string
 }) {
   const folderProps = useFolderProps(node.path)
+  const actions = useContext(FolderActionsContext)
   return (
     <TreeItemShell
       name={node.name}
       label={node.name}
       hasChildren={node.children.length > 0}
       row={
-        <button
-          type="button"
-          aria-label={`Open folder ${node.name}`}
-          aria-current={node.path === selectedFolder ? 'true' : undefined}
-          onClick={() => onSelectFolder(node.path)}
-          {...folderProps}
-          className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
-        >
-          <Folder className="text-muted-foreground size-3.5 shrink-0" />
-          <span className="truncate">{node.name}</span>
-        </button>
+        <>
+          <button
+            type="button"
+            data-folder-path={node.path}
+            aria-label={`Open folder ${node.name}`}
+            aria-current={node.path === selectedFolder ? 'true' : undefined}
+            onClick={() => onSelectFolder(node.path)}
+            {...folderProps}
+            className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+          >
+            <Folder className="text-muted-foreground size-3.5 shrink-0" />
+            <span className="truncate">{node.name}</span>
+          </button>
+          {actions !== undefined && (
+            <ActionsButton
+              name={node.name}
+              onOpen={(x, y) => actions.openFolderMenu(node.path, x, y)}
+            />
+          )}
+        </>
       }
     >
       {node.children.map((child) => (
@@ -109,6 +121,41 @@ function FolderItem({
   )
 }
 
+function RootFolderItem({
+  selectedFolder,
+  onSelectFolder,
+}: {
+  selectedFolder?: string
+  onSelectFolder: (path: string) => void
+}) {
+  const rootProps = useFolderProps('')
+  const actions = useContext(FolderActionsContext)
+  return (
+    // The root is a destination like any other folder, and the only one
+    // reachable when every document sits at the top level.
+    <div role="treeitem" tabIndex={-1} aria-label="Workspace">
+      <div className="flex items-center gap-1">
+        <span className="w-[1.125rem]" aria-hidden="true" />
+        <button
+          type="button"
+          data-folder-path=""
+          aria-label="Open folder Workspace"
+          aria-current={selectedFolder === '' ? 'true' : undefined}
+          onClick={() => onSelectFolder('')}
+          {...rootProps}
+          className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+        >
+          <Folder className="text-muted-foreground size-3.5 shrink-0" />
+          <span className="truncate">Workspace</span>
+        </button>
+        {actions !== undefined && (
+          <ActionsButton name="Workspace" onOpen={(x, y) => actions.openFolderMenu('', x, y)} />
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function WorkspaceFolderTree({
   documents,
   onSelectFolder,
@@ -116,28 +163,16 @@ export function WorkspaceFolderTree({
   className,
 }: WorkspaceFolderTreeProps) {
   const tree = useMemo(() => buildFolderTree(documents), [documents])
-  const rootProps = useFolderProps('')
+  const longPress = useLongPressMenu(undefined)
 
   return (
-    <div role="tree" aria-label="Workspace folders" className={cn('space-y-0.5', className)}>
-      {/* The root is a destination like any other folder, and the only one
-          reachable when every document sits at the top level. */}
-      <div role="treeitem" tabIndex={-1} aria-label="Workspace">
-        <div className="flex items-center gap-1">
-          <span className="w-[1.125rem]" aria-hidden="true" />
-          <button
-            type="button"
-            aria-label="Open folder Workspace"
-            aria-current={selectedFolder === '' ? 'true' : undefined}
-            onClick={() => onSelectFolder('')}
-            {...rootProps}
-            className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
-          >
-            <Folder className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="truncate">Workspace</span>
-          </button>
-        </div>
-      </div>
+    <div
+      role="tree"
+      aria-label="Workspace folders"
+      {...longPress}
+      className={cn('space-y-0.5', className)}
+    >
+      <RootFolderItem selectedFolder={selectedFolder} onSelectFolder={onSelectFolder} />
       {tree.map((node) => (
         <FolderItem
           key={node.path}

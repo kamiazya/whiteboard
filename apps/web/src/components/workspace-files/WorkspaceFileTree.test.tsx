@@ -70,16 +70,21 @@ describe('WorkspaceFileTree', () => {
   })
 
   // A folder that no document claims has no name of its own — the segment
-  // is the honest label, and it is not something to click.
-  it('shows a folder nobody claims as plain text', () => {
+  // is the honest label. It is a Tab stop that folds its group, and opens
+  // nothing: there is no document behind it.
+  it('a folder nobody claims folds its group and opens nothing', () => {
+    const onOpen = vi.fn()
     render(
       <WorkspaceFileTree
         documents={[{ documentId: 'c1', path: 'design/login', name: 'Auth' }]}
-        onOpen={vi.fn()}
+        onOpen={onOpen}
       />,
     )
-    expect(screen.getByText('design')).not.toBeNull()
-    expect(screen.queryByRole('button', { name: /^design$/ })).toBeNull()
+    const folder = screen.getByRole('button', { name: /^design$/ })
+    expect(folder.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(folder)
+    expect(folder.getAttribute('aria-expanded')).toBe('false')
+    expect(onOpen).not.toHaveBeenCalled()
   })
 
   it('renders nested paths as an ARIA tree, not a flat list', () => {

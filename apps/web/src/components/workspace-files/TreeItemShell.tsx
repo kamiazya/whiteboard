@@ -36,8 +36,11 @@ interface TreeItemShellProps {
   /** The treeitem's own accessible name. */
   label: string
   hasChildren: boolean
-  /** What the row shows beside the toggle. */
-  row: ReactNode
+  /**
+   * What the row shows beside the toggle. A function receives the group's
+   * toggle, for a row that is itself the control that opens and closes it.
+   */
+  row: ReactNode | ((group: { toggle: () => void; expanded: boolean }) => ReactNode)
   /** The nested items, rendered while expanded. */
   children: ReactNode
 }
@@ -50,6 +53,7 @@ export function TreeItemShell({
   children,
 }: Readonly<TreeItemShellProps>) {
   const [expanded, setExpanded] = useState(true)
+  const toggle = () => setExpanded((prev) => !prev)
 
   return (
     // Generic containers carry the ARIA tree roles (APG tree pattern):
@@ -64,15 +68,11 @@ export function TreeItemShell({
     >
       <div className="flex items-center gap-1">
         {hasChildren ? (
-          <ExpandToggle
-            name={name}
-            expanded={expanded}
-            onToggle={() => setExpanded((prev) => !prev)}
-          />
+          <ExpandToggle name={name} expanded={expanded} onToggle={toggle} />
         ) : (
           <span className="w-[1.125rem]" aria-hidden="true" />
         )}
-        {row}
+        {typeof row === 'function' ? row({ toggle, expanded }) : row}
       </div>
       {hasChildren && expanded && (
         // biome-ignore lint/a11y/useSemanticElements: role="group" inside a role="tree" is the APG tree pattern; the suggested semantic elements (fieldset/optgroup) are invalid tree children
