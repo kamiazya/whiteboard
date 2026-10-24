@@ -18,6 +18,13 @@ import {
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 import { utf16Max } from './utf16-max.js'
 
+/**
+ * A subpath's refusal, worded as zod's `.startsWith('#')` worded it. The check
+ * is an anchored regex rather than `.startsWith`, because zod 4.6 emits the
+ * latter as `"format": "starts_with"`, a format JSON Schema does not define.
+ */
+const SUBPATH_MESSAGE = 'Invalid string: must start with "#"'
+
 // The proposal layer (ADR-0029): a change somebody wants made, carried on the
 // live document until a person adopts or dismisses it.
 //
@@ -92,7 +99,7 @@ export const nodePatchFieldsSchema = z
     // changes what a node SAYS, never which node it is or what kind.
     text: z.string().optional(),
     file: z.string().optional(),
-    subpath: z.string().startsWith('#').optional(),
+    subpath: z.string().regex(/^#/, SUBPATH_MESSAGE).optional(),
     url: z.url().optional(),
     label: z.string().optional(),
     background: z.string().optional(),

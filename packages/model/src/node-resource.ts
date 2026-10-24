@@ -20,6 +20,13 @@
 import { z } from 'zod'
 import { utf16Max } from './utf16-max.js'
 
+/**
+ * A subpath's refusal, worded as zod's `.startsWith('#')` worded it. The check
+ * is an anchored regex rather than `.startsWith`, because zod 4.6 emits the
+ * latter as `"format": "starts_with"`, a format JSON Schema does not define.
+ */
+const SUBPATH_MESSAGE = 'Invalid string: must start with "#"'
+
 const URI_LIST = 'text/uri-list'
 
 export const nodeResourceSchema = z
@@ -31,7 +38,7 @@ export const nodeResourceSchema = z
     /** Where the bytes live, when the node points at them instead. */
     location: z.string().optional(),
     /** A fragment inside the thing at `location`. */
-    subpath: z.string().startsWith('#').optional(),
+    subpath: z.string().regex(/^#/, SUBPATH_MESSAGE).optional(),
   })
   .strict()
   // `location` is a plain string because a file's is a path inside a
@@ -97,7 +104,7 @@ export const nodeFileInputSchema = utf16Max(
   tooLong("a file's path"),
 )
 export const nodeSubpathInputSchema = utf16Max(
-  z.string().startsWith('#'),
+  z.string().regex(/^#/, SUBPATH_MESSAGE),
   NODE_LOCATION_MAX_CHARS,
   tooLong("a file's subpath"),
 )

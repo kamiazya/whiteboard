@@ -14,6 +14,13 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
+/**
+ * A subpath's refusal, worded as zod's `.startsWith('#')` worded it. The check
+ * is an anchored regex rather than `.startsWith`, because zod 4.6 emits the
+ * latter as `"format": "starts_with"`, a format JSON Schema does not define.
+ */
+const SUBPATH_MESSAGE = 'Invalid string: must start with "#"'
+
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/) as this package writes and
 // reads it: the specified document, plus the single `x-whiteboard` extension
 // key at three sites.
@@ -109,7 +116,7 @@ const textNodeSchema = sharedNodeFieldsSchema.extend({
 const fileNodeSchema = sharedNodeFieldsSchema.extend({
   type: z.literal('file'),
   file: z.string(),
-  subpath: z.string().startsWith('#').optional(),
+  subpath: z.string().regex(/^#/, SUBPATH_MESSAGE).optional(),
 })
 
 const linkNodeSchema = sharedNodeFieldsSchema.extend({
