@@ -257,7 +257,9 @@ canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes".
+"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+Display panel is said back the same way ("Edge routing: Orthogonal", "Line
+jumps: On").
 
 The controls around a selected node name it ("Resize Review, south-east",
 "More actions for Review") and add three `Tab` stops, not thirteen: the

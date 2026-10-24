@@ -13,7 +13,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -21,6 +22,11 @@ const edgesFacetOf = (canvas: SpatialCanvas) =>
   canvas.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
 
 afterEach(cleanup)
+
+// The announcer is one module-level channel that clears itself after a beat.
+beforeEach(async () => {
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe(''), { timeout: 4000 })
+})
 
 const initial: SpatialCanvas = {
   nodes: [
@@ -251,4 +257,17 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
       lineJumps: 'arc',
     })
   })
+})
+
+it('announces the routing and line-jump picks', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  await openSettings(container)
+
+  await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
+  optionButton(container, 'Orthogonal')?.click()
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Edge routing: Orthogonal'))
+
+  optionButton(container, 'On')?.click()
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Line jumps: On'))
 })
