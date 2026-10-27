@@ -352,7 +352,7 @@ function folderNameContract(factory: FilesSourceFactory): void {
       const source = await factory(fixture)
       await source.setFolderName?.('class/week-6', 'Week 6')
       await expect(source.setFolderName?.('class/week-7', ' week 6 ')).rejects.toThrow(
-        'Another folder in this folder is already called "week 6".',
+        'Another folder here is already called "week 6".',
       )
     })
 

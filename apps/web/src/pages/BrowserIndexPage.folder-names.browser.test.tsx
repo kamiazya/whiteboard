@@ -99,7 +99,7 @@ describe('a named folder in a browser-kept workspace', () => {
     mount(index, 'class')
     const dialog = await newSubfolderOf('class', 'week 6')
     expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another folder in this folder is already called "week 6". Choose a name no other folder beside it has.',
+      'Another folder here is already called "week 6". Choose a name no other folder here has.',
     )
   })
 })

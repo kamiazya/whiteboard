@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 const TAKEN =
-  'Another document in this folder is already called "plan". Choose a name no other document beside it has.'
+  'Another document here is already called "plan". Choose a name no other document here has.'
 
 function renderPanel(overrides: Parameters<typeof fakeFilesSource>[0] = {}) {
   const rows: WorkspaceDocumentEntry[] = [
@@ -116,7 +116,7 @@ describe('a document named as a sibling already is', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Markdown note' }))
     await waitFor(() =>
       expect(within(sheet).getByRole('alert').textContent).toBe(
-        'Another document in this folder is already called "Plan". Choose a name no other document beside it has.',
+        'Another document here is already called "Plan". Choose a name no other document here has.',
       ),
     )
     expect(source.createDocument).not.toHaveBeenCalled()

@@ -110,7 +110,7 @@ describe('a typed new folder', () => {
   it('refuses a last part a sibling folder already shows', () => {
     expect(planNestedFolder('Class/week 6', known)).toEqual({
       refusal:
-        'Another folder in this folder is already called "week 6". Choose a name no other folder beside it has.',
+        'Another folder here is already called "week 6". Choose a name no other folder here has.',
     })
   })
 
