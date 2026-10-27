@@ -272,12 +272,21 @@ const shapeFor: Record<string, (input: fc.Arbitrary<unknown>) => fc.Arbitrary<un
 
 const RENDER_STYLES = new Set(['clean', 'document', 'visual.sketch', 'visual.neon'])
 const SEEDED_PATHS = new Set(['board', 'notes/plan'])
+/** The batch without its folder renames, unless that would leave it empty. */
+function withoutFolderRenames(ops: Record<string, unknown>[]): Record<string, unknown>[] {
+  const kept = ops.filter((op) => op.op !== 'folder.rename')
+  return kept.length > 0 ? kept : ops
+}
+
 shapeFor.wb_workspace_edit = (inputs) =>
   // A `document.set` writes OKF onto the markdown document, and a create or a
-  // move lands on a path of its own, mostly; a move says what it changes.
+  // move lands on a path of its own, mostly; a move says what it changes. A
+  // `folder.rename` is steered out of the shaped batches: this seeding keeps
+  // no folders (its arm row is `refused-only`), and one in a batch refuses
+  // the whole batch, which took the tool's row under the floor.
   mostly(inputs, (input: { ops: Record<string, unknown>[] }) => ({
     ...inSeededWorkspace(input),
-    ops: input.ops.map((op, index) => {
+    ops: withoutFolderRenames(input.ops).map((op, index) => {
       if (op.op === 'document.set') return { ...op, documentId: MARKDOWN_ID, markdown: OKF_NOTE }
       if (op.op !== 'document.create' && op.op !== 'document.move') return op
       const path = SEEDED_PATHS.has(op.path as string) ? `fresh-${index}` : op.path
