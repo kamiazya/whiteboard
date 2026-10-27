@@ -84,13 +84,17 @@ function thumbnailSvg(document: WorkspaceDocumentEntry, drawn: DocumentRender): 
  */
 function Undrawn({ document, empty }: { document: WorkspaceDocumentEntry; empty: boolean }) {
   const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
+  const kind = document.kind ?? 'markdown'
+  // The icon stays the box's own child unless there is a word to stand under
+  // it: a span child is how the cross-fade below is told apart from this.
+  if (!empty) return <KindIcon data-kind={kind} className="text-muted-foreground size-full" />
   return (
     <span className="flex size-full flex-col items-center justify-center gap-1">
       <KindIcon
-        data-kind={document.kind ?? 'markdown'}
-        className={cn('text-muted-foreground min-h-0 w-full flex-1', empty && 'opacity-60')}
+        data-kind={kind}
+        className="text-muted-foreground min-h-0 w-full flex-1 opacity-60"
       />
-      {empty && <span className="text-muted-foreground text-xs leading-none">Empty</span>}
+      <span className="text-muted-foreground text-xs leading-none">Empty</span>
     </span>
   )
 }
