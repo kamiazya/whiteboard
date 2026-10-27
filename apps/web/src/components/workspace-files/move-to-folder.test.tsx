@@ -150,7 +150,7 @@ describe('moving a document to a named folder', () => {
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
     expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another folder in "class" is already called "WEEK 6". Choose a name no other folder beside it has.',
+      'Another folder in this folder is already called "WEEK 6". Choose a name no other folder beside it has.',
     )
     expect(source.renameDocumentPath).not.toHaveBeenCalled()
   })

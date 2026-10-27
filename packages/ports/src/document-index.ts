@@ -563,11 +563,11 @@ export class DisplayNameTakenError extends Error {
     readonly path: string,
     readonly displayName: string,
   ) {
-    const parent = path.includes('/')
-      ? `"${path.slice(0, path.lastIndexOf('/'))}"`
-      : 'the top level'
+    // The folder is named by where the person already is, not by its
+    // address: a parent's address ("class") is not what its name ("Class")
+    // reads, and the keeper does not hold the name to say it.
     super(
-      `Another ${kind} in ${parent} is already called "${displayName.trim()}". ` +
+      `Another ${kind} in this folder is already called "${displayName.trim()}". ` +
         `Choose a name no other ${kind} beside it has.`,
     )
     this.name = 'DisplayNameTakenError'
