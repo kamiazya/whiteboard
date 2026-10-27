@@ -348,6 +348,21 @@ describe('a heading that names a sibling document', () => {
     expect(readWorkspaceDocumentName(workspace, DOC)).toBeNull()
   })
 
+  // Top-level documents are the tree's roots: a node there has no parent to
+  // ask for its siblings, and the live app's first notes all sit there.
+  it('leaves a top-level note unnamed beside a top-level namesake', () => {
+    const workspace = workspaceWith('untitled', '# Plan')
+    createWorkspaceDocumentAtPath(workspace, {
+      path: 'plan',
+      documentId: SIBLING,
+      kind: 'markdown',
+      name: 'Plan',
+    })
+    workspace.commit()
+    seedNameFromTitle(workspace, DOC)
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBeNull()
+  })
+
   it('still names the note after a heading a document in ANOTHER folder shows', () => {
     const workspace = workspaceWith('class/untitled', '# Weekly review')
     createWorkspaceDocumentAtPath(workspace, {

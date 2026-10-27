@@ -38,9 +38,10 @@ const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
  * compares (model's `displayNameKey`). Folders are judged apart, so a folder
  * of the same name is no collision.
  */
-function siblingDocumentShows(node: LoroTreeNode, title: string): boolean {
+function siblingDocumentShows(workspace: LoroDoc, node: LoroTreeNode, title: string): boolean {
   const key = displayNameKey(title)
-  const siblings = node.parent()?.children() ?? []
+  // A top-level document is one of the tree's roots and has no parent to ask.
+  const siblings = node.parent()?.children() ?? workspace.getTree(WORKSPACE_TREE_KEY).roots()
   for (const sibling of siblings) {
     if (sibling.id === node.id) continue
     const meta = workspaceNodeMetaSchema.safeParse(
@@ -90,7 +91,7 @@ function siblingDocumentShows(node: LoroTreeNode, title: string): boolean {
  * container on a tree node is an op, and a read that writes would make every
  * keeper's judgement a write of its own.
  */
-function nameToSeed(node: LoroTreeNode): string | null | undefined {
+function nameToSeed(workspace: LoroDoc, node: LoroTreeNode): string | null | undefined {
   const meta = workspaceNodeMetaSchema.safeParse(
     Object.fromEntries(META_KEYS.map((key) => [key, node.data.get(key)])),
   )
@@ -109,13 +110,13 @@ function nameToSeed(node: LoroTreeNode): string | null | undefined {
   // A heading is not a name typed into a name field, so a duplicate the
   // keeper can see is not written: the note stays unnamed, and a name this
   // seeded from the heading's first words is taken back.
-  if (siblingDocumentShows(node, title)) return name === undefined ? null : undefined
+  if (siblingDocumentShows(workspace, node, title)) return name === undefined ? null : undefined
   return title
 }
 
 /** Seeds `node`'s name, uncommitted. */
-function seedNode(node: LoroTreeNode): void {
-  const name = nameToSeed(node)
+function seedNode(workspace: LoroDoc, node: LoroTreeNode): void {
+  const name = nameToSeed(workspace, node)
   if (name === undefined) node.data.delete('name')
   else if (name !== null) node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(name))
 }
@@ -129,7 +130,7 @@ function seedNode(node: LoroTreeNode): void {
 export function seedNameFromTitle(workspace: LoroDoc, documentId: string): void {
   const node = documentNode(workspace, documentId)
   if (node === undefined) return
-  seedNode(node)
+  seedNode(workspace, node)
   workspace.commit()
 }
 
@@ -200,7 +201,7 @@ export function seedNamesFromTitles(workspace: LoroDoc, touched: readonly Touche
   const tree = workspace.getTree(WORKSPACE_TREE_KEY)
   for (const { node: id } of touched) {
     const node = tree.getNodeByID(id)
-    if (node !== undefined) seedNode(node)
+    if (node !== undefined) seedNode(workspace, node)
   }
   workspace.commit()
 }
