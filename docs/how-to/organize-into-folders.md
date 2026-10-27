@@ -56,6 +56,13 @@ name. A refused name is said beside the field before anything is saved. Two
 folders that came to share a name by syncing two copies of the workspace keep
 both names; nothing is renamed for you.
 
+Names nobody typed follow the same rule without asking you. A note that is
+still unnamed takes its name from its first heading only when no other
+document in its folder already shows that name; otherwise it stays
+**Untitled** until you name it. **Duplicate** names the copy
+"Name (copy)", or the first "Name (copy 2)", "Name (copy 3)" … that nothing
+beside it shows.
+
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.

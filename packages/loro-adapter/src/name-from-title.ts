@@ -2,6 +2,7 @@
 // keeper: the browser's store and the daemon, which names on every content
 // write, take the same bytes, so a note typed into at `untitled` must come out
 // named the same way whichever of them keeps it.
+import { displayNameKey } from '@kamiazya/whiteboard-model'
 import type { LoroDoc, LoroTreeNode } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -32,7 +33,27 @@ function isGeneratedDocumentPath(path: string): boolean {
 const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
 
 /**
- * The name `node` should be given now, or `null` to leave it as it is.
+ * Whether `title` is what another DOCUMENT beside `node` shows — its name, or
+ * its segment when it has none — compared as the keepers' sibling rule
+ * compares (model's `displayNameKey`). Folders are judged apart, so a folder
+ * of the same name is no collision.
+ */
+function siblingDocumentShows(node: LoroTreeNode, title: string): boolean {
+  const key = displayNameKey(title)
+  const siblings = node.parent()?.children() ?? []
+  for (const sibling of siblings) {
+    if (sibling.id === node.id) continue
+    const meta = workspaceNodeMetaSchema.safeParse(
+      Object.fromEntries(META_KEYS.map((field) => [field, sibling.data.get(field)])),
+    )
+    if (meta.success && displayNameKey(meta.data.name ?? meta.data.segment) === key) return true
+  }
+  return false
+}
+
+/**
+ * The name `node` should be given now, `null` to leave it as it is, or
+ * `undefined` to take back a name this seeded.
  *
  * Someone who opens a note and types `# Weekly review` has said what it is
  * called. Without this the workspace keeps calling it `untitled`, in the
@@ -69,7 +90,7 @@ const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
  * container on a tree node is an op, and a read that writes would make every
  * keeper's judgement a write of its own.
  */
-function nameToSeed(node: LoroTreeNode): string | null {
+function nameToSeed(node: LoroTreeNode): string | null | undefined {
   const meta = workspaceNodeMetaSchema.safeParse(
     Object.fromEntries(META_KEYS.map((key) => [key, node.data.get(key)])),
   )
@@ -83,13 +104,20 @@ function nameToSeed(node: LoroTreeNode): string | null {
   if (title === undefined || title === name) return null
   // Absent: nobody has named it. A strict prefix of the title: we named it,
   // from a heading that has since grown.
-  return name === undefined || title.startsWith(name) ? title : null
+  const ours = name === undefined || title.startsWith(name)
+  if (!ours) return null
+  // A heading is not a name typed into a name field, so a duplicate the
+  // keeper can see is not written: the note stays unnamed, and a name this
+  // seeded from the heading's first words is taken back.
+  if (siblingDocumentShows(node, title)) return name === undefined ? null : undefined
+  return title
 }
 
 /** Seeds `node`'s name, uncommitted. */
 function seedNode(node: LoroTreeNode): void {
   const name = nameToSeed(node)
-  if (name !== null) node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(name))
+  if (name === undefined) node.data.delete('name')
+  else if (name !== null) node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(name))
 }
 
 /**
