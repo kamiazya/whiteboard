@@ -32,6 +32,7 @@ import {
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 
@@ -86,6 +87,12 @@ function edgeSegments(
   return { label: found.label, options: found.control.options, layout: found.control.layout }
 }
 
+/** The panel sits beside the board, so a reader on it hears nothing of the redraw a pick causes. */
+function pickAloud(pick: () => void, announcement: string): void {
+  pick()
+  announceOnCanvas(announcement)
+}
+
 function EdgeSegmentRow({
   registry,
   field,
@@ -125,7 +132,7 @@ function EdgeSegmentRow({
               label={option.label}
               layout={row.layout}
               selected={current === value}
-              onSelect={() => onPick(value)}
+              onSelect={() => pickAloud(() => onPick(value), `${row.label}: ${option.label}`)}
               {...(glyph === undefined ? {} : { glyph })}
             />
           )

@@ -2,11 +2,14 @@ import {
   createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type DuplicateDocumentResponse,
+  type FolderNameSummary,
   type ListDocumentsResponse,
   type ListWorkspacesResponse,
   type RenameDocumentPathResponse,
   renameDocumentPathRequestSchema,
   renameWorkspaceRequestSchema,
+  type SetFolderNameResponse,
+  setFolderNameRequestSchema,
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
@@ -20,6 +23,7 @@ import {
   type DocumentIndex,
   DocumentPathContestedError,
   hasDocumentDuplicates,
+  hasDocumentFolders,
   isDatabaseBusy,
   isWorkspaceNotFoundError,
   isWorkspaceNotHeldError,
@@ -54,9 +58,11 @@ import {
 import { readJsonBody } from '../read-json-body.js'
 import {
   corruptStored,
+  displayNameTaken,
   type ErrorAnswer,
   firstOwned,
   hasDescendants,
+  invalidBodyRefusal,
   moveIntoSelf,
   notFoundAs,
   pastNamespaceCeiling,
@@ -376,7 +382,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // fields here is how `pinned` went unanswered while the tool and
       // `/api/v1` carried it.
       const { documents } = await wbDocumentList(deps, { workspaceId })
-      const response: ListDocumentsResponse = { documents }
+      const folderNames = await namedFoldersOf(deps, workspaceId)
+      const response: ListDocumentsResponse = {
+        documents,
+        ...(folderNames === undefined ? {} : { folderNames }),
+      }
       return c.json(response)
     } catch (err) {
       // "Empty" and "never registered" are different answers, and conflating
@@ -393,6 +403,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       throw err
     }
   })
+
+  mountFolderNameRoute(app, options.serverDeps)
 
   // Delete a document: evacuate it into the trash, then drop its doc-cache
   // entry. Its saved versions stay while the trash holds it, so a restore
@@ -562,4 +574,56 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
   )
 
   return app
+}
+
+/**
+ * The named folders a document listing carries beside its documents: a second
+ * walk of the record's META only (no content digest), and absent when no
+ * folder is named — the keeper's silence about names.
+ */
+async function namedFoldersOf(
+  deps: ServerDeps,
+  workspaceId: string,
+): Promise<FolderNameSummary[] | undefined> {
+  if (!hasDocumentFolders(deps.documentIndex)) return undefined
+  const named = await deps.documentIndex.listFolderNames({ workspaceId })
+  return named.length === 0 ? undefined : named
+}
+
+function mountFolderNameRoute(app: Hono, deps: ServerDeps): void {
+  // Name a folder, or clear its name: the display name a reader shows for the
+  // folder instead of its segment. Straight to the PORT (ADR-0018), as the
+  // workspace rename is — naming is the port call and nothing else. The
+  // folder's path never changes here: its address is fixed when it is made.
+  app.put('/api/workspaces/:workspaceId/folders/name', async (c) => {
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
+    const body = await readJsonBody(c, setFolderNameRequestSchema, {
+      voice: 'code',
+      refuseShape: (error) => invalidBodyRefusal(error, 'path is required'),
+    })
+    if ('refusal' in body) return body.refusal
+    const index = deps.documentIndex
+    if (!hasDocumentFolders(index)) {
+      return c.json({ title: 'This keeper does not name folders.' } satisfies ApiErrorBody, 501)
+    }
+    try {
+      await index.setFolderName({
+        workspaceId,
+        path: body.data.path,
+        ...(body.data.name === undefined ? {} : { name: body.data.name }),
+      })
+      const response: SetFolderNameResponse = { ok: true }
+      return c.json(response)
+    } catch (err) {
+      const owned = firstOwned(err, [
+        displayNameTaken,
+        notFoundAs(`No folder "${body.data.path}" to name`),
+        corruptStored,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
+      throw err
+    }
+  })
 }

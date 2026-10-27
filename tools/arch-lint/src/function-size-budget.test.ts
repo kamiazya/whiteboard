@@ -265,7 +265,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
   // The two layouts are ONE card with a `layout`. The entry below is that card
   // — the whole of what both layouts draw, counted once.
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 116,
+  // +1: the search box's combobox handle, which makes the list its listbox.
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 117,
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   // The two list effects do not repeat one another on a mount; the lines are the
@@ -275,7 +276,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 804,
+  // +3: the search combobox, owned here because the box and its results are siblings.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 807,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 92,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 97,
@@ -436,9 +438,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   // Both raised (+2, +3) for the layout's routing budget, which the repair
-  // pass's routes and the search spend from.
+  // pass's routes and the search spend from; `assignEdgeAnchors` +1 more for
+  // leaving the edges drawn as a contact mark out of the search.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 71,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 55,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 56,
   'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
   // The trial evaluator's three steps are named closures (applySelfCosts /
   // applyPairCosts / rescorePairsOf / rescorePairInto), each carrying the

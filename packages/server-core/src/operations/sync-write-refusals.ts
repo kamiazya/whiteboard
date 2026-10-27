@@ -619,6 +619,27 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
 }
 
 /**
+ * A sync write refused because it would give folders a display name every
+ * other folder-name writer refuses (`folderNameRefusal`: blank, holding a
+ * "/", past `DOCUMENT_NAME_MAX_LENGTH`). A name stored before, left as it is
+ * or repaired, is let through.
+ */
+export class FolderNameRefusedError extends SyncWriteRefusalError {
+  readonly code = 'folder_name_refused'
+  readonly status = 400
+
+  constructor(
+    public readonly paths: readonly string[],
+    reason: string,
+  ) {
+    super(
+      `This update would give the folder ${paths.map((path) => JSON.stringify(path)).join(', ')} a name no folder may have. ${reason}`,
+    )
+    this.name = 'FolderNameRefusedError'
+  }
+}
+
+/**
  * A sync write refused because its changes build on a change this keeper
  * does not hold. Loro parks such changes outside the oplog, where no bound is
  * judged, and applies them as soon as a later import supplies what they

@@ -17,9 +17,10 @@ import { type MouseEvent, useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { PREVIEW_PADDING_PX } from '../../lib/preview-padding.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
-import type { DocumentRender } from './load-row-render.js'
+import { type DocumentRender, EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
 
 export interface DocumentThumbnailProps {
   readonly document: WorkspaceDocumentEntry
@@ -28,7 +29,7 @@ export interface DocumentThumbnailProps {
    * stays free of the daemon client, and so a test can answer without a
    * network or a worker.
    */
-  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
+  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<RowRender | null>
   readonly className?: string
 }
 
@@ -62,9 +63,46 @@ function fitFor(document: WorkspaceDocumentEntry, bounds: DocumentRender['bounds
   return document.kind !== 'spatial' && isStrip ? 'cover-start' : 'contain'
 }
 
+/**
+ * A note's picture as a thumbnail: cropped to its ink. Its `bounds` reach
+ * from the viewBox origin to the far edge of the text, the near margin
+ * included, so the far margin is the one added here.
+ */
+function thumbnailSvg(document: WorkspaceDocumentEntry, drawn: DocumentRender): string {
+  const fit = fitFor(document, drawn.bounds)
+  if (document.kind !== 'markdown') return fitSvgToBox(drawn.svg, fit)
+  return fitSvgToBox(drawn.svg, fit, {
+    w: drawn.bounds.w + PREVIEW_PADDING_PX,
+    h: drawn.bounds.h + PREVIEW_PADDING_PX,
+  })
+}
+
+/**
+ * The kind icon, before a picture lands or in place of one. An empty
+ * document says so under it: a blank pane reads as a picture that failed to
+ * draw.
+ */
+function Undrawn({ document, empty }: { document: WorkspaceDocumentEntry; empty: boolean }) {
+  const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
+  const kind = document.kind ?? 'markdown'
+  // The icon stays the box's own child unless there is a word to stand under
+  // it: a span child is how the cross-fade below is told apart from this.
+  if (!empty) return <KindIcon data-kind={kind} className="text-muted-foreground size-full" />
+  return (
+    <span className="flex size-full flex-col items-center justify-center gap-1">
+      <KindIcon
+        data-kind={kind}
+        className="text-muted-foreground min-h-0 w-full flex-1 opacity-60"
+      />
+      <span className="text-muted-foreground text-xs leading-none">Empty</span>
+    </span>
+  )
+}
+
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
   const [drawn, setDrawn] = useState<DocumentRender | null>(null)
+  const [empty, setEmpty] = useState(false)
   // Read for its CHANGE, not its value: a board that names a theme is drawn
   // in the bundled family until this tab holds that theme's face, and the
   // ask for the face is made by the render below — so the row that triggered
@@ -76,7 +114,10 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
     let live = true
     loadRender(document)
       .then((render) => {
-        if (live && render !== null) setDrawn(render)
+        if (!live) return
+        // Not drawn is not empty: only EMPTY_DOCUMENT says anything about content.
+        setEmpty(render === EMPTY_DOCUMENT)
+        if (render !== null && render !== EMPTY_DOCUMENT) setDrawn(render)
       })
       // A row that cannot be drawn keeps its kind icon. A picture is a
       // convenience; failing to make one must not cost the row itself.
@@ -100,10 +141,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
         // Sole content, and the only place `data-kind` appears: its ABSENCE
         // is how a test knows the render landed, so the copy that stays
         // behind during the cross-fade below must not carry it.
-        <KindIcon
-          data-kind={document.kind ?? 'markdown'}
-          className="text-muted-foreground size-full"
-        />
+        <Undrawn document={document} empty={empty} />
       ) : (
         <>
           {/* The render comes FIRST in document order, and rides above the
@@ -128,7 +166,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
               their opacities sum to 1.00 across the whole 220ms. */}
           <SceneSvg
             as="span"
-            svg={fitSvgToBox(drawn.svg, fitFor(document, drawn.bounds))}
+            svg={thumbnailSvg(document, drawn)}
             onClickCapture={keepLinksInert}
             className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
           />

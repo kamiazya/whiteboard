@@ -3,6 +3,12 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import {
+  type FolderNames,
+  folderDisplayName,
+  folderTrail,
+  type NestedFolderPlan,
+} from '../../lib/folder-names.js'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,7 +17,10 @@ import {
 } from '../ui/dialog.js'
 import { documentPathRefusal } from './document-path-refusal.js'
 import { DialogActions, ErrorLine } from './FolderDialogParts.js'
-import { folderLabel, joinPath, leafOf, typedFolderPath } from './folder-moves.js'
+import { joinPath, leafOf } from './folder-moves.js'
+
+/** The folders a typed new folder makes on its way, each with the name it was given. */
+type CreatedFolders = Extract<NestedFolderPlan, { path: string }>['created']
 
 const NEW_FOLDER = 'New folder…'
 
@@ -43,22 +52,38 @@ function useRovingFocus(count: number) {
 }
 
 /**
+ * Each option's words: a folder's whole trail, as each folder on it is called
+ * — two folders may share a name under different parents, and the list must
+ * tell them apart — then "New folder…".
+ */
+function optionLabels(folders: readonly string[], names: FolderNames): string[] {
+  return [
+    ...folders.map((folder) =>
+      folder === '' ? folderDisplayName('') : folderTrail(folder, names).join(' / '),
+    ),
+    NEW_FOLDER,
+  ]
+}
+
+/**
  * The folders as a listbox of buttons, with "New folder…" last. Not a
  * `<select>`: the last row opens a second step, which a native menu cannot
  * hold.
  */
 function FolderOptions({
   folders,
+  names,
   busy,
   onPick,
   onNewFolder,
 }: {
   folders: readonly string[]
+  names: FolderNames
   busy: boolean
   onPick: (folder: string) => void
   onNewFolder: () => void
 }) {
-  const labels = [...folders.map(folderLabel), NEW_FOLDER]
+  const labels = optionLabels(folders, names)
   const { active, refs, onKeyDown } = useRovingFocus(labels.length)
 
   return (
@@ -72,7 +97,7 @@ function FolderOptions({
         const isNew = index === folders.length
         return (
           <button
-            key={label}
+            key={index === folders.length ? NEW_FOLDER : `folder:${folders[index]}`}
             ref={(element) => {
               refs.current[index] = element
             }}
@@ -109,38 +134,45 @@ function NewFolderField({ value, onChange }: { value: string; onChange: (next: s
         className="rounded border px-2 py-1"
       />
       <span id="move-new-folder-hint" className="text-muted-foreground text-xs">
-        Use “/” for a folder inside a folder.
+        Use “/” for a folder inside a folder: “Class/Week 6” makes both.
       </span>
     </div>
   )
 }
 
 /**
- * Naming a folder that does not exist yet. The destination is held to the
- * path grammar with the document's own last segment on the end, because that
- * is the path the keeper will be asked for.
+ * Naming a folder that does not exist yet — "/" nests, each part naming one
+ * folder. The plan is refused for a blank part or a name a sibling folder
+ * already shows, and then held to the path grammar with the document's own
+ * last segment on the end, because that is the path the keeper will be asked
+ * for.
  */
 function NewFolderForm({
   document,
   busy,
   error,
+  planNewFolder,
   onBack,
   onPick,
 }: {
   document: WorkspaceDocumentEntry
   busy: boolean
   error: string | null
+  planNewFolder: (typed: string) => NestedFolderPlan
   onBack: () => void
-  onPick: (folder: string) => void
+  onPick: (folder: string, created: CreatedFolders) => void
 }) {
   const [name, setName] = useState('')
   const [issue, setIssue] = useState<string | null>(null)
   const submit = () => {
-    const folder = typedFolderPath(name)
-    if (folder === '') return
-    const refusal = documentPathRefusal(joinPath(folder, leafOf(document.path)))
+    const plan = planNewFolder(name)
+    if ('refusal' in plan) {
+      setIssue(plan.refusal)
+      return
+    }
+    const refusal = documentPathRefusal(joinPath(plan.path, leafOf(document.path)))
     setIssue(refusal)
-    if (refusal === null) onPick(folder)
+    if (refusal === null) onPick(plan.path, plan.created)
   }
 
   return (
@@ -170,6 +202,23 @@ function MoveHeader({ document }: { document: WorkspaceDocumentEntry | null }) {
   )
 }
 
+interface MoveToFolderDialogProps {
+  /** The document being moved, or null when the dialog is closed. */
+  document: WorkspaceDocumentEntry | null
+  /** Destination folders, `''` being the workspace root. */
+  folders: readonly string[]
+  /** What each folder is called. */
+  names: FolderNames
+  /** What a typed new folder means, or why it is refused. */
+  planNewFolder: (typed: string) => NestedFolderPlan
+  busy: boolean
+  /** Shown verbatim — the keeper names the path that collided. */
+  error: string | null
+  onCancel: () => void
+  /** A folder picked, or one typed — then with the folders it makes on the way. */
+  onPick: (folder: string, created?: CreatedFolders) => void
+}
+
 /**
  * The picker behind "Move to folder…". A pointer path (drag a card onto a
  * folder) exists, but this is the one a touch or keyboard user has, so it is
@@ -178,24 +227,8 @@ function MoveHeader({ document }: { document: WorkspaceDocumentEntry | null }) {
  * `folders` already excludes where the document sits — choosing it would be
  * a move that moves nothing.
  */
-export function MoveToFolderDialog({
-  document,
-  folders,
-  busy,
-  error,
-  onCancel,
-  onPick,
-}: {
-  /** The document being moved, or null when the dialog is closed. */
-  document: WorkspaceDocumentEntry | null
-  /** Destination folders, `''` being the workspace root. */
-  folders: readonly string[]
-  busy: boolean
-  /** Shown verbatim — the keeper names the path that collided. */
-  error: string | null
-  onCancel: () => void
-  onPick: (folder: string) => void
-}) {
+export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
+  const { document, folders, names, planNewFolder, busy, error, onCancel, onPick } = props
   const [naming, setNaming] = useState(false)
   // A different document starts at the list again.
   useEffect(() => setNaming(false), [document])
@@ -209,6 +242,7 @@ export function MoveToFolderDialog({
             document={document}
             busy={busy}
             error={error}
+            planNewFolder={planNewFolder}
             onBack={() => setNaming(false)}
             onPick={onPick}
           />
@@ -216,6 +250,7 @@ export function MoveToFolderDialog({
           <>
             <FolderOptions
               folders={folders}
+              names={names}
               busy={busy}
               onPick={onPick}
               onNewFolder={() => setNaming(true)}

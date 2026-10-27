@@ -18,7 +18,17 @@ import { expect, it } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
-import { createRowRenderLoader } from './load-row-render.js'
+import {
+  createRowRenderLoader,
+  type DocumentRender,
+  EMPTY_DOCUMENT,
+  type RowRender,
+} from './load-row-render.js'
+
+/** The picture an answer carries, or undefined for one that is not a picture. */
+function picture(answer: RowRender | null): DocumentRender | undefined {
+  return answer === null || answer === EMPTY_DOCUMENT ? undefined : answer
+}
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -70,11 +80,12 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
   const drawn = await load({ documentId: 'd1', path: 'a/b', kind: 'spatial' })
 
   expect(drawn).not.toBeNull()
+  expect(drawn).not.toBe(EMPTY_DOCUMENT)
   // The text proves it drew THIS canvas, not an empty one — an empty scene
   // also produces a valid <svg> and would pass a shape-only assertion.
-  expect(drawn?.svg).toContain('Alpha')
-  expect(drawn?.svg).toContain('Beta')
-  expect(drawn?.bounds.w).toBeGreaterThan(0)
+  expect(picture(drawn)?.svg).toContain('Alpha')
+  expect(picture(drawn)?.svg).toContain('Beta')
+  expect(picture(drawn)?.bounds.w).toBeGreaterThan(0)
 }, 60_000)
 
 // The list draws a tagged board in the colour its workspace declares, as the
@@ -108,9 +119,9 @@ it('draws a tagged board in the colour its tag library declares', async () => {
   const declared = await draw(async () => ({ health: { values: { ok: { color: '4' } } } }))
   const undeclared = await draw()
 
-  expect(declared?.svg).toContain(green)
+  expect(picture(declared)?.svg).toContain(green)
   // The control: the colour comes from the library, not from the board.
-  expect(undeclared?.svg).not.toContain(green)
+  expect(picture(undeclared)?.svg).not.toContain(green)
 }, 60_000)
 
 // A board of file nodes previews as the board that opens: what each node
@@ -158,9 +169,9 @@ it('draws the board a file node embeds inside the thumbnail', async () => {
   // The control: a target the list cannot resolve leaves the card.
   const dangling = await draw([board])
 
-  expect(drawn?.svg).toContain(green)
-  expect(drawn?.svg).toContain('Embedded')
-  expect(dangling?.svg).not.toContain(green)
+  expect(picture(drawn)?.svg).toContain(green)
+  expect(picture(drawn)?.svg).toContain('Embedded')
+  expect(picture(dangling)?.svg).not.toContain(green)
 }, 60_000)
 
 // A note that is mostly `![[…]]` previews as the note that opens, not as the
@@ -196,8 +207,8 @@ it('draws the note a body embeds inside the thumbnail', async () => {
   const drawn = await draw([note, embedded])
   const dangling = await draw([note])
 
-  expect(drawn?.svg).toContain('Quoted paragraph')
-  expect(dangling?.svg).not.toContain('Quoted paragraph')
+  expect(picture(drawn)?.svg).toContain('Quoted paragraph')
+  expect(picture(dangling)?.svg).not.toContain('Quoted paragraph')
 }, 60_000)
 
 // A mood board previews as the pictures it holds, not as a grid of "Image"
@@ -232,7 +243,7 @@ it('draws a picture a board holds inside the thumbnail', async () => {
   // The control: a keeper that holds no such picture leaves the card.
   const missing = await draw(async () => undefined)
 
-  const svg = new DOMParser().parseFromString(drawn?.svg ?? '', 'image/svg+xml')
+  const svg = new DOMParser().parseFromString(picture(drawn)?.svg ?? '', 'image/svg+xml')
   expect(svg.querySelector('image')?.getAttribute('href')).toMatch(/^data:image\/png;base64,/)
-  expect(missing?.svg).not.toContain('<image')
+  expect(picture(missing)?.svg).not.toContain('<image')
 }, 60_000)

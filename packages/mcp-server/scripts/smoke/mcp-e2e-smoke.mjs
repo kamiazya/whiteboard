@@ -24,6 +24,7 @@ import {
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
 import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
+import { folderRenameNamesAFolder } from './lib/folder-rename.mjs'
 import { assertListedRowIsNotPinned } from './lib/listed-pin.mjs'
 import { assertProposalAuthor, SMOKE_AUTHOR } from './lib/proposal-author.mjs'
 import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
@@ -545,6 +546,7 @@ async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
     )
   }
   console.log('[e2e] wb_workspace_edit → two documents, ids returned, batch actor stamped')
+  await folderRenameNamesAFolder({ callTool, expectToolError, workspaceId: WORKSPACE_ID })
 }
 
 async function placementNamingAndDeletionRoundTrip(ctx) {

@@ -1535,16 +1535,17 @@ line attaches, and a line through the box it attaches to satisfies
 nobody, so `optimizeSideChoices` treats such an edge as free; `routeEdge`
 now lets the anchor pass's side win over the edge's own, since the two
 differ only where the search overruled — the overrule has to reach the
-trial that adopts it and the final render alike. Two things moved with
-it. The search is no longer gated at two edges: a lone edge can be its
+trial that adopts it and the final render alike. The search is no
+longer gated at two edges: a lone edge can be its
 own problem, and the sweep's single-edge layouts had been keeping
 whatever the initial ranking picked, foreign body and all — `foreign` 15
 to 7, `own-endpoint` 12 to 10, `interiorInk` 2083 to 955, every price
-column down with them. And the coincident-anchor decision changed: a
-flush-stacked pair named `bottom/top` used to draw the shared point (an
-invisible edge, honouring a degenerate request); the spike its trial
-path makes is a route through its own boxes, so it is overruled into a
-visible route around the pair.
+column down with them.
+
+**Touching boxes are not routed** (`edge-contact.ts`, owner
+decision): a pair sharing a border or overlapping draws an
+arrowhead mark on the target's facing side and leaves the side
+search, so the coincident-ends repair and U-hook preference are narrow now. A gap still routes; `edge-touching-boxes.test.ts` pins it.
 ## The facet score judges what the board SAYS, not where it puts things
 
 `quality/facet-score.ts` (`scoreFacets(canvas)`, from `/scoring`) is

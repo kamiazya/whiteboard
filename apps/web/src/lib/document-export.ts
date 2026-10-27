@@ -1,6 +1,5 @@
 /**
- * The picture a person SAVES of a document: a markdown note's laid-out body,
- * and the file either kind's picture becomes.
+ * The file a picture of a canvas becomes when a person SAVES it.
  *
  * Standalone is the whole difficulty. The screen draws a stored picture
  * through a `blob:` URL, which names memory in THIS page: a saved SVG opened
@@ -8,26 +7,11 @@
  * So every page-local picture is turned into bytes inside the file.
  */
 
-import {
-  type BoundingBox,
-  type ReferenceSeams,
-  renderSceneToSvg,
-  type Scene,
-  sceneDocumentBounds,
-} from '@kamiazya/whiteboard-canvas-render'
-import {
-  createBrowserMeasureText,
-  withViewerFontEmbedded,
-} from '@kamiazya/whiteboard-canvas-viewer'
+import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
+import { withViewerFontEmbedded } from '@kamiazya/whiteboard-canvas-viewer'
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
-import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { type FragmentLoaders, layoutWithFragments } from './fragment-requests.js'
-import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
 import { embedTextInPng } from './png-embed.js'
 import { rasterizeSvgToPng } from './rasterize-svg.js'
-import { layoutMarkdownScene } from './render-preview.js'
-import { backgroundOf, type PictureExportOptions } from './spatial/picture-options.js'
-import { exportEnvelope } from './spatial/scene-render-core.js'
 import { themeFacesNamedBy } from './theme-fonts.js'
 
 /** The two pictures a document can be saved as. */
@@ -62,40 +46,6 @@ export interface DrawnDocument {
   readonly bounds: BoundingBox
   /** PNG pixels per canvas unit it is saved at (default 1); an SVG has none. */
   readonly scale?: number
-}
-
-export interface MarkdownExportOptions {
-  /** The bundle the preview resolves the body's references and pictures through. */
-  readonly references?: ReferenceSeams
-  readonly tagLibrary?: TagLibrary
-  /** Absent is a transparent 1x picture. */
-  readonly picture?: PictureExportOptions
-  /** Injection seam for tests; defaults to the real MathJax/mermaid engines. */
-  readonly fragments?: FragmentLoaders
-}
-
-/**
- * A note is laid out at the page width `wb_scene_render` draws one at, so the
- * web's saved picture and the daemon's of the same note wrap alike.
- */
-const MARKDOWN_EXPORT_WIDTH_PX = 720
-
-/**
- * A markdown note as the preview draws it, as a whole document: the
- * preview's own layout, its math and diagrams included, in the light theme a
- * saved artifact is pinned to.
- */
-export async function renderMarkdownForExport(
-  body: string,
-  options: MarkdownExportOptions = {},
-): Promise<DrawnDocument> {
-  const scene = await markdownExportScene(body, options)
-  const bounds = sceneDocumentBounds(scene)
-  return {
-    svg: renderSceneToSvg(scene, exportEnvelope(bounds, backgroundOf(options.picture))),
-    bounds,
-    ...(options.picture === undefined ? {} : { scale: options.picture.scale }),
-  }
 }
 
 export interface SavedPictureOptions {
@@ -137,25 +87,6 @@ export async function savedPicture(
   // Copied into a fresh ArrayBuffer-backed view: Blob's lib.dom typing
   // rejects ArrayBufferLike-backed Uint8Arrays.
   return new Blob([Uint8Array.from(embedded)], { type: 'image/png' })
-}
-
-/**
- * A note's scene with its math and diagrams drawn, as the preview draws them:
- * the layout's own record of what it asks for — an embedded note's math too —
- * rendered, then answered.
- */
-function markdownExportScene(body: string, options: MarkdownExportOptions): Promise<Scene> {
-  const base = {
-    measure: createBrowserMeasureText(),
-    maxWidth: MARKDOWN_EXPORT_WIDTH_PX,
-    theme: 'light' as const,
-    ...(options.references === undefined ? {} : { references: options.references }),
-    ...(options.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
-  }
-  return layoutWithFragments(
-    (seams) => layoutMarkdownScene(body, { ...base, ...seams }),
-    options.fragments ?? FRAGMENT_ENGINES,
-  )
 }
 
 /**

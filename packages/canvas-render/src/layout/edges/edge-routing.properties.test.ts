@@ -5,7 +5,7 @@
 
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { afterAllFloor, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
@@ -247,12 +247,14 @@ describe('routing properties: anchor fan-out', () => {
 // Occlusion-aware side selection. The generator packs chunky boxes onto a
 // tight grid so overlap — and therefore an occluded default anchor — is
 // the common case (vacuous-generator rule; the mutation check is reverting
-// side selection to ignore occlusion, which must go red).
+// side selection to ignore occlusion, which must go red). The far column and
+// row exist so the two ENDS can sit apart: a touching pair is drawn as its
+// contact, not sided, and the floor below holds that a share still is sided.
 const packedScenario = fc.record({
   rects: fc.array(
     fc.record({
-      x: fc.constantFrom(0, 40, 80, 120, 160),
-      y: fc.constantFrom(0, 40, 80, 120),
+      x: fc.constantFrom(0, 40, 80, 120, 160, 320, 360),
+      y: fc.constantFrom(0, 40, 80, 120, 280),
       w: fc.constantFrom(60, 100, 140),
       h: fc.constantFrom(60, 100, 140),
     }),
@@ -262,14 +264,35 @@ const packedScenario = fc.record({
   toIndex: fc.nat({ max: 5 }),
 })
 
+/**
+ * Whether two boxes touch — a shared stretch of border, or overlapping
+ * bodies — without one holding the other. Such a pair is drawn as its
+ * contact mark (`edge-touching-boxes.test.ts`), which starts inside the
+ * source rather than on a side, so the side properties below skip its
+ * departure. Written from the definition, not from `edge-contact.ts`.
+ */
+function touches(a: SpatialNode, b: SpatialNode): boolean {
+  const ox = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+  const oy = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  const holds = (o: SpatialNode, i: SpatialNode) =>
+    i.x >= o.x && i.y >= o.y && i.x + i.width <= o.x + o.width && i.y + i.height <= o.y + o.height
+  return ox >= 0 && oy >= 0 && (ox > 0 || oy > 0) && !holds(a, b) && !holds(b, a)
+}
+
+const OCCLUSION_TITLE =
+  'a derived side anchor is never strictly inside a foreign node unless every side is'
+
 describe('routing properties: occlusion-aware sides', () => {
+  const reached = { runs: 0, sided: 0, occluded: 0 }
   fcTest.prop([packedScenario], withDefaults())(
-    'a derived side anchor is never strictly inside a foreign node unless every side is',
+    OCCLUSION_TITLE,
     ({ rects, fromIndex, toIndex }) => {
+      reached.runs++
       const nodes = rects.map((r, i) => node(`n${i}`, 'text', r))
       const from = nodes[fromIndex % nodes.length]!
       const to = nodes[toIndex % nodes.length]!
-      if (from.id === to.id) return
+      if (from.id === to.id || touches(from, to)) return
+      reached.sided++
       const routed = routeEdge(
         nodes,
         {
@@ -302,12 +325,18 @@ describe('routing properties: occlusion-aware sides', () => {
         )
         const occluded = (s: string) => occluders.some((o) => strictlyInside(o, sidePoint(self, s)))
         const allOccluded = ['top', 'right', 'bottom', 'left'].every(occluded)
+        if (['top', 'right', 'bottom', 'left'].some(occluded)) reached.occluded++
         expect(allOccluded || !occluded(side)).toBe(true)
       }
       check(from, routed.fromSide)
       check(to, routed.toSide)
     },
   )
+  afterAllFloor([OCCLUSION_TITLE], () => {
+    // Measured over three runs of 200: 120-137 sided, 69-85 occluded ends.
+    expect(reached.sided / reached.runs).toBeGreaterThan(0.4)
+    expect(reached.occluded / reached.runs).toBeGreaterThan(0.2)
+  })
 })
 
 // Zero-bend alignment. Vertically stacked pairs whose x-spans always
@@ -493,9 +522,11 @@ describe('routing properties: crossing minimization', () => {
           if (side === 'top') return p.y === n.y && p.x >= n.x && p.x <= n.x + n.width
           return p.y === n.y + n.height && p.x >= n.x && p.x <= n.x + n.width
         }
-        expect(onSide(byId.get(endNode(e.from) ?? '')!, routed.fromSide, routed.path[0]!)).toBe(
-          true,
-        )
+        const fromNode = byId.get(endNode(e.from) ?? '')!
+        const toNode = byId.get(endNode(e.to) ?? '')!
+        if (!touches(fromNode, toNode)) {
+          expect(onSide(fromNode, routed.fromSide, routed.path[0]!)).toBe(true)
+        }
         expect(
           onSide(
             byId.get(endNode(e.to) ?? '')!,

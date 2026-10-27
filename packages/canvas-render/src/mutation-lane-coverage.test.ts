@@ -359,7 +359,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutation-checked by hand against them.
     //
     // 116 with `layout/nodes/mdast-embed-pending.ts`, the framed "Loading…"
-    // a block embed draws while its target is still being fetched. Outside
+    // a block embed draws while its target is still being fetched, and the
+    // "Empty canvas" line a canvas embed with nothing on it draws. Outside
     // the lane: three guards and one small layout, each pinned by example
     // in `mdast-embed-pending.test.ts` and reached from the browser by
     // `embed-loading-preview.browser.test.tsx`; nothing in it is a cost
@@ -370,9 +371,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // counted in the viewBox. Outside the lane: a constant with no branch,
     // pinned by `scene-bounds.test.ts`'s haloed-run case and mutated by hand
     // to 0 against it.
+    //
+    // 118 with `layout/edges/edge-contact.ts`, the contact mark two touching
+    // boxes are drawn as instead of a route. Outside the lane: a predicate
+    // and one small geometry, pinned by example and by a property over
+    // touching pairs in `edge-touching-boxes.test.ts`, its guards each
+    // mutated by hand against them; nothing in it is a cost model or a search.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 117,
+      production: 118,
     })
   })
 

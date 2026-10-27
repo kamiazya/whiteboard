@@ -17,6 +17,11 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
     ['workspaceApiUrl', urls.workspaceApiUrl(WS), `/api/workspaces/${ENC_WS}`],
     ['workspaceNamesApiUrl', urls.workspaceNamesApiUrl(WS), `/api/workspaces/${ENC_WS}/names`],
     [
+      'workspaceFolderNameApiUrl',
+      urls.workspaceFolderNameApiUrl(WS),
+      `/api/workspaces/${ENC_WS}/folders/name`,
+    ],
+    [
       'workspaceDocumentsApiUrl',
       urls.workspaceDocumentsApiUrl(WS),
       `/api/workspaces/${ENC_WS}/documents`,

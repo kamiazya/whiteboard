@@ -188,8 +188,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // folders. Raised by 64 when path lookup stopped walking the whole record:
   // `nodesAlong` steps down only toward the requested path and the walk reads
   // node meta without copying content, which needs the tree's own node reader
-  // and so cannot leave this file without a value cycle back into it.
-  'packages/loro-adapter/src/workspace-tree.ts': 1076,
+  // and so cannot leave this file without a value cycle back into it. Raised
+  // by 15 for a folder's display name: its schema, its read, and the promotion
+  // that drops it — the two folder-name writers live in
+  // packages/loro-adapter/src/workspace-folder-name.ts.
+  'packages/loro-adapter/src/workspace-tree.ts': 1091,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -520,7 +523,9 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // step, live in `smoke/lib/canvas-view-theme.mjs`; the listed-pin check is
   // `smoke/lib/listed-pin.mjs`, leaving an import and a call here; so are the
   // proposal-author and facet-write refusal checks (`smoke/lib/*.mjs`).
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2721,
+  // Raised by 2 for the folder.rename step's import and call; the step is
+  // packages/mcp-server/scripts/smoke/lib/folder-rename.mjs.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2723,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

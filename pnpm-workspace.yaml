@@ -90,9 +90,6 @@ minimumReleaseAgeExclude:
   # GHSA-27r3-jxmh-p828 (high) is cleared only in 2.4.0, published 2026-10-22;
   # the prod audit gates every merge. prune on or after 2026-10-30
   - body-parser@2.4.0
-  # GHSA-w74x-v6f9-j3xg and three more fast-uri advisories are cleared only in
-  # 3.1.9, published 2026-10-19. prune on or after 2026-10-27
-  - fast-uri@3.1.9
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

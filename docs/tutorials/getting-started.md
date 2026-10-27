@@ -26,7 +26,9 @@ touch screen, tap a card to open the document, and tap its **…** button (or pr
 and hold the card) for its actions (open, pin, rename, delete). With a mouse, a click previews a
 document in the pane beside the list, and a double-click — or Enter on a
 focused one — opens it. That holds for the cards, the **Recent** strip and
-search results alike. Search keeps your query in the box when you open a
+search results alike. Each card shows a small picture of its document — a
+note's picture is cropped to the text it holds — and a document with nothing
+in it yet shows its kind with **Empty** under it. Search keeps your query in the box when you open a
 result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the
@@ -41,7 +43,9 @@ documents** returns you to the folder the document was in.
 note** — and creates one in whichever folder you are standing in. A kind
 cannot be changed later, which is why you pick it by name rather than by
 icon; everything else about a document is editable afterwards, so nothing
-else is asked for. A new document starts at the path `untitled`; the first time
+else is asked for. A new document starts at the path `untitled`, and until it
+has a name the lists call it **Untitled** (**Untitled 2** for `untitled-2`), the
+word its title box shows; the first time
 you give it a name in its title, its path becomes that name (`untitled` to
 `checkout-architecture`), and from then on the path stays put. If you already know what the document is called and where
 it goes, **Name and folder…** in that menu takes both up front; leaving its
@@ -52,6 +56,12 @@ instead. Its first field is the name, with the keyboard already up; type it and
 press **Canvas** or **Markdown note**, and the document is created under that
 name at the path the name earns (`Meeting notes` becomes `meeting-notes`).
 Leave the name empty and it starts at `untitled` as above.
+
+Two documents side by side in one folder cannot share a name: the sheet, the
+**Name and folder…** form and **Rename…** each refuse a name another document
+in the same folder already shows — ignoring case and surrounding spaces — and
+say so beside the field before anything is saved. The same name in another
+folder is fine.
 
 Either way the new document opens straight away, ready to work in. The folder
 you are standing in is part of the address — the URL carries a `?folder=`

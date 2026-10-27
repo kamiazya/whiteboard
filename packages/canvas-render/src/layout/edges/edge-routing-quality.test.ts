@@ -218,17 +218,26 @@ describe('routing quality across the synthetic corpus', () => {
       // all. Every price column moved down with it (bends 8152 -> 8046,
       // border ink 824 -> 770, length 1341164 -> 1338795); crossings and
       // short runways did not move.
-      violations: { 'own-endpoint': 10, foreign: 7, degenerate: 0 },
-      interiorInk: 955,
-      borderInk: 770,
-      bends: 8046,
-      crossings: 494,
-      touches: 36,
+      //
+      // When touching boxes started being drawn as their contact mark (one
+      // arrowhead's run ending on the shared border) rather than routed
+      // round: own-endpoint/foreign 10/7 -> 11/5, bends 8046 -> 5087,
+      // crossings 494 -> 352, touches 36 -> 13, length 1338795 -> 1164519,
+      // border ink 770 -> 487. Interior ink 955 -> 999 and short runways
+      // 136 -> 167 are the marks themselves: each spends its arrowhead inside
+      // the source, and is one arrowhead long by design.
+      violations: { 'own-endpoint': 11, foreign: 5, degenerate: 0 },
+      interiorInk: 999,
+      borderInk: 487,
+      bends: 5087,
+      crossings: 352,
+      touches: 13,
       // 54 -> 22 when a crossing on a waypoint of a straight run started to
-      // hop (the earlier line hops when the later one has no room).
-      unhoppedCrossings: 22,
-      length: 1338795,
-      shortArrowRunway: 136,
+      // hop (the earlier line hops when the later one has no room); 22 -> 9
+      // with the contact marks above.
+      unhoppedCrossings: 9,
+      length: 1164519,
+      shortArrowRunway: 167,
     })
   })
 })
@@ -282,13 +291,17 @@ describe('routing quality past the side-choice optimizer gate', () => {
       crossings: crossings(paths),
       length: Math.round(length),
     }).toEqual({
+      // 100/11578/266/760/855/275766 before touching pairs were drawn as
+      // their contact mark. The 35 marks carry no border ink of their own;
+      // border ink 266 -> 506 is the routed edges, re-sided by a search that
+      // no longer counts the marks, and every other column fell.
       edges: 345,
-      violations: 100,
-      interiorInk: 11578,
-      borderInk: 266,
-      bends: 760,
-      crossings: 855,
-      length: 275766,
+      violations: 93,
+      interiorInk: 11006,
+      borderInk: 506,
+      bends: 664,
+      crossings: 819,
+      length: 269387,
     })
   }, 120_000)
 })

@@ -1,3 +1,4 @@
+import { displayNameKey } from './display-name.js'
 import { DOCUMENT_NAME_MAX_LENGTH, DOCUMENT_PATH_MAX_LENGTH } from './ids.js'
 import { fitToLength } from './text-bound.js'
 
@@ -18,13 +19,16 @@ export function deriveCopyName(
   baseName: string,
   existingNames: ReadonlySet<string> | readonly string[],
 ): string {
-  const existing = existingNames instanceof Set ? existingNames : new Set(existingNames)
+  // Compared as the keepers' sibling rule compares, so a copy never takes a
+  // name another document already shows in another case.
+  const taken = new Set([...existingNames].map(displayNameKey))
+  const free = (name: string) => !taken.has(displayNameKey(name))
   const candidate = (suffix: string) =>
     `${fitToLength(baseName, DOCUMENT_NAME_MAX_LENGTH - suffix.length).trimEnd()}${suffix}`
   const first = candidate(' (copy)')
-  if (!existing.has(first)) return first
+  if (free(first)) return first
   let n = 2
-  while (existing.has(candidate(` (copy ${n})`))) n++
+  while (!free(candidate(` (copy ${n})`))) n++
   return candidate(` (copy ${n})`)
 }
 

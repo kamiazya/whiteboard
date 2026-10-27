@@ -25,6 +25,7 @@ import {
 import {
   type DocumentIndex,
   type DocumentTrash,
+  hasDocumentFolders,
   hasDocumentPins,
   hasDocumentTrash,
   WorkspaceNotFoundError,
@@ -194,6 +195,25 @@ function pinMembers(index: DocumentIndex): Pick<WorkspaceFilesSource, 'setPinned
 }
 
 /**
+ * Present exactly when the index names folders — the tree index does, the
+ * legacy row index has no folder to name.
+ */
+function folderMembers(
+  index: DocumentIndex,
+): Pick<WorkspaceFilesSource, 'listFolderNames' | 'setFolderName'> {
+  if (!hasDocumentFolders(index)) return {}
+  return {
+    listFolderNames: () => index.listFolderNames({ workspaceId: getBrowserWorkspaceId() }),
+    setFolderName: (path, name) =>
+      index.setFolderName({
+        workspaceId: getBrowserWorkspaceId(),
+        path,
+        ...(name === undefined ? {} : { name }),
+      }),
+  }
+}
+
+/**
  * Present exactly when the index keeps a trash (the tree index does; the port
  * does not promise one). Structural rather than instanceof, for the same
  * cross-realm reason ports' isWorkspaceNotFoundError exists.
@@ -233,6 +253,11 @@ function trashMembers(
       if (!purged) throw new Error(trashPurgeRefusal(documentId).title)
     },
   }
+}
+
+/** The members a source has exactly when its index has the capability behind them. */
+function capabilityMembers(index: DocumentIndex) {
+  return { ...pinMembers(index), ...folderMembers(index), ...trashMembers(index) }
 }
 
 /**
@@ -517,7 +542,6 @@ export function createBrowserFilesSource(
       return read.kind === 'blob' ? read.blob : undefined
     },
 
-    ...pinMembers(index),
-    ...trashMembers(index),
+    ...capabilityMembers(index),
   }
 }

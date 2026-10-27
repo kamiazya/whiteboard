@@ -181,6 +181,20 @@ class Model {
   }
 
   /**
+   * The keeper's sibling-name refusal, restated rather than imported: another
+   * document under the same parent shows `name` (its own, or its last segment).
+   */
+  nameTaken(path: string, name: string, selfId?: string): boolean {
+    const parent = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+    const key = (n: string) => n.trim().normalize('NFC').toLowerCase()
+    for (const d of this.docs.values()) {
+      if (d.id === selfId || parent(d.path) !== parent(path)) continue
+      if (key(d.name ?? d.path.slice(d.path.lastIndexOf('/') + 1)) === key(name)) return true
+    }
+    return false
+  }
+
+  /**
    * The reader's alias table: PATHS only. Display names are retired from
    * resolution (path + id are the only written forms; names appear at
    * render time), so a name matching an alias must change nothing here.
@@ -319,7 +333,8 @@ describe('reference semantics under command sequences', () => {
       })
       slots[1] = seedSource.documentId
       // A SHADOW attempt on non-pool paths: X's path is also Y's display
-      // name — and that must change NOTHING, because display names are
+      // name (Y one folder down, since siblings may not share a name) — and
+      // that must change NOTHING, because display names are
       // retired from resolution. '[[shadowed]]' resolves to X and follows
       // X's moves, Y's name notwithstanding. Off-pool so it never contends
       // with command traffic; X sits in slot 2 so the commands can move it.
@@ -339,13 +354,13 @@ describe('reference semantics under command sequences', () => {
       })
       const seedShadowHolder = await wbDocumentCreate(deps, {
         workspaceId: WS,
-        path: 'shadow-holder',
+        path: 'holder/shadow-holder',
         kind: 'markdown',
         name: 'shadowed',
       })
       model.docs.set(seedShadowHolder.documentId, {
         id: seedShadowHolder.documentId,
-        path: 'shadow-holder',
+        path: 'holder/shadow-holder',
         name: 'shadowed',
         kind: 'markdown',
         bodyTokens: [],
@@ -406,7 +421,10 @@ describe('reference semantics under command sequences', () => {
       for (const cmd of cmds) {
         switch (cmd.t) {
           case 'create': {
-            if (model.byPath(cmd.path) !== undefined) {
+            if (
+              model.byPath(cmd.path) !== undefined ||
+              (cmd.name !== undefined && model.nameTaken(cmd.path, cmd.name))
+            ) {
               await expect(
                 wbDocumentCreate(deps, {
                   workspaceId: WS,
@@ -523,6 +541,22 @@ describe('reference semantics under command sequences', () => {
             const id = slots[cmd.slot]
             const doc = id === null || id === undefined ? undefined : model.docs.get(id)
             if (doc === undefined) break
+            const keepsOwn =
+              doc.name !== undefined && doc.name.toLowerCase() === cmd.name?.toLowerCase()
+            if (
+              cmd.name !== undefined &&
+              !keepsOwn &&
+              model.nameTaken(doc.path, cmd.name, doc.id)
+            ) {
+              await expect(
+                deps.documentIndex.setDocumentName({
+                  workspaceId: WS,
+                  documentId: doc.id,
+                  name: cmd.name,
+                }),
+              ).rejects.toThrow(/already called/)
+              break
+            }
             await deps.documentIndex.setDocumentName({
               workspaceId: WS,
               documentId: doc.id,

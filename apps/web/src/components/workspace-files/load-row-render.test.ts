@@ -2,7 +2,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
-import { createRowRenderLoader, type RowRenderDeps } from './load-row-render.js'
+import { createRowRenderLoader, EMPTY_DOCUMENT, type RowRenderDeps } from './load-row-render.js'
 import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
 
 // Hoisted, because the loader imports both of these modules at collection
@@ -160,11 +160,11 @@ describe('createRowRenderLoader', () => {
 
   // An empty body lays out to nothing; asking the pool for it spends a slot
   // to produce a blank picture.
-  it('answers null for an empty body without touching the pool', async () => {
+  it('answers empty for an empty body without touching the pool', async () => {
     const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => ({ body: '   \n  ' }) }) })
-    expect(
-      await createRowRenderLoader(d)({ documentId: 'd1', path: 'a', kind: 'markdown' }),
-    ).toBeNull()
+    expect(await createRowRenderLoader(d)({ documentId: 'd1', path: 'a', kind: 'markdown' })).toBe(
+      EMPTY_DOCUMENT,
+    )
     expect(d.renderMarkdown).not.toHaveBeenCalled()
   })
 
@@ -355,6 +355,41 @@ describe('the theme face a row needs', () => {
 
     expect(fonts.loadThemeFontFromSource).toHaveBeenCalledTimes(1)
     expect(fonts.loadThemeFontFromSource).toHaveBeenCalledWith('Yomogi')
+  })
+
+  // An empty board draws an empty viewBox: a blank pane in the row and the
+  // preview. It answers EMPTY_DOCUMENT, as a blank note does, so both say so —
+  // and never null, which is the answer for a board that could not be drawn.
+  it('answers empty for a board with nothing on it', async () => {
+    pool.run.mockResolvedValue({
+      type: 'laid-out',
+      id: 1,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
+      bounds: { x: 0, y: 0, w: 1, h: 1 },
+      scene: { nodes: [] },
+    })
+
+    const drawn = await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => [],
+    })(board)
+
+    expect(drawn).toBe(EMPTY_DOCUMENT)
+  })
+
+  it('answers null, not empty, for a board the worker could not lay out', async () => {
+    pool.run.mockResolvedValue({ type: 'failed', id: 1, reason: 'boom' })
+
+    const drawn = await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => [],
+    })(board)
+
+    expect(drawn).toBeNull()
   })
 
   // The worker already draws by a library it is handed; this is the seam

@@ -19,7 +19,7 @@ Guides:
 - **[organize-with-tags](organize-with-tags.md)** — tag documents and filter the document
   browser by tag.
 - **[organize-into-folders](organize-into-folders.md)** — move a document into a folder from its
-  menu or by dragging, and rename a folder.
+  menu or by dragging, and name or rename a folder without moving anything.
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — install the `whiteboard` command,
   start the daemon, connect the web app to it through the browser extension, and move a whole
   workspace kept in your browser onto it.

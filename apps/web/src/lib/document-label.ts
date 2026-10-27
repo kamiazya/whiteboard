@@ -1,3 +1,5 @@
+import { isGeneratedPath } from './new-document-path.js'
+
 /**
  * Which stand-in an unnamed document shows: the last segment of its path, or
  * the whole path. Each surface picks one for itself — a row inside a folder
@@ -19,7 +21,12 @@ export function documentLabel(
 ): string {
   if (document.name !== null && document.name !== undefined) return document.name
   if (rule === 'path') return document.path
-  return document.path.slice(document.path.lastIndexOf('/') + 1)
+  const leaf = document.path.slice(document.path.lastIndexOf('/') + 1)
+  // An address the create flow generated is no word anybody chose, so it
+  // reads as the title box's own word for an unnamed document — numbered,
+  // since two of them can sit in one folder.
+  if (isGeneratedPath(leaf)) return `Untitled${leaf.slice('untitled'.length).replace('-', ' ')}`
+  return leaf
 }
 
 /**

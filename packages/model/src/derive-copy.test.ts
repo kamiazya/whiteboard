@@ -13,6 +13,12 @@ const isWellFormed = (text: string): boolean =>
   !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text)
 
 describe('deriveCopyName', () => {
+  // A copy is a name nobody typed, so it must not land on one a sibling shows
+  // under the keepers' own sibling rule: case and padding do not make it new.
+  it('skips a taken name that differs only in case or padding', () => {
+    expect(deriveCopyName('Diagram', [' diagram (COPY) '])).toBe('Diagram (copy 2)')
+  })
+
   it('appends " (copy)" when no collision exists', () => {
     expect(deriveCopyName('Diagram', [])).toBe('Diagram (copy)')
   })

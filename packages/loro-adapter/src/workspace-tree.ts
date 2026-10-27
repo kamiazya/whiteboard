@@ -99,13 +99,23 @@ export type WorkspaceNodeMeta = z.infer<typeof workspaceNodeMetaSchema>
  * changes what a user can do (no creating a deep path in one step). Modelling
  * the folder keeps the port's behaviour and gives later folder operations —
  * move, rename, collapse — something to act on.
+ * Its optional `name` is what a person reads, kept apart from the segment as
+ * a document's is; read loosely, never by the write rule, so a stored name
+ * costs the name at worst and never the folder's subtree.
  */
-export const workspaceFolderMetaSchema = z.object({ segment: z.string().min(1) }).strict()
+export const workspaceFolderMetaSchema = z
+  .object({ segment: z.string().min(1), name: workspaceNodeMetaSchema.shape.name })
+  .strict()
 
 /** A node of the tree: a document, or a folder standing in for a path part. */
 export type WorkspaceNode =
   | { readonly type: 'document'; readonly meta: WorkspaceNodeMeta; readonly path: string }
-  | { readonly type: 'folder'; readonly segment: string; readonly path: string }
+  | {
+      readonly type: 'folder'
+      readonly segment: string
+      readonly path: string
+      readonly name?: string
+    }
 
 export interface WorkspaceDocumentEntry extends WorkspaceNodeMeta {
   /** Derived from ancestry on every read; never stored. */
@@ -154,7 +164,7 @@ function attachContentContainers(node: LoroTreeNode): void {
 
 type Read =
   | { readonly type: 'document'; readonly meta: WorkspaceNodeMeta }
-  | { readonly type: 'folder'; readonly segment: string }
+  | { readonly type: 'folder'; readonly segment: string; readonly name?: string }
 
 /** A stored value as the map's `toJSON` would hand it over. */
 function jsonOf(value: unknown): unknown {
@@ -182,7 +192,7 @@ function readMeta(node: LoroTreeNode): Read | null {
   const asDocument = workspaceNodeMetaSchema.safeParse(raw)
   if (asDocument.success) return { type: 'document', meta: asDocument.data }
   const asFolder = workspaceFolderMetaSchema.safeParse(raw)
-  if (asFolder.success) return { type: 'folder', segment: asFolder.data.segment }
+  if (asFolder.success) return { type: 'folder', ...asFolder.data }
   return null
 }
 
@@ -228,7 +238,8 @@ function pushChildren<T>(
   for (let i = children.length - 1; i >= 0; i--) stack.push(item(children[i] as LoroTreeNode))
 }
 
-function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
+/** Exported for the sibling modules that read the tree whole. */
+export function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
   const stack: Array<{ node: LoroTreeNode; prefix: string; above: string | undefined }> = []
   pushChildren(stack, tree(doc).roots(), (node) => ({ node, prefix: '', above: undefined }))
@@ -428,7 +439,7 @@ export function readWorkspaceNodes(doc: LoroDoc): WorkspaceNode[] {
   return walk(doc).map(({ read, path }) =>
     read.type === 'document'
       ? ({ type: 'document', meta: read.meta, path } as const)
-      : ({ type: 'folder', segment: read.segment, path } as const),
+      : ({ ...read, path } as const),
   )
 }
 
@@ -732,6 +743,10 @@ export function createWorkspaceDocumentAtPath(
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind)
   if (meta.name !== undefined) setChosenName(node, meta.name)
+  // A promoted folder's name was the folder's, not one chosen for the document.
+  else if (existing !== null && existing.node.data.get('name') !== undefined) {
+    node.data.delete('name')
+  }
   node.data.set('createdAt', meta.createdAt)
   node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)

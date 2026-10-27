@@ -137,9 +137,9 @@ describe('FolderContentsList', () => {
     expect(screen.getAllByTestId('card-kind-badge').length).toBeGreaterThan(0)
   })
 
-  it('labels a document by its path segment when nobody named it', () => {
+  it('labels an unnamed document by its generated address, read as Untitled', () => {
     const unnamed: WorkspaceDocumentEntry[] = [{ documentId: 'd9', path: 'design/untitled-3' }]
     render(<FolderContentsList documents={unnamed} folder="design" onOpen={vi.fn()} />)
-    expect(screen.getByTestId('card-title').textContent).toBe('untitled-3')
+    expect(screen.getByTestId('card-title').textContent).toBe('Untitled 3')
   })
 })

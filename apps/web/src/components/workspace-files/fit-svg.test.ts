@@ -43,4 +43,23 @@ describe('fitSvgToBox', () => {
     expect(out).toContain('preserveAspectRatio="xMidYMid meet"')
     expect(out).not.toContain('preserveAspectRatio="none"')
   })
+
+  // A note is laid out at a column's width, so its viewBox spans the column
+  // whatever the text holds: a two-word note fitted whole is two words in
+  // the corner of a mostly empty picture.
+  it('crops to the extent the ink reaches, measured from the viewBox origin', () => {
+    const out = fitSvgToBox('<svg viewBox="-8 -8 656 41.6" width="656"></svg>', 'contain', {
+      w: 190,
+      h: 41.6,
+    })
+    expect(out).toContain('viewBox="-8 -8 190 41.6"')
+  })
+
+  it('never widens the picture past the viewBox it was drawn with', () => {
+    const out = fitSvgToBox('<svg viewBox="0 0 400 300" width="400"></svg>', 'contain', {
+      w: 900,
+      h: 100,
+    })
+    expect(out).toContain('viewBox="0 0 400 100"')
+  })
 })

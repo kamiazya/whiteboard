@@ -144,6 +144,13 @@ export interface MarkdownNodeEditorProps {
   readonly testId?: string
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
+  /**
+   * What Escape is announced as. Absent means Escape discards ("Discarded");
+   * a host whose cancel KEEPS what was typed passes what it keeps, read at the
+   * moment of the cancel rather than at mount, and the editor's description
+   * says so too.
+   */
+  readonly cancelAnnouncement?: string
   readonly onChange?: (text: string) => void
   /**
    * The catalog's Comment seam: the selection as a text anchor over this
@@ -175,6 +182,7 @@ export function MarkdownNodeEditor({
   testId = 'text-node-editor',
   onCommit,
   onCancel,
+  cancelAnnouncement,
   onChange,
   onRequestComment,
   threads,
@@ -190,8 +198,8 @@ export function MarkdownNodeEditor({
   const onRequestCommentRef = useRef(onRequestComment)
   onRequestCommentRef.current = onRequestComment
   // Latest callbacks without recreating the EditorView per parent render.
-  const callbacksRef = useRef({ onCommit, onCancel, onChange })
-  callbacksRef.current = { onCommit, onCancel, onChange }
+  const callbacksRef = useRef({ onCommit, onCancel, onChange, cancelAnnouncement })
+  callbacksRef.current = { onCommit, onCancel, onChange, cancelAnnouncement }
 
   const commit = (view: EditorView) => {
     if (!mountedRef.current || finishedRef.current) return
@@ -201,7 +209,7 @@ export function MarkdownNodeEditor({
   const cancel = () => {
     if (finishedRef.current) return
     finishedRef.current = true
-    announceOnCanvas('Discarded')
+    announceOnCanvas(callbacksRef.current.cancelAnnouncement ?? 'Discarded')
     callbacksRef.current.onCancel()
   }
   const commitAndReturn = (view: EditorView) => {
@@ -389,13 +397,12 @@ export function MarkdownNodeEditor({
           ...(centerContent
             ? { display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }
             : {}),
-          // Explicit, because the canvas root turns selection OFF and this
-          // inherits from it.
+          // Explicit: the canvas root turns selection OFF and this inherits it.
           userSelect: 'text',
           ...style,
         }}
       />
-      <EditorExitDescription id={hintId} />
+      <EditorExitDescription id={hintId} escapeKeeps={cancelAnnouncement !== undefined} />
       <EditorExitHint
         onDone={() => {
           const view = viewRef.current

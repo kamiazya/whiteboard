@@ -9,11 +9,13 @@ import {
 } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
+import { folderDisplayName } from '../../lib/folder-names.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { folderContents } from './folder-contents.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -378,12 +380,13 @@ function FolderCard({
 }) {
   const folderProps = useFolderProps(child.path)
   const actions = useContext(FolderActionsContext)
+  const shown = folderDisplayName(child.path, useContext(FolderNamesContext))
   return (
     <div className="relative">
       <button
         type="button"
         data-folder-path={child.path}
-        aria-label={`Open folder ${child.name}`}
+        aria-label={`Open folder ${shown}`}
         onClick={() => onOpen({ kind: 'folder', path: child.path })}
         {...folderProps}
         className="hover:bg-accent data-[dropping]:ring-ring data-[dropping]:bg-accent flex data-[dropping]:ring-2 w-full flex-col overflow-hidden rounded-md border text-left"
@@ -393,7 +396,7 @@ function FolderCard({
         </span>
         <span className="flex min-w-0 items-center gap-1 px-2 py-1.5 pointer-coarse:pr-11">
           <span data-testid="card-title" className="truncate text-sm">
-            {child.name}
+            {shown}
           </span>
           {/* How much is inside, so a folder is not a blind alley to
                   click into — and the chevron says this card navigates. */}
@@ -405,7 +408,7 @@ function FolderCard({
       </button>
       {actions !== undefined && (
         <ActionsButton
-          name={child.name}
+          name={shown}
           onOpen={(x, y) => actions.openFolderMenu(child.path, x, y)}
           className="absolute right-0 bottom-0"
         />

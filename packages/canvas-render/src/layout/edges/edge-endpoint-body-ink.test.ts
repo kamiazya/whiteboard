@@ -56,7 +56,10 @@ it('never routes a segment of A->B strictly inside any node body, on the exact u
   const edges: CanvasEdge[] = [
     {
       id: 'ab',
-      from: { node: 'A' },
+      // Overlapping boxes left to themselves are drawn as their contact
+      // (`edge-contact.ts`); a named departure face hands the pair to the
+      // search this pins.
+      from: { node: 'A', side: 'bottom' },
       to: { node: 'B' },
     },
     {

@@ -36,6 +36,8 @@ import {
   type SaveVersionResponse,
   saveVersionRequestSchema,
   saveVersionResponseSchema,
+  setFolderNameRequestSchema,
+  setFolderNameResponseSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
   type VersionEntry,
@@ -81,6 +83,31 @@ describe('setPinnedRequestSchema', () => {
 
   it('rejects missing pinned', () => {
     expect(setPinnedRequestSchema.safeParse({}).success).toBe(false)
+  })
+})
+
+describe('setFolderNameRequestSchema', () => {
+  it('takes a path and a name, or a path alone to clear', () => {
+    const valid = { path: 'week-6', name: 'Week 6' }
+    expect(roundtrip(setFolderNameRequestSchema, valid)).toEqual(valid)
+    expect(setFolderNameRequestSchema.parse({ path: 'week-6' })).toEqual({ path: 'week-6' })
+  })
+
+  it('refuses the names every folder-name writer refuses', () => {
+    for (const name of ['', '   ', 'a/b', 'x'.repeat(201)]) {
+      expect(setFolderNameRequestSchema.safeParse({ path: 'week-6', name }).success).toBe(false)
+    }
+  })
+
+  it('refuses an off-grammar path and a stray key', () => {
+    expect(setFolderNameRequestSchema.safeParse({ path: 'Week 6', name: 'x' }).success).toBe(false)
+    expect(
+      setFolderNameRequestSchema.safeParse({ path: 'week-6', name: 'x', rename: true }).success,
+    ).toBe(false)
+  })
+
+  it('answers ok', () => {
+    expect(roundtrip(setFolderNameResponseSchema, { ok: true })).toEqual({ ok: true })
   })
 })
 
@@ -534,6 +561,18 @@ describe('listDocumentsResponseSchema', () => {
 
   it('rejects missing documents', () => {
     expect(listDocumentsResponseSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('carries folder names, and reads a keeper that lists none as absent', () => {
+    const named = { ...valid, folderNames: [{ path: 'week-6', name: 'Week 6' }] }
+    expect(roundtrip(listDocumentsResponseSchema, named)).toEqual(named)
+    expect(listDocumentsResponseSchema.parse(valid).folderNames).toBeUndefined()
+  })
+
+  it('reads malformed folder names as absent rather than losing the documents', () => {
+    const parsed = listDocumentsResponseSchema.parse({ ...valid, folderNames: [{ path: 'a' }] })
+    expect(parsed.folderNames).toBeUndefined()
+    expect(parsed.documents).toHaveLength(1)
   })
 })
 

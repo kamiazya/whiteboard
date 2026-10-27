@@ -170,6 +170,8 @@ const WRITER_CASES: Record<string, (index: TreeIndex, workspaceId: string) => Pr
     index.setDocumentName({ workspaceId, documentId: DOCUMENT_ID, name: 'renamed' }),
   setDocumentPinned: (index, workspaceId) =>
     index.setDocumentPinned({ workspaceId, documentId: DOCUMENT_ID, pinned: true }),
+  setFolderName: (index, workspaceId) =>
+    index.setFolderName({ workspaceId, path: 'folder', name: 'Folder' }),
   restoreDocument: (index, workspaceId) =>
     index.restoreDocument({ workspaceId, documentId: 'not-in-the-trash' }),
   purgeTrashEntry: (index, workspaceId) =>

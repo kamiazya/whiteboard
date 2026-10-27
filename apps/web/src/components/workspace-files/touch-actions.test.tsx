@@ -36,7 +36,11 @@ afterEach(() => {
 function renderPanel() {
   render(
     <WorkspaceFilesPanel
-      source={fakeFilesSource({ listDocuments: async () => rows })}
+      source={fakeFilesSource({
+        listDocuments: async () => rows,
+        listFolderNames: async () => [],
+        setFolderName: async () => {},
+      })}
       onOpenDocument={() => {}}
     />,
   )

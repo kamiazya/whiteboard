@@ -325,6 +325,51 @@ function pinContract(factory: FilesSourceFactory): void {
   })
 }
 
+function folderNameContract(factory: FilesSourceFactory): void {
+  describe('folder names', () => {
+    const fixture = {
+      documents: [
+        { path: 'class/week-6/notes', kind: 'markdown' as const },
+        { path: 'class/week-7/notes', kind: 'markdown' as const },
+        { path: 'class/plan', kind: 'markdown' as const },
+        { path: 'class/plan/outline', kind: 'markdown' as const },
+      ],
+    }
+
+    it('names a folder without moving anything, and clears the name', async () => {
+      const source = await factory(fixture)
+      expect(await source.listFolderNames?.()).toEqual([])
+      await source.setFolderName?.('class/week-6', 'Week 6')
+      expect(await source.listFolderNames?.()).toEqual([{ path: 'class/week-6', name: 'Week 6' }])
+      expect((await source.listDocuments()).map((entry) => entry.path)).toContain(
+        'class/week-6/notes',
+      )
+      await source.setFolderName?.('class/week-6', undefined)
+      expect(await source.listFolderNames?.()).toEqual([])
+    })
+
+    it('refuses the name a sibling folder already shows, in the keeper’s words', async () => {
+      const source = await factory(fixture)
+      await source.setFolderName?.('class/week-6', 'Week 6')
+      await expect(source.setFolderName?.('class/week-7', ' week 6 ')).rejects.toThrow(
+        'Another folder here is already called "week 6".',
+      )
+    })
+
+    it('refuses to name a document used as a folder', async () => {
+      const source = await factory(fixture)
+      await expect(source.setFolderName?.('class/plan', 'Plan')).rejects.toThrow()
+    })
+
+    it('drops the name of a folder its last document left', async () => {
+      const source = await factory(fixture)
+      await source.setFolderName?.('class/week-6', 'Week 6')
+      await source.renameDocumentPath('class/week-6/notes', 'term/week-6/notes')
+      expect(await source.listFolderNames?.()).toEqual([])
+    })
+  })
+}
+
 function trashNameContract(factory: FilesSourceFactory): void {
   describe('trash names', () => {
     it('lists the display name the document had, and none for one that had none', async () => {
@@ -404,6 +449,7 @@ export function describeWorkspaceFilesSourceConformance(
     tagLibraryContract(factory)
     stencilLibraryContract(factory)
     pinContract(factory)
+    folderNameContract(factory)
     trashContract(factory)
     trashNameContract(factory)
   })

@@ -14,6 +14,15 @@ format the document is in, and says which in its `kind` field; there is no
 an explicitly lossy projection rather than a way to read the stored content
 (see [ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
 
+**An edge between two boxes that touch is drawn as a mark, not a route.**
+When the boxes share a stretch of border, or overlap without one holding the
+other, there is no distance to route through, so the edge is drawn as one
+arrowhead whose tip sits on the target's facing side, centred on the stretch
+the two facing sides share. Every routing style draws it the same way, on
+the canvas, in the exports and in `wb_scene_render`. An edge that names a
+side the contact does not use, or stores its own bends, is routed as before.
+Boxes any distance apart, however small, are routed as usual.
+
 **The daemon does not typeset math or draw diagrams.** `wb_scene_render`, the
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code
@@ -23,7 +32,7 @@ knows (the note preview, the daemon's renders and the exports alike), in the
 light or dark palette of the surface they are drawn on. Footnotes are not
 supported: `[^1]` stays in the text as written and its `[^1]: …` definition
 is drawn as an ordinary paragraph where it was written. In the web app, the note preview, the canvas editor, a past version
-opened from version history, and the SVG/PNG exports of either kind (see
+opened from version history, and a canvas's SVG/PNG exports (see
 [Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
 diagrams — in the document's own text, in a note or board it embeds with
 `![[…]]`, and in the note a canvas file node shows. A past version resolves no
@@ -122,7 +131,10 @@ not:
   value; deleting one a record already holds lands. The workspace document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
-  still be kept or shortened. The workspace document's `update` and `promote`
+  still be kept or shortened. It refuses, with
+  `400 {"error":"folder_name_refused"}`, an update that gives a folder a name
+  that is blank, holds a `/` or is longer than 200 characters; a folder name
+  stored before can still be kept or repaired. The workspace document's `update` and `promote`
   refuse, with `413 {"error":"too_many_documents"}`, an update or record that
   would leave the workspace holding more than 2000 documents; a workspace that
   already holds more still takes edits that add no document, and deleting is
@@ -297,6 +309,33 @@ over-long `title` is refused before anything is written — `document.create`
 creates nothing, and through `/api/v1` the answer is
 `400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A
 blank name still clears it, and a name stored before the limit still lists.
+
+A folder can carry a display name of its own, kept apart from its path the
+way a document's is: naming a folder moves nothing, and the folder keeps the
+path it was made with. A folder name holds the same 200-character bound, and
+may not be blank or contain `/`, which is what separates folders in a path.
+It is written by `wb_workspace_edit`'s `folder.rename` op and by
+`PUT /api/workspaces/{id}/folders/name` with `{"path": …, "name": …}` (no
+`name` clears it), and `GET /api/workspaces/{id}/documents` lists it as
+`folderNames: [{"path", "name"}]` beside `documents` when any folder is
+named. The name travels with the folder when it moves, and goes with it
+when the folder empties and is removed. Only a folder can be named: the
+path of a document that has documents below it is a document, not a folder,
+and naming it answers `404`.
+
+Two documents in the same folder may not show the same name, and neither
+may two folders in the same folder. A create, a rename, or a markdown
+document's frontmatter `title` that would give a document the name another
+document beside it already shows — its name, or its last path segment when
+it has none — is refused, and so is a folder name another folder beside it
+shows; names are compared ignoring case, surrounding spaces and Unicode
+composition, so `Week 6`, ` week 6 ` and `WEEK 6` are one name. The refusal
+answers `409 {"error":"display_name_taken"}` from `/api/v1` and the daemon's
+name routes, and stops a `wb_workspace_edit` batch at that op. A folder and a
+document may share a name, and so may two documents in different folders.
+Two names that only meet when two copies of a workspace merge — each named
+while the other could not see it — are both kept: nothing renames either,
+and either can keep its own name in a later write.
 
 A board declares at most **64** semantic axes in `visual.axes/v0` (the facet
 keys it treats as meaning, which the legend scores on every layout).
@@ -728,8 +767,9 @@ next start.
 
 ## Web app exports
 
-The web editor's document row (More actions → Export) saves the open document
-as SVG or PNG, rendered with the light palette regardless of the UI mode so an
+The web editor's document row (More actions → Export) saves an open canvas
+as SVG or PNG (a markdown note's Export… offers only **Save as Markdown (.md)**,
+below), rendered with the light palette regardless of the UI mode so an
 export's bytes never depend on a display preference — and with the document's
 theme, if it names one, since that is part of the document rather than of the
 display.
@@ -745,23 +785,15 @@ Both are remembered per browser and apply to all four picture entries. The
 daemon's `wb_scene_render` and `POST …/export` do not read these checkboxes; the
 PNG route keeps its own `scale` parameter.
 
-The export draws what the editor shows, including what the document points at:
-
-- **A canvas** exports with its pictures, the note or board a file node points
-  at, and what a text node embeds with `![[…]]`. The comment layer — pins, cards,
-  region outlines and the highlights of threads about a passage — is left out of
-  Export as PNG / SVG and drawn by Export as PNG (with comments) / SVG (with
-  comments). A file node pointing at another board draws its
-  miniature whatever its size on screen, as `wb_scene_render` does with
-  `embedReferences`. Math
-  blocks and Mermaid diagrams are drawn as the editor draws them, in a text
-  node and in the note a file node or an embed shows; `wb_scene_render` draws
-  the same canvas with them as source.
-- **A markdown note** exports as its laid-out body, at the 720-pixel page
-  width `wb_scene_render` uses, with its math blocks, Mermaid diagrams,
-  pictures and embeds drawn as the preview draws them — including a math
-  block or a diagram inside a quote, a list item or an embedded note. `wb_scene_render` draws
-  the same note with math and diagrams as source.
+The export draws what the editor shows, including what the canvas points at:
+its pictures, the note or board a file node points at, and what a text node
+embeds with `![[…]]`. The comment layer — pins, cards, region outlines and the
+highlights of threads about a passage — is left out of Export as PNG / SVG and
+drawn by Export as PNG (with comments) / SVG (with comments). A file node
+pointing at another board draws its miniature whatever its size on screen, as
+`wb_scene_render` does with `embedReferences`. Math blocks and Mermaid diagrams
+are drawn as the editor draws them, in a text node and in the note a file node
+or an embed shows; `wb_scene_render` draws the same canvas with them as source.
 
 Stored pictures are written into the file as PNG `data:` URIs, so a saved SVG
 shows them anywhere it is opened. They are re-encoded from the pixels the
@@ -801,8 +833,7 @@ the `whiteboard` keyword — the same pattern
 draw.io uses. A shared PNG therefore carries its exact node coordinates and edges, not just
 pixels; any PNG chunk reader can recover the document, and image viewers ignore
 the chunk. Unlike draw.io, the app does not open such a PNG back as an
-editable canvas: a PNG dropped into the editor is inserted as an image. A
-markdown note has no JSON Canvas form, so its PNG is the picture alone.
+editable canvas: a PNG dropped into the editor is inserted as an image.
 
 There is currently no raster (PNG) export tool and no tool that returns image
 bytes as MCP `ImageContent` — `wb_scene_render` is the closest equivalent for

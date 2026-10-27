@@ -6,6 +6,7 @@ import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
+import { forgetSearchQueries } from '../lib/search-query-memory.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
@@ -22,7 +23,13 @@ import { BrowserIndexPage } from './BrowserIndexPage.js'
 // CALLS, which this page's own effect satisfies on its own; only an assertion
 // on the rendered cards can see this.
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // The box remembers its query per workspace for the page's life, so a
+  // second run of the search case mounted onto 'e' and listed results, not
+  // the cards it waits for.
+  forgetSearchQueries()
+})
 
 const OTHER_WORKSPACE = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
@@ -108,7 +115,7 @@ describe('the card list follows a workspace switch', () => {
     try {
       renderPage(store)
       await waitFor(() => expect(titles()).toContain('Left behind'))
-      fireEvent.change(await screen.findByRole('searchbox', { name: 'Search documents' }), {
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Search documents' }), {
         target: { value: 'e' },
       })
       const results = await screen.findByTestId('search-results')

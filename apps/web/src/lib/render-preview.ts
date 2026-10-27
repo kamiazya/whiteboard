@@ -20,6 +20,7 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromScene } from './document-outline.js'
+import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
 import type { ResolvedTheme } from './theme.js'
@@ -77,7 +78,7 @@ export interface RenderedMarkdownPreview {
   readonly blocks: readonly RailBlock[]
 }
 
-export const PREVIEW_PADDING_PX = 8
+export { PREVIEW_PADDING_PX }
 
 /**
  * Parse -> layout -> serialize, backing the preview pane. This is the ONLY
@@ -184,12 +185,8 @@ function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[
   return anchors
 }
 
-/**
- * The note's scene itself, for a surface that draws it whole rather than
- * as the pane's padded, keyed projection — the saved export. Shared so the
- * picture a person saves is laid out by exactly what the preview paints.
- */
-export function layoutMarkdownScene(
+/** The note's scene itself, before the pane pads and keys it. */
+function layoutMarkdownScene(
   value: string,
   {
     measure,

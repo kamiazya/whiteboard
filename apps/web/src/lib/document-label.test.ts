@@ -25,6 +25,17 @@ describe('documentLabel', () => {
   })
 
   it('answers a root-level path whole under the leaf rule', () => {
-    expect(documentLabel({ name: null, path: 'untitled-2' }, 'leaf')).toBe('untitled-2')
+    expect(documentLabel({ name: null, path: 'roadmap' }, 'leaf')).toBe('roadmap')
+  })
+
+  it('reads a generated address as the word the editor shows for an unnamed document', () => {
+    expect(documentLabel({ path: 'untitled' }, 'leaf')).toBe('Untitled')
+    expect(documentLabel({ name: null, path: 'work/untitled-2' }, 'leaf')).toBe('Untitled 2')
+    expect(documentLabel({ path: 'work/untitled-12' }, 'leaf')).toBe('Untitled 12')
+  })
+
+  it('keeps an address a person chose that only resembles a generated one', () => {
+    expect(documentLabel({ path: 'untitled-1' }, 'leaf')).toBe('untitled-1')
+    expect(documentLabel({ path: 'untitled-notes' }, 'leaf')).toBe('untitled-notes')
   })
 })

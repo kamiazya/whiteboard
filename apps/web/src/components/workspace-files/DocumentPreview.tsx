@@ -21,12 +21,12 @@ import { formatRelative } from '../../lib/format-relative.js'
 import { sceneLinkTarget } from '../../lib/scene-link.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
-import type { DocumentRender } from './load-row-render.js'
+import { EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
 
 export interface DocumentPreviewProps {
   /** `null` is the honest empty state: nothing is selected. */
   readonly document: WorkspaceDocumentEntry | null
-  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
+  readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<RowRender | null>
   readonly onOpen?: (document: WorkspaceDocumentEntry) => void
   /**
    * Resolves a document id drawn as a link target to its listed entry, so a
@@ -50,11 +50,16 @@ type State =
   | { kind: 'idle' }
   | { kind: 'loading'; path: string }
   | { kind: 'drawn'; path: string; svg: string }
+  /** Nothing in it: a blank note, a board with no node. */
   | { kind: 'blank'; path: string }
+  /** It would not draw, which says nothing about what it holds. */
+  | { kind: 'undrawn'; path: string }
 
 /** What the picture's place says while nothing is drawn: a note is written, a canvas is drawn. */
-function undrawnText(document: WorkspaceDocumentEntry, loading: boolean): string {
-  if (loading) return 'Drawing…'
+function undrawnText(document: WorkspaceDocumentEntry, state: State['kind']): string {
+  if (state === 'loading') return 'Drawing…'
+  // Could not be drawn: nothing is known about what it holds.
+  if (state === 'undrawn') return 'No preview.'
   return (document.kind ?? 'markdown') === 'markdown'
     ? 'Nothing written yet.'
     : 'Nothing to draw yet.'
@@ -106,16 +111,14 @@ export function DocumentPreview({
     loadRender(document)
       .then((render) => {
         if (!live) return
-        setState(
-          render === null
-            ? { kind: 'blank', path: document.path }
-            : { kind: 'drawn', path: document.path, svg: render.svg },
-        )
+        if (render === null) setState({ kind: 'undrawn', path: document.path })
+        else if (render === EMPTY_DOCUMENT) setState({ kind: 'blank', path: document.path })
+        else setState({ kind: 'drawn', path: document.path, svg: render.svg })
       })
       // A document that will not draw is still a document: the pane keeps
       // its name, path and age rather than becoming an error.
       .catch(() => {
-        if (live) setState({ kind: 'blank', path: document.path })
+        if (live) setState({ kind: 'undrawn', path: document.path })
       })
     return () => {
       live = false
@@ -141,9 +144,7 @@ export function DocumentPreview({
             className="size-full [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
           />
         ) : (
-          <p className="text-muted-foreground text-sm">
-            {undrawnText(document, state.kind === 'loading')}
-          </p>
+          <p className="text-muted-foreground text-sm">{undrawnText(document, state.kind)}</p>
         )}
       </div>
 

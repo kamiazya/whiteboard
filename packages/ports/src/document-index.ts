@@ -547,6 +547,41 @@ export function isDocumentNotFoundError(error: unknown): error is DocumentNotFou
   )
 }
 
+/**
+ * Thrown when a write would give a folder, or a document, the display name a
+ * sibling of the same kind under the same parent already shows — compared
+ * trimmed, NFC-normalised and case-folded (model's `displayNameKey`).
+ *
+ * A refusal of what the writer can SEE, and no more: two replicas naming two
+ * siblings alike offline both keep their names when they merge, since
+ * nothing could have refused either and a rename nobody made is worse.
+ */
+export class DisplayNameTakenError extends Error {
+  constructor(
+    readonly kind: 'folder' | 'document',
+    /** The path of the folder or document the name was for. */
+    readonly path: string,
+    readonly displayName: string,
+  ) {
+    // The folder is named by where the person already is, not by its
+    // address: a parent's address ("class") is not what its name ("Class")
+    // reads, and the keeper does not hold the name to say it.
+    super(
+      `Another ${kind} here is already called "${displayName.trim()}". ` +
+        `Choose a name no other ${kind} here has.`,
+    )
+    this.name = 'DisplayNameTakenError'
+  }
+}
+
+/** Cross-realm-safe guard for `DisplayNameTakenError`, as `isDocumentNotFoundError` is. */
+export function isDisplayNameTakenError(error: unknown): error is DisplayNameTakenError {
+  return (
+    error instanceof DisplayNameTakenError ||
+    (error instanceof Error && error.name === 'DisplayNameTakenError')
+  )
+}
+
 /** Thrown when an operation would strand or swallow the documents below its target. */
 export class DocumentHasDescendantsError extends Error {
   constructor(
@@ -651,6 +686,10 @@ export interface DocumentIndex {
    * document, because the caller that wanted a new one would otherwise
    * start writing into somebody else's. Claiming the path and assigning the
    * `documentId` is one step, not a check followed by a write.
+   *
+   * Fails `DisplayNameTakenError` when a `name` is given and another
+   * document directly under the same parent already shows it (its name, or
+   * unnamed, its segment). Created without a name, nothing is compared.
    */
   createDocument(input: CreateDocumentInput): Promise<DocumentEntry>
   resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null>
@@ -724,6 +763,10 @@ export interface DocumentIndex {
    * Fails `DocumentNotFoundError` for an id this workspace does not hold, on
    * the same reasoning as `moveDocument`: a rename has a target, and quietly
    * doing nothing is indistinguishable from having renamed it.
+   *
+   * Fails `DisplayNameTakenError` when another document directly under the
+   * same parent already shows the name. The document's own current name is
+   * no duplicate, and clearing is never refused.
    */
   setDocumentName(input: SetDocumentNameInput): Promise<void>
   /**

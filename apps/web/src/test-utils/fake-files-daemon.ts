@@ -14,13 +14,18 @@ import {
   planReferenceRewrite,
   rewriteReferenceTargets,
 } from '@kamiazya/whiteboard-codec'
-import { type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
+import {
+  isSiblingDisplayNameTaken,
+  type TagBearerKind,
+  tagsInUse,
+} from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
   STENCIL_LIBRARY_PATH,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
+import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import { jsonResponse } from './json-response.js'
 
@@ -48,6 +53,8 @@ interface State {
   trash: Trashed[]
   /** Pinned document ids in pin order, so a pin survives a rename the way it does on the daemon. */
   pinned: string[]
+  /** Folder display names by path; a folder no document is under has none. */
+  folderNames: Map<string, string>
   counter: number
 }
 type Body = Record<string, string | boolean | undefined>
@@ -111,6 +118,55 @@ function renameSubtree(state: State, from: string, to: string): void {
   })
 }
 
+/** Folder paths standing now: a prefix some document's path has below it. */
+function foldersStanding(state: State): Set<string> {
+  const folders = new Set<string>()
+  for (const row of state.rows) {
+    const segments = row.path.split('/')
+    for (let i = 1; i < segments.length; i++) folders.add(segments.slice(0, i).join('/'))
+  }
+  return folders
+}
+
+/** Names travel with a moved subtree, and a folder that emptied keeps none, as on the daemon. */
+function moveFolderNames(state: State, from: string, to: string): void {
+  const moved = new Map<string, string>()
+  for (const [path, name] of state.folderNames) {
+    const inside = path === from || path.startsWith(`${from}/`)
+    moved.set(inside ? `${to}${path.slice(from.length)}` : path, name)
+  }
+  state.folderNames = moved
+}
+
+function folderNamesAnswer(state: State) {
+  const standing = foldersStanding(state)
+  // A folder that emptied is pruned, its name with it.
+  for (const path of state.folderNames.keys()) {
+    if (!standing.has(path)) state.folderNames.delete(path)
+  }
+  const rows = [...state.folderNames].map(([path, name]) => ({ path, name }))
+  return rows.length === 0 ? {} : { folderNames: rows }
+}
+
+function setFolderName(state: State, path: string, name: string | undefined): Response {
+  const standing = foldersStanding(state)
+  // A document used as a folder has no folder node to name.
+  if (!standing.has(path) || state.rows.some((row) => row.path === path)) return notFound()
+  if (name === undefined) {
+    state.folderNames.delete(path)
+    return jsonResponse({ ok: true })
+  }
+  const others = [...standing]
+    .filter((other) => other !== path)
+    .map((other) => ({ path: other, name: state.folderNames.get(other) }))
+  if (isSiblingDisplayNameTaken(others, { path, name })) {
+    const message = new DisplayNameTakenError('folder', path, name).message
+    return jsonResponse({ error: 'display_name_taken', message }, 409)
+  }
+  state.folderNames.set(path, name.trim())
+  return jsonResponse({ ok: true })
+}
+
 function setPinned(state: State, path: string, pinned: boolean): Response {
   const row = state.rows.find((candidate) => candidate.path === path)
   if (row === undefined) return notFound()
@@ -166,7 +222,18 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
           kind: row.kind,
           ...(row.name === undefined ? {} : { name: row.name }),
         })),
+        ...folderNamesAnswer(state),
       }),
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/workspaces\/[^/]+\/folders\/name$/,
+    handle: (state, _match, body) =>
+      setFolderName(
+        state,
+        String(body.path),
+        typeof body.name === 'string' ? body.name : undefined,
+      ),
   },
   {
     method: 'POST',
@@ -186,6 +253,7 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
     pattern: /\/documents\/(.+)\/path$/,
     handle: (state, match, body) => {
       renameSubtree(state, match[1] ?? '', String(body.path))
+      moveFolderNames(state, match[1] ?? '', String(body.path))
       return jsonResponse({ path: body.path })
     },
   },
@@ -255,7 +323,7 @@ export function createFakeFilesDaemon(seed: {
   readonly rows: readonly FakeFilesDaemonRow[]
   readonly trashed: readonly Pick<FakeFilesDaemonRow, 'path' | 'kind' | 'name'>[]
 }): typeof globalThis.fetch {
-  const state: State = { rows: [], trash: [], pinned: [], counter: 0 }
+  const state: State = { rows: [], trash: [], pinned: [], folderNames: new Map(), counter: 0 }
   state.rows = seed.rows.map((row) => ({ ...row, id: nextId(state) }))
   state.trash = seed.trashed.map((row) => ({ ...row, id: nextId(state), deletedAt: 1_700_000 }))
 

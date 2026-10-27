@@ -49,7 +49,7 @@ pinch zooms in every tool.
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
 "Canvas, 5 notes. Tab selects the first note" (frames and connections are counted apart, and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
-nodes top to bottom, then left to right (ties by position in the document),
+nodes top to bottom, then left to right (two nodes at exactly the same spot always come in the same order),
 and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
@@ -241,18 +241,25 @@ The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
 to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
 keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent.
+thrown-away draft is not silent. The one exception is a note you have just
+added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
+because a typed note lost to the key that closes the editor would have no
+undo. Press `Esc` on a new note before typing and it is removed.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
 it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
 
 Every node and edge is listed by name for a screen reader, in the order `Tab`
-walks them, and the canvas points at the selected one: a note by its first
+walks them: by where they sit, top to bottom and then left to right, not by
+the order they were added, so a note placed above another is read first. The
+canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes".
+"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+Display panel is said back the same way ("Edge routing: Orthogonal", "Line
+jumps: On").
 
 The controls around a selected node name it ("Resize Review, south-east",
 "More actions for Review") and add three `Tab` stops, not thirteen: the
@@ -269,21 +276,27 @@ Group from the dock, and closing a dialog or the context menu with `Esc`.
 Opening a document, returning to the list or opening Settings moves keyboard
 focus to the page's heading and has a screen reader say where you are
 ("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
-titled the same way ("Roadmap · Whiteboard"). A new, empty note is the
-exception for focus: the editor takes it, so you can type at once, and the
-announcement still plays.
+titled the same way ("Roadmap · Whiteboard"). An empty document is the
+exception for focus, and the announcement still plays: a new, empty note's
+editor takes it, so you can type at once, and an empty canvas's surface takes
+it, so a shortcut such as `N` works the moment the canvas appears — straight
+after **Create a canvas**, with no click first.
 
 ## Searching the document list
 
 In the document list's search box, the results are one key away, and a screen
 reader hears how many there are once the search settles ("3 results for
 “map”", or "No results for “map”"). A search that takes longer than a moment
-shows "Searching…".
+shows "Searching…". The box is a combobox over its results: focus stays in it
+while the arrow keys highlight a result, so you can keep typing, and a screen
+reader names the highlighted one.
 
 | Shortcut | Action |
 |---|---|
-| `ArrowDown` in the search box | Move to the first result |
-| `ArrowDown` / `ArrowUp` on a result | Move to the next or previous result; `ArrowUp` on the first returns to the box |
+| `ArrowDown` / `ArrowUp` in the search box | Highlight the next or previous result; `ArrowUp` on the first highlights none |
+| `Enter` in the search box | Open the highlighted result, or the first when none is highlighted |
+| `Escape` in the search box | Drop the highlight; with none, clear the search |
+| `ArrowDown` / `ArrowUp` on a result reached with `Tab` | Move to the next or previous result; `ArrowUp` on the first returns to the box |
 | `Enter` on a result | Open the document |
 
 ← Back to [reference](README.md)

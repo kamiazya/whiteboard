@@ -83,7 +83,7 @@ function renderList() {
 it('on hearing the move, lists a workspace still kept here and says why', async () => {
   const movedId = await seedTwoWorkspaces()
   renderList()
-  await waitFor(() => expect(titles()).toEqual(['untitled']), { timeout: 15_000 })
+  await waitFor(() => expect(titles()).toEqual(['Untitled']), { timeout: 15_000 })
 
   await removeElsewhere(movedId)
   announceWorkspaceRemoved(movedId)
@@ -103,7 +103,7 @@ it('drops the notice once the person switches to another workspace', async () =>
   await index.createWorkspace({ workspaceId: THIRD })
   await index.createDocument({ workspaceId: THIRD, path: 'elsewhere', kind: 'markdown' })
   renderList()
-  await waitFor(() => expect(titles()).toEqual(['untitled']), { timeout: 15_000 })
+  await waitFor(() => expect(titles()).toEqual(['Untitled']), { timeout: 15_000 })
   await removeElsewhere(movedId)
   announceWorkspaceRemoved(movedId)
   await screen.findByTestId('workspace-moved-notice', {}, { timeout: 15_000 })

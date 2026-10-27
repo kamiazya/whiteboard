@@ -16,6 +16,8 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
   importDocument?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['importDocument']>>>
   setPinned?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['setPinned']>>>
   listTagsInUse?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['listTagsInUse']>>>
+  listFolderNames?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['listFolderNames']>>>
+  setFolderName?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['setFolderName']>>>
 }
 
 /**
@@ -63,5 +65,13 @@ export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): 
     ...(overrides.listTagsInUse === undefined
       ? {}
       : { listTagsInUse: vi.fn(overrides.listTagsInUse) }),
+    // Optional like `setPinned`: absent, folders show their segments and
+    // offer no Rename….
+    ...(overrides.listFolderNames === undefined
+      ? {}
+      : { listFolderNames: vi.fn(overrides.listFolderNames) }),
+    ...(overrides.setFolderName === undefined
+      ? {}
+      : { setFolderName: vi.fn(overrides.setFolderName) }),
   } as FakeFilesSource
 }
