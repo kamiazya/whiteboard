@@ -3,6 +3,8 @@ import {
   deriveCopyPath,
   generateDocumentId,
   isSelfOrDescendant,
+  firstDistinctUnnamedPath,
+  isMovedNameTaken,
   isSiblingDisplayNameTaken,
   SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'
@@ -153,7 +155,9 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
   }
 
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
-    const { workspaceId, path, kind, name } = createDocumentInputSchema.parse(input)
+    const parsed = createDocumentInputSchema.parse(input)
+    const { workspaceId, kind, name } = parsed
+    let path = parsed.path
     if (!this.#workspaces.has(workspaceId)) {
       throw new WorkspaceNotFoundError(workspaceId)
     }
@@ -164,6 +168,13 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     refuseNewDocuments(documents.size)
     if (name !== undefined && isSiblingDisplayNameTaken(documents.values(), { path, name })) {
       throw new DisplayNameTakenError('document', path, name)
+    }
+    if (name === undefined) {
+      const distinct = firstDistinctUnnamedPath(path, documents.values(), (each) =>
+        documents.has(each),
+      )
+      if (distinct === null) throw new DocumentPathTakenError(workspaceId, path)
+      path = distinct
     }
     const entry: DocumentEntry = {
       documentId: generateDocumentId(),
@@ -258,6 +269,19 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     if (!plan.ok) {
       if (plan.reason === 'not-found') throw new DocumentNotFoundError(workspaceId, from)
       throw new DocumentPathTakenError(workspaceId, plan.path)
+    }
+    const root = documents.get(from)
+    if (root !== undefined) {
+      const staying = [...documents.values()].filter(
+        (entry) => !isSelfOrDescendant(entry.path, from),
+      )
+      if (isMovedNameTaken(staying, { from, to, name: root.name })) {
+        throw new DisplayNameTakenError(
+          'document',
+          to,
+          root.name ?? to.slice(to.lastIndexOf('/') + 1),
+        )
+      }
     }
     for (const move of plan.moves) {
       const entry = documents.get(move.from)

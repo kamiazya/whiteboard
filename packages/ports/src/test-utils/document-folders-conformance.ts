@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentFolders, DocumentIndex } from '../index.js'
 import { DisplayNameTakenError, DocumentNotFoundError, WorkspaceNotFoundError } from '../index.js'
+import { describeMoveFolderName } from './document-index-move-name-conformance.js'
 
 type FolderIndex = DocumentIndex & DocumentFolders
 
@@ -45,6 +46,7 @@ export function describeDocumentFoldersConformance(makeIndex: MakeFolderIndex): 
     describeFolderNameLifetime(withIndex)
     describeFolderRefusals(withIndex)
     describeFolderDuplicates(withIndex)
+    describeMoveFolderName(withIndex, WS)
   })
 }
 

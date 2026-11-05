@@ -45,6 +45,8 @@ import {
   displayNameKey,
   generateDocumentId,
   isSelfOrDescendant,
+  firstDistinctUnnamedPath,
+  isMovedNameTaken,
   isSiblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
 import type {
@@ -375,8 +377,13 @@ export class LoroWorkspaceDocumentIndex
       refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
       refuseNewFoldersAt(nodes, input.path)
       if (input.name !== undefined) refuseSiblingDocumentName(nodes, input.path, input.name)
+      const path =
+        input.name === undefined &&
+        !nodes.some((node) => node.type === 'document' && node.path === input.path)
+          ? distinctUnnamedPath(nodes, input.path)
+          : input.path
       const created = createWorkspaceDocumentAtPath(doc, {
-        path: input.path,
+        path,
         documentId: generateDocumentId(),
         kind: input.kind,
         ...(input.name === undefined ? {} : { name: input.name }),
@@ -389,7 +396,7 @@ export class LoroWorkspaceDocumentIndex
       // else: another replica may be creating the same path right now and
       // both will survive the merge. It stops the ordinary case — one user,
       // one device — without claiming to be a global invariant.
-      if (created === null) throw new DocumentPathTakenError(input.workspaceId, input.path)
+      if (created === null) throw new DocumentPathTakenError(input.workspaceId, path)
       await this.docs.save(input.workspaceId, doc)
       // Through entryOf, so a create answers the same shape a resolve does —
       // updatedAt included; the conformance suite compares them directly.
@@ -485,6 +492,7 @@ export class LoroWorkspaceDocumentIndex
       const taken = moveCollision(nodes, moving, input.from, input.to)
       if (taken !== undefined) throw new DocumentPathTakenError(input.workspaceId, taken)
       refuseNewFoldersAt(nodes, input.to)
+      refuseMovedName(nodes, moving, input.from, input.to)
       // ONE tree move. The descendants come with it because their paths are
       // their ancestors' — there is no per-row rewrite to order, so the
       // depth-ordering a row-backed store needs does not arise.
@@ -663,6 +671,46 @@ function refuseSiblingDocumentName(
   if (isSiblingDisplayNameTaken(others, { path, name })) {
     throw new DisplayNameTakenError('document', path, name)
   }
+}
+
+/**
+ * Refuses a move that would leave the node at `from` showing, under its new
+ * parent, a name a sibling of the same kind already shows. Only the root of
+ * the moving subtree changes parent; everything below it keeps its siblings.
+ */
+function refuseMovedName(
+  nodes: readonly WorkspaceNode[],
+  moving: readonly WorkspaceNode[],
+  from: string,
+  to: string,
+): void {
+  for (const root of moving.filter((node) => node.path === from)) {
+    const kind = root.type
+    const name = root.type === 'folder' ? root.name : root.meta.name
+    const staying = nodes.flatMap((node) =>
+      // An ancestor of `from` either empties with the move (and is gone) or
+      // stays and collides on path, which was refused before this runs.
+      node.type === kind &&
+      !isSelfOrDescendant(node.path, from) &&
+      !isSelfOrDescendant(from, node.path)
+        ? [{ path: node.path, name: node.type === 'folder' ? node.name : node.meta.name }]
+        : [],
+    )
+    if (isMovedNameTaken(staying, { from, to, name })) {
+      throw new DisplayNameTakenError(kind, to, name ?? to.slice(to.lastIndexOf('/') + 1))
+    }
+  }
+}
+
+/** The address an unnamed document takes so it does not read like a named sibling. */
+function distinctUnnamedPath(nodes: readonly WorkspaceNode[], path: string): string {
+  const documents = nodes.flatMap((node) =>
+    node.type === 'document' ? [{ path: node.path, name: node.meta.name }] : [],
+  )
+  const taken = new Set(nodes.map((node) => node.path))
+  // Null only past a thousand suffixes: the requested address stands and the
+  // path-taken rules answer for it.
+  return firstDistinctUnnamedPath(path, documents, (each) => taken.has(each)) ?? path
 }
 
 /** Whether a purge or restore of `entry` must leave its bytes for another trash row. */
