@@ -87,6 +87,7 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
+import { anchorResolverFor } from '../../lib/anchor-resolver.js'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
@@ -2047,6 +2048,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // handler closes over the new id.
                 key={thread.id}
                 thread={thread}
+                orphaned={anchorResolverFor({ kind: 'spatial', canvas })?.(thread) === 'orphaned'}
                 box={(() => {
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
