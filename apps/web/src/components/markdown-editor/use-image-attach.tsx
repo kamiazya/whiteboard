@@ -96,7 +96,10 @@ function writeStored(
   )
   const failed = results.find((result) => !result.ok)
   setNotice(failed === undefined || failed.ok ? refusal : failed.reason)
-  if (markup.length === 0) return api?.applyEffects(dropPendingImage(token))
+  if (markup.length === 0) {
+    api?.applyEffects(dropPendingImage(token))
+    return
+  }
   let inserted = false
   api?.run((target) => {
     inserted = insertPendingImage(token, markup.join('\n\n'))(target)

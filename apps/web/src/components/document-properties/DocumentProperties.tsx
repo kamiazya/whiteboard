@@ -75,16 +75,9 @@ export function DocumentProperties({
   status,
   actions,
 }: DocumentPropertiesProps) {
-  const {
-    draftTitle,
-    setDraftTitle,
-    editBaselineRef,
-    typedRef,
-    suggestionsId,
-    refusal,
-    commit,
-    settled,
-  } = useTitleEditing(title, onTitleChange)
+  const editing = useTitleEditing(title, onTitleChange)
+  const { draftTitle, setDraftTitle, editBaselineRef, typedRef, suggestionsId, refusal, commit } =
+    editing
 
   return (
     <div
@@ -168,13 +161,7 @@ export function DocumentProperties({
             const typed = typedRef.current
             typedRef.current = null
             if (typed === null || typed.trim() === editBaselineRef.current.trim()) return
-            // Announced once the keeper has answered, and only if it stored
-            // the name: a refusal has its own alert, and a status saying
-            // "Renamed" beside it would tell a screen reader both.
-            const heading = documentHeading(typed.trim())
-            void settled().then((answer) => {
-              if (answer === null) announceRoute(`Renamed to ${heading}`)
-            })
+            editing.announceWhenStored(`Renamed to ${documentHeading(typed.trim())}`)
             onTitleSettled?.(typed.trim())
           }}
           placeholder="Untitled"
@@ -210,7 +197,7 @@ function useTitleEditing(title: string, onTitleChange: DocumentPropertiesProps['
   // before a state update could reach the blur's closure.
   const typedRef = useRef<string | null>(null)
   const suggestionsId = useId()
-  const { refusal, commit, settled } = useTitleCommit(onTitleChange)
+  const { refusal, commit, announceWhenStored } = useTitleCommit(onTitleChange)
   return {
     draftTitle,
     setDraftTitle,
@@ -219,7 +206,7 @@ function useTitleEditing(title: string, onTitleChange: DocumentPropertiesProps['
     suggestionsId,
     refusal,
     commit,
-    settled,
+    announceWhenStored,
   }
 }
 
@@ -257,7 +244,17 @@ function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange'])
       if (ticket === latestRef.current) setRefusal(said)
     })
   }
-  return { refusal, commit, settled: () => answerRef.current }
+  /**
+   * Announces `said` once the keeper has answered the newest commit, and only
+   * if it stored the name: a refusal has its own alert, and a status saying
+   * "Renamed" beside it would tell a screen reader both.
+   */
+  const announceWhenStored = (said: string) => {
+    void answerRef.current.then((answer) => {
+      if (answer === null) announceRoute(said)
+    })
+  }
+  return { refusal, commit, announceWhenStored }
 }
 
 /**
