@@ -28,10 +28,13 @@ function Note({
   initial,
   store,
   onBody,
+  generation = 0,
 }: {
   initial: string
   store?: (file: File) => Promise<ImageStoreResult>
   onBody: (body: string) => void
+  /** A new value remounts the editor, as a document switch or a CRDT rebind does. */
+  generation?: number
 }) {
   const [value, setValue] = useState(initial)
   const references = useReferenceSeams({
@@ -42,6 +45,7 @@ function Note({
   return (
     <div style={{ height: 500 }}>
       <MarkdownEditor
+        key={generation}
         theme="light"
         value={value}
         onChange={(next) => {
@@ -198,6 +202,32 @@ describe('an image in a note', () => {
       expect(screen.getByTestId('note-image-notice').textContent).toContain('Disk is full.'),
     )
     expect(onBody).not.toHaveBeenCalled()
+  })
+
+  it('says so when an upload finishes after the editor was remounted', async () => {
+    const upload = held()
+    await setViewport(1280, 800)
+    const onBody = vi.fn()
+    const { rerender } = render(<Note initial="ab" store={upload.store} onBody={onBody} />)
+    const content = document.querySelector('.cm-content') as HTMLElement
+    fireEvent(
+      content,
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: filesOf(PNG()),
+      }),
+    )
+    await vi.waitFor(() => expect(upload.pending()).toBe(1))
+    rerender(<Note initial="ab" store={upload.store} onBody={onBody} generation={1} />)
+    upload.resolve(0, 'asset:orphan')
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('note-image-notice').textContent).toContain('not added'),
+    )
+    expect(screen.getByTestId('note-image-notice').textContent).toContain('meter.png')
+    expect(onBody).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await vi.waitFor(() => expect(screen.getByTestId('note-image-notice').textContent).toBe(''))
   })
 
   it('refuses a type the keeper cannot store before uploading it', async () => {

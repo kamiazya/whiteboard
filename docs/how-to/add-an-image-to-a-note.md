@@ -33,6 +33,10 @@ an upload the keeper turns away.
 
 ## What else to know
 
+- If the note is reopened while a picture uploads — you switch documents, or the editor
+  reconnects — the picture is stored but not written into the note, and the editor says so.
+  Add it again with **Image…**.
+
 - An image a note names is never removed by the workspace's file clean-up, also while the
   note is in the trash or in a saved version.
 - **Save as Markdown (.md)** saves the line above as text and no pixels: the file names the
