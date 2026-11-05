@@ -1,6 +1,6 @@
 // The dock's Group always makes a new, named-on-arrival frame in free space,
 // so it never lands invisible over existing work nor wraps a selection the
-// person did not ask to group — that is the menu's Group selection.
+// person did not ask to group — that is the menu's Frame selection.
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame } from '@kamiazya/whiteboard-model'

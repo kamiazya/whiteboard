@@ -136,7 +136,7 @@ const CASCADE_STEP_PX = 24
 /** Bounded search depth: `findFreeSpot` never loops forever on a densely occupied canvas. */
 const MAX_CASCADE_STEPS = 50
 
-function boxesIntersect(a: Box, b: Box): boolean {
+export function boxesIntersect(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 

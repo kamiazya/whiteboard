@@ -27,7 +27,7 @@ function addedMessage(added: readonly SpatialNode[], next: SpatialCanvas) {
       const members = next.nodes.filter(
         (node) => node.id !== only.id && !isFrame(node) && frameHolds(only, node),
       )
-      if (members.length > 0) return `Grouped ${plural(members.length, 'node', 'nodes')}`
+      if (members.length > 0) return `Framed ${plural(members.length, 'node', 'nodes')}`
     }
     return ADDED[nodeKind(only) ?? ''] ?? 'Node added'
   }

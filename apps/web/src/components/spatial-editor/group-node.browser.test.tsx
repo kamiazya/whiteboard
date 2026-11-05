@@ -1,5 +1,5 @@
 // Group nodes (JSON Canvas `type: 'group'`): an empty frame from the
-// palette, "Group selection" framing a multi-selection, geometric
+// palette, "Frame selection" framing a multi-selection, geometric
 // containment moves (the frame carries fully-contained nodes), label
 // editing, and frame deletion that keeps members. Real pointer input for
 // the drag/double-press paths.
@@ -112,7 +112,7 @@ it('a real double-click on the frame name edits it; empty commit removes it', as
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).not.toHaveProperty('label'))
 })
 
-it('Group selection from a multi-selected node frames the selection with padding', async () => {
+it('Frame selection from a multi-selected node frames the selection with padding', async () => {
   const twoLoose: SpatialCanvas = {
     nodes: [
       textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
@@ -136,7 +136,7 @@ it('Group selection from a multi-selected node frames the selection with padding
 
   rightClick(root, 180, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame selection' }))
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
   const frame = latest.canvas.nodes[0]
@@ -150,7 +150,7 @@ it('Group selection from a multi-selected node frames the selection with padding
   )
 })
 
-it('Group selection from a shift-added node frames the whole selection', async () => {
+it('Frame selection from a shift-added node frames the whole selection', async () => {
   const twoLoose: SpatialCanvas = {
     nodes: [
       textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
@@ -168,7 +168,7 @@ it('Group selection from a shift-added node frames the whole selection', async (
 
   rightClick(root, 360, 250)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame selection' }))
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
   expect(latest.canvas.nodes[0]).toMatchObject({ x: 96, y: 96, width: 348, height: 208 })
@@ -252,7 +252,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
   })
 })
 
-it('Group selection can frame a selection that includes a group frame', async () => {
+it('Frame selection can frame a selection that includes a group frame', async () => {
   const mixed: SpatialCanvas = {
     nodes: [
       groupNode({ id: 'g1', x: 80, y: 80, width: 200, height: 140 }),
@@ -277,7 +277,7 @@ it('Group selection can frame a selection that includes a group frame', async ()
 
   rightClick(root, 450, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame selection' }))
 
   // A new OUTER frame prepends, enclosing the inner frame and both nodes
   // (min corner 80,80 / max corner 520,220, plus 24px padding).

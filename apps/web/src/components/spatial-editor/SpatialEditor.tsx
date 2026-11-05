@@ -143,6 +143,7 @@ import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { canvasRootLabel, selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
+import { LayoutStatus } from './LayoutStatus.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -163,6 +164,7 @@ import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { toolAnnouncement } from './tool-announcement.js'
+import { useRemoveAbandonedNote } from './use-abandoned-note.js'
 import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
@@ -232,22 +234,11 @@ export interface SpatialEditorProps {
   /** Tags in use anywhere in the workspace, offered by every tag row beside the board's own. */
   readonly tagSuggestions?: readonly string[]
   /**
-   * The tool active on mount. Pages resolve it from the canvas's own shape
-   * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
-   * ready to place, one with content opens in navigation mode so a plain
-   * drag pans instead of moving someone's work. Defaults to 'hand' for
-   * callers that express no preference; tests exercising editing flows pass
-   * 'select' explicitly.
+   * The tool active on mount. A canvas opens in Select; pages pass the
+   * tab's last resting tool for the document instead when there is one
+   * (`resolveInitialTool`).
    */
   readonly defaultTool?: EditorTool
-  /**
-   * The tool this canvas should open in, resolved by the page only once its
-   * document has loaded (the node count that decides it is not known at
-   * mount). Applied exactly once, and never over a choice the user already
-   * made with the palette — an opening preference must not reach in and
-   * change the mode someone is working in.
-   */
-  readonly initialTool?: EditorTool
   /** Reports a tool the user picked with the palette, so the host can remember it. */
   readonly onToolChosen?: (tool: EditorTool) => void
   /** Names the document for viewport memory: pan and zoom are restored per key within a session. */
@@ -425,8 +416,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       className,
       testId = DEFAULT_TEST_ID,
       theme,
-      defaultTool = 'hand',
-      initialTool,
+      defaultTool = 'select',
       onToolChosen,
       viewportKey,
       lockedNodeIds,
@@ -479,17 +469,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       longPressRef,
       clearLongPress,
     } = useInteractionState({ canvas })
+    useRemoveAbandonedNote({ gestureStateRef, canvasRef, onChange })
     const selectedId = selectionState.primaryId
     const {
       tool,
       setTool,
-      toolChosenByUserRef,
       contextMenu,
       setContextMenu,
       longPressPulse,
       setLongPressPulse,
       openContextMenuAtRef,
-    } = useToolState({ defaultTool, initialTool })
+    } = useToolState(defaultTool)
     const emptyHintId = useId()
     const a11yIdPrefix = useId()
     /**
@@ -1172,7 +1162,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const changeTool = (next: EditorTool) => {
       setTool(next)
       announceOnCanvas(toolAnnouncement(next, canvas.nodes.length > 0, hasCoarsePointer()))
-      toolChosenByUserRef.current = true
       onToolChosen?.(next)
       // A context menu belongs to the mode it opened in; it must not
       // outlive a switch (especially into view-only hand mode).
@@ -1630,6 +1619,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {canvas.nodes.length === 0 && (
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
         )}
+        <LayoutStatus current={sceneCurrent} />
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
         )}

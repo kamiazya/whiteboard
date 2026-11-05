@@ -165,8 +165,9 @@ describe('SpatialEditorHandle', () => {
       })
 
       // Node "b" spans canvas x 250..330, y 20..60: its centre (290, 40) lands
-      // on the container's centre (400, 300), which is the pan Frame selection makes.
-      expect(transformOf(container)).toBe('scale(1) translate(110px, 260px)')
+      // on the centre of the strip between the tool-chip clearance (50) and
+      // the dock (70) — (400, 290) — which is the pan Frame selection makes.
+      expect(transformOf(container)).toBe('scale(1) translate(110px, 250px)')
     })
 
     it('fitToContent() with no ids frames every node', () => {
@@ -177,7 +178,7 @@ describe('SpatialEditorHandle', () => {
       })
 
       // Both nodes span canvas x 20..330, y 20..80, centred on (175, 50).
-      expect(transformOf(container)).toBe('scale(1) translate(225px, 250px)')
+      expect(transformOf(container)).toBe('scale(1) translate(225px, 240px)')
     })
 
     it('fitToContent brings a node far outside the container into view', () => {
@@ -193,7 +194,7 @@ describe('SpatialEditorHandle', () => {
         ref.current?.fitToContent(['far'])
       })
       // A single box is centred, not pinned to the corner.
-      expect(transformOf(container)).toBe('scale(1) translate(-2650px, -1730px)')
+      expect(transformOf(container)).toBe('scale(1) translate(-2650px, -1740px)')
 
       act(() => {
         ref.current?.fitToContent(['near', 'far'])
@@ -355,5 +356,54 @@ describe('paper (ADR-0030)', () => {
       />,
     )
     expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(255, 255, 255)')
+  })
+})
+
+describe('the layout status', () => {
+  it('sits in the editor chrome, not in the panned and zoomed canvas layer', () => {
+    const { container } = render(
+      <SpatialEditor
+        theme="light"
+        canvas={twoNodeCanvas()}
+        onChange={() => {}}
+        measure={fakeMeasure}
+      />,
+    )
+    const status = container.querySelector('[data-testid="layout-status"]')
+    expect(status).not.toBeNull()
+    expect(status?.closest('[data-testid="viewport-transform"]')).toBeNull()
+  })
+})
+
+describe('leaving the canvas mid-edit', () => {
+  function mountWithNewNote(start: SpatialCanvas) {
+    let latest = start
+    const view = render(
+      <SpatialEditor
+        theme="light"
+        defaultTool="select"
+        canvas={start}
+        onChange={(next) => {
+          latest = next
+        }}
+        measure={fakeMeasure}
+      />,
+    )
+    fireEvent.click(view.getByTestId('add-button'))
+    fireEvent.click(view.getByRole('menuitem', { name: 'Note' }))
+    return { view, latest: () => latest }
+  }
+
+  it('removes a new note that was left empty', () => {
+    const { view, latest } = mountWithNewNote({ nodes: [], edges: [] })
+    expect(latest().nodes).toHaveLength(1)
+    view.unmount()
+    expect(latest().nodes).toHaveLength(0)
+  })
+
+  it('keeps the notes that were already there', () => {
+    const { view, latest } = mountWithNewNote(twoNodeCanvas())
+    view.unmount()
+    expect(latest().nodes.map((node) => node.id)).toEqual(['a', 'b'])
   })
 })

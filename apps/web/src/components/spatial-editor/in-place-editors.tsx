@@ -2,7 +2,6 @@ import { commentCornerOf } from '@kamiazya/whiteboard-model'
 import type { ComponentProps } from 'react'
 import { CommentComposeOverlay } from './comment-compose-overlay.js'
 import type { EditorGesture } from './editor-gesture.js'
-import { LayoutStatus } from './LayoutStatus.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
 import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 
@@ -38,8 +37,7 @@ export interface InPlaceEditorsProps {
 }
 
 /**
- * The editors that open ON the canvas rather than in a panel (and the layout
- * status, the one other thing drawn over it that follows the scene): an edge's
+ * The editors that open ON the canvas rather than in a panel: an edge's
  * label, a group's label, a new comment, and a node's own text. Each draws
  * in the board's palette and the family the scene declares, so a draft does
  * not move when it commits.
@@ -49,7 +47,6 @@ export function InPlaceEditors(props: InPlaceEditorsProps) {
   const { canvas, viewport, apply } = gesture
   return (
     <>
-      <LayoutStatus current={props.sceneCurrent} />
       {edgeLabel.id !== null && (
         <EdgeLabelEditorOverlay
           editId={edgeLabel.id}

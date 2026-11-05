@@ -23,9 +23,9 @@ describe('what a canvas change sounds like', () => {
     expect(canvasChangeMessage(two, { nodes: [a], edges: [] })).toBe('Deleted 1 node')
   })
 
-  it('a frame that arrives around existing nodes is a grouping', () => {
+  it('a frame that arrives around existing nodes says it framed them', () => {
     const frame = groupNode({ id: 'g', x: -10, y: -10, width: 340, height: 80 })
-    expect(canvasChangeMessage(two, { nodes: [frame, a, b], edges: [] })).toBe('Grouped 2 nodes')
+    expect(canvasChangeMessage(two, { nodes: [frame, a, b], edges: [] })).toBe('Framed 2 nodes')
   })
 
   it('a new edge says which two it joins', () => {

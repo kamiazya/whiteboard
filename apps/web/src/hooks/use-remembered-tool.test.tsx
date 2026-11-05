@@ -44,10 +44,4 @@ describe('useRememberedTool', () => {
     expect(readLastTool('doc-a')).toBe('select')
     expect(readLastTool('doc-b')).toBeNull()
   })
-
-  it('writes nothing before the document has loaded and the tool is unknown', () => {
-    const { unmount } = renderHook(() => useRememberedTool('doc-a', undefined))
-    unmount()
-    expect(readLastTool('doc-a')).toBeNull()
-  })
 })

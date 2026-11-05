@@ -17,7 +17,7 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you were last using on it, chosen or not |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas opens in Select; one you come back to within the same browser session returns to whichever of Select and Hand you were last using on it |
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |
@@ -103,7 +103,7 @@ example "Aligned 3 nodes left").
 **Tidy** (the right-click menu of a selection, or **Tidy canvas** on empty
 space) lines boxes up and clears overlaps without taking anything out of its
 frame: a frame's contents are tidied inside it, a frame drawn mostly inside
-another, such as one made with **Group selection**, counts as inside it, and
+another, such as one made with **Frame selection**, counts as inside it, and
 a frame grows down or right to make room rather than moving away from the
 frames beside it. Frames are never left overlapping one another. A screen reader hears
 what it did ("Tidied 6 notes in 2 frames"), or "Already tidy" when there was
@@ -192,7 +192,9 @@ would. Later edits never move the view.
 When a panel covers part of the canvas, as the inspector does in a narrow
 window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
 frame their target in the part you can still see, and opening a panel over the
-selected node moves it clear.
+selected node moves it clear. **Zoom to fit** and **Zoom to the selection**
+also keep what they frame clear of the dock along the bottom and leave room
+along the top for the action buttons a selected node shows above itself.
 
 
 The dock carries one view control — **zoom to fit** — and it is there in
@@ -231,8 +233,8 @@ selection, or nudging several nodes each undo in a single press.
 
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
-Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the Select tool's right-click menus (`Shift + F10` opens the same menus from the keyboard) — Align and Distribute on
+Redo under Edit and a closing line that Align, Distribute, Tidy and Frame selection
+have no key and live in the Select tool's right-click menus (`Shift + F10` opens the same menus from the keyboard) — Align and Distribute on
 a selection of two or more nodes — since the Hand tool's right-click offers
 comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
@@ -278,7 +280,8 @@ keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
 thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
-undo. Press `Esc` on a new note before typing and it is removed.
+undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
+while a new note is still empty removes it too.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
@@ -300,7 +303,7 @@ connection, because a line asserts no relation.
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 including the frame a node sits in ("Selected: Web App, in Frontend (3 of 8)"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes". Moving a node across a frame's edge, by
+"Framed 3 nodes", "Deleted 2 nodes". Moving a node across a frame's edge, by
 nudging or dragging, is said too ("Web App moved into Backend", "Web App left
 Frontend", "Web App moved from Frontend into Backend"); a move that stays inside
 its frame says nothing, so a run of nudges is quiet until one crosses an edge. Choosing how edges are drawn in the
