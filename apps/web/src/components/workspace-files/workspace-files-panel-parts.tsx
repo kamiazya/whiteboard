@@ -79,6 +79,12 @@ function searchResultRows({
   )
 }
 
+/** A kind as people say it — never "spatial document", which is the model's word. */
+export const KIND_NOUN: Readonly<Record<DocumentKind, string>> = {
+  spatial: 'a canvas',
+  markdown: 'a note',
+}
+
 /**
  * What the last write refused to do, if anything. Three separate `role=alert`
  * paragraphs rather than one, because each names a different subject and a
@@ -88,12 +94,6 @@ function searchResultRows({
  * behind it did not refresh, which is why it says what was done before
  * saying what could not be shown.
  */
-/** A kind as people say it — never "spatial document", which is the model's word. */
-export const KIND_NOUN: Readonly<Record<DocumentKind, string>> = {
-  spatial: 'a canvas',
-  markdown: 'a note',
-}
-
 export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWriteOutcome> }) {
   return (
     <>

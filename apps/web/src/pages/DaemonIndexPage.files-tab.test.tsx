@@ -392,7 +392,7 @@ describe('DaemonIndexPage tree view', () => {
 
     await pickNewDocumentKind('markdown')
     const alert = await screen.findByText(/Could not create/)
-    expect(alert.textContent).toContain('markdown')
+    expect(alert.textContent).toContain('a note')
 
     await pickNewDocumentKind('markdown')
     await waitFor(() => {

@@ -165,15 +165,6 @@ function writeContract(factory: FilesSourceFactory): void {
     ])
   })
 
-  // An unnamed create may land past the path it asked for (a sibling already
-  // shows that word as its name), so the caller opens what this answers.
-  it('answers the path the created document landed at', async () => {
-    const source = await factory({ documents: [{ path: 'other', kind: 'markdown', name: 'Plan' }] })
-    const landed = await source.createDocument('plan', 'markdown')
-    const created = (await source.listDocuments()).filter((entry) => entry.path !== 'other')
-    expect(created.map((entry) => entry.path)).toEqual([landed])
-  })
-
   it('moves a document and everything under it on rename, keeping their ids', async () => {
     const source = await factory({
       documents: [
@@ -211,6 +202,17 @@ function writeContract(factory: FilesSourceFactory): void {
 }
 
 /** A move repoints what other documents wrote to the old path, whichever keeper made it. */
+function landedPathContract(factory: FilesSourceFactory): void {
+  // An unnamed create may land past the path it asked for (a sibling already
+  // shows that word as its name), so the caller opens what this answers.
+  it('answers the path the created document landed at', async () => {
+    const source = await factory({ documents: [{ path: 'other', kind: 'markdown', name: 'Plan' }] })
+    const landed = await source.createDocument('plan', 'markdown')
+    const created = (await source.listDocuments()).filter((entry) => entry.path !== 'other')
+    expect(created.map((entry) => entry.path)).toEqual([landed])
+  })
+}
+
 function referenceFollowContract(factory: FilesSourceFactory): void {
   it('repoints a reference another document wrote to a renamed path', async () => {
     const source = await factory({
@@ -454,6 +456,7 @@ export function describeWorkspaceFilesSourceConformance(
     tagReadContract(factory)
     boardTagContract(factory)
     writeContract(factory)
+    landedPathContract(factory)
     referenceFollowContract(factory)
     tagLibraryContract(factory)
     stencilLibraryContract(factory)

@@ -373,12 +373,7 @@ export function WorkspaceFilesPanel({
   /** The address a name typed at creation earns inside the folder being browsed. */
   const pathForName = useCallback(
     (name: string, kind: DocumentKind) =>
-      addressForNameIn(
-        folder,
-        name,
-        kind,
-        (documents ?? []).map((row) => row.path),
-      ),
+      addressForNameIn(folder, name, kind, documents?.map((row) => row.path) ?? []),
     [folder, documents],
   )
 
@@ -404,17 +399,16 @@ export function WorkspaceFilesPanel({
         // No options means nobody expressed an opinion, so the address is
         // derived exactly as it always was. The dialog is the only caller
         // that supplies one.
-        const asked = options?.path ?? derivedNewPath
-        let path = asked
+        let path = options?.path ?? derivedNewPath
         // ONLY this write decides whether the create was refused. Everything
         // below is bookkeeping on a document that already exists, and
         // reporting a failed refresh as "could not create" invites a retry
         // that collides with what was just made — from the dialog, while the
         // form is still open holding the path that now exists.
         try {
-          refuseTakenDocumentName(listedRef.current, { path: asked, name: options?.name })
+          refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
           // Where it LANDED: an unnamed create may shift past a sibling's name.
-          path = await source.createDocument(asked, kind, options?.name)
+          path = await source.createDocument(path, kind, options?.name)
           flushFolderNamesIntoRef.current(path)
         } catch (err) {
           outcome.reportCreateRefusal({
