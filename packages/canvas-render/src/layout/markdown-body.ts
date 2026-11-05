@@ -74,6 +74,8 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           appearance,
           embedPath: box.embedPath,
           nestedLayoutBudget,
+          // The board, not the conversation about it — see `withoutCommentLayer`.
+          commentLayer: false,
           ...pickKeys(options, FORWARDED_TO_EMBEDDED_CANVAS),
         }),
         box,

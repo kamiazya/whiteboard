@@ -31,6 +31,7 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import type { ResolvedReference } from '../references/resolved.js'
 import { markdownTheme } from '../theme/theme-asset.js'
+import { withoutCommentLayer } from './comments.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import { type FittedBlocks, fitBlocksToHeight, typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type {
@@ -88,7 +89,7 @@ function layoutCanvasMiniature(
   options: ResolvedLayoutOptions,
 ): EmbeddedCanvasMiniature | undefined {
   const scene = options.layoutNestedCanvas(canvas, {
-    ...options,
+    ...withoutCommentLayer(options),
     // Per-canvas silhouettes, for the reason composeFileEmbed gives.
     explicitNodeOutlines: undefined,
     activeEmbedPath: new Set(box.embedPath),

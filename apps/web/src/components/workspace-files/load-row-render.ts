@@ -181,6 +181,9 @@ async function renderSpatialInPool(
       // A thumbnail has no viewport for a level-of-detail gate to read, and
       // a miniature of a board is the board with its embeds drawn.
       expandAllFileNodes: references === undefined ? undefined : true,
+      // A thumbnail is the board, not the conversation about it — the same
+      // picture the PNG export hands someone.
+      commentLayer: false,
     },
     'background',
   )

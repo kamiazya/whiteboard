@@ -330,6 +330,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       lockedNodeIds: request.lockedNodeIds,
       showResolved: request.showResolved,
+      commentLayer: request.commentLayer,
       threads: request.threads,
       proposals: request.proposals,
       tagLibrary: request.tagLibrary,
