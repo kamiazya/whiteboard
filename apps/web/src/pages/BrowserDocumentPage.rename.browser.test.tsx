@@ -5,6 +5,7 @@ import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -193,6 +194,37 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     titleInput.blur()
     await waitForTitle('Untitled')
     expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
+  })
+
+  it("a sibling's name is refused beside the title, and a corrected one saves", async () => {
+    await renderLoaded()
+    const index = new FoldingBrowserIndex()
+    const { documentId } = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'roadmap',
+      kind: 'spatial',
+    })
+    await index.setDocumentName({
+      workspaceId: getBrowserWorkspaceId(),
+      documentId,
+      name: 'Roadmap',
+    })
+
+    const titleInput = await titleField()
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: 'roadmap' } })
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Another document here is already called "roadmap". Choose a name no other document here has.',
+    )
+    expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
+    expect((titleInput as HTMLInputElement).value).toBe('roadmap')
+
+    fireEvent.change(titleInput, { target: { value: 'Roadmap 2' } })
+    titleInput.blur()
+    await waitForTitle('Roadmap 2')
+    await waitForWriteLanded()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('network-negative: editing the title triggers no fetch to /api/ or daemon endpoints', async () => {

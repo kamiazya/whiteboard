@@ -1,5 +1,6 @@
 import { documentNameSchema } from '@kamiazya/whiteboard-model'
 import {
+  DisplayNameTakenError,
   type DocumentIndex,
   DocumentNotFoundError,
   WorkspaceNotFoundError,
@@ -232,6 +233,26 @@ async function openWhatIsLeft(
 }
 
 /**
+ * A duplicate name is a refusal of what was typed, not a failure of the store:
+ * nothing was written, so the caller keeps the error to say why and
+ * persistence stays healthy.
+ */
+function keepRefusal(err: unknown, into: { current: DisplayNameTakenError | null }): boolean {
+  if (!(err instanceof DisplayNameTakenError)) return false
+  into.current = err
+  return true
+}
+
+/** The snapshot with the refused name put back, unless a later edit already replaced it. */
+function withoutRefusedName(
+  current: DocumentSnapshot | null,
+  refused: string | null,
+  prior: string | null,
+): DocumentSnapshot | null {
+  return current !== null && current.name === refused ? { ...current, name: prior } : current
+}
+
+/**
  * What a mount opens. A deep link that resolves to nothing falls through to
  * the normal default-document flow rather than showing a degraded banner — a
  * stale bookmark must not dead-end the user — unless the workspace holds
@@ -301,6 +322,8 @@ export function useBrowserDocumentController(
   // on the real outcome instead of the second caller observing an already-cleared
   // pendingSnapshotRef and returning true before the first save actually settles.
   const savePromiseRef = useRef<Promise<boolean> | null>(null)
+  // Why the last save was refused as a duplicate name, for the rename that queued it.
+  const refusedRenameRef = useRef<DisplayNameTakenError | null>(null)
 
   // Returns true if there was nothing to flush or the flush succeeded.
   // Returns false if a pending save failed — callers that depend on data
@@ -337,6 +360,13 @@ export function useBrowserDocumentController(
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
         } catch (err) {
+          if (keepRefusal(err, refusedRenameRef)) {
+            setPersistenceRef.current((p) => ({
+              kind: 'saved',
+              lastSavedAt: p.lastSavedAt ?? null,
+            }))
+            return false
+          }
           log.warn('a rename could not be saved; the person sees the generic copy', err)
           setPersistenceRef.current((p) => ({
             kind: 'degraded',
@@ -436,8 +466,16 @@ export function useBrowserDocumentController(
       snapshotRef.current = updated
       setSnapshot(updated)
       setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
+      refusedRenameRef.current = null
       return flushSave().then((ok) => {
-        if (!ok) throw new Error('Failed to save the renamed canvas.')
+        if (ok) return
+        const refusal = refusedRenameRef.current
+        refusedRenameRef.current = null
+        if (refusal === null) throw new Error('Failed to save the renamed canvas.')
+        const restored = withoutRefusedName(snapshotRef.current, normalized, base.name)
+        snapshotRef.current = restored
+        setSnapshot(restored)
+        throw refusal
       })
     },
     [flushSave],

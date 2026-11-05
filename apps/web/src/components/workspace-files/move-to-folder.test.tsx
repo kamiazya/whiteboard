@@ -90,6 +90,24 @@ describe('moving a document to a folder from its menu', () => {
   })
 })
 
+describe('a move into a new folder that the keeper refuses', () => {
+  it('leaves no phantom folder in the picker', async () => {
+    const source = renderWithFolders()
+    source.renameDocumentPath.mockRejectedValueOnce(new Error('plans/login is taken'))
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(within(dialog).getByRole('option', { name: 'New folder…' }))
+    fireEvent.change(within(dialog).getByLabelText('Folder name'), { target: { value: 'Plans' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
+    await within(dialog).findByRole('alert')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }))
+
+    const options = within(dialog)
+      .getAllByRole('option')
+      .map((each) => each.textContent)
+    expect(options.some((text) => text?.includes('Plans'))).toBe(false)
+  })
+})
+
 describe('moving a document to a named folder', () => {
   function renderNamed() {
     let rows: WorkspaceDocumentEntry[] = [
