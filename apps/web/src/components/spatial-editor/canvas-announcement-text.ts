@@ -6,6 +6,7 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { readingOrder } from '../../lib/spatial/reading-order.js'
 import { inkPlace } from '../../lib/spatial/traversal-order.js'
 import { edgeRoute, inkA11yName, nodeA11yName } from './node-a11y-name.js'
@@ -106,7 +107,20 @@ export function canvasChangeMessage(prev: SpatialCanvas, next: SpatialCanvas): s
   if (goneEdges.length > 0 && newEdges.length === 0) {
     return `Deleted ${plural(goneEdges.length, 'edge', 'edges')}`
   }
-  return membershipMessage(prev, next)
+  return goneLinesMessage(prev, next) ?? membershipMessage(prev, next)
+}
+
+/**
+ * Ink taken away, said as a node deletion is: "Deleted 1 drawing" for strokes
+ * somebody drew, "Deleted 2 lines" once any ruled line is among them.
+ */
+function goneLinesMessage(prev: SpatialCanvas, next: SpatialCanvas): string | undefined {
+  const kept = new Set((next.lines ?? []).map((line) => line.id))
+  const gone = (prev.lines ?? []).filter((line) => !kept.has(line.id))
+  if (gone.length === 0) return undefined
+  return gone.every(isFreehandStroke)
+    ? `Deleted ${plural(gone.length, 'drawing', 'drawings')}`
+    : `Deleted ${plural(gone.length, 'line', 'lines')}`
 }
 
 /** What is selected, with its place among the nodes in the order Tab walks them. */
