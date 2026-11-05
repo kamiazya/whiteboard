@@ -62,6 +62,17 @@ export function describeMoveDocumentName(
       })
     })
 
+    describeMoveKeepsName(withIndex, workspaceId)
+  })
+  describeMoveBesideAncestor(withIndex, workspaceId)
+}
+
+/** A document ancestor never empties: it stays beside the moved root, showing its name. */
+function describeMoveBesideAncestor(
+  withIndex: WithIndex<DocumentIndex>,
+  workspaceId: string,
+): void {
+  describe('a document moved out from under a named document', () => {
     it('is refused beside the named document it was nested under', async () => {
       await withIndex(async (index) => {
         await create(index, workspaceId, 'p', 'R')
@@ -72,8 +83,6 @@ export function describeMoveDocumentName(
         expect(await paths(index, workspaceId)).toEqual(['p', 'p/q'])
       })
     })
-
-    describeMoveKeepsName(withIndex, workspaceId)
   })
 }
 
@@ -134,6 +143,28 @@ export function describeMoveFolderName(
       })
     })
 
+    it('is no duplicate beside a document of that name', async () => {
+      await withIndex(async (index) => {
+        await create(index, workspaceId, 'term/plan', 'Plan')
+        await create(index, workspaceId, 'old/w/x')
+        await index.setFolderName({ workspaceId, path: 'old/w', name: 'Plan' })
+        await index.moveDocument({ workspaceId, from: 'old/w', to: 'term/w' })
+        expect(await paths(index, workspaceId)).toContain('term/w/x')
+      })
+    })
+  })
+  describeMoveFolderBesideAncestor(withIndex, workspaceId)
+}
+
+/**
+ * An ancestor the move leaves behind stays beside the moved root and shows
+ * its name like any sibling — unless the move empties it, and the folder goes.
+ */
+function describeMoveFolderBesideAncestor(
+  withIndex: WithIndex<DocumentIndex & DocumentFolders>,
+  workspaceId: string,
+): void {
+  describe('a folder moved out from under a named folder', () => {
     it('is refused beside the named folder it leaves, when that folder stays', async () => {
       await withIndex(async (index) => {
         await create(index, workspaceId, 'a/b/x')
@@ -152,16 +183,6 @@ export function describeMoveFolderName(
         await index.setFolderName({ workspaceId, path: 'a', name: 'B' })
         await index.moveDocument({ workspaceId, from: 'a/b', to: 'b' })
         expect(await paths(index, workspaceId)).toEqual(['b/x'])
-      })
-    })
-
-    it('is no duplicate beside a document of that name', async () => {
-      await withIndex(async (index) => {
-        await create(index, workspaceId, 'term/plan', 'Plan')
-        await create(index, workspaceId, 'old/w/x')
-        await index.setFolderName({ workspaceId, path: 'old/w', name: 'Plan' })
-        await index.moveDocument({ workspaceId, from: 'old/w', to: 'term/w' })
-        expect(await paths(index, workspaceId)).toContain('term/w/x')
       })
     })
   })
