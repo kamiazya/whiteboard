@@ -12,7 +12,7 @@
  * prop and leaves through its own callback.
  */
 import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mayAutofocus, noteFocusPlaced } from '../../lib/focus-claim.js'
 import { routeAnnouncementSnapshot } from '../../lib/route-announcer.js'
@@ -317,7 +317,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // A blur on Enter dropped focus to <body> and said nothing: a screen-reader
   // user heard no receipt and lost their place. Focus goes to the page
   // heading and the rename is announced.
-  it('hands focus to the finish target on Enter and announces the rename', () => {
+  it('hands focus to the finish target on Enter and announces the rename', async () => {
     const target = document.createElement('h1')
     target.tabIndex = -1
     document.body.append(target)
@@ -335,9 +335,26 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(document.activeElement).toBe(target)
-    expect(routeAnnouncementSnapshot()).toBe('Renamed to Release plan')
+    await waitFor(() => expect(routeAnnouncementSnapshot()).toBe('Renamed to Release plan'))
     expect(onSettled).toHaveBeenCalledTimes(1)
     target.remove()
+  })
+
+  // The keeper refuses a sibling's name after the box already showed it; the
+  // alert says so, and a status announcing success beside it told a
+  // screen-reader user both things at once.
+  it('announces no rename when the keeper refuses the name', async () => {
+    const onChange = vi.fn(async (next: string) =>
+      next === 'Sibling name' ? 'Another document here is already called "Sibling name".' : null,
+    )
+    render(<DocumentProperties {...titleProps({ title: 'Draft', onTitleChange: onChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+    box.focus()
+    fireEvent.change(box, { target: { value: 'Sibling name' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    await screen.findByText(/already called/)
+    expect(routeAnnouncementSnapshot()).not.toBe('Renamed to Sibling name')
   })
 
   // The Enter that CONFIRMS a Japanese/Chinese/Korean conversion is not "I am

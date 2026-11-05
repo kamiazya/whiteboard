@@ -75,8 +75,16 @@ export function DocumentProperties({
   status,
   actions,
 }: DocumentPropertiesProps) {
-  const { draftTitle, setDraftTitle, editBaselineRef, typedRef, suggestionsId, refusal, commit } =
-    useTitleEditing(title, onTitleChange)
+  const {
+    draftTitle,
+    setDraftTitle,
+    editBaselineRef,
+    typedRef,
+    suggestionsId,
+    refusal,
+    commit,
+    settled,
+  } = useTitleEditing(title, onTitleChange)
 
   return (
     <div
@@ -160,7 +168,13 @@ export function DocumentProperties({
             const typed = typedRef.current
             typedRef.current = null
             if (typed === null || typed.trim() === editBaselineRef.current.trim()) return
-            announceRoute(`Renamed to ${documentHeading(typed.trim())}`)
+            // Announced once the keeper has answered, and only if it stored
+            // the name: a refusal has its own alert, and a status saying
+            // "Renamed" beside it would tell a screen reader both.
+            const heading = documentHeading(typed.trim())
+            void settled().then((answer) => {
+              if (answer === null) announceRoute(`Renamed to ${heading}`)
+            })
             onTitleSettled?.(typed.trim())
           }}
           placeholder="Untitled"
@@ -196,8 +210,17 @@ function useTitleEditing(title: string, onTitleChange: DocumentPropertiesProps['
   // before a state update could reach the blur's closure.
   const typedRef = useRef<string | null>(null)
   const suggestionsId = useId()
-  const { refusal, commit } = useTitleCommit(onTitleChange)
-  return { draftTitle, setDraftTitle, editBaselineRef, typedRef, suggestionsId, refusal, commit }
+  const { refusal, commit, settled } = useTitleCommit(onTitleChange)
+  return {
+    draftTitle,
+    setDraftTitle,
+    editBaselineRef,
+    typedRef,
+    suggestionsId,
+    refusal,
+    commit,
+    settled,
+  }
 }
 
 /** Why the last rename was refused, beside the box it was typed into. */
@@ -222,15 +245,19 @@ function TitleRefusal({ id, refusal }: { readonly id: string; readonly refusal: 
 function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange']) {
   const [refusal, setRefusal] = useState<string | null>(null)
   const latestRef = useRef(0)
+  // The keeper's answer to the newest commit: null when it stored the name.
+  const answerRef = useRef<Promise<string | null>>(Promise.resolve(null))
   const commit = (next: string) => {
     if (onTitleChange === undefined) return
     noteFocusPlaced()
     const ticket = ++latestRef.current
-    void onTitleChange(next).then((answer) => {
-      if (ticket === latestRef.current) setRefusal(answer)
+    const answer = onTitleChange(next)
+    answerRef.current = answer
+    void answer.then((said) => {
+      if (ticket === latestRef.current) setRefusal(said)
     })
   }
-  return { refusal, commit }
+  return { refusal, commit, settled: () => answerRef.current }
 }
 
 /**
