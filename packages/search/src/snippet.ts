@@ -122,11 +122,11 @@ function renderLinks(chunk: string, labelOf: LinkLabel | undefined): string {
  */
 function plainExcerpt(
   value: string,
-  window: { start: number; end: number },
+  cut: { start: number; end: number },
   match: { start: number; end: number },
   labelOf: LinkLabel | undefined,
 ) {
-  const { start, end } = window
+  const { start, end } = cut
   const matchStart = Math.max(start, Math.min(end, match.start))
   const matchEnd = Math.max(matchStart, Math.min(end, match.end))
   const slotted = `${value.slice(start, matchStart)}${MATCH_SLOT}${value.slice(matchEnd, end)}`

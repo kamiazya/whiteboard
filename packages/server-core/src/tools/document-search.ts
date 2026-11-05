@@ -106,6 +106,21 @@ function collectSearchable(
   return searchable
 }
 
+/**
+ * The workspace's folder names by path. A folder is renamed without its
+ * address moving, so its display name is the only place "Operations Team" is
+ * written; the documents inside are found by it too, ranked below a document
+ * that says the words.
+ */
+async function folderNamesIn(
+  deps: ServerDeps,
+  workspaceId: string,
+): Promise<ReadonlyMap<string, string>> {
+  if (!hasDocumentFolders(deps.documentIndex)) return new Map()
+  const named = await deps.documentIndex.listFolderNames({ workspaceId })
+  return new Map(named.map(({ path, name }) => [path, name] as const))
+}
+
 /** The display names of the named folders above `path`, as an optional field. */
 function foldersOf(path: string, folderNames: ReadonlyMap<string, string>) {
   const folders = folderNamesOf(path, folderNames)
@@ -188,16 +203,7 @@ export function createDocumentSearchTool(
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
       const content = await vectors.facts.factsFor(parsed.workspaceId, entries)
 
-      // A folder is renamed without its address moving, so its display name
-      // is the only place "Operations Team" is written; the documents inside
-      // are found by it too, ranked below a document that says the words.
-      const folderNames = hasDocumentFolders(deps.documentIndex)
-        ? new Map(
-            (await deps.documentIndex.listFolderNames({ workspaceId: parsed.workspaceId })).map(
-              ({ path, name }) => [path, name] as const,
-            ),
-          )
-        : new Map<string, string>()
+      const folderNames = await folderNamesIn(deps, parsed.workspaceId)
       const searchable = collectSearchable(entries, content, parsed, folderNames)
       const termsOf = terms.termsOf(parsed.workspaceId, entries, content)
 
@@ -232,11 +238,8 @@ export function createDocumentSearchTool(
       if (embedder === undefined) {
         // The returned page IS the prefix of the full ranking here, so the
         // index is the rank.
-        const hits = fullTextSearch(searchable, query, {
-          limit: parsed.limit,
-          termsOf,
-          linkLabel: linkLabelsFrom(entries),
-        })
+        const linkLabel = linkLabelsFrom(entries)
+        const hits = fullTextSearch(searchable, query, { limit: parsed.limit, termsOf, linkLabel })
         return {
           results: hits.map((hit, index) =>
             describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),

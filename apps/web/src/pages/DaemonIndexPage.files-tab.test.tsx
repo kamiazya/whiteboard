@@ -588,7 +588,9 @@ describe('DaemonIndexPage tree view', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'zzzz' },
     })
-    expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
+    const results = await screen.findByTestId('search-results')
+    // Once the answer is in: until then nothing has been found not to match.
+    await waitFor(() => expect(results.textContent).toContain('Nothing matches'))
   })
 
   it('still shows the failure alert when the list fails for a non-404 reason', async () => {

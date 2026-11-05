@@ -326,6 +326,36 @@ function walkResults(event: KeyboardEvent<HTMLElement>, onLeaveUp: (() => void) 
   else rows[event.key === 'ArrowDown' ? Math.min(at + 1, rows.length - 1) : at - 1]?.focus()
 }
 
+/**
+ * Say what was searched, not just that nothing came back. Search here is
+ * lexical: it finds the words a document actually contains, so a query in
+ * one language structurally cannot reach a document written in another
+ * (measured on this repo's own corpus: 21 of 22 such queries returned
+ * nothing). "Nothing matches" alone would read as "no such document" —
+ * naming the query and what was looked at lets the reader tell a missing
+ * document from a query that could never match. Nothing at all while an
+ * answer is on its way: nothing has been found not to match yet.
+ */
+function NothingMatches({
+  query,
+  searchedContents,
+  pending,
+  className,
+}: {
+  query: string
+  searchedContents: boolean
+  pending: boolean
+  className: string | undefined
+}) {
+  if (pending) return null
+  return (
+    <p className={cn('text-muted-foreground text-sm', className)}>
+      Nothing matches “{query.trim()}” in the{' '}
+      {searchedContents ? 'names, folders and text' : 'names and folders'} of this workspace.
+    </p>
+  )
+}
+
 export function SearchResults({
   results,
   query,
@@ -353,20 +383,14 @@ export function SearchResults({
   // for a bigger picture, the way Finder's icon view does.
   const [layout, setLayout] = useState<'list' | 'grid'>('list')
 
-  if (results.length === 0 && pending) return null
   if (results.length === 0) {
-    // Say what was searched, not just that nothing came back. Search here is
-    // lexical: it finds the words a document actually contains, so a query
-    // in one language structurally cannot reach a document written in
-    // another (measured on this repo's own corpus: 21 of 22 such queries
-    // returned nothing). "Nothing matches" alone would read as "no such
-    // document" — naming the query and what was looked at lets the reader
-    // tell a missing document from a query that could never match.
     return (
-      <p className={cn('text-muted-foreground text-sm', className)}>
-        Nothing matches “{query.trim()}” in the{' '}
-        {searchedContents ? 'names, folders and text' : 'names and folders'} of this workspace.
-      </p>
+      <NothingMatches
+        query={query}
+        searchedContents={searchedContents}
+        pending={pending}
+        className={className}
+      />
     )
   }
 

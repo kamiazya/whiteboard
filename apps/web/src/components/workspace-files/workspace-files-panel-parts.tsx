@@ -18,7 +18,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/too
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
-import type { FolderNames } from '../../lib/folder-names.js'
 import type { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
@@ -55,19 +54,18 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  * a blank pane. Everything else is the source's own hits, widened with the
  * documents whose NAME matches — a content index does not rank a name.
  */
-function searchResultRows({
+function useSearchResultRows({
   activeTag,
   hits,
   documents,
   query,
-  folderNames,
 }: {
   activeTag: string | null
   hits: SearchState['hits']
   documents: readonly WorkspaceDocumentEntry[]
   query: string
-  folderNames: FolderNames
 }): ComponentProps<typeof SearchResults>['results'] {
+  const folderNames = useContext(FolderNamesContext)
   if (activeTag !== null || hits === null) {
     return searchDocuments(documents, query, folderNames).map((document) => ({ document }))
   }
@@ -613,8 +611,7 @@ export function SearchColumn({
   combobox: SearchCombobox
 }) {
   const { hits, searchDegraded, searching } = search
-  const folderNames = useContext(FolderNamesContext)
-  const rows = searchResultRows({ activeTag, hits, documents, query, folderNames })
+  const rows = useSearchResultRows({ activeTag, hits, documents, query })
   usePublishSearchResults(combobox, rows, onOpenDocument === undefined ? undefined : openEntry)
   return (
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
@@ -640,9 +637,8 @@ export function SearchColumn({
         )}
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-          // A `#tag` query is a FILTER over what is loaded (the
-          // search contract), not a content search — it never leaves the
-          // client. Everything else asks the source.
+          // A `#tag` query is a FILTER over what is loaded (the search
+          // contract) and never leaves the client; everything else asks the source.
           results={rows}
           onLeaveUp={focusSearchBox}
           combobox={combobox}
