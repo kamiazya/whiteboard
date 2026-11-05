@@ -269,50 +269,58 @@ export function PanelToolbar({
   /** Absent on a host that renders no folder actions. */
   onNewFolder?: ((folder: string) => void) | undefined
 }) {
+  const browsing = query.trim() === ''
+  const trail = columns === 'two' && browsing
+  const newFolder = columns === 'two' && browsing && onNewFolder !== undefined
   return (
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1">
-        {/* The trail belongs to whatever narrows the view. In one-column
-          mode nothing does — the tree already shows every level at once —
-          and while searching the results are from everywhere, so a trail
-          would name a folder the list is not confined to. */}
-        {columns === 'two' && query.trim() === '' && (
-          <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
-        )}
-      </div>
-      {/* Two columns only: the one-column tree draws no empty folder to land in. */}
-      {columns === 'two' && query.trim() === '' && onNewFolder !== undefined && (
-        <NewFolderButton onClick={() => onNewFolder(folder)} />
+    // Two rows below `sm`: at a phone's width one row gave the search box
+    // 144px and wrapped the trail's last folder name in two. Where you are
+    // gets a row; what you are looking for gets the next one.
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {(trail || newFolder) && (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {/* The trail belongs to whatever narrows the view. In one-column
+              mode nothing does — the tree already shows every level at once —
+              and while searching the results are from everywhere, so a trail
+              would name a folder the list is not confined to. */}
+            {trail && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
+          </div>
+          {/* Two columns only: the one-column tree draws no empty folder to land in. */}
+          {newFolder && <NewFolderButton onClick={() => onNewFolder(folder)} />}
+        </div>
       )}
-      <div className="relative shrink-0">
-        <Search
-          aria-hidden="true"
-          className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+      <div className="flex min-w-0 items-center gap-2 sm:ml-auto">
+        <div className="relative min-w-0 flex-1 sm:flex-none">
+          <Search
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+          />
+          <input
+            type="search"
+            aria-label="Search documents"
+            placeholder="Search"
+            maxLength={SEARCH_QUERY_MAX_CHARS}
+            value={query}
+            onChange={(event) => changeQuery(event.target.value)}
+            {...combobox.boxProps}
+            className="w-full rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
+          />
+        </div>
+        <NewDocumentMenu
+          disabled={creating}
+          workspace={workspace}
+          defaultPath={derivedNewPath}
+          pathForName={pathForName}
+          createError={outcome.createRefusal?.reason ?? null}
+          onCreate={createHere}
+          {...(onImportFiles === undefined ? {} : { onImportFiles })}
+          onDismiss={outcome.dismissCreateRefusal}
         />
-        <input
-          type="search"
-          aria-label="Search documents"
-          placeholder="Search"
-          maxLength={SEARCH_QUERY_MAX_CHARS}
-          value={query}
-          onChange={(event) => changeQuery(event.target.value)}
-          {...combobox.boxProps}
-          className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
-        />
-      </div>
-      <NewDocumentMenu
-        disabled={creating}
-        workspace={workspace}
-        defaultPath={derivedNewPath}
-        pathForName={pathForName}
-        createError={outcome.createRefusal?.reason ?? null}
-        onCreate={createHere}
-        {...(onImportFiles === undefined ? {} : { onImportFiles })}
-        onDismiss={outcome.dismissCreateRefusal}
-      />
-      {/* Absent while searching: the results carry their own list/grid
+        {/* Absent while searching: the results carry their own list/grid
         choice, and two pairs side by side answered one question twice. */}
-      {query.trim() === '' && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+        {browsing && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+      </div>
     </div>
   )
 }
