@@ -200,7 +200,9 @@ selection, or nudging several nodes each undo in a single press.
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
 Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the right-click menus. It also
+no key and live in the Select tool's right-click menus — Align and Distribute on
+a selection of two or more nodes — since the Hand tool's right-click offers
+comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
 way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
@@ -248,7 +250,11 @@ undo. Press `Esc` on a new note before typing and it is removed.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
-it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
+it ("Hand tool", "Select tool", "Connect tool", "Draw tool"). On a canvas with
+notes, the Connect tool also shows what to press at the top of the canvas —
+"Click the first note, then the second" ("Tap…" on a touch screen), then "Now
+click the note to connect to" once the first is chosen — and the first line is
+announced with the tool's name.
 
 Every node and edge is listed by name for a screen reader, in the order `Tab`
 walks them: by where they sit, top to bottom and then left to right, not by

@@ -129,6 +129,7 @@ import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
+import { ConnectToolHint } from './ConnectToolHint.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
@@ -159,7 +160,7 @@ import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
-import { TOOL_ANNOUNCEMENT } from './tool-announcement.js'
+import { toolAnnouncement } from './tool-announcement.js'
 import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
@@ -1165,7 +1166,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const changeTool = (next: EditorTool) => {
       setTool(next)
-      announceOnCanvas(TOOL_ANNOUNCEMENT[next])
+      announceOnCanvas(toolAnnouncement(next, canvas.nodes.length > 0, hasCoarsePointer()))
       toolChosenByUserRef.current = true
       onToolChosen?.(next)
       // A context menu belongs to the mode it opened in; it must not
@@ -1619,6 +1620,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )}
         {canvas.nodes.length === 0 && (
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
+        )}
+        {tool === 'connect' && canvas.nodes.length > 0 && (
+          <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
         )}
         <ToolPalette
           onReturnFocus={() => rootRef.current?.focus({ preventScroll: true })}
