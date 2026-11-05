@@ -40,7 +40,14 @@ function FolderMenuView({
       y={menu.y}
       label="Folder actions"
       title={title}
-      items={[...rename, { label: 'New subfolder…', icon: <FolderPlus />, onSelect: onSubfolder }]}
+      items={[
+        ...rename,
+        {
+          label: menu.folder === '' ? 'New folder…' : 'New subfolder…',
+          icon: <FolderPlus />,
+          onSelect: onSubfolder,
+        },
+      ]}
       onClose={onClose}
       variant={hasCoarsePointer() ? 'sheet' : 'list'}
     />
@@ -57,12 +64,14 @@ function nameDialogCopy(dialog: FolderDialog | null, names: FolderNamesState['na
       submitLabel: 'Rename',
     }
   }
+  // Said BEFORE the folder is made: an empty folder is not kept, and finding
+  // that out after leaving it reads as the folder having been lost.
   return {
-    title: 'New subfolder',
+    title: dialog?.folder === '' ? 'New folder' : 'New subfolder',
     description:
-      'A folder exists while a document is in it. Open it, then add or move a document in.',
+      'The folder appears in the list once a document is in it. Create it, then add a note or canvas there, or move a document in.',
     initialName: '',
-    submitLabel: 'Open folder',
+    submitLabel: 'Create folder',
   }
 }
 

@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
 import {
   type KeyboardEvent,
@@ -68,6 +69,8 @@ export interface FolderContentsListProps {
   className?: string
   /** How many columns the grid has at its current width; undefined once it is gone. */
   onColumnCount?: (count: number | undefined) => void
+  /** A document made in this folder, offered where the folder is empty. */
+  onCreateHere?: ((kind: DocumentKind) => void) | undefined
 }
 
 /**
@@ -429,6 +432,7 @@ export function FolderContentsList({
   renderThumbnail,
   className,
   onColumnCount,
+  onCreateHere,
 }: FolderContentsListProps) {
   const { folders, documents: here } = useMemo(
     () => folderContents(documents, folder),
@@ -445,7 +449,7 @@ export function FolderContentsList({
   )
 
   if (folders.length === 0 && here.length === 0) {
-    return <EmptyFolderNote className={className} />
+    return <EmptyFolderNote className={className} onCreateHere={onCreateHere} />
   }
 
   return (
@@ -480,12 +484,37 @@ export function FolderContentsList({
   )
 }
 
-/** Folders are implicit path segments, so an emptied one still being open needs saying. */
-function EmptyFolderNote({ className }: { readonly className: string | undefined }) {
+const HERE_BUTTON =
+  'hover:bg-accent rounded-md border px-3 py-1.5 text-sm text-foreground pointer-coarse:min-h-11'
+
+/**
+ * Folders are implicit path segments, so an empty one standing open needs
+ * saying — with the way to keep it beside the reason it would go. A document
+ * made from here lands in THIS folder, which is what writes its pending name.
+ */
+function EmptyFolderNote({
+  className,
+  onCreateHere,
+}: {
+  readonly className: string | undefined
+  readonly onCreateHere: FolderContentsListProps['onCreateHere']
+}) {
   return (
-    <p className={cn('text-muted-foreground text-sm', className)}>
-      This folder is empty. A folder exists only while a document's path names it, so it goes once
-      you leave.
-    </p>
+    <div className={cn('text-muted-foreground flex flex-col items-start gap-2 text-sm', className)}>
+      <p>
+        This folder is empty. It is kept only while a document is in it, so add one here or it goes
+        once you leave.
+      </p>
+      {onCreateHere !== undefined && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={HERE_BUTTON} onClick={() => onCreateHere('markdown')}>
+            New note here
+          </button>
+          <button type="button" className={HERE_BUTTON} onClick={() => onCreateHere('spatial')}>
+            New canvas here
+          </button>
+        </div>
+      )}
+    </div>
   )
 }

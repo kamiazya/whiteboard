@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   FolderInput,
+  FolderPlus,
   List,
   Pencil,
   Pin,
@@ -208,6 +209,23 @@ function ColumnToggle({
 }
 
 /**
+ * A folder is made where the person stands, and labelled in words: behind a
+ * folder's own menu it was found by nobody who did not already know.
+ */
+function NewFolderButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1.5 rounded border p-1.5 pr-2.5 text-xs font-medium pointer-coarse:min-h-11"
+    >
+      <FolderPlus aria-hidden="true" className="size-4" />
+      New folder
+    </button>
+  )
+}
+
+/**
  * The row above the columns: where you are, what you are looking for, and
  * the two things you can change about the view.
  *
@@ -232,6 +250,7 @@ export function PanelToolbar({
   onImportFiles,
   chooseColumns,
   combobox,
+  onNewFolder,
 }: {
   columns: 'one' | 'two'
   query: string
@@ -247,6 +266,8 @@ export function PanelToolbar({
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']
   chooseColumns: (next: 'one' | 'two') => void
   combobox: SearchCombobox
+  /** Absent on a host that renders no folder actions. */
+  onNewFolder?: ((folder: string) => void) | undefined
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -259,6 +280,10 @@ export function PanelToolbar({
           <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
         )}
       </div>
+      {/* Two columns only: the one-column tree draws no empty folder to land in. */}
+      {columns === 'two' && query.trim() === '' && onNewFolder !== undefined && (
+        <NewFolderButton onClick={() => onNewFolder(folder)} />
+      )}
       <div className="relative shrink-0">
         <Search
           aria-hidden="true"
@@ -491,6 +516,7 @@ export function BrowseTwoColumns({
   openCardMenu,
   loadRender,
   onGridColumns,
+  onCreateHere,
 }: {
   documents: readonly WorkspaceDocumentEntry[]
   folder: string
@@ -506,6 +532,7 @@ export function BrowseTwoColumns({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
   onGridColumns: (count: number | undefined) => void
+  onCreateHere: ComponentProps<typeof FolderContentsList>['onCreateHere']
 }) {
   /**
    * A press in the contents list, in the order the four answers rank: a
@@ -546,6 +573,7 @@ export function BrowseTwoColumns({
               : { onActivateDocument: openEntry })}
             onDocumentContextMenu={openCardMenu}
             onColumnCount={onGridColumns}
+            onCreateHere={onCreateHere}
             renderThumbnail={(entry) => (
               <DocumentThumbnail
                 key={entry.documentId}

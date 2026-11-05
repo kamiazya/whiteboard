@@ -67,11 +67,21 @@ A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.
 
-## Start a new subfolder
+## Make a new folder
 
-**New subfolder…** in the same menu asks for a name and opens that folder,
-showing the name you gave it. Because a folder exists only while a document is
-in it, the new folder is empty until you create a document there or move one
-in — its name is kept by the page until then and saved with the folder once a
-document lands in it. Leaving it without doing either lets it go, name and all.
-The same duplicate rule as a rename applies.
+**New folder** above the list (in the two-column view) makes a folder inside
+the folder you are in — at the workspace root, a top-level folder. The same entry is in a folder's own
+menu, as **New subfolder…** (or **New folder…** on **Workspace** in the folder
+path). It asks for a name; **Create folder** opens the new folder, showing the
+name you gave it.
+
+A folder exists only while a document is in it, and the dialog says so before
+you create it: the new folder is empty until you put a document there, and its
+name is kept by the page until then and saved with the folder once a document
+lands in it. The empty folder offers **New note here** and **New canvas here**,
+which create the document inside it; moving a document in works too. Leaving it
+empty lets it go, name and all. The same duplicate rule as a rename applies.
+
+The page keeps a folder's name the same way when a move takes the last document
+out of it: move a document back in during the same visit and the folder comes
+back under its name rather than its address.

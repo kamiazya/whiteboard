@@ -702,6 +702,7 @@ export function WorkspaceFilesPanel({
             openCardMenu={openCardMenu}
             loadRender={loadRender}
             onGridColumns={setGridColumns}
+            onCreateHere={(kind) => void createHere(kind).catch(() => undefined)}
           />
         )
       default: {
@@ -746,6 +747,7 @@ export function WorkspaceFilesPanel({
             onImportFiles={importer.importFiles}
             chooseColumns={chooseColumns}
             combobox={combobox}
+            onNewFolder={folderActions.openNewFolder}
           />
 
           <PanelRefusals outcome={outcome} />
