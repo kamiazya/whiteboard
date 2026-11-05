@@ -48,7 +48,7 @@ export interface PreviewPaneProps {
    * Called with the 1-based source line of the task item whose checkbox was
    * activated. Absent, the boxes stay inert pictures (a version preview).
    */
-  onToggleTask?: (line: number) => void
+  onToggleTask?: (line: number) => boolean
 }
 
 // `fill` on the host, not in the SVG: canvas-render assigns markdown
