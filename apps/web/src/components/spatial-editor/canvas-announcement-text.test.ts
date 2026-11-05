@@ -1,7 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { canvasChangeMessage, selectionMessage } from './canvas-announcement-text.js'
+import { canvasChangeMessage, selectionMessage, tidyMessage } from './canvas-announcement-text.js'
 
 const a = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
 const b = textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' })
@@ -120,5 +120,31 @@ describe('frame membership', () => {
       nodes: [{ ...front, x: 8 }, back, { ...web, x: 28 }],
     }
     expect(canvasChangeMessage(board, moved)).toBeUndefined()
+  })
+})
+
+describe('what a tidy sounds like', () => {
+  const front = groupNode({ id: 'f', x: 0, y: 0, width: 300, height: 300, label: 'Frontend' })
+  const back = groupNode({ id: 'k', x: 400, y: 0, width: 300, height: 300, label: 'Backend' })
+  const note = (id: string, x: number) =>
+    textNode({ id, x, y: 40, width: 100, height: 40, text: id.toUpperCase() })
+  const nodes = [front, back, note('p', 20), note('q', 150), note('r', 420), note('s', 900)]
+
+  it('counts the notes it moved and the frames they sit in', () => {
+    const moves = [
+      { id: 'p', x: 24, y: 40 },
+      { id: 'q', x: 150, y: 44 },
+      { id: 'r', x: 424, y: 40 },
+    ]
+    expect(tidyMessage(nodes, moves)).toBe('Tidied 3 notes in 2 frames')
+  })
+
+  it('a note outside every frame is counted without a frame', () => {
+    expect(tidyMessage(nodes, [{ id: 's', x: 904, y: 40 }])).toBe('Tidied 1 note')
+  })
+
+  it('a move that changes nothing is not a tidy', () => {
+    expect(tidyMessage(nodes, [{ id: 'p', x: 20, y: 40 }])).toBe('Already tidy')
+    expect(tidyMessage(nodes, [])).toBe('Already tidy')
   })
 })

@@ -134,3 +134,40 @@ export function selectionMessage(
   }
   return undefined
 }
+
+/** A box a tidy or an arrange verb wants a node moved (and, for a frame, resized) to. */
+interface BoxMoveLike {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+  readonly width?: number
+  readonly height?: number
+}
+
+/**
+ * What a tidy did, said once the menu that ran it has closed: the notes it
+ * moved and the frames they sit in, or that there was nothing to do — a
+ * tidy that answers with silence reads exactly like one that did not run.
+ */
+export function tidyMessage(nodes: readonly SpatialNode[], moves: readonly BoxMoveLike[]): string {
+  const after = nodes.map((node) => {
+    const move = moves.find((entry) => entry.id === node.id)
+    return move === undefined ? node : { ...node, ...move }
+  })
+  const changed = after.filter((node, index) => {
+    const before = nodes[index]
+    return (
+      before !== undefined &&
+      (before.x !== node.x ||
+        before.y !== node.y ||
+        before.width !== node.width ||
+        before.height !== node.height)
+    )
+  })
+  if (changed.length === 0) return 'Already tidy'
+  const notes = changed.filter((node) => !isFrame(node))
+  if (notes.length === 0) return `Tidied ${plural(changed.length, 'frame', 'frames')}`
+  const frames = new Set(notes.flatMap((node) => frameOf(node, after)?.id ?? []))
+  const where = frames.size === 0 ? '' : ` in ${plural(frames.size, 'frame', 'frames')}`
+  return `Tidied ${plural(notes.length, 'note', 'notes')}${where}`
+}

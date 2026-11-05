@@ -15,6 +15,7 @@ import type { MutableRefObject } from 'react'
 import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { alignableBoxesOf, alignBoxes, distributeBoxes } from '../align.js'
+import { tidyMessage } from '../canvas-announcement-text.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 
 const ALIGN_PHRASE = {
@@ -101,14 +102,14 @@ function tidyVerb(input: ArrangeBandsInput): ContextMenuItem {
     label: 'Tidy',
     icon: <Sparkles />,
     onSelect: () => {
-      applyBoxMoves(
-        tidyNodes(tidyBoxes(canvasRef.current.nodes), {
-          scope: new Set([node.id, ...extraIds]),
-          locked: isLocked,
-          edges: canvasRef.current.edges,
-        }),
-      )
-      announceOnCanvas('Tidied')
+      const { nodes, edges } = canvasRef.current
+      const moves = tidyNodes(tidyBoxes(nodes), {
+        scope: new Set([node.id, ...extraIds]),
+        locked: isLocked,
+        edges,
+      })
+      applyBoxMoves(moves)
+      announceOnCanvas(tidyMessage(nodes, moves))
     },
   }
 }

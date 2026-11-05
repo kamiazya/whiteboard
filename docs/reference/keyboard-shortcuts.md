@@ -105,7 +105,9 @@ space) lines boxes up and clears overlaps without taking anything out of its
 frame: a frame's contents are tidied inside it, a frame drawn mostly inside
 another, such as one made with **Group selection**, counts as inside it, and
 a frame grows down or right to make room rather than moving away from the
-frames beside it. Frames are never left overlapping one another.
+frames beside it. Frames are never left overlapping one another. A screen reader hears
+what it did ("Tidied 6 notes in 2 frames"), or "Already tidy" when there was
+nothing to move.
 
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
