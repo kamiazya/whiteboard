@@ -40,7 +40,7 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
 export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): FakeFilesSource {
   return {
     listDocuments: vi.fn(overrides.listDocuments ?? (async () => [])),
-    createDocument: vi.fn(overrides.createDocument ?? (async () => {})),
+    createDocument: vi.fn(overrides.createDocument ?? (async (path: string) => path)),
     renameDocumentPath: vi.fn(overrides.renameDocumentPath ?? (async () => {})),
     searchDocuments: vi.fn(
       overrides.searchDocuments ??

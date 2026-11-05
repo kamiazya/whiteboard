@@ -37,13 +37,13 @@ describe('WorkspaceFilesPanel create guard', () => {
   // stay green. It is pinned anyway because one gesture producing one
   // document is the contract; which layer delivers it may change.
   it('two same-tick selects of one kind send one create', async () => {
-    let resolveCreate: (() => void) | undefined
+    let resolveCreate: ((path: string) => void) | undefined
     const source = fakeFilesSource({
       listDocuments: () =>
         Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
       createDocument: vi.fn(
         () =>
-          new Promise<void>((resolve) => {
+          new Promise<string>((resolve) => {
             resolveCreate = resolve
           }),
       ),
@@ -57,7 +57,7 @@ describe('WorkspaceFilesPanel create guard', () => {
     fireEvent.pointerUp(item)
 
     expect(source.createDocument).toHaveBeenCalledTimes(1)
-    resolveCreate?.()
+    resolveCreate?.('untitled')
     await waitFor(() => expect(source.createDocument).toHaveBeenCalledTimes(1))
   })
 
@@ -67,7 +67,7 @@ describe('WorkspaceFilesPanel create guard', () => {
     const source = fakeFilesSource({
       listDocuments: () =>
         Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
-      createDocument: vi.fn(() => new Promise<void>(() => {})),
+      createDocument: vi.fn(() => new Promise<string>(() => {})),
     })
     render(<WorkspaceFilesPanel source={source} />)
     await screen.findAllByTestId('card-title')
@@ -173,6 +173,30 @@ describe('WorkspaceFilesPanel — creating opens what it made', () => {
     fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('untitled'))
+  })
+
+  // The keeper may shift an unnamed create past an address a sibling's name
+  // reads as; the path asked for then names nothing.
+  it('opens the path the keeper says the document landed at', async () => {
+    const onOpenDocument = vi.fn()
+    const rows: { documentId: string; path: string; kind: 'markdown' | 'spatial' }[] = [
+      { documentId: 'd1', path: 'seed', kind: 'markdown' },
+    ]
+    const source = fakeFilesSource({
+      listDocuments: () => Promise.resolve([...rows]),
+      createDocument: vi.fn(async () => {
+        rows.push({ documentId: 'd2', path: 'untitled-2', kind: 'spatial' })
+        return 'untitled-2'
+      }),
+    })
+    render(<WorkspaceFilesPanel source={source} onOpenDocument={onOpenDocument} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('untitled-2'))
+    expect(onOpenDocument).not.toHaveBeenCalledWith('untitled')
   })
 
   // A create that failed has nothing to open, and navigating away would take

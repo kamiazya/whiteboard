@@ -241,8 +241,11 @@ export function createDaemonFilesSource(
     },
     ...listingMembers(list, afterWrite, { daemonFetch, daemonBaseUrl, workspaceId }),
 
-    createDocument: (path: string, kind: DocumentKind, name?: string) =>
-      afterWrite(createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)),
+    async createDocument(path: string, kind: DocumentKind, name?: string): Promise<string> {
+      const created = createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)
+      await afterWrite(created)
+      return (await created).path
+    },
 
     async importDocument(path: string, imported: ImportedDocument): Promise<void> {
       // The create route takes a markdown document's text and no canvas

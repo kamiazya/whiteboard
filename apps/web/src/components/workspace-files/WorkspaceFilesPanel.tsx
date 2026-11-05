@@ -403,15 +403,17 @@ export function WorkspaceFilesPanel({
         // No options means nobody expressed an opinion, so the address is
         // derived exactly as it always was. The dialog is the only caller
         // that supplies one.
-        const path = options?.path ?? derivedNewPath
+        const asked = options?.path ?? derivedNewPath
+        let path = asked
         // ONLY this write decides whether the create was refused. Everything
         // below is bookkeeping on a document that already exists, and
         // reporting a failed refresh as "could not create" invites a retry
         // that collides with what was just made — from the dialog, while the
         // form is still open holding the path that now exists.
         try {
-          refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
-          await source.createDocument(path, kind, options?.name)
+          refuseTakenDocumentName(listedRef.current, { path: asked, name: options?.name })
+          // Where it LANDED: an unnamed create may shift past a sibling's name.
+          path = await source.createDocument(asked, kind, options?.name)
           flushFolderNamesIntoRef.current(path)
         } catch (err) {
           outcome.reportCreateRefusal({

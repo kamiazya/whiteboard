@@ -38,6 +38,7 @@ function renderWithFolders(
     },
     createDocument: async (path, kind, name) => {
       rows = [...rows, { documentId: `d${rows.length + 1}`, path, kind, ...(name ? { name } : {}) }]
+      return path
     },
     renameDocumentPath: async (from, to) => {
       rows = rows.map((row) => (row.path === from ? { ...row, path: to } : row))

@@ -44,8 +44,12 @@ export interface WorkspaceFilesSource {
    * document. Split into a create then a set-name, the second half can fail
    * alone and leave a document the user named sitting in the list as
    * untitled-N, with nothing on screen saying which half went wrong.
+   *
+   * Answers the path the document LANDED at: an unnamed create shifts past
+   * an address a sibling's name already reads as, so the path asked for may
+   * not exist, and opening it would open nothing.
    */
-  createDocument(path: string, kind: DocumentKind, name?: string): Promise<void>
+  createDocument(path: string, kind: DocumentKind, name?: string): Promise<string>
   /**
    * Create a document at `path` holding a file's content — the document is
    * created and filled by the one call, so a refusal leaves nothing behind.
