@@ -1,4 +1,5 @@
 import type { CanvasEdge, CanvasLine } from '@kamiazya/whiteboard-model'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { BoxTargetOverlay } from './BoxTargetOverlay.js'
@@ -84,13 +85,18 @@ function PathHandles({
           gesture.dispatch({ type: 'pointerdown-end', elementId: element.id, endpoint })
         }}
       />
-      <EdgeBendLayer
-        edge={element}
-        path={path}
-        viewport={gesture.viewport}
-        begin={gesture.beginOverlay}
-        dispatch={gesture.dispatch}
-      />
+      {/* A drawing's bends are where the hand went, and a press on the
+        stroke has to MOVE it: grab points every few pixels along it left no
+        part of a selected drawing a finger could press without bending it. */}
+      {!isFreehandStroke(element) && (
+        <EdgeBendLayer
+          edge={element}
+          path={path}
+          viewport={gesture.viewport}
+          begin={gesture.beginOverlay}
+          dispatch={gesture.dispatch}
+        />
+      )}
     </>
   )
 }

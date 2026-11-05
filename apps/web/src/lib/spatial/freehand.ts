@@ -21,8 +21,12 @@
  * display — at zoom 0.25 the same wobble covers four times the document.
  */
 
-import { type CanvasLine, MAX_BENDS } from '@kamiazya/whiteboard-model'
-import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import { type CanvasEdge, type CanvasLine, MAX_BENDS } from '@kamiazya/whiteboard-model'
+import {
+  resolveEdgeOwnStyle,
+  VISUAL_EDGES_KEY,
+  VISUAL_INK_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import type { Point } from './viewport.js'
 
 /**
@@ -210,4 +214,17 @@ export function freehandLine(
       ...(group === undefined ? {} : { [VISUAL_INK_KEY]: { group } }),
     },
   }
+}
+
+/**
+ * Whether an element is a stroke somebody DREW rather than a line ruled
+ * between two points: both ends free, and drawn as the curve `freehandLine`
+ * asks for. Its bends are the samples the hand left, not points anyone
+ * placed, so offering each as a grab point turns a drawing into a fence of
+ * handles that a press on the stroke can only ever bend.
+ */
+export function isFreehandStroke(element: CanvasEdge | CanvasLine): boolean {
+  if (!('kind' in element.from) || !('kind' in element.to)) return false
+  if (element.from.kind !== 'point' || element.to.kind !== 'point') return false
+  return resolveEdgeOwnStyle(element).routing === 'curved'
 }

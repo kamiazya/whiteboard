@@ -12,10 +12,17 @@
  * handles do not answer the arrow keys the way a bend does. The keyboard
  * path is the box targets the armed gesture puts on the board.
  */
+import { hasCoarsePointer } from '../../lib/platform.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 
 /** Half-width in SCREEN pixels — divided by zoom so a handle stays grabbable. */
 const HANDLE_HALF_PX = 6
+/**
+ * Half the target a FINGER gets, in screen pixels: the 44px touch floor the
+ * selection's resize handles use. The marker stays small so it does not
+ * cover the ink; only what takes the press grows.
+ */
+const COARSE_HIT_HALF_PX = 22
 
 const ENDPOINTS = [
   { endpoint: 'from', label: 'start' },
@@ -39,6 +46,14 @@ export function EdgeEndHandles({
 }) {
   if (path.length < 2) return null
   const half = HANDLE_HALF_PX / Math.max(zoom, 0.01)
+  const hitHalf = hasCoarsePointer() ? COARSE_HIT_HALF_PX / Math.max(zoom, 0.01) : undefined
+  const arm = (endpoint: 'from' | 'to', event: React.PointerEvent) => {
+    if (event.button !== 0) return
+    // The root's own hit-test must not also see this press, or it starts a
+    // second gesture and this one never reaches its pointerup.
+    event.stopPropagation()
+    onArm(endpoint, event)
+  }
   const at = (endpoint: 'from' | 'to') =>
     (endpoint === 'from' ? path[0] : path[path.length - 1]) as Point
   return (
@@ -48,7 +63,20 @@ export function EdgeEndHandles({
       <title>Connection ends</title>
       {ENDPOINTS.map(({ endpoint, label }) => {
         const point = at(endpoint)
-        return (
+        return [
+          hitHalf === undefined ? null : (
+            <rect
+              key={`${endpoint}-hit`}
+              data-testid={`edge-end-hit-${endpoint}`}
+              x={point.x - hitHalf}
+              y={point.y - hitHalf}
+              width={hitHalf * 2}
+              height={hitHalf * 2}
+              fill="transparent"
+              style={{ pointerEvents: 'auto', cursor: 'grab' }}
+              onPointerDown={(event) => arm(endpoint, event)}
+            />
+          ),
           // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space point under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
           <rect
             key={endpoint}
@@ -61,14 +89,7 @@ export function EdgeEndHandles({
             stroke="var(--manipulation)"
             strokeWidth={2 / Math.max(zoom, 0.01)}
             style={{ pointerEvents: 'auto', cursor: 'grab' }}
-            onPointerDown={(event) => {
-              if (event.button !== 0) return
-              // The root's own hit-test must not also see this press, or it
-              // starts a second gesture and this one never reaches its
-              // pointerup.
-              event.stopPropagation()
-              onArm(endpoint, event)
-            }}
+            onPointerDown={(event) => arm(endpoint, event)}
             role="button"
             tabIndex={0}
             aria-label={`Move the ${label} of this connection`}
@@ -84,8 +105,8 @@ export function EdgeEndHandles({
             }}
           >
             <title>Drag to attach this {label} somewhere else</title>
-          </rect>
-        )
+          </rect>,
+        ]
       })}
     </svg>
   )
