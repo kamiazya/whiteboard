@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DOCUMENT_NAME_MAX_LENGTH } from './ids.js'
+import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from './ids.js'
 
 /**
  * Why `name` cannot be a folder's display name, or `null` when it can.
@@ -78,6 +78,59 @@ export function isSiblingDisplayNameTaken(
     shown.push(other.name ?? other.path.slice(other.path.lastIndexOf('/') + 1))
   }
   return isDisplayNameTaken(target.name, shown)
+}
+
+/**
+ * Whether moving the entry at `from` to `to` makes it show a name a sibling
+ * already shows. `staying` is every entry of the same KIND that is not part
+ * of the moving subtree; `name` is the moving entry's own display name. An
+ * entry that keeps the label it already showed under the same parent (an
+ * unnamed one renamed in place changes its label; a named one does not) is
+ * no new duplicate, so re-saving a form over one that merged in is not
+ * refused.
+ */
+export function isMovedNameTaken(
+  staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+  move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
+): boolean {
+  const segmentOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
+  const shown = move.name ?? segmentOf(move.to)
+  const wasShown = move.name ?? segmentOf(move.from)
+  if (
+    parentOf(move.from) === parentOf(move.to) &&
+    displayNameKey(shown) === displayNameKey(wasShown)
+  ) {
+    return false
+  }
+  return isSiblingDisplayNameTaken(staying, { path: move.to, name: shown })
+}
+
+/**
+ * The address an UNNAMED document takes so that it does not read like a
+ * sibling. Nobody chose a label for it, so a label that duplicates a sibling's
+ * name is not a mistake to refuse: it moves to the first `-2`, `-3`, ...
+ * address that is free and shows a label no sibling does. `path` itself when
+ * it already reads distinctly; `null` when no suffix in range is free or
+ * valid.
+ */
+export function firstDistinctUnnamedPath(
+  path: string,
+  siblings: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+  isOccupied: (candidate: string) => boolean,
+): string | null {
+  const others = [...siblings]
+  const reads = (candidate: string): boolean =>
+    isSiblingDisplayNameTaken(others, {
+      path: candidate,
+      name: candidate.slice(candidate.lastIndexOf('/') + 1),
+    })
+  if (!reads(path)) return path
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${path}-${n}`
+    if (!documentPathSchema.safeParse(candidate).success) return null
+    if (!isOccupied(candidate) && !reads(candidate)) return candidate
+  }
+  return null
 }
 
 function parentOf(path: string): string {

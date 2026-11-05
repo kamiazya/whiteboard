@@ -184,11 +184,11 @@ class Model {
    * The keeper's sibling-name refusal, restated rather than imported: another
    * document under the same parent shows `name` (its own, or its last segment).
    */
-  nameTaken(path: string, name: string, selfId?: string): boolean {
+  nameTaken(path: string, name: string, selfId?: string, leaving: ReadonlySet<string> = new Set()) {
     const parent = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
     const key = (n: string) => n.trim().normalize('NFC').toLowerCase()
     for (const d of this.docs.values()) {
-      if (d.id === selfId || parent(d.path) !== parent(path)) continue
+      if (d.id === selfId || leaving.has(d.id) || parent(d.path) !== parent(path)) continue
       if (key(d.name ?? d.path.slice(d.path.lastIndexOf('/') + 1)) === key(name)) return true
     }
     return false
@@ -441,10 +441,17 @@ describe('reference semantics under command sequences', () => {
               kind: cmd.kind,
               ...(cmd.name === undefined ? {} : { name: cmd.name }),
             })
+            // An unnamed create whose address would read as a sibling's name
+            // takes a suffixed address instead; any other lands where asked.
+            const shifts =
+              cmd.name === undefined &&
+              model.nameTaken(cmd.path, cmd.path.slice(cmd.path.lastIndexOf('/') + 1))
+            if (shifts) expect(created.path).toMatch(new RegExp(`^${cmd.path}-\\d+$`))
+            else expect(created.path).toBe(cmd.path)
             slots[cmd.slot] = created.documentId
             model.docs.set(created.documentId, {
               id: created.documentId,
-              path: cmd.path,
+              path: created.path,
               kind: cmd.kind,
               ...(cmd.name === undefined ? {} : { name: cmd.name }),
               bodyTokens: [],
@@ -522,6 +529,20 @@ describe('reference semantics under command sequences', () => {
               return holder !== undefined && !movedPaths.includes(holder.path)
             })
             if (collides) {
+              await expect(attempt()).rejects.toThrow()
+              break
+            }
+            // The moved root shows its name, or its new segment, beside the
+            // documents that stay; a rename in place that keeps its label is
+            // no new duplicate.
+            const segment = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+            const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+            const key = (n: string) => n.trim().normalize('NFC').toLowerCase()
+            const label = doc.name ?? segment(cmd.to)
+            const keepsLabel =
+              parentOf(from) === parentOf(cmd.to) && key(label) === key(doc.name ?? segment(from))
+            const leaving = new Set(model.movedBy(from).map((d) => d.id))
+            if (!keepsLabel && model.nameTaken(cmd.to, label, undefined, leaving)) {
               await expect(attempt()).rejects.toThrow()
               break
             }
