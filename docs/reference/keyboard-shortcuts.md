@@ -148,6 +148,10 @@ elsewhere follows what it finds: an image becomes an image node, our own
 copied JSON becomes the nodes it describes, and any other text becomes a
 note. Edges come along whenever both of their endpoints are selected.
 
+A cut does not remove anything until you paste: the cut nodes stay in place
+under a veil, a chip says how many are held, and a screen reader hears it ("1
+node held — paste to place, Escape to cancel"). `Esc` lifts the hold.
+
 Right-click empty space and choose **Paste here** to place the pasted
 content at that exact point instead of the default offset.
 
