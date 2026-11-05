@@ -150,7 +150,8 @@ export function movedDisplayNameTaken(
  * The address an UNNAMED document takes so that it does not read like a
  * sibling. Nobody chose a label for it, so a label that duplicates a sibling's
  * name is not a mistake to refuse: it moves to the first `-2`, `-3`, ...
- * address that is free and shows a label no sibling does. `path` itself when
+ * address that is free and shows a label no sibling does — for a generated
+ * address, the next generated one (`untitled-3`, never `untitled-2-2`). `path` itself when
  * it already reads distinctly; `null` when no suffix in range is free or
  * valid.
  */
@@ -166,8 +167,12 @@ export function firstDistinctUnnamedPath(
       name: shownName('document', { path: candidate }),
     }) !== undefined
   if (!reads(path)) return path
+  // A generated address steps to the next generated one, so it still reads
+  // as "Untitled N" rather than as a raw `untitled-2-2`.
+  const parent = parentOfPath(path)
+  const stem = isGeneratedDocumentPath(path) ? `${parent === '' ? '' : `${parent}/`}untitled` : path
   for (let n = 2; n < 1000; n++) {
-    const candidate = `${path}-${n}`
+    const candidate = `${stem}-${n}`
     if (!documentPathSchema.safeParse(candidate).success) return null
     if (!isOccupied(candidate) && !reads(candidate)) return candidate
   }
