@@ -358,3 +358,19 @@ describe('paper (ADR-0030)', () => {
     expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(255, 255, 255)')
   })
 })
+
+describe('the layout status', () => {
+  it('sits in the editor chrome, not in the panned and zoomed canvas layer', () => {
+    const { container } = render(
+      <SpatialEditor
+        theme="light"
+        canvas={twoNodeCanvas()}
+        onChange={() => {}}
+        measure={fakeMeasure}
+      />,
+    )
+    const status = container.querySelector('[data-testid="layout-status"]')
+    expect(status).not.toBeNull()
+    expect(status?.closest('[data-testid="viewport-transform"]')).toBeNull()
+  })
+})

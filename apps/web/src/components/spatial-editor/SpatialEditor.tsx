@@ -142,6 +142,7 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
+import { LayoutStatus } from './LayoutStatus.js'
 import { canvasRootLabel, selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
@@ -1614,6 +1615,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {canvas.nodes.length === 0 && (
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
         )}
+        {/* Chrome, not canvas: inside the panned layer the chip was
+            centred on the layer's zero width, at the canvas origin. */}
+        <LayoutStatus current={sceneCurrent} />
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
         )}

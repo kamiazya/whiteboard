@@ -28,7 +28,7 @@ export function LayoutStatus({ current }: { readonly current: boolean }) {
   return (
     <div aria-live="polite" data-testid="layout-status" data-editor-overlay>
       {shown && !current && (
-        <div className="pointer-events-none absolute top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background px-3 py-1 text-muted-foreground text-xs shadow-sm">
+        <div className="pointer-events-none absolute top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border bg-background px-3 py-1 text-muted-foreground text-xs shadow-sm">
           <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
           <span>Laying out…</span>
         </div>
