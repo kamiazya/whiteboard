@@ -230,5 +230,5 @@ it('names a drawing as a drawing, in the contents list and on its handles', asyn
     end.getAttribute('aria-label'),
   )
   expect(ends).toEqual(['Move the start of this drawing', 'Move the end of this drawing'])
-  await vi.waitFor(() => expect(canvasAnnouncement().trim()).toBe('Selected: Drawing'))
+  await vi.waitFor(() => expect(canvasAnnouncement().trim()).toBe('Selected: Drawing (1 of 1)'))
 })

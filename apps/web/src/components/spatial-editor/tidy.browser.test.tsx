@@ -6,7 +6,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -151,6 +152,14 @@ it('tidies the whole canvas from the empty-space menu', () => {
   expect(byId(latest.canvas, 'b').x).toBe(40)
   expect(latest.commands).toHaveLength(1)
   expect(latest.commands[0]).toMatchObject({ kind: 'batch' })
+})
+
+it('says what Tidy canvas did once the menu has closed', async () => {
+  const { Host } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
+  const { container } = render(<Host />)
+  openMenuOn(rootOf(container), 600, 500)
+  clickItem(container, 'Tidy canvas')
+  await vi.waitFor(() => expect(canvasAnnouncement().trim()).toBe('Tidied 1 note'))
 })
 
 it('grows a group around a member at its edge, in the same undo step as the moves', () => {

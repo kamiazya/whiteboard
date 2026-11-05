@@ -50,7 +50,7 @@ describe('arriving on a canvas', () => {
     await waitFor(() => expect(document.activeElement).toBe(surface()), SLOW)
 
     await userEvent.keyboard('n')
-    await waitFor(() => expect(surface()?.textContent).not.toContain('Double-click to add a note'))
+    await waitFor(() => expect(surface()?.textContent).not.toContain('to add a note'))
   })
 
   it('gives the canvas the keyboard when it has content too', async () => {

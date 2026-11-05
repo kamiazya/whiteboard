@@ -45,7 +45,7 @@ describe('node accessible names', () => {
       textNode({ id: 'b', x: 0, y: 0, width: 100, height: 40, text: 'B' }),
     ]
     const edge = { id: 'e', from: { node: 'a' }, to: { node: 'b' } } as const
-    expect(edgeA11yName(edge, nodes)).toBe('Edge from A to B')
-    expect(edgeA11yName({ ...edge, label: 'yes' }, nodes)).toBe('Edge from A to B: yes')
+    expect(edgeA11yName(edge, nodes)).toBe('Connection from A to B')
+    expect(edgeA11yName({ ...edge, label: 'yes' }, nodes)).toBe('Connection from A to B: yes')
   })
 })

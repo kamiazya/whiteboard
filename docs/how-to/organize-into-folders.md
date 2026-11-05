@@ -48,7 +48,8 @@ The picker lists the workspace root and every folder, plus **New folder…**:
   and for a folder moved under a folder with a same-named folder.
 
 With a mouse or a pen you can also drag a card or row onto a folder (the
-picker says so once, under its list) — a folder
+picker says so once, under its list, beside the keyboard way back to it:
+`Shift + F10` on a card, then **Move to folder…**) — a folder
 card, a folder in the tree beside the list, or **Workspace** for the root. The
 folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the

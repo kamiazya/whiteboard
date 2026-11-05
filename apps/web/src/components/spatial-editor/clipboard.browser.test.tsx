@@ -13,7 +13,8 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
@@ -534,6 +535,17 @@ it('a mouse click on empty canvas does NOT place — desktop keeps the explicit 
   const a = latest.canvas.nodes.find((n) => n.id === 'a')
   expect(a).toMatchObject({ x: 40, y: 40 })
   expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
+})
+
+it('a cut is said aloud, since the held nodes stay visible under the veil', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+  await vi.waitFor(() =>
+    expect(canvasAnnouncement().trim()).toBe('1 node held — paste to place, Escape to cancel'),
+  )
 })
 
 it('the pending chip announces the hold and its ✕ cancels it — touch finally has an exit', () => {

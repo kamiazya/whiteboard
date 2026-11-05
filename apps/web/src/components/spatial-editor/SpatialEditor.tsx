@@ -1206,6 +1206,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       selectedNode,
       extraIds,
       setSelectedEdgeId,
+      setEdgeLabelEditId,
       selectedInkIds,
       setSelectedInkIds,
       pendingCut,

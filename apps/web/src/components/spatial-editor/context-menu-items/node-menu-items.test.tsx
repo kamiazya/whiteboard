@@ -213,7 +213,7 @@ describe('nodeMenuItems', () => {
         row.onSelect()
         return canvasAnnouncement()
       }
-      expect(say('Tidy')).toBe('Tidied')
+      expect(say('Tidy')).toBe('Already tidy')
       expect(say('Lock')).toBe('Locked 1 node')
       const unlock = nodeMenuItems(
         baseInput(textNode, canvas, { isLocked: () => true, onToggleNodeLock }),

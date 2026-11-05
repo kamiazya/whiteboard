@@ -9,6 +9,7 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import type { ClipboardImageSeams, PastedFragment } from '../../lib/clipboard-images.js'
 import { clearClipboardFragmentForTests, readClipboardFragment } from '../../lib/clipboard-store.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
@@ -191,6 +192,13 @@ describe('useClipboardActions, a cut pasted as a copy', () => {
     })
     expect(changes).toHaveLength(2)
     expect(edgesOntoPeer(changes[1]?.command)).toHaveLength(0)
+  })
+
+  it('says what a cut is holding and how to finish or cancel it', () => {
+    const { hook } = harness(wired, { primaryId: 'a', clipboardImages: undefined })
+    hook.result.current.cutSelection()
+    // Trimmed: a repeat inside the announcer's beat carries a trailing no-break space.
+    expect(canvasAnnouncement().trim()).toBe('1 node held — paste to place, Escape to cancel')
   })
 
   it('answers unhandled for a fragment that makes nothing', () => {

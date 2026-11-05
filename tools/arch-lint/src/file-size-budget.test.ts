@@ -357,7 +357,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no sample size makes safe, and the setup both runs share.
   // +95: R1 (the canvas stays readable through the model's own schema after
   // every step) and the long-stroke command that reaches the bend cap.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2975, // +2: the connect-pick-target ledger row
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2979, // +2: the connect-pick-target ledger row; +4: the two leave-canvas (F6) ledger rows
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // The v19 -> v20 upgrade block (the plaintext replica discard): the seed
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical

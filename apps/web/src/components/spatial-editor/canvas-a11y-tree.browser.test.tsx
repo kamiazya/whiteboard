@@ -41,7 +41,7 @@ it('lists every node and edge by name in one labelled listbox', async () => {
   await expect.element(page.getByRole('option', { name: 'Ship' })).toBeInTheDocument()
   await expect.element(page.getByRole('option', { name: 'Frame cluster' })).toBeInTheDocument()
   await expect
-    .element(page.getByRole('option', { name: 'Edge from Review to Ship: then' }))
+    .element(page.getByRole('option', { name: 'Connection from Review to Ship: then' }))
     .toBeInTheDocument()
 })
 
@@ -81,4 +81,18 @@ it('grouping a selection announces how many nodes it framed', async () => {
   rightClick(root, 100, 70)
   await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
   await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Grouped 2 nodes'))
+})
+
+it('nudging a node out of its frame announces that it left', async () => {
+  mount({
+    nodes: [
+      groupNode({ id: 'g', x: 20, y: 200, width: 300, height: 160, label: 'Box' }),
+      textNode({ id: 'n', x: 40, y: 220, width: 120, height: 60, text: 'Inner' }),
+    ],
+    edges: [],
+  })
+  await userEvent.keyboard('{Tab}{Tab}')
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Selected: Inner, in Box (2 of 2)'))
+  await userEvent.keyboard('{Shift>}{ArrowDown}{ArrowDown}{ArrowDown}{/Shift}')
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Inner left Box'))
 })
