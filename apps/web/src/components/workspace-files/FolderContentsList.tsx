@@ -449,7 +449,7 @@ export function FolderContentsList({
   )
 
   if (folders.length === 0 && here.length === 0) {
-    return <EmptyFolderNote className={className} onCreateHere={onCreateHere} />
+    return <EmptyFolderNote folder={folder} className={className} onCreateHere={onCreateHere} />
   }
 
   return (
@@ -490,20 +490,24 @@ const HERE_BUTTON =
 /**
  * Folders are implicit path segments, so an empty one standing open needs
  * saying — with the way to keep it beside the reason it would go. A document
- * made from here lands in THIS folder, which is what writes its pending name.
+ * made from here, or moved in from here, lands in THIS folder, which is what
+ * writes its pending name.
  */
 function EmptyFolderNote({
+  folder,
   className,
   onCreateHere,
 }: {
+  readonly folder: string
   readonly className: string | undefined
   readonly onCreateHere: FolderContentsListProps['onCreateHere']
 }) {
+  const actions = useContext(FolderActionsContext)
   return (
     <div className={cn('text-muted-foreground flex flex-col items-start gap-2 text-sm', className)}>
       <p>
-        This folder is empty. It is kept only while a document is in it, so add one here or it goes
-        once you leave.
+        This folder is empty. It is kept only while a document is in it, so add or move one here or
+        it goes once you leave.
       </p>
       {onCreateHere !== undefined && (
         <div className="flex flex-wrap gap-2">
@@ -513,6 +517,15 @@ function EmptyFolderNote({
           <button type="button" className={HERE_BUTTON} onClick={() => onCreateHere('spatial')}>
             New canvas here
           </button>
+          {actions !== undefined && (
+            <button
+              type="button"
+              className={HERE_BUTTON}
+              onClick={() => actions.gatherInto(folder)}
+            >
+              Move documents here…
+            </button>
+          )}
         </div>
       )}
     </div>

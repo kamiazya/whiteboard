@@ -1,5 +1,5 @@
 import { folderNameRefusal } from '@kamiazya/whiteboard-model'
-import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import {
@@ -11,6 +11,8 @@ import {
 import { useAnnouncer } from '../annotations/announcer.js'
 import { FolderActionsLayer, type FolderDialog, type FolderMenu } from './FolderActionsLayer.js'
 import type { FolderActions } from './folder-actions.js'
+import { documentLanding, focusLanding, folderLanding } from './folder-landing.js'
+import { pathInFolder } from './folder-moves.js'
 import { useFolderMoves } from './use-folder-moves.js'
 import { type FolderNamesState, useFolderNames } from './use-folder-names.js'
 
@@ -24,6 +26,7 @@ function useFolderSurfaceActions(
   moveInto: (entry: WorkspaceDocumentEntry, folder: string) => Promise<boolean>,
   rootRef: RefObject<HTMLElement | null>,
   setMenu: (menu: FolderMenu) => void,
+  setGathering: (folder: string) => void,
 ): FolderActions {
   return useMemo(
     () => ({
@@ -35,8 +38,9 @@ function useFolderSurfaceActions(
         const rect = rootRef.current?.getBoundingClientRect()
         setMenu({ folder, x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) })
       },
+      gatherInto: setGathering,
     }),
-    [documents, moveInto, rootRef, setMenu],
+    [documents, moveInto, rootRef, setMenu, setGathering],
   )
 }
 
@@ -101,28 +105,29 @@ function namingChecks(
   }
 }
 
-/** What the layer's dialogs and menu do when answered, in terms of the moves and the open dialogs. */
-function layerHandlers({
-  documents,
-  folderNames,
-  moveInto,
-  renameFolder,
-  goToFolder,
-  setError,
-  setMoving,
-  setDialog,
-}: Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
+type HandlerDeps = Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
   documents: readonly WorkspaceDocumentEntry[] | null
   folderNames: FolderNamesState
   goToFolder: (folder: string) => void
   setMoving: (entry: WorkspaceDocumentEntry | null) => void
   setDialog: (dialog: FolderDialog | null) => void
-}) {
+  setGathering: (folder: string | null) => void
+  announce: (text: string) => void
+  /** Where focus goes when the dialog now closing has gone. */
+  landOn: (selectors: readonly string[]) => void
+}
+
+/** The two move dialogs answered: documents gathered into a folder, one sent to a folder. */
+function moveHandlers({ folderNames, moveInto, setMoving, setGathering, landOn }: HandlerDeps) {
   return {
-    onCancel: () => {
-      setMoving(null)
-      setDialog(null)
-      setError(null)
+    // One move at a time, stopping at the first refusal so the dialog can
+    // word it with the rest still chosen. The folder's pending name needs
+    // nothing here: it is written once the listing shows a document in it.
+    onGather: async (folder: string, entries: readonly WorkspaceDocumentEntry[]) => {
+      for (const entry of entries) if (!(await moveInto(entry, folder))) return
+      const [first] = entries
+      if (first !== undefined) landOn(documentLanding(pathInFolder(first.path, folder)))
+      setGathering(null)
     },
     onMoveTo: async (
       entry: WorkspaceDocumentEntry,
@@ -135,22 +140,71 @@ function layerHandlers({
       const calledAs = created.find((each) => each.path === folder)?.name
       if (!(await moveInto(entry, folder, calledAs))) return
       for (const each of created) folderNames.remember(each.path, each.name)
+      landOn(folderLanding(folder))
       setMoving(null)
     },
+  }
+}
+
+/** The folder dialog answered: a new folder opened, or a folder renamed. */
+function nameHandlers(deps: HandlerDeps) {
+  const { documents, folderNames, renameFolder, goToFolder, setDialog, announce, landOn } = deps
+  return {
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
         const path = namedPath(open, name, documents, folderNames)
         folderNames.remember(path, name)
+        landOn(folderLanding(path))
         setDialog(null)
         goToFolder(path)
-      } else if (await renameFolder(open.folder, name)) setDialog(null)
+        // The route announcer still names the page; this says where in it.
+        announce(`In ${name}, empty`)
+      } else if (await renameFolder(open.folder, name)) {
+        landOn(folderLanding(open.folder))
+        setDialog(null)
+      }
     },
     ...namingChecks(documents, folderNames),
+  }
+}
+
+/** What the layer's dialogs and menu do when answered, in terms of the moves and the open dialogs. */
+function layerHandlers(deps: HandlerDeps) {
+  const { setMoving, setDialog, setGathering, setError } = deps
+  return {
+    onCancel: () => {
+      setMoving(null)
+      setDialog(null)
+      setGathering(null)
+      setError(null)
+    },
+    ...moveHandlers(deps),
+    ...nameHandlers(deps),
     onMenuChoice: (kind: FolderDialog['kind'], folder: string) => {
       setError(null)
       setDialog({ kind, folder })
     },
   }
+}
+
+/**
+ * Where focus goes once a folder dialog closes: set by the handler that
+ * closes it, spent by the dialog's close.
+ */
+function useDialogLanding(rootRef: RefObject<HTMLElement | null>) {
+  const landing = useRef<readonly string[] | null>(null)
+  const landOn = useCallback((selectors: readonly string[]) => {
+    landing.current = selectors
+  }, [])
+  const onCloseAutoFocus = useCallback(
+    (event: Event) => {
+      const selectors = landing.current
+      landing.current = null
+      if (selectors !== null && focusLanding(rootRef.current, selectors)) event.preventDefault()
+    },
+    [rootRef],
+  )
+  return { landOn, onCloseAutoFocus }
 }
 
 /** The card menu's way into the move picker, clearing the last refusal. */
@@ -172,14 +226,16 @@ function useOpenSurfaces(source: unknown, clearError: (error: null) => void) {
   const [moving, setMoving] = useState<WorkspaceDocumentEntry | null>(null)
   const [menu, setMenu] = useState<FolderMenu | null>(null)
   const [dialog, setDialog] = useState<FolderDialog | null>(null)
+  const [gathering, setGathering] = useState<string | null>(null)
   // SCOPE RESET — a path of the departed workspace handed to the new keeper.
   useEffect(() => {
     setMoving(null)
     setMenu(null)
     setDialog(null)
+    setGathering(null)
     clearError(null)
   }, [source, clearError])
-  return { moving, setMoving, menu, setMenu, dialog, setDialog }
+  return { moving, setMoving, menu, setMenu, dialog, setDialog, gathering, setGathering }
 }
 
 interface FolderActionsDeps {
@@ -217,24 +273,22 @@ export function useFolderActions({
     announce,
     folderNames,
   })
-  const { moving, setMoving, menu, setMenu, dialog, setDialog } = useOpenSurfaces(source, setError)
+  const surfaces = useOpenSurfaces(source, setError)
+  const { moving, setMoving, menu, setMenu, dialog, gathering, setGathering } = surfaces
+  const { landOn, onCloseAutoFocus } = useDialogLanding(rootRef)
 
-  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu)
+  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, setGathering)
   const openMovePicker = useMovePickerOpener(setError, setMoving)
   const handlers = layerHandlers({
-    documents,
-    folderNames,
-    moveInto,
-    renameFolder,
-    goToFolder,
-    setError,
-    setMoving,
-    setDialog,
+    ...surfaces,
+    ...{ documents, folderNames, moveInto, renameFolder, goToFolder, setError, announce, landOn },
   })
 
   const layer = (
     <FolderActionsLayer
       folderNames={folderNames}
+      documents={documents ?? []}
+      gathering={gathering}
       announcement={announcement}
       moving={moving}
       menu={menu}
@@ -242,6 +296,7 @@ export function useFolderActions({
       busy={busy}
       error={error ?? folderNames.refusal}
       onCloseMenu={() => setMenu(null)}
+      onCloseAutoFocus={onCloseAutoFocus}
       {...handlers}
     />
   )
