@@ -203,12 +203,37 @@ function previewLine(
 }
 
 /**
+ * `ids` plus every unlocked node a FRAME among them holds — what a move of
+ * that selection carries. Membership is geometric (`frameHolds`), the one
+ * rule JSON Canvas groups have, so a frame's box is read where the move
+ * BEGAN: `startOf` overrides it for a frame whose live box has already
+ * moved under a drag.
+ */
+export function withHeldMembers(
+  canvas: SpatialCanvas,
+  ids: Iterable<string>,
+  isLocked: (id: string) => boolean,
+  startOf: (id: string) => { readonly x: number; readonly y: number } | undefined = () => undefined,
+): ReadonlySet<string> {
+  const carried = new Set<string>(ids)
+  for (const frame of canvas.nodes) {
+    if (!carried.has(frame.id) || !isFrame(frame)) continue
+    const start = startOf(frame.id) ?? frame
+    const box = { x: start.x, y: start.y, width: frame.width, height: frame.height }
+    for (const n of canvas.nodes) {
+      if (n.id !== frame.id && !isLocked(n.id) && frameHolds(box, n)) carried.add(n.id)
+    }
+  }
+  return carried
+}
+
+/**
  * Every node travelling WITH an in-flight move: the grabbed node, the
- * multi-selection extras, and — when the grabbed node is a group frame —
- * its geometrically contained members (minus locked ones, which the commit
- * refuses to move). One producer shared by snapping (which must exclude
- * carried nodes as attractors), the drag ghost, and the live layers — the
- * commit path applies the same containment rule to its member moves.
+ * multi-selection extras, and every frame among them's geometrically
+ * contained members (minus locked ones, which the commit refuses to move).
+ * One producer shared by snapping (which must exclude carried nodes as
+ * attractors), the drag ghost, and the live layers — the commit path
+ * applies the same containment rule to its member moves.
  */
 export function carriedWithDrag(
   canvas: SpatialCanvas,
@@ -216,21 +241,9 @@ export function carriedWithDrag(
   extraIds: ReadonlySet<string>,
   isLocked: (id: string) => boolean,
 ): ReadonlySet<string> {
-  const carried = new Set<string>([gesture.nodeId, ...extraIds])
-  const movingNode = canvas.nodes.find((n) => n.id === gesture.nodeId)
-  if (movingNode !== undefined && isFrame(movingNode)) {
-    // The frame's box where the gesture began, not where the ghost is now.
-    const startBox = {
-      x: gesture.startX,
-      y: gesture.startY,
-      width: movingNode.width,
-      height: movingNode.height,
-    }
-    for (const n of canvas.nodes) {
-      if (!isLocked(n.id) && frameHolds(startBox, n)) carried.add(n.id)
-    }
-  }
-  return carried
+  return withHeldMembers(canvas, [gesture.nodeId, ...extraIds], isLocked, (id) =>
+    id === gesture.nodeId ? { x: gesture.startX, y: gesture.startY } : undefined,
+  )
 }
 
 /**

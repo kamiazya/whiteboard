@@ -101,7 +101,8 @@ around it, and a brief "Locked — unlock from the menu" notice says why. A
 frame holding an edge gives way to the edge, so you can select, label or
 restyle that edge by pressing it; the frame is selected from its border.
 
-A frame is carried by its border band and its name strip. A drag that starts on
+A frame carries every unlocked node that sits wholly inside it, whether you
+drag it or nudge it with the arrow keys, and the move is one undo step. A frame is carried by its border band and its name strip. A drag that starts on
 the frame's empty interior sweeps a selection band instead, so you can pick up
 the notes inside without moving the frame; a tap there still selects the frame.
 A press that moves less than a few pixels is a tap: the node stays exactly where
