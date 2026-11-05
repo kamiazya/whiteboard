@@ -2,7 +2,11 @@ import {
   decodeSegment,
   isDotSegment,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import { formatWorkspaceAddress, parseWorkspaceAddress } from '@kamiazya/whiteboard-model'
+import {
+  formatWorkspaceAddress,
+  parentOfPath,
+  parseWorkspaceAddress,
+} from '@kamiazya/whiteboard-model'
 
 // Canonical URL shapes for apps/web. Kept as pure string-building/parsing
 // functions (no React Router import) so the shape is unit-testable without a
@@ -46,15 +50,9 @@ export function workspacePath(workspace: string): string {
 // folder, so it gets the plain workspace address. `folder` is the list's own
 // query parameter (useRoutedFolder).
 export function workspaceFolderPath(workspace: string, documentPathInWorkspace: string): string {
-  const folder = folderOfDocumentPath(documentPathInWorkspace)
+  const folder = parentOfPath(documentPathInWorkspace)
   if (folder === '') return workspacePath(workspace)
   return `${workspacePath(workspace)}?${new URLSearchParams({ folder }).toString()}`
-}
-
-/** The folder a document path sits in; `''` for a root-level document. */
-export function folderOfDocumentPath(documentPathInWorkspace: string): string {
-  const cut = documentPathInWorkspace.lastIndexOf('/')
-  return cut < 0 ? '' : documentPathInWorkspace.slice(0, cut)
 }
 
 export function documentPathPrefix(workspace: string): string {

@@ -1,5 +1,5 @@
 import type { WorkspaceNode } from '@kamiazya/whiteboard-loro-adapter'
-import { rebasePath } from '@kamiazya/whiteboard-model'
+import { parentOfPath, rebasePath } from '@kamiazya/whiteboard-model'
 
 export type WorkspaceNodes = WorkspaceNode[]
 
@@ -8,12 +8,6 @@ interface Below {
   all: number
   /** Of those, the ones whose path the move frees. */
   moving: number
-}
-
-/** The path one segment up, or `undefined` for a path with none above it. */
-function parentOf(path: string): string | undefined {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? undefined : path.slice(0, cut)
 }
 
 /**
@@ -60,7 +54,7 @@ function vacatedPaths(nodes: WorkspaceNodes, moving: WorkspaceNodes): Set<string
   }
   for (let depth = byDepth.length - 1; depth > 0; depth--) {
     for (const path of byDepth[depth] ?? []) {
-      const parent = parentOf(path) as string
+      const parent = parentOfPath(path)
       const self = below.get(path) as Below
       const held = own.get(path) ?? { all: 0, moving: 0 }
       const into = enter(parent)

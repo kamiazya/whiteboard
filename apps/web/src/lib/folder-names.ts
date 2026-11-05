@@ -1,4 +1,9 @@
-import { displayNameKey, folderNameRefusal } from '@kamiazya/whiteboard-model'
+import {
+  displayNameKey,
+  folderNameRefusal,
+  leafOfPath,
+  parentOfPath,
+} from '@kamiazya/whiteboard-model'
 import { addressForNameIn } from './address-from-name.js'
 import { displayNameTakenMessage } from './display-name-taken.js'
 
@@ -7,22 +12,13 @@ export type FolderNames = ReadonlyMap<string, string>
 
 const NO_NAMES: FolderNames = new Map()
 
-function leafOf(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1)
-}
-
-function parentOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut)
-}
-
 /**
  * What a folder is called: the name somebody gave it, or its own segment when
  * nobody did. The root is the workspace, which no folder name can rename.
  */
 export function folderDisplayName(path: string, names: FolderNames = NO_NAMES): string {
   if (path === '') return 'Workspace'
-  return names.get(path) ?? leafOf(path)
+  return names.get(path) ?? leafOfPath(path)
 }
 
 /** Each folder from the top down to `path`, as it is called — the root not included. */
@@ -58,12 +54,12 @@ export function folderShowingName(
   names: FolderNames,
   target: { readonly path: string; readonly name: string },
 ): string | undefined {
-  const parent = parentOf(target.path)
+  const parent = parentOfPath(target.path)
   const key = displayNameKey(target.name)
   return folders.find(
     (path) =>
       path !== target.path &&
-      parentOf(path) === parent &&
+      parentOfPath(path) === parent &&
       displayNameKey(folderDisplayName(path, names)) === key,
   )
 }
@@ -75,7 +71,7 @@ export function folderShowingName(
  * and placed by its parent's names when it is not at the top.
  */
 export function folderNameTakenMessage(existing: string, names: FolderNames): string {
-  const parent = parentOf(existing)
+  const parent = parentOfPath(existing)
   if (parent === '')
     return displayNameTakenMessage('folder', existing, folderDisplayName(existing, names))
   const where = folderTrail(parent, names).join(' / ')
@@ -122,9 +118,9 @@ export function planNestedFolder(
     const key = displayNameKey(part)
     const existing = known.folders.find(
       (path) =>
-        parentOf(path) === parent &&
+        parentOfPath(path) === parent &&
         (displayNameKey(folderDisplayName(path, known.names)) === key ||
-          displayNameKey(leafOf(path)) === key),
+          displayNameKey(leafOfPath(path)) === key),
     )
     if (existing !== undefined) {
       parent = existing

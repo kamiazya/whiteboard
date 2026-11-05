@@ -1,5 +1,10 @@
 import { referenceMarkup } from '@kamiazya/whiteboard-codec'
-import { deriveWorkspaceSegment, documentPathSchema } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  documentPathSchema,
+  leafOfPath,
+  parentOfPath,
+} from '@kamiazya/whiteboard-model'
 import { pathAfterFirstRename } from './first-rename-path.js'
 import { newDocumentPathIn } from './new-document-path.js'
 
@@ -26,12 +31,12 @@ export function planLinkTarget(
   existingPaths: readonly string[],
 ): LinkTargetPlan | null {
   const typed = text.trim()
-  const cut = typed.lastIndexOf('/')
-  const typedFolder = cut < 0 ? '' : typed.slice(0, cut)
+  const typedFolder = parentOfPath(typed)
   const folderIsAddress = typedFolder !== '' && documentPathSchema.safeParse(typedFolder).success
-  const ownFolder = ownPath === undefined ? '' : ownPath.slice(0, ownPath.lastIndexOf('/') + 1)
+  const ownParent = ownPath === undefined ? '' : parentOfPath(ownPath)
+  const ownFolder = ownParent === '' ? '' : `${ownParent}/`
   const folder = folderIsAddress ? `${typedFolder}/` : ownFolder
-  const name = (folderIsAddress ? typed.slice(cut + 1) : typed).trim()
+  const name = (folderIsAddress ? leafOfPath(typed) : typed).trim()
   if (name === '') return null
 
   const path = isAddress(name)

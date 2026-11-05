@@ -17,9 +17,16 @@ export {
   folderNameSchema,
   isMovedNameTaken,
   isSiblingDisplayNameTaken,
+  shownName,
 } from './display-name.js'
 export * from './document-kind.js'
-export { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
+export {
+  isSelfOrDescendant,
+  leafOfPath,
+  parentOfPath,
+  pathBelow,
+  rebasePath,
+} from './document-path.js'
 export {
   base64ToBytes,
   base64UrlToBytes,
