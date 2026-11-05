@@ -3,7 +3,7 @@ import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import { creationObstacles } from '../../lib/spatial/frame-interior.js'
-import type { Box } from '../../lib/spatial/geometry.js'
+import { type Box, findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
@@ -164,14 +164,21 @@ export function useNodeCreation({
 
   /**
    * A new, empty frame, asked for by name: in free space near the view's
-   * centre (or at the point the canvas menu was opened on), selected, with
+   * centre (or nearest the point the canvas menu was opened on), selected, with
    * its name editor open, since an unnamed empty frame has nothing to find
    * it by. It never wraps the selection — framing what is selected is the
    * menu's Group selection, and a frame that silently nested around the
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    const point = spawnPoint(at, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT })
+    const size = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }
+    // A point is where to START looking, never a place to land regardless:
+    // a frame holds whatever it covers, so one dropped over another frame
+    // took that frame's notes and hid its name.
+    const point =
+      at === undefined
+        ? spawnPoint(undefined, size)
+        : findFreeSpot(at, size, creationObstacles(canvasRef.current), visibleCanvasRect())
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({
