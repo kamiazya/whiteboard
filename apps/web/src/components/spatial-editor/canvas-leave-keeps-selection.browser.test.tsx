@@ -59,3 +59,17 @@ it('F6 moves focus on past the canvas and keeps the selection', async () => {
   expect(rootOf(container).contains(document.activeElement)).toBe(false)
   expect(selectedNames()).toEqual(['Second'])
 })
+
+it('F6 and Shift+F6 from a dock control leave the canvas region too', async () => {
+  const { container } = mount()
+  const dockControl = () =>
+    rootOf(container).querySelector<HTMLElement>('[data-testid="zoom-fit-button"]')
+  dockControl()?.focus()
+  expect(document.activeElement).toBe(dockControl())
+  await userEvent.keyboard('{Shift>}{F6}{/Shift}')
+  await expect.element(page.getByRole('button', { name: 'Before the canvas' })).toHaveFocus()
+
+  dockControl()?.focus()
+  await userEvent.keyboard('{F6}')
+  await expect.element(page.getByRole('button', { name: 'After the canvas' })).toHaveFocus()
+})

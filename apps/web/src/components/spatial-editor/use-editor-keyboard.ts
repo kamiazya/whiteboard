@@ -252,6 +252,14 @@ export function useEditorKeyboard({
   }
 
   const runNavigation = (id: ShortcutId, e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    // F6 moves between page regions from anywhere in the canvas's region,
+    // the dock and a node's links included — not only from the root — so a
+    // keyboard user on Undo is not stranded there. A text field keeps it.
+    const leave =
+      id === 'leave-canvas-forward' ? 1 : id === 'leave-canvas-backward' ? -1 : undefined
+    if (leave !== undefined && gestureState.kind === 'idle' && !typingInText(e)) {
+      return focusPastCanvas(e.currentTarget, leave)
+    }
     // Only the canvas root itself: a Tab or Enter from the dock, a handle or a
     // connect target belongs to that control.
     if (e.target !== e.currentTarget || gestureState.kind !== 'idle') return false
@@ -268,10 +276,6 @@ export function useEditorKeyboard({
       case 'open-context-menu-shift-f10':
         openSelectionMenu()
         return true
-      case 'leave-canvas-forward':
-        return focusPastCanvas(e.currentTarget, 1)
-      case 'leave-canvas-backward':
-        return focusPastCanvas(e.currentTarget, -1)
       default:
         return false
     }
