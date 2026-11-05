@@ -3,7 +3,7 @@ import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import { creationObstacles } from '../../lib/spatial/frame-interior.js'
-import { type Box, findFreeSpot } from '../../lib/spatial/geometry.js'
+import { type Box, boxesIntersect, findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
@@ -24,6 +24,21 @@ import {
   resolveSpawnPoint,
 } from './node-factories.js'
 import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+
+/** Whether a `size` box centred on `center` overlaps none of `obstacles`. */
+function isFreeAt(
+  center: Point,
+  size: { readonly width: number; readonly height: number },
+  obstacles: readonly Box[],
+): boolean {
+  const box = {
+    x: center.x - size.width / 2,
+    y: center.y - size.height / 2,
+    width: size.width,
+    height: size.height,
+  }
+  return !obstacles.some((other) => boxesIntersect(box, other))
+}
 
 export interface NodeCreationInputs {
   readonly rootRef: RefObject<HTMLDivElement | null>
@@ -172,13 +187,17 @@ export function useNodeCreation({
    */
   const createGroupAtViewportCenter = (at?: Point) => {
     const size = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }
-    // A point is where to START looking, never a place to land regardless:
-    // a frame holds whatever it covers, so one dropped over another frame
-    // took that frame's notes and hid its name.
+    // A point is kept only when the frame fits there without covering
+    // anything: a frame holds whatever it covers, so one dropped over another
+    // frame took that frame's notes and hid its name. Otherwise the point is
+    // where the search for free space starts.
+    const obstacles = creationObstacles(canvasRef.current)
     const point =
       at === undefined
         ? spawnPoint(undefined, size)
-        : findFreeSpot(at, size, creationObstacles(canvasRef.current), visibleCanvasRect())
+        : isFreeAt(at, size, obstacles)
+          ? at
+          : findFreeSpot(at, size, obstacles, visibleCanvasRect())
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({
