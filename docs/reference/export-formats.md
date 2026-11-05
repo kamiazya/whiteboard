@@ -54,7 +54,11 @@ is not embedded in the output.
 An inline Markdown image (`![alt](url)`) in a body draws its picture when the
 surface resolves the URL to a workspace attachment, or when the URL is
 `http:`, `https:` or `data:`. Any other URL — a bare or relative file path,
-`file:` — draws as its alt text. The daemon's PNG export goes one step
+`file:` — draws as its alt text. A picture that is the whole of its paragraph
+draws at its natural size, scaled down to the body's width, where the surface
+knows that size: the web app's preview, read view, print and list thumbnail
+decode it. Elsewhere, and for a picture inside a sentence, it is drawn one line
+tall. The daemon's PNG export goes one step
 further and draws only `data:` images: it never reads a file the URL names on
 the daemon's host, and never fetches a remote one. Of those it draws only PNG,
 JPEG, GIF, WebP and SVG, written as `data:<type>,…` or `data:<type>;base64,…`

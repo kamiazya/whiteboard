@@ -1,0 +1,134 @@
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { type PrintBlock, printBands } from '../../lib/print-bands.js'
+import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
+import type { MarkdownViewMode } from './EditorToolbar.js'
+
+/**
+ * Printing a note — the browser's own Print, or the document menu's
+ * "Print / Save as PDF…" — hands out its read view: the title and the drawn
+ * body, over as many pages as it takes. Everything else on the page is the
+ * app and does not print (`[data-print-content]` in index.css).
+ *
+ * The body is ONE SVG, and a page break through it slices whatever lies on
+ * the line, so for the length of a print it is drawn again as one strip per
+ * block (`printBands`), each kept whole on its page. The strips exist only
+ * while print media applies: on screen they would double the body's DOM.
+ */
+
+const PRINT_REQUEST_EVENT = 'whiteboard:print-note'
+
+/** Asks the open note's editor to print its read view. */
+export function requestNotePrint(): void {
+  window.dispatchEvent(new Event(PRINT_REQUEST_EVENT))
+}
+
+/**
+ * Answers a print request: switches the editor to Read, lets that render,
+ * prints, and puts the view the reader had back. `window.print()` returns
+ * once the dialog closes, so the restore waits for the reader.
+ */
+export function useNotePrintRequest(
+  mode: MarkdownViewMode,
+  setMode: (next: MarkdownViewMode) => void,
+): void {
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  useEffect(() => {
+    const onRequest = () => {
+      const before = modeRef.current
+      flushSync(() => setMode('read'))
+      // Two frames: one for the read layout to commit, one for it to paint.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          window.print()
+          if (before !== 'read') setMode(before)
+        }),
+      )
+    }
+    window.addEventListener(PRINT_REQUEST_EVENT, onRequest)
+    return () => window.removeEventListener(PRINT_REQUEST_EVENT, onRequest)
+  }, [setMode])
+}
+
+/** Whether print media applies now, following both the dialog and an emulated medium. */
+function usePrinting(): boolean {
+  const [printing, setPrinting] = useState(false)
+  useEffect(() => {
+    // A realm with no media queries (jsdom) still has the print events.
+    const media = typeof window.matchMedia === 'function' ? window.matchMedia('print') : null
+    // `beforeprint` comes before the print layout is taken, so the strips are
+    // committed synchronously there; the media query covers a medium that
+    // changes with no dialog (an emulated one, a PDF renderer).
+    const on = () => flushSync(() => setPrinting(true))
+    const off = () => setPrinting(false)
+    const follow = () => (media?.matches ? on() : off())
+    window.addEventListener('beforeprint', on)
+    window.addEventListener('afterprint', off)
+    media?.addEventListener('change', follow)
+    return () => {
+      window.removeEventListener('beforeprint', on)
+      window.removeEventListener('afterprint', off)
+      media?.removeEventListener('change', follow)
+    }
+  }, [])
+  return printing
+}
+
+/** Copies of the drawn body, one per band, each showing only its band. */
+function bandCopies(svg: SVGSVGElement, blocks: readonly PrintBlock[]): SVGSVGElement[] {
+  const box = svg.viewBox.baseVal
+  const width = box.width > 0 ? box.width : svg.getBoundingClientRect().width
+  const height = box.height > 0 ? box.height : svg.getBoundingClientRect().height
+  return printBands(blocks, height).map((band) => {
+    const copy = svg.cloneNode(true) as SVGSVGElement
+    copy.setAttribute('viewBox', `${box.x} ${box.y + band.top} ${width} ${band.bottom - band.top}`)
+    copy.setAttribute('width', String(width))
+    copy.setAttribute('height', String(band.bottom - band.top))
+    copy.removeAttribute('style')
+    copy.setAttribute('data-testid', 'note-print-band')
+    copy.setAttribute('aria-hidden', 'true')
+    return copy
+  })
+}
+
+/**
+ * The note as it prints. Rendered beside the preview, and empty until print
+ * media applies; `hostRef` is the preview column holding the drawn body,
+ * `blocksRef` its top-level blocks in the SVG's pixel space.
+ */
+export function NotePrintView({
+  title,
+  hostRef,
+  blocksRef,
+}: {
+  title: string | undefined
+  hostRef: RefObject<HTMLElement | null>
+  blocksRef: RefObject<readonly PrintBlock[]> | undefined
+}) {
+  const printing = usePrinting()
+  const bandsRef = useRef<HTMLDivElement | null>(null)
+  // A layout effect, so the strips are in place inside the same synchronous
+  // commit `beforeprint` forces — before the browser takes the print layout.
+  useLayoutEffect(() => {
+    const target = bandsRef.current
+    if (!printing || target === null) return
+    const svg = hostRef.current?.querySelector<SVGSVGElement>(
+      '[data-testid="markdown-preview-pane"] svg',
+    )
+    if (svg === null || svg === undefined) return
+    target.replaceChildren(...bandCopies(svg, blocksRef?.current ?? []))
+    return () => target.replaceChildren()
+  }, [printing, hostRef, blocksRef])
+  if (!printing) return null
+  return (
+    <div
+      data-testid="note-print-view"
+      className="note-print-view"
+      style={{ fill: editorTextFill('light') }}
+    >
+      {title !== undefined && title !== '' && <h1>{title}</h1>}
+      <div ref={bandsRef} />
+    </div>
+  )
+}

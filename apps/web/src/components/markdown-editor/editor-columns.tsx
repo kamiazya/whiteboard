@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import { cn } from '../../lib/utils.js'
 import { DocumentHeader, type DocumentHeaderProps } from './DocumentHeader.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
+import { NotePrintView } from './note-print.js'
 import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
 import { shownBody } from './read-title.js'
@@ -189,12 +190,14 @@ export function PreviewColumn({
     <div
       ref={scrollRef}
       data-testid="markdown-preview-scroll"
+      data-print-content=""
       className="min-w-0 flex-1 overflow-auto"
       onClick={onPreviewClick}
     >
+      <NotePrintView title={title} hostRef={scrollRef} blocksRef={blocksRef} />
       <div
         ref={innerRef}
-        className="relative mx-auto px-6 py-8"
+        className="note-print-screen relative mx-auto px-6 py-8"
         style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
       >
         {previewMarkers.map((marker) => (
