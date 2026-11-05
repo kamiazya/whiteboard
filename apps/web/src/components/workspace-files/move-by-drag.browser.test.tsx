@@ -22,13 +22,18 @@ beforeEach(async () => {
   await clearWhiteboardDb()
 })
 
-async function seedAndRender() {
+async function seedAndRender(extra: { path: string; name: string }[] = []) {
   const index = new FoldingBrowserIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const ids: Record<string, string> = {}
   for (const path of ['notes', 'design/login', 'archive/old']) {
     ids[path] = (await index.createDocument({ workspaceId, path, kind: 'markdown' })).documentId
+  }
+  for (const { path, name } of extra) {
+    ids[path] = (
+      await index.createDocument({ workspaceId, path, kind: 'markdown', name })
+    ).documentId
   }
   const source = createBrowserFilesSource({ index })
   render(<WorkspaceFilesPanel source={source} memoryScope="move" onOpenDocument={() => {}} />)
@@ -130,6 +135,23 @@ describe('moving a document from the keyboard', () => {
       expect((await pathsOf(source))[ids.notes as string]).toBe('design/notes'),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('refuses a folder where a sibling already shows its name, and keeps the picker', async () => {
+    const { source, ids } = await seedAndRender([{ path: 'design/brief', name: 'Notes' }])
+    notesCard().focus()
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}')
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    within(menu).getByRole('menuitem', { name: 'Move to folder…' }).focus()
+    await userEvent.keyboard('{Enter}')
+    const dialog = await screen.findByRole('dialog', { name: 'Move to folder' })
+
+    await userEvent.click(within(dialog).getByRole('option', { name: 'design' }))
+
+    expect((await within(dialog).findByRole('alert')).textContent).toBe(
+      'Another document here is already called "notes". Choose a name no other document here has.',
+    )
+    expect((await pathsOf(source))[ids.notes as string]).toBe('notes')
   })
 
   it('cancels with Escape and moves nothing', async () => {
