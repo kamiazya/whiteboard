@@ -290,12 +290,7 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     expect(screen.queryByText(/Could not create/)).toBeNull()
   })
 
-  // Two alerts are in the DOM while the dialog is open, but only ONE is in
-  // the accessibility tree: Radix marks the page behind a modal
-  // `aria-hidden`, so nothing announces the panel's generic line twice.
-  // Measured — DOM 2, `getAllByRole('alert')` 1 — because the raw-DOM count
-  // reads as a duplicate-announcement bug and is not one. Pinned so a later
-  // non-modal dialog cannot turn it into one silently.
+  // One refusal, one announcement: the dialog's line is the only one.
   it('announces a refused dialog create exactly once', async () => {
     const source = fakeFilesSource({
       listDocuments: () =>
@@ -313,15 +308,12 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     // wait passes on the poll that lands between the two renders — which is
     // exactly how the earlier version of this test went green against two
     // alerts.
-    // Scoped to the dialog: the panel's own line now carries the reason too,
-    // behind the modal where Radix hides it from the accessibility tree.
     await within(await screen.findByRole('dialog')).findByText(/already exists/)
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
-  // The real residue of the two alerts: dismissing the form leaves the
-  // panel's generic line behind, describing a submission the person just
-  // abandoned. Nothing on screen then connects it to anything.
+  // Dismissing the form must not leave a panel line behind describing a
+  // submission the person just abandoned.
   it('drops the failure when the form it belonged to is dismissed', async () => {
     const source = fakeFilesSource({
       listDocuments: () =>
@@ -334,8 +326,6 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
     fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
-    // Scoped to the dialog: the panel's own line now carries the reason too,
-    // behind the modal where Radix hides it from the accessibility tree.
     await within(await screen.findByRole('dialog')).findByText(/already exists/)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -359,5 +349,43 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/Could not create/)
+  })
+
+  // Users say canvas and note; "spatial document" is the model's word.
+  it('names the kind as people do in the panel refusal', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('refused'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    const alert = (await screen.findByRole('alert')).textContent ?? ''
+    expect(alert).toMatch(/Could not create a canvas here/)
+    expect(alert).not.toMatch(/spatial/)
+  })
+
+  // The dialog's own line says it; a second red line behind the overlay
+  // repeated it for anyone who can see past the modal.
+  it('leaves no panel line behind the dialog that is showing the refusal', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('"seed" already exists'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
+
+    await within(await screen.findByRole('dialog')).findByText(/already exists/)
+    expect(screen.getAllByText(/already exists/)).toHaveLength(1)
+    expect(screen.queryByText(/Could not create/)).toBeNull()
   })
 })

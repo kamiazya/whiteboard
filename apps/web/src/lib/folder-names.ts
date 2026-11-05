@@ -1,8 +1,4 @@
-import {
-  displayNameKey,
-  folderNameRefusal,
-  isSiblingDisplayNameTaken,
-} from '@kamiazya/whiteboard-model'
+import { displayNameKey, folderNameRefusal } from '@kamiazya/whiteboard-model'
 import { addressForNameIn } from './address-from-name.js'
 import { displayNameTakenMessage } from './display-name-taken.js'
 
@@ -52,21 +48,40 @@ export function newFolderSegmentIn(parent: string, name: string, taken: readonly
 }
 
 /**
- * Whether a folder at `path` may be called `name` among `folders` — the folder
- * paths known here, each showing its name from `names` or its segment. The
+ * The folder among `folders` that already shows `name` beside `target.path`
+ * — each showing its name from `names` or its segment — or undefined. The
  * folder itself is left out, so keeping its own name is never a duplicate.
  * Documents are a different kind and are not compared.
  */
-export function isFolderNameTaken(
+export function folderShowingName(
   folders: readonly string[],
   names: FolderNames,
   target: { readonly path: string; readonly name: string },
-): boolean {
-  return isSiblingDisplayNameTaken(
-    folders
-      .filter((path) => path !== target.path)
-      .map((path) => ({ path, name: folderDisplayName(path, names) })),
-    target,
+): string | undefined {
+  const parent = parentOf(target.path)
+  const key = displayNameKey(target.name)
+  return folders.find(
+    (path) =>
+      path !== target.path &&
+      parentOf(path) === parent &&
+      displayNameKey(folderDisplayName(path, names)) === key,
+  )
+}
+
+/**
+ * The refusal of a name the folder at `existing` already shows: quoted as
+ * that folder is CALLED, not as it was typed — "q3 planning" beside a folder
+ * called "Q3 Planning" read as a claim that something is called the former —
+ * and placed by its parent's names when it is not at the top.
+ */
+export function folderNameTakenMessage(existing: string, names: FolderNames): string {
+  const parent = parentOf(existing)
+  if (parent === '')
+    return displayNameTakenMessage('folder', existing, folderDisplayName(existing, names))
+  const where = folderTrail(parent, names).join(' / ')
+  return (
+    `Another folder in "${where}" is already called "${folderDisplayName(existing, names)}". ` +
+    'Choose a name no other folder there has.'
   )
 }
 
@@ -81,10 +96,10 @@ export type NestedFolderPlan =
 /**
  * What "Class/Week 6" typed as a new folder means: `/` nests, so each part is
  * one folder, named by that part. A part that names a folder already standing
- * under the same parent is that folder — the way there — except the LAST one,
- * which is the folder being made, and making one a sibling already shows is a
- * known duplicate. Each new address is derived from its part, numbered past
- * whatever `taken` and the earlier parts hold.
+ * under the same parent — by what it is called or by its address — is that
+ * folder, the last part included: typing a folder that exists is asking to go
+ * there, so the plan answers it and makes nothing. Each new address is derived
+ * from its part, numbered past whatever `taken` and the earlier parts hold.
  */
 export function planNestedFolder(
   typed: string,
@@ -101,17 +116,16 @@ export function planNestedFolder(
   if (parts.length === 0) return { refusal: folderNameRefusal('') ?? '' }
   let parent = ''
   const created: { path: string; name: string }[] = []
-  for (const [i, part] of parts.entries()) {
+  for (const part of parts) {
     const refusal = folderNameRefusal(part)
     if (refusal !== null) return { refusal }
+    const key = displayNameKey(part)
     const existing = known.folders.find(
       (path) =>
         parentOf(path) === parent &&
-        displayNameKey(folderDisplayName(path, known.names)) === displayNameKey(part),
+        (displayNameKey(folderDisplayName(path, known.names)) === key ||
+          displayNameKey(leafOf(path)) === key),
     )
-    if (existing !== undefined && i === parts.length - 1) {
-      return { refusal: displayNameTakenMessage('folder', existing, part) }
-    }
     if (existing !== undefined) {
       parent = existing
       continue

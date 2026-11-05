@@ -174,7 +174,8 @@ describe('moving a document to a named folder', () => {
     expect(source.setFolderName).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses a new folder a sibling folder already shows', async () => {
+  // Typing a folder that exists is asking to go there.
+  it('moves into an existing folder typed by its names, making no folder', async () => {
     const source = renderNamed()
     const dialog = await openPicker('Login flow')
     fireEvent.click(within(dialog).getByRole('option', { name: 'New folder…' }))
@@ -182,9 +183,31 @@ describe('moving a document to a named folder', () => {
       target: { value: 'class/WEEK 6' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
-    expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another folder here is already called "WEEK 6". Choose a name no other folder here has.',
+    await waitFor(() =>
+      expect(source.renameDocumentPath).toHaveBeenCalledWith('design/login', 'class/w6/login'),
     )
-    expect(source.renameDocumentPath).not.toHaveBeenCalled()
+    expect(source.setFolderName).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.getAllByRole('status').map((each) => each.textContent)).toContain(
+        'Moved Login flow to Week 6',
+      ),
+    )
+  })
+
+  // The folder's name is not known to the list until the move lands, so the
+  // first move into it used to announce its address.
+  it('announces a move into a new folder by the name it was given', async () => {
+    renderNamed()
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(within(dialog).getByRole('option', { name: 'New folder…' }))
+    fireEvent.change(within(dialog).getByLabelText('Folder name'), {
+      target: { value: 'Équipe Ops' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
+    await waitFor(() =>
+      expect(screen.getAllByRole('status').map((each) => each.textContent)).toContain(
+        'Moved Login flow to Équipe Ops',
+      ),
+    )
   })
 })

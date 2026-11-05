@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   folderDisplayName,
+  folderNameTakenMessage,
+  folderShowingName,
   folderTrail,
-  isFolderNameTaken,
   newFolderSegmentIn,
   planNestedFolder,
 } from './folder-names.js'
@@ -51,13 +52,21 @@ describe('a duplicate folder name', () => {
   const folders = ['class', 'class/week-6', 'class/drafts', 'other']
 
   it('is a name a sibling folder already shows, compared trimmed and case-folded', () => {
-    expect(isFolderNameTaken(folders, names, { path: 'class/drafts', name: ' week 6 ' })).toBe(true)
-    expect(isFolderNameTaken(folders, names, { path: 'class/drafts', name: 'Drafts' })).toBe(false)
+    expect(
+      folderShowingName(folders, names, { path: 'class/drafts', name: ' week 6 ' }) !== undefined,
+    ).toBe(true)
+    expect(
+      folderShowingName(folders, names, { path: 'class/drafts', name: 'Drafts' }) !== undefined,
+    ).toBe(false)
   })
 
   it('is no duplicate of the folder itself, nor of a folder under another parent', () => {
-    expect(isFolderNameTaken(folders, names, { path: 'class/week-6', name: 'week 6' })).toBe(false)
-    expect(isFolderNameTaken(folders, names, { path: 'other', name: 'Week 6' })).toBe(false)
+    expect(
+      folderShowingName(folders, names, { path: 'class/week-6', name: 'week 6' }) !== undefined,
+    ).toBe(false)
+    expect(folderShowingName(folders, names, { path: 'other', name: 'Week 6' }) !== undefined).toBe(
+      false,
+    )
   })
 })
 
@@ -107,14 +116,30 @@ describe('a typed new folder', () => {
     })
   })
 
-  it('refuses a last part a sibling folder already shows', () => {
-    expect(planNestedFolder('Class/week 6', known)).toEqual({
-      refusal:
-        'Another folder here is already called "week 6". Choose a name no other folder here has.',
-    })
+  // Typing a folder that exists is asking to go there, not to make a twin.
+  it('answers an existing folder typed by its names as that folder, making nothing', () => {
+    expect(planNestedFolder('Class/week 6', known)).toEqual({ path: 'class/week-6', created: [] })
+  })
+
+  it('answers an existing folder typed by its address as that folder', () => {
+    expect(planNestedFolder('class/week-6', known)).toEqual({ path: 'class/week-6', created: [] })
   })
 
   it('refuses a blank name', () => {
     expect(planNestedFolder(' / ', known)).toEqual({ refusal: 'A folder name cannot be blank.' })
+  })
+})
+
+describe('the refusal of a folder name a sibling shows', () => {
+  it('quotes the sibling as it is called, and says where when nested', () => {
+    expect(folderNameTakenMessage('class/week-6', names)).toBe(
+      'Another folder in "Class" is already called "Week 6". Choose a name no other folder there has.',
+    )
+  })
+
+  it('says here at the top of the workspace', () => {
+    expect(folderNameTakenMessage('class', names)).toBe(
+      'Another folder here is already called "Class". Choose a name no other folder here has.',
+    )
   })
 })

@@ -39,6 +39,7 @@ import {
   BrowseTwoColumns,
   cardMenuItemsFor,
   columnViewOf,
+  KIND_NOUN,
   LoadingColumns,
   PanelPreview,
   PanelRefusals,
@@ -418,7 +419,8 @@ export function WorkspaceFilesPanel({
         } catch (err) {
           outcome.reportCreateRefusal({
             kind,
-            reason: messageOf(err, `Could not create a ${kind} document here.`),
+            reason: messageOf(err, `Could not create ${KIND_NOUN[kind]} here.`),
+            inForm: options !== undefined,
           })
           // Re-thrown so the caller can tell a refusal from a success — the
           // dialog stays open on one and closes on the other, and swallowing

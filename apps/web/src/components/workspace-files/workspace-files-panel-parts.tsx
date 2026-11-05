@@ -1,4 +1,4 @@
-import { SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   CheckCircle2,
   Columns2,
@@ -88,12 +88,18 @@ function searchResultRows({
  * behind it did not refresh, which is why it says what was done before
  * saying what could not be shown.
  */
+/** A kind as people say it — never "spatial document", which is the model's word. */
+export const KIND_NOUN: Readonly<Record<DocumentKind, string>> = {
+  spatial: 'a canvas',
+  markdown: 'a note',
+}
+
 export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWriteOutcome> }) {
   return (
     <>
-      {outcome.createRefusal !== null && (
+      {outcome.createRefusal !== null && !outcome.createRefusal.inForm && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {outcome.createRefusal.kind} document here.{' '}
+          Could not create {KIND_NOUN[outcome.createRefusal.kind]} here.{' '}
           {outcome.createRefusal.reason}
         </p>
       )}

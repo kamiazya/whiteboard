@@ -51,12 +51,15 @@ export function useFolderMoves({
   const { names, rename } = folderNames
 
   const moveInto = useCallback(
-    (entry: WorkspaceDocumentEntry, folder: string) =>
+    // `calledAs` is a folder this move is making: its name is remembered only
+    // once the move lands, so `names` does not hold it yet.
+    (entry: WorkspaceDocumentEntry, folder: string, calledAs?: string) =>
       attempt(async () => {
         const newPath = pathInFolder(entry.path, folder)
         if (newPath === entry.path) return
         await moveDocument(entry, newPath)
-        announce(`Moved ${documentLabel(entry, 'leaf')} to ${folderDisplayName(folder, names)}`)
+        const shown = calledAs ?? folderDisplayName(folder, names)
+        announce(`Moved ${documentLabel(entry, 'leaf')} to ${shown}`)
       }),
     [attempt, moveDocument, announce, names],
   )

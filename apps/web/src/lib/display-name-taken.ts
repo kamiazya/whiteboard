@@ -1,4 +1,4 @@
-import { isSiblingDisplayNameTaken } from '@kamiazya/whiteboard-model'
+import { displayNameKey } from '@kamiazya/whiteboard-model'
 import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 
 /**
@@ -35,8 +35,26 @@ export function refuseTakenDocumentName(
   },
 ): void {
   if (target.name === undefined) return
-  const others = documents.filter((each) => each.documentId !== target.documentId)
-  if (isSiblingDisplayNameTaken(others, { path: target.path, name: target.name })) {
-    throw new DisplayNameTakenError('document', target.path, target.name)
+  const parent = parentOf(target.path)
+  const key = displayNameKey(target.name)
+  // Quoted as the sibling is CALLED, not as it was typed: "plan" beside a
+  // document called "Plan" reads as a claim that something is called "plan".
+  const holder = documents.find(
+    (each) =>
+      each.documentId !== target.documentId &&
+      parentOf(each.path) === parent &&
+      displayNameKey(each.name ?? leafOf(each.path)) === key,
+  )
+  if (holder !== undefined) {
+    throw new DisplayNameTakenError('document', target.path, holder.name ?? leafOf(holder.path))
   }
+}
+
+function parentOf(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut === -1 ? '' : path.slice(0, cut)
+}
+
+function leafOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
 }
