@@ -13,7 +13,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useContext } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -27,6 +27,7 @@ import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { SearchState } from './use-debounced-document-search.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { type SearchCombobox, usePublishSearchResults } from './use-search-combobox.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -49,11 +50,11 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  * Two answers, and the difference is where the search HAPPENED. A `#tag`
  * query is a FILTER over what is already loaded and never leaves the client;
  * so is the fallback while content search is unreachable or still in flight,
- * because the names and paths already in hand are a real answer rather than
+ * because the names and folders already in hand are a real answer rather than
  * a blank pane. Everything else is the source's own hits, widened with the
  * documents whose NAME matches — a content index does not rank a name.
  */
-function searchResultRows({
+function useSearchResultRows({
   activeTag,
   hits,
   documents,
@@ -64,8 +65,9 @@ function searchResultRows({
   documents: readonly WorkspaceDocumentEntry[]
   query: string
 }): ComponentProps<typeof SearchResults>['results'] {
+  const folderNames = useContext(FolderNamesContext)
   if (activeTag !== null || hits === null) {
-    return searchDocuments(documents, query).map((document) => ({ document }))
+    return searchDocuments(documents, query, folderNames).map((document) => ({ document }))
   }
   return withNameMatches(
     hits.map((hit) => ({
@@ -76,6 +78,7 @@ function searchResultRows({
     })),
     documents,
     query,
+    folderNames,
   )
 }
 
@@ -608,7 +611,7 @@ export function SearchColumn({
   combobox: SearchCombobox
 }) {
   const { hits, searchDegraded, searching } = search
-  const rows = searchResultRows({ activeTag, hits, documents, query })
+  const rows = useSearchResultRows({ activeTag, hits, documents, query })
   usePublishSearchResults(combobox, rows, onOpenDocument === undefined ? undefined : openEntry)
   return (
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
@@ -625,7 +628,7 @@ export function SearchColumn({
         >
           {searching !== 'idle' ? '' : resultsAnnouncement(rows.length, query)}
           {searchDegraded &&
-            ' Searching names and paths only — this workspace’s content search is unavailable.'}
+            ' Searching names and folders only — this workspace’s content search is unavailable.'}
         </p>
         {searching === 'slow' && (
           <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
@@ -634,14 +637,14 @@ export function SearchColumn({
         )}
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-          // A `#tag` query is a FILTER over what is loaded (the
-          // search contract), not a content search — it never leaves the
-          // client. Everything else asks the source.
+          // A `#tag` query is a FILTER over what is loaded (the search
+          // contract) and never leaves the client; everything else asks the source.
           results={rows}
           onLeaveUp={focusSearchBox}
           combobox={combobox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
+          pending={searching !== 'idle'}
           selectedPath={selectedPath}
           onSelect={tapOpens ? openEntry : setSelected}
           onDocumentContextMenu={openCardMenu}

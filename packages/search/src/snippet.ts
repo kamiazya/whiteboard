@@ -10,44 +10,152 @@ export const CONTEXT_RADIUS = 60
 const MATCH_SLOT = '\uE000'
 
 /**
+ * What a `[[target]]` (or `![[target]]`) shows in an excerpt: the target's
+ * display name when the caller knows it, `undefined` to fall back to the
+ * target's last segment. A reader of the excerpt sees what the preview shows
+ * for the link, never the address it is written with.
+ */
+export type LinkLabel = (target: string) => string | undefined
+
+/** A wiki link or embed, as the reference extractor reads one: no brackets or line breaks inside. */
+const LINK = /!?\[\[([^[\]\n]*)\]\]/g
+const LINK_AT = /!?\[\[([^[\]\n]*)\]\]/y
+
+/** How far either side of an edge it looks for a link it might sit inside. */
+const LINK_REACH_UNITS = 512
+
+/** Stands in for a rendered link while the rest of the excerpt is stripped. */
+const LINK_OPEN = ''
+const LINK_CLOSE = ''
+
+/**
+ * A `LinkLabel` over a listing: a link names its target by path or by
+ * document id, and reads as that document's display name when it has one,
+ * else as its path's last segment.
+ */
+export function linkLabelsFrom(
+  entries: Iterable<{ readonly documentId: string; readonly path: string; readonly name?: string }>,
+): LinkLabel {
+  const names = new Map<string, string>()
+  for (const { documentId, path, name } of entries) {
+    // By id, even unnamed: the id is no word anybody reads, the path's leaf is.
+    names.set(documentId, name ?? leafOf(path))
+    if (name !== undefined) names.set(path, name)
+  }
+  return (target) => names.get(target)
+}
+
+function leafOf(target: string): string {
+  return target.slice(target.lastIndexOf('/') + 1)
+}
+
+/** `[[target#Heading|alias]]`'s inner text as a reader sees it. */
+function linkText(inner: string, labelOf: LinkLabel | undefined): string {
+  const bar = inner.indexOf('|')
+  if (bar !== -1) return inner.slice(bar + 1)
+  const hash = inner.indexOf('#')
+  const target = (hash === -1 ? inner : inner.slice(0, hash)).trim()
+  const heading = hash === -1 ? '' : inner.slice(hash + 1).trim()
+  const label = target === '' ? '' : (labelOf?.(target) ?? leafOf(target))
+  if (heading === '') return label
+  return label === '' ? heading : `${label} › ${heading}`
+}
+
+/**
+ * The link `at` falls strictly inside, if any — where an excerpt may not be
+ * cut. Looks only within `LINK_REACH_UNITS` either side, so an edge costs
+ * the same however long the document is; a "link" longer than that is not
+ * one an excerpt has to keep whole.
+ */
+function linkAround(value: string, at: number): { start: number; end: number } | undefined {
+  if (at <= 0 || at >= value.length) return undefined
+  const from = Math.max(0, at - LINK_REACH_UNITS)
+  const near = value.slice(from, Math.min(value.length, at + LINK_REACH_UNITS))
+  const local = at - from
+  // A cut between `!` and `[[` is inside the embed too.
+  const open = near.startsWith('![[', local - 1) ? local - 1 : near.lastIndexOf('[[', local - 1)
+  if (open === -1) return undefined
+  const start = near[open] === '[' && near[open - 1] === '!' ? open - 1 : open
+  LINK_AT.lastIndex = start
+  const found = LINK_AT.exec(near)
+  if (found === null) return undefined
+  const end = start + found[0].length
+  return start < local && local < end ? { start: from + start, end: from + end } : undefined
+}
+
+/**
  * The words markdown typesets, without the typesetting: fence lines, quote /
  * list / task / heading markers, table delimiter rows and cell pipes, and
  * inline emphasis, code ticks and link syntax. Anchored on lines, so it runs
- * over the excerpt before whitespace is collapsed.
+ * over the excerpt before whitespace is collapsed. A wiki link becomes what
+ * it reads as, after everything else, so neither a pipe in it nor markup in
+ * a display name is mistaken for the excerpt's own.
  */
-function stripMarkup(chunk: string): string {
-  return chunk
+function stripMarkup(chunk: string, labelOf: LinkLabel | undefined): string {
+  const links: string[] = []
+  const held = chunk.replace(LINK, (_, inner: string) => {
+    links.push(linkText(inner, labelOf))
+    return `${LINK_OPEN}${links.length - 1}${LINK_CLOSE}`
+  })
+  return held
     .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, '')
     .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, '')
     .replace(
       /^[ \t]*(?:#{1,6}[ \t]+|(?:>[ \t]?)+|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+][ \t]+|\d+[.)][ \t]+)/gm,
       '',
     )
-    .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\*\*|__|~~|`/g, '')
     .replace(/[ \t]*\|[ \t]*/g, ' ')
+    .replace(/(\d+)/g, (_, i: string) => links[Number(i)] ?? '')
+}
+
+/** A link rendered in place, and nothing else touched — the match keeps what it says. */
+function renderLinks(chunk: string, labelOf: LinkLabel | undefined): string {
+  return chunk.replace(LINK, (_, inner: string) => linkText(inner, labelOf))
 }
 
 /**
  * The excerpt with its markup stripped everywhere but the match itself, which
- * stays as written so a caller can still find and highlight it.
+ * stays as written so a caller can still find and highlight it — bar a link,
+ * which reads as its label there too.
  */
-function plainExcerpt(value: string, start: number, end: number, index: number, length: number) {
-  const matchStart = Math.max(start, Math.min(end, index))
-  const matchEnd = Math.max(matchStart, Math.min(end, index + length))
+function plainExcerpt(
+  value: string,
+  cut: { start: number; end: number },
+  match: { start: number; end: number },
+  labelOf: LinkLabel | undefined,
+) {
+  const { start, end } = cut
+  const matchStart = Math.max(start, Math.min(end, match.start))
+  const matchEnd = Math.max(matchStart, Math.min(end, match.end))
   const slotted = `${value.slice(start, matchStart)}${MATCH_SLOT}${value.slice(matchEnd, end)}`
-  const [head = '', tail = ''] = stripMarkup(slotted).split(MATCH_SLOT)
-  return `${head}${value.slice(matchStart, matchEnd)}${tail}`
+  const [head = '', tail = ''] = stripMarkup(slotted, labelOf).split(MATCH_SLOT)
+  return `${head}${renderLinks(value.slice(matchStart, matchEnd), labelOf)}${tail}`
+}
+
+/** The match, widened to whole links where it starts or ends inside one. */
+function matchSpan(value: string, index: number, length: number) {
+  return {
+    start: linkAround(value, index)?.start ?? index,
+    end: linkAround(value, index + length)?.end ?? index + length,
+  }
 }
 
 /**
  * A short plain-text excerpt around [index, index+length), whitespace
- * collapsed, ellipsised at cut edges. Shared by reference extraction and
+ * collapsed, ellipsised at cut edges, a `[[link]]` shown as what it reads as
+ * (`labelOf`) and never cut through. Shared by reference extraction and
  * search results so "where is this in the document" reads the same way
  * from both surfaces.
  */
-export function snippetAround(value: string, index: number, length: number): string {
+export function snippetAround(
+  value: string,
+  index: number,
+  length: number,
+  labelOf?: LinkLabel,
+): string {
+  const match = matchSpan(value, index, length)
   // Both edges snap INWARD to a grapheme boundary, so an excerpt can never
   // grow past the radius it was asked for and the rule reads the same at
   // both ends. Code points were not enough: `slice` indexes UTF-16 code
@@ -55,11 +163,37 @@ export function snippetAround(value: string, index: number, length: number): str
   // pair emitted a fragment at the edge of every search result and backlink
   // context — and inside a run of flags, an excerpt whose first flag was not
   // one the document contains.
-  const start = clusterStartAtOrAfter(value, Math.max(0, index - CONTEXT_RADIUS))
-  const end = clusterEndAtOrBefore(value, Math.min(value.length, index + length + CONTEXT_RADIUS))
+  const start = snapStart(
+    value,
+    clusterStartAtOrAfter(value, Math.max(0, match.start - CONTEXT_RADIUS)),
+    match,
+  )
+  const end = snapEnd(
+    value,
+    clusterEndAtOrBefore(value, Math.min(value.length, match.end + CONTEXT_RADIUS)),
+    match,
+  )
   const text =
-    start < end ? plainExcerpt(value, start, end, index, length).replace(/\s+/g, ' ').trim() : ''
+    start < end
+      ? plainExcerpt(value, { start, end }, match, labelOf).replace(/\s+/g, ' ').trim()
+      : ''
   return `${start > 0 ? '…' : ''}${text}${end < value.length ? '…' : ''}`
+}
+
+/**
+ * A window edge moved off any link it fell inside: outward over a link the
+ * match is part of, inward past one it is not.
+ */
+function snapStart(value: string, at: number, match: { start: number; end: number }): number {
+  const link = linkAround(value, at)
+  if (link === undefined) return at
+  return link.end > match.start ? Math.min(link.start, match.start) : link.end
+}
+
+function snapEnd(value: string, at: number, match: { start: number; end: number }): number {
+  const link = linkAround(value, at)
+  if (link === undefined) return at
+  return link.start < match.end ? Math.max(link.end, match.end) : link.start
 }
 
 /**

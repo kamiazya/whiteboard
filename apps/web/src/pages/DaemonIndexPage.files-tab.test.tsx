@@ -504,7 +504,11 @@ describe('DaemonIndexPage tree view', () => {
     })
 
     const results = await screen.findByTestId('search-results')
-    expect(results.textContent).toContain('notes/design')
+    // Where it is, said by folder: the row stands in `notes`.
+    await waitFor(() => {
+      const row = results.querySelector('[data-doc-path="notes/design"]')
+      expect(row?.querySelector('[data-testid="result-location"]')?.textContent).toBe('notes')
+    })
     // The folder view is replaced, not shown beside the results.
     expect(screen.queryByTestId('folder-contents')).toBeNull()
     // And the trail is gone, because the results are not confined to a folder.
@@ -584,7 +588,9 @@ describe('DaemonIndexPage tree view', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'zzzz' },
     })
-    expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
+    const results = await screen.findByTestId('search-results')
+    // Once the answer is in: until then nothing has been found not to match.
+    await waitFor(() => expect(results.textContent).toContain('Nothing matches'))
   })
 
   it('still shows the failure alert when the list fails for a non-404 reason', async () => {

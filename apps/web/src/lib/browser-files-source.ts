@@ -32,7 +32,9 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
+  folderNamesOf,
   fullTextSearch,
+  linkLabelsFrom,
   type SearchableDocument,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
@@ -192,6 +194,37 @@ function pinMembers(index: DocumentIndex): Pick<WorkspaceFilesSource, 'setPinned
       await index.setDocumentPinned({ workspaceId, documentId: resolved.documentId, pinned })
     },
   }
+}
+
+/** The keeper's folder names by path; none for an index that names no folder. */
+async function folderNamesIn(index: DocumentIndex): Promise<ReadonlyMap<string, string>> {
+  if (!hasDocumentFolders(index)) return new Map()
+  const named = await index.listFolderNames({ workspaceId: getBrowserWorkspaceId() })
+  return new Map(named.map(({ path, name }) => [path, name] as const))
+}
+
+/**
+ * The search corpus: each document's placement, the display names of the
+ * folders it sits in, and its text — read one document at a time, since
+ * reading is what the corpus cache spares.
+ */
+async function searchableOf(
+  entries: readonly WorkspaceDocumentEntry[],
+  folderNames: ReadonlyMap<string, string>,
+  textsOf: (entry: WorkspaceDocumentEntry) => Promise<string[]>,
+): Promise<SearchableDocument[]> {
+  const searchable: SearchableDocument[] = []
+  for (const entry of entries) {
+    const folders = folderNamesOf(entry.path, folderNames)
+    searchable.push({
+      documentId: entry.documentId,
+      path: entry.path,
+      ...optional('name', entry.name),
+      ...(folders.length === 0 ? {} : { folders }),
+      texts: await textsOf(entry),
+    })
+  }
+  return searchable
 }
 
 /**
@@ -475,16 +508,10 @@ export function createBrowserFilesSource(
     async searchDocuments(query, limit = 20) {
       if (query.trim() === '') return []
       const entries = await this.listDocuments()
-      const searchable: SearchableDocument[] = []
       const record = lazyContentRecord()
-      for (const entry of entries) {
-        searchable.push({
-          documentId: entry.documentId,
-          path: entry.path,
-          ...optional('name', entry.name),
-          texts: await searchableTextsFor(entry, record),
-        })
-      }
+      const searchable = await searchableOf(entries, await folderNamesIn(index), (entry) =>
+        searchableTextsFor(entry, record),
+      )
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
       // Every hit here is a keyword hit — there is no embedder in the
       // browser — so each carries its rank, and the panel highlights.
@@ -498,15 +525,14 @@ export function createBrowserFilesSource(
       const { emojiSearchText } = await import(
         '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
       )
-      return fullTextSearch(searchable, query, { limit, alsoIndex: emojiSearchText }).flatMap(
-        (hit) => {
-          const document = byId.get(hit.documentId)
-          rank += 1
-          return document === undefined
-            ? []
-            : [{ document, contexts: [...hit.contexts], lexicalRank: rank }]
-        },
-      )
+      const options = { limit, alsoIndex: emojiSearchText, linkLabel: linkLabelsFrom(entries) }
+      return fullTextSearch(searchable, query, options).flatMap((hit) => {
+        const document = byId.get(hit.documentId)
+        rank += 1
+        return document === undefined
+          ? []
+          : [{ document, contexts: [...hit.contexts], lexicalRank: rank }]
+      })
     },
 
     async setDocumentName(entry, name): Promise<void> {
