@@ -24,6 +24,7 @@ function useFolderSurfaceActions(
   moveInto: (entry: WorkspaceDocumentEntry, folder: string) => Promise<boolean>,
   rootRef: RefObject<HTMLElement | null>,
   setMenu: (menu: FolderMenu) => void,
+  setGathering: (folder: string) => void,
 ): FolderActions {
   return useMemo(
     () => ({
@@ -35,8 +36,9 @@ function useFolderSurfaceActions(
         const rect = rootRef.current?.getBoundingClientRect()
         setMenu({ folder, x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) })
       },
+      gatherInto: setGathering,
     }),
-    [documents, moveInto, rootRef, setMenu],
+    [documents, moveInto, rootRef, setMenu, setGathering],
   )
 }
 
@@ -111,18 +113,28 @@ function layerHandlers({
   setError,
   setMoving,
   setDialog,
+  setGathering,
 }: Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
   documents: readonly WorkspaceDocumentEntry[] | null
   folderNames: FolderNamesState
   goToFolder: (folder: string) => void
   setMoving: (entry: WorkspaceDocumentEntry | null) => void
   setDialog: (dialog: FolderDialog | null) => void
+  setGathering: (folder: string | null) => void
 }) {
   return {
     onCancel: () => {
       setMoving(null)
       setDialog(null)
+      setGathering(null)
       setError(null)
+    },
+    // One move at a time, stopping at the first refusal so the dialog can
+    // word it with the rest still chosen. The folder's pending name needs
+    // nothing here: it is written once the listing shows a document in it.
+    onGather: async (folder: string, entries: readonly WorkspaceDocumentEntry[]) => {
+      for (const entry of entries) if (!(await moveInto(entry, folder))) return
+      setGathering(null)
     },
     onMoveTo: async (
       entry: WorkspaceDocumentEntry,
@@ -172,14 +184,16 @@ function useOpenSurfaces(source: unknown, clearError: (error: null) => void) {
   const [moving, setMoving] = useState<WorkspaceDocumentEntry | null>(null)
   const [menu, setMenu] = useState<FolderMenu | null>(null)
   const [dialog, setDialog] = useState<FolderDialog | null>(null)
+  const [gathering, setGathering] = useState<string | null>(null)
   // SCOPE RESET — a path of the departed workspace handed to the new keeper.
   useEffect(() => {
     setMoving(null)
     setMenu(null)
     setDialog(null)
+    setGathering(null)
     clearError(null)
   }, [source, clearError])
-  return { moving, setMoving, menu, setMenu, dialog, setDialog }
+  return { moving, setMoving, menu, setMenu, dialog, setDialog, gathering, setGathering }
 }
 
 interface FolderActionsDeps {
@@ -217,9 +231,10 @@ export function useFolderActions({
     announce,
     folderNames,
   })
-  const { moving, setMoving, menu, setMenu, dialog, setDialog } = useOpenSurfaces(source, setError)
+  const surfaces = useOpenSurfaces(source, setError)
+  const { moving, setMoving, menu, setMenu, dialog, setDialog, gathering, setGathering } = surfaces
 
-  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu)
+  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, setGathering)
   const openMovePicker = useMovePickerOpener(setError, setMoving)
   const handlers = layerHandlers({
     documents,
@@ -230,11 +245,14 @@ export function useFolderActions({
     setError,
     setMoving,
     setDialog,
+    setGathering,
   })
 
   const layer = (
     <FolderActionsLayer
       folderNames={folderNames}
+      documents={documents ?? []}
+      gathering={gathering}
       announcement={announcement}
       moving={moving}
       menu={menu}

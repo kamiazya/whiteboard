@@ -7,6 +7,7 @@ import { ContextMenu } from '../ui/ContextMenu.js'
 import { ErrorLine } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
 import { folderOf } from './folder-moves.js'
+import { MoveDocumentsHereDialog } from './MoveDocumentsHereDialog.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
 import type { FolderNamesState } from './use-folder-names.js'
 
@@ -152,6 +153,10 @@ function StatusLines({
 
 interface FolderActionsLayerProps {
   folderNames: FolderNamesState
+  /** Every document listed, for the picker that gathers some into a folder. */
+  documents: readonly WorkspaceDocumentEntry[]
+  /** The folder documents are being gathered into, or null. */
+  gathering: string | null
   announcement: string
   moving: WorkspaceDocumentEntry | null
   menu: FolderMenu | null
@@ -165,6 +170,7 @@ interface FolderActionsLayerProps {
     created?: readonly { readonly path: string; readonly name: string }[],
   ) => void | Promise<void>
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
+  onGather: (folder: string, entries: readonly WorkspaceDocumentEntry[]) => void | Promise<void>
   refuseName: (dialog: FolderDialog, name: string) => string | null
   planNewFolder: (typed: string) => NestedFolderPlan
   onMenuChoice: (kind: FolderDialog['kind'], folder: string) => void
@@ -187,7 +193,8 @@ function destinationsFor(
  * dialog, the folder's own menu and the status lines.
  */
 export function FolderActionsLayer(props: FolderActionsLayerProps) {
-  const { folderNames, announcement, moving, menu, dialog, busy, error } = props
+  const { folderNames, documents, gathering, announcement, moving, menu, dialog, busy, error } =
+    props
   const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
     props
   const destinations = destinationsFor(moving, folderNames.folders)
@@ -196,7 +203,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
     <>
       <StatusLines
         announcement={announcement}
-        refusal={moving === null && dialog === null ? error : null}
+        refusal={moving === null && dialog === null && gathering === null ? error : null}
         onDismiss={() => {
           onCancel()
           folderNames.dismissRefusal()
@@ -211,6 +218,15 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
         error={error}
         onCancel={onCancel}
         onPick={(folder, created) => moving !== null && onMoveTo(moving, folder, created)}
+      />
+      <MoveDocumentsHereDialog
+        folder={gathering}
+        documents={documents}
+        names={folderNames.names}
+        busy={busy}
+        error={error}
+        onCancel={onCancel}
+        onMove={props.onGather}
       />
       <NameDialog
         dialog={dialog}

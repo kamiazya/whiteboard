@@ -22,6 +22,9 @@ function renderPanel(initialFolder = '') {
       rows = [...rows, { documentId: `d${rows.length + 1}`, path, kind, ...(name ? { name } : {}) }]
       return path
     },
+    renameDocumentPath: async (from, to) => {
+      rows = rows.map((row) => (row.path === from ? { ...row, path: to } : row))
+    },
   })
   render(
     <WorkspaceFilesPanel source={source} initialFolder={initialFolder} onOpenDocument={() => {}} />,
@@ -70,5 +73,30 @@ describe('an empty new folder', () => {
     await waitFor(() =>
       expect(source.setFolderName).toHaveBeenCalledWith('site-visits', 'Site visits'),
     )
+  })
+})
+
+describe('filing existing documents into an empty new folder', () => {
+  it('moves the documents picked from its own view, which keeps the folder', async () => {
+    const { source } = renderPanel()
+    fireEvent.submit(
+      within(await newFolderFromToolbar('Site visits'))
+        .getByLabelText('Folder name')
+        .closest('form') as HTMLElement,
+    )
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(await within(contents).findByRole('button', { name: 'Move documents here…' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Move documents here' })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Notes/ }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move here' }))
+
+    await waitFor(() =>
+      expect(source.renameDocumentPath).toHaveBeenCalledWith('notes', 'site-visits/notes'),
+    )
+    await waitFor(() =>
+      expect(source.setFolderName).toHaveBeenCalledWith('site-visits', 'Site visits'),
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 })
