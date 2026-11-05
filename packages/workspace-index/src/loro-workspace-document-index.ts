@@ -467,6 +467,7 @@ export class LoroWorkspaceDocumentIndex
           shownName('document', source),
           documents.map((entry) => shownName('document', entry)),
         ),
+        withoutAnnotations: input.withoutAnnotations === true,
       })
       // Unreachable while the path above was derived free of every node.
       if (copy === null) throw new DocumentPathTakenError(input.workspaceId, path)

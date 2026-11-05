@@ -462,6 +462,13 @@ export const listDocumentsResponseSchema = z.object({
 // POST /api/workspaces/:workspaceId/documents/<path>/duplicate — the copy the
 // keeper made BESIDE the source, as one write: its path and name are derived
 // there (model's `deriveCopyPath` / `deriveCopyName`), never by the client.
+// The body is optional: an empty request copies the whole document, its
+// comment threads and open proposals included. `withoutAnnotations` copies the
+// content alone (the port's `DuplicateDocumentInput` says what that leaves).
+export const duplicateDocumentRequestSchema = z
+  .object({ withoutAnnotations: z.boolean().optional() })
+  .strict()
+
 export const duplicateDocumentResponseSchema = z.object({
   document: documentSummarySchema.pick({ documentId: true, path: true, name: true, kind: true }),
 })
@@ -479,6 +486,7 @@ export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
 export type FolderNameSummary = z.infer<typeof folderNameSummarySchema>
 export type SetFolderNameRequest = z.infer<typeof setFolderNameRequestSchema>
 export type SetFolderNameResponse = z.infer<typeof setFolderNameResponseSchema>
+export type DuplicateDocumentRequest = z.infer<typeof duplicateDocumentRequestSchema>
 export type DuplicateDocumentResponse = z.infer<typeof duplicateDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>

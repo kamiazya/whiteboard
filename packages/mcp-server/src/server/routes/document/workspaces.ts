@@ -2,6 +2,7 @@ import {
   createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type DuplicateDocumentResponse,
+  duplicateDocumentRequestSchema,
   type ListDocumentsResponse,
   type ListWorkspacesResponse,
   type RenameDocumentPathResponse,
@@ -546,10 +547,20 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
     'post',
     ['duplicate'],
     async (c, workspaceId, path) => {
+      const asked = await readJsonBody(c, duplicateDocumentRequestSchema, {
+        voice: 'problem',
+        optional: true,
+        refuseShape: (error) => titleRefusal(error, 'invalid duplicate options'),
+      })
+      if ('refusal' in asked) return asked.refusal
       const { documentIndex } = serverDeps
       if (!hasDocumentDuplicates(documentIndex)) return c.json(NO_DUPLICATES, 501)
       try {
-        const copy = await documentIndex.duplicateDocument({ workspaceId, path })
+        const copy = await documentIndex.duplicateDocument({
+          workspaceId,
+          path,
+          ...(asked.data.withoutAnnotations === true ? { withoutAnnotations: true } : {}),
+        })
         const response: DuplicateDocumentResponse = {
           document: {
             documentId: copy.documentId,

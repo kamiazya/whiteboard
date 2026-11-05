@@ -1019,14 +1019,18 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
  * (segment, kind, name, documentId) are tree bookkeeping and stay behind —
  * only containers are content.
  */
-export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): LoroDoc | null {
+export function projectWorkspaceDocument(
+  doc: LoroDoc,
+  documentId: string,
+  opts: { omit?: ReadonlySet<string> } = {},
+): LoroDoc | null {
   const node = nodeById(doc, documentId)
   if (node === null) return null
   const out = new LoroDoc()
   for (const key of node.data.keys()) {
     // A stored plane belongs to the record, not the document: see
     // STORED_PLANE_KEY_PREFIX for what carrying one into the projection costs.
-    if (isPlaneKey(key)) continue
+    if (isPlaneKey(key) || opts.omit?.has(key)) continue
     const value = node.data.get(key) as unknown
     const kind = containerKind(value)
     // Scalars are node meta, not content — see the doc comment.
