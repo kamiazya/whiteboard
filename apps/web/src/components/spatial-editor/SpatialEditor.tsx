@@ -142,8 +142,8 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
-import { LayoutStatus } from './LayoutStatus.js'
 import { canvasRootLabel, selectionCommentCompose, selectionMenuTarget } from './keyboard-menu.js'
+import { LayoutStatus } from './LayoutStatus.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -164,6 +164,7 @@ import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { toolAnnouncement } from './tool-announcement.js'
+import { useRemoveAbandonedNote } from './use-abandoned-note.js'
 import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
@@ -468,6 +469,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       longPressRef,
       clearLongPress,
     } = useInteractionState({ canvas })
+    useRemoveAbandonedNote({ gestureStateRef, canvasRef, onChange })
     const selectedId = selectionState.primaryId
     const {
       tool,

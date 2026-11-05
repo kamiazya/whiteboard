@@ -261,7 +261,8 @@ keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
 thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
-undo. Press `Esc` on a new note before typing and it is removed.
+undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
+while a new note is still empty removes it too.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces

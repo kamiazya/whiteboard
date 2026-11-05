@@ -374,3 +374,36 @@ describe('the layout status', () => {
     expect(status?.closest('[data-testid="viewport-transform"]')).toBeNull()
   })
 })
+
+describe('leaving the canvas mid-edit', () => {
+  function mountWithNewNote(start: SpatialCanvas) {
+    let latest = start
+    const view = render(
+      <SpatialEditor
+        theme="light"
+        defaultTool="select"
+        canvas={start}
+        onChange={(next) => {
+          latest = next
+        }}
+        measure={fakeMeasure}
+      />,
+    )
+    fireEvent.click(view.getByTestId('add-button'))
+    fireEvent.click(view.getByRole('menuitem', { name: 'Note' }))
+    return { view, latest: () => latest }
+  }
+
+  it('removes a new note that was left empty', () => {
+    const { view, latest } = mountWithNewNote({ nodes: [], edges: [] })
+    expect(latest().nodes).toHaveLength(1)
+    view.unmount()
+    expect(latest().nodes).toHaveLength(0)
+  })
+
+  it('keeps the notes that were already there', () => {
+    const { view, latest } = mountWithNewNote(twoNodeCanvas())
+    view.unmount()
+    expect(latest().nodes.map((node) => node.id)).toEqual(['a', 'b'])
+  })
+})
