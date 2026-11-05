@@ -129,7 +129,7 @@ describe('a drop the keeper refuses', () => {
     drag(notesCard(), folder).drop()
 
     const alert = await screen.findByText(
-      'Another document here is already called "notes". Choose a name no other document here has.',
+      'Another document here is already called "Notes". Choose a name no other document here has.',
     )
     const box = alert.getBoundingClientRect()
     expect(box.height).toBeGreaterThan(0)
@@ -176,7 +176,7 @@ describe('moving a document from the keyboard', () => {
     await userEvent.click(within(dialog).getByRole('option', { name: 'design' }))
 
     expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another document here is already called "notes". Choose a name no other document here has.',
+      'Another document here is already called "Notes". Choose a name no other document here has.',
     )
     expect((await pathsOf(source))[ids.notes as string]).toBe('notes')
   })

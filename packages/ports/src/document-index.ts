@@ -561,6 +561,7 @@ export class DisplayNameTakenError extends Error {
     readonly kind: 'folder' | 'document',
     /** The path of the folder or document the name was for. */
     readonly path: string,
+    /** The name the existing sibling shows — what the refusal quotes. */
     readonly displayName: string,
   ) {
     // The folder is named by where the person already is, not by its

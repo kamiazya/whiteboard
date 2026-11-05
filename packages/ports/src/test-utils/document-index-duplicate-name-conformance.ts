@@ -47,6 +47,7 @@ export function describeDuplicateDocumentName(withIndex: WithIndex, workspaceId:
       })
     })
   })
+  describeRefusalQuotesSibling(withIndex, workspaceId, create)
   describeDuplicateDocumentRename(withIndex, workspaceId, create)
   describeMoveDocumentName(withIndex, workspaceId)
   describeUnnamedCreate(withIndex, workspaceId)
@@ -97,6 +98,46 @@ function describeDuplicateDocumentRename(
         const { documentId } = await create(index, 'week/other', 'Other')
         await index.setDocumentName({ workspaceId, documentId })
         expect((await index.resolveDocumentById({ workspaceId, documentId }))?.name).toBeUndefined()
+      })
+    })
+  })
+}
+
+function describeRefusalQuotesSibling(
+  withIndex: WithIndex,
+  workspaceId: string,
+  create: (
+    index: DocumentIndex,
+    path: string,
+    name?: string,
+  ) => Promise<{ documentId: string; name?: string }>,
+): void {
+  describe('a refused document name', () => {
+    // Quoted as the sibling is CALLED, not as it was typed: "plan" beside a
+    // document called "Plan" would read as a claim that something is "plan".
+    const quotes = 'Another document here is already called "Q3 Planning".'
+    it('quotes the sibling name on create, rename and move', async () => {
+      await withIndex(async (index) => {
+        await create(index, 'week/plan', 'Q3 Planning')
+        const { documentId } = await create(index, 'week/other', 'Other')
+        await create(index, 'month/away', 'q3 planning')
+
+        await expect(create(index, 'week/new', ' q3 PLANNING ')).rejects.toThrow(quotes)
+        await expect(
+          index.setDocumentName({ workspaceId, documentId, name: 'q3 planning' }),
+        ).rejects.toThrow(quotes)
+        await expect(
+          index.moveDocument({ workspaceId, from: 'month/away', to: 'week/away' }),
+        ).rejects.toThrow(quotes)
+      })
+    })
+
+    it('quotes an unnamed sibling by the segment it shows', async () => {
+      await withIndex(async (index) => {
+        await create(index, 'week/plan')
+        await expect(create(index, 'week/other', 'PLAN')).rejects.toThrow(
+          'Another document here is already called "plan".',
+        )
       })
     })
   })

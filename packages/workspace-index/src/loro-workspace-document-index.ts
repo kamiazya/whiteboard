@@ -49,9 +49,9 @@ import {
   documentShownName,
   firstDistinctUnnamedPath,
   generateDocumentId,
-  isMovedNameTaken,
   isSelfOrDescendant,
-  isSiblingDisplayNameTaken,
+  movedDisplayNameTaken,
+  siblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
 import type {
   BlobRef,
@@ -601,9 +601,8 @@ export class LoroWorkspaceDocumentIndex
       const currentName = current?.type === 'folder' ? current.name : undefined
       if (input.name !== undefined && !sameDisplayName(currentName, input.name)) {
         const others = nodes.filter((node) => node.type === 'folder' && node.path !== input.path)
-        if (isSiblingDisplayNameTaken(others, { path: input.path, name: input.name })) {
-          throw new DisplayNameTakenError('folder', input.path, input.name)
-        }
+        const shown = siblingDisplayNameTaken(others, { path: input.path, name: input.name })
+        if (shown !== undefined) throw new DisplayNameTakenError('folder', input.path, shown)
       }
       setWorkspaceFolderName(doc, {
         path: input.path,
@@ -678,9 +677,8 @@ function refuseSiblingDocumentName(
       ? [{ path: node.path, name: node.meta.name }]
       : [],
   )
-  if (isSiblingDisplayNameTaken(others, { path, name })) {
-    throw new DisplayNameTakenError('document', path, name)
-  }
+  const shown = siblingDisplayNameTaken(others, { path, name })
+  if (shown !== undefined) throw new DisplayNameTakenError('document', path, shown)
 }
 
 /**
@@ -702,9 +700,8 @@ function refuseMovedName(
         ? [{ path: node.path, name: node.type === 'folder' ? node.name : node.meta.name }]
         : [],
     )
-    if (isMovedNameTaken(staying, { from, to, name })) {
-      throw new DisplayNameTakenError(kind, to, name ?? to.slice(to.lastIndexOf('/') + 1))
-    }
+    const shown = movedDisplayNameTaken(staying, { from, to, name })
+    if (shown !== undefined) throw new DisplayNameTakenError(kind, to, shown)
   }
 }
 

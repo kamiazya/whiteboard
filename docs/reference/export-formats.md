@@ -332,7 +332,9 @@ it has none — is refused, and so is a folder name another folder beside it
 shows; names are compared ignoring case, surrounding spaces and Unicode
 composition, so `Week 6`, ` week 6 ` and `WEEK 6` are one name. The refusal
 answers `409 {"error":"display_name_taken"}` from `/api/v1` and the daemon's
-name routes, and stops a `wb_workspace_edit` batch at that op. A folder and a
+name routes, and stops a `wb_workspace_edit` batch at that op; its message
+quotes the name as the sibling shows it (`already called "Week 6"`), not as it
+was given. A folder and a
 document may share a name, and so may two documents in different folders.
 Two names that only meet when two copies of a workspace merge — each named
 while the other could not see it — are both kept: nothing renames either,

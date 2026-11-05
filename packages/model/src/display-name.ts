@@ -48,51 +48,56 @@ export function displayNameKey(name: string): string {
 }
 
 /**
- * Whether `name` is already the display name of one of `siblings` — the
- * names the other folders, or the other documents, under the same parent
- * show. A writer refuses a duplicate it can SEE; one that arrives by merging
- * two replicas' edits is kept, since nothing could have refused it and a
- * rename nobody made would be worse than two equal names.
+ * Which of `siblings` — the names the other folders, or the other documents,
+ * under the same parent show — `name` duplicates, as that sibling shows it;
+ * `undefined` when none. A writer refuses a duplicate it can SEE; one that
+ * arrives by merging two replicas' edits is kept, since nothing could have
+ * refused it and a rename nobody made would be worse than two equal names.
  */
-function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
+function siblingShowing(name: string, siblings: Iterable<string>): string | undefined {
   const key = displayNameKey(name)
-  for (const sibling of siblings) if (displayNameKey(sibling) === key) return true
-  return false
+  for (const sibling of siblings) if (displayNameKey(sibling) === key) return sibling
+  return undefined
 }
 
 /**
- * Whether `target.name` duplicates what a sibling of `target.path` shows —
- * the siblings being the entries of `others` directly under the same parent,
- * each showing its name or, unnamed, its own segment. `others` is one KIND of
- * entry (folders, or documents: the two are compared separately) and leaves
- * the target itself out, which only the caller can identify.
+ * The name a sibling of `target.path` already shows that `target.name`
+ * duplicates — the siblings being the entries of `others` directly under the
+ * same parent, each showing its name or, unnamed, its own segment — or
+ * `undefined` when `target.name` is free. `others` is one KIND of entry
+ * (folders, or documents: the two are compared separately) and leaves the
+ * target itself out, which only the caller can identify.
+ *
+ * The SIBLING's name is what a refusal quotes, never the one typed: "plan"
+ * beside a document called "Plan" would read as a claim that something is
+ * called "plan".
  */
-export function isSiblingDisplayNameTaken(
+export function siblingDisplayNameTaken(
   others: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
   target: { readonly path: string; readonly name: string },
-): boolean {
+): string | undefined {
   const parent = parentOf(target.path)
   const shown: string[] = []
   for (const other of others) {
     if (parentOf(other.path) !== parent) continue
     shown.push(other.name ?? other.path.slice(other.path.lastIndexOf('/') + 1))
   }
-  return isDisplayNameTaken(target.name, shown)
+  return siblingShowing(target.name, shown)
 }
 
 /**
- * Whether moving the entry at `from` to `to` makes it show a name a sibling
- * already shows. `staying` is every entry of the same KIND that is not part
- * of the moving subtree; `name` is the moving entry's own display name. An
- * entry that keeps the label it already showed under the same parent (an
- * unnamed one renamed in place changes its label; a named one does not) is
- * no new duplicate, so re-saving a form over one that merged in is not
- * refused.
+ * The name a sibling already shows that moving the entry at `from` to `to`
+ * would make it show too, or `undefined` when the move makes no duplicate.
+ * `staying` is every entry of the same KIND that is not part of the moving
+ * subtree; `name` is the moving entry's own display name. An entry that keeps
+ * the label it already showed under the same parent (an unnamed one renamed
+ * in place changes its label; a named one does not) is no new duplicate, so
+ * re-saving a form over one that merged in is not refused.
  */
-export function isMovedNameTaken(
+export function movedDisplayNameTaken(
   staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
   move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
-): boolean {
+): string | undefined {
   const segmentOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
   const shown = move.name ?? segmentOf(move.to)
   const wasShown = move.name ?? segmentOf(move.from)
@@ -100,9 +105,9 @@ export function isMovedNameTaken(
     parentOf(move.from) === parentOf(move.to) &&
     displayNameKey(shown) === displayNameKey(wasShown)
   ) {
-    return false
+    return undefined
   }
-  return isSiblingDisplayNameTaken(staying, { path: move.to, name: shown })
+  return siblingDisplayNameTaken(staying, { path: move.to, name: shown })
 }
 
 /**
@@ -120,10 +125,10 @@ export function firstDistinctUnnamedPath(
 ): string | null {
   const others = [...siblings]
   const reads = (candidate: string): boolean =>
-    isSiblingDisplayNameTaken(others, {
+    siblingDisplayNameTaken(others, {
       path: candidate,
       name: candidate.slice(candidate.lastIndexOf('/') + 1),
-    })
+    }) !== undefined
   if (!reads(path)) return path
   for (let n = 2; n < 1000; n++) {
     const candidate = `${path}-${n}`

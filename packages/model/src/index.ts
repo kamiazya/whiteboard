@@ -15,8 +15,8 @@ export {
   firstDistinctUnnamedPath,
   folderNameRefusal,
   folderNameSchema,
-  isMovedNameTaken,
-  isSiblingDisplayNameTaken,
+  movedDisplayNameTaken,
+  siblingDisplayNameTaken,
 } from './display-name.js'
 export * from './document-kind.js'
 export { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
