@@ -28,6 +28,22 @@ import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 const GROUP_FRAME_SIZE = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }
 
 /**
+ * How far above a frame its own chrome reaches: the name sits over the top
+ * edge, and once selected so does its tool chip — 44px on a touch screen
+ * plus its 6px gap. A frame placed flush under a note would draw both over
+ * that note.
+ */
+const FRAME_TOP_CLEARANCE_PX = 50
+
+/** What a new frame must keep clear of: each obstacle, reaching down over the frame's top strip. */
+function frameObstacles(canvas: SpatialCanvas): readonly Box[] {
+  return creationObstacles(canvas).map((box) => ({
+    ...box,
+    height: box.height + FRAME_TOP_CLEARANCE_PX,
+  }))
+}
+
+/**
  * Where a frame asked for at `at` goes: `at` itself when the frame covers
  * nothing there, else the free spot nearest it. A frame holds whatever it
  * covers, so one dropped over another frame took that frame's notes and hid
@@ -119,13 +135,17 @@ export function useNodeCreation({
   // call sites used `defaultCreateId`.
   const newId = () => (createId ?? defaultCreateId)()
 
-  const spawnPoint = (at: Point | undefined, size: { width: number; height: number }): Point => {
+  /** The canvas point at the middle of the editor's box. */
+  const viewCenter = (): Point => {
     const root = rootRef.current
     const centerScreen =
       root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-    const preferred = screenToCanvas(centerScreen, viewport)
+    return screenToCanvas(centerScreen, viewport)
+  }
+
+  const spawnPoint = (at: Point | undefined, size: { width: number; height: number }): Point => {
     const occupied = creationObstacles(canvasRef.current)
-    return resolveSpawnPoint(at, preferred, size, occupied, visibleCanvasRect())
+    return resolveSpawnPoint(at, viewCenter(), size, occupied, visibleCanvasRect())
   }
 
   const createLinkAtViewportCenter = (url: string, at?: Point) => {
@@ -186,10 +206,11 @@ export function useNodeCreation({
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    const point =
-      at === undefined
-        ? spawnPoint(undefined, GROUP_FRAME_SIZE)
-        : frameSpawnPoint(at, creationObstacles(canvasRef.current), visibleCanvasRect())
+    const point = frameSpawnPoint(
+      at ?? viewCenter(),
+      frameObstacles(canvasRef.current),
+      visibleCanvasRect(),
+    )
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({
