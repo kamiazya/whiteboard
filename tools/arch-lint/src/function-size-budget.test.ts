@@ -205,7 +205,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 81, // +1: the dock hands focus back to the canvas; +5: the locked-press notice mount; +2: the empty cue takes its description id; +3: the Connect tool hint mount
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 82, // +1: the dock hands focus back to the canvas; +5: the locked-press notice mount; +2: the empty cue takes its description id; +3: the Connect tool hint mount; +1: the layout status mounts in the chrome, out of the panned layer
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
@@ -248,7 +248,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 585, // +37: the hand tool's double click, armed at the press and resolved at the release; a frame-interior drag becoming a band
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
-  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,
+  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
   'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 152, // +5: Group frames a selection and opens the new frame's name

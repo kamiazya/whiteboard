@@ -1617,8 +1617,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {canvas.nodes.length === 0 && (
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
         )}
-        {/* Chrome, not canvas: inside the panned layer the chip was
-            centred on the layer's zero width, at the canvas origin. */}
         <LayoutStatus current={sceneCurrent} />
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />

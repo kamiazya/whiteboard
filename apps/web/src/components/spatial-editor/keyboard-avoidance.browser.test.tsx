@@ -8,7 +8,7 @@
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -364,8 +364,9 @@ it('keeps a pan the user made while the keyboard was up', async () => {
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
   fake.height = window.innerHeight
-  fake.dispatchEvent(new Event('resize'))
-
-  await new Promise((resolve) => setTimeout(resolve, 50))
+  // act flushes the view update a restore would make, so nothing pending is missed.
+  await act(async () => {
+    fake.dispatchEvent(new Event('resize'))
+  })
   expect(transformOf(container)).toBe(panned)
 })
