@@ -3,7 +3,9 @@ import { useCallback, useState } from 'react'
 import { z } from 'zod'
 import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentPathTakenMessage } from '../../lib/document-path-taken.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
+import type { FolderNames } from '../../lib/folder-names.js'
 
 /**
  * The rename flow: which document the dialog is open for, whether a submit is
@@ -40,12 +42,12 @@ export interface RenameDocument {
 /**
  * A keeper refuses a name past the bound with the port's own parse, and a
  * ZodError's message is its issue list as JSON — so the issues' own words are
- * what a rename surface shows. Anything else is shown as it stands: the server
- * names the produced path that collided.
+ * what a rename surface shows. A taken address is reworded by the folder's
+ * name in `names`; anything else is shown as it stands.
  */
-export function refusalMessage(err: unknown): string {
+export function refusalMessage(err: unknown, names?: FolderNames): string {
   if (err instanceof z.ZodError) return err.issues.map((issue) => issue.message).join('; ')
-  return messageOf(err, 'Could not rename it.')
+  return documentPathTakenMessage(err, names) ?? messageOf(err, 'Could not rename it.')
 }
 
 /**

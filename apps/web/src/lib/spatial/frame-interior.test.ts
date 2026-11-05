@@ -2,6 +2,7 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import {
   creationObstacles,
+  frameForNewNote,
   frameTitleAt,
   nextSpotInFrame,
   pointInsideFrame,
@@ -59,4 +60,16 @@ it('a named frame reserves its name strip; an unnamed one draws none', () => {
   // Both boxes, and one strip: the named frame's.
   expect(obstacles).toHaveLength(3)
   expect(obstacles).toContainEqual({ x: 200, y: 156, width: 400, height: 44 })
+})
+
+it('a note asked for beside a node in nested frames goes to the innermost frame', () => {
+  const outer = groupNode({ id: 'o', x: 0, y: 0, width: 1000, height: 1000 })
+  const inner = groupNode({ id: 'i', x: 100, y: 100, width: 500, height: 400 })
+  const note = textNode({ id: 'n', x: 150, y: 150, width: 200, height: 100, text: 'x' })
+  const loose = textNode({ id: 'l', x: 2000, y: 0, width: 200, height: 100, text: 'y' })
+  const nodes = [outer, inner, note, loose]
+  expect(frameForNewNote(note, nodes)?.id).toBe('i')
+  expect(frameForNewNote(inner, nodes)?.id).toBe('i')
+  expect(frameForNewNote(loose, nodes)).toBeUndefined()
+  expect(frameForNewNote(undefined, nodes)).toBeUndefined()
 })

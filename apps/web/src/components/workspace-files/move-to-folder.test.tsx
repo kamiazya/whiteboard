@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
+import { DisplayNameTakenError, DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { DaemonApiError } from '../../lib/daemon-api-client.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
@@ -91,6 +92,30 @@ describe('moving a document to a folder from its menu', () => {
       'Another document here is already called "Login flow". Choose a name no other document here has.',
     )
     expect(screen.getByRole('dialog', { name: 'Move to folder' })).toBeTruthy()
+  })
+
+  const PATH_TAKEN =
+    'Workspace already has a document at "login". Change one of their addresses, or choose another folder.'
+
+  it('words an address the folder already holds for people, without the workspace id', async () => {
+    const source = renderWithFolders()
+    source.renameDocumentPath.mockRejectedValueOnce(
+      new DocumentPathTakenError('01M6NN5Y6CYSN7B8YWJXN1RF5S', 'login'),
+    )
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(within(dialog).getByRole('option', { name: 'Workspace' }))
+    expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent', PATH_TAKEN)
+  })
+
+  it('words the daemon’s taken-address refusal the same way', async () => {
+    const source = renderWithFolders()
+    const raised = new DocumentPathTakenError('01M6NN5Y6CYSN7B8YWJXN1RF5S', 'login').message
+    source.renameDocumentPath.mockRejectedValueOnce(
+      new DaemonApiError(raised, 409, { title: raised }),
+    )
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(within(dialog).getByRole('option', { name: 'Workspace' }))
+    expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent', PATH_TAKEN)
   })
 
   it('shows the keeper’s refusal and keeps the picker open', async () => {
@@ -204,6 +229,19 @@ describe('moving a document to a named folder', () => {
     )
     await waitFor(() => expect(source.setFolderName).toHaveBeenCalledWith('class/week-7', 'Week 7'))
     expect(source.setFolderName).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the folder holding a taken address by its name', async () => {
+    const source = renderNamed()
+    source.renameDocumentPath.mockRejectedValueOnce(
+      new DocumentPathTakenError('01M6NN5Y6CYSN7B8YWJXN1RF5S', 'class/w6/login'),
+    )
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(await within(dialog).findByRole('option', { name: 'Class / Week 6' }))
+    expect(await within(dialog).findByRole('alert')).toHaveProperty(
+      'textContent',
+      'Week 6 already has a document at "login". Change one of their addresses, or choose another folder.',
+    )
   })
 
   // Typing a folder that exists is asking to go there.

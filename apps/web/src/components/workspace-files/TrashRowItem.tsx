@@ -25,7 +25,13 @@ export function TrashRowItem({
   onPurgeSettled,
 }: Readonly<TrashRowItemProps>) {
   const folder = folderOf(row.path)
-  const names = useContext(FolderNamesContext)
+  // A folder still standing is called what it is called now — restore keeps
+  // that name — and one that went with the document by the name it had.
+  const live = useContext(FolderNamesContext)
+  const names = new Map([
+    ...(row.folderNames ?? []).map(({ path, name }) => [path, name] as const),
+    ...live,
+  ])
   const where = folder === '' ? 'Workspace' : folderTrail(folder, names).join(' / ')
   return (
     <li className="flex items-center gap-2 pointer-coarse:min-h-11 pointer-coarse:gap-3">

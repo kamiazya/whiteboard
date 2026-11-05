@@ -65,4 +65,15 @@ describe('the home toolbar at 390px', () => {
     )
     expect(search.getBoundingClientRect().width).toBeGreaterThanOrEqual(200)
   })
+
+  it('lets the search box span the row, sharing it with nothing', async () => {
+    const { trail } = await renderInFolder()
+    const search = screen.getByLabelText('Search documents').getBoundingClientRect()
+    const row = trail.parentElement?.parentElement?.getBoundingClientRect()
+    expect(search.width).toBeGreaterThanOrEqual((row?.width ?? 0) - 1)
+    for (const name of ['New document', 'One column']) {
+      const other = screen.getByRole('button', { name }).getBoundingClientRect()
+      expect(other.top >= search.bottom || other.bottom <= search.top).toBe(true)
+    }
+  })
 })

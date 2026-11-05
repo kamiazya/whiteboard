@@ -104,6 +104,27 @@ export function nextSpotInFrame(
 }
 
 /**
+ * The frame a note asked for while `selected` is selected belongs in: the
+ * selected frame itself, or the innermost frame holding the selected node —
+ * a note added next to one in a frame is added to that frame's contents.
+ */
+export function frameForNewNote(
+  selected: SpatialNode | undefined,
+  nodes: readonly SpatialNode[],
+): SpatialNode | undefined {
+  if (selected === undefined) return undefined
+  if (isFrame(selected)) return selected
+  const holders = nodes.filter(
+    (node) => node.id !== selected.id && isFrame(node) && frameHolds(node, selected),
+  )
+  return holders.reduce<SpatialNode | undefined>(
+    (inner, node) =>
+      inner === undefined || node.width * node.height < inner.width * inner.height ? node : inner,
+    undefined,
+  )
+}
+
+/**
  * The frame whose NAME is under `at`. A frame with no name draws nothing
  * above itself, so it has no strip to point at; later frames paint over
  * earlier ones, so the last match wins.
