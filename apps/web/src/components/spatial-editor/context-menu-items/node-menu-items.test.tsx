@@ -186,7 +186,7 @@ describe('nodeMenuItems', () => {
       optionOf(items, 'Align', 'Align left')?.onSelect()
       expect(applyBoxMoves).toHaveBeenCalledTimes(1)
       expect(close).toHaveBeenCalledTimes(1)
-      expect(canvasAnnouncement()).toBe('Aligned 3 nodes left')
+      expect(canvasAnnouncement().trim()).toBe('Aligned 3 nodes left')
     })
 
     it('Distribute closes the menu and announces the axis', () => {
@@ -196,7 +196,7 @@ describe('nodeMenuItems', () => {
       )
       optionOf(items, 'Distribute', 'Distribute horizontally')?.onSelect()
       expect(close).toHaveBeenCalledTimes(1)
-      expect(canvasAnnouncement()).toBe('Distributed horizontally')
+      expect(canvasAnnouncement().trim()).toBe('Distributed horizontally')
     })
 
     it('Tidy, Lock and Unlock announce what they did', () => {
@@ -211,7 +211,7 @@ describe('nodeMenuItems', () => {
       const say = (label: string) => {
         const row = items.find((item) => labelOf(item) === label) as { onSelect: () => void }
         row.onSelect()
-        return canvasAnnouncement()
+        return canvasAnnouncement().trim()
       }
       expect(say('Tidy')).toBe('Already tidy')
       expect(say('Lock')).toBe('Locked 1 node')
@@ -219,7 +219,7 @@ describe('nodeMenuItems', () => {
         baseInput(textNode, canvas, { isLocked: () => true, onToggleNodeLock }),
       )[0] as { onSelect: () => void }
       unlock.onSelect()
-      expect(canvasAnnouncement()).toBe('Unlocked 1 node')
+      expect(canvasAnnouncement().trim()).toBe('Unlocked 1 node')
     })
   })
 
