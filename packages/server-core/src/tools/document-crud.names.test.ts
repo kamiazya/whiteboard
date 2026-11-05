@@ -1,7 +1,7 @@
+import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { DocumentNameConflictError } from './document-crud.errors.js'
 import { wbDocumentCreate } from './document-crud.js'
 
