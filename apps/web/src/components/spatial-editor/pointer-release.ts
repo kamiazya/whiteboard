@@ -296,8 +296,14 @@ function runPrimaryAction(
     return true
   }
   if (isFrame(node)) {
-    // A frame's interior is paper that belongs to it: the name is edited from
-    // its own strip (`emptyDoublePress`), and a double press here adds a note.
+    // A frame's name strip is its handle, so a press there picks the frame;
+    // a double press on it edits the name. The interior is paper that
+    // belongs to the frame, and a double press there adds a note.
+    if (frameTitleAt(canvas.nodes, at) === node.id) {
+      applyResult(result)
+      ctx.setGroupLabelEditId(node.id)
+      return true
+    }
     createNodeAt(pointInsideFrame(node, at, { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }))
     return true
   }

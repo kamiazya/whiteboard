@@ -73,3 +73,43 @@ it('dragging a selection that includes a frame carries the frame members', () =>
   expect(boxOf(latest, 'g1')).toEqual({ x: 120, y: 120 })
   expect(boxOf(latest, 'a')).toEqual({ x: 160, y: 160 })
 })
+
+it('dragging a frame by its name strip carries the frame and its members', () => {
+  const { Host, latest } = makeEditorHost({ initial: grouped })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // The name is drawn in the band above the frame's top edge.
+  fireEvent.pointerDown(root, { pointerId: 1, clientX: 200, clientY: 60, buttons: 1 })
+  fireEvent.pointerMove(root, { pointerId: 1, clientX: 240, clientY: 100, buttons: 1 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: 240, clientY: 100 })
+
+  expect(boxOf(latest, 'g1')).toEqual({ x: 120, y: 120 })
+  expect(boxOf(latest, 'a')).toEqual({ x: 160, y: 160 })
+  expect(boxOf(latest, 'c')).toEqual({ x: 600, y: 400 })
+})
+
+it('a selected frame resizes from a press 8px outside its corner', () => {
+  const { Host, latest } = makeEditorHost({ initial: grouped })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 82, 200)
+
+  // Delivered to whatever the browser's own hit test finds there, so this
+  // asserts the size of the corner's hit area, not the handler.
+  const r = root.getBoundingClientRect()
+  const target = document.elementFromPoint(r.left + 448, r.top + 308)
+  if (target === null) throw new Error('nothing under the corner')
+  fireEvent.pointerDown(target, {
+    button: 0,
+    pointerId: 2,
+    clientX: r.left + 448,
+    clientY: r.top + 308,
+  })
+  fireEvent.pointerMove(root, { pointerId: 2, clientX: r.left + 488, clientY: r.top + 348 })
+  fireEvent.pointerUp(root, { pointerId: 2, clientX: r.left + 488, clientY: r.top + 348 })
+
+  const frame = latest.canvas.nodes.find((n) => n.id === 'g1')
+  expect(frame?.width).toBeGreaterThan(360)
+  expect(frame?.height).toBeGreaterThan(220)
+})

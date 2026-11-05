@@ -29,6 +29,7 @@ import {
   frameHolds,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
+import { FRAME_TITLE_OFFSET_PX } from '../../lib/spatial/frame-interior.js'
 import { type Box, distanceToPolyline, hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { type DrawnPath, inkUnder, inkWithin, type Rect } from './ink-hit.js'
@@ -317,12 +318,31 @@ export function frameBandStart(
   return travelled < FRAME_BAND_SLOP_PX ? null : startPoint
 }
 
+/**
+ * The named frame whose name strip — the band its name is drawn in, above
+ * its top edge — is under `at`. The strip is the frame's handle as much as
+ * its border is, and a far larger target; later frames paint over earlier.
+ */
+function nameStripUnder(boxes: readonly NodeBox[], at: Point): string | undefined {
+  return boxes
+    .filter(
+      ({ titled, box }) =>
+        titled === true &&
+        at.x >= box.x &&
+        at.x <= box.x + box.width &&
+        at.y >= box.y - FRAME_TITLE_OFFSET_PX &&
+        at.y < box.y,
+    )
+    .at(-1)?.id
+}
+
 /** The probes a PRESS contends with, in `CONTENT_PICK_ORDER`. */
 export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe | SkippedProbe> {
   return {
     lines: (at) => inkUnder(inputs.paths, at, inputs.tolerance, inputs.isEdgeLocked)?.id,
     nodes: (at) => {
-      const id = hitTest(pointableBoxes(inputs.boxes, inputs.isNodeLocked), at)
+      const pointable = pointableBoxes(inputs.boxes, inputs.isNodeLocked)
+      const id = hitTest(pointable, at) ?? nameStripUnder(pointable, at)
       if (id === undefined) return undefined
       const frame = frameBox(inputs, id)
       // A frame's interior yields to a relation drawn across it: the relation
