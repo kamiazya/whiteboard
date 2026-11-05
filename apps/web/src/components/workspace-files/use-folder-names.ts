@@ -126,6 +126,32 @@ function usePendingFolderNames(
 }
 
 /**
+ * A named folder the last listing emptied keeps its name as a pending one.
+ * The keeper prunes a folder's name with the folder, so without this a
+ * document moved out and back would bring the folder back under its bare
+ * segment. Read from the stored names of the render BEFORE the re-read
+ * lands, which still hold the departed folder's.
+ */
+function useKeepEmptiedNames(
+  source: WorkspaceFilesSource,
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  standing: readonly string[],
+  stored: FolderNames,
+  remember: (path: string, name: string) => void,
+) {
+  const before = useRef<{ source: WorkspaceFilesSource; standing: readonly string[] } | null>(null)
+  useEffect(() => {
+    const previous = before.current
+    before.current = documents === null ? null : { source, standing }
+    if (previous === null || documents === null || previous.source !== source) return
+    for (const path of previous.standing) {
+      const name = stored.get(path)
+      if (name !== undefined && !standing.includes(path)) remember(path, name)
+    }
+  }, [source, documents, standing, stored, remember])
+}
+
+/**
  * Folder display names: what the keeper lists, plus the names given to folders
  * that do not exist yet.
  *
@@ -141,6 +167,8 @@ export function useFolderNames(
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
   const { pending, remember, flushInto, refusal } = usePendingFolderNames(source, standing, reload)
+
+  useKeepEmptiedNames(source, documents, standing, stored, remember)
 
   const names = useMemo(() => new Map([...stored, ...pending]), [stored, pending])
   const folders = useMemo(() => [...new Set([...standing, ...pending.keys()])], [standing, pending])
