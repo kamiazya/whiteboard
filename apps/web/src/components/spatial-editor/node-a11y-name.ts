@@ -81,7 +81,7 @@ export function edgeA11yName(
 }
 
 /** "Line from A to empty space": a line is ink, so it is never called a connection. */
-export function lineA11yName(
+function lineA11yName(
   line: EdgeEnds & { readonly label?: string },
   nodes: readonly SpatialNode[],
 ): string {
