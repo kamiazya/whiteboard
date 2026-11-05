@@ -1,8 +1,8 @@
 import { DialogFooter } from '../ui/dialog.js'
 
-const CANCEL_CLASS = 'rounded-md border px-3 py-1.5 text-sm hover:bg-accent'
+const CANCEL_CLASS = 'rounded-md border px-3 py-1.5 text-sm hover:bg-accent pointer-coarse:min-h-11'
 const PRIMARY_CLASS =
-  'bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm disabled:opacity-50'
+  'bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm disabled:opacity-50 pointer-coarse:min-h-11'
 
 /** A refusal worded beside the field it concerns; nothing when there is none. */
 export function ErrorLine({ message }: { message: string | null }) {

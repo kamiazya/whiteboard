@@ -52,7 +52,7 @@ export function DocumentPathField({
       </label>
       {/* The border is on the ROW so the prefix reads as part of the field
           rather than as a caption sitting beside it. */}
-      <div className="focus-within:ring-ring flex items-center rounded-md border bg-background px-2 py-1.5 font-mono text-sm focus-within:ring-1">
+      <div className="focus-within:ring-ring flex items-center rounded-md border bg-background px-2 py-1.5 font-mono text-sm focus-within:ring-1 pointer-coarse:py-0">
         {prefix !== null && (
           // Only the HANDLE gives way. A workspace with no segment is
           // addressed by its 26-character canonical id, and an unshrinkable
@@ -82,7 +82,7 @@ export function DocumentPathField({
           // that fact available to sighted readers alone.
           aria-describedby={prefix === null ? hintId : `${prefixId} ${hintId}`}
           // A floor: a long handle truncates rather than squeezing the box people type in.
-          className="min-w-[10ch] flex-1 bg-transparent outline-none"
+          className="min-w-[10ch] flex-1 bg-transparent outline-none pointer-coarse:min-h-11"
         />
       </div>
       <span id={hintId} className="text-muted-foreground text-xs">
