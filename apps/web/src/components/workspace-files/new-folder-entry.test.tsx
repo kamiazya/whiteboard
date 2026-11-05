@@ -20,6 +20,7 @@ function renderPanel(initialFolder = '') {
     },
     createDocument: async (path, kind, name) => {
       rows = [...rows, { documentId: `d${rows.length + 1}`, path, kind, ...(name ? { name } : {}) }]
+      return path
     },
   })
   render(
