@@ -85,6 +85,7 @@ function NameDialog({
   refuseName,
   onCancel,
   onSubmitName,
+  onCloseAutoFocus,
 }: {
   dialog: FolderDialog | null
   names: FolderNamesState['names']
@@ -93,9 +94,11 @@ function NameDialog({
   refuseName: (dialog: FolderDialog, name: string) => string | null
   onCancel: () => void
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
+  onCloseAutoFocus: (event: Event) => void
 }) {
   return (
     <FolderNameDialog
+      onCloseAutoFocus={onCloseAutoFocus}
       open={dialog !== null}
       {...nameDialogCopy(dialog, names)}
       refuse={(name) => (dialog === null ? null : refuseName(dialog, name))}
@@ -175,6 +178,7 @@ interface FolderActionsLayerProps {
   planNewFolder: (typed: string) => NestedFolderPlan
   onMenuChoice: (kind: FolderDialog['kind'], folder: string) => void
   onCloseMenu: () => void
+  onCloseAutoFocus: (event: Event) => void
 }
 
 /** Where a document can be moved: the root and every folder, but not where it is. */
@@ -218,6 +222,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
         error={error}
         onCancel={onCancel}
         onPick={(folder, created) => moving !== null && onMoveTo(moving, folder, created)}
+        onCloseAutoFocus={props.onCloseAutoFocus}
       />
       <MoveDocumentsHereDialog
         folder={gathering}
@@ -227,6 +232,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
         error={error}
         onCancel={onCancel}
         onMove={props.onGather}
+        onCloseAutoFocus={props.onCloseAutoFocus}
       />
       <NameDialog
         dialog={dialog}
@@ -236,6 +242,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
         error={error}
         onCancel={onCancel}
         onSubmitName={onSubmitName}
+        onCloseAutoFocus={props.onCloseAutoFocus}
       />
       {menu !== null && (
         <FolderMenuView

@@ -1,5 +1,5 @@
 import { folderNameRefusal } from '@kamiazya/whiteboard-model'
-import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import {
@@ -11,6 +11,8 @@ import {
 import { useAnnouncer } from '../annotations/announcer.js'
 import { FolderActionsLayer, type FolderDialog, type FolderMenu } from './FolderActionsLayer.js'
 import type { FolderActions } from './folder-actions.js'
+import { documentLanding, focusLanding, folderLanding } from './folder-landing.js'
+import { pathInFolder } from './folder-moves.js'
 import { useFolderMoves } from './use-folder-moves.js'
 import { type FolderNamesState, useFolderNames } from './use-folder-names.js'
 
@@ -114,6 +116,8 @@ function layerHandlers({
   setMoving,
   setDialog,
   setGathering,
+  announce,
+  landOn,
 }: Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
   documents: readonly WorkspaceDocumentEntry[] | null
   folderNames: FolderNamesState
@@ -121,6 +125,9 @@ function layerHandlers({
   setMoving: (entry: WorkspaceDocumentEntry | null) => void
   setDialog: (dialog: FolderDialog | null) => void
   setGathering: (folder: string | null) => void
+  announce: (text: string) => void
+  /** Where focus goes when the dialog now closing has gone. */
+  landOn: (selectors: readonly string[]) => void
 }) {
   return {
     onCancel: () => {
@@ -134,6 +141,8 @@ function layerHandlers({
     // nothing here: it is written once the listing shows a document in it.
     onGather: async (folder: string, entries: readonly WorkspaceDocumentEntry[]) => {
       for (const entry of entries) if (!(await moveInto(entry, folder))) return
+      const [first] = entries
+      if (first !== undefined) landOn(documentLanding(pathInFolder(first.path, folder)))
       setGathering(null)
     },
     onMoveTo: async (
@@ -147,15 +156,22 @@ function layerHandlers({
       const calledAs = created.find((each) => each.path === folder)?.name
       if (!(await moveInto(entry, folder, calledAs))) return
       for (const each of created) folderNames.remember(each.path, each.name)
+      landOn(folderLanding(folder))
       setMoving(null)
     },
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
         const path = namedPath(open, name, documents, folderNames)
         folderNames.remember(path, name)
+        landOn(folderLanding(path))
         setDialog(null)
         goToFolder(path)
-      } else if (await renameFolder(open.folder, name)) setDialog(null)
+        // The route announcer still names the page; this says where in it.
+        announce(`In ${name}, empty`)
+      } else if (await renameFolder(open.folder, name)) {
+        landOn(folderLanding(open.folder))
+        setDialog(null)
+      }
     },
     ...namingChecks(documents, folderNames),
     onMenuChoice: (kind: FolderDialog['kind'], folder: string) => {
@@ -233,6 +249,12 @@ export function useFolderActions({
   })
   const surfaces = useOpenSurfaces(source, setError)
   const { moving, setMoving, menu, setMenu, dialog, setDialog, gathering, setGathering } = surfaces
+  const landing = useRef<readonly string[] | null>(null)
+  const onCloseAutoFocus = (event: Event) => {
+    const selectors = landing.current
+    landing.current = null
+    if (selectors !== null && focusLanding(rootRef.current, selectors)) event.preventDefault()
+  }
 
   const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, setGathering)
   const openMovePicker = useMovePickerOpener(setError, setMoving)
@@ -246,6 +268,10 @@ export function useFolderActions({
     setMoving,
     setDialog,
     setGathering,
+    announce,
+    landOn: (selectors) => {
+      landing.current = selectors
+    },
   })
 
   const layer = (
@@ -260,6 +286,7 @@ export function useFolderActions({
       busy={busy}
       error={error ?? folderNames.refusal}
       onCloseMenu={() => setMenu(null)}
+      onCloseAutoFocus={onCloseAutoFocus}
       {...handlers}
     />
   )

@@ -216,6 +216,8 @@ interface MoveToFolderDialogProps {
   /** Shown verbatim — the keeper names the path that collided. */
   error: string | null
   onCancel: () => void
+  /** Where focus goes once the dialog has closed: a handler that does not prevent the event leaves Radix's default (the opener). */
+  onCloseAutoFocus: (event: Event) => void
   /** A folder picked, or one typed — then with the folders it makes on the way. */
   onPick: (folder: string, created?: CreatedFolders) => void
 }
@@ -230,13 +232,14 @@ interface MoveToFolderDialogProps {
  */
 export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
   const { document, folders, names, planNewFolder, busy, error, onCancel, onPick } = props
+  const { onCloseAutoFocus } = props
   const [naming, setNaming] = useState(false)
   // A different document starts at the list again.
   useEffect(() => setNaming(false), [document])
 
   return (
     <Dialog open={document !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <MoveHeader document={document} />
         {naming && document !== null ? (
           <NewFolderForm

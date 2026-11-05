@@ -23,6 +23,8 @@ interface FolderNameDialogProps {
   error: string | null
   onCancel: () => void
   onSubmit: (name: string) => void
+  /** Where focus goes once the dialog has closed: a handler that does not prevent the event leaves Radix's default (the opener). */
+  onCloseAutoFocus: (event: Event) => void
 }
 
 function FolderNameForm({
@@ -35,7 +37,7 @@ function FolderNameForm({
   error,
   onCancel,
   onSubmit,
-}: Omit<FolderNameDialogProps, 'open'>) {
+}: Omit<FolderNameDialogProps, 'open' | 'onCloseAutoFocus'>) {
   const [name, setName] = useState(initialName)
   const [issue, setIssue] = useState<string | null>(null)
 
@@ -82,10 +84,15 @@ function FolderNameForm({
  * mounted only while open, so each opening starts from `initialName`, and
  * the dialog's first focusable is the field.
  */
-export function FolderNameDialog({ open, onCancel, ...form }: FolderNameDialogProps) {
+export function FolderNameDialog({
+  open,
+  onCancel,
+  onCloseAutoFocus,
+  ...form
+}: FolderNameDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <FolderNameForm {...form} onCancel={onCancel} />
       </DialogContent>
     </Dialog>

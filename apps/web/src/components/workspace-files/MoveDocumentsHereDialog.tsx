@@ -66,6 +66,8 @@ interface MoveDocumentsHereDialogProps {
   /** Shown verbatim — the keeper names the path that collided. */
   error: string | null
   onCancel: () => void
+  /** Where focus goes once the dialog has closed: a handler that does not prevent the event leaves Radix's default (the opener). */
+  onCloseAutoFocus: (event: Event) => void
   onMove: (folder: string, entries: readonly WorkspaceDocumentEntry[]) => void | Promise<void>
 }
 
@@ -75,7 +77,7 @@ interface MoveDocumentsHereDialogProps {
  * only way to file a document into it was to leave — which lost it.
  */
 export function MoveDocumentsHereDialog(props: MoveDocumentsHereDialogProps) {
-  const { folder, documents, names, busy, error, onCancel, onMove } = props
+  const { folder, documents, names, busy, error, onCancel, onMove, onCloseAutoFocus } = props
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => setChosen(new Set()), [folder])
   const offered = documents.filter((entry) => folder !== null && folderOf(entry.path) !== folder)
@@ -88,7 +90,7 @@ export function MoveDocumentsHereDialog(props: MoveDocumentsHereDialogProps) {
 
   return (
     <Dialog open={folder !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
         <form
           className="flex flex-col gap-3"
           onSubmit={(event) => {
