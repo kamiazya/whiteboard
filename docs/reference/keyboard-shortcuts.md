@@ -55,7 +55,8 @@ and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
-selected makes the next `Tab` the browser's, which is the way on to the bottom dock.
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock, and
+the canvas then says so ("Tab leaves the canvas").
 To leave without losing the selection, press `F6` (on to the dock) or
 `Shift + F6` (back to the header, where the Display panel shows the selected
 node) — the selection stays exactly as it was. A canvas with no nodes lets `Tab` go straight to the

@@ -13,7 +13,7 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { attachTargetName } from '../../lib/spatial/attach-target-label.js'
@@ -175,6 +175,12 @@ export function useEditorKeyboard({
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
   const handOffTabRef = useRef(false)
+  // The same fact as state, so the canvas name can say what Tab will do.
+  const [handingOffTab, setHandingOffTab] = useState(false)
+  const handOffTab = (next: boolean): void => {
+    handOffTabRef.current = next
+    setHandingOffTab(next)
+  }
 
   const selectOnly = (id: string): void => {
     applySelection({ type: 'set-members', ids: [id] })
@@ -200,14 +206,14 @@ export function useEditorKeyboard({
   const stepThroughStops = (step: 1 | -1): boolean => {
     const nothingSelected = selection === undefined && selectedInkIds.length === 0
     const handOff = handOffTabRef.current && nothingSelected
-    handOffTabRef.current = false
+    handOffTab(false)
     return !handOff && walk.step(step)
   }
 
   const selectAdjacent = (key: string): boolean => {
     const direction = ADJACENT_DIRECTION[key]
     if (direction === undefined) return false
-    handOffTabRef.current = false
+    handOffTab(false)
     const nodes = traversableNodes()
     const id =
       selection === undefined
@@ -278,10 +284,10 @@ export function useEditorKeyboard({
       // Nothing left to let go of: this Escape is the way out, so the Tab
       // after it is the browser's. An Escape that DID release a selection
       // keeps the walk, or the first Escape would already have left it.
-      handOffTabRef.current = true
+      handOffTab(true)
       return false
     }
-    handOffTabRef.current = false
+    handOffTab(false)
     e.preventDefault()
     applySelection({ type: 'clear' })
     setSelectedEdgeId(null)
@@ -754,5 +760,11 @@ export function useEditorKeyboard({
     )
   }
 
-  return { handleKeyDown, handleResizeHandleKeyDown, handleConnectKeyDown }
+  return {
+    handleKeyDown,
+    handleResizeHandleKeyDown,
+    handleConnectKeyDown,
+    /** Whether the next Tab is the browser's: nothing selected, after the Escape that let go. */
+    tabLeavesCanvas: handingOffTab && selection === undefined && selectedInkIds.length === 0,
+  }
 }

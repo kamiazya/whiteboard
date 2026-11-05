@@ -1186,7 +1186,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // The keyboard surface — shortcut dispatch plus the three keydown
     // handlers the JSX wires (canvas root, focused resize handle, connect
     // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
-    const { handleKeyDown, handleResizeHandleKeyDown, handleConnectKeyDown } = useEditorKeyboard({
+    const keyboard = useEditorKeyboard({
       tool,
       canvas,
       canvasRef,
@@ -1245,6 +1245,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return true
       },
     })
+    const { handleKeyDown, handleResizeHandleKeyDown, handleConnectKeyDown } = keyboard
     const shortcutHelp = useShortcutHelp(tool, handleKeyDown)
 
     /** Places one of the directly-creatable kinds at a canvas-space point. */
@@ -1875,7 +1876,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the same documented tradeoff drawing/whiteboard editors commonly
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
-          aria-label={canvasRootLabel(canvas, selectedId, selectedEdgeId)}
+          aria-label={canvasRootLabel(canvas, selectedId, selectedEdgeId, keyboard.tabLeavesCanvas)}
           aria-describedby={emptyHintRef(canvas, emptyHintId)}
           aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
