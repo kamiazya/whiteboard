@@ -62,6 +62,12 @@ export function describeMoveDocumentName(
       })
     })
 
+    describeMoveKeepsName(withIndex, workspaceId)
+  })
+}
+
+function describeMoveKeepsName(withIndex: WithIndex<DocumentIndex>, workspaceId: string): void {
+  describe('a document move that shows no name a sibling shows', () => {
     it('is no duplicate for a rename in place that keeps the name it shows', async () => {
       await withIndex(async (index) => {
         await create(index, workspaceId, 'week/plan', 'Plan')

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentIndex, WorkspaceEntry } from '../index.js'
 import { DisplayNameTakenError } from '../index.js'
+import {
+  describeMoveDocumentName,
+  describeUnnamedCreate,
+} from './document-index-move-name-conformance.js'
 
 // The conformance suite's own fixture shape, restated so this file imports
 // nothing back from the suite that calls it.
@@ -44,6 +48,8 @@ export function describeDuplicateDocumentName(withIndex: WithIndex, workspaceId:
     })
   })
   describeDuplicateDocumentRename(withIndex, workspaceId, create)
+  describeMoveDocumentName(withIndex, workspaceId)
+  describeUnnamedCreate(withIndex, workspaceId)
 }
 
 function describeDuplicateDocumentRename(
