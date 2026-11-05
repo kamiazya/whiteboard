@@ -749,7 +749,6 @@ function DocumentPageBody({
                 <SpatialEditorPane
                   className="relative h-full min-h-0"
                   editorKey={documentKey}
-                  canvasLoaded={sync.loaded}
                   editorRef={attachSpatialHandle}
                   {...agentTouchProps(model.spatial)}
                   canvas={sync.canvas}

@@ -6,22 +6,18 @@ beforeEach(() => {
 })
 
 describe('resolveInitialTool', () => {
-  it('starts an empty canvas in select — nothing to pan, everything to make', () => {
-    expect(resolveInitialTool({ isEmpty: true, lastTool: null })).toBe('select')
+  it('opens in select when this tab has no tool remembered for the canvas', () => {
+    expect(resolveInitialTool({ lastTool: null })).toBe('select')
   })
 
-  it('starts a canvas that already has content in hand — reading before editing', () => {
-    expect(resolveInitialTool({ isEmpty: false, lastTool: null })).toBe('hand')
+  it("returns to this tab's last resting tool for the canvas", () => {
+    expect(resolveInitialTool({ lastTool: 'hand' })).toBe('hand')
+    expect(resolveInitialTool({ lastTool: 'select' })).toBe('select')
   })
 
-  it("prefers this tab's last tool over the emptiness guess, in both directions", () => {
-    expect(resolveInitialTool({ isEmpty: true, lastTool: 'hand' })).toBe('hand')
-    expect(resolveInitialTool({ isEmpty: false, lastTool: 'select' })).toBe('select')
-  })
-
-  it('never restores connect — a transient drawing mode is not a resting state', () => {
-    expect(resolveInitialTool({ isEmpty: false, lastTool: 'connect' })).toBe('hand')
-    expect(resolveInitialTool({ isEmpty: true, lastTool: 'connect' })).toBe('select')
+  it('never restores connect or draw — a transient marking mode is not a resting state', () => {
+    expect(resolveInitialTool({ lastTool: 'connect' })).toBe('select')
+    expect(resolveInitialTool({ lastTool: 'draw' })).toBe('select')
   })
 })
 

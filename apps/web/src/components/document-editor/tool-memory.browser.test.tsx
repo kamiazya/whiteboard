@@ -7,16 +7,18 @@ import { page } from 'vitest/browser'
 import { SpatialEditorPane } from './SpatialEditorPane.js'
 
 // Only this file's own key: session storage is shared by browser files running in parallel.
-beforeEach(() => sessionStorage.removeItem('wb.lastTool:doc'))
+beforeEach(() => {
+  sessionStorage.removeItem('wb.lastTool:doc')
+  sessionStorage.removeItem('wb.lastTool:doc-renamed')
+})
 afterEach(cleanup)
 
-function Pane({ initial }: { initial: SpatialCanvas }) {
+function Pane({ initial, editorKey = 'doc' }: { initial: SpatialCanvas; editorKey?: string }) {
   const [canvas, setCanvas] = useState(initial)
   return (
     <div style={{ width: 800, height: 600 }}>
       <SpatialEditorPane
-        editorKey="doc"
-        canvasLoaded
+        editorKey={editorKey}
         canvas={canvas}
         onChange={(next) => setCanvas(next)}
         theme="light"
@@ -71,4 +73,27 @@ it('reopens a board that has content in the tool the user picked', async () => {
   first.unmount()
   render(<Pane initial={withNode} />)
   expect(pressed('Select')).toBe('true')
+})
+
+it('opens a board that already has content in Select', async () => {
+  render(<Pane initial={withNode} />)
+  await expect.poll(() => pressed('Select')).toBe('true')
+  expect(pressed('Hand (pan)')).toBe('false')
+})
+
+it('stays in Select when the board remounts under a new key with content', async () => {
+  const first = render(<Pane initial={{ nodes: [], edges: [] }} />)
+  await expect.poll(() => pressed('Select')).toBe('true')
+  first.unmount()
+  render(<Pane initial={withNode} editorKey="doc-renamed" />)
+  await expect.poll(() => pressed('Select')).toBe('true')
+  expect(pressed('Hand (pan)')).toBe('false')
+})
+
+it('returns to Hand within the session when the user chose Hand', async () => {
+  const first = render(<Pane initial={withNode} />)
+  fireEvent.click(page.getByRole('button', { name: 'Hand (pan)' }).element())
+  first.unmount()
+  render(<Pane initial={withNode} />)
+  await expect.poll(() => pressed('Hand (pan)')).toBe('true')
 })
