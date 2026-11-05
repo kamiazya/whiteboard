@@ -101,16 +101,27 @@ function nodeEditorTheme(centerContent: boolean): Extension {
  * tab or a phone app switch would drop it while the save state still reads
  * saved. `pagehide` fires on every unload path (bfcache included);
  * `visibilitychange` covers a backgrounded tab that is never unloaded cleanly.
+ *
+ * `visibilitychange` is heard in the CAPTURE phase. The page's save flush
+ * listens for the same events and was registered first (it mounts with the
+ * page, this with the edit), and on `document` a capture listener runs
+ * before every bubble listener whatever their order. Closing or reloading a
+ * tab fires `visibilitychange` before `pagehide`, so the commit lands before
+ * the first flush; heard in the bubble phase the flush ran first, wrote the
+ * canvas without the draft, and the commit after it was lost with the tab —
+ * a note just made was saved empty. (`pagehide` targets `window`, where
+ * measured in Chromium a capture listener did NOT overtake an earlier bubble
+ * one, so it stays the fallback for an unload with no visibility change.)
  */
 function onPageHide(handler: () => void): () => void {
   const onVisibility = () => {
     if (document.visibilityState === 'hidden') handler()
   }
   window.addEventListener('pagehide', handler)
-  document.addEventListener('visibilitychange', onVisibility)
+  document.addEventListener('visibilitychange', onVisibility, { capture: true })
   return () => {
     window.removeEventListener('pagehide', handler)
-    document.removeEventListener('visibilitychange', onVisibility)
+    document.removeEventListener('visibilitychange', onVisibility, { capture: true })
   }
 }
 
