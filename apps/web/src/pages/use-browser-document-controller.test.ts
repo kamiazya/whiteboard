@@ -1292,7 +1292,7 @@ describe('useBrowserDocumentController', () => {
         duplicated = await result.current.duplicateDocument()
       })
 
-      expect(duplicated?.name).toBe('untitled (copy)')
+      expect(duplicated?.name).toBe('Untitled (copy)')
       expect(duplicated?.documentId).not.toBe(C1)
       // switched to the duplicate
       expect(result.current.snapshot?.documentId).toBe(duplicated?.documentId)
@@ -1335,7 +1335,7 @@ describe('useBrowserDocumentController', () => {
         duplicated = await result.current.duplicateDocument()
       })
 
-      expect(duplicated?.name).toBe('untitled (copy 2)')
+      expect(duplicated?.name).toBe('Untitled (copy 2)')
     })
 
     it('flushes a pending rename before duplicating, so the copy is named from the latest title', async () => {

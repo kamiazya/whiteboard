@@ -287,7 +287,7 @@ describe('BrowserDocumentPage', () => {
     await openDocumentOpsMenu()
     fireEvent.pointerUp(await documentOpsItem(/duplicate/i))
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled (copy)')
     })
   })
 
@@ -332,14 +332,14 @@ describe('BrowserDocumentPage', () => {
       releaseCopy?.()
     })
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled (copy)')
     })
     // The row remounts with the copy (keyed on canvas identity): the fresh
     // menu offers Duplicate enabled again.
     await openDocumentOpsMenu()
     expect((await documentOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
     const list = await store.listDocuments()
-    expect(list.filter((c) => c.name === 'untitled (copy)')).toHaveLength(1)
+    expect(list.filter((c) => c.name === 'Untitled (copy)')).toHaveLength(1)
   })
 
   it('shows an alert and re-enables the Duplicate button when duplicateDocument fails', async () => {

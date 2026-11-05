@@ -46,6 +46,7 @@ import {
   deriveCopyName,
   deriveCopyPath,
   displayNameKey,
+  documentShownName,
   firstDistinctUnnamedPath,
   generateDocumentId,
   isMovedNameTaken,
@@ -460,12 +461,9 @@ export class LoroWorkspaceDocumentIndex
         sourceDocumentId: source.documentId,
         documentId: generateDocumentId(),
         path,
-        // What a listing shows for each document, so the copy's name is
-        // derived from — and kept apart from — what a person reads there.
-        name: deriveCopyName(
-          source.name ?? source.path,
-          documents.map((entry) => entry.name ?? entry.path),
-        ),
+        // What a person reads for each document, so the copy's name is
+        // derived from — and kept apart from — what they see there.
+        name: deriveCopyName(documentShownName(source), documents.map(documentShownName)),
       })
       // Unreachable while the path above was derived free of every node.
       if (copy === null) throw new DocumentPathTakenError(input.workspaceId, path)

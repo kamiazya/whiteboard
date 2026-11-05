@@ -45,7 +45,7 @@ import {
   workspaceNamesApiUrl,
   workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { deriveCopyName, deriveCopyPath } from '@kamiazya/whiteboard-model'
+import { deriveCopyName, deriveCopyPath, documentShownName } from '@kamiazya/whiteboard-model'
 import { vi } from 'vitest'
 import { jsonResponse } from './json-response.js'
 
@@ -260,8 +260,8 @@ function duplicateDocument(routes: FakeDaemonRoutes, workspaceId: string, path: 
           rows.map((row) => row.path),
         ),
         name: deriveCopyName(
-          source.name ?? path,
-          rows.map((row) => row.name ?? row.path),
+          documentShownName(source),
+          rows.map((row) => documentShownName(row)),
         ),
         kind: source.kind,
       },

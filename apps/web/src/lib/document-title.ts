@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, UNTITLED_DOCUMENT_WORD } from '@kamiazya/whiteboard-model'
 
 const APP_NAME = 'Whiteboard'
 
@@ -21,5 +21,5 @@ export function documentArrival(name: string, kind: DocumentKind): string {
  * shows for an unnamed one. The address is a subtitle, never the heading.
  */
 export function documentHeading(name: string | null | undefined): string {
-  return name === null || name === undefined || name === '' ? 'Untitled' : name
+  return name === null || name === undefined || name === '' ? UNTITLED_DOCUMENT_WORD : name
 }

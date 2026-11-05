@@ -1,6 +1,7 @@
 import {
   deriveCopyName,
   deriveCopyPath,
+  documentShownName,
   firstDistinctUnnamedPath,
   generateDocumentId,
   isMovedNameTaken,
@@ -317,8 +318,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       path: copyPath,
       kind: source.kind,
       name: deriveCopyName(
-        source.name ?? source.path,
-        [...documents.values()].map((entry) => entry.name ?? entry.path),
+        documentShownName(source),
+        [...documents.values()].map(documentShownName),
       ),
     }
     copyContent(source.documentId, copy.documentId)

@@ -137,6 +137,23 @@ function describeSource(withIndex: WithIndex): void {
     })
   })
 
+  // A generated address is no word anybody chose: the source reads as
+  // "Untitled" wherever it is shown, so its copy starts from that word.
+  it('names the copy of an unnamed source at a generated address "Untitled (copy)"', async () => {
+    await withIndex(async (index) => {
+      await index.createDocument({ workspaceId: WS, path: 'notes/untitled-3', kind: 'markdown' })
+
+      const first = await index.duplicateDocument({ workspaceId: WS, path: 'notes/untitled-3' })
+      const second = await index.duplicateDocument({ workspaceId: WS, path: 'notes/untitled-3' })
+
+      expect(first).toMatchObject({ path: 'notes/untitled-3-copy', name: 'Untitled (copy)' })
+      expect(second).toMatchObject({ path: 'notes/untitled-3-copy-2', name: 'Untitled (copy 2)' })
+      await expect(
+        index.resolveDocument({ workspaceId: WS, path: 'notes/untitled-3-copy' }),
+      ).resolves.toMatchObject({ name: 'Untitled (copy)' })
+    })
+  })
+
   it('copies once: a later edit to the source leaves the copy as it was', async () => {
     await withIndex(async (index, content) => {
       await roadmap(index, content)

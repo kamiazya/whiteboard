@@ -1,4 +1,4 @@
-import { isGeneratedPath } from './new-document-path.js'
+import { isGeneratedDocumentPath, UNTITLED_DOCUMENT_WORD } from '@kamiazya/whiteboard-model'
 
 /**
  * Which stand-in an unnamed document shows: the last segment of its path, or
@@ -25,7 +25,9 @@ export function documentLabel(
   // An address the create flow generated is no word anybody chose, so it
   // reads as the title box's own word for an unnamed document — numbered,
   // since two of them can sit in one folder.
-  if (isGeneratedPath(leaf)) return `Untitled${leaf.slice('untitled'.length).replace('-', ' ')}`
+  if (isGeneratedDocumentPath(leaf)) {
+    return `${UNTITLED_DOCUMENT_WORD}${leaf.slice('untitled'.length).replace('-', ' ')}`
+  }
   return leaf
 }
 
