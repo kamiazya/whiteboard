@@ -30,14 +30,14 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-function Page({ mode = 'read' }: { mode?: 'read' | 'split' }) {
+function Page({ mode = 'read', value = BODY }: { mode?: 'read' | 'split'; value?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 400, overflow: 'hidden' }}>
       <header data-testid="app-chrome">ALPHA · Saved</header>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <MarkdownEditor
           theme="light"
-          value={BODY}
+          value={value}
           onChange={() => {}}
           initialViewMode={mode}
           previewDebounceMs={0}
@@ -82,6 +82,20 @@ describe('a note printed from the browser', () => {
     for (const band of view.querySelectorAll('[data-testid="note-print-band"]')) {
       expect(getComputedStyle(band).breakInside).toBe('avoid')
     }
+  })
+
+  it('prints the title once when the body already opens with it', async () => {
+    render(<Page mode="split" value={`# Week 1 - Evaporation\n\n${BODY}`} />)
+    await expect.poll(drawn).not.toBeNull()
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBeGreaterThan(10)
+    const view = screen.getByTestId('note-print-view')
+    // The body's own heading is the one that prints; each strip is a clip of
+    // the whole drawn body, so its text is asked of the drawing itself.
+    expect(view.querySelector('h1')).toBeNull()
+    expect(drawn()?.textContent).toContain('Week 1 - Evaporation')
   })
 
   it('draws nothing extra on screen, and drops the strips once printing ends', async () => {

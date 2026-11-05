@@ -6,7 +6,7 @@ import type { MarkdownViewMode } from './EditorToolbar.js'
 import { NotePrintView } from './note-print.js'
 import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
-import { shownBody } from './read-title.js'
+import { opensWithTitle, shownBody } from './read-title.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 
 // The two COLUMNS the editor lays side by side, and the marker that sits in
@@ -193,6 +193,7 @@ export function PreviewColumn({
   tagLibrary: Parameters<typeof PreviewPane>[0]['tagLibrary']
   onToggleTask: Parameters<typeof PreviewPane>[0]['onToggleTask']
 }) {
+  const drawnBody = shownBody(value, mode, meta !== undefined, title)
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
     // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — the interactive element is the anchor inside, which is natively keyboard-activatable
@@ -203,7 +204,13 @@ export function PreviewColumn({
       className="min-w-0 flex-1 overflow-auto"
       onClick={onPreviewClick}
     >
-      <NotePrintView title={title} hostRef={scrollRef} blocksRef={blocksRef} />
+      <NotePrintView
+        // The drawn body may already open with the name as its heading (any
+        // mode but Read under a header); printing both reads as a mistake.
+        title={opensWithTitle(drawnBody, title) ? undefined : title}
+        hostRef={scrollRef}
+        blocksRef={blocksRef}
+      />
       <div
         ref={innerRef}
         className="note-print-screen relative mx-auto px-6 py-8"
@@ -221,7 +228,7 @@ export function PreviewColumn({
           <p className="text-muted-foreground text-sm">{emptyPreviewCopy(mode)}</p>
         ) : (
           <PreviewPane
-            value={shownBody(value, mode, meta !== undefined, title)}
+            value={drawnBody}
             maxWidth={previewWidth}
             measure={measure}
             theme={theme}
