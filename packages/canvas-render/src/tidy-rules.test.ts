@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TidyNode } from './tidy.js'
 import { tidyNodes } from './tidy.js'
+import { TIDY_MARGIN_PX } from './tidy-units.js'
 
 const box = (
   id: string,
@@ -33,6 +34,19 @@ const applyMoves = (
 
 const edges = (pairs: readonly (readonly [string, string])[]) =>
   pairs.map(([fromNode, toNode]) => ({ from: { node: fromNode }, to: { node: toNode } }))
+
+describe('what counts as clear', () => {
+  it('a box exactly one margin from its neighbour is already clear of it', () => {
+    // The margin is the clearance tidy KEEPS, so a gap of exactly that much
+    // is a gap it is done with: `b` stays where it is while `a` lines its
+    // centre up with `c`'s and lands one margin short of `b`.
+    const nodes = [box('c', 0, 200, 200, 80), box('a', 44, 0, 120, 80), box('b', 192, 0, 200, 80)]
+    const moves = tidyNodes(nodes)
+    expect(moves.find((m) => m.id === 'b')).toBeUndefined()
+    const a = moves.find((m) => m.id === 'a')
+    expect(a === undefined ? undefined : a.x + 120 + TIDY_MARGIN_PX).toBe(192)
+  })
+})
 
 describe('scope and the frames it lets grow', () => {
   it('a frame neither in scope nor holding anything in scope is not grown', () => {
@@ -214,5 +228,21 @@ describe('who a unit root claims', () => {
     const at = (id: string) => after.find((b) => b.id === id) as TidyNode
     expect(holds(at('inner'), at('n'))).toBe(true)
     expect(holds(at('outer'), at('inner'))).toBe(true)
+  })
+
+  it('of two equal frames the earlier holds the later, wherever their container is listed', () => {
+    // Equal areas go to the earlier frame in document order. `twin` is the
+    // same size as `straddler` and mostly inside it, and less than half of
+    // it is inside `outer` — so it is in `outer` only through `straddler`,
+    // and listing `outer` last must not hand `twin` the claim instead.
+    const nodes = [
+      box('straddler', 704, 104, 504, 104, true),
+      box('twin', 800, 104, 504, 104, true),
+      box('outer', 0, 0, 1000, 400, true),
+    ]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const at = (id: string) => after.find((b) => b.id === id) as TidyNode
+    expect(holds(at('straddler'), at('twin'))).toBe(true)
+    expect(holds(at('outer'), at('straddler'))).toBe(true)
   })
 })
