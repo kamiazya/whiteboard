@@ -1,3 +1,4 @@
+import { leafOfPath } from '@kamiazya/whiteboard-model'
 import { isGeneratedPath } from './new-document-path.js'
 
 /**
@@ -21,7 +22,7 @@ export function documentLabel(
 ): string {
   if (document.name !== null && document.name !== undefined) return document.name
   if (rule === 'path') return document.path
-  const leaf = document.path.slice(document.path.lastIndexOf('/') + 1)
+  const leaf = leafOfPath(document.path)
   // An address the create flow generated is no word anybody chose, so it
   // reads as the title box's own word for an unnamed document — numbered,
   // since two of them can sit in one folder.

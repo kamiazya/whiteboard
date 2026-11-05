@@ -1,3 +1,4 @@
+import { leafOfPath, parentOfPath } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { DaemonApiError } from './daemon-api-client.js'
 import { type FolderNames, folderDisplayName } from './folder-names.js'
@@ -29,10 +30,8 @@ function takenPathOf(err: unknown): string | undefined {
 export function documentPathTakenMessage(err: unknown, names?: FolderNames): string | undefined {
   const path = takenPathOf(err)
   if (path === undefined) return undefined
-  const cut = path.lastIndexOf('/')
-  const folder = cut === -1 ? '' : path.slice(0, cut)
   return (
-    `${folderDisplayName(folder, names)} already has a document at "${path.slice(cut + 1)}". ` +
+    `${folderDisplayName(parentOfPath(path), names)} already has a document at "${leafOfPath(path)}". ` +
     'Change one of their addresses, or choose another folder.'
   )
 }

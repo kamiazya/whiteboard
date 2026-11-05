@@ -1,4 +1,9 @@
-import { deriveWorkspaceSegment, documentPathSchema, pathBelow } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  documentPathSchema,
+  parentOfPath,
+  pathBelow,
+} from '@kamiazya/whiteboard-model'
 import { isGeneratedPath } from './new-document-path.js'
 
 /**
@@ -27,11 +32,11 @@ export function pathAfterFirstRename(
   const segment = deriveWorkspaceSegment(name)
   if (segment === undefined) return null
 
-  const cut = path.lastIndexOf('/') + 1
-  const folder = path.slice(0, cut)
+  const parent = parentOfPath(path)
+  const folder = parent === '' ? '' : `${parent}/`
   const siblings = new Set(
     existingPaths.flatMap((other) => {
-      const rest = pathBelow(folder.slice(0, -1), other)
+      const rest = pathBelow(parent, other)
       return rest === undefined ? [] : [rest]
     }),
   )

@@ -1,3 +1,4 @@
+import { parentOfPath } from '@kamiazya/whiteboard-model'
 /**
  * What a search found, from anywhere in the workspace.
  *
@@ -301,9 +302,9 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 
 /** The folders a document sits in, top down, as they are called; the workspace for one at its top. */
 function locationOf(path: string, names: FolderNames): string {
-  const cut = path.lastIndexOf('/')
-  if (cut === -1) return folderDisplayName('', names)
-  return folderTrail(path.slice(0, cut), names).join(' / ')
+  const folder = parentOfPath(path)
+  if (folder === '') return folderDisplayName('', names)
+  return folderTrail(folder, names).join(' / ')
 }
 
 function titleOf(entry: WorkspaceDocumentEntry): string {

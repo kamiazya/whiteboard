@@ -1,4 +1,4 @@
-import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, parentOfPath } from '@kamiazya/whiteboard-model'
 import { FolderPlus, Pencil } from 'lucide-react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { folderDisplayName, type NestedFolderPlan } from '../../lib/folder-names.js'
@@ -6,7 +6,6 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import { ContextMenu } from '../ui/ContextMenu.js'
 import { ErrorLine } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
-import { folderOf } from './folder-moves.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
 import type { FolderNamesState } from './use-folder-names.js'
 
@@ -178,7 +177,7 @@ function destinationsFor(
 ): string[] {
   if (moving === null) return []
   return ['', ...[...folders].sort(compareCodeUnit)].filter(
-    (each) => each !== folderOf(moving.path),
+    (each) => each !== parentOfPath(moving.path),
   )
 }
 

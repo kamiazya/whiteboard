@@ -2,7 +2,7 @@
 // keeper: the browser's store and the daemon, which names on every content
 // write, take the same bytes, so a note typed into at `untitled` must come out
 // named the same way whichever of them keeps it.
-import { displayNameKey } from '@kamiazya/whiteboard-model'
+import { displayNameKey, leafOfPath } from '@kamiazya/whiteboard-model'
 import type { LoroDoc, LoroTreeNode } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -26,8 +26,7 @@ import {
  * placed somewhere has engaged with naming, and must not be overridden.
  */
 function isGeneratedDocumentPath(path: string): boolean {
-  const last = path.slice(path.lastIndexOf('/') + 1)
-  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(last)
+  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(leafOfPath(path))
 }
 
 const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)

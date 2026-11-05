@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
+import {
+  isSelfOrDescendant,
+  leafOfPath,
+  parentOfPath,
+  pathBelow,
+  rebasePath,
+} from './document-path.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 describe('isSelfOrDescendant', () => {
@@ -66,6 +72,43 @@ describe('pathBelow', () => {
       if (below === undefined) return
       expect(`${folder}/${below}`).toBe(path)
       expect(rebasePath(path, folder, 'moved')).toBe(`moved/${below}`)
+    },
+  )
+})
+
+describe('parentOfPath and leafOfPath', () => {
+  it('answer the empty parent and the whole path for a top-level path', () => {
+    expect(parentOfPath('readme')).toBe('')
+    expect(leafOfPath('readme')).toBe('readme')
+  })
+
+  it('split a nested path at its last segment', () => {
+    expect(parentOfPath('design')).toBe('')
+    expect(parentOfPath('design/x')).toBe('design')
+    expect(leafOfPath('design/x')).toBe('x')
+    expect(parentOfPath('a/b/c')).toBe('a/b')
+    expect(leafOfPath('a/b/c')).toBe('c')
+  })
+
+  it('answer the empty parent and leaf for the workspace root', () => {
+    expect(parentOfPath('')).toBe('')
+    expect(leafOfPath('')).toBe('')
+  })
+
+  const segmentArbitrary = fc.stringMatching(/^[aAb0]([aAb0-]*[aAb0])?$/)
+  const segmentsArbitrary = fc.array(segmentArbitrary, { minLength: 1, maxLength: 4 })
+
+  // The oracle reads the segments the path was BUILT from, not a slice of the
+  // joined string, so it shares no machinery with the subject.
+  fcTest.prop([segmentsArbitrary], withDefaults())(
+    'split a valid path into the segments above its last and that last segment',
+    (segments) => {
+      const path = segments.join('/')
+      const parent = parentOfPath(path)
+      const leaf = leafOfPath(path)
+      expect(leaf).toBe(segments.at(-1))
+      expect(parent).toBe(segments.slice(0, -1).join('/'))
+      expect(parent === '' ? leaf : `${parent}/${leaf}`).toBe(path)
     },
   )
 })

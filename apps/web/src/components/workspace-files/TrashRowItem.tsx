@@ -1,9 +1,9 @@
+import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { useContext } from 'react'
 import { documentLabel } from '../../lib/document-label.js'
 import type { TrashRow } from '../../lib/files-source.js'
 import { folderTrail } from '../../lib/folder-names.js'
 import { formatRelative } from '../../lib/format-relative.js'
-import { folderOf } from './folder-moves.js'
 import { PurgeTrashEntryControl } from './PurgeTrashEntryControl.js'
 import { FolderNamesContext } from './use-folder-names.js'
 
@@ -24,7 +24,7 @@ export function TrashRowItem({
   purge,
   onPurgeSettled,
 }: Readonly<TrashRowItemProps>) {
-  const folder = folderOf(row.path)
+  const folder = parentOfPath(row.path)
   // A folder still standing is called what it is called now — restore keeps
   // that name — and one that went with the document by the name it had.
   const live = useContext(FolderNamesContext)

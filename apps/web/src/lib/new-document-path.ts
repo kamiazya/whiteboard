@@ -1,4 +1,4 @@
-import { pathBelow } from '@kamiazya/whiteboard-model'
+import { leafOfPath, pathBelow } from '@kamiazya/whiteboard-model'
 
 /**
  * Where a new document goes when it is made from inside a folder.
@@ -45,6 +45,5 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
  * gate; the property beside this file holds this one to the generator.
  */
 export function isGeneratedPath(path: string): boolean {
-  const last = path.slice(path.lastIndexOf('/') + 1)
-  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(last)
+  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(leafOfPath(path))
 }

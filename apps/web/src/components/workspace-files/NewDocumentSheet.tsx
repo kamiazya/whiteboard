@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, parentOfPath } from '@kamiazya/whiteboard-model'
 import { Upload } from 'lucide-react'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
@@ -25,7 +25,7 @@ function useNameClearedOnOpen(open: boolean) {
 }
 
 function SheetHeader({ defaultPath }: { defaultPath: string }) {
-  const folder = defaultPath.includes('/') ? defaultPath.slice(0, defaultPath.lastIndexOf('/')) : ''
+  const folder = parentOfPath(defaultPath)
   return (
     <DialogHeader>
       <DialogTitle>New document</DialogTitle>

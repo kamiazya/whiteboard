@@ -1,7 +1,7 @@
+import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
-import { folderOf } from './folder-moves.js'
 
 interface DuplicatedCopy {
   readonly entry: WorkspaceDocumentEntry
@@ -18,7 +18,7 @@ function arrivedIn(
   before: { readonly ids: ReadonlySet<string>; readonly folder: string },
 ): WorkspaceDocumentEntry | undefined {
   return documents.find(
-    (entry) => !before.ids.has(entry.documentId) && folderOf(entry.path) === before.folder,
+    (entry) => !before.ids.has(entry.documentId) && parentOfPath(entry.path) === before.folder,
   )
 }
 
@@ -97,7 +97,7 @@ export function useDuplicateFeedback({
       const source = rows.find((entry) => entry.path === path)
       asked.current = {
         ids: new Set(rows.map((entry) => entry.documentId)),
-        folder: folderOf(path),
+        folder: parentOfPath(path),
         from: source === undefined ? path : documentLabel(source, 'leaf'),
         askedAt: Date.now(),
       }

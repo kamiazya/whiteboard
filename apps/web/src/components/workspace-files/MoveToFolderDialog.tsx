@@ -1,3 +1,4 @@
+import { leafOfPath } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -18,7 +19,7 @@ import {
 } from '../ui/dialog.js'
 import { documentPathRefusal } from './document-path-refusal.js'
 import { DialogActions, ErrorLine } from './FolderDialogParts.js'
-import { joinPath, leafOf } from './folder-moves.js'
+import { joinPath } from './folder-moves.js'
 
 /** The folders a typed new folder makes on its way, each with the name it was given. */
 type CreatedFolders = Extract<NestedFolderPlan, { path: string }>['created']
@@ -171,7 +172,7 @@ function NewFolderForm({
       setIssue(plan.refusal)
       return
     }
-    const refusal = documentPathRefusal(joinPath(plan.path, leafOf(document.path)))
+    const refusal = documentPathRefusal(joinPath(plan.path, leafOfPath(document.path)))
     setIssue(refusal)
     if (refusal === null) onPick(plan.path, plan.created)
   }

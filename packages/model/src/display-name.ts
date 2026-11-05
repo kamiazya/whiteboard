@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { leafOfPath, parentOfPath } from './document-path.js'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from './ids.js'
 
 /**
@@ -71,11 +72,11 @@ export function isSiblingDisplayNameTaken(
   others: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
   target: { readonly path: string; readonly name: string },
 ): boolean {
-  const parent = parentOf(target.path)
+  const parent = parentOfPath(target.path)
   const shown: string[] = []
   for (const other of others) {
-    if (parentOf(other.path) !== parent) continue
-    shown.push(other.name ?? other.path.slice(other.path.lastIndexOf('/') + 1))
+    if (parentOfPath(other.path) !== parent) continue
+    shown.push(other.name ?? leafOfPath(other.path))
   }
   return isDisplayNameTaken(target.name, shown)
 }
@@ -93,11 +94,10 @@ export function isMovedNameTaken(
   staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
   move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
 ): boolean {
-  const segmentOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
-  const shown = move.name ?? segmentOf(move.to)
-  const wasShown = move.name ?? segmentOf(move.from)
+  const shown = move.name ?? leafOfPath(move.to)
+  const wasShown = move.name ?? leafOfPath(move.from)
   if (
-    parentOf(move.from) === parentOf(move.to) &&
+    parentOfPath(move.from) === parentOfPath(move.to) &&
     displayNameKey(shown) === displayNameKey(wasShown)
   ) {
     return false
@@ -122,7 +122,7 @@ export function firstDistinctUnnamedPath(
   const reads = (candidate: string): boolean =>
     isSiblingDisplayNameTaken(others, {
       path: candidate,
-      name: candidate.slice(candidate.lastIndexOf('/') + 1),
+      name: leafOfPath(candidate),
     })
   if (!reads(path)) return path
   for (let n = 2; n < 1000; n++) {
@@ -131,9 +131,4 @@ export function firstDistinctUnnamedPath(
     if (!isOccupied(candidate) && !reads(candidate)) return candidate
   }
   return null
-}
-
-function parentOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut)
 }

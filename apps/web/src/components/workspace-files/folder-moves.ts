@@ -1,15 +1,5 @@
-import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, leafOfPath } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-
-/** The folder a path sits in; `''` is the workspace root. */
-export function folderOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut)
-}
-
-export function leafOf(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1)
-}
 
 export function joinPath(folder: string, leaf: string): string {
   return folder === '' ? leaf : `${folder}/${leaf}`
@@ -31,5 +21,5 @@ export function foldersOf(documents: readonly WorkspaceDocumentEntry[]): string[
 
 /** Where a document lands when it is put in `folder`: same last segment, new parent. */
 export function pathInFolder(documentPath: string, folder: string): string {
-  return joinPath(folder, leafOf(documentPath))
+  return joinPath(folder, leafOfPath(documentPath))
 }
