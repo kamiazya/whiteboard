@@ -15,7 +15,7 @@ describe('createBrowserFilesSource moves', () => {
     await source.createDocument('month/x', 'markdown', 'plan')
 
     await expect(source.renameDocumentPath('month/x', 'week/x')).rejects.toThrow(
-      'Another document here is already called "plan".',
+      'Another document here is already called "Plan".',
     )
     expect((await source.listDocuments()).map((e) => e.path).sort()).toEqual([
       'month/x',

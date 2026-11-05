@@ -1,3 +1,4 @@
+import { leafOfPath } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -18,7 +19,7 @@ import {
 } from '../ui/dialog.js'
 import { documentPathRefusal } from './document-path-refusal.js'
 import { DialogActions, ErrorLine } from './FolderDialogParts.js'
-import { joinPath, leafOf } from './folder-moves.js'
+import { joinPath } from './folder-moves.js'
 
 /** The folders a typed new folder makes on its way, each with the name it was given. */
 type CreatedFolders = Extract<NestedFolderPlan, { path: string }>['created']
@@ -171,7 +172,7 @@ function NewFolderForm({
       setIssue(plan.refusal)
       return
     }
-    const refusal = documentPathRefusal(joinPath(plan.path, leafOf(document.path)))
+    const refusal = documentPathRefusal(joinPath(plan.path, leafOfPath(document.path)))
     setIssue(refusal)
     if (refusal === null) onPick(plan.path, plan.created)
   }
@@ -216,6 +217,8 @@ interface MoveToFolderDialogProps {
   /** Shown verbatim — the keeper names the path that collided. */
   error: string | null
   onCancel: () => void
+  /** Where focus goes once the dialog has closed: a handler that does not prevent the event leaves Radix's default (the opener). */
+  onCloseAutoFocus: (event: Event) => void
   /** A folder picked, or one typed — then with the folders it makes on the way. */
   onPick: (folder: string, created?: CreatedFolders) => void
 }
@@ -230,13 +233,14 @@ interface MoveToFolderDialogProps {
  */
 export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
   const { document, folders, names, planNewFolder, busy, error, onCancel, onPick } = props
+  const { onCloseAutoFocus } = props
   const [naming, setNaming] = useState(false)
   // A different document starts at the list again.
   useEffect(() => setNaming(false), [document])
 
   return (
     <Dialog open={document !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <MoveHeader document={document} />
         {naming && document !== null ? (
           <NewFolderForm
@@ -259,10 +263,12 @@ export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
             <ErrorLine message={error} />
             {/* The pointer path, said once where a pointer user is already
               moving something; nothing else on screen hints at it. A touch
-              screen offers no drag, so it is not promised there. */}
+              screen offers no drag, so it is not promised there. A keyboard
+              user cannot drag, so the way back here is said beside it. */}
             {!hasCoarsePointer() && (
               <p className="text-muted-foreground text-xs">
-                Next time, you can also drag a card onto a folder.
+                Next time, you can also drag a card onto a folder, or press Shift+F10 on a card and
+                choose Move to folder….
               </p>
             )}
             <DialogActions cancelLabel="Cancel" onCancel={onCancel} />

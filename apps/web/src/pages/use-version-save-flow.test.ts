@@ -2,7 +2,7 @@
  * The race-guard seam both document pages duplicated: `run` no-ops while
  * saving, captures the scope before the save's own await, and bails on
  * outcome/commit/finally alike once the scope has moved on. Written before
- * the extraction (the use-tool-state.test.ts pattern) so it is red against
+ * the extraction, at the hook's own seam, so it is red against
  * the pages' own inline logic having no shared hook to call.
  */
 import { act, renderHook } from '@testing-library/react'

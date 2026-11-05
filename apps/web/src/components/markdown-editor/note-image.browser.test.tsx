@@ -29,7 +29,9 @@ function Note({
   store,
   onBody,
   generation = 0,
+  loadImage = async (ref) => `blob:${ref}`,
 }: {
+  loadImage?: (ref: string) => Promise<string | undefined>
   initial: string
   store?: (file: File) => Promise<ImageStoreResult>
   onBody: (body: string) => void
@@ -40,7 +42,7 @@ function Note({
   const references = useReferenceSeams({
     body: value,
     load: async () => undefined,
-    loadImage: async (ref) => `blob:${ref}`,
+    loadImage,
   })
   return (
     <div style={{ height: 500 }}>
@@ -95,6 +97,29 @@ function filesOf(...files: File[]): DataTransfer {
   for (const file of files) data.items.add(file)
   return data
 }
+
+/** A real picture of `width` x `height`, so the decode has a size to report. */
+function pictureUrl(width: number, height: number): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  return canvas.toDataURL('image/png')
+}
+
+describe('a picture alone in its paragraph', () => {
+  it('is drawn at its natural size, not one line tall', async () => {
+    await setViewport(1280, 800)
+    const url = pictureUrl(320, 200)
+    render(
+      <Note initial={'Intro\n\n![d](asset:pic)'} onBody={() => {}} loadImage={async () => url} />,
+    )
+    await vi.waitFor(() => {
+      const image = document.querySelector('[data-testid="markdown-preview-pane"] image')
+      expect(image?.getAttribute('width')).toBe('320')
+      expect(image?.getAttribute('height')).toBe('200')
+    })
+  })
+})
 
 describe('an image in a note', () => {
   it('is picked through the Image verb and drawn by the preview', async () => {

@@ -7,12 +7,13 @@ const A: LinkableDocument = { documentId: 'doc-a', path: 'notes/alpha', name: 'A
 const B: LinkableDocument = { documentId: 'doc-b', path: 'notes/beta' }
 
 describe('useLinkResolution', () => {
-  it('labels a link by its display name, falling back to the path', () => {
+  it('labels a link by its display name, falling back to the name the list shows', () => {
     const { result } = renderHook(() => useLinkResolution({ documents: [A, B] }))
 
     expect(result.current.resolveTitle('doc-a')).toBe('Alpha')
-    // B has no name of its own, which is how the index spells "never named".
-    expect(result.current.resolveTitle('doc-b')).toBe('notes/beta')
+    // B has no name of its own, which is how the index spells "never named":
+    // the list shows the last part of its path, and so does the link.
+    expect(result.current.resolveTitle('doc-b')).toBe('beta')
     expect(result.current.resolveTitle('doc-gone')).toBeUndefined()
   })
 

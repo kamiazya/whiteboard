@@ -245,30 +245,25 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
-  // Both live on `mostlyInside`'s last line, and both are equivalent for the
-  // same reason, stated in full beside the code: `area` is positive there, so
-  // `w * h * 2 > area` already implies `w * h > 0`. The span checks exist to
-  // rule out two NEGATIVE spans — a box diagonally across the canvas, whose
-  // product is positive — and nothing else. So `w > 0` and `w >= 0` differ
-  // only at `w === 0`, where the product is 0 and fails the majority test
-  // either way; and `&&` -> `||` differs only where exactly one span is
-  // positive, where the product is non-positive and fails it too. Verified by
-  // applying each edit and running the file's property, which kills the five
-  // non-equivalent mutants on the same two functions.
+  // `mostlyInside`'s span check: `area` is positive there, so `w * h * 2 >
+  // area` already implies `w * h > 0`, and at `w === 0` the product is 0 and
+  // fails the majority test whichever comparison admitted it. The reasoning
+  // is beside the code; verified by applying the edit and running the file's
+  // property.
   //
-  // The other two are `buildUnits`', each equivalent by construction.
-  // `h.id !== g.id` only excludes `g` itself, and for `g` the last conjunct is
-  // already `!true || at(g) < at(g)`, false (ids are unique in a canvas).
-  // `at(h) < at(g)` -> false makes every twin of an identical pair a root,
-  // but the earlier twin is visited first and claims the later one, so the
-  // later is skipped as claimed. Each verified by applying the edit and
-  // running tidy's suites, drawing-quality and server-core's
-  // canvas-edit/propose tests, which stay green.
+  // The other three change no output of `buildUnits`, each verified by
+  // applying the edit and running tidy's suites and the drawing, composition
+  // and facet scoreboards, which stay green. `frameNesting` builds an
+  // encloser list for every frame on the board, and a level's frames are the
+  // board's own objects, so its `?? []` fallback is never taken. A missing
+  // `locked` defaults to a function answering `false`; one answering
+  // `undefined` is read through `!` and `.some` alike. And `units.length < 2`
+  // is a shortcut: sorting a level of one unit by document order returns it.
   'src/tidy-units.ts': {
     'EqualityOperator: w > 0 -> w >= 0': 1,
-    'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
-    'ConditionalExpression: h.id !== g.id -> true': 1,
-    'ConditionalExpression: at(h) < at(g) -> false': 1,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+    'ArrowFunction: () => false -> () => undefined': 1,
+    'ConditionalExpression: units.length < 2 -> false': 1,
   },
   // Guards that change no output of `tidyNodes`. A yield anchor list seeded
   // with a string (both of `anchorsToYieldTo`'s arrays) is read only by
@@ -279,17 +274,45 @@ export const KNOWN_EQUIVALENT = {
   // `applyUnitDeltas` skipping it — or skipping a zero delta — adds nothing.
   // And the output's finiteness check repeats `settleOnce`'s, which already
   // falls back to the finite input for any non-finite rounded rect. Each
-  // verified as the `tidy-units.ts` entries above were. NOT recorded: the
-  // fixpoint loops' bounds and breaks, which change the result on a board
-  // that needs more passes or cycles; and `claimed.has` / `m.id === node.id`
-  // in `buildUnits`, which a frame claimed by an overlapping frame and a
-  // frame of negative size each tell apart.
+  // verified as the `tidy-units.ts` entries above were.
+  //
+  // The rest were each applied by hand against the tests the lane selects
+  // and stayed green, and each is equivalent by construction. Lookups that
+  // cannot miss: every node's rect is in the walk's `settled` map from the
+  // start and every level's nodes are the board's own, so the `frame` /
+  // `rect === undefined` guards (two and three of them) and `settled`'s
+  // `?? []` are never taken; the top level has no floor, so its `outside`
+  // anchors (the object and both arrays) are never read; and `framed` is a
+  // set of node ids, which a string literal never matches. An empty level
+  // (`inner.length === 0`) settles nothing and grows its frame by nothing.
+  // `snapped === at` only spares a zero shift. A missing `otherId` finds no
+  // unit in `byId` anyway, and a unit's member list is never empty, so
+  // `?.` and `.` agree. A `locked` answering `undefined` reads as `false`.
+  // Skipping only immobile zero-delta units in `applyUnitDeltas` applies a
+  // movable unit's zero delta, which adds nothing. And leaving the start
+  // state out of the level loop's `seen` costs at most one pass from a state
+  // that is already a fixpoint. NOT recorded, because some board would tell
+  // them apart: the fixpoint loops' bounds (a board needing more passes than
+  // the cap, or one that cycles),
+  // the signatures' `'|'` separators (two visited states whose coordinates
+  // concatenate alike), and every budget guard, which the cost tests kill
+  // and the lane excludes for run time.
   'src/tidy.ts': {
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 6,
     'EqualityOperator: at >= target -> at > target': 1,
     'ConditionalExpression: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> false': 1,
     'ConditionalExpression: unit.dx === 0 && unit.dy === 0 -> false': 1,
     'ConditionalExpression: !isFiniteRect({ x, y, width, height }) -> false': 1,
+    'ConditionalExpression: frame === undefined -> false': 2,
+    'ConditionalExpression: rect === undefined -> false': 3,
+    'ObjectLiteral: { x: [], y: [] } -> {}': 1,
+    'ConditionalExpression: inner.length === 0 -> false': 1,
+    'ConditionalExpression: snapped === at -> false': 1,
+    'ConditionalExpression: otherId === undefined -> false': 1,
+    'OptionalChaining: unit.members[0]?.frame -> unit.members[0].frame': 1,
+    'ArrowFunction: () => false -> () => undefined': 1,
+    'LogicalOperator: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> !unit.movable && unit.dx === 0 && unit.dy === 0': 1,
+    'ArrayDeclaration: [signature()] -> []': 1,
   },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not

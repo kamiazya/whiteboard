@@ -215,7 +215,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'roadmap' } })
 
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'Another document here is already called "roadmap". Choose a name no other document here has.',
+      'Another document here is already called "Roadmap". Choose a name no other document here has.',
     )
     expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
     expect((titleInput as HTMLInputElement).value).toBe('roadmap')

@@ -33,7 +33,7 @@ export function readWorkspaceFolderNames(
  * would show again the moment the first one stopped being first. Stored
  * trimmed, and refused for what `folderNameRefusal` refuses. Whether the name
  * duplicates a sibling's is the caller's question (model's
- * `isSiblingDisplayNameTaken`): this writes what it is given.
+ * `siblingDisplayNameTaken`): this writes what it is given.
  */
 export function setWorkspaceFolderName(
   doc: LoroDoc,

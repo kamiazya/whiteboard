@@ -45,3 +45,24 @@ export function pathBelow(folder: string, path: string): string | undefined {
   if (folder === '') return path
   return path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : undefined
 }
+
+/**
+ * The folder `path` sits in: everything before its last segment, and `''` —
+ * the workspace root, the same empty folder `pathBelow` reads — for a
+ * top-level path. Never `undefined`: the root IS a folder, so a caller that
+ * compares two paths' parents compares two strings rather than special-casing
+ * the top level, and `parentOfPath(p) === ''` is how to ask "is it top-level".
+ */
+export function parentOfPath(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut === -1 ? '' : path.slice(0, cut)
+}
+
+/**
+ * The last segment of `path` — what an unnamed entry shows — and the whole
+ * path when it is top-level. `parentOfPath` and this split a path exactly:
+ * the parent, a `/` unless the parent is the root, then the leaf.
+ */
+export function leafOfPath(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
+}

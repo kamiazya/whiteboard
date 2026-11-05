@@ -136,6 +136,11 @@ export type LayoutRequest = LayoutSubject & {
   readonly tagLibrary?: TagLibrary
   /** Draw resolved comments too (the editor's per-user toggle). */
   readonly showResolved?: boolean
+  /**
+   * canvas-render's `commentLayer`: `false` draws the board without its
+   * comments, as a list thumbnail does. Absent draws them, as the editor needs.
+   */
+  readonly commentLayer?: boolean
   /** The document's conversations, for passage highlights inside text nodes. */
   readonly threads?: readonly CommentThread[]
   /**

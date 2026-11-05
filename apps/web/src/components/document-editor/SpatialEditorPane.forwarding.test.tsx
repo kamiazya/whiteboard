@@ -94,7 +94,6 @@ function renderPane(editing: { id: string; text: string } | null) {
   return render(
     <SpatialEditorPane
       editorKey="doc"
-      canvasLoaded
       fileSeams={{
         references: { entries: [], aliases: [], titles: [], extras: [] },
         onAddImage: () => Promise.reject(new Error('unused')),

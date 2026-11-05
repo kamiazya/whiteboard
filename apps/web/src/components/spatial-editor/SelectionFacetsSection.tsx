@@ -4,6 +4,7 @@ import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plug
 import { useSyncExternalStore } from 'react'
 import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import type { SelectionSource } from '../../lib/spatial/editor-handle.js'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { collectCanvasTags } from '../../lib/spatial/tags.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
@@ -42,7 +43,7 @@ export function SelectionFacetsSection({
     source.getSelection,
   )
   const subject = inspectorSubject(canvas, selection.selectedId, selection.selectedEdgeId)
-  if (subject === undefined) return null
+  if (subject === undefined) return lineSectionFor(canvas, selection.selectedEdgeId)
   const extraIds = new Set(selection.extraIds)
   const tagCommands = (after: readonly string[]) =>
     tagWriteCommands(currentCanvas(), subject, selection.selectedId, extraIds, after)
@@ -77,6 +78,30 @@ export function SelectionFacetsSection({
     </section>
   )
 }
+
+/**
+ * A stroke carries none of the facets this form writes — ink classifies
+ * nothing and has no box to dress — so its section says what it is and where
+ * its verbs live, rather than leaving the panel to read "Whole canvas" while
+ * a stroke is selected.
+ */
+const lineSectionFor = (canvas: SpatialCanvas, id: string | null) => {
+  const line = (canvas.lines ?? []).find((entry) => entry.id === id)
+  return line === undefined ? null : <LineSection drawing={isFreehandStroke(line)} />
+}
+
+const LineSection = ({ drawing }: { drawing: boolean }) => (
+  <section
+    data-testid="selection-facets"
+    aria-label="Selection"
+    className="flex flex-col gap-1 pb-3"
+  >
+    <span className="text-xs font-medium">{drawing ? 'This drawing' : 'This line'}</span>
+    <p className="text-xs text-muted-foreground">
+      Colour, label, lock and delete are on its more-actions button (⋯) on the canvas.
+    </p>
+  </section>
+)
 
 const SelectionHeading = ({ kind, count }: { kind: 'node' | 'edge'; count: number }) => (
   <div className="flex items-baseline justify-between">

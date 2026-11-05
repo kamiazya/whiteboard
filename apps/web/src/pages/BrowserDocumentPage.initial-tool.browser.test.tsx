@@ -13,8 +13,8 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
 
 // Real browser + real IndexedDB: the canvas's node count comes from the Loro
-// document the backend actually loads, which is exactly the input the initial
-// tool is derived from — a jsdom mock would have to fake that input away.
+// document the backend actually loads — the input the opening tool once
+// depended on, and must not any more.
 async function mountLoaded(): Promise<void> {
   renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
@@ -34,8 +34,8 @@ afterEach(() => {
   cleanup()
 })
 
-describe('initial tool follows the canvas shape (real browser)', () => {
-  it('opens an empty canvas in Select, and the same canvas in Hand once it holds a node', async () => {
+describe('the tool a canvas opens in (real browser)', () => {
+  it('opens an empty canvas in Select, and the same canvas in Select once it holds a node', async () => {
     await mountLoaded()
     await waitFor(() => expect(pressed('Select')).toBe('true'), { timeout: 5000 })
 
@@ -60,7 +60,8 @@ describe('initial tool follows the canvas shape (real browser)', () => {
 
     cleanup()
     await mountLoaded()
-    await waitFor(() => expect(pressed('Hand (pan)')).toBe('true'), { timeout: 5000 })
+    await waitFor(() => expect(pressed('Select')).toBe('true'), { timeout: 5000 })
+    expect(pressed('Hand (pan)')).toBe('false')
   })
 
   it('reopens a canvas in the tool the person last chose on it, even with content', async () => {
@@ -77,11 +78,11 @@ describe('initial tool follows the canvas shape (real browser)', () => {
       },
       { timeout: 5000 },
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Select' }))
-    await waitFor(() => expect(pressed('Select')).toBe('true'))
+    await userEvent.click(screen.getByRole('button', { name: 'Hand (pan)' }))
+    await waitFor(() => expect(pressed('Hand (pan)')).toBe('true'))
 
     cleanup()
     await mountLoaded()
-    await waitFor(() => expect(pressed('Select')).toBe('true'), { timeout: 5000 })
+    await waitFor(() => expect(pressed('Hand (pan)')).toBe('true'), { timeout: 5000 })
   })
 })

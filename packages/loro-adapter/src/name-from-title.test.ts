@@ -4,6 +4,7 @@
  * drive this through a write; here each gate is held on its own, where
  * removing one cannot be absorbed by whatever the keeper does around it.
  */
+import { siblingDisplayNameTaken } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -13,6 +14,7 @@ import {
   seedNamesFromTitles,
   writeDocumentContentAndName,
 } from './name-from-title.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { documentsTouchedSince } from './touched-documents.js'
 import {
   createWorkspaceDocumentAtPath,
@@ -374,5 +376,84 @@ describe('a heading that names a sibling document', () => {
     workspace.commit()
     seedNameFromTitle(workspace, DOC)
     expect(readWorkspaceDocumentName(workspace, DOC)).toBe('Weekly review')
+  })
+})
+
+/** Stores `name` on `documentId`'s node as it stands, past the write rule — what a merge can leave. */
+function storeRawName(workspace: LoroDoc, documentId: string, name: string): void {
+  const node = workspace
+    .getTree(WORKSPACE_TREE_KEY)
+    .getNodes()
+    .find((each) => each.data.get('documentId') === documentId)
+  node?.data.set('name', name)
+  workspace.commit()
+}
+
+describe('a sibling whose stored name is blank', () => {
+  const SIBLING = '01J0000000000000000000S1B1'
+
+  it.each(['', '   '])('shows its segment, which the heading may not take (%j)', (blank) => {
+    const workspace = workspaceWith('class/untitled', '# Review')
+    createWorkspaceDocumentAtPath(workspace, {
+      path: 'class/review',
+      documentId: SIBLING,
+      kind: 'markdown',
+    })
+    workspace.commit()
+    storeRawName(workspace, SIBLING, blank)
+    seedNameFromTitle(workspace, DOC)
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBeNull()
+  })
+})
+
+// The seeder and the keepers' write rule answer one question — does a sibling
+// document already show this name — so over any sibling set they must agree:
+// the note stays unnamed exactly when the write rule would refuse the title.
+describe('the heading seeder agrees with the sibling write rule', () => {
+  const ids = [
+    '01J0000000000000000000S1C0',
+    '01J0000000000000000000S1C1',
+    '01J0000000000000000000S1C2',
+  ]
+  const siblingArbitrary = fc.record({
+    folder: fc.constantFrom('class', 'other'),
+    segment: fc.constantFrom('plan', 'review', 'a', 'untitled-2'),
+    name: fc.option(fc.constantFrom('Plan', 'REVIEW', 'a', ' plan ', '', '  ', 'x'), {
+      nil: undefined,
+    }),
+  })
+  const siblingsArbitrary = fc.uniqueArray(siblingArbitrary, {
+    maxLength: ids.length,
+    selector: (each) => `${each.folder}/${each.segment}`,
+  })
+
+  fcTest.prop(
+    [
+      siblingsArbitrary,
+      fc.constantFrom('Plan', 'plan', 'Review', 'a', 'x', 'Elsewhere', 'Untitled 2'),
+    ],
+    withDefaults(),
+  )('leaves the note unnamed exactly when a sibling shows the title', (siblings, title) => {
+    const workspace = workspaceWith('class/untitled', `# ${title}`)
+    siblings.forEach((sibling, i) => {
+      const documentId = ids[i] as string
+      createWorkspaceDocumentAtPath(workspace, {
+        path: `${sibling.folder}/${sibling.segment}`,
+        documentId,
+        kind: 'markdown',
+      })
+      if (sibling.name !== undefined) storeRawName(workspace, documentId, sibling.name)
+    })
+    workspace.commit()
+    seedNameFromTitle(workspace, DOC)
+    const taken = siblingDisplayNameTaken(
+      'document',
+      siblings.map((sibling) => ({
+        path: `${sibling.folder}/${sibling.segment}`,
+        name: sibling.name,
+      })),
+      { path: 'class/untitled', name: title },
+    )
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBe(taken === undefined ? title : null)
   })
 })

@@ -16,35 +16,28 @@ function isRestingTool(value: unknown): value is RestingTool {
 }
 
 /**
- * The tool a canvas opens in. An empty canvas is one the user came to
- * FILL, so it opens ready to place and edit; a canvas with content is one
- * they came to READ, so a plain drag pans instead of moving someone's work.
- * Whatever they last chose on this document in this session wins over both guesses — it is a
- * stated preference, not an inference.
+ * The tool a canvas opens in: Select, whatever the canvas holds. Opening in
+ * Hand on a canvas with content made a click select nothing and left the
+ * keyboard's node traversal dead, with nothing on screen saying why. A tool
+ * this tab last rested in on the same document wins — returning to a canvas
+ * mid-session resumes what the user was doing.
  */
-export function resolveInitialTool({
-  isEmpty,
-  lastTool,
-}: {
-  isEmpty: boolean
-  lastTool: EditorTool | null
-}): EditorTool {
-  if (isRestingTool(lastTool)) return lastTool
-  return isEmpty ? 'select' : 'hand'
+export function resolveInitialTool({ lastTool }: { lastTool: EditorTool | null }): EditorTool {
+  return isRestingTool(lastTool) ? lastTool : 'select'
 }
 
 /**
  * Per document and session-scoped on purpose: the tool is a property of "what
  * I am doing on this canvas right now", so a canvas reopens in the mode it was
- * left in, while a new browser session starts from the canvas's own guess.
+ * left in, while a new browser session starts in Select.
  */
 export function readLastTool(documentKey: string): EditorTool | null {
   try {
     const stored = sessionStorage.getItem(keyFor(documentKey))
     return isRestingTool(stored) ? stored : null
   } catch {
-    // Storage can be unavailable (private mode, blocked cookies); the
-    // canvas-shape guess is a complete fallback.
+    // Storage can be unavailable (private mode, blocked cookies); opening
+    // in Select is a complete fallback.
     return null
   }
 }

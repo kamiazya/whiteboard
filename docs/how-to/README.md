@@ -33,6 +33,8 @@ Guides:
   by picking, pasting or dropping it.
 - **[tick-off-tasks](tick-off-tasks.md)** — keep a `- [ ]` checklist in a markdown document and
   tick items off by clicking the box in the preview.
+- **[draw-on-a-canvas](draw-on-a-canvas.md)** — circle or underline something with the Draw
+  tool, then move or delete the drawing.
 - **[define-your-own-stencils](define-your-own-stencils.md)** — dress a box by what it IS, and
   grow the vocabulary with a stencil library the workspace owns.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas

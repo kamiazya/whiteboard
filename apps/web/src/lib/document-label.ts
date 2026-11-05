@@ -1,4 +1,4 @@
-import { isGeneratedPath } from './new-document-path.js'
+import { shownName } from '@kamiazya/whiteboard-model'
 
 /**
  * Which stand-in an unnamed document shows: the last segment of its path, or
@@ -9,24 +9,20 @@ export type UnnamedLabelRule = 'leaf' | 'path'
 
 /**
  * What a document is CALLED on a surface: its chosen name, or — when it has
- * none — a stand-in derived from its path by `rule`.
+ * none — a stand-in derived from its path by `rule`. The `leaf` rule is
+ * model's `shownName`, what every keeper's sibling rule compares, so a row
+ * reads exactly as the name a refusal quotes for it.
  *
  * Unnamed is spelled by absence (`null` or omitted), as both keepers' index
- * stores it. A name that happens to equal the path is still a name somebody
- * chose, so nothing here compares the two.
+ * stores it, and a blank name reads as none. A name that happens to equal the
+ * path is still a name somebody chose, so nothing here compares the two.
  */
 export function documentLabel(
   document: { readonly name?: string | null; readonly path: string },
   rule: UnnamedLabelRule,
 ): string {
-  if (document.name !== null && document.name !== undefined) return document.name
-  if (rule === 'path') return document.path
-  const leaf = document.path.slice(document.path.lastIndexOf('/') + 1)
-  // An address the create flow generated is no word anybody chose, so it
-  // reads as the title box's own word for an unnamed document — numbered,
-  // since two of them can sit in one folder.
-  if (isGeneratedPath(leaf)) return `Untitled${leaf.slice('untitled'.length).replace('-', ' ')}`
-  return leaf
+  if (rule === 'leaf') return shownName('document', document)
+  return document.name?.trim() || document.path
 }
 
 /**

@@ -17,7 +17,7 @@ Two rules hold for the whole table:
 
 | Shortcut | Action |
 |---|---|
-| `H` | Hand (pan) — drag anywhere to pan. A canvas with content opens in Hand, an empty one in Select, and a canvas you have used before in this browser session reopens in whichever of the two you were last using on it, chosen or not |
+| `H` | Hand (pan) — drag anywhere to pan. A canvas opens in Select; one you come back to within the same browser session returns to whichever of Select and Hand you were last using on it |
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |
@@ -33,29 +33,42 @@ pinch zooms in every tool.
 |---|---|
 | `Cmd/Ctrl + A` | Select every node |
 | `Shift` + click | Add or remove a node from the selection |
-| `Tab` | Select the next node in reading order; with nothing selected, the first |
-| `Shift + Tab` | Select the previous node in reading order |
+| `Tab` | Select the next node in reading order, visiting the connections and lines that leave a node right after it; with nothing selected, the first node |
+| `Shift + Tab` | Step back through the same walk |
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
-| `Enter` / `F2` | Edit the selected node's text, or a frame's label (a frame label is one line: `Enter` saves it) |
+| `Enter` / `F2` | Edit the selected node's text, a frame's label, or the selected connection's or line's label (a frame's, connection's or line's label is one line: `Enter` saves it) |
+| `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
-| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
-| `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
+| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
+| `Delete` / `Backspace` | Delete the selected nodes, or the selected connection or line |
 | Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
+| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
-"Canvas, 5 notes. Tab selects the first note" (frames and connections are counted apart, and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
+"Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
 nodes top to bottom, then left to right (two nodes at exactly the same spot always come in the same order),
 and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
-selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
-dock. Locked nodes are skipped, since they cannot be selected.
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock.
+To leave without losing the selection, press `F6` (on to the dock) or
+`Shift + F6` (back to the header, where the Display panel shows the selected
+node) — the selection stays exactly as it was. A canvas with no nodes lets `Tab` go straight to the
+dock. Locked nodes and locked connections are skipped, since they cannot be selected.
+
+**Reaching a connection without a pointer.** The `Tab` walk visits each
+connection right after the node it leaves, and each line right after the node
+it starts (or ends) at; a line attached to no node comes after the last node.
+A selected connection is announced with its place among the connections and
+lines, as "Selected: Connection from Web App to API Gateway (2 of 5)". From
+there `Enter` or `F2` edits its label, `Shift + F10` opens its menu (arrow
+ends, sides, colour, comment, lock, delete), `Delete` deletes it, and `Esc`
+goes back to the node you reached it from.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys
 still nudge.
@@ -70,7 +83,7 @@ targets one by one. With nothing selected, `C` switches to the Connect tool as
 before.
 
 **The menu from the keyboard.** `Shift + F10` (or the `Menu` key) opens the menu
-for what is selected, a node, a set of nodes, an edge or a group, and puts focus on
+for what is selected, a node, a set of nodes, a connection, a line or a group, and puts focus on
 its first row. `Arrow Up` / `Arrow Down` step through the rows, `Home` and
 `End` jump to the first and last, `Enter` runs the one under focus, and `Esc`
 closes the menu and returns focus to the canvas. While a menu is open no other
@@ -90,9 +103,11 @@ example "Aligned 3 nodes left").
 **Tidy** (the right-click menu of a selection, or **Tidy canvas** on empty
 space) lines boxes up and clears overlaps without taking anything out of its
 frame: a frame's contents are tidied inside it, a frame drawn mostly inside
-another, such as one made with **Group selection**, counts as inside it, and
+another, such as one made with **Frame selection**, counts as inside it, and
 a frame grows down or right to make room rather than moving away from the
-frames beside it. Frames are never left overlapping one another.
+frames beside it. Frames are never left overlapping one another. A screen reader hears
+what it did ("Tidied 6 notes in 2 frames"), or "Already tidy" when there was
+nothing to move.
 
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
@@ -135,6 +150,10 @@ elsewhere follows what it finds: an image becomes an image node, our own
 copied JSON becomes the nodes it describes, and any other text becomes a
 note. Edges come along whenever both of their endpoints are selected.
 
+A cut does not remove anything until you paste: the cut nodes stay in place
+under a veil, a chip says how many are held, and a screen reader hears it ("1
+node held — paste to place, Escape to cancel"). `Esc` lifts the hold.
+
 Right-click empty space and choose **Paste here** to place the pasted
 content at that exact point instead of the default offset.
 
@@ -173,7 +192,10 @@ would. Later edits never move the view.
 When a panel covers part of the canvas, as the inspector does in a narrow
 window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
 frame their target in the part you can still see, and opening a panel over the
-selected node moves it clear.
+selected node moves it clear. **Zoom to fit** and **Zoom to the selection**
+also keep what they frame clear of the dock along the bottom and of the
+overview map in the corner, and leave room along the top for the action
+buttons a selected node shows above itself.
 
 
 The dock carries one view control — **zoom to fit** — and it is there in
@@ -212,8 +234,8 @@ selection, or nudging several nodes each undo in a single press.
 
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
-Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the Select tool's right-click menus — Align and Distribute on
+Redo under Edit and a closing line that Align, Distribute, Tidy and Frame selection
+have no key and live in the Select tool's right-click menus (`Shift + F10` opens the same menus from the keyboard) — Align and Distribute on
 a selection of two or more nodes — since the Hand tool's right-click offers
 comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
@@ -244,7 +266,7 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
 | `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
-| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote |
+| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. In a markdown document a blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 | `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
 
@@ -254,12 +276,14 @@ The formatting bar above a markdown document is one `Tab` stop. `Left` and `Righ
 
 The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
-to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
-keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent. The one exception is a note you have just
+to B" for a relation's label. A note's text is described as "Escape discards,
+Ctrl+Enter keeps" (`Command` on a Mac); a frame's name and a connection's or
+line's label, being one line, as "Escape discards, Enter keeps". Pressing
+`Esc` announces "Discarded" so a thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
-undo. Press `Esc` on a new note before typing and it is removed.
+undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
+while a new note is still empty removes it too.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
@@ -269,14 +293,22 @@ notes, the Connect tool also shows what to press at the top of the canvas —
 click the note to connect to" once the first is chosen — and the first line is
 announced with the tool's name.
 
-Every node and edge is listed by name for a screen reader, in the order `Tab`
-walks them: by where they sit, top to bottom and then left to right, not by
-the order they were added, so a note placed above another is read first. The
+Every node, connection and line is listed by name for a screen reader, in the
+order `Tab` walks them: nodes by where they sit, top to bottom and then left to
+right, not by the order they were added, so a note placed above another is read
+first, each followed by the connections and lines that leave it. The
 canvas points at the selected one: a note by its first
-line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
+line, a frame as "Frame cluster", a connection as "Connection from Review to
+Ship: then". A stroke made with Draw is listed as "Drawing", and a line dragged
+out to empty space as "Line from Review to empty space"; neither is called a
+connection, because a line asserts no relation.
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
+including the frame a node sits in ("Selected: Web App, in Frontend (3 of 8)"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+"Framed 3 nodes", "Deleted 2 nodes". Moving a node across a frame's edge, by
+nudging or dragging, is said too ("Web App moved into Backend", "Web App left
+Frontend", "Web App moved from Frontend into Backend"); a move that stays inside
+its frame says nothing, so a run of nudges is quiet until one crosses an edge. Choosing how edges are drawn in the
 Display panel is said back the same way ("Edge routing: Orthogonal", "Line
 jumps: On").
 
@@ -286,20 +318,33 @@ south-east resize handle (the arrow keys resize from it), the right-hand
 connect handle and the actions button.
 
 Whatever you finish on the canvas leaves the keyboard on it: keeping a label
-with `Ctrl + Enter` or discarding it with `Esc`, completing a connection, choosing
+with `Enter` (or `Ctrl + Enter`) or discarding it with `Esc`, completing a connection, choosing
 Group from the dock, and closing a dialog or the context menu with `Esc`.
 `Delete`, the arrow keys and undo work straight away, with no click first.
 
 ## Moving between pages
 
-Opening a document, returning to the list or opening Settings moves keyboard
-focus to the page's heading and has a screen reader say where you are
-("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
-titled the same way ("Roadmap · Whiteboard"). An empty document is the
-exception for focus, and the announcement still plays: a new, empty note's
-editor takes it, so you can type at once, and an empty canvas's surface takes
-it, so a shortcut such as `N` works the moment the canvas appears — straight
-after **Create a canvas**, with no click first.
+Opening a document, returning to the list or opening Settings has a screen
+reader say where you are ("Roadmap, markdown note", "Plan, canvas",
+"Documents"), and the browser tab is titled the same way ("Roadmap ·
+Whiteboard"). Where keyboard focus lands depends on the page:
+
+- **A note** puts it on the note's heading, directly above its text. A new,
+  empty note is the exception: its editor takes focus, so you can type at once.
+- **A canvas** puts it on the canvas itself, empty or not, so a shortcut such
+  as `N` or an arrow key works the moment the canvas appears — straight after
+  **Create a canvas**, with no click first.
+- **The document list** puts it on its heading, and coming back from a
+  document you opened from the list (**Back**, or the browser's back) puts it
+  on that document's card instead, so you carry on where you were.
+- **Settings** does not move focus, so the next Tab starts from the top of the page.
+
+The first Tab stop on every page is **Skip to content**, hidden until it is
+focused: it moves focus past the app's header and the page's own header to
+the canvas, the note's editor, or the start of the page's content. When the
+app first opens on a page that puts focus on its heading, the first `Tab`
+still goes to **Skip to content**; after that, `Tab` from a page's heading
+goes on into the page.
 
 ## Searching the document list
 

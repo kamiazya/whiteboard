@@ -342,3 +342,30 @@ describe('DocumentMenu — export for a markdown note', () => {
     expect(screen.queryByRole('menuitemcheckbox', { name: 'With background' })).toBeNull()
   })
 })
+
+describe('DocumentMenu — handing a note out', () => {
+  it('says beside the Markdown save that pictures and diagrams stay out of it', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'markdown' })
+    await openMenu()
+    await openExportSubmenu('Save as Markdown (.md)')
+    const save = screen.getByRole('menuitem', { name: 'Save as Markdown (.md)' })
+    const describedBy = save.getAttribute('aria-describedby') ?? ''
+    expect(document.getElementById(describedBy)?.textContent).toMatch(
+      /pictures and embedded diagrams are not included.*Print \/ Save as PDF/,
+    )
+  })
+
+  it('offers Print / Save as PDF when the page can print, and asks for it', async () => {
+    const onPrint = vi.fn()
+    render(<DocumentMenu kind="markdown" onPrint={onPrint} />, { container: document.body })
+    await openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Print / Save as PDF…' }))
+    await waitFor(() => expect(onPrint).toHaveBeenCalledOnce())
+  })
+
+  it('offers no print row where the page has none to give', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'spatial' })
+    await openMenu()
+    expect(screen.queryByRole('menuitem', { name: /Print/ })).toBeNull()
+  })
+})

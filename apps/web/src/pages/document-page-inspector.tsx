@@ -4,6 +4,7 @@ import { ConnectionsPanel } from '../components/connections/ConnectionsPanel.js'
 import { documentRemoved } from '../components/document-editor/EditorLock.js'
 import { InspectorSegment } from '../components/document-editor/InspectorSegment.js'
 import { DocumentFacetsEditor } from '../components/document-properties/DocumentProperties.js'
+import { requestNotePrint } from '../components/markdown-editor/note-print.js'
 import { ProposalsPanel } from '../components/proposals/ProposalsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { InspectorPanel } from '../components/ui/InspectorPanel.js'
@@ -136,6 +137,7 @@ export function DocumentRowActions({
         kind={model.documentKind}
         notice={notice}
         {...(versionsEnabled && !removed ? { onBookmark } : {})}
+        {...(model.documentKind === 'markdown' && !removed ? { onPrint: requestNotePrint } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}
           : { triggerRef: model.slots.menuTriggerRef })}

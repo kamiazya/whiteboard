@@ -1,5 +1,10 @@
-import { deriveWorkspaceSegment, documentPathSchema, pathBelow } from '@kamiazya/whiteboard-model'
-import { isGeneratedPath } from './new-document-path.js'
+import {
+  deriveWorkspaceSegment,
+  documentPathSchema,
+  isGeneratedDocumentPath,
+  parentOfPath,
+  pathBelow,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * The address a document moves to when it is named for the first time, or
@@ -23,22 +28,22 @@ export function pathAfterFirstRename(
   name: string,
   existingPaths: readonly string[],
 ): string | null {
-  if (!isGeneratedPath(path)) return null
+  if (!isGeneratedDocumentPath(path)) return null
   const segment = deriveWorkspaceSegment(name)
   if (segment === undefined) return null
 
-  const cut = path.lastIndexOf('/') + 1
-  const folder = path.slice(0, cut)
+  const parent = parentOfPath(path)
+  const folder = parent === '' ? '' : `${parent}/`
   const siblings = new Set(
     existingPaths.flatMap((other) => {
-      const rest = pathBelow(folder.slice(0, -1), other)
+      const rest = pathBelow(parent, other)
       return rest === undefined ? [] : [rest]
     }),
   )
   let leaf = segment
   for (let n = 2; siblings.has(leaf); n++) leaf = `${segment}-${n}`
 
-  if (isGeneratedPath(leaf)) return null
+  if (isGeneratedDocumentPath(leaf)) return null
   const next = `${folder}${leaf}`
   return documentPathSchema.safeParse(next).success ? next : null
 }

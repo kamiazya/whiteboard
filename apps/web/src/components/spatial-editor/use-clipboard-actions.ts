@@ -6,6 +6,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, type RefObject, useEffect, useRef, useState } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import {
   type ClipboardImageSeams,
   needsImageTransfer,
@@ -234,6 +235,18 @@ function selectCreatedBy(
  * through `onChange`; every selection write goes through `selectNodes`.
  * Plain per-render closures, exactly as they were inside the editor body.
  */
+const countOf = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/** What a cut holds, by kind: "2 nodes", "1 node and 1 line". */
+function heldCount(fragment: ClipboardFragment): string {
+  const lines = (fragment.lines ?? []).length
+  const parts = [
+    ...(fragment.nodes.length > 0 ? [countOf(fragment.nodes.length, 'node', 'nodes')] : []),
+    ...(lines > 0 ? [countOf(lines, 'line', 'lines')] : []),
+  ]
+  return parts.join(' and ')
+}
+
 export function useClipboardActions({
   canvasRef,
   primaryId,
@@ -330,6 +343,8 @@ export function useClipboardActions({
         ...(fragment.lines ?? []).map((line) => [line.id, JSON.stringify(line)] as const),
       ]),
     })
+    // The veil alone does not say a cut happened: the nodes stay visible.
+    announceOnCanvas(`${heldCount(fragment)} held — paste to place, Escape to cancel`)
     return writeCarryingImages(fragment, clipboardImages)
   }
 

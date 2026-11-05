@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
+import { documentPathSchema, isGeneratedDocumentPath } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { pathAfterFirstRename } from './first-rename-path.js'
-import { isGeneratedPath, newDocumentPathIn } from './new-document-path.js'
+import { newDocumentPathIn } from './new-document-path.js'
 
 describe('pathAfterFirstRename', () => {
   it('derives the address from the name while the path is still generated', () => {
@@ -58,21 +58,21 @@ describe('pathAfterFirstRename', () => {
       if (next === null) return
       expect(documentPathSchema.safeParse(next).success).toBe(true)
       expect(existing).not.toContain(next)
-      expect(isGeneratedPath(next)).toBe(false)
+      expect(isGeneratedDocumentPath(next)).toBe(false)
     },
   )
 })
 
-describe('isGeneratedPath', () => {
+describe('isGeneratedDocumentPath', () => {
   it('accepts exactly what newDocumentPathIn produces', () => {
     const taken: string[] = []
     for (let i = 0; i < 15; i++) {
       const path = newDocumentPathIn('design', taken)
       taken.push(path)
-      expect(isGeneratedPath(path), path).toBe(true)
+      expect(isGeneratedDocumentPath(path), path).toBe(true)
     }
-    expect(isGeneratedPath('untitled-1')).toBe(false)
-    expect(isGeneratedPath('untitled-02')).toBe(false)
-    expect(isGeneratedPath('my-untitled')).toBe(false)
+    expect(isGeneratedDocumentPath('untitled-1')).toBe(false)
+    expect(isGeneratedDocumentPath('untitled-02')).toBe(false)
+    expect(isGeneratedDocumentPath('my-untitled')).toBe(false)
   })
 })

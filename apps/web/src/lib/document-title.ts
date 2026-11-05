@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, shownName } from '@kamiazya/whiteboard-model'
 
 const APP_NAME = 'Whiteboard'
 
@@ -17,9 +17,10 @@ export function documentArrival(name: string, kind: DocumentKind): string {
 }
 
 /**
- * The page heading for a document: its chosen name, or the word the title box
- * shows for an unnamed one. The address is a subtitle, never the heading.
+ * The page heading for a document: its chosen name, or — unnamed — what the
+ * document list shows for it at `path` (`Untitled 2` for a generated
+ * address), so the page and the list never call one document two things.
  */
-export function documentHeading(name: string | null | undefined): string {
-  return name === null || name === undefined || name === '' ? 'Untitled' : name
+export function documentHeading(name: string | null | undefined, path: string): string {
+  return shownName('document', { path, name })
 }

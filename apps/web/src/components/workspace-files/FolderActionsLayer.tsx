@@ -1,4 +1,4 @@
-import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, parentOfPath } from '@kamiazya/whiteboard-model'
 import { FolderPlus, Pencil } from 'lucide-react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { folderDisplayName, type NestedFolderPlan } from '../../lib/folder-names.js'
@@ -6,7 +6,7 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import { ContextMenu } from '../ui/ContextMenu.js'
 import { ErrorLine } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
-import { folderOf } from './folder-moves.js'
+import { MoveDocumentsHereDialog } from './MoveDocumentsHereDialog.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
 import type { FolderNamesState } from './use-folder-names.js'
 
@@ -84,6 +84,7 @@ function NameDialog({
   refuseName,
   onCancel,
   onSubmitName,
+  onCloseAutoFocus,
 }: {
   dialog: FolderDialog | null
   names: FolderNamesState['names']
@@ -92,9 +93,11 @@ function NameDialog({
   refuseName: (dialog: FolderDialog, name: string) => string | null
   onCancel: () => void
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
+  onCloseAutoFocus: (event: Event) => void
 }) {
   return (
     <FolderNameDialog
+      onCloseAutoFocus={onCloseAutoFocus}
       open={dialog !== null}
       {...nameDialogCopy(dialog, names)}
       refuse={(name) => (dialog === null ? null : refuseName(dialog, name))}
@@ -152,6 +155,10 @@ function StatusLines({
 
 interface FolderActionsLayerProps {
   folderNames: FolderNamesState
+  /** Every document listed, for the picker that gathers some into a folder. */
+  documents: readonly WorkspaceDocumentEntry[]
+  /** The folder documents are being gathered into, or null. */
+  gathering: string | null
   announcement: string
   moving: WorkspaceDocumentEntry | null
   menu: FolderMenu | null
@@ -165,10 +172,12 @@ interface FolderActionsLayerProps {
     created?: readonly { readonly path: string; readonly name: string }[],
   ) => void | Promise<void>
   onSubmitName: (dialog: FolderDialog, name: string) => void | Promise<void>
+  onGather: (folder: string, entries: readonly WorkspaceDocumentEntry[]) => void | Promise<void>
   refuseName: (dialog: FolderDialog, name: string) => string | null
   planNewFolder: (typed: string) => NestedFolderPlan
   onMenuChoice: (kind: FolderDialog['kind'], folder: string) => void
   onCloseMenu: () => void
+  onCloseAutoFocus: (event: Event) => void
 }
 
 /** Where a document can be moved: the root and every folder, but not where it is. */
@@ -178,48 +187,68 @@ function destinationsFor(
 ): string[] {
   if (moving === null) return []
   return ['', ...[...folders].sort(compareCodeUnit)].filter(
-    (each) => each !== folderOf(moving.path),
+    (each) => each !== parentOfPath(moving.path),
+  )
+}
+
+/** The two move pickers: one document sent to a folder, documents gathered into one. */
+function MoveDialogs(props: FolderActionsLayerProps) {
+  const { folderNames, documents, gathering, moving, busy, error, onCancel, onMoveTo } = props
+  return (
+    <>
+      <MoveToFolderDialog
+        document={moving}
+        folders={destinationsFor(moving, folderNames.folders)}
+        names={folderNames.names}
+        planNewFolder={props.planNewFolder}
+        busy={busy}
+        error={error}
+        onCancel={onCancel}
+        onPick={(folder, created) => moving !== null && onMoveTo(moving, folder, created)}
+        onCloseAutoFocus={props.onCloseAutoFocus}
+      />
+      <MoveDocumentsHereDialog
+        folder={gathering}
+        documents={documents}
+        names={folderNames.names}
+        busy={busy}
+        error={error}
+        onCancel={onCancel}
+        onMove={props.onGather}
+        onCloseAutoFocus={props.onCloseAutoFocus}
+      />
+    </>
   )
 }
 
 /**
- * Everything the folder actions put on screen: the move picker, the folder
+ * Everything the folder actions put on screen: the move pickers, the folder
  * dialog, the folder's own menu and the status lines.
  */
 export function FolderActionsLayer(props: FolderActionsLayerProps) {
-  const { folderNames, announcement, moving, menu, dialog, busy, error } = props
-  const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
-    props
-  const destinations = destinationsFor(moving, folderNames.folders)
+  const { folderNames, gathering, announcement, moving, menu, dialog, busy, error } = props
+  const { onCancel, onMenuChoice } = props
 
   return (
     <>
       <StatusLines
         announcement={announcement}
-        refusal={moving === null && dialog === null ? error : null}
+        refusal={moving === null && dialog === null && gathering === null ? error : null}
         onDismiss={() => {
           onCancel()
           folderNames.dismissRefusal()
         }}
       />
-      <MoveToFolderDialog
-        document={moving}
-        folders={destinations}
-        names={folderNames.names}
-        planNewFolder={planNewFolder}
-        busy={busy}
-        error={error}
-        onCancel={onCancel}
-        onPick={(folder, created) => moving !== null && onMoveTo(moving, folder, created)}
-      />
+      <MoveDialogs {...props} />
       <NameDialog
         dialog={dialog}
         names={folderNames.names}
-        refuseName={refuseName}
+        refuseName={props.refuseName}
         busy={busy}
         error={error}
         onCancel={onCancel}
-        onSubmitName={onSubmitName}
+        onSubmitName={props.onSubmitName}
+        onCloseAutoFocus={props.onCloseAutoFocus}
       />
       {menu !== null && (
         <FolderMenuView
@@ -228,7 +257,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
           canRename={folderNames.canRename(menu.folder)}
           onRename={() => onMenuChoice('rename', menu.folder)}
           onSubfolder={() => onMenuChoice('subfolder', menu.folder)}
-          onClose={onCloseMenu}
+          onClose={props.onCloseMenu}
         />
       )}
     </>

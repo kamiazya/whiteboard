@@ -15,11 +15,18 @@ export {
   firstDistinctUnnamedPath,
   folderNameRefusal,
   folderNameSchema,
-  isMovedNameTaken,
-  isSiblingDisplayNameTaken,
+  movedDisplayNameTaken,
+  shownName,
+  siblingDisplayNameTaken,
 } from './display-name.js'
 export * from './document-kind.js'
-export { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
+export {
+  isSelfOrDescendant,
+  leafOfPath,
+  parentOfPath,
+  pathBelow,
+  rebasePath,
+} from './document-path.js'
 export {
   base64ToBytes,
   base64UrlToBytes,
@@ -51,6 +58,7 @@ export * from './text-anchor.js'
 export { fitToLength, growsPast } from './text-bound.js'
 export * from './trust.js'
 export { uint8ArrayAnyRealmSchema } from './uint8-array.js'
+export { isGeneratedDocumentPath } from './unnamed-document.js'
 export { utf16Max } from './utf16-max.js'
 export { VERSION_LABEL_MAX_LENGTH, versionLabelSchema } from './version-label.js'
 export { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from './viewport.js'

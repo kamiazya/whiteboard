@@ -48,8 +48,14 @@ describe('ShortcutHelpSheet', () => {
     expect(note.textContent).toMatch(/Align/)
     expect(note.textContent).toMatch(/Distribute/)
     expect(note.textContent).toMatch(/Tidy/)
-    expect(note.textContent).toMatch(/Group/)
+    expect(note.textContent).toMatch(/Frame selection/)
     expect(note.textContent).toMatch(/right-click/i)
+  })
+
+  it('names the keyboard way into those menus beside right-click', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const text = screen.getByTestId('shortcut-help-menu-only').textContent ?? ''
+    expect(text).toMatch(/Shift\+F10/)
   })
 
   // The Hand tool's right-click offers comments only, so the arrange

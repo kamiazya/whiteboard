@@ -29,6 +29,27 @@ async function textHasAsset(blob: Blob): Promise<boolean> {
   return new TextDecoder().decode(await blob.arrayBuffer()).includes('asset:')
 }
 
+/** A picture (`![…](…)`) or an embed (`![[…]]`): what a .md file names and cannot carry. */
+const PICTURE_OR_EMBED = /!\[\[|!\[[^\]\n]*\]\(/
+
+async function textHasPicture(blob: Blob): Promise<boolean> {
+  return PICTURE_OR_EMBED.test(new TextDecoder().decode(await blob.arrayBuffer()))
+}
+
+/** What the confirmation says the saved text left out, if anything. */
+async function savedCaveat(format: SceneExportFormat, blob: Blob): Promise<string> {
+  // An image in a canvas is an `asset:` reference to the workspace's file,
+  // so the saved text does not carry its pixels.
+  if (format === 'canvas' && (await textHasAsset(blob))) {
+    return ' — images are referenced, not embedded'
+  }
+  // A note's pictures and embedded diagrams are named, not drawn, in its .md.
+  if (format === 'md' && (await textHasPicture(blob))) {
+    return ' — pictures and embedded diagrams are not included; for a handout, use Print / Save as PDF'
+  }
+  return ''
+}
+
 function exportedNotice(label: string, scope: ExportScope | undefined): string {
   // Kept out of the handler: it already sits at the complexity ceiling.
   return scope === undefined ? `Exported as ${label}` : `Exported the selection as ${label}`
@@ -67,14 +88,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         if (saved === undefined) {
           onExported?.(exportedNotice(label, scope))
         } else {
-          // An image in a canvas is an `asset:` reference to the workspace's
-          // file, so the saved text does not carry its pixels.
-          const referencesImages = format === 'canvas' && (await textHasAsset(blob))
-          onExported?.(
-            referencesImages
-              ? `Saved as ${saved} — images are referenced, not embedded`
-              : `Saved as ${saved}`,
-          )
+          onExported?.(`Saved as ${saved}${await savedCaveat(format, blob)}`)
         }
       } catch (err) {
         log?.error('canvas export failed:', err)

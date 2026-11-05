@@ -114,6 +114,14 @@ describe('MinimapRail', () => {
 
   // The strip of grey bars beside a note read as a rendering glitch; hovering
   // it says what it is for.
+  // Hover alone left the strip unexplained to a reader who never hovers it:
+  // it carries a visible label, and a name for a screen reader that meets it.
+  it('is labelled on screen and named for assistive technology', () => {
+    const { getByText, getByRole } = renderRail()
+    expect(getByText('Map')).toBeTruthy()
+    expect(getByRole('img', { name: /document map/i })).toBeTruthy()
+  })
+
   it('says on hover that it is the document map', () => {
     const { getByTestId } = renderRail()
     expect(getByTestId('markdown-minimap-rail').getAttribute('title')).toMatch(/document map/i)

@@ -25,8 +25,9 @@ it in the same way.
 
 Open the document's menu — right-click its card or row, tap the **…** button
 on it (shown on a touch screen), long-press it, or press Shift+F10 on a focused
-card — and choose **Move to folder…**. The picker lists the workspace root and every folder, plus **New
-folder…**:
+card — and choose **Move to folder…**. With the document open, the same entry is in its
+**More actions** menu at the top right, and the page follows the document to its new address.
+The picker lists the workspace root and every folder, plus **New folder…**:
 
 - Arrow keys walk the list, **Enter** picks, **Escape** cancels.
 - Each folder is listed by its names from the top down — `Class / Week 6` —
@@ -47,7 +48,8 @@ folder…**:
   and for a folder moved under a folder with a same-named folder.
 
 With a mouse or a pen you can also drag a card or row onto a folder (the
-picker says so once, under its list) — a folder
+picker says so once, under its list, beside the keyboard way back to it:
+`Shift + F10` on a card, then **Move to folder…**) — a folder
 card, a folder in the tree beside the list, or **Workspace** for the root. The
 folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the
@@ -83,7 +85,8 @@ still unnamed takes its name from its first heading only when no other
 document in its folder already shows that name; otherwise it stays
 **Untitled** until you name it. **Duplicate** names the copy
 "Name (copy)", or the first "Name (copy 2)", "Name (copy 3)" … that nothing
-beside it shows. The copy is selected in the list, and a
+beside it shows; a copy of an unnamed document starts from what its row shows,
+so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy is selected in the list, and a
 "Duplicated _name_" notice offers **Open** for it.
 
 A document that has documents under it (`plan` beside `plan/outline`) is
@@ -96,14 +99,18 @@ its menu has no **Rename…**; rename the document instead.
 the folder you are in — at the workspace root, a top-level folder. The same entry is in a folder's own
 menu, as **New subfolder…** (or **New folder…** on **Workspace** in the folder
 path). It asks for a name; **Create folder** opens the new folder, showing the
-name you gave it.
+name you gave it, with keyboard focus on its name in the folder path and a
+screen reader told "In _name_, empty". After a move, focus goes to the folder
+the document went to (or the document itself, after **Move documents here…**).
 
 A folder exists only while a document is in it, and the dialog says so before
 you create it: the new folder is empty until you put a document there, and its
 name is kept by the page until then and saved with the folder once a document
 lands in it. The empty folder offers **New note here** and **New canvas here**,
-which create the document inside it; moving a document in works too. Leaving it
-empty lets it go, name and all. The same duplicate rule as a rename applies.
+which create the document inside it, and **Move documents here…**, which lists
+every other document in the workspace with a checkbox and where it is now: tick
+the ones to file there and choose **Move here**. Leaving it empty lets it go,
+name and all. The same duplicate rule as a rename applies.
 
 The page keeps a folder's name the same way when a move takes the last document
 out of it: move a document back in during the same visit and the folder comes

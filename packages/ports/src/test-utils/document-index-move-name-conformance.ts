@@ -219,6 +219,13 @@ export function describeUnnamedCreate(
       })
     })
 
+    it('moves a generated address to the next generated one', async () => {
+      await withIndex(async (index) => {
+        await create(index, workspaceId, 'week/other', 'Untitled 2')
+        expect((await create(index, workspaceId, 'week/untitled-2')).path).toBe('week/untitled-3')
+      })
+    })
+
     it('keeps the address when nothing shows its label', async () => {
       await withIndex(async (index) => {
         await create(index, workspaceId, 'week/other', 'Plan')

@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import { leafOfPath, parentOfPath } from './document-path.js'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from './ids.js'
+import { isGeneratedDocumentPath, UNTITLED_DOCUMENT_WORD } from './unnamed-document.js'
 
 /**
  * Why `name` cannot be a folder's display name, or `null` when it can.
@@ -48,92 +50,131 @@ export function displayNameKey(name: string): string {
 }
 
 /**
- * Whether `name` is already the display name of one of `siblings` — the
- * names the other folders, or the other documents, under the same parent
- * show. A writer refuses a duplicate it can SEE; one that arrives by merging
- * two replicas' edits is kept, since nothing could have refused it and a
- * rename nobody made would be worse than two equal names.
+ * Which of `siblings` — the names the other folders, or the other documents,
+ * under the same parent show — `name` duplicates, as that sibling shows it;
+ * `undefined` when none. A writer refuses a duplicate it can SEE; one that
+ * arrives by merging two replicas' edits is kept, since nothing could have
+ * refused it and a rename nobody made would be worse than two equal names.
  */
-function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
+function siblingShowing(name: string, siblings: Iterable<string>): string | undefined {
   const key = displayNameKey(name)
-  for (const sibling of siblings) if (displayNameKey(sibling) === key) return true
-  return false
+  for (const sibling of siblings) if (displayNameKey(sibling) === key) return sibling
+  return undefined
 }
 
 /**
- * Whether `target.name` duplicates what a sibling of `target.path` shows —
- * the siblings being the entries of `others` directly under the same parent,
- * each showing its name or, unnamed, its own segment. `others` is one KIND of
- * entry (folders, or documents: the two are compared separately) and leaves
- * the target itself out, which only the caller can identify.
+ * The two kinds of entry a workspace names. They are compared apart: a
+ * folder and a document may show one name side by side.
  */
-export function isSiblingDisplayNameTaken(
-  others: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+type NamedEntryKind = 'document' | 'folder'
+
+/**
+ * What an entry shows where a person reads it in its folder: the name
+ * somebody gave it, trimmed, or — unnamed — its own last segment, except that
+ * an unnamed DOCUMENT at an address the new-document flow generated shows
+ * `Untitled`, numbered as the address is (`untitled-3` shows `Untitled 3`).
+ *
+ * A BLANK name counts as none, because it shows nothing a person could read;
+ * comparing the blank instead would let a sibling take the very label the
+ * blank-named entry is showing. A generated address is no word anybody chose,
+ * so it reads as the title box's word for an unnamed document — numbered,
+ * since two of them can sit in one folder and must not read as one. A folder
+ * has no generated address, so its segment is what it shows.
+ *
+ * One answer for every reader of "what does this entry show" — the keepers'
+ * sibling rule, the heading seeder, a duplicate's name and the web's labels —
+ * so none of them can drift from another.
+ */
+export function shownName(
+  kind: NamedEntryKind,
+  entry: { readonly path: string; readonly name?: string | null | undefined },
+): string {
+  const name = entry.name?.trim()
+  if (name !== undefined && name !== '') return name
+  const leaf = leafOfPath(entry.path)
+  if (kind === 'folder' || !isGeneratedDocumentPath(leaf)) return leaf
+  return `${UNTITLED_DOCUMENT_WORD}${leaf.slice('untitled'.length).replace('-', ' ')}`
+}
+
+/**
+ * The name a sibling of `target.path` already shows that `target.name`
+ * duplicates — the siblings being the entries of `others`, all of `kind`,
+ * directly under the same parent, each showing its `shownName` — or
+ * `undefined` when `target.name` is free. `others` leaves the target itself
+ * out, which only the caller can identify.
+ *
+ * The SIBLING's name is what a refusal quotes, never the one typed: "plan"
+ * beside a document called "Plan" would read as a claim that something is
+ * called "plan".
+ */
+export function siblingDisplayNameTaken(
+  kind: NamedEntryKind,
+  others: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   target: { readonly path: string; readonly name: string },
-): boolean {
-  const parent = parentOf(target.path)
+): string | undefined {
+  const parent = parentOfPath(target.path)
   const shown: string[] = []
   for (const other of others) {
-    if (parentOf(other.path) !== parent) continue
-    shown.push(other.name ?? other.path.slice(other.path.lastIndexOf('/') + 1))
+    if (parentOfPath(other.path) !== parent) continue
+    shown.push(shownName(kind, other))
   }
-  return isDisplayNameTaken(target.name, shown)
+  return siblingShowing(target.name, shown)
 }
 
 /**
- * Whether moving the entry at `from` to `to` makes it show a name a sibling
- * already shows. `staying` is every entry of the same KIND that is not part
- * of the moving subtree; `name` is the moving entry's own display name. An
- * entry that keeps the label it already showed under the same parent (an
- * unnamed one renamed in place changes its label; a named one does not) is
- * no new duplicate, so re-saving a form over one that merged in is not
- * refused.
+ * The name a sibling already shows that moving the entry at `from` to `to`
+ * would make it show too, or `undefined` when the move makes no duplicate.
+ * `staying` is every entry of the same KIND that is not part of the moving
+ * subtree; `name` is the moving entry's own display name. An entry that keeps
+ * the label it already showed under the same parent (an unnamed one renamed
+ * in place changes its label; a named one does not) is no new duplicate, so
+ * re-saving a form over one that merged in is not refused.
  */
-export function isMovedNameTaken(
-  staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+export function movedDisplayNameTaken(
+  kind: NamedEntryKind,
+  staying: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
-): boolean {
-  const segmentOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
-  const shown = move.name ?? segmentOf(move.to)
-  const wasShown = move.name ?? segmentOf(move.from)
+): string | undefined {
+  const shown = shownName(kind, { path: move.to, name: move.name })
+  const wasShown = shownName(kind, { path: move.from, name: move.name })
   if (
-    parentOf(move.from) === parentOf(move.to) &&
+    parentOfPath(move.from) === parentOfPath(move.to) &&
     displayNameKey(shown) === displayNameKey(wasShown)
   ) {
-    return false
+    return undefined
   }
-  return isSiblingDisplayNameTaken(staying, { path: move.to, name: shown })
+  return siblingDisplayNameTaken(kind, staying, { path: move.to, name: shown })
 }
 
 /**
  * The address an UNNAMED document takes so that it does not read like a
  * sibling. Nobody chose a label for it, so a label that duplicates a sibling's
  * name is not a mistake to refuse: it moves to the first `-2`, `-3`, ...
- * address that is free and shows a label no sibling does. `path` itself when
+ * address that is free and shows a label no sibling does — for a generated
+ * address, the next generated one (`untitled-3`, never `untitled-2-2`). `path` itself when
  * it already reads distinctly; `null` when no suffix in range is free or
  * valid.
  */
 export function firstDistinctUnnamedPath(
   path: string,
-  siblings: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+  siblings: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   isOccupied: (candidate: string) => boolean,
 ): string | null {
   const others = [...siblings]
   const reads = (candidate: string): boolean =>
-    isSiblingDisplayNameTaken(others, {
+    siblingDisplayNameTaken('document', others, {
       path: candidate,
-      name: candidate.slice(candidate.lastIndexOf('/') + 1),
-    })
+      name: shownName('document', { path: candidate }),
+    }) !== undefined
   if (!reads(path)) return path
+  // A generated address steps to the next generated one, so it still reads
+  // as "Untitled N" rather than as a raw `untitled-2-2`.
+  const parent = parentOfPath(path)
+  const stem = isGeneratedDocumentPath(path) ? `${parent === '' ? '' : `${parent}/`}untitled` : path
   for (let n = 2; n < 1000; n++) {
-    const candidate = `${path}-${n}`
+    const candidate = `${stem}-${n}`
     if (!documentPathSchema.safeParse(candidate).success) return null
     if (!isOccupied(candidate) && !reads(candidate)) return candidate
   }
   return null
-}
-
-function parentOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut)
 }

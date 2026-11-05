@@ -52,3 +52,31 @@ export function usePlaceByName(
     ],
   )
 }
+
+/**
+ * Moves the open document to a path the reader chose (Move to folder…), the
+ * same way a first rename places it: through the keeper's move, then the
+ * controller and the address follow. Rejects with the keeper's refusal, for
+ * the picker to show; resolves at once with no document open.
+ */
+export function useMoveByPath(
+  controller: Pick<
+    DaemonDocumentController,
+    'workspaceId' | 'path' | 'switchDocument' | 'refreshDocuments'
+  >,
+  daemonFetch: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  onPathMoved: ((path: string) => void) | undefined,
+): (to: string) => Promise<void> {
+  const { workspaceId, path, switchDocument, refreshDocuments } = controller
+  return useCallback(
+    async (to: string) => {
+      if (workspaceId === null || path === null || to === path) return
+      await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, to)
+      switchDocument(to)
+      refreshDocuments()
+      onPathMoved?.(to)
+    },
+    [daemonFetch, daemonBaseUrl, workspaceId, path, switchDocument, refreshDocuments, onPathMoved],
+  )
+}

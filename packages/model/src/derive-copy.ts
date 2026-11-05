@@ -1,4 +1,5 @@
 import { displayNameKey } from './display-name.js'
+import { leafOfPath, parentOfPath } from './document-path.js'
 import { DOCUMENT_NAME_MAX_LENGTH, DOCUMENT_PATH_MAX_LENGTH } from './ids.js'
 import { fitToLength } from './text-bound.js'
 
@@ -45,9 +46,9 @@ export function deriveCopyPath(
   existingPaths: ReadonlySet<string> | readonly string[],
 ): string | null {
   const existing = existingPaths instanceof Set ? existingPaths : new Set(existingPaths)
-  const cut = sourcePath.lastIndexOf('/') + 1
-  const folder = sourcePath.slice(0, cut)
-  const leaf = sourcePath.slice(cut)
+  const parent = parentOfPath(sourcePath)
+  const folder = parent === '' ? '' : `${parent}/`
+  const leaf = leafOfPath(sourcePath)
   const candidate = (suffix: string): string | null => {
     const room = DOCUMENT_PATH_MAX_LENGTH - folder.length - suffix.length
     // A path segment must end in a letter or digit, so a cut that lands just

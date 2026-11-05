@@ -23,7 +23,6 @@ import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
-import { safeSetItem } from '../../lib/safe-local-storage.js'
 import { openSceneLink } from '../../lib/scene-link.js'
 import { toggleTaskLine } from '../../lib/task-toggle.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
@@ -61,7 +60,7 @@ import { useLinkFollow } from './use-link-follow.js'
 import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
-import { readStoredViewMode, VIEW_MODE_STORAGE_KEY } from './view-mode-storage.js'
+import { useViewMode } from './view-mode-storage.js'
 import { type LinkTargetCreator, wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
@@ -375,21 +374,30 @@ export function MarkdownEditor({
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
 
   // The preview's lines are those of the debounced body; applying them to a
-  // newer one could flip a different item, so a click inside that window waits.
-  // Written through the source view whenever one is mounted: a CRDT-bound
-  // host makes `onChange` a no-op and takes edits only from the view.
-  const onToggleTask = (line: number) => {
-    if (value !== debouncedValue) return
+  // newer one could flip a different item, so a click inside that window is
+  // dropped. Written through the source view whenever one is mounted: a
+  // CRDT-bound host makes `onChange` a no-op and takes edits only from the view.
+  // Answers whether the line was rewritten.
+  const onToggleTask = (line: number): boolean => {
+    if (value !== debouncedValue) return false
     const api = sourceApiRef.current
-    if (api === null) return onChange(toggleTaskLine(value, line))
+    if (api === null) {
+      const next = toggleTaskLine(value, line)
+      if (next === value) return false
+      onChange(next)
+      return true
+    }
+    let toggled = false
     api.run(({ state, dispatch }) => {
       if (line > state.doc.lines) return false
       const at = state.doc.line(line)
       const next = toggleTaskLine(at.text, 1)
       if (next === at.text) return false
       dispatch(state.update({ changes: { from: at.from, to: at.to, insert: next } }))
+      toggled = true
       return true
     })
+    return toggled
   }
 
   // A document link's href is a bare id: meaningless to the browser, which
@@ -397,17 +405,7 @@ export function MarkdownEditor({
   const onPreviewClick = (event: ReactMouseEvent<HTMLDivElement>) =>
     openSceneLink(event, onOpenDocument)
 
-  const [mode, setMode] = useState<MarkdownViewMode>(() => initialViewMode ?? readStoredViewMode())
-  const changeMode = (next: MarkdownViewMode) => {
-    setMode(next)
-    // A mount with an explicit initial mode stays detached from the shared
-    // preference when the mode changes too — half an isolation (read the
-    // prop, still write the store) would leave the writer side poisoning
-    // concurrent mounts.
-    if (initialViewMode !== undefined) return
-    // Preference persistence is best-effort; the session state still works.
-    safeSetItem(VIEW_MODE_STORAGE_KEY, next)
-  }
+  const { mode, changeMode } = useViewMode(initialViewMode)
 
   // Source-pane share of the split, clamped so neither pane can vanish.
   const [splitRatio, setSplitRatio] = useState(0.5)

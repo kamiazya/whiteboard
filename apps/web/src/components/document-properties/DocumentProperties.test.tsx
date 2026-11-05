@@ -57,15 +57,31 @@ function meta(overrides: Partial<StoredCoreFacets> = {}): StoredCoreFacets {
 
 /** The two title props every render needs, defaulted to an unnamed document. */
 function titleProps(
-  overrides: { title?: string; onTitleChange?: (next: string) => Promise<string | null> } = {},
+  overrides: {
+    title?: string
+    unnamedTitle?: string
+    onTitleChange?: (next: string) => Promise<string | null>
+  } = {},
 ) {
-  return { title: '', onTitleChange: vi.fn(async () => null), ...overrides }
+  return {
+    title: '',
+    unnamedTitle: 'Untitled',
+    onTitleChange: vi.fn(async () => null),
+    ...overrides,
+  }
 }
 
 describe('DocumentProperties', () => {
   it('shows the workspace name as the title, without needing the panel opened', () => {
     render(<DocumentProperties {...titleProps({ title: 'Release plan' })} />)
     expect(textboxValue(/title/i)).toBe('Release plan')
+  })
+
+  it('shows an unnamed document the name the list shows for it', () => {
+    render(<DocumentProperties {...titleProps({ unnamedTitle: 'Untitled 2' })} />)
+    expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('placeholder')).toBe(
+      'Untitled 2',
+    )
   })
 
   it("labels the software keyboard's Enter as Done on the title field", () => {
@@ -235,6 +251,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     const view = () => (
       <DocumentProperties
         title={current === 'untitled' ? '' : current}
+        unnamedTitle="Untitled"
         onTitleChange={onTitleChange}
       />
     )

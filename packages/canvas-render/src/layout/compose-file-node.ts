@@ -3,6 +3,7 @@ import type { MdastFlowContent } from '@kamiazya/whiteboard-model/mdast'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import type { ResolvedReference } from '../references/resolved.js'
 import { referenceFor } from '../references/seams.js'
+import { withoutOverlays } from './comments.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import {
   chromeShape,
@@ -48,7 +49,7 @@ function composeFileEmbed(
   }
 
   const childScene = options.layoutNestedCanvas(child, {
-    ...options,
+    ...withoutOverlays(options),
     // Silhouettes resolve per CANVAS (in withCanvasTheme), keyed by that
     // canvas's own node ids: spreading the parent's map both drops the
     // child's facets and leaks a same-id root node's shape into the embedded

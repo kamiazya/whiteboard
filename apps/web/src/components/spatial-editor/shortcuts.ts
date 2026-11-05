@@ -46,6 +46,8 @@ export type ShortcutId =
   | 'edit-selected-node'
   | 'open-context-menu'
   | 'open-context-menu-shift-f10'
+  | 'leave-canvas-forward'
+  | 'leave-canvas-backward'
   | 'comment-on-selection'
   | 'undo'
   | 'redo'
@@ -153,7 +155,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     shift: false,
     display: 'Tab',
     description:
-      'Select the next node in reading order (the first, when none is selected); past the last node Tab leaves the canvas',
+      'Select the next node in reading order, visiting the connections and lines that leave each node after it (the first node, when none is selected); past the end Tab leaves the canvas',
     tools: ['select'],
   },
   {
@@ -163,7 +165,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     shift: true,
     display: 'Shift+Tab',
     description:
-      'Select the previous node in reading order; before the first node Shift+Tab leaves the canvas',
+      'Step back through the same walk of nodes, connections and lines; before the first node Shift+Tab leaves the canvas',
     tools: ['select'],
   },
   {
@@ -180,7 +182,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     section: 'Navigate',
     keys: ['Enter', 'F2'],
     display: 'Enter',
-    description: "Edit the selected node's text, or a group's label (also F2)",
+    description:
+      "Edit the selected node's text, a group's label, or a connection's or line's label (also F2)",
     tools: ['select'],
   },
   // The keyboard's right-click: the SELECTION's menu (the canvas's when
@@ -204,6 +207,24 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: "Open the selection's menu (the canvas menu when nothing is selected)",
     tools: ['select'],
   },
+  // The way off the canvas that keeps the selection: Tab walks it, and Escape
+  // then Tab lets go of it first. F6 is the platform's move-between-regions key.
+  {
+    id: 'leave-canvas-forward',
+    section: 'Navigate',
+    keys: ['F6'],
+    shift: false,
+    display: 'F6',
+    description: 'Leave the canvas for the next control, keeping the selection',
+  },
+  {
+    id: 'leave-canvas-backward',
+    section: 'Navigate',
+    keys: ['F6'],
+    shift: true,
+    display: 'Shift+F6',
+    description: 'Leave the canvas for the control before it (the header), keeping the selection',
+  },
   {
     id: 'toggle-lock',
     section: 'Edit',
@@ -225,7 +246,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     mod: true,
     alt: true,
     display: 'Cmd+Alt+M',
-    description: 'Comment on the selected node, nodes or edge',
+    description: 'Comment on the selected node, nodes or connection',
     tools: ['select'],
   },
   // Viewport framing (tldraw combos). Live in every tool — navigation is
@@ -406,7 +427,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     section: 'Edit',
     keys: ['Delete', 'Backspace'],
     display: 'Delete',
-    description: 'Delete the selected node(s) or edge',
+    description: 'Delete the selected node(s), connection or line',
     handledInline: true,
   },
   // Escape peels one layer per press: a gesture in flight first — in a text
@@ -422,7 +443,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     section: 'Edit',
     keys: ['Escape'],
     display: 'Esc',
-    description: 'Cancel the gesture or clear the selection; discards text being edited',
+    description:
+      'Cancel the gesture or clear the selection; on a connection reached with Tab, back to its node; discards text being edited',
     handledInline: true,
   },
   {

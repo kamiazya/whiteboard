@@ -120,6 +120,7 @@ export function EdgeLabelEditorOverlay({
       label={`Label of edge ${edgeRoute(edge, canvas.nodes)}`}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
+      singleLine
       {...labelDraft(palette, fontFamily)}
       onCommit={(label) => {
         const command = labelInkCommand(canvas, edge.id, label.trim())

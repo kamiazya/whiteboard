@@ -117,23 +117,23 @@ describe('nodeMenuItems', () => {
     expect(onToggleNodeLock).toHaveBeenCalledWith('a', false)
   })
 
-  it('offers Group selection on a single node, framing just that node', () => {
+  it('offers Frame selection on a single node, framing just that node', () => {
     const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
     const groupSelection = vi.fn()
     const items = nodeMenuItems(baseInput(textNode, canvas, { groupSelection }))
-    const groupItem = items.find((item) => labelOf(item) === 'Group selection')
+    const groupItem = items.find((item) => labelOf(item) === 'Frame selection')
     expect(groupItem).toBeDefined()
     ;(groupItem as { onSelect: () => void }).onSelect()
     expect(groupSelection).toHaveBeenCalledWith(['a'])
   })
 
-  it('offers Group selection over a multi-selection, framing every member', () => {
+  it('offers Frame selection over a multi-selection, framing every member', () => {
     const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
     const groupSelection = vi.fn()
     const withExtra = nodeMenuItems(
       baseInput(textNode, canvas, { extraIds: new Set(['b']), groupSelection }),
     )
-    const groupItem = withExtra.find((item) => labelOf(item) === 'Group selection')
+    const groupItem = withExtra.find((item) => labelOf(item) === 'Frame selection')
     expect(groupItem).toBeDefined()
     ;(groupItem as { onSelect: () => void }).onSelect()
     expect(groupSelection).toHaveBeenCalledWith(['a', 'b'])
@@ -186,7 +186,7 @@ describe('nodeMenuItems', () => {
       optionOf(items, 'Align', 'Align left')?.onSelect()
       expect(applyBoxMoves).toHaveBeenCalledTimes(1)
       expect(close).toHaveBeenCalledTimes(1)
-      expect(canvasAnnouncement()).toBe('Aligned 3 nodes left')
+      expect(canvasAnnouncement().trim()).toBe('Aligned 3 nodes left')
     })
 
     it('Distribute closes the menu and announces the axis', () => {
@@ -196,7 +196,7 @@ describe('nodeMenuItems', () => {
       )
       optionOf(items, 'Distribute', 'Distribute horizontally')?.onSelect()
       expect(close).toHaveBeenCalledTimes(1)
-      expect(canvasAnnouncement()).toBe('Distributed horizontally')
+      expect(canvasAnnouncement().trim()).toBe('Distributed horizontally')
     })
 
     it('Tidy, Lock and Unlock announce what they did', () => {
@@ -211,15 +211,15 @@ describe('nodeMenuItems', () => {
       const say = (label: string) => {
         const row = items.find((item) => labelOf(item) === label) as { onSelect: () => void }
         row.onSelect()
-        return canvasAnnouncement()
+        return canvasAnnouncement().trim()
       }
-      expect(say('Tidy')).toBe('Tidied')
+      expect(say('Tidy')).toBe('Already tidy')
       expect(say('Lock')).toBe('Locked 1 node')
       const unlock = nodeMenuItems(
         baseInput(textNode, canvas, { isLocked: () => true, onToggleNodeLock }),
       )[0] as { onSelect: () => void }
       unlock.onSelect()
-      expect(canvasAnnouncement()).toBe('Unlocked 1 node')
+      expect(canvasAnnouncement().trim()).toBe('Unlocked 1 node')
     })
   })
 

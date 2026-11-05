@@ -82,6 +82,33 @@ export function keyboardAvoidanceSubject(root: Element): Element | null {
   return active.closest('[data-editor-overlay]') ?? active
 }
 
+const sameView = (a: Viewport, b: Viewport): boolean =>
+  a.x === b.x && a.y === b.y && a.zoom === b.zoom
+
+/**
+ * The view before the first lift of an edit and the view the last lift left,
+ * so the lift can be taken back once nothing is being typed into. Left in
+ * place, every lift accumulated: notes added one after another at the same
+ * spot on screen landed a keyboard's height apart on the canvas. A view that
+ * is no longer the lifted one was panned by the user, and that pan is theirs
+ * to keep.
+ */
+function createLiftMemory() {
+  let lift: { readonly before: Viewport; lifted: Viewport } | null = null
+  return {
+    record(viewport: Viewport, next: Viewport) {
+      if (lift !== null && sameView(viewport, lift.lifted)) lift.lifted = next
+      else lift = { before: viewport, lifted: next }
+    },
+    restore(setViewport: (updater: (viewport: Viewport) => Viewport) => void) {
+      const pending = lift
+      if (pending === null) return
+      lift = null
+      setViewport((viewport) => (sameView(viewport, pending.lifted) ? pending.before : viewport))
+    },
+  }
+}
+
 export interface KeyboardAvoidanceInputs {
   readonly rootRef: { readonly current: HTMLDivElement | null }
   readonly containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
@@ -126,9 +153,10 @@ export function useKeyboardAvoidance({
     const root = rootRef.current
     if (root === null) return
     const visual = window.visualViewport ?? null
+    const lift = createLiftMemory()
     const apply = () => {
       const subject = keyboardAvoidanceSubject(root)
-      if (subject === null) return
+      if (subject === null) return lift.restore(setViewportRef.current)
       const containerSize = containerSizeOfRef.current(root)
       if (containerSize === null) return
       const rootRect = root.getBoundingClientRect()
@@ -163,7 +191,9 @@ export function useKeyboardAvoidance({
           width: screenBox.width / viewport.zoom,
           height: screenBox.height / viewport.zoom,
         }
-        return panToShowTarget(target, viewport, containerSize, { top, bottom }) ?? viewport
+        const next = panToShowTarget(target, viewport, containerSize, { top, bottom })
+        if (next !== undefined) lift.record(viewport, next)
+        return next ?? viewport
       })
     }
     // Focus is the entry: the keyboard may already be up (typing into one

@@ -8,7 +8,11 @@ import {
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { GFM } from '@lezer/markdown'
 import { describe, expect, it } from 'vitest'
-import { backspaceEmptyMarkup, exitEmptyListItem } from './exit-empty-list-item.js'
+import {
+  backspaceEmptyMarkup,
+  endListOnEmptyItem,
+  exitEmptyListItem,
+} from './exit-empty-list-item.js'
 
 function apply(doc: string, caret: number): string | null {
   const state = EditorState.create({ doc, selection: EditorSelection.single(caret) })
@@ -85,6 +89,52 @@ describe('Enter on a quote through the editor chain', () => {
     const afterFirst = enter('> one\n> ')
     expect(afterFirst).toBe('> one\n')
     expect(enter(afterFirst)).toBe('> one\n\n')
+  })
+})
+
+describe('endListOnEmptyItem', () => {
+  function end(doc: string): { doc: string; caret: number } | null {
+    const state = EditorState.create({ doc, selection: EditorSelection.single(doc.length) })
+    let next: { doc: string; caret: number } | null = null
+    const handled = endListOnEmptyItem({
+      state,
+      dispatch: (tr) => {
+        next = { doc: tr.state.doc.toString(), caret: tr.state.selection.main.head }
+      },
+    })
+    return handled ? next : null
+  }
+
+  it('leaves a blank line after a bullet, task or numbered list, caret below it', () => {
+    expect(end('- one\n- ')).toEqual({ doc: '- one\n\n', caret: 7 })
+    expect(end('- [ ] one\n- [ ] ')).toEqual({ doc: '- [ ] one\n\n', caret: 11 })
+    expect(end('1. one\n2. ')).toEqual({ doc: '1. one\n\n', caret: 8 })
+  })
+
+  it('keeps the quote around a list it ends, on both lines', () => {
+    expect(end('> - one\n> - ')).toEqual({ doc: '> - one\n>\n> ', caret: 12 })
+  })
+
+  it('adds no second blank line when one already ends the list', () => {
+    expect(end('- one\n\n- ')).toEqual({ doc: '- one\n\n', caret: 7 })
+    expect(end('- ')).toEqual({ doc: '', caret: 0 })
+  })
+
+  it('treats a quote line like the plain exit, and stands aside on content', () => {
+    expect(end('> one\n> ')).toEqual({ doc: '> one\n', caret: 6 })
+    expect(end('- one')).toBeNull()
+  })
+
+  it('makes the next typed line a paragraph of its own, not part of the last item', () => {
+    const ended = end('- [ ] Kettle\n- [ ] Worksheet\n- [ ] ')
+    const typed = `${ended?.doc ?? ''}Diagram: hello`
+    const tree = markdown({ extensions: [GFM] }).language.parser.parse(typed)
+    const top: string[] = []
+    const cursor = tree.cursor()
+    cursor.firstChild()
+    do top.push(cursor.name)
+    while (cursor.nextSibling())
+    expect(top).toEqual(['BulletList', 'Paragraph'])
   })
 })
 

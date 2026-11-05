@@ -410,6 +410,24 @@ describe('the theme face a row needs', () => {
     )
   })
 
+  // A thumbnail is the board alone: the comments on it stay on its page, as
+  // the PNG export leaves them.
+  it('asks the worker to draw the board without its comments', async () => {
+    pool.run.mockResolvedValue({ type: 'laid-out', id: 1, svg: SVG, bounds: BOUNDS })
+
+    await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => [],
+    })(board)
+
+    expect(pool.run).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'layout', commentLayer: false }),
+      'background',
+    )
+  })
+
   // The fetch is on USE: a folder of boards that name no theme costs no
   // font request at all, which is what keeps this off the startup path.
   it('asks for nothing when the worker measured everything the board wanted', async () => {

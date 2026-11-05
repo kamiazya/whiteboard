@@ -1,3 +1,4 @@
+import { leafOfPath } from '@kamiazya/whiteboard-model'
 /**
  * How much text either side of the match an excerpt carries, in UTF-16 code
  * units. Exported so a test can place a character exactly on the cut boundary
@@ -39,14 +40,10 @@ export function linkLabelsFrom(
   const names = new Map<string, string>()
   for (const { documentId, path, name } of entries) {
     // By id, even unnamed: the id is no word anybody reads, the path's leaf is.
-    names.set(documentId, name ?? leafOf(path))
+    names.set(documentId, name ?? leafOfPath(path))
     if (name !== undefined) names.set(path, name)
   }
   return (target) => names.get(target)
-}
-
-function leafOf(target: string): string {
-  return target.slice(target.lastIndexOf('/') + 1)
 }
 
 /** `[[target#Heading|alias]]`'s inner text as a reader sees it. */
@@ -56,7 +53,7 @@ function linkText(inner: string, labelOf: LinkLabel | undefined): string {
   const hash = inner.indexOf('#')
   const target = (hash === -1 ? inner : inner.slice(0, hash)).trim()
   const heading = hash === -1 ? '' : inner.slice(hash + 1).trim()
-  const label = target === '' ? '' : (labelOf?.(target) ?? leafOf(target))
+  const label = target === '' ? '' : (labelOf?.(target) ?? leafOfPath(target))
   if (heading === '') return label
   return label === '' ? heading : `${label} › ${heading}`
 }

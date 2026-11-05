@@ -18,6 +18,7 @@ import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
 import { DaemonAddress } from './connection/DaemonAddress.js'
 import { ExtensionConnectEntry } from './connection/ExtensionConnectEntry.js'
+import { SkipToContent } from './shell/SkipToContent.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 
 /**
@@ -287,8 +288,10 @@ function ShellBar({
   } = useShellWorkspaceRows(workspaces, location.pathname)
 
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-chrome pointer-coarse:h-12">
-      {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
+    <>
+      <SkipToContent />
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-chrome pointer-coarse:h-12">
+        {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
           Switcher"): it names the workspace in its accessible name, opens the
           popover that lists the others, and carries the session state when a
           page published one. It opens on every page — the workspace is a fact
@@ -297,62 +300,63 @@ function ShellBar({
           replacement destination: a whole-account view of every document is a
           state this product does not have, and leaving a document is the
           page's own affordance. */}
-      <ConnectionStatus
-        state={connection?.state ?? null}
-        daemonBaseUrl={daemonBaseUrl}
-        lastWrittenAt={connection?.lastWrittenAt ?? null}
-        {...(activeName === undefined ? {} : { workspaceName: activeName })}
-        workspaceMenu={
-          // Rendered whenever a keeper published a switcher, INCLUDING when
-          // the address names no workspace. A daemon holding nothing serves
-          // `/`, and this menu is the only place creation is offered — so
-          // requiring a handle here left a fresh daemon with no way to make
-          // its first workspace, the one thing this menu exists to make
-          // possible. With no handle the menu simply has no current
-          // row: the rename section is already behind `active !== undefined`,
-          // so it degrades to a list and a create button on its own.
-          workspaces ? (
-            <WorkspaceMenu
-              current={workspaceHandleInAddress}
-              workspaces={rows}
-              source={workspaces.source}
-              onSwitch={workspaces.onSwitch}
-              sessionLabel={connectionLabel(connection?.state ?? null)}
-              onRenamed={applyRename}
-              onCounted={applyCounts}
+        <ConnectionStatus
+          state={connection?.state ?? null}
+          daemonBaseUrl={daemonBaseUrl}
+          lastWrittenAt={connection?.lastWrittenAt ?? null}
+          {...(activeName === undefined ? {} : { workspaceName: activeName })}
+          workspaceMenu={
+            // Rendered whenever a keeper published a switcher, INCLUDING when
+            // the address names no workspace. A daemon holding nothing serves
+            // `/`, and this menu is the only place creation is offered — so
+            // requiring a handle here left a fresh daemon with no way to make
+            // its first workspace, the one thing this menu exists to make
+            // possible. With no handle the menu simply has no current
+            // row: the rename section is already behind `active !== undefined`,
+            // so it degrades to a list and a create button on its own.
+            workspaces ? (
+              <WorkspaceMenu
+                current={workspaceHandleInAddress}
+                workspaces={rows}
+                source={workspaces.source}
+                onSwitch={workspaces.onSwitch}
+                sessionLabel={connectionLabel(connection?.state ?? null)}
+                onRenamed={applyRename}
+                onCounted={applyCounts}
+              />
+            ) : undefined
+          }
+          onWorkInBrowser={onWorkInBrowser}
+        >
+          {connection?.state.keeper === 'daemon' && (
+            <ReplicaCacheNotice
+              settingsStore={settingsStore}
+              workspaceId={activeRow?.workspaceId ?? null}
             />
-          ) : undefined
-        }
-        onWorkInBrowser={onWorkInBrowser}
-      >
-        {connection?.state.keeper === 'daemon' && (
-          <ReplicaCacheNotice
-            settingsStore={settingsStore}
-            workspaceId={activeRow?.workspaceId ?? null}
-          />
-        )}
-        {connection?.state.keeper === 'browser' && (
-          <BrowserKeeperConnect settingsStore={settingsStore} />
-        )}
-      </ConnectionStatus>
-      <AlphaBadge />
-      <span className="min-w-0 flex-1" />
-      {/* Hidden rather than disabled where the browser has no element
+          )}
+          {connection?.state.keeper === 'browser' && (
+            <BrowserKeeperConnect settingsStore={settingsStore} />
+          )}
+        </ConnectionStatus>
+        <AlphaBadge />
+        <span className="min-w-0 flex-1" />
+        {/* Hidden rather than disabled where the browser has no element
           fullscreen (iPhone Safari — video-only): a disabled control still
           claims row space and invites a tap that can never work, and there
           is nothing the user could change to enable it. */}
-      {fullscreen.supported && (
-        <FullscreenButton buttonRef={toggleRef} onEnter={fullscreen.toggle} />
-      )}
-      <SettingsButton
-        nudge={nudge}
-        onOpen={() =>
-          navigate(settingsPath(), {
-            state: { from: `${location.pathname}${location.search}` },
-          })
-        }
-      />
-    </header>
+        {fullscreen.supported && (
+          <FullscreenButton buttonRef={toggleRef} onEnter={fullscreen.toggle} />
+        )}
+        <SettingsButton
+          nudge={nudge}
+          onOpen={() =>
+            navigate(settingsPath(), {
+              state: { from: `${location.pathname}${location.search}` },
+            })
+          }
+        />
+      </header>
+    </>
   )
 }
 

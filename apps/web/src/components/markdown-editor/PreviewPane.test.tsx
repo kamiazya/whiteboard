@@ -108,6 +108,25 @@ describe('PreviewPane', () => {
       expect(onToggleTask.mock.calls).toEqual([[3], [3]])
     })
 
+    it('announces nothing for a press the editor dropped, even once the box changes', () => {
+      const pane = (value: string) => (
+        <PreviewPane
+          theme="light"
+          value={value}
+          maxWidth={480}
+          measure={fakeMeasure}
+          onToggleTask={() => false}
+        />
+      )
+      const { container, rerender } = render(pane(source))
+      fireEvent.click(boxes(container)[0] as Element)
+      rerender(pane(source.replace('- [ ] first', '- [x] first')))
+      expect(boxes(container)[0]?.getAttribute('aria-checked')).toBe('true')
+      expect(container.querySelector('[data-testid="task-announcement"]')?.textContent ?? '').toBe(
+        '',
+      )
+    })
+
     it('does nothing when the boxes drawn do not match the task lines in the source', () => {
       const onToggleTask = vi.fn()
       // A box the source has no task line for (an embedded note's, say) must not

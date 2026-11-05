@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { messageOf, parentOfPath } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import { addressForNameIn } from '../../lib/address-from-name.js'
@@ -459,9 +459,7 @@ export function WorkspaceFilesPanel({
       if (query.trim() !== '' && next.trim() === '') {
         setSelected((current) => {
           if (current === null) return null
-          const cut = current.path.lastIndexOf('/')
-          const parent = cut === -1 ? '' : current.path.slice(0, cut)
-          return parent === folder ? current : null
+          return parentOfPath(current.path) === folder ? current : null
         })
       }
       // Entering a search swaps the listing for results, so the selection made
@@ -536,7 +534,7 @@ export function WorkspaceFilesPanel({
         return
       }
       await refreshAndSelect(newPath)
-      const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
+      const landedIn = parentOfPath(newPath)
       setFolder(landedIn)
       onFolderChangeRef.current?.(landedIn)
     },
@@ -545,7 +543,13 @@ export function WorkspaceFilesPanel({
   // The rename flow owns its own three states (see use-rename-document.ts)
   // and takes `moveDocument` directly — it is declared above, so no ref
   // bridges the two.
-  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect, listed: listedRef })
+  const rename = useRenameDocument({
+    source,
+    moveDocument,
+    refreshAndSelect,
+    listed: listedRef,
+    rootRef,
+  })
   const importer = useImportFiles({
     source,
     folder,
@@ -837,6 +841,7 @@ export function WorkspaceFilesPanel({
             busy={rename.busy}
             error={rename.error}
             onCancel={rename.cancel}
+            onCloseAutoFocus={rename.onCloseAutoFocus}
             onSubmit={(name, newPath) => {
               if (rename.renaming === null) return
               void rename.submit(rename.renaming, name, newPath)

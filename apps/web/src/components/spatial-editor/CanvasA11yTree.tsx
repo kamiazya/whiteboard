@@ -1,9 +1,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
-import { readingOrder } from '../../lib/spatial/reading-order.js'
+import { type TraversalStop, traversalStops } from '../../lib/spatial/traversal-order.js'
 import { canvasChangeMessage, selectionMessage } from './canvas-announcement-text.js'
-import { edgeA11yName, nodeA11yName } from './node-a11y-name.js'
+import { inkA11yName, nodeA11yName } from './node-a11y-name.js'
 
 /** The id of the option standing for a node or an edge, under one canvas's prefix. */
 function a11yItemId(prefix: string, kind: 'node' | 'edge', id: string): string {
@@ -64,10 +64,40 @@ function A11yOption({
   return <div role="option" tabIndex={-1} id={id} aria-label={name} aria-selected={selected} />
 }
 
+/** One stop of the walk as its option: a node by its words, ink by what it joins. */
+function A11yStop({
+  canvas,
+  idPrefix,
+  stop,
+  selected,
+}: {
+  readonly canvas: SpatialCanvas
+  readonly idPrefix: string
+  readonly stop: TraversalStop
+  readonly selected: boolean
+}) {
+  if (stop.kind === 'ink') {
+    // Lines share the edge id space on purpose: one selection key names
+    // either, so the active descendant finds a selected stroke unchanged.
+    const name = inkA11yName(canvas, stop.id) ?? 'Connection'
+    return <A11yOption id={a11yItemId(idPrefix, 'edge', stop.id)} name={name} selected={selected} />
+  }
+  const node = canvas.nodes.find((entry) => entry.id === stop.id)
+  if (node === undefined) return null
+  return (
+    <A11yOption
+      id={a11yItemId(idPrefix, 'node', node.id)}
+      name={nodeA11yName(node)}
+      selected={selected}
+    />
+  )
+}
+
 /**
  * The canvas is drawn, so the accessibility tree has nothing to say about
- * its contents. This is the parallel projection: every node and edge as a
- * named, selectable option, in the order Tab walks them, off-screen. Focus
+ * its contents. This is the parallel projection: every node, connection and
+ * line as a named, selectable option — each node followed by the connections and lines
+ * that leave it, the order Tab walks them — off-screen. Focus
  * stays on the canvas root, which points at the selected option with
  * `aria-activedescendant` — the same virtual-focus arrangement a listbox uses.
  */
@@ -92,7 +122,10 @@ export function CanvasA11yTree({
     [primaryId, extraIds],
   )
   useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion)
-  const nodes = useMemo(() => readingOrder(canvas.nodes), [canvas.nodes])
+  const stops = useMemo(
+    () => traversalStops(canvas, { isNodeLocked: () => false, isInkLocked: () => false }),
+    [canvas],
+  )
   const selectedSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds])
   return (
     // Not a Tab stop and not a pointer target: the root keeps both jobs.
@@ -102,20 +135,13 @@ export function CanvasA11yTree({
       aria-multiselectable="true"
       className="sr-only pointer-events-none"
     >
-      {nodes.map((node) => (
-        <A11yOption
-          key={node.id}
-          id={a11yItemId(idPrefix, 'node', node.id)}
-          name={nodeA11yName(node)}
-          selected={selectedSet.has(node.id)}
-        />
-      ))}
-      {canvas.edges.map((edge) => (
-        <A11yOption
-          key={edge.id}
-          id={a11yItemId(idPrefix, 'edge', edge.id)}
-          name={edgeA11yName(edge, canvas.nodes)}
-          selected={edge.id === selectedEdgeId}
+      {stops.map((stop) => (
+        <A11yStop
+          key={`${stop.kind}-${stop.id}`}
+          canvas={canvas}
+          idPrefix={idPrefix}
+          stop={stop}
+          selected={stop.kind === 'node' ? selectedSet.has(stop.id) : stop.id === selectedEdgeId}
         />
       ))}
     </div>

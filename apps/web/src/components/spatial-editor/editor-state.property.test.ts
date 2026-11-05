@@ -482,6 +482,10 @@ const SHORTCUT_COVERAGE = {
     'not modelled: opens the selection menu — covered by keyboard-context-menu.browser.test.tsx',
   'open-context-menu-shift-f10':
     'not modelled: opens the selection menu — covered by keyboard-context-menu.browser.test.tsx',
+  'leave-canvas-forward':
+    'not modelled: moves focus off the canvas root and writes no state — covered by canvas-leave-keeps-selection.browser.test.tsx',
+  'leave-canvas-backward':
+    'not modelled: moves focus off the canvas root and writes no state — covered by canvas-leave-keeps-selection.browser.test.tsx',
   'comment-on-selection':
     'not modelled: opens the annotation composer, which writes no canvas, gesture or selection state — covered by comment-shortcut.browser.test.tsx',
   undo: 'not modelled: steps the document history in the pane listener — covered by useDocumentSync tests',

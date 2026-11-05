@@ -53,12 +53,6 @@ export type SpatialEditorPassedThrough = Pick<
 export interface SpatialEditorPaneProps extends SpatialEditorPassedThrough {
   /** Keys the editor on canvas identity — see the comment at the render. */
   editorKey: string
-  /**
-   * Whether the document behind `canvas` has loaded. The initial tool is
-   * decided from the canvas's own shape, but only then — at mount every
-   * canvas still looks empty.
-   */
-  canvasLoaded: boolean
   /** From `useDocumentFileSeams`; spread onto the editor here, once. */
   fileSeams: DocumentFileSeams
   /** From `useNodeInEditor`; wires the editor and the overlay coherently. */
@@ -86,7 +80,6 @@ export interface SpatialEditorPaneProps extends SpatialEditorPassedThrough {
 
 export function SpatialEditorPane({
   editorKey,
-  canvasLoaded,
   fileSeams,
   nodeInEditor,
   onOpenDocument,
@@ -102,19 +95,17 @@ export function SpatialEditorPane({
   // picked, typed and silently dropped.
   ...editorProps
 }: SpatialEditorPaneProps) {
-  const { canvas, theme, tagLibrary } = editorProps
+  const { theme, tagLibrary } = editorProps
   // The overlay's markdown editor reads the seams as functions; it builds
   // them from the same wire the canvas posts to its worker.
   const overlaySeams = useMemo(
     () => referenceSeamsFromWire(fileSeams.references),
     [fileSeams.references],
   )
-  const initialTool = canvasLoaded
-    ? resolveInitialTool({
-        isEmpty: canvas.nodes.length === 0,
-        lastTool: readLastTool(editorKey),
-      })
-    : undefined
+  const initialTool = useMemo(
+    () => resolveInitialTool({ lastTool: readLastTool(editorKey) }),
+    [editorKey],
+  )
   const rememberTool = useRememberedTool(editorKey, initialTool)
   return (
     <div data-testid="spatial-editor-container" className={className}>
@@ -128,7 +119,7 @@ export function SpatialEditorPane({
           viewport. */}
       <SpatialEditor
         key={editorKey}
-        initialTool={initialTool}
+        defaultTool={initialTool}
         onToolChosen={rememberTool}
         viewportKey={editorKey}
         ref={editorRef}

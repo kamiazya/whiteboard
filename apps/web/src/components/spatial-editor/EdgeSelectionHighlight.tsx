@@ -36,7 +36,7 @@ export function EdgeSelectionHighlight({
         pointerEvents: 'none',
       }}
     >
-      <title>Selected connection</title>
+      <title>Selection</title>
       <g transform={offset === undefined ? undefined : `translate(${offset.x} ${offset.y})`}>
         {/* ONE element for the whole selection, each stroke a subpath. A
           keyed list of <polyline>s is the obvious shape and was tried: in

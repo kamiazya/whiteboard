@@ -14,6 +14,7 @@ function renderRow() {
       <DocumentProperties
         inline
         title="Commute notes and other things"
+        unnamedTitle="Untitled"
         onTitleChange={vi.fn(async () => null)}
         actions={
           <>

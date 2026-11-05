@@ -13,9 +13,9 @@ import { pathBelow } from '@kamiazya/whiteboard-model'
  * `untitled-N`; `pathAfterFirstRename` is the one place a name later gives a
  * still-generated path its address, and it leaves a name with no address alone.
  *
- * Its inverse is loro-adapter's `isGeneratedDocumentPath`, which every keeper
- * reads to decide whether a heading may still name a document; a property
- * beside this file holds the two to each other through that seeding.
+ * Its inverse is model's `isGeneratedDocumentPath`, which every keeper reads
+ * to decide whether a heading may still name a document and what an unnamed
+ * one reads as; properties beside this file hold the two to each other.
  */
 export function newDocumentPathIn(folder: string, existingPaths: readonly string[]): string {
   // Anchored at a segment boundary, so `design-system/untitled` is not
@@ -34,17 +34,4 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
   let n = 2
   while (siblings.has(`untitled-${n}`)) n++
   return `${prefix}untitled-${n}`
-}
-
-/**
- * Whether a path is one `newDocumentPathIn` chose rather than one a person
- * did — the last segment is `untitled` or `untitled-N` for N >= 2.
- *
- * It is the inverse the first rename reads to decide the address may still
- * follow the name. loro-adapter keeps its own copy for the heading-naming
- * gate; the property beside this file holds this one to the generator.
- */
-export function isGeneratedPath(path: string): boolean {
-  const last = path.slice(path.lastIndexOf('/') + 1)
-  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(last)
 }

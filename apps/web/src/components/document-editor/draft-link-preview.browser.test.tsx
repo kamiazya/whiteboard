@@ -66,7 +66,6 @@ function Harness({ adapter }: { readonly adapter: DocumentFileAdapter }) {
       </button>
       <SpatialEditorPane
         editorKey="doc"
-        canvasLoaded
         fileSeams={fileSeams}
         nodeInEditor={nodeInEditor}
         onOpenDocument={() => {}}

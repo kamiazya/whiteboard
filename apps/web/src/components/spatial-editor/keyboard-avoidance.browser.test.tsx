@@ -8,7 +8,7 @@
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -333,4 +333,40 @@ it('a focused button raises no keyboard, so it moves nothing', async () => {
   await new Promise((resolve) => requestAnimationFrame(resolve))
   await new Promise((resolve) => requestAnimationFrame(resolve))
   expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+})
+
+it('returns the view to where it was once the edit ends and the keyboard closes', async () => {
+  const fake = installFakeVisualViewport()
+  const { container } = render(<Host start={canvasWithNodeAt(400)} />)
+  await startEditing(container, { x: 200, y: 450 })
+  raiseKeyboard(fake, rootOf(container), 300)
+  await vi.waitFor(() => expect(transformOf(container)).not.toBe('scale(1) translate(0px, 0px)'))
+
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
+  fake.height = window.innerHeight
+  fake.dispatchEvent(new Event('resize'))
+
+  await vi.waitFor(() => expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)'))
+})
+
+it('keeps a pan the user made while the keyboard was up', async () => {
+  const fake = installFakeVisualViewport()
+  const { container } = render(<Host start={canvasWithNodeAt(400)} />)
+  await startEditing(container, { x: 200, y: 450 })
+  raiseKeyboard(fake, rootOf(container), 300)
+  await vi.waitFor(() => expect(transformOf(container)).not.toBe('scale(1) translate(0px, 0px)'))
+  const lifted = transformOf(container)
+
+  fireEvent.wheel(rootOf(container), { deltaX: 0, deltaY: 30, clientX: 600, clientY: 100 })
+  await vi.waitFor(() => expect(transformOf(container)).not.toBe(lifted))
+  const panned = transformOf(container)
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
+  fake.height = window.innerHeight
+  // act flushes the view update a restore would make, so nothing pending is missed.
+  await act(async () => {
+    fake.dispatchEvent(new Event('resize'))
+  })
+  expect(transformOf(container)).toBe(panned)
 })

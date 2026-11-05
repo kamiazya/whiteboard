@@ -20,12 +20,84 @@ import {
   visibleSize,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
-import { sameInsets } from '../../lib/spatial/viewport-insets.js'
+import { insetsClearingCorners, sameInsets } from '../../lib/spatial/viewport-insets.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 import { initialViewport, useRememberViewport } from './use-viewport-memory.js'
 import { useVisibleInsets } from './use-visible-insets.js'
 
 /** Margin around framed content, in screen px. */
 const FRAME_MARGIN_PX = 24
+
+/**
+ * Screen px a framed top row needs above it for the tool chip a selection
+ * draws there — a 44px touch slot and its 6px gap. Framed flush, the chip of
+ * a selected top row sat under the page header, out of reach.
+ */
+const NODE_TOOLS_CLEARANCE_PX = 50
+
+/**
+ * The insets a framing verb fits content inside: the panels over the root,
+ * plus the dock floating over its bottom edge and room for the selection's
+ * tool chip along its top.
+ */
+function framingInsets(insets: ViewportOcclusion): Required<ViewportOcclusion> {
+  return {
+    top: Math.max(NODE_TOOLS_CLEARANCE_PX, insets.top ?? 0),
+    bottom: Math.max(DOCK_OCCLUSION_PX, insets.bottom ?? 0),
+    left: insets.left ?? 0,
+    right: insets.right ?? 0,
+  }
+}
+
+/** Cards floating in a corner of the root (`data-viewport-corner`, the overview map), root-local. */
+function cornerCards(
+  root: HTMLElement,
+): { left: number; top: number; right: number; bottom: number }[] {
+  const at = root.getBoundingClientRect()
+  return [...root.querySelectorAll<HTMLElement>('[data-viewport-corner]')].map((card) => {
+    const r = card.getBoundingClientRect()
+    return {
+      left: r.left - at.left,
+      top: r.top - at.top,
+      right: r.right - at.left,
+      bottom: r.bottom - at.top,
+    }
+  })
+}
+
+/**
+ * Frames `bounds` inside the framing insets — and, when that would put one of
+ * the framed `boxes` under a corner card, frames it again clear of the card.
+ * Only then: a lone note fitted to the middle stays in the middle.
+ */
+function frameClearOfCorners(
+  bounds: NonNullable<ReturnType<typeof contentBounds>>,
+  boxes: readonly NodeBox[],
+  size: ContainerSize | null,
+  zoom: number,
+  insets: ViewportOcclusion,
+  root: HTMLElement | null,
+): Viewport {
+  const base = framingInsets(insets)
+  const plain = frameViewport(bounds, size, zoom, FRAME_MARGIN_PX, base)
+  const cards = root === null || size === null ? [] : cornerCards(root)
+  const under = boxes.some(({ box }) => {
+    const left = (box.x - plain.x) * plain.zoom
+    const top = (box.y - plain.y) * plain.zoom
+    const right = left + box.width * plain.zoom
+    const bottom = top + box.height * plain.zoom
+    return cards.some((c) => left < c.right && c.left < right && top < c.bottom && c.top < bottom)
+  })
+  if (!under || size === null) return plain
+  const rootRect = { left: 0, top: 0, right: size.width, bottom: size.height }
+  return frameViewport(
+    bounds,
+    size,
+    zoom,
+    FRAME_MARGIN_PX,
+    insetsClearingCorners(rootRect, cards, base),
+  )
+}
 
 export interface ViewportControlsInputs {
   rootRef: { current: HTMLDivElement | null }
@@ -80,7 +152,7 @@ function useOpenOnContent({
     if (anyBoxVisible(boxes, shifted, visibleSize(size, insets))) return
     const bounds = contentBounds(boxes)
     if (bounds === undefined) return
-    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX, insets))
+    setViewport(frameClearOfCorners(bounds, boxes, size, viewport.zoom, insets, rootRef.current))
   })
 }
 
@@ -165,7 +237,10 @@ export function useViewportControls({
     if (bounds === undefined) return false
     const containerSize = containerSizeOf(rootRef.current)
     const insets = insetsOf()
-    setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX, insets))
+    const framed = ids === undefined ? boxes : boxes.filter(({ id }) => ids.has(id))
+    setViewport((vp) =>
+      frameClearOfCorners(bounds, framed, containerSize, vp.zoom, insets, rootRef.current),
+    )
     return true
   }
 

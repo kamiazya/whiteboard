@@ -3,10 +3,11 @@ import {
   deriveCopyPath,
   firstDistinctUnnamedPath,
   generateDocumentId,
-  isMovedNameTaken,
   isSelfOrDescendant,
-  isSiblingDisplayNameTaken,
+  movedDisplayNameTaken,
   SINGLE_PERSON_NAMESPACE,
+  shownName,
+  siblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
 import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
 import type {
@@ -166,9 +167,11 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       throw new DocumentPathTakenError(workspaceId, path)
     }
     refuseNewDocuments(documents.size)
-    if (name !== undefined && isSiblingDisplayNameTaken(documents.values(), { path, name })) {
-      throw new DisplayNameTakenError('document', path, name)
-    }
+    const shown =
+      name === undefined
+        ? undefined
+        : siblingDisplayNameTaken('document', documents.values(), { path, name })
+    if (shown !== undefined) throw new DisplayNameTakenError('document', path, shown)
     if (name === undefined) {
       const distinct = firstDistinctUnnamedPath(path, documents.values(), (each) =>
         documents.has(each),
@@ -209,9 +212,10 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     for (const [path, entry] of documents) {
       if (entry.documentId !== documentId) continue
       const others = [...documents.values()].filter((other) => other.documentId !== documentId)
-      if (name?.trim() && isSiblingDisplayNameTaken(others, { path, name })) {
-        throw new DisplayNameTakenError('document', path, name)
-      }
+      const shown = name?.trim()
+        ? siblingDisplayNameTaken('document', others, { path, name })
+        : undefined
+      if (shown !== undefined) throw new DisplayNameTakenError('document', path, shown)
       const { name: _dropped, ...rest } = entry
       documents.set(path, { ...rest, ...(name?.trim() ? { name } : {}) })
       return
@@ -275,13 +279,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       const staying = [...documents.values()].filter(
         (entry) => !isSelfOrDescendant(entry.path, from),
       )
-      if (isMovedNameTaken(staying, { from, to, name: root.name })) {
-        throw new DisplayNameTakenError(
-          'document',
-          to,
-          root.name ?? to.slice(to.lastIndexOf('/') + 1),
-        )
-      }
+      const shown = movedDisplayNameTaken('document', staying, { from, to, name: root.name })
+      if (shown !== undefined) throw new DisplayNameTakenError('document', to, shown)
     }
     for (const move of plan.moves) {
       const entry = documents.get(move.from)
@@ -317,8 +316,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       path: copyPath,
       kind: source.kind,
       name: deriveCopyName(
-        source.name ?? source.path,
-        [...documents.values()].map((entry) => entry.name ?? entry.path),
+        shownName('document', source),
+        [...documents.values()].map((entry) => shownName('document', entry)),
       ),
     }
     copyContent(source.documentId, copy.documentId)

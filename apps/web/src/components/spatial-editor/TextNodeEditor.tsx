@@ -186,7 +186,7 @@ export function TextNodeEditor({
         ref={textareaRef}
         aria-label={label}
         aria-describedby={hintId}
-        aria-keyshortcuts="Meta+Enter Control+Enter"
+        aria-keyshortcuts={singleLine ? 'Enter' : 'Meta+Enter Control+Enter'}
         data-testid={testId}
         placeholder={placeholder}
         value={value}
@@ -223,12 +223,13 @@ export function TextNodeEditor({
           }
         }}
       />
-      <EditorExitDescription id={hintId} />
+      <EditorExitDescription id={hintId} singleLine={singleLine} />
       {refusal !== null && <LengthLimitNotice box={box} testId={testId} text={refusal} />}
       <EditorExitHint
         onDone={commitAndReturn}
         onCancel={cancelAndReturn}
         canvasOverlay
+        singleLine={singleLine}
         placement={{
           left: box.x,
           right: box.x + box.width,

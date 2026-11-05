@@ -168,6 +168,9 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // delete, which is the worst place for that class of mistake.
   selection: 'cleared on switch',
   renaming: 'cleared on switch',
+  // Where a saved rename landed, spent by the dialog's close; the reset's
+  // cancel drops it too, so a switch never focuses the departed card's path.
+  landing: 'cleared on switch',
   // The rename form's refusal and in-flight flag, named from inside its own
   // hook. Cleared with the dialog, which the reset closes.
   error: 'cleared on switch',
@@ -469,6 +472,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // supplies the "list" the old prefixes carried.
   generationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
+  openMovePickerRef:
+    'no subject: the Move to folder picker’s opener, reassigned by MoveOpenDocument on every render from the path it is given — it holds no document of its own, so a switch re-renders it with the new path',
   currentDocumentIdRef:
     'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
   isFirstDocumentUrlSyncRef:
@@ -513,6 +518,8 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // same rule, same wording as the browser page's entries for them.
   duplicateError: 'cleared on switch',
   isDuplicating: 'cleared on switch',
+  openMovePickerRef:
+    'no subject: the Move to folder picker’s opener, reassigned by MoveOpenDocument on every render from the path it is given — it holds no document of its own, so a switch re-renders it with the new path',
   currentDocumentIdRef:
     'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
 }

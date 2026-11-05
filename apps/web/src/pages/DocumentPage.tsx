@@ -39,6 +39,7 @@ import { useWhiteboardCommands } from '../hooks/use-whiteboard-commands.js'
 import type { SceneExportOptions } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { documentHeading } from '../lib/document-title.js'
 import { fileRefOptions } from '../lib/link-entries.js'
 import { pictureExportOptionsOf } from '../lib/picture-export-options.js'
 import { applyCommand } from '../lib/spatial/commands.js'
@@ -223,6 +224,7 @@ function DocumentHeader({
                     inline
                     key={documentKey}
                     title={model.title === 'top-bar' ? identity.name : model.title.value}
+                    unnamedTitle={documentHeading(undefined, topBar.path)}
                     onTitleChange={titleWriter(model, identity.onRename)}
                     {...settledProp(model, identity)}
                     finishFocusRef={headingRef}
@@ -749,7 +751,6 @@ function DocumentPageBody({
                 <SpatialEditorPane
                   className="relative h-full min-h-0"
                   editorKey={documentKey}
-                  canvasLoaded={sync.loaded}
                   editorRef={attachSpatialHandle}
                   {...agentTouchProps(model.spatial)}
                   canvas={sync.canvas}

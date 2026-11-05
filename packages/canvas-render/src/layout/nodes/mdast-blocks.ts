@@ -727,6 +727,52 @@ function layoutMathBlock(
   return fragment
 }
 
+/**
+ * A paragraph whose only content is one picture of KNOWN natural size: a
+ * figure, drawn at that size and scaled down to the column with its aspect
+ * kept. Still a paragraph holding one image run — the painter, passage
+ * anchoring and the outline read it exactly as they read an inline one —
+ * only the run's box is the picture's rather than a line's. `undefined`
+ * when the paragraph is anything else, so it is set as prose.
+ */
+function layoutFigure(
+  children: readonly MdastPhrasingContent[],
+  cursor: Cursor,
+  options: ResolvedMdastOptions,
+): ParagraphBlockNode | undefined {
+  const content = children.filter((child) => !(child.type === 'text' && child.value.trim() === ''))
+  const only = content.length === 1 ? content[0] : undefined
+  if (only?.type !== 'image') return undefined
+  const image = referenceFor(only.url, options.references?.resolveReference)?.image
+  if (image === undefined || !isFinitePositive(image.width) || !isFinitePositive(image.height)) {
+    return undefined
+  }
+  const column =
+    Number.isFinite(options.maxWidth) && options.maxWidth > 0 ? options.maxWidth : image.width
+  const scale = Math.min(1, column / image.width)
+  const box = {
+    x: cursor.x,
+    y: cursor.y,
+    w: image.width * scale,
+    h: image.height * scale,
+  }
+  const alt = only.alt === undefined || only.alt === null || only.alt === '' ? undefined : only.alt
+  const run: TextRunNode = {
+    kind: 'textRun',
+    bbox: box,
+    baseline: box.h,
+    text: alt ?? IMAGE_PLACEHOLDER,
+    paints: { kind: 'image', src: image.href },
+    appearance: {
+      ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+      fontFamily: options.fontFamily,
+      fontSize: options.theme.bodyFontSizePx,
+    },
+  }
+  cursor.y += box.h + options.theme.blockGapPx
+  return { kind: 'paragraph', bbox: box, runs: [run] }
+}
+
 function layoutBlock(
   node: MdastFlowContent,
   cursor: Cursor,
@@ -771,6 +817,8 @@ function layoutBlock(
       if (only?.type === 'embed' && options.resolveEmbed !== undefined) {
         return layoutEmbedBlock(only.documentId, only.fragment, cursor, options, embedPath)
       }
+      const figure = layoutFigure(node.children, cursor, options)
+      if (figure !== undefined) return figure
       const { runs, lineCount, inkWidth } = layoutPhrasing(
         node.children,
         cursor,

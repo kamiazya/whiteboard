@@ -137,6 +137,12 @@ describe('the picker’s hint at the pointer path', () => {
     expect(within(dialog).getByText(/drag a card onto a folder/)).toBeTruthy()
   })
 
+  it('pairs the drag with the keyboard way back to this dialog', async () => {
+    renderWithFolders()
+    const dialog = await openPicker('Login flow')
+    expect(within(dialog).getByText(/Shift\+F10 on a card/)).toBeTruthy()
+  })
+
   it('says nothing about dragging on a touch screen, where no drag is offered', async () => {
     const realMatchMedia = window.matchMedia
     window.matchMedia = (query: string) =>

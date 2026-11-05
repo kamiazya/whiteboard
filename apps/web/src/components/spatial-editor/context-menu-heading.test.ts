@@ -23,5 +23,5 @@ it('names an edge menu for the route it joins', () => {
   const a = textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' })
   const b = textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' })
   const edge = { id: 'e', from: { node: 'a' }, to: { node: 'b' } }
-  expect(contextMenuHeading({ ...none, edge }, [a, b], false).title).toBe('Edge from A to B')
+  expect(contextMenuHeading({ ...none, edge }, [a, b], false).title).toBe('Connection from A to B')
 })

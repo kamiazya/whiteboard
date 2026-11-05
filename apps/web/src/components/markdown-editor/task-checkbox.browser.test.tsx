@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { useReferenceSeams } from '../../hooks/use-reference-seams.js'
 import { MarkdownEditor, type MarkdownEditorProps } from './MarkdownEditor.js'
 
 afterEach(cleanup)
@@ -18,9 +19,19 @@ const BODY = ['# Plan', '', '- [ ] first', '  - [x] nested', '* [ ] star item'].
 
 let latest = BODY
 let writes: string[] = []
-function Harness({ mode }: { mode: NonNullable<MarkdownEditorProps['initialViewMode']> }) {
+function Harness({
+  mode,
+  debounced = false,
+}: {
+  mode: NonNullable<MarkdownEditorProps['initialViewMode']>
+  /** Keep the editor's own preview debounce, as the app does, rather than 0. */
+  debounced?: boolean
+}) {
   const [value, setValue] = useState(BODY)
   latest = value
+  // The page's seams follow the body at once, while the preview's text waits
+  // out the debounce — so the preview redraws twice for one tick.
+  const references = useReferenceSeams({ body: value, load: async () => undefined })
   return (
     <MarkdownEditor
       theme="light"
@@ -30,7 +41,7 @@ function Harness({ mode }: { mode: NonNullable<MarkdownEditorProps['initialViewM
         setValue(next)
       }}
       initialViewMode={mode}
-      previewDebounceMs={0}
+      {...(debounced ? { references } : { previewDebounceMs: 0 })}
     />
   )
 }
@@ -84,6 +95,22 @@ describe('task checkboxes in the preview', () => {
       .poll(() => document.querySelector('[data-testid="task-announcement"]')?.textContent)
       .toBe('star item: not checked')
     expect(document.activeElement).toBe(boxes()[2])
+  })
+})
+
+describe('a task ticked in Split while the preview waits out its debounce', () => {
+  it('announces the NEW state and keeps focus on the box once it redraws', async () => {
+    render(<Harness mode="split" debounced />)
+    await expect.poll(() => boxes().length).toBe(3)
+    ;(boxes()[0] as SVGElement).focus()
+    await userEvent.keyboard(' ')
+    await expect.poll(() => latest).toContain('- [x] first')
+    await expect.poll(() => boxes()[0]?.getAttribute('aria-checked')).toBe('true')
+    await expect
+      .poll(() => document.querySelector('[data-testid="task-announcement"]')?.textContent)
+      .toBe('first: checked')
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('first')
+    expect(document.activeElement).toBe(boxes()[0])
   })
 })
 
@@ -179,5 +206,51 @@ describe('a press near a task item that is not meant for it', () => {
     window.getSelection()?.removeAllRanges()
     await control()
     expect(latest).toContain('- [ ] first')
+  })
+})
+
+describe('a task box pressed while the source is ahead of the preview', () => {
+  function SlowPreview() {
+    const [value, setValue] = useState(BODY)
+    latest = value
+    // Long enough that every keystroke below lands inside the debounce.
+    return (
+      <MarkdownEditor
+        theme="light"
+        value={value}
+        onChange={setValue}
+        initialViewMode="split"
+        previewDebounceMs={60_000}
+      />
+    )
+  }
+
+  it('leaves focus in the source while typing continues', async () => {
+    render(<SlowPreview />)
+    await expect.poll(() => boxes().length).toBe(3)
+    const source = document.querySelector('.cm-content') as HTMLElement
+    source.focus()
+    await userEvent.keyboard('a')
+    await expect.poll(() => latest).toContain('a')
+    // Dropped: the preview's lines are older than the body.
+    await userEvent.click(boxes()[0] as Element)
+    source.focus()
+    await userEvent.keyboard('bc')
+    await expect.poll(() => latest).toContain('ab')
+    expect(source.contains(document.activeElement)).toBe(true)
+    expect(latest).toContain('- [ ] first')
+  })
+
+  it('stops waiting on a toggle once focus moves to the source', async () => {
+    render(<SlowPreview />)
+    await expect.poll(() => boxes().length).toBe(3)
+    // Lands in the body; the preview will not redraw it for a minute.
+    await userEvent.click(boxes()[0] as Element)
+    await expect.poll(() => latest).toContain('- [x] first')
+    const source = document.querySelector('.cm-content') as HTMLElement
+    source.focus()
+    await userEvent.keyboard('yz')
+    await expect.poll(() => latest).toContain('yz')
+    expect(source.contains(document.activeElement)).toBe(true)
   })
 })

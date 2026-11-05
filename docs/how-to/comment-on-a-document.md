@@ -58,6 +58,11 @@ here**. The comment is drawn as a pin with a bubble, connected by a dotted
 leader, and it also appears in the rail like any other conversation. Drag
 a pin to move where its comment points.
 
+A canvas's comments are drawn only on the canvas itself. Where the canvas is
+shown inside something else — embedded in a note with `![[…]]`, shown in a
+file node on another canvas, or as its picture in the documents list — it is
+drawn without them, the way **Export as PNG** leaves them out unless you ask.
+
 Each rail row names what it is about in a small chip — the node's first line
 ("on Sign-up form"), "on canvas" for a spot, "on an edge", or "whole
 document". Pressing a row moves the canvas to that place if it is off screen

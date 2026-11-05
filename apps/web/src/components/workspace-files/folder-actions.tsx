@@ -20,6 +20,8 @@ export interface FolderActions {
   /** A document was dropped on `folder`. */
   readonly dropInto: (folder: string, documentPath: string) => void
   readonly openFolderMenu: (folder: string, clientX: number, clientY: number) => void
+  /** Pick existing documents to move into `folder` — the empty folder's way to be kept. */
+  readonly gatherInto: (folder: string) => void
 }
 
 export const FolderActionsContext = createContext<FolderActions | undefined>(undefined)

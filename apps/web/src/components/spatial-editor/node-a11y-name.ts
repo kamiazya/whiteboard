@@ -1,13 +1,16 @@
 import {
+  type CanvasLine,
   frameLabel,
   isFrame,
   isImageRef,
   nodeFile,
   nodeText,
   nodeUrl,
+  type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { documentLabel } from '../../lib/document-label.js'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 
 const NAME_MAX_CHARS = 60
 
@@ -61,18 +64,42 @@ export function edgeRoute(edge: EdgeEnds, nodes: readonly SpatialNode[]): string
   return `from ${end(edge.from)} to ${end(edge.to)}`
 }
 
-/** "Edge from A to B", with the label after it when the edge has one. */
+/** An ink element's name, with its label after it when it has one. */
+function withLabel(base: string, ink: { readonly label?: string }): string {
+  const label = ink.label?.trim()
+  return label === undefined || label === '' ? base : `${base}: ${clip(label)}`
+}
+
+/** "Connection from A to B", with the label after it when the relation has one. */
 export function edgeA11yName(
   edge: EdgeEnds & { readonly label?: string },
   nodes: readonly SpatialNode[],
 ): string {
-  const base = `Edge ${edgeRoute(edge, nodes)}`
-  const label = edge.label?.trim()
-  return label === undefined || label === '' ? base : `${base}: ${clip(label)}`
+  return withLabel(`Connection ${edgeRoute(edge, nodes)}`, edge)
+}
+
+/**
+ * A LINE by name: "Drawing" for a stroke somebody drew, "Line from A to
+ * empty space" for one ruled between two points — never a connection, because
+ * a line asserts no relation (ADR-0038 decision 2).
+ */
+function lineA11yName(line: CanvasLine, nodes: readonly SpatialNode[]): string {
+  return withLabel(isFreehandStroke(line) ? 'Drawing' : `Line ${edgeRoute(line, nodes)}`, line)
 }
 
 /** What the controls around a selection act on: the one node by name, or how many when there are several. */
 export function selectionSubject(primary: SpatialNode | undefined, extraCount: number): string {
   if (primary === undefined || extraCount > 0) return `${1 + extraCount} nodes`
   return nodeA11yName(primary)
+}
+
+/** The name of a connection or a line by id, whichever collection holds it. */
+export function inkA11yName(
+  canvas: Pick<SpatialCanvas, 'nodes' | 'edges' | 'lines'>,
+  id: string,
+): string | undefined {
+  const edge = canvas.edges.find((entry) => entry.id === id)
+  if (edge !== undefined) return edgeA11yName(edge, canvas.nodes)
+  const line = (canvas.lines ?? []).find((entry) => entry.id === id)
+  return line === undefined ? undefined : lineA11yName(line, canvas.nodes)
 }

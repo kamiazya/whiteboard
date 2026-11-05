@@ -1,3 +1,5 @@
+import { leafOfPath } from '@kamiazya/whiteboard-model'
+
 // Characters that are invalid in a filename on common filesystems (Windows
 // in particular) — a path's `/` among them — become `-`, so the download never
 // silently fails. So do the C0 and C1 controls and DEL, and the bidi
@@ -28,5 +30,5 @@ export function exportFilenameBaseFor(name: string | null | undefined, path: str
   while (fromName.endsWith('.') || fromName.endsWith(' '))
     fromName = fromName.slice(0, -1).trimEnd()
   if (/[^\s.-]/u.test(fromName)) return fromName
-  return path.slice(path.lastIndexOf('/') + 1)
+  return leafOfPath(path)
 }

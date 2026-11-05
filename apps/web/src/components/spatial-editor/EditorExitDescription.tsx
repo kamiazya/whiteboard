@@ -3,10 +3,11 @@ import { isMacPlatform } from '../../lib/platform.js'
 /**
  * What a screen reader hears after an editor's name: the two ways out, in this
  * platform's key. `escapeKeeps` is for a host whose Escape keeps the draft (a
- * note created for this edit, once something is typed in it).
+ * note created for this edit, once something is typed in it); `singleLine` for
+ * a one-line field, which a bare Enter keeps.
  */
-function editorExitDescription(escapeKeeps: boolean): string {
-  const keep = `${isMacPlatform() ? 'Command' : 'Ctrl'}+Enter`
+function editorExitDescription(escapeKeeps: boolean, singleLine: boolean): string {
+  const keep = singleLine ? 'Enter' : `${isMacPlatform() ? 'Command' : 'Ctrl'}+Enter`
   return escapeKeeps ? `Escape or ${keep} keeps the note` : `Escape discards, ${keep} keeps`
 }
 
@@ -18,13 +19,15 @@ function editorExitDescription(escapeKeeps: boolean): string {
 export function EditorExitDescription({
   id,
   escapeKeeps = false,
+  singleLine = false,
 }: {
   readonly id: string
   readonly escapeKeeps?: boolean
+  readonly singleLine?: boolean
 }) {
   return (
     <span id={id} className="sr-only">
-      {editorExitDescription(escapeKeeps)}
+      {editorExitDescription(escapeKeeps, singleLine)}
     </span>
   )
 }

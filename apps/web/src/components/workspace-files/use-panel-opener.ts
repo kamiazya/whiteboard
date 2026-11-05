@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { noteListDeparture } from '../../lib/list-departure.js'
 import { openOnSingleActivation } from '../../lib/open-on-single-activation.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
@@ -38,6 +39,7 @@ export function usePanelOpener(
       const open = openRef.current
       if (open === undefined) return
       if (entry !== null) remember(entry)
+      noteListDeparture(path)
       open(path)
     },
     [remember],

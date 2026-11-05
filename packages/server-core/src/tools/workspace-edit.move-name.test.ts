@@ -28,7 +28,7 @@ describe('wb_workspace_edit document.move onto a sibling name', () => {
         workspaceId: WS,
         ops: [{ op: 'document.move', documentId: moving.documentId, path: 'week/x' }],
       }),
-    ).rejects.toThrow(/ops\[0\] \(document\.move\).*already called "plan"/)
+    ).rejects.toThrow(/ops\[0\] \(document\.move\).*already called "Plan"/)
     expect(
       (await documentIndex.resolveDocumentById({ workspaceId: WS, documentId: moving.documentId }))
         ?.path,

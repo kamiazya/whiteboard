@@ -72,7 +72,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // stand alone (the mark's frame, the alpha badge, fullscreen, settings) did.
   'apps/web/src/components/AppShell.tsx#ShellBar': 105,
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
-  'apps/web/src/components/ui/EditorExitHint.tsx#EditorExitHint': 109,
+  'apps/web/src/components/ui/EditorExitHint.tsx#EditorExitHint': 110, // +1: a one-line editor names a bare Enter
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 284,
@@ -101,7 +101,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentFacetsEditor': 117,
-  'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 111, // +1: the rename announcement waits for the keeper's answer, through the hook's handle
+  'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 112, // +1: the unnamed document's shown name as placeholder; +1: the rename announcement waits for the keeper's answer, through the hook's handle
   // +1: `pickImage`, the note's Image verb on the inline bar.
   'apps/web/src/components/markdown-editor/EditorToolbar.tsx#EditorToolbar': 136,
   'apps/web/src/components/markdown-editor/LinkPickerDialog.tsx#LinkPickerDialog': 160,
@@ -118,7 +118,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
   // +3: `tagLibrary`, threaded to the preview pane.
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 86,
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 90, // +2: the print view beside the preview; +2: the drawn body, and a print title left out when the body opens with it
   // +3: `onRequestImage`, the touch bar's Image slot.
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 56,
   // +1: `pickImage`, offered only by a host that stores files.
@@ -173,15 +173,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
   'apps/web/src/components/spatial-editor/DragPreviewLayer.tsx#DragPreviewLayer': 80,
-  'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 102,
-  'apps/web/src/components/spatial-editor/EdgeEndHandles.tsx#EdgeEndHandles': 68,
+  'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 105, // +3: a ruled line's bends are read as the line's, not a connection's
   'apps/web/src/components/spatial-editor/EdgeSelectionHighlight.tsx#EdgeSelectionHighlight': 52,
   'apps/web/src/components/spatial-editor/LegendOverlay.tsx#LegendOverlay': 73,
   'apps/web/src/components/spatial-editor/LinkEmbedLayer.tsx#LinkEmbedLayer': 98,
   'apps/web/src/components/spatial-editor/LinkUrlDialog.tsx#LinkUrlDialog': 84, // +1 the URL field's maxLength
   'apps/web/src/components/spatial-editor/MarkdownNodeEditor.tsx#MarkdownNodeEditor': 249, // +3: the editor's accessible name and its discard announcement
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
-  'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapSurface': 112,
+  'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapSurface': 113, // +1: the corner marker a fit keeps content clear of
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
   'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 330, // +7: the controls name their subject and the keyboard gets one stop per job
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
@@ -205,13 +204,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 81, // +1: the dock hands focus back to the canvas; +5: the locked-press notice mount; +2: the empty cue takes its description id; +3: the Connect tool hint mount
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 82, // +1: the dock hands focus back to the canvas; +5: the locked-press notice mount; +2: the empty cue takes its description id; +3: the Connect tool hint mount; +1: the layout status mounts in the chrome, out of the panned layer
   // The document picker and the URL dialog live in
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 116, // +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
@@ -225,7 +224,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,
   'apps/web/src/components/spatial-editor/gestures.ts#reduceGesture': 77,
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
-  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 63, // +1: the editor's accessible name;  +3: the scene's frame titles join the label obstacles
+  'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 64, // +1: a label is one line, so Enter keeps it; +1: the editor's accessible name;  +3: the scene's frame titles join the label obstacles
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
   'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 84, // +1: the press point the primary action needs
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
@@ -236,7 +235,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 602, // +41: C arms a connect from the selection and the arrows walk its targets
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 620, // +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
@@ -248,7 +247,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 585, // +37: the hand tool's double click, armed at the press and resolved at the release; a frame-interior drag becoming a band
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
-  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,
+  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
   'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 152, // +5: Group frames a selection and opens the new frame's name
@@ -299,7 +298,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
-  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 64,
+  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 68, // +4: decoded picture sizes ride with each href
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   // The receiving half of a cross-origin transfer, as one sequence: announce,
   // listen, accept, report. The workspace list is already split out
@@ -342,7 +341,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
-  'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
+  'apps/web/src/lib/layout-worker.ts#handleLayout': 69, // +1: commentLayer, for a thumbnail drawn without comments
   'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 277,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
@@ -376,10 +375,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 67, // +2: the page heading is where Enter in the title hands focus
+  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 68, // +1: the title box's placeholder is the list's name for an unnamed document; +2: the page heading is where Enter in the title hands focus
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
   // The row's controls in one JSX run; the notice prop is one more spread.
-  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 57, // +4: the export's selection scope passes through to the menu
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 58, // +4: the export's selection scope passes through to the menu; +1: a note's print row
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
@@ -436,7 +435,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // most of its lines and splitting them out would be a component per row, which
   // is the shape this bundle exists to avoid. The JSON Canvas row is the third
   // of the three the daemon page was missing.
-  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
+  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 85, // +5: the Move to folder… row and its picker
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
@@ -467,7 +466,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
   // +1: the table rows take the inline typesetter by argument, since the
   // table module may not import the typesetter back.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 190,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 192, // +2: a paragraph that is one picture is a figure
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
   // The inline-run walker's inner steps are NAMED (emitAtomic / placeCollapsed /

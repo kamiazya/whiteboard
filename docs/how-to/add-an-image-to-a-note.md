@@ -26,7 +26,9 @@ began, and the caret stays where you are. Several images pasted or dropped toget
 together once all are stored, in the order you gave them, each in its own paragraph.
 
 The text in the brackets is the picture's alt text, taken from the file name. Edit it in the
-source to describe the picture. **Split** and **Read** show the picture itself.
+source to describe the picture. **Split** and **Read** show the picture itself. A picture in
+a paragraph of its own is drawn at its own size, scaled down to fit the page width with its
+shape kept; one written in the middle of a sentence stays the height of the line.
 
 The accepted types and the size limit are the canvas's: PNG, JPEG, GIF, WebP and SVG, up to
 the upload limit. Anything else is refused before it uploads, and the editor says why; so is

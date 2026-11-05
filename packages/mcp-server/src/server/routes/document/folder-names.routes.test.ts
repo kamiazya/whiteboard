@@ -85,7 +85,7 @@ describe('PUT /api/workspaces/:workspaceId/folders/name', () => {
     expect(res.status).toBe(409)
     await expect(res.json()).resolves.toMatchObject({
       error: 'display_name_taken',
-      message: expect.stringMatching(/already called "week 6"/),
+      message: expect.stringMatching(/already called "Week 6"/),
     })
     expect((await listed(app)).folderNames).toEqual([{ path: 'term/week-6', name: 'Week 6' }])
   })

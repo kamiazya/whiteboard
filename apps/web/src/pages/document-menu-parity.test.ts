@@ -59,6 +59,10 @@ const MENU_PARITY: Record<string, MenuParity> = {
   Duplicate: { reach: 'both' },
   // Was a `gap` too; the same entry failing is what reported the closure.
   Delete: { reach: 'both' },
+  // Both keepers move through their own files source and follow the document
+  // to its new address (BrowserDocumentPage.move-to-folder.browser.test.tsx,
+  // DaemonDocumentPage.move-to-folder.test.tsx).
+  'Move to folder…': { reach: 'both' },
 }
 
 // `?raw` rather than node:fs — apps/web is browser-only and must not import a
