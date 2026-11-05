@@ -192,32 +192,16 @@ function destinationsFor(
   )
 }
 
-/**
- * Everything the folder actions put on screen: the move picker, the folder
- * dialog, the folder's own menu and the status lines.
- */
-export function FolderActionsLayer(props: FolderActionsLayerProps) {
-  const { folderNames, documents, gathering, announcement, moving, menu, dialog, busy, error } =
-    props
-  const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
-    props
-  const destinations = destinationsFor(moving, folderNames.folders)
-
+/** The two move pickers: one document sent to a folder, documents gathered into one. */
+function MoveDialogs(props: FolderActionsLayerProps) {
+  const { folderNames, documents, gathering, moving, busy, error, onCancel, onMoveTo } = props
   return (
     <>
-      <StatusLines
-        announcement={announcement}
-        refusal={moving === null && dialog === null && gathering === null ? error : null}
-        onDismiss={() => {
-          onCancel()
-          folderNames.dismissRefusal()
-        }}
-      />
       <MoveToFolderDialog
         document={moving}
-        folders={destinations}
+        folders={destinationsFor(moving, folderNames.folders)}
         names={folderNames.names}
-        planNewFolder={planNewFolder}
+        planNewFolder={props.planNewFolder}
         busy={busy}
         error={error}
         onCancel={onCancel}
@@ -234,14 +218,37 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
         onMove={props.onGather}
         onCloseAutoFocus={props.onCloseAutoFocus}
       />
+    </>
+  )
+}
+
+/**
+ * Everything the folder actions put on screen: the move pickers, the folder
+ * dialog, the folder's own menu and the status lines.
+ */
+export function FolderActionsLayer(props: FolderActionsLayerProps) {
+  const { folderNames, gathering, announcement, moving, menu, dialog, busy, error } = props
+  const { onCancel, onMenuChoice } = props
+
+  return (
+    <>
+      <StatusLines
+        announcement={announcement}
+        refusal={moving === null && dialog === null && gathering === null ? error : null}
+        onDismiss={() => {
+          onCancel()
+          folderNames.dismissRefusal()
+        }}
+      />
+      <MoveDialogs {...props} />
       <NameDialog
         dialog={dialog}
         names={folderNames.names}
-        refuseName={refuseName}
+        refuseName={props.refuseName}
         busy={busy}
         error={error}
         onCancel={onCancel}
-        onSubmitName={onSubmitName}
+        onSubmitName={props.onSubmitName}
         onCloseAutoFocus={props.onCloseAutoFocus}
       />
       {menu !== null && (
@@ -251,7 +258,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
           canRename={folderNames.canRename(menu.folder)}
           onRename={() => onMenuChoice('rename', menu.folder)}
           onSubfolder={() => onMenuChoice('subfolder', menu.folder)}
-          onClose={onCloseMenu}
+          onClose={props.onCloseMenu}
         />
       )}
     </>

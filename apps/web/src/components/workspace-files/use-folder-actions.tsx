@@ -105,20 +105,7 @@ function namingChecks(
   }
 }
 
-/** What the layer's dialogs and menu do when answered, in terms of the moves and the open dialogs. */
-function layerHandlers({
-  documents,
-  folderNames,
-  moveInto,
-  renameFolder,
-  goToFolder,
-  setError,
-  setMoving,
-  setDialog,
-  setGathering,
-  announce,
-  landOn,
-}: Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
+type HandlerDeps = Pick<Moves, 'moveInto' | 'renameFolder' | 'setError'> & {
   documents: readonly WorkspaceDocumentEntry[] | null
   folderNames: FolderNamesState
   goToFolder: (folder: string) => void
@@ -128,14 +115,11 @@ function layerHandlers({
   announce: (text: string) => void
   /** Where focus goes when the dialog now closing has gone. */
   landOn: (selectors: readonly string[]) => void
-}) {
+}
+
+/** The two move dialogs answered: documents gathered into a folder, one sent to a folder. */
+function moveHandlers({ folderNames, moveInto, setMoving, setGathering, landOn }: HandlerDeps) {
   return {
-    onCancel: () => {
-      setMoving(null)
-      setDialog(null)
-      setGathering(null)
-      setError(null)
-    },
     // One move at a time, stopping at the first refusal so the dialog can
     // word it with the rest still chosen. The folder's pending name needs
     // nothing here: it is written once the listing shows a document in it.
@@ -159,6 +143,13 @@ function layerHandlers({
       landOn(folderLanding(folder))
       setMoving(null)
     },
+  }
+}
+
+/** The folder dialog answered: a new folder opened, or a folder renamed. */
+function nameHandlers(deps: HandlerDeps) {
+  const { documents, folderNames, renameFolder, goToFolder, setDialog, announce, landOn } = deps
+  return {
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
         const path = namedPath(open, name, documents, folderNames)
@@ -174,11 +165,46 @@ function layerHandlers({
       }
     },
     ...namingChecks(documents, folderNames),
+  }
+}
+
+/** What the layer's dialogs and menu do when answered, in terms of the moves and the open dialogs. */
+function layerHandlers(deps: HandlerDeps) {
+  const { setMoving, setDialog, setGathering, setError } = deps
+  return {
+    onCancel: () => {
+      setMoving(null)
+      setDialog(null)
+      setGathering(null)
+      setError(null)
+    },
+    ...moveHandlers(deps),
+    ...nameHandlers(deps),
     onMenuChoice: (kind: FolderDialog['kind'], folder: string) => {
       setError(null)
       setDialog({ kind, folder })
     },
   }
+}
+
+/**
+ * Where focus goes once a folder dialog closes: set by the handler that
+ * closes it, spent by the dialog's close.
+ */
+function useDialogLanding(rootRef: RefObject<HTMLElement | null>) {
+  const landing = useRef<readonly string[] | null>(null)
+  const landOn = useCallback((selectors: readonly string[]) => {
+    landing.current = selectors
+  }, [])
+  const onCloseAutoFocus = useCallback(
+    (event: Event) => {
+      const selectors = landing.current
+      landing.current = null
+      if (selectors !== null && focusLanding(rootRef.current, selectors)) event.preventDefault()
+    },
+    [rootRef],
+  )
+  return { landOn, onCloseAutoFocus }
 }
 
 /** The card menu's way into the move picker, clearing the last refusal. */
@@ -248,30 +274,14 @@ export function useFolderActions({
     folderNames,
   })
   const surfaces = useOpenSurfaces(source, setError)
-  const { moving, setMoving, menu, setMenu, dialog, setDialog, gathering, setGathering } = surfaces
-  const landing = useRef<readonly string[] | null>(null)
-  const onCloseAutoFocus = (event: Event) => {
-    const selectors = landing.current
-    landing.current = null
-    if (selectors !== null && focusLanding(rootRef.current, selectors)) event.preventDefault()
-  }
+  const { moving, setMoving, menu, setMenu, dialog, gathering, setGathering } = surfaces
+  const { landOn, onCloseAutoFocus } = useDialogLanding(rootRef)
 
   const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, setGathering)
   const openMovePicker = useMovePickerOpener(setError, setMoving)
   const handlers = layerHandlers({
-    documents,
-    folderNames,
-    moveInto,
-    renameFolder,
-    goToFolder,
-    setError,
-    setMoving,
-    setDialog,
-    setGathering,
-    announce,
-    landOn: (selectors) => {
-      landing.current = selectors
-    },
+    ...surfaces,
+    ...{ documents, folderNames, moveInto, renameFolder, goToFolder, setError, announce, landOn },
   })
 
   const layer = (

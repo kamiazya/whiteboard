@@ -6,7 +6,7 @@
  */
 
 /** The deepest crumb of the folder trail: the folder the contents pane is showing. */
-export const CURRENT_FOLDER = 'nav[aria-label="Folder path"] [aria-current="true"]'
+const CURRENT_FOLDER = 'nav[aria-label="Folder path"] [aria-current="true"]'
 
 function at(path: string): string {
   return `[data-folder-path="${CSS.escape(path)}"]`
