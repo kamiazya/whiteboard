@@ -96,20 +96,26 @@ function locateBox(
   return drawn.length === lines.length && line !== undefined ? { index, line } : null
 }
 
+/** A toggle sent and not yet drawn: which box, and the state it was drawn in. */
+interface PendingToggle {
+  readonly index: number
+  readonly wasChecked: boolean
+}
+
+const isChecked = (box: Element | undefined) => box?.getAttribute('aria-checked') === 'true'
+
 /**
- * Puts focus back on the box that was toggled. Answers what to announce once
- * the repaint carrying the new state has arrived, and null until then.
+ * Puts focus back on the box that was toggled — every repaint replaces it,
+ * and a repaint can come before the one carrying the toggle (the page's
+ * reference seams follow the body at once while the preview's text waits out
+ * its debounce). Answers what to announce once a repaint draws the box in
+ * the OTHER state, and null until then, so the old state is never read out.
  */
-function settleToggle(
-  boxes: readonly Element[],
-  waiting: { index: number; keyed: KeyedSvgRender },
-  keyed: KeyedSvgRender,
-): string | null {
+function settleToggle(boxes: readonly Element[], waiting: PendingToggle): string | null {
   const box = boxes[waiting.index]
   if (box instanceof SVGElement && document.activeElement !== box) box.focus()
-  if (keyed === waiting.keyed || box === undefined) return null
-  const done = box.getAttribute('aria-checked') === 'true'
-  return `${box.getAttribute('aria-label') ?? 'Task'}: ${done ? 'checked' : 'not checked'}`
+  if (box === undefined || isChecked(box) === waiting.wasChecked) return null
+  return `${box.getAttribute('aria-label') ?? 'Task'}: ${isChecked(box) ? 'checked' : 'not checked'}`
 }
 
 /**
@@ -136,24 +142,25 @@ export function useTaskCheckboxes(
   const hostRef = useRef<HTMLDivElement | null>(null)
   // A toggle repaints the preview, which replaces the box that held focus, so
   // the box is found again by its position once the repaint arrives.
-  const pending = useRef<{ index: number; keyed: KeyedSvgRender } | null>(null)
+  const pending = useRef<PendingToggle | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const toggleFrom = useCallback(
     (target: EventTarget | null, at?: { readonly x: number; readonly y: number }): boolean => {
       const hit = onToggleTask && locateBox(hostRef.current, source, target, at)
       if (!hit) return false
-      pending.current = { index: hit.index, keyed }
+      const drawn = hostRef.current?.querySelectorAll(CHECKBOX)[hit.index]
+      pending.current = { index: hit.index, wasChecked: isChecked(drawn) }
       onToggleTask(hit.line)
       return true
     },
-    [keyed, onToggleTask, source],
+    [onToggleTask, source],
   )
   // Declared after the keyed patcher's layout effect has run for this commit,
   // so the boxes it just painted are the ones made focusable.
   useEffect(() => {
     if (onToggleTask === undefined) return
     const boxes = prepareBoxes(hostRef.current, source)
-    const said = pending.current === null ? null : settleToggle(boxes, pending.current, keyed)
+    const said = pending.current === null ? null : settleToggle(boxes, pending.current)
     if (said === null) return
     pending.current = null
     setAnnouncement(said)
