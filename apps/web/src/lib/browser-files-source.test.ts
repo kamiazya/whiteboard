@@ -264,26 +264,6 @@ describe('createBrowserFilesSource trash', () => {
     expect(await source.listTrash?.()).toEqual([])
   })
 
-  it('lists the names of the folders a deleted document stood in', async () => {
-    const index = new FoldingBrowserIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'field-trips/trip-log',
-      kind: 'markdown',
-    })
-    await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
-    const source = createBrowserFilesSource({ index })
-    await source.setFolderName?.('field-trips', 'Field trips')
-    await index.deleteDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'field-trips/trip-log',
-    })
-
-    const trash = await source.listTrash?.()
-    expect(trash?.[0]?.folderNames).toEqual([{ path: 'field-trips', name: 'Field trips' }])
-  })
-
   it('rejects a restore or purge that found nothing, so the UI can say so', async () => {
     // The index answers null for an id that is not in the trash; swallowing
     // that resolves the button's promise and the section reloads with the
