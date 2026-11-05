@@ -74,3 +74,51 @@ describe('what a selection sounds like', () => {
     expect(selectionMessage(board, [], null)).toBeUndefined()
   })
 })
+
+describe('frame membership', () => {
+  const front = groupNode({ id: 'f', x: 0, y: 0, width: 300, height: 200, label: 'Frontend' })
+  const back = groupNode({ id: 'k', x: 400, y: 0, width: 300, height: 200, label: 'Backend' })
+  const web = textNode({ id: 'w', x: 20, y: 40, width: 100, height: 40, text: 'Web App' })
+  const board: SpatialCanvas = { nodes: [front, back, web], edges: [] }
+  const at = (x: number, y = 40): SpatialCanvas => ({
+    ...board,
+    nodes: [front, back, { ...web, x, y }],
+  })
+
+  it('a selected node says the frame it sits in', () => {
+    expect(selectionMessage(board, ['w'], null)).toBe('Selected: Web App, in Frontend (3 of 3)')
+  })
+
+  it('a nudge that stays inside the frame says nothing', () => {
+    expect(canvasChangeMessage(board, at(28))).toBeUndefined()
+  })
+
+  it('a move out of a frame says it left', () => {
+    expect(canvasChangeMessage(board, at(20, 400))).toBe('Web App left Frontend')
+  })
+
+  it('a move into a frame says which', () => {
+    expect(canvasChangeMessage(at(20, 400), at(420))).toBe('Web App moved into Backend')
+  })
+
+  it('a move from one frame to another names both', () => {
+    expect(canvasChangeMessage(board, at(420))).toBe('Web App moved from Frontend into Backend')
+  })
+
+  it('a frame moved over a note at rest does not say the note moved', () => {
+    const outside: SpatialCanvas = { ...board, nodes: [front, back, { ...web, y: 400 }] }
+    const over: SpatialCanvas = {
+      ...outside,
+      nodes: [{ ...front, y: 380 }, back, { ...web, y: 400 }],
+    }
+    expect(canvasChangeMessage(outside, over)).toBeUndefined()
+  })
+
+  it('a frame carrying its notes changes no membership', () => {
+    const moved: SpatialCanvas = {
+      ...board,
+      nodes: [{ ...front, x: 8 }, back, { ...web, x: 28 }],
+    }
+    expect(canvasChangeMessage(board, moved)).toBeUndefined()
+  })
+})

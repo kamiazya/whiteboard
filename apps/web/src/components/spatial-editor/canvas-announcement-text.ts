@@ -1,5 +1,6 @@
 import {
   frameHolds,
+  frameLabel,
   isFrame,
   nodeKind,
   type SpatialCanvas,
@@ -34,10 +35,54 @@ function addedMessage(added: readonly SpatialNode[], next: SpatialCanvas) {
   return `${added.length} nodes added`
 }
 
+/** The innermost frame holding `node`, the node itself excluded. */
+function frameOf(node: SpatialNode, nodes: readonly SpatialNode[]): SpatialNode | undefined {
+  let inner: SpatialNode | undefined
+  for (const candidate of nodes) {
+    if (candidate.id === node.id || !isFrame(candidate) || !frameHolds(candidate, node)) continue
+    if (inner === undefined || candidate.width * candidate.height < inner.width * inner.height) {
+      inner = candidate
+    }
+  }
+  return inner
+}
+
+function frameName(frame: SpatialNode): string {
+  const label = frameLabel(frame)?.trim()
+  return label === undefined || label === '' ? 'a frame' : label
+}
+
+/**
+ * A move that took a node into, out of, or across a frame. Only nodes that
+ * themselves moved count, so a frame dragged over a note at rest is not the
+ * note "moving in", and a frame carrying its notes changes nobody's frame.
+ * Moves inside one frame say nothing, which is what keeps a run of nudges
+ * from flooding the reader: only the press that crosses an edge speaks.
+ */
+function membershipMessage(prev: SpatialCanvas, next: SpatialCanvas): string | undefined {
+  const crossings = next.nodes.flatMap((node) => {
+    const before = prev.nodes.find((entry) => entry.id === node.id)
+    if (before === undefined || (before.x === node.x && before.y === node.y)) return []
+    const was = frameOf(before, prev.nodes)
+    const now = frameOf(node, next.nodes)
+    return was?.id === now?.id ? [] : [{ node, was, now }]
+  })
+  const [only] = crossings
+  if (only === undefined) return undefined
+  if (crossings.length > 1) return `${crossings.length} nodes changed frame`
+  const name = nodeA11yName(only.node)
+  const { was, now } = only
+  if (was === undefined)
+    return now === undefined ? undefined : `${name} moved into ${frameName(now)}`
+  if (now === undefined) return `${name} left ${frameName(was)}`
+  return `${name} moved from ${frameName(was)} into ${frameName(now)}`
+}
+
 /**
  * What a change to the canvas sounds like, for the one verb that caused it —
- * or undefined when nothing a reader would want to hear happened (a move, a
- * resize, a text edit). A node change outranks the edges that went with it.
+ * or undefined when nothing a reader would want to hear happened (a resize,
+ * a text edit, a move that stays in its frame). A node change outranks the edges
+ * that went with it, and both outrank a move across a frame's edge.
  */
 export function canvasChangeMessage(prev: SpatialCanvas, next: SpatialCanvas): string | undefined {
   const prevIds = new Set(prev.nodes.map((node) => node.id))
@@ -61,7 +106,7 @@ export function canvasChangeMessage(prev: SpatialCanvas, next: SpatialCanvas): s
   if (goneEdges.length > 0 && newEdges.length === 0) {
     return `Deleted ${plural(goneEdges.length, 'edge', 'edges')}`
   }
-  return undefined
+  return membershipMessage(prev, next)
 }
 
 /** What is selected, with its place among the nodes in the order Tab walks them. */
@@ -76,7 +121,9 @@ export function selectionMessage(
     const node = canvas.nodes.find((entry) => entry.id === id)
     if (node === undefined) return undefined
     const place = readingOrder(canvas.nodes).findIndex((entry) => entry.id === id) + 1
-    return `Selected: ${nodeA11yName(node)} (${place} of ${canvas.nodes.length})`
+    const frame = frameOf(node, canvas.nodes)
+    const where = frame === undefined ? '' : `, in ${frameName(frame)}`
+    return `Selected: ${nodeA11yName(node)}${where} (${place} of ${canvas.nodes.length})`
   }
   if (selectedEdgeId !== null) {
     const name = inkA11yName(canvas, selectedEdgeId)

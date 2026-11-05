@@ -290,8 +290,12 @@ canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", a connection as "Connection from Review to
 Ship: then", a line as "Line from Review to empty space".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
+including the frame a node sits in ("Selected: Web App, in Frontend (3 of 8)"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+"Grouped 3 nodes", "Deleted 2 nodes". Moving a node across a frame's edge, by
+nudging or dragging, is said too ("Web App moved into Backend", "Web App left
+Frontend", "Web App moved from Frontend into Backend"); a move that stays inside
+its frame says nothing, so a run of nudges is quiet until one crosses an edge. Choosing how edges are drawn in the
 Display panel is said back the same way ("Edge routing: Orthogonal", "Line
 jumps: On").
 
