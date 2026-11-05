@@ -129,7 +129,8 @@ function settleToggle(boxes: readonly Element[], waiting: PendingToggle): string
 export function useTaskCheckboxes(
   source: string,
   keyed: KeyedSvgRender,
-  onToggleTask: ((line: number) => void) | undefined,
+  /** Answers whether the line was rewritten; a press it drops is not waited on. */
+  onToggleTask: ((line: number) => boolean) | undefined,
 ): {
   hostRef: MutableRefObject<HTMLDivElement | null>
   /** What a screen reader should hear after the last toggle; empty before one. */
@@ -149,12 +150,13 @@ export function useTaskCheckboxes(
       const hit = onToggleTask && locateBox(hostRef.current, source, target, at)
       if (!hit) return false
       const drawn = hostRef.current?.querySelectorAll(CHECKBOX)[hit.index]
-      pending.current = { index: hit.index, wasChecked: isChecked(drawn) }
-      onToggleTask(hit.line)
+      const wasChecked = isChecked(drawn)
+      if (onToggleTask(hit.line)) pending.current = { index: hit.index, wasChecked }
       return true
     },
     [onToggleTask, source],
   )
+  useForgetOnMovingOn(hostRef, pending)
   // Declared after the keyed patcher's layout effect has run for this commit,
   // so the boxes it just painted are the ones made focusable.
   useEffect(() => {
@@ -166,6 +168,29 @@ export function useTaskCheckboxes(
     setAnnouncement(said)
   }, [keyed, onToggleTask, source])
   return { hostRef, announcement, handlers: onToggleTask ? activationHandlers(toggleFrom) : {} }
+}
+
+/**
+ * A key or press outside the preview means the reader has moved on: the box
+ * no longer gets focus back. Focus alone cannot tell — writing the toggle
+ * through the source view moves focus there itself.
+ */
+function useForgetOnMovingOn(
+  hostRef: MutableRefObject<HTMLDivElement | null>,
+  pending: MutableRefObject<PendingToggle | null>,
+): void {
+  useEffect(() => {
+    const movedOn = (event: Event) => {
+      if (event.target instanceof Node && hostRef.current?.contains(event.target)) return
+      pending.current = null
+    }
+    document.addEventListener('keydown', movedOn, true)
+    document.addEventListener('pointerdown', movedOn, true)
+    return () => {
+      document.removeEventListener('keydown', movedOn, true)
+      document.removeEventListener('pointerdown', movedOn, true)
+    }
+  }, [hostRef, pending])
 }
 
 function activationHandlers(

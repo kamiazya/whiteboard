@@ -339,7 +339,10 @@ Whiteboard"). Where keyboard focus lands depends on the page:
 
 The first Tab stop on every page is **Skip to content**, hidden until it is
 focused: it moves focus past the app's header and the page's own header to
-the canvas, the note's editor, or the start of the page's content.
+the canvas, the note's editor, or the start of the page's content. When the
+app first opens on a page that puts focus on its heading, the first `Tab`
+still goes to **Skip to content**; after that, `Tab` from a page's heading
+goes on into the page.
 
 ## Searching the document list
 

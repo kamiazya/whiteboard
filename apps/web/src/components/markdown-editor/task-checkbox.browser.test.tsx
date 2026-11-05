@@ -208,3 +208,49 @@ describe('a press near a task item that is not meant for it', () => {
     expect(latest).toContain('- [ ] first')
   })
 })
+
+describe('a task box pressed while the source is ahead of the preview', () => {
+  function SlowPreview() {
+    const [value, setValue] = useState(BODY)
+    latest = value
+    // Long enough that every keystroke below lands inside the debounce.
+    return (
+      <MarkdownEditor
+        theme="light"
+        value={value}
+        onChange={setValue}
+        initialViewMode="split"
+        previewDebounceMs={60_000}
+      />
+    )
+  }
+
+  it('leaves focus in the source while typing continues', async () => {
+    render(<SlowPreview />)
+    await expect.poll(() => boxes().length).toBe(3)
+    const source = document.querySelector('.cm-content') as HTMLElement
+    source.focus()
+    await userEvent.keyboard('a')
+    await expect.poll(() => latest).toContain('a')
+    // Dropped: the preview's lines are older than the body.
+    await userEvent.click(boxes()[0] as Element)
+    source.focus()
+    await userEvent.keyboard('bc')
+    await expect.poll(() => latest).toContain('ab')
+    expect(source.contains(document.activeElement)).toBe(true)
+    expect(latest).toContain('- [ ] first')
+  })
+
+  it('stops waiting on a toggle once focus moves to the source', async () => {
+    render(<SlowPreview />)
+    await expect.poll(() => boxes().length).toBe(3)
+    // Lands in the body; the preview will not redraw it for a minute.
+    await userEvent.click(boxes()[0] as Element)
+    await expect.poll(() => latest).toContain('- [x] first')
+    const source = document.querySelector('.cm-content') as HTMLElement
+    source.focus()
+    await userEvent.keyboard('yz')
+    await expect.poll(() => latest).toContain('yz')
+    expect(source.contains(document.activeElement)).toBe(true)
+  })
+})

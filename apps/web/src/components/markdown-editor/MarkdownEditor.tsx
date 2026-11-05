@@ -374,21 +374,30 @@ export function MarkdownEditor({
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
 
   // The preview's lines are those of the debounced body; applying them to a
-  // newer one could flip a different item, so a click inside that window waits.
-  // Written through the source view whenever one is mounted: a CRDT-bound
-  // host makes `onChange` a no-op and takes edits only from the view.
-  const onToggleTask = (line: number) => {
-    if (value !== debouncedValue) return
+  // newer one could flip a different item, so a click inside that window is
+  // dropped. Written through the source view whenever one is mounted: a
+  // CRDT-bound host makes `onChange` a no-op and takes edits only from the view.
+  // Answers whether the line was rewritten.
+  const onToggleTask = (line: number): boolean => {
+    if (value !== debouncedValue) return false
     const api = sourceApiRef.current
-    if (api === null) return onChange(toggleTaskLine(value, line))
+    if (api === null) {
+      const next = toggleTaskLine(value, line)
+      if (next === value) return false
+      onChange(next)
+      return true
+    }
+    let toggled = false
     api.run(({ state, dispatch }) => {
       if (line > state.doc.lines) return false
       const at = state.doc.line(line)
       const next = toggleTaskLine(at.text, 1)
       if (next === at.text) return false
       dispatch(state.update({ changes: { from: at.from, to: at.to, insert: next } }))
+      toggled = true
       return true
     })
+    return toggled
   }
 
   // A document link's href is a bare id: meaningless to the browser, which

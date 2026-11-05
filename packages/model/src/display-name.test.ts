@@ -220,9 +220,20 @@ describe('firstDistinctUnnamedPath', () => {
     expect(firstDistinctUnnamedPath('notes/untitled', siblings, free)).toBe('notes/untitled-2')
   })
 
-  it('moves a generated address off the numbered label a named sibling shows', () => {
+  // A generated address stays generated, so it keeps reading as "Untitled N"
+  // and stays one the heading seeder names: `untitled-2-2` would be neither.
+  it('moves a generated address to the next generated one, not a suffixed one', () => {
     const siblings = [{ path: 'notes/a', name: 'Untitled 2' }]
-    expect(firstDistinctUnnamedPath('notes/untitled-2', siblings, free)).toBe('notes/untitled-2-2')
+    expect(firstDistinctUnnamedPath('notes/untitled-2', siblings, free)).toBe('notes/untitled-3')
+  })
+
+  it('skips a generated address that is taken or reads as a sibling', () => {
+    const siblings = [
+      { path: 'notes/a', name: 'Untitled 2' },
+      { path: 'notes/b', name: 'untitled 4' },
+    ]
+    const taken = (candidate: string) => candidate === 'notes/untitled-3'
+    expect(firstDistinctUnnamedPath('notes/untitled-2', siblings, taken)).toBe('notes/untitled-5')
   })
 
   it('keeps a generated address beside unnamed generated siblings, which read apart', () => {
