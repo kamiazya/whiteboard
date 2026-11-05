@@ -18,6 +18,12 @@ export interface FolderNamesState {
   readonly folders: readonly string[]
   /** A folder made here and named, held until a document lands in it. */
   readonly remember: (path: string, name: string) => void
+  /**
+   * Write the pending names of the folders a document at `path` now stands in,
+   * without waiting for a listing — the caller may leave the page the moment
+   * the document exists, and an effect waiting for the listing would never run.
+   */
+  readonly flushInto: (path: string) => void
   /** Rename a folder: a pending one in place, a standing one through the keeper. */
   readonly rename: (path: string, name: string) => Promise<void>
   /** Whether a folder at `path` can be renamed here at all. */
@@ -78,26 +84,38 @@ function usePendingFolderNames(
     writing.current = new Set()
   }, [source])
 
+  const flush = useCallback(
+    (shouldWrite: (folder: string) => boolean) => {
+      const write = source.setFolderName
+      if (write === undefined) return
+      for (const [path, name] of pending) {
+        if (!shouldWrite(path) || writing.current.has(path)) continue
+        writing.current.add(path)
+        void write(path, name)
+          .then(reload, () => undefined)
+          .finally(() => {
+            writing.current.delete(path)
+            setPending((current) => withEntry(current, path, undefined))
+          })
+      }
+    },
+    [pending, source, reload],
+  )
+
   useEffect(() => {
-    const write = source.setFolderName
-    if (write === undefined) return
-    for (const [path, name] of pending) {
-      if (!standing.includes(path) || writing.current.has(path)) continue
-      writing.current.add(path)
-      void write(path, name)
-        .then(reload, () => undefined)
-        .finally(() => {
-          writing.current.delete(path)
-          setPending((current) => withEntry(current, path, undefined))
-        })
-    }
-  }, [pending, standing, source, reload])
+    flush((path) => standing.includes(path))
+  }, [flush, standing])
+
+  const flushInto = useCallback(
+    (documentPath: string) => flush((path) => documentPath.startsWith(`${path}/`)),
+    [flush],
+  )
 
   const remember = useCallback((path: string, name: string) => {
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  return { pending, remember }
+  return { pending, remember, flushInto }
 }
 
 /**
@@ -115,7 +133,7 @@ export function useFolderNames(
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
-  const { pending, remember } = usePendingFolderNames(source, standing, reload)
+  const { pending, remember, flushInto } = usePendingFolderNames(source, standing, reload)
 
   const names = useMemo(() => new Map([...stored, ...pending]), [stored, pending])
   const folders = useMemo(() => [...new Set([...standing, ...pending.keys()])], [standing, pending])
@@ -140,5 +158,5 @@ export function useFolderNames(
     [source, documents],
   )
 
-  return { names, folders, remember, rename, canRename }
+  return { names, folders, remember, flushInto, rename, canRename }
 }

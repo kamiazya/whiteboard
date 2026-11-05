@@ -391,6 +391,8 @@ export function WorkspaceFilesPanel({
    * still never derived from a name (ADR-0008); the dialog takes both, and
    * neither field feeds the other.
    */
+  // Set once the folder actions exist, below the early returns this callback sits above.
+  const flushFolderNamesIntoRef = useRef<(path: string) => void>(() => {})
   const createHere = useCallback(
     async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
       // Every action here clears ALL of the panel's transient reports, not
@@ -411,6 +413,7 @@ export function WorkspaceFilesPanel({
         try {
           refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
           await source.createDocument(path, kind, options?.name)
+          flushFolderNamesIntoRef.current(path)
         } catch (err) {
           outcome.reportCreateRefusal({
             kind,
@@ -584,6 +587,8 @@ export function WorkspaceFilesPanel({
     moveDocument,
     goToFolder: selectFolder,
   })
+
+  flushFolderNamesIntoRef.current = folderActions.flushFolderNamesInto
 
   if (listStatus === 'error') {
     return (

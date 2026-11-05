@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
@@ -14,6 +14,7 @@ afterEach(cleanup)
  */
 function renderWithFolders(
   options: {
+    onOpenDocument?: () => void
     initialFolder?: string
     names?: Record<string, string>
     refuseName?: (path: string, name: string) => Error
@@ -47,7 +48,7 @@ function renderWithFolders(
       source={source}
       initialFolder={options.initialFolder ?? 'class'}
       revision={revision}
-      onOpenDocument={() => {}}
+      onOpenDocument={options.onOpenDocument ?? (() => {})}
     />
   )
   const { rerender } = render(panel(0))
@@ -163,6 +164,28 @@ describe('a new subfolder', () => {
     await source.createDocument('class/w6/week-8/untitled', 'markdown')
     relist()
     await waitFor(() =>
+      expect(source.setFolderName).toHaveBeenCalledWith('class/w6/week-8', 'Week 8'),
+    )
+  })
+
+  it('writes the name when the document made there opens at once and the panel goes away', async () => {
+    const { source } = renderWithFolders({ onOpenDocument: () => cleanup() })
+    await submitFolderName('New subfolder…', 'w6', 'Week 8')
+    await screen.findByRole('navigation', { name: 'Folder path' })
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /new document/i }), { button: 0 })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Name and folder/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'New document' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await vi.waitFor(() =>
+      expect(source.createDocument).toHaveBeenCalledWith(
+        expect.stringMatching(/^class\/w6\/week-8\//),
+        'spatial',
+        undefined,
+      ),
+    )
+
+    await vi.waitFor(() =>
       expect(source.setFolderName).toHaveBeenCalledWith('class/w6/week-8', 'Week 8'),
     )
   })

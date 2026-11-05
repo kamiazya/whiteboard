@@ -239,5 +239,11 @@ export function useFolderActions({
     />
   )
 
-  return { actions, names: folderNames.names, openMovePicker, layer }
+  return {
+    actions,
+    names: folderNames.names,
+    flushFolderNamesInto: folderNames.flushInto,
+    openMovePicker,
+    layer,
+  }
 }
