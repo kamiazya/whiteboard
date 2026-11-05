@@ -3,8 +3,8 @@
 // timeout, looks exactly like a quiet week. These two guards are what make
 // those two failures loud.
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { isAbsolute, join, matchesGlob, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
@@ -169,7 +169,14 @@ describe('mutation.yml timeouts', () => {
   // does not fail anything. The workflow cannot measure itself, so the number
   // records what it was sized from: `# measured: <date> <minutes> min`, the
   // newest duration observed, and the limit must leave 1.5x headroom over it.
-  it.each(timeouts())('job $job records the duration it was sized from', ({ minutes, comment }) => {
+  // The weekly job is the exception: its limit is derived from `MINUTES`
+  // below, because a hand-typed "measured" figure there compared the comment
+  // with itself and let a leg run at twice its model until it was cancelled.
+  const measuredJobs = timeouts().filter(({ job }) => job !== 'weekly')
+  it.each(measuredJobs)('job $job records the duration it was sized from', ({
+    minutes,
+    comment,
+  }) => {
     const match = /# measured: (\d{4}-\d{2}-\d{2}) (\d+) min\b/.exec(comment)
     expect(match, 'a `# measured: <date> <N> min` comment above the timeout').not.toBeNull()
     expect(minutes).toBeGreaterThanOrEqual(Math.ceil(Number(match?.[2]) * 1.5))
@@ -189,6 +196,7 @@ describe('mutation.yml report merges', () => {
 type Step = { id?: string; run?: string; env?: Record<string, string> }
 type Job = {
   'timeout-minutes'?: number
+  env?: Record<string, string>
   strategy?: { matrix?: { shard?: number[]; include?: unknown } }
   steps?: Step[]
 }
@@ -282,5 +290,83 @@ describe('the PR lane', () => {
     const budget = Number(mutate?.env?.BUDGET_MINUTES)
     expect(budget).toBeGreaterThan(0)
     expect(budget + 5).toBeLessThanOrEqual(JOBS.pr?.['timeout-minutes'] ?? 0)
+  })
+})
+
+describe('the canvas-render lane skips the tests that measure cost', () => {
+  const RENDER = resolve(REPO_ROOT, 'packages/canvas-render')
+
+  const exclusions = async (): Promise<string[]> => {
+    const { default: lane } = (await import(
+      pathToFileURL(resolve(RENDER, 'vitest.stryker.config.ts')).href
+    )) as { default: { test: { exclude: string[] } } }
+    return lane.test.exclude
+  }
+
+  const testFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return testFiles(path)
+      return entry.name.endsWith('.test.ts') ? [path] : []
+    })
+
+  // A cost or budget test bounds how much WORK a layout does, on inputs sized
+  // to make a quadratic blow up. Stryker runs every test once per static
+  // mutant, so those few files multiply into the lane's whole run time: 87 of
+  // 2182 tests were 294 of 412 seconds, and the weekly leg holding the edge
+  // router's mutants stopped finishing inside its job limit.
+  it('excludes every cost and budget test, and the exclusions reach a real population', async () => {
+    const files = testFiles(join(RENDER, 'src'))
+      .map((file) => relative(RENDER, file).split(sep).join('/'))
+      .filter((file) => /(cost|budget)[^/]*\.test\.ts$/.test(file))
+    expect(files.length).toBeGreaterThan(10)
+    const exclude = await exclusions()
+    expect(files.filter((file) => !exclude.some((glob) => matchesGlob(file, glob)))).toEqual([])
+  })
+
+  // A literal path that names no file excludes nothing and reads as if it did.
+  it('names no excluded file that does not exist', async () => {
+    const literal = (await exclusions()).filter((glob) => !/[*?{[]/.test(glob))
+    expect(literal.length).toBeGreaterThan(0)
+    expect(literal.filter((path) => !existsSync(resolve(RENDER, path)))).toEqual([])
+  })
+})
+
+describe('the weekly lane is sized from the cost model', () => {
+  // Stryker's initial run (every test, with coverage) precedes the first
+  // mutant and is inside the budget. Logged: 1 to 4 minutes, longer when the
+  // suite grows.
+  const INITIAL_RUN_MINUTES = 5
+  const HEADROOM = 1.5
+  // Install, checkout and artifact upload around the budgeted step.
+  const SURROUND_MINUTES = 10
+
+  const heaviest = () =>
+    Math.max(
+      ...Array.from({ length: LEGS }, (_, k) => minutesOf(shardOf(MUTATED, `${k + 1}/${LEGS}`))),
+    )
+  const weeklyStep = () => JOBS.weekly?.steps?.find((step) => step.run?.includes('stryker run'))
+
+  it('runs every leg under a Stryker budget with headroom over the heaviest modelled leg', () => {
+    const step = weeklyStep()
+    expect(step?.run).toMatch(/timeout [^\n]*"\$\{BUDGET_MINUTES\}m" pnpm exec stryker run/)
+    const budget = Number(step?.env?.BUDGET_MINUTES)
+    expect(budget).toBeGreaterThanOrEqual(Math.ceil(HEADROOM * (heaviest() + INITIAL_RUN_MINUTES)))
+  })
+
+  it('leaves the job limit room past the budget to record where a leg stopped and upload', () => {
+    const budget = Number(weeklyStep()?.env?.BUDGET_MINUTES)
+    expect(budget).toBeGreaterThan(0)
+    expect(budget + SURROUND_MINUTES).toBeLessThanOrEqual(JOBS.weekly?.['timeout-minutes'] ?? 0)
+  })
+
+  it('records an unfinished leg and fails the report job when one did not finish', () => {
+    const record = JOBS.weekly?.steps?.find((step) => step.run?.includes('stopped.md'))
+    expect(record?.run).toContain('tmp/stryker-reports/stopped.md')
+    const report = JOBS['weekly-report']
+    const expected = report?.env?.EXPECTED_LEGS
+    expect(Number(expected)).toBe(LEGS)
+    const gate = report?.steps?.find((step) => step.run?.includes('legs finished'))
+    expect(gate?.run).toMatch(/exit 1/)
   })
 })

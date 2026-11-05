@@ -292,25 +292,24 @@ jobs:
 
   # One leg per share of the curated list (`MUTATION_SHARD`, dealt by
   # `shardOf` in stryker-targets.mjs): the whole list no longer fits one
-  # runner's limit, and a cancelled run uploads nothing, because the reports
-  # are written at the end. A report-only lane going quiet looks the same as a
-  # lane with nothing to say, so each leg must finish well inside its limit.
+  # runner's limit, and a leg that is cut off uploads no report, because the
+  # reports are written at the end. A report-only lane going quiet looks the
+  # same as a lane with nothing to say, so a leg runs under its own budget,
+  # below the job limit, and says where it stopped (`stopped.md`);
+  # `weekly-report` turns that into a failure.
   #
-  # Sizing. The first sharded run (2026-10-05, run 37303929216) took 57, 39,
-  # 11, 49, 60 and 11 minutes for its six legs, dealt then by file COUNT. The
-  # legs are dealt by recorded minutes now (`MINUTES` in stryker-targets.mjs),
-  # which projects the longest leg at about 46 minutes of mutation plus 4 of
-  # install and initial run — the edge router's cost model alone, which no
-  # deal can split. The figure below stays the measured 60 until a run under
-  # the new deal replaces it with its own longest leg. Re-measure `MINUTES`
-  # when MUTATED changes. The guard in tools/arch-lint/src/mutation-lane.test.ts
-  # holds the figure to 1.5x headroom.
+  # Sizing. Each leg is dealt by recorded minutes (`MINUTES` in
+  # stryker-targets.mjs), and the limit is derived from them rather than from a
+  # remembered run: `mutation-lane.test.ts` requires the Stryker budget to be
+  # 1.5x the heaviest leg's modelled minutes plus the install and initial run,
+  # and the job limit to sit 5 minutes or more above the budget. Re-measure
+  # `MINUTES` when MUTATED changes, or when a leg's log shows its mutants
+  # costing more than modelled.
   weekly:
     if: github.event_name != 'pull_request'
     name: weekly (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
-    # measured: 2026-10-05 60 min
-    timeout-minutes: 90
+    timeout-minutes: 100
     strategy:
       # A leg that times out must not cancel the others: the reports of the
       # legs that finished are the point.
@@ -330,9 +329,41 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Mutation test canvas-render
+        working-directory: packages/canvas-render
         env:
           MUTATION_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
-        run: pnpm mutation:render
+          BUDGET_MINUTES: '85'
+        run: |
+          set -uo pipefail
+          date +%s > /tmp/mutation-start
+          status=0
+          timeout --kill-after=2m "${BUDGET_MINUTES}m" pnpm exec stryker run 2>&1 \
+            | tee /tmp/stryker.log || status=$?
+          echo "$status" > /tmp/mutation-status
+          exit "$status"
+
+      # Stryker writes its report only once every mutant is done, so a leg that
+      # stopped early has nothing to upload but this line.
+      - name: Record where an unfinished leg stopped
+        if: always()
+        working-directory: packages/canvas-render
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          BUDGET_MINUTES: '85'
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/stryker-reports
+          if [ -f tmp/stryker-reports/mutation.json ]; then exit 0; fi
+          progress=$(grep -ao '[0-9]*/[0-9]* tested ([^)]*)' /tmp/stryker.log 2>/dev/null | tail -n 1 || true)
+          minutes=$(( ($(date +%s) - $(cat /tmp/mutation-start 2>/dev/null || date +%s)) / 60 ))
+          case "$(cat /tmp/mutation-status 2>/dev/null || echo none)" in
+            124 | 137) why="timed out at its ${BUDGET_MINUTES}-minute budget" ;;
+            none) why="never started mutating" ;;
+            *) why="failed" ;;
+          esac
+          echo "- leg ${SHARD} ${why} after ${minutes} min, at ${progress:-0 tested}" \
+            > tmp/stryker-reports/stopped.md
+          cat tmp/stryker-reports/stopped.md
 
       - name: Upload mutation report
         if: always()
@@ -347,6 +378,9 @@ jobs:
   # anything that looked for `mutation-canvas-render` still finds it. Runs
   # after a failed or cancelled leg too, and merges what finished: the files a
   # leg did not reach are absent from the report rather than the whole week.
+  # A leg that did not finish FAILS this job, after the merged report is
+  # uploaded: without that the scheduled run reads as green with a sixth of
+  # the list silently missing.
   weekly-report:
     if: github.event_name != 'pull_request' && !cancelled()
     needs: weekly
@@ -355,6 +389,9 @@ jobs:
     # Two jq calls over the downloaded reports (0.04 s locally over two real
     # ones); the download and upload are the rest, and are not yet observed.
     timeout-minutes: 10
+    env:
+      # The weekly matrix's leg count; `mutation-lane.test.ts` holds it equal.
+      EXPECTED_LEGS: '6'
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -367,8 +404,8 @@ jobs:
           # One leg lands in shards/ itself, several in a directory each.
           mapfile -t reports < <(find shards -name mutation.json 2>/dev/null)
           if [ "${#reports[@]}" -eq 0 ]; then
-            echo '::error::no leg produced a mutation report'
-            exit 1
+            echo '::warning::no leg produced a mutation report'
+            exit 0
           fi
           mkdir -p report
           # Each leg mutates a disjoint set of files, so concatenating the
@@ -381,8 +418,20 @@ jobs:
           echo "merged $(jq '.files | length' report/mutation.json) files from ${#reports[@]} legs"
 
       - name: Upload merged mutation report
+        if: hashFiles('report/mutation.json') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-canvas-render
           path: report/
           retention-days: 30
+
+      - name: Fail when a leg did not finish
+        run: |
+          set -uo pipefail
+          finished=$(find shards -name mutation.json 2>/dev/null | wc -l)
+          if [ "$finished" -ge "$EXPECTED_LEGS" ]; then exit 0; fi
+          # A leg cut off before it could write a line leaves neither file, so
+          # the count is the check and the lines are only the explanation.
+          find shards -name stopped.md -exec cat {} + 2>/dev/null || true
+          echo "::error::${finished} of ${EXPECTED_LEGS} legs finished, so the files of the others have no result this week"
+          exit 1

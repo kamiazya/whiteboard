@@ -80,7 +80,7 @@ whiteboard server deactivate-user --json (--user=<user id> | --provider=<id> --s
 whiteboard server add-user       --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
-whiteboard native-host install   --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]
+whiteboard native-host install   --json [--development] [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]
 `
 
 /** The one way an output reaches stdout: parsed by the schema that declares it. */
