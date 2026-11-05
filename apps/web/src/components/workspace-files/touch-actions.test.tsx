@@ -93,13 +93,13 @@ describe('a touch user reaches the actions without a gesture', () => {
     expect(await screen.findByRole('menu', { name: 'Folder actions' })).toBeTruthy()
   })
 
-  it('a breadcrumb crumb opens the folder menu, the root offering only New subfolder', async () => {
+  it('a breadcrumb crumb opens the folder menu, the root offering only New folder', async () => {
     renderPanel()
     const trail = await screen.findByRole('navigation', { name: 'Folder path' })
     fireEvent.click(within(trail).getByRole('button', { name: 'Workspace actions' }))
     const menu = await screen.findByRole('menu', { name: 'Folder actions' })
     expect(within(menu).queryByRole('menuitem', { name: 'Rename…' })).toBeNull()
-    expect(within(menu).getByRole('menuitem', { name: 'New subfolder…' })).toBeTruthy()
+    expect(within(menu).getByRole('menuitem', { name: 'New folder…' })).toBeTruthy()
   })
 
   it('the actions button is a 44px target', async () => {

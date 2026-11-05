@@ -58,7 +58,7 @@ function FolderNameForm({
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="rounded border px-2 py-1"
+            className="rounded border px-2 py-1 pointer-coarse:min-h-11"
           />
         </label>
         <ErrorLine message={issue ?? error} />

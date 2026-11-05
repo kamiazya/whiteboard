@@ -5,7 +5,8 @@
  * Rendered only when there is something in it: an empty trash is silence,
  * not an empty box — the section exists for the moment someone deleted a
  * document and wants it back, and any other moment it would only push the
- * list up. Collapsed by default for the same reason.
+ * list up. Collapsed by default for the same reason, and placed above the
+ * list by its host: below a long list it was a disclosure nobody scrolled to.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { WorkspaceCapacityReachedError } from '../../lib/browser-keeper-capacity.js'
@@ -51,7 +52,7 @@ function TrashDetails({
   onPurgeSettled: () => void
 }) {
   return (
-    <details className="border-t px-2 py-1 text-sm" data-testid="trash-section">
+    <details className="px-2 py-1 text-sm" data-testid="trash-section">
       <summary className="text-muted-foreground cursor-pointer text-xs font-medium pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:items-center">
         Trash ({rows.length})
       </summary>

@@ -31,6 +31,14 @@ describe('EmptyWorkspaceState chooser', () => {
     expect(onCreate.mock.calls).toEqual([['spatial'], ['markdown']])
   })
 
+  // A folder exists only while a document is in it, so the first screen
+  // cannot make one; it says where folders come from instead of leaving the
+  // only way to one behind a menu nobody has seen yet.
+  it('says where folders come from', () => {
+    render(<EmptyWorkspaceState onCreate={() => {}} />)
+    expect(screen.getByText(/New folder above the list/)).toBeTruthy()
+  })
+
   it('disables both choices while a create is in flight', () => {
     render(<EmptyWorkspaceState onCreate={() => {}} disabled />)
     expect(screen.getByRole('button', { name: 'Create a canvas' }).hasAttribute('disabled')).toBe(

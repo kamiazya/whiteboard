@@ -40,7 +40,14 @@ function FolderMenuView({
       y={menu.y}
       label="Folder actions"
       title={title}
-      items={[...rename, { label: 'New subfolder…', icon: <FolderPlus />, onSelect: onSubfolder }]}
+      items={[
+        ...rename,
+        {
+          label: menu.folder === '' ? 'New folder…' : 'New subfolder…',
+          icon: <FolderPlus />,
+          onSelect: onSubfolder,
+        },
+      ]}
       onClose={onClose}
       variant={hasCoarsePointer() ? 'sheet' : 'list'}
     />
@@ -57,12 +64,14 @@ function nameDialogCopy(dialog: FolderDialog | null, names: FolderNamesState['na
       submitLabel: 'Rename',
     }
   }
+  // Said BEFORE the folder is made: an empty folder is not kept, and finding
+  // that out after leaving it reads as the folder having been lost.
   return {
-    title: 'New subfolder',
+    title: dialog?.folder === '' ? 'New folder' : 'New subfolder',
     description:
-      'A folder exists while a document is in it. Open it, then add or move a document in.',
+      'The folder appears in the list once a document is in it. Create it, then add a note or canvas there, or move a document in.',
     initialName: '',
-    submitLabel: 'Open folder',
+    submitLabel: 'Create folder',
   }
 }
 
@@ -98,20 +107,45 @@ function NameDialog({
 }
 
 /**
- * The polite line that says a move landed, and the refusal of a drop (no
- * dialog is open to word it).
+ * The polite line that says a move landed, and the refusal of a drop.
+ *
+ * A drop has no dialog to word its refusal, and the layer renders below the
+ * whole list, so the refusal floats over the list like the undo toast:
+ * placed in the flow, a refused drop onto a folder near the top said why
+ * somewhere off the bottom of the screen, which read as nothing happening.
  *
  * No explicit aria-live: Radix hides everything outside an open modal except
  * the subtree of a [aria-live] element, which would leave the panel's own
  * alerts exposed behind the dialog.
  */
-function StatusLines({ announcement, refusal }: { announcement: string; refusal: string | null }) {
+function StatusLines({
+  announcement,
+  refusal,
+  onDismiss,
+}: {
+  announcement: string
+  refusal: string | null
+  onDismiss: () => void
+}) {
   return (
     <>
       <p role="status" className="sr-only">
         {announcement}
       </p>
-      <ErrorLine message={refusal} />
+      {refusal !== null && (
+        <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2">
+          <div className="bg-background border-destructive/40 flex items-center gap-3 rounded-lg border px-4 py-2 shadow-lg">
+            <ErrorLine message={refusal} />
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="hover:bg-accent shrink-0 rounded-md border px-2 py-0.5 text-sm font-medium pointer-coarse:min-h-11 pointer-coarse:px-3"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -137,6 +171,17 @@ interface FolderActionsLayerProps {
   onCloseMenu: () => void
 }
 
+/** Where a document can be moved: the root and every folder, but not where it is. */
+function destinationsFor(
+  moving: WorkspaceDocumentEntry | null,
+  folders: readonly string[],
+): string[] {
+  if (moving === null) return []
+  return ['', ...[...folders].sort(compareCodeUnit)].filter(
+    (each) => each !== folderOf(moving.path),
+  )
+}
+
 /**
  * Everything the folder actions put on screen: the move picker, the folder
  * dialog, the folder's own menu and the status lines.
@@ -145,18 +190,17 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
   const { folderNames, announcement, moving, menu, dialog, busy, error } = props
   const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
     props
-  const destinations =
-    moving === null
-      ? []
-      : ['', ...[...folderNames.folders].sort(compareCodeUnit)].filter(
-          (each) => each !== folderOf(moving.path),
-        )
+  const destinations = destinationsFor(moving, folderNames.folders)
 
   return (
     <>
       <StatusLines
         announcement={announcement}
         refusal={moving === null && dialog === null ? error : null}
+        onDismiss={() => {
+          onCancel()
+          folderNames.dismissRefusal()
+        }}
       />
       <MoveToFolderDialog
         document={moving}

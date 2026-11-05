@@ -48,3 +48,34 @@ describe('DocumentThumbnail text at row size', () => {
     expect(worst).toBeLessThan(0.75)
   })
 })
+
+describe('a note picture wider than its card', () => {
+  const note = { documentId: 'n1', path: 'jp', name: '概要', kind: 'markdown' as const }
+  const wide = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="120" viewBox="0 0 900 120"><text x="0" y="40" font-size="16">深層学習による自然言語処理の文献を整理する。主な論点は三つある。</text></svg>`
+
+  it('fades out at the edge where its text is cut, whatever the script', async () => {
+    const { container } = render(
+      <DocumentThumbnail
+        document={note}
+        loadRender={async () => ({ svg: wide, bounds: { x: 0, y: 0, w: 900, h: 120 } })}
+        className="h-[90px] w-[160px]"
+      />,
+    )
+    await waitFor(() => expect(container.querySelector('svg text')).not.toBeNull())
+    const host = container.querySelector('svg')?.parentElement as HTMLElement
+    expect(getComputedStyle(host).maskImage).toContain('linear-gradient')
+  })
+
+  it('draws a picture that fits whole without a fade', async () => {
+    const { container } = render(
+      <DocumentThumbnail
+        document={note}
+        loadRender={async () => ({ svg: wide, bounds: { x: 0, y: 0, w: 200, h: 120 } })}
+        className="h-[90px] w-[160px]"
+      />,
+    )
+    await waitFor(() => expect(container.querySelector('svg text')).not.toBeNull())
+    const host = container.querySelector('svg')?.parentElement as HTMLElement
+    expect(getComputedStyle(host).maskImage).toBe('none')
+  })
+})

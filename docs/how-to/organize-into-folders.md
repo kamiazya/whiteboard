@@ -37,11 +37,16 @@ folder…**:
   the two first. This holds for dragging, for a rename that changes the path,
   and for a folder moved under a folder with a same-named folder.
 
-With a mouse or a pen you can also drag a card or row onto a folder — a folder
+With a mouse or a pen you can also drag a card or row onto a folder (the
+picker says so once, under its list) — a folder
 card, a folder in the tree beside the list, or **Workspace** for the root. The
 folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the
 start of a drag.
+
+A drop that cannot be made — the folder already holds a document showing the
+same name, say — moves nothing, and the reason appears at the bottom of the
+screen until you dismiss it.
 
 A move is announced to screen readers as "Moved _name_ to _folder_".
 
@@ -66,17 +71,28 @@ still unnamed takes its name from its first heading only when no other
 document in its folder already shows that name; otherwise it stays
 **Untitled** until you name it. **Duplicate** names the copy
 "Name (copy)", or the first "Name (copy 2)", "Name (copy 3)" … that nothing
-beside it shows.
+beside it shows. The copy is selected in the list, and a
+"Duplicated _name_" notice offers **Open** for it.
 
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.
 
-## Start a new subfolder
+## Make a new folder
 
-**New subfolder…** in the same menu asks for a name and opens that folder,
-showing the name you gave it. Because a folder exists only while a document is
-in it, the new folder is empty until you create a document there or move one
-in — its name is kept by the page until then and saved with the folder once a
-document lands in it. Leaving it without doing either lets it go, name and all.
-The same duplicate rule as a rename applies.
+**New folder** above the list (in the two-column view) makes a folder inside
+the folder you are in — at the workspace root, a top-level folder. The same entry is in a folder's own
+menu, as **New subfolder…** (or **New folder…** on **Workspace** in the folder
+path). It asks for a name; **Create folder** opens the new folder, showing the
+name you gave it.
+
+A folder exists only while a document is in it, and the dialog says so before
+you create it: the new folder is empty until you put a document there, and its
+name is kept by the page until then and saved with the folder once a document
+lands in it. The empty folder offers **New note here** and **New canvas here**,
+which create the document inside it; moving a document in works too. Leaving it
+empty lets it go, name and all. The same duplicate rule as a rename applies.
+
+The page keeps a folder's name the same way when a move takes the last document
+out of it: move a document back in during the same visit and the folder comes
+back under its name rather than its address.

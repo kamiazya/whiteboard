@@ -19,9 +19,12 @@ inside a quote.
 
 ## Tick an item
 
-In **Split** and **Read** view, click the box. The item's `[ ]` becomes `[x]`
+In **Split** and **Read** view, click the box or the item's text on the same
+line (a link in it still opens the link). The item's `[ ]` becomes `[x]`
 (or back) in the source, and nothing else on the line changes: the marker, the
-indentation and the text stay as you wrote them.
+indentation and the text stay as you wrote them. On a touch screen a tap just
+beside the box counts too, so the target is finger-sized rather than the
+drawn box's.
 
 From the keyboard, Tab to a box and press Enter or Space. Focus stays on the
 same box after the toggle. A screen reader reads each box by its item's text and

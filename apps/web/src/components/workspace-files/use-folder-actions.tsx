@@ -196,7 +196,7 @@ interface FolderActionsDeps {
  * menu's entry.
  *
  * There is no stored folder to create — a new folder exists once something
- * is moved into it, and "New subfolder…" only opens the (empty) place, its
+ * is moved into it, and "New folder" only opens the (empty) place, its
  * name held until a document lands there (`useFolderNames`).
  */
 export function useFolderActions({
@@ -243,5 +243,6 @@ export function useFolderActions({
   )
 
   const { names, flushInto } = folderNames
-  return { actions, names, flushInto, openMovePicker, layer }
+  const openNewFolder = (folder: string) => handlers.onMenuChoice('subfolder', folder)
+  return { actions, names, flushInto, openMovePicker, openNewFolder, layer }
 }

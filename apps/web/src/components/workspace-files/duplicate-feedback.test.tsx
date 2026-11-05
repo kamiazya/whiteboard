@@ -1,0 +1,59 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
+import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
+
+afterEach(cleanup)
+
+describe('duplicating a document from its menu', () => {
+  it('says what was duplicated, offers to open the copy, and selects it', async () => {
+    let rows: WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'budget', name: 'Budget review', kind: 'markdown' },
+      { documentId: 'd2', path: 'notes', name: 'Notes', kind: 'markdown' },
+    ]
+    const source = fakeFilesSource({ listDocuments: async () => rows })
+    const onOpenDocument = vi.fn()
+    let revision = 0
+    const panel = () => (
+      <WorkspaceFilesPanel
+        source={source}
+        revision={revision}
+        onOpenDocument={onOpenDocument}
+        onDuplicateDocument={(path) => {
+          rows = [
+            ...rows,
+            {
+              documentId: 'd3',
+              path: `${path}-copy`,
+              name: 'Budget review (copy)',
+              kind: 'markdown',
+            },
+          ]
+          revision += 1
+          view.rerender(panel())
+        }}
+      />
+    )
+    const view = render(panel())
+
+    const card = (await screen.findAllByTestId('card-title'))
+      .find((each) => each.textContent === 'Budget review')
+      ?.closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 5, clientY: 5 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
+
+    const toast = await screen.findByText('Duplicated Budget review')
+    const copyCard = (await screen.findAllByTestId('card-title'))
+      .find((each) => each.textContent === 'Budget review (copy)')
+      ?.closest('button') as HTMLElement
+    await waitFor(() => expect(copyCard.getAttribute('aria-current')).toBe('true'))
+
+    fireEvent.click(
+      within(toast.parentElement as HTMLElement).getByRole('button', { name: 'Open' }),
+    )
+    expect(onOpenDocument).toHaveBeenCalledWith('budget-copy')
+  })
+})

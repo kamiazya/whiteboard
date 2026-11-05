@@ -72,7 +72,11 @@ function buildFolderTree(documents: readonly WorkspaceDocumentEntry[]): FolderNo
   return freeze(root)
 }
 
-/** A folder's own row: the button that opens it, and its actions on a touch screen. */
+/**
+ * A folder's own row: the button that opens it, and its actions on a touch
+ * screen. The button fills the row, so a press beside the name still opens
+ * the folder rather than landing on nothing.
+ */
 function FolderRowButton({
   node,
   shown,
@@ -95,7 +99,7 @@ function FolderRowButton({
         aria-current={node.path === selectedFolder ? 'true' : undefined}
         onClick={() => onSelectFolder(node.path)}
         {...folderProps}
-        className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+        className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
       >
         <Folder className="text-muted-foreground size-3.5 shrink-0" />
         <span className="truncate">{shown}</span>
@@ -165,7 +169,7 @@ function RootFolderItem({
           aria-current={selectedFolder === '' ? 'true' : undefined}
           onClick={() => onSelectFolder('')}
           {...rootProps}
-          className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+          className="data-[dropping]:ring-ring data-[dropping]:ring-2 hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
         >
           <Folder className="text-muted-foreground size-3.5 shrink-0" />
           <span className="truncate">Workspace</span>

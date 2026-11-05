@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   FolderInput,
+  FolderPlus,
   List,
   Pencil,
   Pin,
@@ -211,14 +212,25 @@ function ColumnToggle({
 }
 
 /**
+ * A folder is made where the person stands, and labelled in words: behind a
+ * folder's own menu it was found by nobody who did not already know.
+ */
+function NewFolderButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1.5 rounded border p-1.5 pr-2.5 text-xs font-medium pointer-coarse:min-h-11"
+    >
+      <FolderPlus aria-hidden="true" className="size-4" />
+      New folder
+    </button>
+  )
+}
+
+/**
  * The row above the columns: where you are, what you are looking for, and
  * the two things you can change about the view.
- *
- * The trail belongs to whatever NARROWS the view, which is why it has two
- * conditions rather than one. In one-column mode nothing narrows — the tree
- * already shows every level at once — and while searching the results are
- * from everywhere, so a trail would name a folder the list is not confined
- * to.
  */
 export function PanelToolbar({
   columns,
@@ -235,6 +247,7 @@ export function PanelToolbar({
   onImportFiles,
   chooseColumns,
   combobox,
+  onNewFolder,
 }: {
   columns: 'one' | 'two'
   query: string
@@ -250,47 +263,60 @@ export function PanelToolbar({
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']
   chooseColumns: (next: 'one' | 'two') => void
   combobox: SearchCombobox
+  /** Absent on a host that renders no folder actions. */
+  onNewFolder?: ((folder: string) => void) | undefined
 }) {
+  const browsing = query.trim() === ''
+  const trail = browsing
+  const newFolder = columns === 'two' && browsing && onNewFolder !== undefined
   return (
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1">
-        {/* The trail belongs to whatever narrows the view. In one-column
-          mode nothing does — the tree already shows every level at once —
-          and while searching the results are from everywhere, so a trail
-          would name a folder the list is not confined to. */}
-        {columns === 'two' && query.trim() === '' && (
-          <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
-        )}
-      </div>
-      <div className="relative shrink-0">
-        <Search
-          aria-hidden="true"
-          className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+    // Two rows below `sm`: at a phone's width one row gave the search box
+    // 144px and wrapped the trail's last folder name in two. Where you are
+    // gets a row; what you are looking for gets the next one.
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {(trail || newFolder) && (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {/* Absent while searching: the results are from everywhere, so a
+              trail would name a folder the list is not confined to. In the
+              one-column list it still says where a new document lands. */}
+            {trail && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
+          </div>
+          {/* Two columns only: the one-column tree draws no empty folder to land in. */}
+          {newFolder && <NewFolderButton onClick={() => onNewFolder(folder)} />}
+        </div>
+      )}
+      <div className="flex min-w-0 items-center gap-2 sm:ml-auto">
+        <div className="relative min-w-0 flex-1 sm:flex-none">
+          <Search
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+          />
+          <input
+            type="search"
+            aria-label="Search documents"
+            placeholder="Search"
+            maxLength={SEARCH_QUERY_MAX_CHARS}
+            value={query}
+            onChange={(event) => changeQuery(event.target.value)}
+            {...combobox.boxProps}
+            className="w-full rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
+          />
+        </div>
+        <NewDocumentMenu
+          disabled={creating}
+          workspace={workspace}
+          defaultPath={derivedNewPath}
+          pathForName={pathForName}
+          createError={outcome.createRefusal?.reason ?? null}
+          onCreate={createHere}
+          {...(onImportFiles === undefined ? {} : { onImportFiles })}
+          onDismiss={outcome.dismissCreateRefusal}
         />
-        <input
-          type="search"
-          aria-label="Search documents"
-          placeholder="Search"
-          maxLength={SEARCH_QUERY_MAX_CHARS}
-          value={query}
-          onChange={(event) => changeQuery(event.target.value)}
-          {...combobox.boxProps}
-          className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
-        />
-      </div>
-      <NewDocumentMenu
-        disabled={creating}
-        workspace={workspace}
-        defaultPath={derivedNewPath}
-        pathForName={pathForName}
-        createError={outcome.createRefusal?.reason ?? null}
-        onCreate={createHere}
-        {...(onImportFiles === undefined ? {} : { onImportFiles })}
-        onDismiss={outcome.dismissCreateRefusal}
-      />
-      {/* Absent while searching: the results carry their own list/grid
+        {/* Absent while searching: the results carry their own list/grid
         choice, and two pairs side by side answered one question twice. */}
-      {query.trim() === '' && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+        {browsing && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+      </div>
     </div>
   )
 }
@@ -471,6 +497,18 @@ export function columnViewOf(
   return columns === 'one' ? { kind: 'browseOne', documents } : { kind: 'browseTwo', documents }
 }
 
+/** A card's picture: the document's own render, filling the card's picture box. */
+function cardThumbnail(loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']) {
+  return (entry: WorkspaceDocumentEntry) => (
+    <DocumentThumbnail
+      key={entry.documentId}
+      document={entry}
+      loadRender={loadRender}
+      className="size-full"
+    />
+  )
+}
+
 /**
  * The folder tree beside the folder's own contents. Below `md` the folder
  * column goes: the breadcrumb already walks the same hierarchy, and three
@@ -494,6 +532,7 @@ export function BrowseTwoColumns({
   openCardMenu,
   loadRender,
   onGridColumns,
+  onCreateHere,
 }: {
   documents: readonly WorkspaceDocumentEntry[]
   folder: string
@@ -509,6 +548,7 @@ export function BrowseTwoColumns({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
   onGridColumns: (count: number | undefined) => void
+  onCreateHere: ComponentProps<typeof FolderContentsList>['onCreateHere']
 }) {
   /**
    * A press in the contents list, in the order the four answers rank: a
@@ -549,14 +589,8 @@ export function BrowseTwoColumns({
               : { onActivateDocument: openEntry })}
             onDocumentContextMenu={openCardMenu}
             onColumnCount={onGridColumns}
-            renderThumbnail={(entry) => (
-              <DocumentThumbnail
-                key={entry.documentId}
-                document={entry}
-                loadRender={loadRender}
-                className="size-full"
-              />
-            )}
+            onCreateHere={onCreateHere}
+            renderThumbnail={cardThumbnail(loadRender)}
           />
         </div>
       </div>

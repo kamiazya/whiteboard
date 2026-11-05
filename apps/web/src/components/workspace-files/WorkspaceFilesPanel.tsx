@@ -26,6 +26,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
+import { DuplicatedToast, useDuplicateFeedback } from './use-duplicate-feedback.js'
 import { useFolderActions } from './use-folder-actions.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
@@ -588,6 +589,7 @@ export function WorkspaceFilesPanel({
   })
 
   flushFolderNamesIntoRef.current = folderActions.flushInto
+  const duplicated = useDuplicateFeedback({ documents, onDuplicateDocument, select: setSelected })
 
   if (listStatus === 'error') {
     return (
@@ -621,7 +623,7 @@ export function WorkspaceFilesPanel({
           tapOpens,
           source,
           openEntry: offeredOpen,
-          onDuplicateDocument,
+          onDuplicateDocument: duplicated.duplicate,
           onRequestDelete,
           onRequestDeleteMany,
           setPeek,
@@ -702,6 +704,7 @@ export function WorkspaceFilesPanel({
             openCardMenu={openCardMenu}
             loadRender={loadRender}
             onGridColumns={setGridColumns}
+            onCreateHere={(kind) => void createHere(kind).catch(() => undefined)}
           />
         )
       default: {
@@ -746,6 +749,7 @@ export function WorkspaceFilesPanel({
             onImportFiles={importer.importFiles}
             chooseColumns={chooseColumns}
             combobox={combobox}
+            onNewFolder={folderActions.openNewFolder}
           />
 
           <PanelRefusals outcome={outcome} />
@@ -760,6 +764,12 @@ export function WorkspaceFilesPanel({
               onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
             />
           )}
+          <SourceTrashSection
+            source={source}
+            revision={revision}
+            listLoaded={documents !== null}
+            onRestored={() => void readList().then(setDocuments, () => undefined)}
+          />
           {selection !== null && (
             <div className="px-2 pb-2">
               <SelectionBar
@@ -769,29 +779,33 @@ export function WorkspaceFilesPanel({
               />
             </div>
           )}
-          {/* Above the columns, and only in the browse view: a search has its
-          own answer to "which one did you mean", and a lane beside it
-          would compete with the results the person asked for. Absent on a
-          host that cannot open a document, since every tile would be
-          inert. */}
-          {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
-            <RecentLane
-              documents={documents}
-              recentIds={recentIds}
-              gridColumns={gridColumns}
-              selectedPath={selectedPath}
-              onSelect={selectOrOpen}
-              onOpen={openEntry}
-              renderThumbnail={(entry) => (
-                <DocumentThumbnail
-                  key={entry.documentId}
-                  document={entry}
-                  loadRender={loadRender}
-                  className="size-full"
-                />
-              )}
-            />
-          )}
+          {/* Above the columns, at the workspace root of the two-column view
+          only: a search has its own answer, the one-column list already
+          shows every document, and inside a folder the lane pushed that
+          folder's own contents down. Absent on a host that cannot open a
+          document, since every tile would be inert. */}
+          {documents !== null &&
+            query.trim() === '' &&
+            columns === 'two' &&
+            folder === '' &&
+            onOpenDocument !== undefined && (
+              <RecentLane
+                documents={documents}
+                recentIds={recentIds}
+                gridColumns={gridColumns}
+                selectedPath={selectedPath}
+                onSelect={selectOrOpen}
+                onOpen={openEntry}
+                renderThumbnail={(entry) => (
+                  <DocumentThumbnail
+                    key={entry.documentId}
+                    document={entry}
+                    loadRender={loadRender}
+                    className="size-full"
+                  />
+                )}
+              />
+            )}
           <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
             {renderColumns()}
             {/* When a tap opens, selection can no longer fill this pane, so it
@@ -806,29 +820,12 @@ export function WorkspaceFilesPanel({
                   findDocument={findListed}
                   onOpen={offeredOpen}
                   onRename={rename.open}
-                  onDuplicateDocument={onDuplicateDocument}
+                  onDuplicateDocument={duplicated.duplicate}
                   onRequestDelete={onRequestDelete}
                 />
               </div>
             )}
           </div>
-          {/* Not while the list is loading. The trash is a SECOND list of the
-          departed workspace's documents and reads on its own, so left
-          mounted it keeps showing that workspace's rows under the new
-          address until its own read answers — measured with a trash read
-          that never answers, which is the window this closes. */}
-          {documents !== null && (
-            <SourceTrashSection
-              source={source}
-              revision={revision}
-              onRestored={() => {
-                // A restore that landed but whose refresh failed leaves the list
-                // stale, not the restore undone — same rule as every other write
-                // here, so the trash section never invents its own error shape.
-                void readList().then(setDocuments, () => undefined)
-              }}
-            />
-          )}
           <PeekDialog
             document={peek}
             loadRender={loadRender}
@@ -859,6 +856,7 @@ export function WorkspaceFilesPanel({
             />
           )}
           {folderActions.layer}
+          <DuplicatedToast copy={duplicated.copy} onOpen={offeredOpen} />
         </section>
       </FolderNamesContext.Provider>
     </FolderActionsContext.Provider>

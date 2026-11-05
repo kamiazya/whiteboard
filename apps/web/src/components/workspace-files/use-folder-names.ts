@@ -28,6 +28,7 @@ export interface FolderNamesState {
   readonly flushInto: (path: string) => void
   /** Why the keeper refused a pending name it tried to write, until the next attempt. */
   readonly refusal: string | null
+  readonly dismissRefusal: () => void
   /** Rename a folder: a pending one in place, a standing one through the keeper. */
   readonly rename: (path: string, name: string) => Promise<void>
   /** Whether a folder at `path` can be renamed here at all. */
@@ -68,6 +69,13 @@ function useStoredFolderNames(
   return { stored, reload }
 }
 
+/** Why the keeper refused a name, and the way to put it away. */
+function useRefusal() {
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const dismissRefusal = useCallback(() => setRefusal(null), [])
+  return { refusal, setRefusal, dismissRefusal }
+}
+
 /**
  * Names given to folders no document is in yet, and the flush that writes one
  * once the listing shows a document under it. The pending name stays until
@@ -81,7 +89,7 @@ function usePendingFolderNames(
 ) {
   const [pending, setPending] = useState<FolderNames>(new Map())
   const writing = useRef(new Set<string>())
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const { refusal, setRefusal, dismissRefusal } = useRefusal()
 
   // SCOPE RESET — a name given in the departed workspace names nothing here.
   useEffect(() => {
@@ -122,7 +130,33 @@ function usePendingFolderNames(
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  return { pending, remember, flushInto, refusal }
+  return { pending, remember, flushInto, refusal, dismissRefusal }
+}
+
+/**
+ * A named folder the last listing emptied keeps its name as a pending one.
+ * The keeper prunes a folder's name with the folder, so without this a
+ * document moved out and back would bring the folder back under its bare
+ * segment. Read from the stored names of the render BEFORE the re-read
+ * lands, which still hold the departed folder's.
+ */
+function useKeepEmptiedNames(
+  source: WorkspaceFilesSource,
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  standing: readonly string[],
+  stored: FolderNames,
+  remember: (path: string, name: string) => void,
+) {
+  const before = useRef<{ source: WorkspaceFilesSource; standing: readonly string[] } | null>(null)
+  useEffect(() => {
+    const previous = before.current
+    before.current = documents === null ? null : { source, standing }
+    if (previous === null || documents === null || previous.source !== source) return
+    for (const path of previous.standing) {
+      const name = stored.get(path)
+      if (name !== undefined && !standing.includes(path)) remember(path, name)
+    }
+  }, [source, documents, standing, stored, remember])
 }
 
 /**
@@ -140,7 +174,13 @@ export function useFolderNames(
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
-  const { pending, remember, flushInto, refusal } = usePendingFolderNames(source, standing, reload)
+  const { pending, remember, flushInto, refusal, dismissRefusal } = usePendingFolderNames(
+    source,
+    standing,
+    reload,
+  )
+
+  useKeepEmptiedNames(source, documents, standing, stored, remember)
 
   const names = useMemo(() => new Map([...stored, ...pending]), [stored, pending])
   const folders = useMemo(() => [...new Set([...standing, ...pending.keys()])], [standing, pending])
@@ -165,5 +205,5 @@ export function useFolderNames(
     [source, documents],
   )
 
-  return { names, folders, remember, flushInto, refusal, rename, canRename }
+  return { names, folders, remember, flushInto, refusal, dismissRefusal, rename, canRename }
 }

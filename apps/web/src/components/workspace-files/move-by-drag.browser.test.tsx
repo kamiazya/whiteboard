@@ -115,6 +115,33 @@ describe('dragging a document onto a folder', () => {
   })
 })
 
+describe('a drop the keeper refuses', () => {
+  it('says why on screen, where the person is looking, and moves nothing', async () => {
+    const filler = Array.from({ length: 12 }, (_, i) => ({ path: `z-${i}`, name: `Filler ${i}` }))
+    const { source, ids } = await seedAndRender([
+      { path: 'design/brief', name: 'Notes' },
+      ...filler,
+    ])
+    const folder = within(screen.getByTestId('folder-contents')).getByRole('button', {
+      name: 'Open folder design',
+    })
+
+    drag(notesCard(), folder).drop()
+
+    const alert = await screen.findByText(
+      'Another document here is already called "notes". Choose a name no other document here has.',
+    )
+    const box = alert.getBoundingClientRect()
+    expect(box.height).toBeGreaterThan(0)
+    expect(box.top).toBeGreaterThanOrEqual(0)
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight)
+    expect((await pathsOf(source))[ids.notes as string]).toBe('notes')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(alert.isConnected).toBe(false))
+  })
+})
+
 describe('moving a document from the keyboard', () => {
   it('opens the card menu, picks Move to folder…, arrows to a folder and Enters', async () => {
     const { source, ids } = await seedAndRender()
