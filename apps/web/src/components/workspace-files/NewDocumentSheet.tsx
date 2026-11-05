@@ -140,7 +140,7 @@ export function NewDocumentSheet({
   /** The address a create with no name would use; its folder is shown. */
   defaultPath: string
   /** The address a typed name earns, or the generated one when it earns none. */
-  pathForName: (name: string) => string
+  pathForName: (name: string, kind: DocumentKind) => string
   busy?: boolean | undefined
   error?: string | null | undefined
   onCancel: () => void
@@ -150,7 +150,8 @@ export function NewDocumentSheet({
   const [name, setName] = useNameClearedOnOpen(open)
 
   const trimmed = name.trim()
-  const path = trimmed === '' ? defaultPath : pathForName(trimmed)
+  const pathFor = (kind: DocumentKind) =>
+    trimmed === '' ? defaultPath : pathForName(trimmed, kind)
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
@@ -165,7 +166,9 @@ export function NewDocumentSheet({
           <SheetError error={error} />
           <KindButtons
             busy={busy}
-            onPick={(kind) => onCreate(kind, { path, name: trimmed === '' ? undefined : trimmed })}
+            onPick={(kind) =>
+              onCreate(kind, { path: pathFor(kind), name: trimmed === '' ? undefined : trimmed })
+            }
           />
           <SheetActions busy={busy} onImport={onImport} onCancel={onCancel} />
         </form>

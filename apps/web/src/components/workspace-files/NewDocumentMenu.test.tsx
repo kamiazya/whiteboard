@@ -184,8 +184,72 @@ describe('NewDocumentMenu — the dialog survives a refusal', () => {
 
     expect(onCreate).not.toHaveBeenCalled()
     const alert = (await screen.findByRole('alert')).textContent ?? ''
-    expect(alert).toMatch(/segment/i)
+    expect(alert).toMatch(/letters a–z, digits and hyphens/i)
     expect(alert).not.toMatch(/[{[]/)
+  })
+})
+
+describe('NewDocumentDialog — the path follows the name', () => {
+  const pathForName = (name: string, kind: string) =>
+    `design/${name.toLowerCase().replace(/\s+/g, '-')}-${kind}`
+
+  function renderDialog(onSubmit = vi.fn()) {
+    render(
+      <NewDocumentDialog
+        open
+        defaultPath="design/untitled-2"
+        pathForName={pathForName}
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+    return onSubmit
+  }
+  const pathValue = () => (screen.getByLabelText(/^Path/) as HTMLInputElement).value
+
+  it('derives the path from the name as it is typed, and from the kind', async () => {
+    renderDialog()
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: 'Q3 plan' } })
+    expect(pathValue()).toBe('design/q3-plan-spatial')
+    fireEvent.click(screen.getByRole('radio', { name: 'Markdown note' }))
+    expect(pathValue()).toBe('design/q3-plan-markdown')
+  })
+
+  it('goes back to the default path when the name is cleared', async () => {
+    renderDialog()
+    const name = await screen.findByLabelText(/^Name/)
+    fireEvent.change(name, { target: { value: 'Q3' } })
+    fireEvent.change(name, { target: { value: '' } })
+    expect(pathValue()).toBe('design/untitled-2')
+  })
+
+  it('stops following once the path is edited by hand', async () => {
+    const onSubmit = renderDialog()
+    const name = await screen.findByLabelText(/^Name/)
+    fireEvent.change(name, { target: { value: 'Q3' } })
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: 'plans/q3' } })
+    fireEvent.change(name, { target: { value: 'Q3 hiring' } })
+    expect(pathValue()).toBe('plans/q3')
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(onSubmit).toHaveBeenCalledWith('spatial', { path: 'plans/q3', name: 'Q3 hiring' })
+  })
+
+  it('states the address rule under the path before anything is typed', async () => {
+    renderDialog()
+    const path = await screen.findByLabelText(/^Path/)
+    const hint = document.getElementById(
+      (path.getAttribute('aria-describedby') ?? '').split(' ').at(-1) ?? '',
+    )
+    expect(hint?.textContent).toMatch(/letters a–z, digits and hyphens; made from the name/i)
+  })
+
+  it('says what is wrong with a path while it is typed, not after Create', async () => {
+    const onSubmit = renderDialog()
+    fireEvent.change(await screen.findByLabelText(/^Path/), { target: { value: '文献/概要' } })
+    expect(screen.getByRole('status').textContent).toMatch(/letters a–z, digits and hyphens/i)
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: 'notes/gaiyo' } })
+    expect(screen.getByRole('status').textContent).toBe('')
   })
 })
 

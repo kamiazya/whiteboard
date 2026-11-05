@@ -241,7 +241,7 @@ export function PanelToolbar({
   creating: boolean
   workspace: WorkspaceFilesPanelProps['workspace']
   derivedNewPath: string
-  pathForName: (name: string) => string
+  pathForName: ComponentProps<typeof NewDocumentMenu>['pathForName']
   outcome: ReturnType<typeof useWriteOutcome>
   createHere: ComponentProps<typeof NewDocumentMenu>['onCreate']
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']

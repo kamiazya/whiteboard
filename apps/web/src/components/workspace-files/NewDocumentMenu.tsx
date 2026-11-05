@@ -84,11 +84,11 @@ export function NewDocumentMenu({
    */
   onImportFiles?: (files: readonly File[]) => void
   /**
-   * The address a typed name earns, for the phone sheet that asks for the
-   * name first. Absent, the sheet creates at `defaultPath` and the name is
-   * stored without moving the address.
+   * The address a typed name earns for a kind — what the dialog's Path
+   * follows and what the phone sheet creates at. Absent, both keep
+   * `defaultPath` and the name is stored without moving the address.
    */
-  pathForName?: (name: string) => string
+  pathForName?: (name: string, kind: DocumentKind) => string
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -163,6 +163,7 @@ export function NewDocumentMenu({
             open={dialogOpen}
             workspace={workspace}
             defaultPath={defaultPath}
+            pathForName={pathForName}
             busy={disabled}
             error={createError}
             onCancel={() => {
