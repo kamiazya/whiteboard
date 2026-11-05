@@ -19,6 +19,15 @@ export const trashEntrySchema = z
      * and for a document that never had one; a listing falls back to the path.
      */
     name: z.string().min(1).optional(),
+    /**
+     * The display names of the folders above it when it left, so a restore
+     * can show them again: an empty folder is not kept, so the delete that
+     * emptied one took its name with it. Absent when none had a name.
+     */
+    folderNames: z
+      .array(z.object({ path: z.string().min(1), name: z.string().min(1) }).strict())
+      .max(256)
+      .optional(),
     deletedAt: z.number().int().nonnegative(),
     blob: z.object({
       algorithm: z.literal('sha-256'),

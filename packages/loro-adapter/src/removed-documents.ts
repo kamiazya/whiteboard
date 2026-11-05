@@ -3,6 +3,7 @@
 // import, because a removed tree node cannot be revived and a shallow
 // snapshot drops what it held.
 import type { LoroDoc, TreeID, VersionVector } from 'loro-crdt'
+import { folderNamesByPath, namedFoldersAbove } from './workspace-folder-name.js'
 import {
   deleteWorkspaceNode,
   exportWorkspaceNodeSubtree,
@@ -18,6 +19,8 @@ export interface RemovedDocument {
   readonly path: string
   /** The display name it had, if it was given one. */
   readonly name?: string
+  /** The names of the folders above it before the import; absent when none had one. */
+  readonly folderNames?: Array<{ readonly path: string; readonly name: string }>
   /** Its subtree as it stood before the import: what a restore puts back. */
   readonly bytes: Uint8Array
 }
@@ -132,16 +135,20 @@ function exportDeepestFirst(
   const order = [...evacuees].sort((left, right) => depth(right.path) - depth(left.path))
   const below = survivorsByEvacuee(was, evacuees, alive)
   const out: RemovedDocument[] = []
+  const named = folderNamesByPath(before)
   for (const evacuee of order) {
     for (const id of below.get(evacuee.path) ?? []) deleteWorkspaceNode(before, id)
     const bytes = exportWorkspaceNodeSubtree(before, evacuee.id)
-    if (bytes !== null)
+    if (bytes !== null) {
+      const folderNames = namedFoldersAbove(named, evacuee.path)
       out.push({
         documentId: evacuee.documentId,
         path: evacuee.path,
         ...(evacuee.name === undefined ? {} : { name: evacuee.name }),
+        ...(folderNames.length === 0 ? {} : { folderNames }),
         bytes,
       })
+    }
   }
   return out
 }

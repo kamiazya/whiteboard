@@ -22,15 +22,18 @@ import {
   documentContainers,
   duplicateWorkspaceDocument,
   exportWorkspaceSubtree,
+  folderNamesByPath,
   forgetTrashEntry,
   importWorkspaceSubtree,
   moveWorkspaceNodeToPath,
+  namedFoldersAbove,
   pruneEmptyFolders,
   readPinnedDocumentIds,
   readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceFolderNames,
   readWorkspaceNodes,
+  reapplyFolderNames,
   recordTrashEntry,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -272,6 +275,7 @@ export class LoroWorkspaceDocumentIndex
       refuseNewFolders(foldersIn(nodes), restoring.folders + foldersMissingFor(nodes, entry.path))
       const restored = importWorkspaceSubtree(doc, stored.bytes, parentPath)
       if (restored === null) return null
+      if (entry.folderNames !== undefined) reapplyFolderNames(doc, entry.folderNames)
       forgetTrashEntry(doc, input.documentId)
       await this.docs.save(input.workspaceId, doc)
       // After the save, not before: a failure between the two would otherwise
@@ -324,6 +328,31 @@ export class LoroWorkspaceDocumentIndex
 
   #serialise<T>(workspaceId: string, body: () => Promise<T>): Promise<T> {
     return this.#writes.run(workspaceId, body)
+  }
+
+  /** Stores a document's bytes and records the trash row naming them; the delete follows only once both stand. */
+  async #evacuate(
+    doc: LoroDoc,
+    meta: { readonly documentId: string; readonly name?: string },
+    path: string,
+  ): Promise<void> {
+    const bytes = exportWorkspaceSubtree(doc, path)
+    if (bytes === null) return
+    const { ref } = await this.blobs.put({
+      // Copied so the DTO's narrow buffer type is satisfied without a
+      // cast: Loro's export is `Uint8Array<ArrayBufferLike>`.
+      bytes: new Uint8Array(bytes),
+      contentType: 'application/octet-stream',
+    })
+    const folderNames = namedFoldersAbove(folderNamesByPath(doc), path)
+    recordTrashEntry(doc, {
+      documentId: meta.documentId,
+      path,
+      ...(meta.name === undefined ? {} : { name: meta.name }),
+      ...(folderNames.length === 0 ? {} : { folderNames }),
+      deletedAt: Date.now(),
+      blob: ref,
+    })
   }
 
   async #dropTrashBlobUnlessNamed(
@@ -609,24 +638,7 @@ export class LoroWorkspaceDocumentIndex
       // Only a DOCUMENT is evacuated. A folder holds no content of its own,
       // so there is nothing to bring back and a trash row for one would offer
       // a restore that restores nothing.
-      if (target.type === 'document') {
-        const bytes = exportWorkspaceSubtree(doc, input.path)
-        if (bytes !== null) {
-          const { ref } = await this.blobs.put({
-            // Copied so the DTO's narrow buffer type is satisfied without a
-            // cast: Loro's export is `Uint8Array<ArrayBufferLike>`.
-            bytes: new Uint8Array(bytes),
-            contentType: 'application/octet-stream',
-          })
-          recordTrashEntry(doc, {
-            documentId: target.meta.documentId,
-            path: input.path,
-            ...(target.meta.name === undefined ? {} : { name: target.meta.name }),
-            deletedAt: Date.now(),
-            blob: ref,
-          })
-        }
-      }
+      if (target.type === 'document') await this.#evacuate(doc, target.meta, input.path)
       deleteWorkspaceNodeAtPath(doc, input.path)
       pruneEmptyFolders(doc)
       await this.docs.save(input.workspaceId, doc)

@@ -20,6 +20,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   describeDocumentDuplicatesConformance,
+  describeDocumentFoldersConformance,
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
@@ -88,6 +89,13 @@ describe('FoldingBrowserIndex', () => {
 // to the one its inner index already passes.
 describe('FoldingBrowserIndex pins', () => {
   describeDocumentPinsConformance(async () => {
+    const { index, dbName } = await freshIndex()
+    return { index, dispose: () => deleteDb(dbName) }
+  })
+})
+
+describe('FoldingBrowserIndex folders', () => {
+  describeDocumentFoldersConformance(async () => {
     const { index, dbName } = await freshIndex()
     return { index, dispose: () => deleteDb(dbName) }
   })
