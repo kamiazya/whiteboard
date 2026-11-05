@@ -1,12 +1,15 @@
-import type { CanvasEdge, CanvasLine } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { BoxTargetOverlay } from './BoxTargetOverlay.js'
+import type { ContextMenuTarget } from './CanvasContextMenu.js'
 import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeEndHandles } from './EdgeEndHandles.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import type { EditorGesture } from './editor-gesture.js'
 import { otherEndNodeOf } from './gesture-ends.js'
+import { PathMoreActions, pathMenuTarget } from './PathMoreActions.js'
 
 export interface RoutableHandlesProps {
   readonly gesture: EditorGesture
@@ -18,6 +21,11 @@ export interface RoutableHandlesProps {
   readonly boxes: readonly NodeBox[]
   readonly selectableBoxes: readonly NodeBox[]
   readonly createId: (() => string) | undefined
+  /** Where the selection's more-actions chip opens its menu, and how wide the editor is. */
+  readonly menu?: {
+    readonly open: (target: ContextMenuTarget) => void
+    readonly rootWidth: number
+  }
 }
 
 /**
@@ -36,6 +44,9 @@ export function RoutableHandles(props: RoutableHandlesProps) {
           offset={inkDragOffset(gesture)}
         />
       )}
+      {props.menu !== undefined && state.kind === 'idle' && (
+        <MoreActionsChip {...props} menu={props.menu} />
+      )}
       {selectedRoutable !== undefined && (
         <PathHandles
           gesture={gesture}
@@ -48,6 +59,37 @@ export function RoutableHandles(props: RoutableHandlesProps) {
       )}
     </>
   )
+}
+
+function MoreActionsChip({
+  gesture,
+  selectedInkIds,
+  edgePaths,
+  menu,
+}: RoutableHandlesProps & { readonly menu: NonNullable<RoutableHandlesProps['menu']> }) {
+  const [lead] = selectedInkIds
+  if (lead === undefined) return null
+  const paths = edgePaths.filter((entry) => selectedInkIds.includes(entry.id))
+  return (
+    <PathMoreActions
+      paths={paths.map((entry) => entry.path)}
+      zoom={gesture.viewport.zoom}
+      subject={pathSubject(gesture.canvas, selectedInkIds)}
+      onOpen={(anchor) => menu.open(pathMenuTarget(lead, anchor, gesture.viewport, menu.rootWidth))}
+    />
+  )
+}
+
+/**
+ * What a selected path is called aloud. A drawn stroke is a drawing and a
+ * relation a connection (vocabulary: a Line is not an Edge), and a ruled
+ * line is neither.
+ */
+function pathSubject(canvas: SpatialCanvas, ids: readonly string[]): string {
+  if (ids.length > 1) return `${ids.length} selected items`
+  const line = (canvas.lines ?? []).find((entry) => entry.id === ids[0])
+  if (line === undefined) return 'this connection'
+  return isFreehandStroke(line) ? 'this drawing' : 'this line'
 }
 
 /**
@@ -79,18 +121,24 @@ function PathHandles({
       <EdgeEndHandles
         path={path}
         zoom={gesture.viewport.zoom}
+        subject={pathSubject(gesture.canvas, [element.id])}
         onArm={(endpoint, event) => {
           if (event !== undefined) gesture.beginOverlay(event)
           gesture.dispatch({ type: 'pointerdown-end', elementId: element.id, endpoint })
         }}
       />
-      <EdgeBendLayer
-        edge={element}
-        path={path}
-        viewport={gesture.viewport}
-        begin={gesture.beginOverlay}
-        dispatch={gesture.dispatch}
-      />
+      {/* A drawing's bends are where the hand went, and a press on the
+        stroke has to MOVE it: grab points every few pixels along it left no
+        part of a selected drawing a finger could press without bending it. */}
+      {!isFreehandStroke(element) && (
+        <EdgeBendLayer
+          edge={element}
+          path={path}
+          viewport={gesture.viewport}
+          begin={gesture.beginOverlay}
+          dispatch={gesture.dispatch}
+        />
+      )}
     </>
   )
 }

@@ -6,7 +6,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { readingOrder } from '../../lib/spatial/reading-order.js'
-import { edgeA11yName, edgeRoute, nodeA11yName } from './node-a11y-name.js'
+import { edgeA11yName, edgeRoute, lineA11yName, nodeA11yName } from './node-a11y-name.js'
 
 const plural = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`
@@ -79,7 +79,9 @@ export function selectionMessage(
   }
   if (selectedEdgeId !== null) {
     const edge = canvas.edges.find((entry) => entry.id === selectedEdgeId)
-    return edge === undefined ? undefined : `Selected: ${edgeA11yName(edge, canvas.nodes)}`
+    if (edge !== undefined) return `Selected: ${edgeA11yName(edge, canvas.nodes)}`
+    const line = (canvas.lines ?? []).find((entry) => entry.id === selectedEdgeId)
+    return line === undefined ? undefined : `Selected: ${lineA11yName(line, canvas.nodes)}`
   }
   return undefined
 }
