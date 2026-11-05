@@ -276,9 +276,10 @@ export function PanelToolbar({
   const trail = browsing
   const newFolder = columns === 'two' && browsing && onNewFolder !== undefined
   return (
-    // Two rows below `sm`: at a phone's width one row gave the search box
-    // 144px and wrapped the trail's last folder name in two. Where you are
-    // gets a row; what you are looking for gets the next one.
+    // Rows below `sm`: at a phone's width one row gave the search box 144px
+    // and wrapped the trail's last folder name in two. Where you are gets a
+    // row, what you are looking for the whole of the next, and New with the
+    // view choice wrap below it.
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       {(trail || newFolder) && (
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -292,8 +293,8 @@ export function PanelToolbar({
           {newFolder && <NewFolderButton onClick={() => onNewFolder(folder)} />}
         </div>
       )}
-      <div className="flex min-w-0 items-center gap-2 sm:ml-auto">
-        <div className="relative min-w-0 flex-1 sm:flex-none">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-nowrap">
+        <div className="relative min-w-0 basis-full sm:basis-auto">
           <Search
             aria-hidden="true"
             className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
