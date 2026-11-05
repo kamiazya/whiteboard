@@ -31,6 +31,11 @@ folder…**:
   list instead.
 - If the destination already has a document with the same last segment, the
   move is refused with the path that collided and nothing moves.
+- If a document already in the folder shows the same name — its name, or its
+  last path segment when it has none, compared ignoring case and surrounding
+  spaces — the move is refused with that name and nothing moves. Rename one of
+  the two first. This holds for dragging, for a rename that changes the path,
+  and for a folder moved under a folder with a same-named folder.
 
 With a mouse or a pen you can also drag a card or row onto a folder — a folder
 card, a folder in the tree beside the list, or **Workspace** for the root. The

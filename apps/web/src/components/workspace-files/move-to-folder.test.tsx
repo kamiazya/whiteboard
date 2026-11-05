@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -76,6 +77,20 @@ describe('moving a document to a folder from its menu', () => {
     await waitFor(() =>
       expect(source.renameDocumentPath).toHaveBeenCalledWith('design/login', 'plans/q4/login'),
     )
+  })
+
+  it('words a name a sibling already shows in the folder, and keeps the picker open', async () => {
+    const source = renderWithFolders()
+    source.renameDocumentPath.mockRejectedValueOnce(
+      new DisplayNameTakenError('document', 'archive/login', 'Login flow'),
+    )
+    const dialog = await openPicker('Login flow')
+    fireEvent.click(within(dialog).getByRole('option', { name: 'archive' }))
+    expect(await within(dialog).findByRole('alert')).toHaveProperty(
+      'textContent',
+      'Another document here is already called "Login flow". Choose a name no other document here has.',
+    )
+    expect(screen.getByRole('dialog', { name: 'Move to folder' })).toBeTruthy()
   })
 
   it('shows the keeper’s refusal and keeps the picker open', async () => {

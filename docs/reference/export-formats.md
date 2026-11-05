@@ -325,7 +325,8 @@ and naming it answers `404`.
 
 Two documents in the same folder may not show the same name, and neither
 may two folders in the same folder. A create, a rename, or a markdown
-document's frontmatter `title` that would give a document the name another
+document's frontmatter `title`, or a move (the daemon's path route and
+`document.move`, for documents and folders alike) that would give a document the name another
 document beside it already shows — its name, or its last path segment when
 it has none — is refused, and so is a folder name another folder beside it
 shows; names are compared ignoring case, surrounding spaces and Unicode
@@ -336,6 +337,11 @@ document may share a name, and so may two documents in different folders.
 Two names that only meet when two copies of a workspace merge — each named
 while the other could not see it — are both kept: nothing renames either,
 and either can keep its own name in a later write.
+
+A document created with no name shows its last path segment; when that
+would read the same as a name a sibling shows, the create is not refused and
+instead takes the next free address (`plan` becomes `plan-2`), and the
+returned `path` says where it landed.
 
 A board declares at most **64** semantic axes in `visual.axes/v0` (the facet
 keys it treats as meaning, which the legend scores on every layout).
