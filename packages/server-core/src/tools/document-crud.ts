@@ -284,8 +284,10 @@ export async function wbDocumentCreate(
   const sent = input.kind === 'markdown' ? (input.markdown ?? '') : undefined
   const markdown = sent !== undefined && !hasOkfFrontmatter(sent) ? asOkfBody(sent) : sent
 
+  let title: string | undefined
   if (markdown !== undefined) {
     const preflight = parseWritableOkf(markdown)
+    title = preflight.frontmatter.title
     // A tag the workspace's library forbids is refused here for exactly the
     // reason the parse above is: the delegated write below would otherwise
     // refuse it AFTER the mint, leaving an empty document squatting the path
@@ -330,7 +332,14 @@ export async function wbDocumentCreate(
   // which the port says cannot exist. But ADR-0006 point 3 is the older rule
   // and outranks tidiness here — naming must never gate creation — so a
   // caller sending a blank one gets a document, not an error.
-  const name = input.name?.trim()
+  //
+  // A frontmatter `title` with no `name` is the name too, handed to the index
+  // at the create rather than applied after it: an unnamed create is
+  // re-addressed away from a sibling's name and a named one is judged by the
+  // duplicate-name refusal, and only the second is right for a document the
+  // caller did name. `refuseConflictingNames` above has already made the two
+  // agree when both are given.
+  const name = (input.name ?? title)?.trim()
   const entry = await rethrowWorkspaceNotFound(deps, workspaceId, 'create', () =>
     deps.documentIndex.createDocument({
       workspaceId,
