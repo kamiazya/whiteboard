@@ -149,6 +149,14 @@ export const wbDocumentListOutputSchema = z
           ),
       }),
     ),
+    // Absent, not empty, when no folder is named or the keeper names none: a
+    // folder with no entry shows its path segment.
+    folderNames: z
+      .array(z.object({ path: z.string(), name: z.string() }).strict())
+      .optional()
+      .describe(
+        'Folders that have a display name, as {path, name}. A folder not listed shows its last path segment.',
+      ),
   })
   .strict()
 

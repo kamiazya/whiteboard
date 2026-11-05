@@ -501,7 +501,7 @@ describe('what the tool table costs to read', () => {
         // +153 wire, 0 visible: each row says whether the workspace pins it (an
         // output field; omitted when the keeper keeps no pins).
         visibleBytes: 541, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
-        wireBytes: 1368, // +17: the output's `path` states its 1024-character bound
+        wireBytes: 1662, // +294: the output lists named folders as {path, name}; 0 visible, 0 undescribed. Earlier +17: the output's `path` states its 1024-character bound
         descriptionWords: 32,
         parameters: 1,
         undescribed: 0,
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, then +767, each the same bytes as visible.
-      wireBytes: 135253, // +316 the folder.rename arm, as visible; +48 zod 4.6's emitter, none of it a lost bound or description: the overlap pair tuple's `minItems`/`maxItems`/`items` (+80) and a subpath's anchored `^#` pattern (-32), as the rows say; +397 wb_scene_render `comments`, as visible; +67 the lookup bounds, as visible; +34 the text anchor quote bound, as visible; +64 the node-set anchor ceiling: thread.add's input, and the threads wb_canvas_view, wb_document_get and wb_thread_edit return; +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
+      wireBytes: 135547, // +316 the folder.rename arm, as visible; +48 zod 4.6's emitter, none of it a lost bound or description: the overlap pair tuple's `minItems`/`maxItems`/`items` (+80) and a subpath's anchored `^#` pattern (-32), as the rows say; +397 wb_scene_render `comments`, as visible; +67 the lookup bounds, as visible; +34 the text anchor quote bound, as visible; +64 the node-set anchor ceiling: thread.add's input, and the threads wb_canvas_view, wb_document_get and wb_thread_edit return; +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible; +294 wb_document_list folderNames, wire only
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

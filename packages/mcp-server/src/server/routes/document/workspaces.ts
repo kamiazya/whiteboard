@@ -2,7 +2,6 @@ import {
   createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type DuplicateDocumentResponse,
-  type FolderNameSummary,
   type ListDocumentsResponse,
   type ListWorkspacesResponse,
   type RenameDocumentPathResponse,
@@ -381,8 +380,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // The operation's own rows are this response's rows: re-listing its
       // fields here is how `pinned` went unanswered while the tool and
       // `/api/v1` carried it.
-      const { documents } = await wbDocumentList(deps, { workspaceId })
-      const folderNames = await namedFoldersOf(deps, workspaceId)
+      const { documents, folderNames } = await wbDocumentList(deps, { workspaceId })
       const response: ListDocumentsResponse = {
         documents,
         ...(folderNames === undefined ? {} : { folderNames }),
@@ -574,20 +572,6 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
   )
 
   return app
-}
-
-/**
- * The named folders a document listing carries beside its documents: a second
- * walk of the record's META only (no content digest), and absent when no
- * folder is named — the keeper's silence about names.
- */
-async function namedFoldersOf(
-  deps: ServerDeps,
-  workspaceId: string,
-): Promise<FolderNameSummary[] | undefined> {
-  if (!hasDocumentFolders(deps.documentIndex)) return undefined
-  const named = await deps.documentIndex.listFolderNames({ workspaceId })
-  return named.length === 0 ? undefined : named
 }
 
 function mountFolderNameRoute(app: Hono, deps: ServerDeps): void {

@@ -9,6 +9,7 @@ import {
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import {
+  hasDocumentFolders,
   hasDocumentPins,
   isWorkspaceSegmentTakenError,
   WorkspaceNotFoundError,
@@ -390,6 +391,9 @@ export async function wbDocumentList(
   const pinned = hasDocumentPins(deps.documentIndex)
     ? new Set(await deps.documentIndex.listPinnedDocuments({ workspaceId: input.workspaceId }))
     : undefined
+  const folderNames = hasDocumentFolders(deps.documentIndex)
+    ? await deps.documentIndex.listFolderNames({ workspaceId: input.workspaceId })
+    : []
   return {
     documents: entries.map((entry) => ({
       documentId: entry.documentId,
@@ -400,6 +404,7 @@ export async function wbDocumentList(
       ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
       ...(pinned === undefined ? {} : { pinned: pinned.has(entry.documentId) }),
     })),
+    ...(folderNames.length === 0 ? {} : { folderNames }),
   }
 }
 

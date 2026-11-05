@@ -115,6 +115,9 @@ export async function seed(wb) {
       },
       { op: 'document.create', path: 'boards/architecture', kind: 'spatial' },
       { op: 'document.create', path: 'boards/roadmap', kind: 'spatial' },
+      // A folder shown under a name other than its path segment, for the
+      // task that reads the name a person would see.
+      { op: 'folder.rename', path: 'boards', name: 'Diagrams' },
       // This workspace's own STENCIL LIBRARY (ADR-0034 decision 4). Seeded
       // as ordinary content, the way a team would have agreed it in an
       // earlier conversation — so a task about it measures whether an agent
