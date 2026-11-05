@@ -186,6 +186,8 @@ export interface TrashRow {
   readonly path: string
   /** The display name it had; absent when it had none, and the path stands in. */
   readonly name?: string
+  /** The folders above it as they were named when it went; absent when none was. */
+  readonly folderNames?: readonly { readonly path: string; readonly name: string }[]
   readonly deletedAt: number
 }
 

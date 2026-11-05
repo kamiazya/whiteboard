@@ -92,6 +92,7 @@ const listHandler =
             documentId: entry.documentId,
             path: entry.path,
             ...(entry.name === undefined ? {} : { name: entry.name }),
+            ...(entry.folderNames === undefined ? {} : { folderNames: entry.folderNames }),
             deletedAt: entry.deletedAt,
           })),
         }

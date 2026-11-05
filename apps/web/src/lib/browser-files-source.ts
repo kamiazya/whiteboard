@@ -263,6 +263,7 @@ function trashMembers(
         documentId: row.documentId,
         path: row.path,
         ...(row.name === undefined ? {} : { name: row.name }),
+        ...(row.folderNames === undefined ? {} : { folderNames: row.folderNames }),
         deletedAt: row.deletedAt,
       }))
     },

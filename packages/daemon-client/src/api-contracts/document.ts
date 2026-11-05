@@ -201,12 +201,23 @@ export const updateDocumentResponseSchema = z.object({
 // The trash: what a delete evacuated, listed for a human and restorable by
 // documentId. Metadata only — blob digests are the store's business and
 // never cross this boundary.
+// One named folder: what a reader shows for the folder at `path` instead of
+// its segment. An unnamed folder is not listed.
+export const folderNameSummarySchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+})
+
 export const trashEntrySummarySchema = z.object({
   documentId: z.string().min(1),
   path: z.string().min(1),
   // Absent for a document that had no display name, and on rows recorded
   // before names were kept: the path is then all a listing has to show.
   name: z.string().min(1).optional(),
+  // The folders above it as they were named when it went, which an emptied
+  // folder can no longer say; read as absent when malformed, so the row costs
+  // a reader the names, never the entry.
+  folderNames: unknownIsAbsent(z.array(folderNameSummarySchema)),
   deletedAt: z.number().int().nonnegative(),
 })
 
@@ -438,13 +449,6 @@ export const documentSummarySchema = z.object({
   // spelled as `wb_document_list` and `/api/v1` spell it. ABSENT, not false,
   // when the keeper keeps no pins: silence about pins is not "none pinned".
   pinned: z.boolean().optional(),
-})
-
-// One named folder: what a reader shows for the folder at `path` instead of
-// its segment. An unnamed folder is not listed.
-export const folderNameSummarySchema = z.object({
-  path: z.string().min(1),
-  name: z.string().min(1),
 })
 
 export const listDocumentsResponseSchema = z.object({
