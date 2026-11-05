@@ -2,7 +2,7 @@ import type { EditorTool } from '../../lib/editor-tool.js'
 import { connectToolHint } from './ConnectToolHint.js'
 
 /** What a screen reader hears when a tool is armed, in the words the dock and the catalog use. */
-export const TOOL_ANNOUNCEMENT = {
+const TOOL_ANNOUNCEMENT = {
   select: 'Select tool',
   hand: 'Hand tool',
   connect: 'Connect tool',

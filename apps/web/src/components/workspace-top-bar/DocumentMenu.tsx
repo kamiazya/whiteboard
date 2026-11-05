@@ -154,6 +154,29 @@ function selectedNodeIds(selection: EditorSelection): readonly string[] {
   return selection.selectedId === null ? [] : [selection.selectedId, ...selection.extraIds]
 }
 
+/**
+ * The "Selection only" choice and the picture export it shapes. A choice made
+ * for this open of the menu, not a remembered preference: what is selected
+ * next time is a different selection.
+ */
+function useSelectionScope(
+  selection: SelectionSource | undefined,
+  kind: DocumentKind | undefined,
+  onExport: (format: SceneExportFormat, scope?: ExportScope) => void,
+) {
+  const source = selection ?? NO_SOURCE
+  const current = useSyncExternalStore(
+    source.subscribeSelection,
+    source.getSelection,
+    source.getSelection,
+  )
+  const nodeIds = kind === 'spatial' ? selectedNodeIds(current) : []
+  const [selectionOnly, setSelectionOnly] = useState(false)
+  const picture = (format: SceneExportFormat) => () =>
+    selectionOnly && nodeIds.length > 0 ? onExport(format, { nodeIds }) : onExport(format)
+  return { nodeIds, selectionOnly, setSelectionOnly, picture }
+}
+
 function ExportSubmenu({
   onExport,
   kind,
@@ -163,18 +186,11 @@ function ExportSubmenu({
   readonly kind: DocumentKind | undefined
   readonly selection: SelectionSource | undefined
 }) {
-  const source = selection ?? NO_SOURCE
-  const current = useSyncExternalStore(
-    source.subscribeSelection,
-    source.getSelection,
-    source.getSelection,
+  const { nodeIds, selectionOnly, setSelectionOnly, picture } = useSelectionScope(
+    selection,
+    kind,
+    onExport,
   )
-  const nodeIds = kind === 'spatial' ? selectedNodeIds(current) : []
-  // A choice made for this open of the menu, not a remembered preference:
-  // what is selected next time is a different selection.
-  const [selectionOnly, setSelectionOnly] = useState(false)
-  const picture = (format: SceneExportFormat) => () =>
-    selectionOnly && nodeIds.length > 0 ? onExport(format, { nodeIds }) : onExport(format)
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className="gap-2">
@@ -182,24 +198,7 @@ function ExportSubmenu({
         Export…
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        {/* A note is text: its export is the .md file. The pictures are of the
-            canvas, and so are the options that shape them. */}
-        {kind !== 'markdown' && (
-          <>
-            <DropdownMenuItem onSelect={picture('png')}>Export as PNG</DropdownMenuItem>
-            <DropdownMenuItem onSelect={picture('svg')}>Export as SVG</DropdownMenuItem>
-          </>
-        )}
-        {kind === 'spatial' && (
-          <>
-            <DropdownMenuItem onSelect={picture('png-comments')}>
-              Export as PNG (with comments)
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={picture('svg-comments')}>
-              Export as SVG (with comments)
-            </DropdownMenuItem>
-          </>
-        )}
+        <PictureEntries kind={kind} picture={picture} />
         {kind === 'markdown' && (
           <DropdownMenuItem onSelect={() => onExport('md')}>
             Save as Markdown (.md)
@@ -219,6 +218,37 @@ function ExportSubmenu({
         )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
+  )
+}
+
+function PictureEntries({
+  kind,
+  picture,
+}: {
+  readonly kind: DocumentKind | undefined
+  readonly picture: (format: SceneExportFormat) => () => void
+}) {
+  return (
+    <>
+      {/* A note is text: its export is the .md file. The pictures are of the
+          canvas, and so are the options that shape them. */}
+      {kind !== 'markdown' && (
+        <>
+          <DropdownMenuItem onSelect={picture('png')}>Export as PNG</DropdownMenuItem>
+          <DropdownMenuItem onSelect={picture('svg')}>Export as SVG</DropdownMenuItem>
+        </>
+      )}
+      {kind === 'spatial' && (
+        <>
+          <DropdownMenuItem onSelect={picture('png-comments')}>
+            Export as PNG (with comments)
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={picture('svg-comments')}>
+            Export as SVG (with comments)
+          </DropdownMenuItem>
+        </>
+      )}
+    </>
   )
 }
 

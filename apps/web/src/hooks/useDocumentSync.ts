@@ -36,7 +36,7 @@ import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import type { PictureExportOptions } from '../lib/spatial/picture-options.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
-import { selectionPicture } from '../lib/spatial/selection-picture.js'
+import { pictureSubject } from '../lib/spatial/selection-picture.js'
 import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
@@ -556,18 +556,14 @@ export function useDocumentSync(
       if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
       // A note's export is its .md file; a picture is of a canvas.
       if (options.kind === 'markdown') return null
-      const whole = session?.getCanvas() ?? canvas
-      const { canvas: exported, threads } =
-        options.selection === undefined
-          ? { canvas: whole, threads: options.threads }
-          : selectionPicture(whole, options.threads ?? [], options.selection)
+      const { canvas: exported, threads } = pictureSubject(session?.getCanvas() ?? canvas, options)
       const measure = createBrowserMeasureText()
       const comments = isCommentedPicture(format)
-      const drawOptions = { ...options, measure, comments, ...(threads ? { threads } : {}) }
       // Waits for every math block and diagram fence the layout asks for —
       // a text node's, a file node's note's — so the file is typeset as the screen is.
       const drawn = await layoutWithFragments(
-        (seams) => renderCanvasForExport(exported, { ...drawOptions, ...seams }),
+        (seams) =>
+          renderCanvasForExport(exported, { ...options, measure, threads, ...seams, comments }),
         FRAGMENT_ENGINES,
       )
       return savedPicture(pictureFormatOf(format), drawn, {

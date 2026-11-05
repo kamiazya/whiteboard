@@ -1,7 +1,7 @@
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { selectionPicture } from './selection-picture.js'
+import { pictureSubject } from './selection-picture.js'
 
 const edge = (id: string, from: string, to: string) => ({
   id,
@@ -44,21 +44,21 @@ const thread = (id: string, anchor: CommentThread['anchor']): CommentThread => (
   messages: [{ id: `${id}-m`, body: 'x' }],
 })
 
-describe('selectionPicture', () => {
+describe('pictureSubject of a selection', () => {
   it('draws a selected frame with its members and the edges both of whose ends it holds', () => {
-    const { canvas } = selectionPicture(board, [], ['frame'])
+    const { canvas } = pictureSubject(board, { threads: [], selection: ['frame'] })
     expect(canvas.nodes.map((node) => node.id)).toEqual(['frame', 'in1', 'in2'])
     expect(canvas.edges.map((e) => e.id)).toEqual(['inner'])
   })
 
   it('keeps an edge between two nodes selected separately', () => {
-    const { canvas } = selectionPicture(board, [], ['in2', 'out'])
+    const { canvas } = pictureSubject(board, { threads: [], selection: ['in2', 'out'] })
     expect(canvas.nodes.map((node) => node.id)).toEqual(['in2', 'out'])
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
   })
 
   it('keeps the ink and the comments that belong to the selection, and nothing else', () => {
-    const { canvas } = selectionPicture(board, [], ['frame'])
+    const { canvas } = pictureSubject(board, { threads: [], selection: ['frame'] })
     expect((canvas.lines ?? []).map((line) => line.id)).toEqual(['ink-in'])
     expect((canvas.comments ?? []).map((comment) => comment.id)).toEqual(['on-in1', 'spot-in'])
   })
@@ -76,12 +76,19 @@ describe('selectionPicture', () => {
       }),
       thread('t-doc', { kind: 'document' }),
     ]
-    const kept = selectionPicture(board, threads, ['frame']).threads.map((t) => t.id)
+    const kept = pictureSubject(board, { threads, selection: ['frame'] }).threads.map((t) => t.id)
     expect(kept).toEqual(['t-node', 't-passage'])
   })
 
+  it('answers the whole board, every conversation kept, without a selection', () => {
+    const threads = [thread('t-doc', { kind: 'document' })]
+    const picture = pictureSubject(board, { threads })
+    expect(picture.canvas).toBe(board)
+    expect(picture.threads).toEqual(threads)
+  })
+
   it('answers the whole board when the selection names nothing on it', () => {
-    const { canvas } = selectionPicture(board, [], ['gone'])
+    const { canvas } = pictureSubject(board, { threads: [], selection: ['gone'] })
     expect(canvas).toBe(board)
   })
 })

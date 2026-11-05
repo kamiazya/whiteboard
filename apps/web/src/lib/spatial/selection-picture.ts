@@ -17,6 +17,37 @@ interface Box {
 const inside = (box: Box, x: number, y: number) =>
   x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
 
+/** Whether a conversation's anchor is about something the picture keeps. */
+function anchorKept(
+  anchor: CommentThread['anchor'],
+  ids: ReadonlySet<string>,
+  edgeIds: ReadonlySet<string>,
+  box: Box,
+): boolean {
+  if (anchor.kind === 'document') return false
+  if (anchor.kind === 'text') return anchor.nodeId !== undefined && ids.has(anchor.nodeId)
+  if (anchor.nodeId !== undefined) return ids.has(anchor.nodeId)
+  if (anchor.edgeId !== undefined) return edgeIds.has(anchor.edgeId)
+  if (anchor.nodeIds !== undefined) return anchor.nodeIds.some((id) => ids.has(id))
+  return inside(box, anchor.x, anchor.y)
+}
+
+/**
+ * What a picture export draws: the whole canvas with every conversation, or,
+ * given a selection, `selectionPicture`'s part of it.
+ */
+export function pictureSubject(
+  canvas: SpatialCanvas,
+  {
+    threads,
+    selection,
+  }: { readonly threads?: readonly CommentThread[]; readonly selection?: readonly string[] },
+): { readonly canvas: SpatialCanvas; readonly threads: readonly CommentThread[] } {
+  return selection === undefined
+    ? { canvas, threads: threads ?? [] }
+    : selectionPicture(canvas, threads ?? [], selection)
+}
+
 /**
  * The picture of a selection: each selected node read as the durable
  * fragment `^id` names (so a selected frame brings its members, the way an
@@ -28,7 +59,7 @@ const inside = (box: Box, x: number, y: number) =>
  * A selection naming nothing on the board answers the board itself, so a
  * stale selection never exports an empty picture.
  */
-export function selectionPicture(
+function selectionPicture(
   canvas: SpatialCanvas,
   threads: readonly CommentThread[],
   nodeIds: readonly string[],
@@ -63,14 +94,7 @@ export function selectionPicture(
         ? edgeIds.has(comment.targetEdgeId)
         : inside(box, comment.x, comment.y),
   )
-  const keptThreads = threads.filter(({ anchor }) => {
-    if (anchor.kind === 'document') return false
-    if (anchor.kind === 'text') return anchor.nodeId !== undefined && ids.has(anchor.nodeId)
-    if (anchor.nodeId !== undefined) return ids.has(anchor.nodeId)
-    if (anchor.edgeId !== undefined) return edgeIds.has(anchor.edgeId)
-    if (anchor.nodeIds !== undefined) return anchor.nodeIds.some((id) => ids.has(id))
-    return inside(box, anchor.x, anchor.y)
-  })
+  const keptThreads = threads.filter(({ anchor }) => anchorKept(anchor, ids, edgeIds, box))
   return {
     canvas: {
       ...canvas,

@@ -61,13 +61,20 @@ export function ShortcutHelpSheet({ open, onOpenChange }: ShortcutHelpSheetProps
             </section>
           )
         })}
-        <p data-testid="shortcut-help-menu-only" className="text-sm text-muted-foreground">
-          Align, Distribute, Tidy and Group have no key. With the Select tool ({SELECT_KEY}),
-          right-click a selection of two or more nodes for Align, Distribute, Tidy and Group
-          selection, or the empty canvas for Tidy canvas and a new Group. The Hand tool&apos;s
-          right-click offers comments only.
-        </p>
+        <MenuOnlyNote />
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Where the arrange actions that have no key are, in the tool that offers them. */
+function MenuOnlyNote() {
+  return (
+    <p data-testid="shortcut-help-menu-only" className="text-sm text-muted-foreground">
+      Align, Distribute, Tidy and Group have no key. With the Select tool ({SELECT_KEY}),
+      right-click a selection of two or more nodes for Align, Distribute, Tidy and Group selection,
+      or the empty canvas for Tidy canvas and a new Group. The Hand tool&apos;s right-click offers
+      comments only.
+    </p>
   )
 }

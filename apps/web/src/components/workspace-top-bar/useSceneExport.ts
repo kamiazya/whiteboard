@@ -29,6 +29,11 @@ async function textHasAsset(blob: Blob): Promise<boolean> {
   return new TextDecoder().decode(await blob.arrayBuffer()).includes('asset:')
 }
 
+function exportedNotice(label: string, scope: ExportScope | undefined): string {
+  // Kept out of the handler: it already sits at the complexity ceiling.
+  return scope === undefined ? `Exported as ${label}` : `Exported the selection as ${label}`
+}
+
 // Export has no dialog of its own (it's a plain dropdown action), so a
 // failed or unavailable export is surfaced next to the trigger instead.
 export function useSceneExport({ onExport, filenameBase, onExported, log }: UseSceneExportOptions) {
@@ -60,7 +65,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         // current task lets the download start first.
         setTimeout(() => URL.revokeObjectURL(url), 0)
         if (saved === undefined) {
-          onExported?.(`Exported ${scope === undefined ? '' : 'the selection '}as ${label}`)
+          onExported?.(exportedNotice(label, scope))
         } else {
           // An image in a canvas is an `asset:` reference to the workspace's
           // file, so the saved text does not carry its pixels.
