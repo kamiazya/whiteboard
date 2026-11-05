@@ -135,7 +135,16 @@ export function SourceColumn({
   )
 }
 
-const EMPTY_PREVIEW = 'Nothing to preview yet. Switch to Write to start.'
+/**
+ * What an empty preview says, by view: in Split the source is already open
+ * beside it, so "switch to Write" would send the reader looking for a control
+ * whose pane is on screen.
+ */
+function emptyPreviewCopy(mode: MarkdownViewMode): string {
+  return mode === 'split'
+    ? 'Nothing to preview yet. What you write appears here.'
+    : 'Nothing to preview yet. Switch to Write to start.'
+}
 
 /**
  * The PREVIEW column: the rendered document, its conversation markers, and
@@ -209,7 +218,7 @@ export function PreviewColumn({
         ))}
         {mode === 'read' && meta !== undefined && <DocumentHeader title={title} meta={meta} />}
         {previewEmpty ? (
-          <p className="text-muted-foreground text-sm">{EMPTY_PREVIEW}</p>
+          <p className="text-muted-foreground text-sm">{emptyPreviewCopy(mode)}</p>
         ) : (
           <PreviewPane
             value={shownBody(value, mode, meta !== undefined, title)}
