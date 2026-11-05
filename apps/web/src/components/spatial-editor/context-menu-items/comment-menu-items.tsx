@@ -6,6 +6,8 @@
  */
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { CircleCheck, RotateCcw } from 'lucide-react'
+import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
+import { COMMENT_ANNOUNCEMENTS } from '../../../lib/comment-announcements.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 
@@ -33,22 +35,26 @@ export function commentMenuItems({
       ? {
           label: 'Reopen',
           icon: <RotateCcw />,
-          onSelect: () =>
+          onSelect: () => {
             applyResult({
               state: { kind: 'idle' },
               commands: [
                 { kind: 'set-comment-resolved', id: comment.id, resolved: false } as const,
               ],
-            }),
+            })
+            announceOnCanvas(COMMENT_ANNOUNCEMENTS.reopened)
+          },
         }
       : {
           label: 'Resolve',
           icon: <CircleCheck />,
-          onSelect: () =>
+          onSelect: () => {
             applyResult({
               state: { kind: 'idle' },
               commands: [{ kind: 'set-comment-resolved', id: comment.id, resolved: true } as const],
-            }),
+            })
+            announceOnCanvas(COMMENT_ANNOUNCEMENTS.resolved)
+          },
         },
   ]
 }
