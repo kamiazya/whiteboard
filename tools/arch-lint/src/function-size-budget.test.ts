@@ -101,7 +101,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentFacetsEditor': 117,
-  'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 110,
+  'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 111, // +1: the rename announcement waits for the keeper's answer, through the hook's handle
   // +1: `pickImage`, the note's Image verb on the inline bar.
   'apps/web/src/components/markdown-editor/EditorToolbar.tsx#EditorToolbar': 136,
   'apps/web/src/components/markdown-editor/LinkPickerDialog.tsx#LinkPickerDialog': 160,

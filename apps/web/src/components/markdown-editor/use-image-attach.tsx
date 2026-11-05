@@ -13,9 +13,17 @@
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { X } from 'lucide-react'
-import { type ReactNode, type RefObject, useMemo, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import { IMAGE_FILE_ACCEPT, imageRefusal } from '../../lib/image-upload-policy.js'
+import { createSubscribers } from '../../lib/subscribers.js'
 import {
   dropPendingImage,
   imageMarkup,
@@ -46,6 +54,61 @@ let nextToken = 0
 type SetNotice = (notice: string | null) => void
 
 /**
+ * The notice for an upload that finished after its editor was gone — a
+ * document switch or a CRDT rebind remounts the editor mid-upload, and the
+ * held position goes with the old view. It lives outside every editor so
+ * the one mounted next can say what happened, instead of "Uploading…"
+ * simply vanishing over a picture that is stored and named nowhere.
+ */
+let stranded: string | null = null
+const strandedChanged = createSubscribers()
+function setStranded(next: string | null): void {
+  if (stranded === next) return
+  stranded = next
+  strandedChanged.emit()
+}
+
+function strandedMessage(fileName: string | null | undefined): string {
+  return fileName === null || fileName === undefined
+    ? 'The images were uploaded but not added: the note was reopened meanwhile. Add them again with Image….'
+    : `${fileName} was uploaded but not added: the note was reopened meanwhile. Add it again with Image….`
+}
+
+function uploadingNotice(files: readonly File[]): string {
+  return files.length === 1 ? `Uploading ${files[0]?.name}…` : `Uploading ${files.length} images…`
+}
+
+/**
+ * Writes what a batch stored at its held position, says what did not
+ * store, and — when the editor that held the position is gone — says the
+ * pictures were stored but not added.
+ */
+function writeStored(
+  api: SourcePaneApi | null,
+  token: string,
+  files: readonly File[],
+  results: readonly ImageStoreResult[],
+  refusal: string | null,
+  setNotice: SetNotice,
+): void {
+  const markup = results.flatMap((result, i) =>
+    result.ok ? [imageMarkup(files[i]?.name ?? '', result.ref)] : [],
+  )
+  const failed = results.find((result) => !result.ok)
+  setNotice(failed === undefined || failed.ok ? refusal : failed.reason)
+  if (markup.length === 0) {
+    api?.applyEffects(dropPendingImage(token))
+    return
+  }
+  let inserted = false
+  api?.run((target) => {
+    inserted = insertPendingImage(token, markup.join('\n\n'))(target)
+    return inserted
+  })
+  if (!inserted) setStranded(strandedMessage(markup.length === 1 ? files[0]?.name : null))
+}
+
+/**
  * The intake itself, built once per editor: the paste and drop handlers are
  * installed at view creation, so they read the seam through `storeRef`.
  */
@@ -54,27 +117,32 @@ function intakeFor(
   sourceApiRef: RefObject<SourcePaneApi | null>,
   setNotice: SetNotice,
 ) {
-  /** Holds the position through `hold`, then writes the picture there once stored. */
-  const store = (file: File, hold: (token: string) => void) => {
+  /**
+   * Holds the position through `hold`, then writes the pictures there once
+   * every one is stored. A batch (several files pasted or dropped together)
+   * is held as ONE position and written in its own order, a paragraph per
+   * picture: held separately, each would land in front of the ones that
+   * finished before it, so the note's order would be the uploads' finishing
+   * order reversed.
+   */
+  const store = (files: readonly File[], hold: (token: string) => void) => {
     const save = storeRef.current
     if (save === undefined) return
-    const refusal = imageRefusal(file)
-    if (refusal !== null) return setNotice(refusal)
+    const refusal = files.map(imageRefusal).find((reason) => reason !== null) ?? null
+    const accepted = files.filter((file) => imageRefusal(file) === null)
+    if (accepted.length === 0) return setNotice(refusal)
     const token = `image-${++nextToken}`
     hold(token)
-    setNotice(`Uploading ${file.name}…`)
-    void save(file).then((result) => {
-      setNotice(result.ok ? null : result.reason)
-      if (result.ok) {
-        sourceApiRef.current?.run(insertPendingImage(token, imageMarkup(file.name, result.ref)))
-      } else sourceApiRef.current?.applyEffects(dropPendingImage(token))
-    })
+    setNotice(uploadingNotice(accepted))
+    void Promise.all(accepted.map((file) => save(file))).then((results) =>
+      writeStored(sourceApiRef.current, token, accepted, results, refusal, setNotice),
+    )
   }
   /** Takes the event over only when it carries an image this editor can store. */
   const intake = (event: Event, view: EditorView, files: File[], at?: number) => {
     if (files.length === 0 || storeRef.current === undefined) return false
     event.preventDefault()
-    for (const file of files) store(file, (token) => startPendingImage(token, at)(view))
+    store(files, (token) => startPendingImage(token, at)(view))
     return true
   }
   const extension: Extension[] = [
@@ -88,7 +156,7 @@ function intakeFor(
     }),
   ]
   const picked = (file: File) =>
-    store(file, (token) => sourceApiRef.current?.run(startPendingImage(token)))
+    store([file], (token) => sourceApiRef.current?.run(startPendingImage(token)))
   return { extension, picked }
 }
 
@@ -146,11 +214,24 @@ export function useImageAttach(
   storeImage: StoreImage | undefined,
   sourceApiRef: RefObject<SourcePaneApi | null>,
 ): ImageAttach {
-  const [notice, setNotice] = useState<string | null>(null)
+  const [ownNotice, setOwnNotice] = useState<string | null>(null)
+  const strandedNotice = useSyncExternalStore(
+    strandedChanged.subscribe,
+    () => stranded,
+    () => null,
+  )
+  const notice = ownNotice ?? strandedNotice
   const inputRef = useRef<HTMLInputElement | null>(null)
   const storeRef = useRef(storeImage)
   storeRef.current = storeImage
-  const attach = useMemo(() => intakeFor(storeRef, sourceApiRef, setNotice), [sourceApiRef])
+  const attach = useMemo(() => {
+    // Anything this editor says next is newer than an earlier editor's word.
+    const setNotice: SetNotice = (next) => {
+      setOwnNotice(next)
+      setStranded(null)
+    }
+    return intakeFor(storeRef, sourceApiRef, setNotice)
+  }, [sourceApiRef])
   if (storeImage === undefined)
     return { pickImage: undefined, extension: attach.extension, element: null }
   return {
@@ -161,7 +242,10 @@ export function useImageAttach(
         inputRef={inputRef}
         onFile={attach.picked}
         notice={notice}
-        onDismiss={() => setNotice(null)}
+        onDismiss={() => {
+          setOwnNotice(null)
+          setStranded(null)
+        }}
       />
     ),
   }

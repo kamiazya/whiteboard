@@ -31,6 +31,41 @@ function useExpiry<T>(value: T | null, clear: (next: null) => void) {
   }, [value, clear])
 }
 
+interface DuplicateAsked {
+  readonly ids: ReadonlySet<string>
+  readonly folder: string
+  readonly from: string
+  readonly askedAt: number
+}
+
+/** Watches each listing for the copy an armed request is waiting on, and selects it. */
+function useCopyArrival(
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  asked: { current: DuplicateAsked | null },
+  setCopy: (copy: DuplicatedCopy) => void,
+  select: (entry: WorkspaceDocumentEntry) => void,
+) {
+  useEffect(() => {
+    const pending = asked.current
+    if (pending === null || documents === null) return
+    // The page answers a duplicate with nothing, so one that failed leaves
+    // its request armed; past the window, whatever arrives in that folder
+    // is somebody else's document, not the copy.
+    if (Date.now() - pending.askedAt > DUPLICATED_WINDOW_MS) {
+      asked.current = null
+      return
+    }
+    const found = arrivedIn(documents, pending)
+    if (found === undefined) return
+    asked.current = null
+    setCopy({ entry: found, from: pending.from })
+    select(found)
+    document
+      .querySelector(`[data-doc-path="${CSS.escape(found.path)}"]`)
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [documents, select, asked, setCopy])
+}
+
 /**
  * What a Duplicate made, found in the next listing: the first document in the
  * source's folder that was not listed when the duplicate was asked for. The
@@ -49,26 +84,9 @@ export function useDuplicateFeedback({
   onDuplicateDocument: ((path: string) => void) | undefined
   select: (entry: WorkspaceDocumentEntry) => void
 }) {
-  const asked = useRef<{
-    readonly ids: ReadonlySet<string>
-    readonly folder: string
-    readonly from: string
-  } | null>(null)
+  const asked = useRef<DuplicateAsked | null>(null)
   const [copy, setCopy] = useState<DuplicatedCopy | null>(null)
-
-  useEffect(() => {
-    const pending = asked.current
-    if (pending === null || documents === null) return
-    const found = arrivedIn(documents, pending)
-    if (found === undefined) return
-    asked.current = null
-    setCopy({ entry: found, from: pending.from })
-    select(found)
-    document
-      .querySelector(`[data-doc-path="${CSS.escape(found.path)}"]`)
-      ?.scrollIntoView?.({ block: 'nearest' })
-  }, [documents, select])
-
+  useCopyArrival(documents, asked, setCopy, select)
   useExpiry(copy, setCopy)
 
   const listed = useRef(documents)
@@ -81,6 +99,7 @@ export function useDuplicateFeedback({
         ids: new Set(rows.map((entry) => entry.documentId)),
         folder: folderOf(path),
         from: source === undefined ? path : documentLabel(source, 'leaf'),
+        askedAt: Date.now(),
       }
       onDuplicateDocument?.(path)
     },

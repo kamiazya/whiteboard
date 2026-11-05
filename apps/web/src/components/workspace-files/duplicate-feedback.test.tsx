@@ -5,7 +5,10 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('duplicating a document from its menu', () => {
   it('says what was duplicated, offers to open the copy, and selects it', async () => {
@@ -55,5 +58,35 @@ describe('duplicating a document from its menu', () => {
       within(toast.parentElement as HTMLElement).getByRole('button', { name: 'Open' }),
     )
     expect(onOpenDocument).toHaveBeenCalledWith('budget-copy')
+  })
+
+  it('does not take a document arriving long after a duplicate that never landed for its copy', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    let rows: WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'budget', name: 'Budget review', kind: 'markdown' },
+    ]
+    const source = fakeFilesSource({ listDocuments: async () => rows })
+    let revision = 0
+    // The duplicate fails: the page reports it elsewhere and lists nothing new.
+    const panel = () => (
+      <WorkspaceFilesPanel source={source} revision={revision} onDuplicateDocument={() => {}} />
+    )
+    const view = render(panel())
+    const card = (await screen.findAllByTestId('card-title'))
+      .find((each) => each.textContent === 'Budget review')
+      ?.closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 5, clientY: 5 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
+
+    vi.setSystemTime(Date.now() + 60_000)
+    rows = [...rows, { documentId: 'd9', path: 'standup', name: 'Standup', kind: 'markdown' }]
+    revision += 1
+    view.rerender(panel())
+    const arrived = (
+      await screen.findByText('Standup', { selector: '[data-testid="card-title"]' })
+    ).closest('button') as HTMLElement
+    expect(screen.queryByText(/^Duplicated /)).toBeNull()
+    expect(arrived.getAttribute('aria-current')).not.toBe('true')
   })
 })

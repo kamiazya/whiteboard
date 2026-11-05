@@ -99,3 +99,53 @@ describe('a rename to a name a sibling already shows', () => {
     expect(await store.load(C1)).toBeNull()
   })
 })
+
+// A rename typed while a refused one is still being written used to wait on
+// it, see it fail, and give up: the newer name was neither stored nor
+// reported, persistence read "saved", and a reload lost it.
+describe('a rename made while a refused rename is still being written', () => {
+  it('is stored, and only the refused rename hears the refusal', async () => {
+    const { store, result } = await openNamed('Release plan')
+    await store.save({
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'other',
+      name: 'Roadmap',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial',
+    })
+    const write = store.index.setDocumentName.bind(store.index)
+    let release: () => void = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let calls = 0
+    store.index.setDocumentName = async (input) => {
+      calls += 1
+      if (calls === 1) await held
+      return write(input)
+    }
+
+    let refused: Promise<unknown> = Promise.resolve()
+    let renamed: Promise<unknown> = Promise.resolve()
+    await act(async () => {
+      refused = result.current.renameDocument('Roadmap').catch((err: unknown) => err)
+    })
+    await act(async () => {
+      renamed = result.current.renameDocument('Budget').then(
+        () => 'stored',
+        (err: unknown) => err,
+      )
+    })
+    await act(async () => {
+      release()
+      await Promise.all([refused, renamed])
+    })
+
+    expect(((await refused) as Error).message).toMatch(/already called/)
+    expect(await renamed).toBe('stored')
+    expect((await store.load(C1))?.name).toBe('Budget')
+    expect(result.current.snapshot?.name).toBe('Budget')
+    expect(result.current.persistence.kind).toBe('saved')
+  })
+})

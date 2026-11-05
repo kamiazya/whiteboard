@@ -673,6 +673,24 @@ describe('a frame in the pick order', () => {
     },
   )
 
+  it("takes a nested frame's name strip as the nested frame, not the frame around it", () => {
+    const inner = { x: 50, y: 100, width: 200, height: 150 }
+    const boxes = [
+      ...frameBoxes,
+      { id: 'inner', container: true, titled: true, box: inner },
+    ] satisfies readonly NodeBox[]
+    const onStrip = { x: 120, y: inner.y - 20 }
+    expect(pickContentAt(pressProbes({ ...emptyInputs, boxes }), onStrip)).toEqual({
+      kind: 'nodes',
+      id: 'inner',
+    })
+    // A note drawn over that strip is still the note's.
+    const note = { id: 'note', box: { x: 110, y: inner.y - 30, width: 20, height: 20 } }
+    expect(
+      pickContentAt(pressProbes({ ...emptyInputs, boxes: [...boxes, note] }), onStrip),
+    ).toEqual({ kind: 'nodes', id: 'note' })
+  })
+
   fcTest.prop([inside], withDefaults())(
     'a locked node absorbs the press over the frame holding it, and a locked frame only on its border',
     (at) => {

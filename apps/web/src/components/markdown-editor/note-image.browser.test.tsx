@@ -28,10 +28,13 @@ function Note({
   initial,
   store,
   onBody,
+  generation = 0,
 }: {
   initial: string
   store?: (file: File) => Promise<ImageStoreResult>
   onBody: (body: string) => void
+  /** A new value remounts the editor, as a document switch or a CRDT rebind does. */
+  generation?: number
 }) {
   const [value, setValue] = useState(initial)
   const references = useReferenceSeams({
@@ -42,6 +45,7 @@ function Note({
   return (
     <div style={{ height: 500 }}>
       <MarkdownEditor
+        key={generation}
         theme="light"
         value={value}
         onChange={(next) => {
@@ -74,6 +78,18 @@ const previewHrefs = () =>
     (node) => node.getAttribute('href'),
   )
 
+/** A store whose uploads finish only when the test says so, in any order. */
+function held() {
+  const waiting: ((result: ImageStoreResult) => void)[] = []
+  return {
+    store: vi.fn(
+      (_file: File) => new Promise<ImageStoreResult>((resolve) => waiting.push(resolve)),
+    ),
+    pending: () => waiting.length,
+    resolve: (index: number, ref: string) => waiting[index]?.({ ok: true, ref }),
+  }
+}
+
 function filesOf(...files: File[]): DataTransfer {
   const data = new DataTransfer()
   for (const file of files) data.items.add(file)
@@ -92,9 +108,25 @@ describe('an image in a note', () => {
     input.files = filesOf(PNG()).files
     fireEvent.change(input)
 
-    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:pic)'))
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:pic)'))
     expect(store).toHaveBeenCalledWith(expect.objectContaining({ name: 'meter.png' }))
     await vi.waitFor(() => expect(previewHrefs()).toContain('blob:asset:pic'))
+  })
+
+  it('keeps words typed during the upload after the picture, caret at their end', async () => {
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+    const upload = held()
+    const { last } = await mount('Pump ok', upload.store)
+    await userEvent.click(await screen.findByRole('button', { name: 'Image…' }))
+    const input = screen.getByLabelText('Choose an image') as HTMLInputElement
+    input.files = filesOf(PNG()).files
+    fireEvent.change(input)
+    await vi.waitFor(() => expect(upload.pending()).toBe(1))
+    await userEvent.keyboard(' hello')
+    upload.resolve(0, 'asset:late')
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:late)\n\n hello'))
+    await userEvent.keyboard('!')
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:late)\n\n hello!'))
   })
 
   it('is offered in the editing catalog too', async () => {
@@ -116,7 +148,25 @@ describe('an image in a note', () => {
         clipboardData: filesOf(PNG()),
       }),
     )
-    await vi.waitFor(() => expect(last()).toBe('a![meter](asset:p1)b'))
+    await vi.waitFor(() => expect(last()).toBe('a\n\n![meter](asset:p1)\n\nb'))
+  })
+
+  it('pasted several at once keeps their order, a paragraph each', async () => {
+    const upload = held()
+    const { content, last } = await mount('ab', upload.store)
+    const named = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' })
+    fireEvent(
+      content,
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: filesOf(named('one.png'), named('two.png')),
+      }),
+    )
+    await vi.waitFor(() => expect(upload.pending()).toBe(2))
+    upload.resolve(1, 'asset:two')
+    upload.resolve(0, 'asset:one')
+    await vi.waitFor(() => expect(last()).toBe('ab\n\n![one](asset:one)\n\n![two](asset:two)'))
   })
 
   it('dropped as a file is stored and written into the note', async () => {
@@ -152,6 +202,32 @@ describe('an image in a note', () => {
       expect(screen.getByTestId('note-image-notice').textContent).toContain('Disk is full.'),
     )
     expect(onBody).not.toHaveBeenCalled()
+  })
+
+  it('says so when an upload finishes after the editor was remounted', async () => {
+    const upload = held()
+    await setViewport(1280, 800)
+    const onBody = vi.fn()
+    const { rerender } = render(<Note initial="ab" store={upload.store} onBody={onBody} />)
+    const content = document.querySelector('.cm-content') as HTMLElement
+    fireEvent(
+      content,
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: filesOf(PNG()),
+      }),
+    )
+    await vi.waitFor(() => expect(upload.pending()).toBe(1))
+    rerender(<Note initial="ab" store={upload.store} onBody={onBody} generation={1} />)
+    upload.resolve(0, 'asset:orphan')
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('note-image-notice').textContent).toContain('not added'),
+    )
+    expect(screen.getByTestId('note-image-notice').textContent).toContain('meter.png')
+    expect(onBody).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await vi.waitFor(() => expect(screen.getByTestId('note-image-notice').textContent).toBe(''))
   })
 
   it('refuses a type the keeper cannot store before uploading it', async () => {
