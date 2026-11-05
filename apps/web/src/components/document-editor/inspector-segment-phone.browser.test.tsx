@@ -42,6 +42,7 @@ function renderRow(onToggle: (kind: string) => void = () => {}) {
           <DocumentProperties
             inline
             title="A fairly long document title"
+            unnamedTitle="Untitled"
             actions={
               <>
                 <InspectorSegment

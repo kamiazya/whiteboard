@@ -517,7 +517,7 @@ function useBrowserDocument(
   const model: DocumentPageModel = {
     scopeKey: documentId,
     documentKind,
-    srTitle: documentHeading(title),
+    srTitle: documentHeading(title, loadedPath),
     sync,
     markdown: {
       body: markdownBody,

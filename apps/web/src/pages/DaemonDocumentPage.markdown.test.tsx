@@ -147,7 +147,7 @@ describe('DaemonDocumentPage markdown documents', () => {
       )
     })
     await waitFor(() => {
-      const title = screen.getByPlaceholderText('Untitled') as HTMLInputElement
+      const title = screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement
       expect(title.value).toBe('Agent verification note')
     })
   })
@@ -190,7 +190,7 @@ describe('DaemonDocumentPage markdown documents', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByPlaceholderText('Untitled')).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy())
     expect(screen.queryByLabelText('Properties')).toBeNull()
   })
 
@@ -208,7 +208,7 @@ describe('DaemonDocumentPage markdown documents', () => {
       )
     })
     await waitFor(() => {
-      const title = screen.getByPlaceholderText('Untitled') as HTMLInputElement
+      const title = screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement
       expect(title.value).toBe('agent-note')
     })
   })

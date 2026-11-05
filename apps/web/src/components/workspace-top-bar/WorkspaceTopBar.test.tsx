@@ -201,6 +201,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
             <DocumentProperties
               inline
               title={identity.name}
+              unnamedTitle="Untitled"
               {...(identity.onRename === undefined ? {} : { onTitleChange: identity.onRename })}
             />
           )}
