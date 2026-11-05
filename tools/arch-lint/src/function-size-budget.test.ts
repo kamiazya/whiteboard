@@ -414,7 +414,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by six for `followRecordedName`, which has to sit beside the
   // snapshot refs: a name the record holds is shown only while no rename of
   // this page's own is pending or saving.
-  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 413, // +7: placing by name ignores a row or workspace that is already gone
+  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 430, // +7: placing by name ignores a row or workspace that is already gone; +17: a title the keeper refuses as a sibling's name is undone rather than read as a failed store
   // `duplicateDocument` is one request to the daemon's duplicate route, the
   // one the index page sends too; what is here is the list refresh and the path
   // move, the same two steps `createDocument` ends with. `deleteDocument` is the
