@@ -2,13 +2,13 @@ import { Folder } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
-import { hasCoarsePointer } from '../../lib/platform.js'
 import {
   type FolderNames,
   folderDisplayName,
   folderTrail,
   type NestedFolderPlan,
 } from '../../lib/folder-names.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import {
   Dialog,
   DialogContent,
