@@ -66,8 +66,7 @@ function siblingShowing(name: string, siblings: Iterable<string>): string | unde
  * The two kinds of entry a workspace names. They are compared apart: a
  * folder and a document may show one name side by side.
  */
-export const namedEntryKindSchema = z.enum(['document', 'folder'])
-export type NamedEntryKind = z.infer<typeof namedEntryKindSchema>
+type NamedEntryKind = 'document' | 'folder'
 
 /**
  * What an entry shows where a person reads it in its folder: the name

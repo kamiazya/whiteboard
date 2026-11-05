@@ -84,7 +84,7 @@ document in its folder already shows that name; otherwise it stays
 **Untitled** until you name it. **Duplicate** names the copy
 "Name (copy)", or the first "Name (copy 2)", "Name (copy 3)" … that nothing
 beside it shows; a copy of an unnamed document starts from what its row shows,
-so a copy of **Untitled 3** is "Untitled 3 (copy)". The copy is selected in the list, and a
+so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy is selected in the list, and a
 "Duplicated _name_" notice offers **Open** for it.
 
 A document that has documents under it (`plan` beside `plan/outline`) is

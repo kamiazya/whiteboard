@@ -16,8 +16,6 @@ export {
   folderNameRefusal,
   folderNameSchema,
   movedDisplayNameTaken,
-  type NamedEntryKind,
-  namedEntryKindSchema,
   shownName,
   siblingDisplayNameTaken,
 } from './display-name.js'

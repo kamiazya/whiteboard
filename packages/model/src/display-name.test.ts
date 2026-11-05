@@ -220,6 +220,11 @@ describe('firstDistinctUnnamedPath', () => {
     expect(firstDistinctUnnamedPath('notes/untitled', siblings, free)).toBe('notes/untitled-2')
   })
 
+  it('moves a generated address off the numbered label a named sibling shows', () => {
+    const siblings = [{ path: 'notes/a', name: 'Untitled 2' }]
+    expect(firstDistinctUnnamedPath('notes/untitled-2', siblings, free)).toBe('notes/untitled-2-2')
+  })
+
   it('keeps a generated address beside unnamed generated siblings, which read apart', () => {
     const siblings = [{ path: 'notes/untitled' }, { path: 'notes/untitled-2' }]
     expect(firstDistinctUnnamedPath('notes/untitled-3', siblings, free)).toBe('notes/untitled-3')
