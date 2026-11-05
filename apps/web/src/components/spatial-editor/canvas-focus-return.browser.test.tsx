@@ -66,6 +66,18 @@ it('keeps the keyboard on the canvas after Ctrl+Enter keeps an edge label', asyn
   await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
 })
 
+it('keeps an edge label on a bare Enter and the keyboard on the canvas', async () => {
+  const { Host, latest } = makeEditorHost({ initial: withEdge })
+  const { container } = render(<Host />)
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
+  const editor = page.getByRole('textbox', { name: /Label of edge/ })
+  await expect.element(editor).toBeInTheDocument()
+  await userEvent.type(editor, 'depends on{Enter}')
+  await vi.waitFor(() => expect(latest.canvas.edges[0]).toMatchObject({ label: 'depends on' }))
+  await expect.element(editor).not.toBeInTheDocument()
+  await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
+})
+
 it('keeps the keyboard on the canvas after Ctrl+Enter keeps a frame name', async () => {
   const framed: SpatialCanvas = {
     nodes: [groupNode({ id: 'g1', x: 80, y: 80, width: 360, height: 220, label: 'cluster' })],

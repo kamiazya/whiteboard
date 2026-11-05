@@ -37,7 +37,7 @@ pinch zooms in every tool.
 | `Shift + Tab` | Step back through the same walk |
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
-| `Enter` / `F2` | Edit the selected node's text, a frame's label (a frame label is one line: `Enter` saves it), or the selected connection's or line's label |
+| `Enter` / `F2` | Edit the selected node's text, a frame's label, or the selected connection's or line's label (a frame's, connection's or line's label is one line: `Enter` saves it) |
 | `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
@@ -275,9 +275,10 @@ The formatting bar above a markdown document is one `Tab` stop. `Left` and `Righ
 
 The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
-to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
-keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent. The one exception is a note you have just
+to B" for a relation's label. A note's text is described as "Escape discards,
+Ctrl+Enter keeps" (`Command` on a Mac); a frame's name and a connection's or
+line's label, being one line, as "Escape discards, Enter keeps". Pressing
+`Esc` announces "Discarded" so a thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
 undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
@@ -316,7 +317,7 @@ south-east resize handle (the arrow keys resize from it), the right-hand
 connect handle and the actions button.
 
 Whatever you finish on the canvas leaves the keyboard on it: keeping a label
-with `Ctrl + Enter` or discarding it with `Esc`, completing a connection, choosing
+with `Enter` (or `Ctrl + Enter`) or discarding it with `Esc`, completing a connection, choosing
 Group from the dock, and closing a dialog or the context menu with `Esc`.
 `Delete`, the arrow keys and undo work straight away, with no click first.
 
