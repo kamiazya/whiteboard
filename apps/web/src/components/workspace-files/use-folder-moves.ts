@@ -1,28 +1,31 @@
 import { useCallback, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
-import { folderDisplayName } from '../../lib/folder-names.js'
+import { type FolderNames, folderDisplayName } from '../../lib/folder-names.js'
 import { pathInFolder } from './folder-moves.js'
 import type { FolderNamesState } from './use-folder-names.js'
 import { refusalMessage } from './use-rename-document.js'
 
 /** One write at a time, with the keeper's refusal kept for the surface that asked. */
-function useAttempt() {
+function useAttempt(names: FolderNames) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const attempt = useCallback(async (write: () => Promise<void>) => {
-    setBusy(true)
-    setError(null)
-    try {
-      await write()
-      return true
-    } catch (err) {
-      setError(refusalMessage(err))
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }, [])
+  const attempt = useCallback(
+    async (write: () => Promise<void>) => {
+      setBusy(true)
+      setError(null)
+      try {
+        await write()
+        return true
+      } catch (err) {
+        setError(refusalMessage(err, names))
+        return false
+      } finally {
+        setBusy(false)
+      }
+    },
+    [names],
+  )
   return { busy, error, setError, attempt }
 }
 
@@ -47,16 +50,19 @@ export function useFolderMoves({
   announce: (text: string) => void
   folderNames: FolderNamesState
 }) {
-  const { busy, error, setError, attempt } = useAttempt()
   const { names, rename } = folderNames
+  const { busy, error, setError, attempt } = useAttempt(names)
 
   const moveInto = useCallback(
-    (entry: WorkspaceDocumentEntry, folder: string) =>
+    // `calledAs` is a folder this move is making: its name is remembered only
+    // once the move lands, so `names` does not hold it yet.
+    (entry: WorkspaceDocumentEntry, folder: string, calledAs?: string) =>
       attempt(async () => {
         const newPath = pathInFolder(entry.path, folder)
         if (newPath === entry.path) return
         await moveDocument(entry, newPath)
-        announce(`Moved ${documentLabel(entry, 'leaf')} to ${folderDisplayName(folder, names)}`)
+        const shown = calledAs ?? folderDisplayName(folder, names)
+        announce(`Moved ${documentLabel(entry, 'leaf')} to ${shown}`)
       }),
     [attempt, moveDocument, announce, names],
   )

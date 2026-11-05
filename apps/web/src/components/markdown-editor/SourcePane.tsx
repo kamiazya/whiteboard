@@ -10,8 +10,9 @@ import {
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { GFM } from '@lezer/markdown'
-import { type RefObject, useEffect, useId, useRef } from 'react'
+import { type RefObject, useEffect, useId, useRef, useState } from 'react'
 import { mayAutofocus } from '../../lib/focus-claim.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
@@ -236,6 +237,11 @@ export interface SourcePaneProps {
    * the bar wraps instead.
    */
   onRequestLinkPicker?: () => boolean
+  /**
+   * Lets the keyboard-docked bar's Image slot open the editor's picker.
+   * Read at mount: absent, the bar offers no Image slot for this pane.
+   */
+  onRequestImage?: () => void
 }
 
 /**
@@ -256,6 +262,7 @@ export function SourcePane({
   extensions,
   reconcileExternalValue = true,
   onRequestLinkPicker,
+  onRequestImage,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -265,9 +272,15 @@ export function SourcePane({
   onChangeRef.current = onChange
   const onRequestLinkPickerRef = useRef(onRequestLinkPicker)
   onRequestLinkPickerRef.current = onRequestLinkPicker
+  const onRequestImageRef = useRef(onRequestImage)
+  onRequestImageRef.current = onRequestImage
   // Filled once the view exists; the focus/blur handlers below read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
   const leaveHintId = useId()
+  // The leave hint names keys, so a touch screen keeps it silent until a key
+  // press shows a keyboard is attached. The description link stays constant;
+  // only its words come and go.
+  const [keyboardInUse, setKeyboardInUse] = useState(() => !hasCoarsePointer())
 
   useEffect(() => {
     const host = hostRef.current
@@ -362,6 +375,9 @@ export function SourcePane({
     viewRef.current = view
     const active = activeMarkdownEditorFor(view, {
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
+      ...(onRequestImageRef.current === undefined
+        ? {}
+        : { pickImage: () => onRequestImageRef.current?.() }),
     })
     activeRef.current = active
     if (apiRef) {
@@ -488,9 +504,10 @@ export function SourcePane({
         className={className}
         style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}
         data-testid="markdown-source-pane"
+        onKeyDownCapture={keyboardInUse ? undefined : () => setKeyboardInUse(true)}
       />
       <span id={leaveHintId} className="sr-only">
-        Press Escape, then Tab or Shift+Tab, to leave the editor.
+        {keyboardInUse ? 'Press Escape, then Tab or Shift+Tab, to leave the editor.' : ''}
       </span>
     </>
   )

@@ -1,4 +1,4 @@
-import { isSiblingDisplayNameTaken } from '@kamiazya/whiteboard-model'
+import { displayNameKey } from '@kamiazya/whiteboard-model'
 import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 
 /**
@@ -15,32 +15,19 @@ export function displayNameTakenMessage(
 }
 
 /**
- * Why a document at `path` cannot be called `name`, or null: another document
- * directly in the same folder already shows it. `documentId` is the document
- * itself when it already exists, left out so keeping its own name is never a
- * duplicate. Folders are another kind and are not compared.
+ * A guard in front of a write: throws the keeper's own refusal when another
+ * document directly in the same folder already shows the name, so a create or
+ * a rename reports it through the path the keeper's refusal takes. `documentId`
+ * is the document itself when it already exists, so keeping its own name is
+ * never a duplicate. Folders are another kind and are not compared. No name is
+ * never a duplicate.
  */
-function documentNameTaken(
+export function refuseTakenDocumentName(
   documents: readonly {
     readonly documentId: string
     readonly path: string
     readonly name?: string | undefined
   }[],
-  target: { readonly path: string; readonly name: string; readonly documentId?: string },
-): string | null {
-  const others = documents.filter((each) => each.documentId !== target.documentId)
-  return isSiblingDisplayNameTaken(others, target)
-    ? displayNameTakenMessage('document', target.path, target.name)
-    : null
-}
-
-/**
- * `documentNameTaken` as a guard in front of a write: throws the refusal, so
- * a create or a rename reports it through the same path the keeper's own
- * refusal of the same name takes. No name is never a duplicate.
- */
-export function refuseTakenDocumentName(
-  documents: Parameters<typeof documentNameTaken>[0],
   target: {
     readonly path: string
     readonly name: string | undefined
@@ -48,6 +35,26 @@ export function refuseTakenDocumentName(
   },
 ): void {
   if (target.name === undefined) return
-  const refusal = documentNameTaken(documents, { ...target, name: target.name })
-  if (refusal !== null) throw new Error(refusal)
+  const parent = parentOf(target.path)
+  const key = displayNameKey(target.name)
+  // Quoted as the sibling is CALLED, not as it was typed: "plan" beside a
+  // document called "Plan" reads as a claim that something is called "plan".
+  const holder = documents.find(
+    (each) =>
+      each.documentId !== target.documentId &&
+      parentOf(each.path) === parent &&
+      displayNameKey(each.name ?? leafOf(each.path)) === key,
+  )
+  if (holder !== undefined) {
+    throw new DisplayNameTakenError('document', target.path, holder.name ?? leafOf(holder.path))
+  }
+}
+
+function parentOf(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut === -1 ? '' : path.slice(0, cut)
+}
+
+function leafOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
 }

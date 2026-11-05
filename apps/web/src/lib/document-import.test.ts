@@ -29,6 +29,25 @@ describe('readImportedFile', () => {
     })
   })
 
+  it('spells an accented file name into its address rather than dropping the letter', () => {
+    const result = readImportedFile('Équipe Ops.md', '# Hi\n')
+    expect(result).toMatchObject({
+      ok: true,
+      document: { name: 'Équipe Ops', pathBase: 'equipe-ops' },
+    })
+  })
+
+  it('addresses a file whose name has no Latin spelling by its kind', () => {
+    expect(readImportedFile('概要.md', '# Hi\n')).toMatchObject({
+      ok: true,
+      document: { name: '概要', pathBase: 'note' },
+    })
+    expect(readImportedFile('図.canvas', '{"nodes":[],"edges":[]}')).toMatchObject({
+      ok: true,
+      document: { name: '図', pathBase: 'canvas' },
+    })
+  })
+
   it('reads a JSON Canvas file as a canvas', () => {
     const text = serializeSpatial(
       { nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'x' })], edges: [] },

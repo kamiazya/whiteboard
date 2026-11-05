@@ -253,7 +253,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
   // leaves the same way: through the bundle, once its share of the editor's
   // values is named.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2151, // +2: the frame-label opener for the keyboard hook and the external version for the accessibility tree; +15: the accessibility projection mount, active descendant and the controls' subject; +8: the tool announcement, the empty cue's description id and their imports; +4: the viewportKey prop that names the document for viewport memory; +2: the viewport's panel insets reach the comment reveal; +4: the resolved-view source and setter on the handle; +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2165, // +8: N with a frame selected asks for the note inside it, and the frame-growing batch rides the creation, net of the dock's Group inputs it no longer passes; +2: the frame-label opener for the keyboard hook and the external version for the accessibility tree; +15: the accessibility projection mount, active descendant and the controls' subject; +8: the tool announcement, the empty cue's description id and their imports; +4: the viewportKey prop that names the document for viewport memory; +2: the viewport's panel insets reach the comment reveal; +4: the resolved-view source and setter on the handle; +11: the locked-press notice mount and its hook call; +3: the dock's Group hands its selection and name editor to node creation; +2: the orphaned-conversation flag on the comment card; +4: the Connect tool's hint mount and its import
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -510,7 +510,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The errands the LLM-driven tool-surface eval asks a model to run, each
   // with its prompt and the outcome it is graded by. It is a table, so it
   // grows by the number of tasks the eval holds.
-  'packages/mcp-server/scripts/eval/tasks.mjs': 1041,
+  'packages/mcp-server/scripts/eval/tasks.mjs': 1047,
   // The stdio round-trip smoke: every registered tool exercised through one
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the

@@ -12,6 +12,10 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(cleanup)
 
+// This mount stores no files, so the Image verb — which has nothing to
+// degrade to — is not offered (note-image.browser.test.tsx covers a host that does).
+const OFFERED = MARKDOWN_EDITOR_VERBS.filter((spec) => spec.action.kind !== 'attach')
+
 const bar = () => document.querySelector('[data-testid="markdown-verb-bar"]') as HTMLElement | null
 const slots = () =>
   [...(bar()?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('aria-label'))
@@ -36,7 +40,7 @@ it('shows every verb at a desktop width, in the table order that keeps bands tog
   await mount()
   await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
   // The bar draws no "…" of its own — ⋯ beside the view modes is the catalog.
-  expect(slots()).toEqual(MARKDOWN_EDITOR_VERBS.map((spec) => spec.label))
+  expect(slots()).toEqual(OFFERED.map((spec) => spec.label))
 })
 
 it('runs a verb on the caret and leaves the caret in the editor', async () => {
@@ -64,10 +68,10 @@ it('drops the verbs a narrow width cannot hold rather than wrapping the strip', 
   await mount()
   await vi.waitFor(() => expect(bar()).not.toBeNull())
   const narrow = slots().length
-  expect(narrow).toBeLessThan(MARKDOWN_EDITOR_VERBS.length)
+  expect(narrow).toBeLessThan(OFFERED.length)
 
   await setViewport(1280, 800)
-  await vi.waitFor(() => expect(slots().length).toBe(MARKDOWN_EDITOR_VERBS.length))
+  await vi.waitFor(() => expect(slots().length).toBe(OFFERED.length))
 })
 
 it('applies a verb to a selection the browser placed that CodeMirror has not read yet', async () => {

@@ -272,7 +272,8 @@ describe('tidy quality scoreboard', () => {
       // 72976 -> 139357 px — because members now settle inside a frame
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
-      movedNodes: 1956,
+      // 1956 -> 1955 with the hop that stops at a frame's margin (below).
+      movedNodes: 1955,
       // 139357 -> 143650 with banding on centres and far edges (above).
       // 143650 -> 127141, and one fewer move, once a box more than half
       // inside a frame counts as its member: it is tidied AMONG the
@@ -294,7 +295,14 @@ describe('tidy quality scoreboard', () => {
       // is put back on the grid. One pixel over 1956 moved nodes, and the
       // three DEBT metrics did not move at all — the repair fires rarely
       // and costs nothing when it does.
-      displacement: 125614,
+      // 125614 -> 134439 when a member's overlap hop stopped at its frame's
+      // margin rather than carrying on up or left past it. Past the margin
+      // the frame grew up or left to follow, so its top-left left its
+      // peers' row: on a three-frame retrospective board one frame rose
+      // 275px above the two beside it. The hop the other way, into room the
+      // frame grows down or right to give, is longer — that is the 7% —
+      // and every DEBT column is unchanged.
+      displacement: 134439,
     })
   })
 })

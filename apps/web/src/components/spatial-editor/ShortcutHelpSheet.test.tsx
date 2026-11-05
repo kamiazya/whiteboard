@@ -52,6 +52,16 @@ describe('ShortcutHelpSheet', () => {
     expect(note.textContent).toMatch(/right-click/i)
   })
 
+  // The Hand tool's right-click offers comments only, so the arrange
+  // actions are reached from the Select tool — and Align/Distribute from a
+  // selection of two or more nodes, the only menu that carries them.
+  it('says the arrange actions need the Select tool and a multi-node selection', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const text = screen.getByTestId('shortcut-help-menu-only').textContent ?? ''
+    expect(text).toMatch(/Select tool \(V\)/)
+    expect(text).toMatch(/two or more/)
+  })
+
   it('renders nothing while closed', () => {
     render(<ShortcutHelpSheet open={false} onOpenChange={() => {}} />)
     expect(screen.queryByTestId('shortcut-help-sheet')).toBeNull()

@@ -21,6 +21,7 @@ import {
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
   describeDocumentDuplicatesConformance,
+  describeDocumentFoldersConformance,
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
@@ -139,6 +140,7 @@ async function blobFileCount(): Promise<number> {
 describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   describeDocumentIndexConformance(makeProductionIndex)
   describeDocumentPinsConformance(makeProductionIndex)
+  describeDocumentFoldersConformance(makeProductionIndex)
   describeDocumentTrashConformance(async () => {
     const { index, dispose } = await makeProductionIndex()
     return { index, dispose, evacuatedBlobCount: blobFileCount, placeDocument: placeInRecord }

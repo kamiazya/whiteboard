@@ -9,10 +9,12 @@
  * hook already holds, and the page is the only thing that has to be read in
  * one sitting.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
+import { exportFilenameBaseFor } from '../components/workspace-top-bar/export-filename.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import { loadBrowserReference } from '../lib/document-embed-content.js'
@@ -189,7 +191,7 @@ export function documentLabels(
   return {
     documentKey: documentId ?? 'no-canvas',
     overlayTitle: documentName ?? 'Untitled',
-    exportFilenameBase: documentName ?? 'canvas',
+    exportFilenameBase: exportFilenameBaseFor(documentName, path),
     commandCanvas: documentId === null ? null : { workspaceId, documentId, path },
   }
 }

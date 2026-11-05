@@ -22,15 +22,18 @@ import {
   documentContainers,
   duplicateWorkspaceDocument,
   exportWorkspaceSubtree,
+  folderNamesByPath,
   forgetTrashEntry,
   importWorkspaceSubtree,
   moveWorkspaceNodeToPath,
+  namedFoldersAbove,
   pruneEmptyFolders,
   readPinnedDocumentIds,
   readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceFolderNames,
   readWorkspaceNodes,
+  reapplyFolderNames,
   recordTrashEntry,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -43,7 +46,9 @@ import {
   deriveCopyName,
   deriveCopyPath,
   displayNameKey,
+  firstDistinctUnnamedPath,
   generateDocumentId,
+  isMovedNameTaken,
   isSelfOrDescendant,
   isSiblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
@@ -272,6 +277,7 @@ export class LoroWorkspaceDocumentIndex
       refuseNewFolders(foldersIn(nodes), restoring.folders + foldersMissingFor(nodes, entry.path))
       const restored = importWorkspaceSubtree(doc, stored.bytes, parentPath)
       if (restored === null) return null
+      if (entry.folderNames !== undefined) reapplyFolderNames(doc, entry.folderNames)
       forgetTrashEntry(doc, input.documentId)
       await this.docs.save(input.workspaceId, doc)
       // After the save, not before: a failure between the two would otherwise
@@ -326,6 +332,31 @@ export class LoroWorkspaceDocumentIndex
     return this.#writes.run(workspaceId, body)
   }
 
+  /** Stores a document's bytes and records the trash row naming them; the delete follows only once both stand. */
+  async #evacuate(
+    doc: LoroDoc,
+    meta: { readonly documentId: string; readonly name?: string },
+    path: string,
+  ): Promise<void> {
+    const bytes = exportWorkspaceSubtree(doc, path)
+    if (bytes === null) return
+    const { ref } = await this.blobs.put({
+      // Copied so the DTO's narrow buffer type is satisfied without a
+      // cast: Loro's export is `Uint8Array<ArrayBufferLike>`.
+      bytes: new Uint8Array(bytes),
+      contentType: 'application/octet-stream',
+    })
+    const folderNames = namedFoldersAbove(folderNamesByPath(doc), path)
+    recordTrashEntry(doc, {
+      documentId: meta.documentId,
+      path,
+      ...(meta.name === undefined ? {} : { name: meta.name }),
+      ...(folderNames.length === 0 ? {} : { folderNames }),
+      deletedAt: Date.now(),
+      blob: ref,
+    })
+  }
+
   async #dropTrashBlobUnlessNamed(
     workspaceId: string,
     rows: readonly TrashEntry[],
@@ -375,8 +406,13 @@ export class LoroWorkspaceDocumentIndex
       refuseNewDocuments(nodes.filter((node) => node.type === 'document').length)
       refuseNewFoldersAt(nodes, input.path)
       if (input.name !== undefined) refuseSiblingDocumentName(nodes, input.path, input.name)
+      const path =
+        input.name === undefined &&
+        !nodes.some((node) => node.type === 'document' && node.path === input.path)
+          ? distinctUnnamedPath(nodes, input.path)
+          : input.path
       const created = createWorkspaceDocumentAtPath(doc, {
-        path: input.path,
+        path,
         documentId: generateDocumentId(),
         kind: input.kind,
         ...(input.name === undefined ? {} : { name: input.name }),
@@ -389,7 +425,7 @@ export class LoroWorkspaceDocumentIndex
       // else: another replica may be creating the same path right now and
       // both will survive the merge. It stops the ordinary case — one user,
       // one device — without claiming to be a global invariant.
-      if (created === null) throw new DocumentPathTakenError(input.workspaceId, input.path)
+      if (created === null) throw new DocumentPathTakenError(input.workspaceId, path)
       await this.docs.save(input.workspaceId, doc)
       // Through entryOf, so a create answers the same shape a resolve does —
       // updatedAt included; the conformance suite compares them directly.
@@ -485,6 +521,7 @@ export class LoroWorkspaceDocumentIndex
       const taken = moveCollision(nodes, moving, input.from, input.to)
       if (taken !== undefined) throw new DocumentPathTakenError(input.workspaceId, taken)
       refuseNewFoldersAt(nodes, input.to)
+      refuseMovedName(nodes, moving, input.from, input.to)
       // ONE tree move. The descendants come with it because their paths are
       // their ancestors' — there is no per-row rewrite to order, so the
       // depth-ordering a row-backed store needs does not arise.
@@ -609,24 +646,7 @@ export class LoroWorkspaceDocumentIndex
       // Only a DOCUMENT is evacuated. A folder holds no content of its own,
       // so there is nothing to bring back and a trash row for one would offer
       // a restore that restores nothing.
-      if (target.type === 'document') {
-        const bytes = exportWorkspaceSubtree(doc, input.path)
-        if (bytes !== null) {
-          const { ref } = await this.blobs.put({
-            // Copied so the DTO's narrow buffer type is satisfied without a
-            // cast: Loro's export is `Uint8Array<ArrayBufferLike>`.
-            bytes: new Uint8Array(bytes),
-            contentType: 'application/octet-stream',
-          })
-          recordTrashEntry(doc, {
-            documentId: target.meta.documentId,
-            path: input.path,
-            ...(target.meta.name === undefined ? {} : { name: target.meta.name }),
-            deletedAt: Date.now(),
-            blob: ref,
-          })
-        }
-      }
+      if (target.type === 'document') await this.#evacuate(doc, target.meta, input.path)
       deleteWorkspaceNodeAtPath(doc, input.path)
       pruneEmptyFolders(doc)
       await this.docs.save(input.workspaceId, doc)
@@ -663,6 +683,58 @@ function refuseSiblingDocumentName(
   if (isSiblingDisplayNameTaken(others, { path, name })) {
     throw new DisplayNameTakenError('document', path, name)
   }
+}
+
+/**
+ * Refuses a move that would leave the node at `from` showing, under its new
+ * parent, a name a sibling of the same kind already shows. Only the root of
+ * the moving subtree changes parent; everything below it keeps its siblings.
+ */
+function refuseMovedName(
+  nodes: readonly WorkspaceNode[],
+  moving: readonly WorkspaceNode[],
+  from: string,
+  to: string,
+): void {
+  for (const root of moving.filter((node) => node.path === from)) {
+    const kind = root.type
+    const name = root.type === 'folder' ? root.name : root.meta.name
+    const staying = nodes.flatMap((node) =>
+      node.type === kind && !isSelfOrDescendant(node.path, from) && !emptiedBy(nodes, node, from)
+        ? [{ path: node.path, name: node.type === 'folder' ? node.name : node.meta.name }]
+        : [],
+    )
+    if (isMovedNameTaken(staying, { from, to, name })) {
+      throw new DisplayNameTakenError(kind, to, name ?? to.slice(to.lastIndexOf('/') + 1))
+    }
+  }
+}
+
+/**
+ * Whether moving `from` away leaves `node` — one of its ancestors — with no
+ * document under it, so `pruneEmptyFolders` removes it with the move. Every
+ * other ancestor stays, and shows its name beside the moved root like any
+ * sibling: a document always stays, and so does a folder still holding one.
+ */
+function emptiedBy(nodes: readonly WorkspaceNode[], node: WorkspaceNode, from: string): boolean {
+  if (node.type !== 'folder' || !isSelfOrDescendant(from, node.path)) return false
+  return !nodes.some(
+    (other) =>
+      other.type === 'document' &&
+      isSelfOrDescendant(other.path, node.path) &&
+      !isSelfOrDescendant(other.path, from),
+  )
+}
+
+/** The address an unnamed document takes so it does not read like a named sibling. */
+function distinctUnnamedPath(nodes: readonly WorkspaceNode[], path: string): string {
+  const documents = nodes.flatMap((node) =>
+    node.type === 'document' ? [{ path: node.path, name: node.meta.name }] : [],
+  )
+  const taken = new Set(nodes.map((node) => node.path))
+  // Null only past a thousand suffixes: the requested address stands and the
+  // path-taken rules answer for it.
+  return firstDistinctUnnamedPath(path, documents, (each) => taken.has(each)) ?? path
 }
 
 /** Whether a purge or restore of `entry` must leave its bytes for another trash row. */

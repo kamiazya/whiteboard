@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { searchDocuments } from './search-documents.js'
+import { searchDocuments, withNameMatches } from './search-documents.js'
 
 const docs: WorkspaceDocumentEntry[] = [
   { documentId: 'd1', path: 'design/login', name: 'Login flow' },
@@ -115,5 +115,39 @@ describe('tag matching', () => {
     expect(searchDocuments(docs, '#q').map((d) => d.documentId)).toEqual([])
     // Matches the name/path of C? '#misc' names no tag, so nothing.
     expect(searchDocuments(docs, '#misc').map((d) => d.documentId)).toEqual([])
+  })
+})
+
+describe('searchDocuments folding', () => {
+  it('matches a name whatever accents either side carries', () => {
+    const accented: WorkspaceDocumentEntry[] = [
+      { documentId: 'a', path: 'suppliers/list', name: 'Café supplier list' },
+      { documentId: 'b', path: 'quipe-ops/untitled-8', name: 'Équipe Ops' },
+    ]
+    expect(searchDocuments(accented, 'cafe').map((d) => d.documentId)).toEqual(['a'])
+    expect(searchDocuments(accented, 'equipe').map((d) => d.documentId)).toEqual(['b'])
+    expect(searchDocuments(accented, 'ÉQUIPE').map((d) => d.documentId)).toEqual(['b'])
+  })
+})
+
+describe('searchDocuments folder names', () => {
+  const filed: WorkspaceDocumentEntry[] = [
+    { documentId: 'in', path: 'quipe-ops/untitled-8', name: 'Rota' },
+    { documentId: 'own', path: 'zz/review', name: 'Operations review' },
+    { documentId: 'out', path: 'misc/other' },
+  ]
+  const names = new Map([['quipe-ops', 'Operations Team']])
+
+  it('matches a document by the display name of its folder, after the ones whose own name matched', () => {
+    expect(searchDocuments(filed, 'operations', names).map((d) => d.documentId)).toEqual([
+      'own',
+      'in',
+    ])
+  })
+
+  it('widens a content answer with folder-name matches too', () => {
+    expect(
+      withNameMatches([], filed, 'operations team', names).map((row) => row.document.documentId),
+    ).toEqual(['in'])
   })
 })

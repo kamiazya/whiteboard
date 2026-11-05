@@ -1,8 +1,10 @@
+import { isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { FolderNames } from '../../lib/folder-names.js'
 import { foldersOf } from './folder-moves.js'
+import { refusalMessage } from './use-rename-document.js'
 
 /**
  * What each folder is called, for every folder-shaped surface — the tree, the
@@ -18,6 +20,15 @@ export interface FolderNamesState {
   readonly folders: readonly string[]
   /** A folder made here and named, held until a document lands in it. */
   readonly remember: (path: string, name: string) => void
+  /**
+   * Write the pending names of the folders a document at `path` now stands in,
+   * without waiting for a listing — the caller may leave the page the moment
+   * the document exists, and an effect waiting for the listing would never run.
+   */
+  readonly flushInto: (path: string) => void
+  /** Why the keeper refused a pending name it tried to write, until the next attempt. */
+  readonly refusal: string | null
+  readonly dismissRefusal: () => void
   /** Rename a folder: a pending one in place, a standing one through the keeper. */
   readonly rename: (path: string, name: string) => Promise<void>
   /** Whether a folder at `path` can be renamed here at all. */
@@ -58,6 +69,13 @@ function useStoredFolderNames(
   return { stored, reload }
 }
 
+/** Why the keeper refused a name, and the way to put it away. */
+function useRefusal() {
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const dismissRefusal = useCallback(() => setRefusal(null), [])
+  return { refusal, setRefusal, dismissRefusal }
+}
+
 /**
  * Names given to folders no document is in yet, and the flush that writes one
  * once the listing shows a document under it. The pending name stays until
@@ -71,33 +89,74 @@ function usePendingFolderNames(
 ) {
   const [pending, setPending] = useState<FolderNames>(new Map())
   const writing = useRef(new Set<string>())
+  const { refusal, setRefusal, dismissRefusal } = useRefusal()
 
   // SCOPE RESET — a name given in the departed workspace names nothing here.
   useEffect(() => {
     setPending(new Map())
     writing.current = new Set()
+    setRefusal(null)
   }, [source])
 
+  const flush = useCallback(
+    (shouldWrite: (folder: string) => boolean) => {
+      const write = source.setFolderName
+      if (write === undefined) return
+      for (const [path, name] of pending) {
+        if (!shouldWrite(path) || writing.current.has(path)) continue
+        writing.current.add(path)
+        setRefusal(null)
+        void write(path, name)
+          .then(reload, (err: unknown) => setRefusal(refusalMessage(err)))
+          .finally(() => {
+            writing.current.delete(path)
+            setPending((current) => withEntry(current, path, undefined))
+          })
+      }
+    },
+    [pending, source, reload],
+  )
+
   useEffect(() => {
-    const write = source.setFolderName
-    if (write === undefined) return
-    for (const [path, name] of pending) {
-      if (!standing.includes(path) || writing.current.has(path)) continue
-      writing.current.add(path)
-      void write(path, name)
-        .then(reload, () => undefined)
-        .finally(() => {
-          writing.current.delete(path)
-          setPending((current) => withEntry(current, path, undefined))
-        })
-    }
-  }, [pending, standing, source, reload])
+    flush((path) => standing.includes(path))
+  }, [flush, standing])
+
+  const flushInto = useCallback(
+    (documentPath: string) => flush((path) => isSelfOrDescendant(documentPath, path)),
+    [flush],
+  )
 
   const remember = useCallback((path: string, name: string) => {
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  return { pending, remember }
+  return { pending, remember, flushInto, refusal, dismissRefusal }
+}
+
+/**
+ * A named folder the last listing emptied keeps its name as a pending one.
+ * The keeper prunes a folder's name with the folder, so without this a
+ * document moved out and back would bring the folder back under its bare
+ * segment. Read from the stored names of the render BEFORE the re-read
+ * lands, which still hold the departed folder's.
+ */
+function useKeepEmptiedNames(
+  source: WorkspaceFilesSource,
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  standing: readonly string[],
+  stored: FolderNames,
+  remember: (path: string, name: string) => void,
+) {
+  const before = useRef<{ source: WorkspaceFilesSource; standing: readonly string[] } | null>(null)
+  useEffect(() => {
+    const previous = before.current
+    before.current = documents === null ? null : { source, standing }
+    if (previous === null || documents === null || previous.source !== source) return
+    for (const path of previous.standing) {
+      const name = stored.get(path)
+      if (name !== undefined && !standing.includes(path)) remember(path, name)
+    }
+  }, [source, documents, standing, stored, remember])
 }
 
 /**
@@ -115,7 +174,13 @@ export function useFolderNames(
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
-  const { pending, remember } = usePendingFolderNames(source, standing, reload)
+  const { pending, remember, flushInto, refusal, dismissRefusal } = usePendingFolderNames(
+    source,
+    standing,
+    reload,
+  )
+
+  useKeepEmptiedNames(source, documents, standing, stored, remember)
 
   const names = useMemo(() => new Map([...stored, ...pending]), [stored, pending])
   const folders = useMemo(() => [...new Set([...standing, ...pending.keys()])], [standing, pending])
@@ -140,5 +205,5 @@ export function useFolderNames(
     [source, documents],
   )
 
-  return { names, folders, remember, rename, canRename }
+  return { names, folders, remember, flushInto, refusal, dismissRefusal, rename, canRename }
 }

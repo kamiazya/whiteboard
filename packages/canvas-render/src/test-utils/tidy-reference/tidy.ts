@@ -3,7 +3,11 @@
 // stack. `tidy-nesting.property.test.ts` holds the production tidy to it on
 // boards with nested frames, so the restructuring stays a pure cost change.
 // Only imports were re-pointed (and unused exports dropped); never edit the
-// logic, and delete this directory with that property.
+// logic, and delete this directory with that property. The exception is
+// a RULE inside a level rather than the walk — who is a root and what it
+// scoops (`tidy-units.ts` here: frames nest by majority, as members do), and
+// the overlap hop stopping at a frame's margin. Those change in both copies
+// at once, so the property keeps comparing the walk alone.
 /**
  * One-tap tidy: deterministic normalization that respects the author's
  * rough topology instead of re-laying the canvas out wholesale.
@@ -267,7 +271,7 @@ function hopClear(unit: Unit, ax: Axis, dir: 1 | -1, occupied: readonly Rect[], 
  * collider's centre, ties right/down) until clear of everything placed so
  * far.
  */
-function resolveOverlaps(units: Unit[], origin: Point): void {
+function resolveOverlaps(units: Unit[], origin: Point, floor: Point | undefined): void {
   const occupied: Rect[] = units.filter((u) => !u.movable).map((u) => u.bbox)
   for (const unit of units) {
     if (!unit.movable) continue
@@ -278,7 +282,12 @@ function resolveOverlaps(units: Unit[], origin: Point): void {
           ? AXIS_X
           : AXIS_Y
       const dir = ax.at(unit.bbox, 0.5) < ax.at(firstHit, 0.5) ? -1 : 1
+      const start = ax.near(unit.bbox)
       hopClear(unit, ax, dir, occupied, ax.of(origin))
+      if (dir === -1 && floor !== undefined && ax.near(unit.bbox) < ax.of(floor)) {
+        ax.shift(unit, start - ax.near(unit.bbox))
+        hopClear(unit, ax, 1, occupied, ax.of(origin))
+      }
     }
     occupied.push(unit.bbox)
   }
@@ -512,7 +521,7 @@ function runPassesToFixpoint(
     alignBands(units, AXIS_X, origin.x, floor?.x)
     alignBands(units, AXIS_Y, origin.y, floor?.y)
     if (options.edges !== undefined) orderRowsByEdges(units, options.edges)
-    resolveOverlaps(units, origin)
+    resolveOverlaps(units, origin, floor)
     const now = signature()
     if (seen.has(now)) break
     seen.add(now)

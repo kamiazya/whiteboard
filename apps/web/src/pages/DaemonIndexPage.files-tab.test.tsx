@@ -156,8 +156,8 @@ describe('DaemonIndexPage tree view', () => {
     // The document one level down is reachable without navigating into it.
     const tree = screen.getByRole('tree')
     expect(within(tree).getByText('design')).not.toBeNull()
-    // And the trail belongs to whatever narrows the view, which here nothing does.
-    expect(screen.queryByRole('navigation', { name: 'Folder path' })).toBeNull()
+    // The trail stays: it still says where you are and where a new document lands.
+    expect(screen.getByRole('navigation', { name: 'Folder path' })).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Two columns' }))
     await screen.findByTestId('folder-contents')
@@ -392,7 +392,7 @@ describe('DaemonIndexPage tree view', () => {
 
     await pickNewDocumentKind('markdown')
     const alert = await screen.findByText(/Could not create/)
-    expect(alert.textContent).toContain('markdown')
+    expect(alert.textContent).toContain('a note')
 
     await pickNewDocumentKind('markdown')
     await waitFor(() => {
@@ -504,7 +504,11 @@ describe('DaemonIndexPage tree view', () => {
     })
 
     const results = await screen.findByTestId('search-results')
-    expect(results.textContent).toContain('notes/design')
+    // Where it is, said by folder: the row stands in `notes`.
+    await waitFor(() => {
+      const row = results.querySelector('[data-doc-path="notes/design"]')
+      expect(row?.querySelector('[data-testid="result-location"]')?.textContent).toBe('notes')
+    })
     // The folder view is replaced, not shown beside the results.
     expect(screen.queryByTestId('folder-contents')).toBeNull()
     // And the trail is gone, because the results are not confined to a folder.
@@ -584,7 +588,9 @@ describe('DaemonIndexPage tree view', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Search documents' }), {
       target: { value: 'zzzz' },
     })
-    expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
+    const results = await screen.findByTestId('search-results')
+    // Once the answer is in: until then nothing has been found not to match.
+    await waitFor(() => expect(results.textContent).toContain('Nothing matches'))
   })
 
   it('still shows the failure alert when the list fails for a non-404 reason', async () => {

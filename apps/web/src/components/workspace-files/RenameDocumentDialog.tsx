@@ -111,14 +111,14 @@ export function RenameDocumentDialog({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
+              className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent pointer-coarse:min-h-11"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={busy}
-              className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+              className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm disabled:opacity-50 pointer-coarse:min-h-11"
             >
               Save
             </button>

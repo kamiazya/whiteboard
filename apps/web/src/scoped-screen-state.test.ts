@@ -196,6 +196,8 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   columns: 'no subject: how you look, not what at; deliberately persisted across everything',
   rootRef: 'no subject: the panel’s own DOM node',
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
+  flushFolderNamesIntoRef:
+    'no subject: mirrors the folder actions’ `flushInto`, reassigned every render — it exists because document creation sits above the hook that owns pending folder names',
   scopeRef: 'no subject: mirrors the device-memory scope argument, reassigned every render',
   // Mirrors `documents`, which the reset clears, and is reassigned every
   // render, so a switch empties it on the render that follows.

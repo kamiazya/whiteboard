@@ -1,9 +1,13 @@
 import { folderNameRefusal } from '@kamiazya/whiteboard-model'
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react'
-import { displayNameTakenMessage } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
-import { isFolderNameTaken, newFolderSegmentIn, planNestedFolder } from '../../lib/folder-names.js'
+import {
+  folderNameTakenMessage,
+  folderShowingName,
+  newFolderSegmentIn,
+  planNestedFolder,
+} from '../../lib/folder-names.js'
 import { useAnnouncer } from '../annotations/announcer.js'
 import { FolderActionsLayer, type FolderDialog, type FolderMenu } from './FolderActionsLayer.js'
 import type { FolderActions } from './folder-actions.js'
@@ -76,9 +80,8 @@ function folderDialogRefusal(
   if (rule !== null) return rule
   const path = namedPath(open, name, documents, folderNames)
   const target = { path, name: name.trim() }
-  return isFolderNameTaken(folderNames.folders, folderNames.names, target)
-    ? displayNameTakenMessage('folder', path, target.name)
-    : null
+  const holder = folderShowingName(folderNames.folders, folderNames.names, target)
+  return holder === undefined ? null : folderNameTakenMessage(holder, folderNames.names)
 }
 
 /** What the layer asks before a folder is named or made: the refusal, and a typed folder's plan. */
@@ -126,9 +129,13 @@ function layerHandlers({
       folder: string,
       created: readonly { readonly path: string; readonly name: string }[] = [],
     ) => {
-      // Named before the move, so the flush finds them once the document lands.
+      // Named only once the move landed: a refused move makes no folder, and a
+      // remembered name would leave one in the picker. The flush finds the
+      // names when the listing shows the document there.
+      const calledAs = created.find((each) => each.path === folder)?.name
+      if (!(await moveInto(entry, folder, calledAs))) return
       for (const each of created) folderNames.remember(each.path, each.name)
-      if (await moveInto(entry, folder)) setMoving(null)
+      setMoving(null)
     },
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
@@ -193,7 +200,7 @@ interface FolderActionsDeps {
  * menu's entry.
  *
  * There is no stored folder to create — a new folder exists once something
- * is moved into it, and "New subfolder…" only opens the (empty) place, its
+ * is moved into it, and "New folder" only opens the (empty) place, its
  * name held until a document lands there (`useFolderNames`).
  */
 export function useFolderActions({
@@ -233,11 +240,13 @@ export function useFolderActions({
       menu={menu}
       dialog={dialog}
       busy={busy}
-      error={error}
+      error={error ?? folderNames.refusal}
       onCloseMenu={() => setMenu(null)}
       {...handlers}
     />
   )
 
-  return { actions, names: folderNames.names, openMovePicker, layer }
+  const { names, flushInto } = folderNames
+  const openNewFolder = (folder: string) => handlers.onMenuChoice('subfolder', folder)
+  return { actions, names, flushInto, openMovePicker, openNewFolder, layer }
 }

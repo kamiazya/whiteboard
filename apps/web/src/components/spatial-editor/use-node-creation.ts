@@ -2,8 +2,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
+import { creationObstacles } from '../../lib/spatial/frame-interior.js'
 import type { Box } from '../../lib/spatial/geometry.js'
-import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
@@ -46,9 +46,6 @@ export interface NodeCreationInputs {
    */
   readonly collapseExtras: () => void
   readonly containerSizeOf: (root: HTMLDivElement | null) => ContainerSize | null
-  /** The selection a Group chosen with no point frames: the primary, then the rest. */
-  readonly selectedId: string | null
-  readonly extraIds: Iterable<string>
   /** Opens the name editor on a frame the person just asked for. */
   readonly openGroupLabel: (id: string) => void
 }
@@ -75,8 +72,6 @@ export function useNodeCreation({
   applyResult,
   collapseExtras,
   containerSizeOf,
-  selectedId,
-  extraIds,
   openGroupLabel,
 }: NodeCreationInputs) {
   /**
@@ -114,7 +109,7 @@ export function useNodeCreation({
     const centerScreen =
       root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
     const preferred = screenToCanvas(centerScreen, viewport)
-    const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+    const occupied = creationObstacles(canvasRef.current)
     return resolveSpawnPoint(at, preferred, size, occupied, visibleCanvasRect())
   }
 
@@ -168,17 +163,14 @@ export function useNodeCreation({
   }
 
   /**
-   * A Group chosen WITHOUT a point (the dock) frames the selection when there
-   * is one — an empty frame dropped over work it does not hold is the wrong
-   * answer to "group these" — and otherwise makes a frame in free space and
-   * asks for its name, since an unnamed empty frame has nothing to find it by.
-   * A point (a drop, the canvas menu) is the person's own choice of place.
+   * A new, empty frame, asked for by name: in free space near the view's
+   * centre (or at the point the canvas menu was opened on), selected, with
+   * its name editor open, since an unnamed empty frame has nothing to find
+   * it by. It never wraps the selection — framing what is selected is the
+   * menu's Group selection, and a frame that silently nested around the
+   * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    if (at === undefined && selectedId !== null) {
-      groupSelection([selectedId, ...extraIds])
-      return
-    }
     const point = spawnPoint(at, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT })
     const id = newId()
     const node = groupNodeDefaults(id, point)
@@ -189,7 +181,7 @@ export function useNodeCreation({
     })
     collapseExtras()
     panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    if (at === undefined) openGroupLabel(id)
+    openGroupLabel(id)
   }
 
   /** Frames the current multi-selection: enclosing box + padding. */
@@ -205,6 +197,7 @@ export function useNodeCreation({
       selectedId: id,
     })
     collapseExtras()
+    openGroupLabel(id)
   }
 
   return {

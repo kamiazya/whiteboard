@@ -9,10 +9,18 @@ What it covers:
 - canvas text: text nodes, group labels, and **edge labels** (a diagram's
   meaning lives in its relations, so they are searchable content)
 - document names and paths
+- the display names of the folders a document sits in: after renaming a
+  folder to "Operations Team", "operations" finds the documents inside it.
+  A document that only its folder's name matched ranks below every document
+  whose own name, path or text matched.
 
 Japanese (and other CJK) queries work without any dictionary or download,
 down to a single character — 「た」 finds 「たささたはな」, so a query answers
-while it is still being typed. Results come back ranked, with a context excerpt around each match, and can
+while it is still being typed. Accents on Latin letters do not have to match:
+"cafe" finds "Café" and "equipe" finds "Équipe", either way round, while
+Japanese voiced kana stay distinct (が does not match か). Results come back ranked, with a context excerpt around each match (a
+`[[link]]` in an excerpt reads as the name of the document it points at, and
+an excerpt never cuts one in half), and can
 be narrowed by `kind` (markdown / spatial) or by tags.
 
 Example prompts:

@@ -1,31 +1,37 @@
 /**
  * What a search found, from anywhere in the workspace.
  *
- * Every row carries its full path, which the folder view deliberately does
- * not: there, the path is the pane you are standing in and repeating it on
- * every card would be noise. Here it is the only thing that says where the
- * document actually is, and the reason someone searched. (The two surveyed
- * apps that flatten hierarchy WITHOUT restoring location per row — Finder and
- * Figma — both carry standing user complaints about exactly that.)
+ * Every row says where the document is, which the folder view deliberately
+ * does not: there, the location is the pane you are standing in and
+ * repeating it on every card would be noise. Here it is the only thing that
+ * says where the document actually is, and the reason someone searched. (The
+ * two surveyed apps that flatten hierarchy WITHOUT restoring location per row
+ * — Finder and Figma — both carry standing user complaints about exactly
+ * that.) It is said in the folders' DISPLAY names, as the tree says it: the
+ * address is what links and the URL carry, and a folder named in a script
+ * the address charset cannot spell has an address nobody would recognise.
  *
- * The matched substring is marked in place, in the title and in the path:
+ * The matched substring is marked in place, in the title and the location:
  * a result list that will not say why a row is present makes the reader
  * re-run the search with their eyes.
  */
 
+import { findFolded } from '@kamiazya/whiteboard-search'
 import { LayoutGrid, List } from 'lucide-react'
-import { type KeyboardEvent, type ReactNode, useId, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useContext, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
+import { type FolderNames, folderDisplayName, folderTrail } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 import { type SearchCombobox, searchOptionId } from './use-search-combobox.js'
 
 /**
  * A row: the document, and the excerpts that say why it is here. Empty
- * contexts mean the match was in the name or the path — both already on
- * the row — so there is nothing more to show.
+ * contexts mean the match was in the name, the address or a folder's name —
+ * the row shows the name and the folders — so there is nothing more to show.
  */
 interface SearchResultRow {
   readonly document: WorkspaceDocumentEntry
@@ -53,11 +59,17 @@ export interface SearchResultsProps {
   /**
    * Whether document CONTENT was actually looked at. False while a content
    * search is unavailable, still in flight, or bypassed by a `#tag` filter —
-   * cases where the answer came from names and paths alone, and an empty
+   * cases where the answer came from names and folders alone, and an empty
    * state claiming otherwise would report a document as missing when nobody
    * looked inside it.
    */
   searchedContents?: boolean
+  /**
+   * Whether an answer is still on its way. An empty list then means nothing
+   * has been found YET, not that nothing matches, so the empty message waits
+   * — beside "Searching…" it contradicted itself.
+   */
+  pending?: boolean
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
   /**
@@ -76,7 +88,7 @@ export interface SearchResultsProps {
 }
 
 /**
- * Why a row is here when its title and path do not say: that it matched by
+ * Why a row is here when its title and location do not say: that it matched by
  * meaning, and the content excerpt around the match.
  */
 function MatchReason({
@@ -130,8 +142,8 @@ function MatchReason({
  * saying the same thing. They had already drifted: the grid carried a
  * comment the list did not, and every other line was duplicated verbatim.
  *
- * The path stays on the card in BOTH forms. Dropping it from the grid would
- * reintroduce the Finder/Figma gap the list avoids.
+ * The location stays on the card in BOTH forms. Dropping it from the grid
+ * would reintroduce the Finder/Figma gap the list avoids.
  */
 function SearchResultCard({
   row: { document: entry, contexts, lexicalRank, semanticRank },
@@ -155,6 +167,7 @@ function SearchResultCard({
   combobox: SearchResultsProps['combobox']
 }) {
   const uid = useId()
+  const folderNames = useContext(FolderNamesContext)
   const pathId = `${uid}-path`
   const excerptId = `${uid}-excerpt`
   return (
@@ -205,11 +218,18 @@ function SearchResultCard({
           <span data-testid="result-title" className="truncate text-sm">
             <Highlighted text={titleOf(entry)} query={query} />
           </span>
-          <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
-            <Highlighted text={entry.path} query={query} />
+          <span
+            id={pathId}
+            data-testid="result-location"
+            // The address, for whoever needs to type a link to it; secondary,
+            // so it waits behind a hover rather than taking the line.
+            title={entry.path}
+            className="text-muted-foreground truncate text-xs"
+          >
+            <Highlighted text={locationOf(entry.path, folderNames)} query={query} />
           </span>
           {(entry.tags?.length ?? 0) > 0 && (
-            /* A #tag query matches nothing visible in title or path, so the
+            /* A #tag query matches nothing visible in title or location, so the
              row must show the tag that put it here. */
             <span className="text-muted-foreground truncate text-[11px]">
               {entry.tags?.map((tag) => `#${tag}`).join(' ')}
@@ -258,24 +278,32 @@ function listProps(
 }
 
 /**
- * The text with its first case-insensitive match marked. First only: one
- * highlight answers "why is this row here", and a title that matches four
- * times painted four times reads as damage rather than emphasis.
+ * The text with its first match marked, compared the way search compares
+ * (case and Latin accents folded) but marked on the text as written, so
+ * "cafe" lights up "Café". First only: one highlight answers "why is this
+ * row here", and a title that matches four times painted four times reads
+ * as damage rather than emphasis.
  */
 function Highlighted({ text, query }: { text: string; query: string }) {
-  const q = query.trim().toLowerCase()
-  if (q === '') return <>{text}</>
-  const at = text.toLowerCase().indexOf(q)
-  if (at === -1) return <>{text}</>
+  const found = findFolded(text, query.trim())
+  if (found === undefined) return <>{text}</>
+  const end = found.index + found.length
   return (
     <>
-      {text.slice(0, at)}
+      {text.slice(0, found.index)}
       <mark data-testid="search-match" className="rounded-sm bg-primary/20 text-inherit">
-        {text.slice(at, at + q.length)}
+        {text.slice(found.index, end)}
       </mark>
-      {text.slice(at + q.length)}
+      {text.slice(end)}
     </>
   )
+}
+
+/** The folders a document sits in, top down, as they are called; the workspace for one at its top. */
+function locationOf(path: string, names: FolderNames): string {
+  const cut = path.lastIndexOf('/')
+  if (cut === -1) return folderDisplayName('', names)
+  return folderTrail(path.slice(0, cut), names).join(' / ')
 }
 
 function titleOf(entry: WorkspaceDocumentEntry): string {
@@ -298,10 +326,41 @@ function walkResults(event: KeyboardEvent<HTMLElement>, onLeaveUp: (() => void) 
   else rows[event.key === 'ArrowDown' ? Math.min(at + 1, rows.length - 1) : at - 1]?.focus()
 }
 
+/**
+ * Say what was searched, not just that nothing came back. Search here is
+ * lexical: it finds the words a document actually contains, so a query in
+ * one language structurally cannot reach a document written in another
+ * (measured on this repo's own corpus: 21 of 22 such queries returned
+ * nothing). "Nothing matches" alone would read as "no such document" —
+ * naming the query and what was looked at lets the reader tell a missing
+ * document from a query that could never match. Nothing at all while an
+ * answer is on its way: nothing has been found not to match yet.
+ */
+function NothingMatches({
+  query,
+  searchedContents,
+  pending,
+  className,
+}: {
+  query: string
+  searchedContents: boolean
+  pending: boolean
+  className: string | undefined
+}) {
+  if (pending) return null
+  return (
+    <p className={cn('text-muted-foreground text-sm', className)}>
+      Nothing matches “{query.trim()}” in the{' '}
+      {searchedContents ? 'names, folders and text' : 'names and folders'} of this workspace.
+    </p>
+  )
+}
+
 export function SearchResults({
   results,
   query,
   searchedContents = true,
+  pending = false,
   selectedPath,
   onSelect,
   onActivate,
@@ -319,24 +378,19 @@ export function SearchResults({
           if (row !== undefined) onDocumentContextMenu(row.document, x, y)
         },
   )
-  // List first: the row form carries the path inline beside the title, which
+  // List first: the row form carries the location inline beside the title, which
   // is the stronger answer to "where is this" — the grid trades that density
   // for a bigger picture, the way Finder's icon view does.
   const [layout, setLayout] = useState<'list' | 'grid'>('list')
 
   if (results.length === 0) {
-    // Say what was searched, not just that nothing came back. Search here is
-    // lexical: it finds the words a document actually contains, so a query
-    // in one language structurally cannot reach a document written in
-    // another (measured on this repo's own corpus: 21 of 22 such queries
-    // returned nothing). "Nothing matches" alone would read as "no such
-    // document" — naming the query and what was looked at lets the reader
-    // tell a missing document from a query that could never match.
     return (
-      <p className={cn('text-muted-foreground text-sm', className)}>
-        Nothing matches “{query.trim()}” in the{' '}
-        {searchedContents ? 'names, paths and contents' : 'names and paths'} of this workspace.
-      </p>
+      <NothingMatches
+        query={query}
+        searchedContents={searchedContents}
+        pending={pending}
+        className={className}
+      />
     )
   }
 

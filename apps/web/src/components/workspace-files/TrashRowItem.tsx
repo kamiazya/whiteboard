@@ -1,7 +1,11 @@
+import { useContext } from 'react'
 import { documentLabel } from '../../lib/document-label.js'
 import type { TrashRow } from '../../lib/files-source.js'
+import { folderTrail } from '../../lib/folder-names.js'
 import { formatRelative } from '../../lib/format-relative.js'
+import { folderOf } from './folder-moves.js'
 import { PurgeTrashEntryControl } from './PurgeTrashEntryControl.js'
+import { FolderNamesContext } from './use-folder-names.js'
 
 export interface TrashRowItemProps {
   row: TrashRow
@@ -20,15 +24,25 @@ export function TrashRowItem({
   purge,
   onPurgeSettled,
 }: Readonly<TrashRowItemProps>) {
+  const folder = folderOf(row.path)
+  // A folder still standing is called what it is called now — restore keeps
+  // that name — and one that went with the document by the name it had.
+  const live = useContext(FolderNamesContext)
+  const names = new Map([
+    ...(row.folderNames ?? []).map(({ path, name }) => [path, name] as const),
+    ...live,
+  ])
+  const where = folder === '' ? 'Workspace' : folderTrail(folder, names).join(' / ')
   return (
-    <li className="flex items-center justify-between gap-2 pointer-coarse:min-h-11 pointer-coarse:gap-3">
-      <span className="min-w-0 truncate" title={row.path}>
-        {documentLabel(row, 'path')}
-        {row.name !== undefined && (
-          <span className="text-muted-foreground pl-2 text-xs">{row.path}</span>
-        )}
-        <span className="text-muted-foreground pl-2 text-xs">
-          deleted {formatRelative(new Date(row.deletedAt).toISOString())}
+    <li className="flex items-center gap-2 pointer-coarse:min-h-11 pointer-coarse:gap-3">
+      {/* flex-1, so Restore lines up down the column whatever the name's length. */}
+      <span className="min-w-0 flex-1" title={row.path}>
+        <span className="block truncate">{documentLabel(row, 'path')}</span>
+        {/* Where it was, as the list names folders; the address comes last,
+            for the one who needs to tell two "Untitled" apart. */}
+        <span className="text-muted-foreground block truncate text-xs">
+          In {where} · deleted {formatRelative(new Date(row.deletedAt).toISOString())}
+          {row.name !== undefined && <span className="pl-2 font-mono opacity-70">{row.path}</span>}
         </span>
       </span>
       <button

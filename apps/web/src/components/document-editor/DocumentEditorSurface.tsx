@@ -38,6 +38,7 @@ export interface MarkdownDocumentSession
     | 'linkTargets'
     | 'onOpenDocument'
     | 'onCreateLinkTarget'
+    | 'onStoreImage'
     | 'ownPath'
     | 'autoFocus'
     | 'title'

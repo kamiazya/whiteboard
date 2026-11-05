@@ -1,4 +1,4 @@
-import { SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   CheckCircle2,
   Columns2,
@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   FolderInput,
+  FolderPlus,
   List,
   Pencil,
   Pin,
@@ -13,7 +14,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useContext } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -27,6 +28,7 @@ import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { SearchState } from './use-debounced-document-search.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { type SearchCombobox, usePublishSearchResults } from './use-search-combobox.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -49,11 +51,11 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  * Two answers, and the difference is where the search HAPPENED. A `#tag`
  * query is a FILTER over what is already loaded and never leaves the client;
  * so is the fallback while content search is unreachable or still in flight,
- * because the names and paths already in hand are a real answer rather than
+ * because the names and folders already in hand are a real answer rather than
  * a blank pane. Everything else is the source's own hits, widened with the
  * documents whose NAME matches — a content index does not rank a name.
  */
-function searchResultRows({
+function useSearchResultRows({
   activeTag,
   hits,
   documents,
@@ -64,8 +66,9 @@ function searchResultRows({
   documents: readonly WorkspaceDocumentEntry[]
   query: string
 }): ComponentProps<typeof SearchResults>['results'] {
+  const folderNames = useContext(FolderNamesContext)
   if (activeTag !== null || hits === null) {
-    return searchDocuments(documents, query).map((document) => ({ document }))
+    return searchDocuments(documents, query, folderNames).map((document) => ({ document }))
   }
   return withNameMatches(
     hits.map((hit) => ({
@@ -76,7 +79,14 @@ function searchResultRows({
     })),
     documents,
     query,
+    folderNames,
   )
+}
+
+/** A kind as people say it — never "spatial document", which is the model's word. */
+export const KIND_NOUN: Readonly<Record<DocumentKind, string>> = {
+  spatial: 'a canvas',
+  markdown: 'a note',
 }
 
 /**
@@ -91,9 +101,9 @@ function searchResultRows({
 export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWriteOutcome> }) {
   return (
     <>
-      {outcome.createRefusal !== null && (
+      {outcome.createRefusal !== null && !outcome.createRefusal.inForm && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {outcome.createRefusal.kind} document here.{' '}
+          Could not create {KIND_NOUN[outcome.createRefusal.kind]} here.{' '}
           {outcome.createRefusal.reason}
         </p>
       )}
@@ -208,14 +218,25 @@ function ColumnToggle({
 }
 
 /**
+ * A folder is made where the person stands, and labelled in words: behind a
+ * folder's own menu it was found by nobody who did not already know.
+ */
+function NewFolderButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1.5 rounded border p-1.5 pr-2.5 text-xs font-medium pointer-coarse:min-h-11"
+    >
+      <FolderPlus aria-hidden="true" className="size-4" />
+      New folder
+    </button>
+  )
+}
+
+/**
  * The row above the columns: where you are, what you are looking for, and
  * the two things you can change about the view.
- *
- * The trail belongs to whatever NARROWS the view, which is why it has two
- * conditions rather than one. In one-column mode nothing narrows — the tree
- * already shows every level at once — and while searching the results are
- * from everywhere, so a trail would name a folder the list is not confined
- * to.
  */
 export function PanelToolbar({
   columns,
@@ -232,6 +253,7 @@ export function PanelToolbar({
   onImportFiles,
   chooseColumns,
   combobox,
+  onNewFolder,
 }: {
   columns: 'one' | 'two'
   query: string
@@ -241,53 +263,67 @@ export function PanelToolbar({
   creating: boolean
   workspace: WorkspaceFilesPanelProps['workspace']
   derivedNewPath: string
-  pathForName: (name: string) => string
+  pathForName: ComponentProps<typeof NewDocumentMenu>['pathForName']
   outcome: ReturnType<typeof useWriteOutcome>
   createHere: ComponentProps<typeof NewDocumentMenu>['onCreate']
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']
   chooseColumns: (next: 'one' | 'two') => void
   combobox: SearchCombobox
+  /** Absent on a host that renders no folder actions. */
+  onNewFolder?: ((folder: string) => void) | undefined
 }) {
+  const browsing = query.trim() === ''
+  const trail = browsing
+  const newFolder = columns === 'two' && browsing && onNewFolder !== undefined
   return (
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1">
-        {/* The trail belongs to whatever narrows the view. In one-column
-          mode nothing does — the tree already shows every level at once —
-          and while searching the results are from everywhere, so a trail
-          would name a folder the list is not confined to. */}
-        {columns === 'two' && query.trim() === '' && (
-          <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
-        )}
-      </div>
-      <div className="relative shrink-0">
-        <Search
-          aria-hidden="true"
-          className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+    // Rows below `sm`: at a phone's width one row gave the search box 144px
+    // and wrapped the trail's last folder name in two. Where you are gets a
+    // row, what you are looking for the whole of the next, and New with the
+    // view choice wrap below it.
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {(trail || newFolder) && (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {/* Absent while searching: the results are from everywhere, so a
+              trail would name a folder the list is not confined to. In the
+              one-column list it still says where a new document lands. */}
+            {trail && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
+          </div>
+          {/* Two columns only: the one-column tree draws no empty folder to land in. */}
+          {newFolder && <NewFolderButton onClick={() => onNewFolder(folder)} />}
+        </div>
+      )}
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-nowrap">
+        <div className="relative min-w-0 basis-full sm:basis-auto">
+          <Search
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+          />
+          <input
+            type="search"
+            aria-label="Search documents"
+            placeholder="Search"
+            maxLength={SEARCH_QUERY_MAX_CHARS}
+            value={query}
+            onChange={(event) => changeQuery(event.target.value)}
+            {...combobox.boxProps}
+            className="w-full rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
+          />
+        </div>
+        <NewDocumentMenu
+          disabled={creating}
+          workspace={workspace}
+          defaultPath={derivedNewPath}
+          pathForName={pathForName}
+          createError={outcome.createRefusal?.reason ?? null}
+          onCreate={createHere}
+          {...(onImportFiles === undefined ? {} : { onImportFiles })}
+          onDismiss={outcome.dismissCreateRefusal}
         />
-        <input
-          type="search"
-          aria-label="Search documents"
-          placeholder="Search"
-          maxLength={SEARCH_QUERY_MAX_CHARS}
-          value={query}
-          onChange={(event) => changeQuery(event.target.value)}
-          {...combobox.boxProps}
-          className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48 pointer-coarse:min-h-11"
-        />
-      </div>
-      <NewDocumentMenu
-        disabled={creating}
-        workspace={workspace}
-        defaultPath={derivedNewPath}
-        pathForName={pathForName}
-        createError={outcome.createRefusal?.reason ?? null}
-        onCreate={createHere}
-        {...(onImportFiles === undefined ? {} : { onImportFiles })}
-        onDismiss={outcome.dismissCreateRefusal}
-      />
-      {/* Absent while searching: the results carry their own list/grid
+        {/* Absent while searching: the results carry their own list/grid
         choice, and two pairs side by side answered one question twice. */}
-      {query.trim() === '' && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+        {browsing && <ColumnToggle columns={columns} chooseColumns={chooseColumns} />}
+      </div>
     </div>
   )
 }
@@ -468,6 +504,18 @@ export function columnViewOf(
   return columns === 'one' ? { kind: 'browseOne', documents } : { kind: 'browseTwo', documents }
 }
 
+/** A card's picture: the document's own render, filling the card's picture box. */
+function cardThumbnail(loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']) {
+  return (entry: WorkspaceDocumentEntry) => (
+    <DocumentThumbnail
+      key={entry.documentId}
+      document={entry}
+      loadRender={loadRender}
+      className="size-full"
+    />
+  )
+}
+
 /**
  * The folder tree beside the folder's own contents. Below `md` the folder
  * column goes: the breadcrumb already walks the same hierarchy, and three
@@ -491,6 +539,7 @@ export function BrowseTwoColumns({
   openCardMenu,
   loadRender,
   onGridColumns,
+  onCreateHere,
 }: {
   documents: readonly WorkspaceDocumentEntry[]
   folder: string
@@ -506,6 +555,7 @@ export function BrowseTwoColumns({
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
   onGridColumns: (count: number | undefined) => void
+  onCreateHere: ComponentProps<typeof FolderContentsList>['onCreateHere']
 }) {
   /**
    * A press in the contents list, in the order the four answers rank: a
@@ -546,14 +596,8 @@ export function BrowseTwoColumns({
               : { onActivateDocument: openEntry })}
             onDocumentContextMenu={openCardMenu}
             onColumnCount={onGridColumns}
-            renderThumbnail={(entry) => (
-              <DocumentThumbnail
-                key={entry.documentId}
-                document={entry}
-                loadRender={loadRender}
-                className="size-full"
-              />
-            )}
+            onCreateHere={onCreateHere}
+            renderThumbnail={cardThumbnail(loadRender)}
           />
         </div>
       </div>
@@ -608,7 +652,7 @@ export function SearchColumn({
   combobox: SearchCombobox
 }) {
   const { hits, searchDegraded, searching } = search
-  const rows = searchResultRows({ activeTag, hits, documents, query })
+  const rows = useSearchResultRows({ activeTag, hits, documents, query })
   usePublishSearchResults(combobox, rows, onOpenDocument === undefined ? undefined : openEntry)
   return (
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
@@ -625,7 +669,7 @@ export function SearchColumn({
         >
           {searching !== 'idle' ? '' : resultsAnnouncement(rows.length, query)}
           {searchDegraded &&
-            ' Searching names and paths only — this workspace’s content search is unavailable.'}
+            ' Searching names and folders only — this workspace’s content search is unavailable.'}
         </p>
         {searching === 'slow' && (
           <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
@@ -634,14 +678,14 @@ export function SearchColumn({
         )}
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-          // A `#tag` query is a FILTER over what is loaded (the
-          // search contract), not a content search — it never leaves the
-          // client. Everything else asks the source.
+          // A `#tag` query is a FILTER over what is loaded (the search
+          // contract) and never leaves the client; everything else asks the source.
           results={rows}
           onLeaveUp={focusSearchBox}
           combobox={combobox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
+          pending={searching !== 'idle'}
           selectedPath={selectedPath}
           onSelect={tapOpens ? openEntry : setSelected}
           onDocumentContextMenu={openCardMenu}

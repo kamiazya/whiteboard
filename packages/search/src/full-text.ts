@@ -1,5 +1,6 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
-import { snippetAround } from './snippet.js'
+import { type Folded, foldForSearch, foldWithOffsets, spanOf } from './fold.js'
+import { type LinkLabel, snippetAround } from './snippet.js'
 
 /**
  * Dictionary-free lexical search: latin runs tokenize as lowercased words,
@@ -48,7 +49,7 @@ export function tokenizeForIndex(text: string): string[] {
  * answers false; answers false itself when it was stopped.
  */
 function tokenizeRuns(text: string, unigrams: boolean, emit: (token: string) => boolean): boolean {
-  for (const match of text.toLowerCase().matchAll(WORD)) {
+  for (const match of foldForSearch(text).matchAll(WORD)) {
     for (const stretch of scriptStretches(match[0])) {
       if (!emitStretch(stretch, unigrams, emit)) return false
     }
@@ -102,6 +103,13 @@ export interface SearchableDocument {
   readonly name?: string
   /** Body / node / label texts, each a separate string so snippets stay per-source. */
   readonly texts: readonly string[]
+  /**
+   * Display names of the named folders the document sits in (`folderNamesOf`).
+   * They find the document, but rank it below every document whose own
+   * name, path or text matched: being filed under "Operations" says less
+   * about a note than saying "operations" does.
+   */
+  readonly folders?: readonly string[]
 }
 
 export interface SearchHit {
@@ -197,6 +205,71 @@ interface TokenBag extends DocumentTerms {
   readonly doc: SearchableDocument
 }
 
+/** Each document's BM25 score over `bags`, out of `corpus` documents; zero ones left out. */
+function bm25(
+  bags: readonly TokenBag[],
+  queryTokens: readonly string[],
+  corpus: number,
+): Map<string, number> {
+  if (bags.length === 0) return new Map()
+  const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
+  // Once per query token, not per (document, token) pair: counting the
+  // documents that hold a token inside the scoring loop made one query
+  // documents² × tokens, seconds on a few hundred notes.
+  const idf = queryTokens.map((token) => {
+    const containing = bags.filter((bag) => bag.counts.has(token)).length
+    return Math.log(1 + (corpus - containing + 0.5) / (containing + 0.5))
+  })
+  const scores = new Map<string, number>()
+  for (const bag of bags) {
+    let score = 0
+    for (const [i, token] of queryTokens.entries()) {
+      const tf = bag.counts.get(token) ?? 0
+      if (tf === 0) continue
+      score +=
+        ((idf[i] ?? 0) * tf * (K1 + 1)) /
+        (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
+    }
+    if (score > 0) scores.set(bag.doc.documentId, score)
+  }
+  return scores
+}
+
+/**
+ * Documents whose own text matched, by that score, then those only a folder
+ * name matched. A folder-only hit's score is its folder score scaled under
+ * the lowest own score, so the scores still descend down the answer.
+ */
+function rankWithFolders(
+  documents: readonly SearchableDocument[],
+  own: ReadonlyMap<string, number>,
+  inFolders: ReadonlyMap<string, number>,
+): { doc: SearchableDocument; score: number }[] {
+  const byId = (a: SearchableDocument, b: SearchableDocument) =>
+    compareCodeUnit(a.documentId, b.documentId)
+  const ownHits = documents
+    .filter((doc) => own.has(doc.documentId))
+    .map((doc) => ({
+      doc,
+      score: own.get(doc.documentId) ?? 0,
+      folder: inFolders.get(doc.documentId) ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score || b.folder - a.folder || byId(a.doc, b.doc))
+  const folderOnly = documents
+    .filter((doc) => !own.has(doc.documentId) && inFolders.has(doc.documentId))
+    .map((doc) => ({ doc, folder: inFolders.get(doc.documentId) ?? 0 }))
+    .sort((a, b) => b.folder - a.folder || byId(a.doc, b.doc))
+  const floor = ownHits.at(-1)?.score
+  const top = folderOnly[0]?.folder ?? 0
+  return [
+    ...ownHits.map(({ doc, score }) => ({ doc, score })),
+    ...folderOnly.map(({ doc, folder }) => ({
+      doc,
+      score: floor === undefined ? folder : (floor * folder) / (folder + top),
+    })),
+  ]
+}
+
 interface SearchOptions {
   readonly limit?: number
   /**
@@ -212,6 +285,8 @@ interface SearchOptions {
    * then the caller's to have applied when it built them.
    */
   readonly termsOf?: (doc: SearchableDocument) => DocumentTerms
+  /** What a `[[link]]` in an excerpt shows: its target's display name (`snippetAround`). */
+  readonly linkLabel?: LinkLabel
 }
 
 /**
@@ -227,37 +302,32 @@ export function fullTextSearch(
     excerpts = true,
     alsoIndex,
     termsOf = (doc) => documentTerms(doc, alsoIndex),
+    linkLabel,
   }: SearchOptions = {},
 ): SearchHit[] {
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
 
-  const bags: TokenBag[] = documents.map((doc) => ({ doc, ...termsOf(doc) }))
-  const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
-  // Once per query token, not per (document, token) pair: counting the
-  // documents that hold a token inside the scoring loop made one query
-  // documents² × tokens, seconds on a few hundred notes.
-  const idf = queryTokens.map((token) => {
-    const containing = bags.filter((bag) => bag.counts.has(token)).length
-    return Math.log(1 + (bags.length - containing + 0.5) / (containing + 0.5))
-  })
-
-  const scored: { doc: SearchableDocument; score: number }[] = []
-  for (const bag of bags) {
-    let score = 0
-    for (const [i, token] of queryTokens.entries()) {
-      const tf = bag.counts.get(token) ?? 0
-      if (tf === 0) continue
-      score +=
-        ((idf[i] ?? 0) * tf * (K1 + 1)) /
-        (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
-    }
-    if (score > 0) scored.push({ doc: bag.doc, score })
-  }
+  const own = bm25(
+    documents.map((doc) => ({ doc, ...termsOf(doc) })),
+    queryTokens,
+    documents.length,
+  )
+  // Only the documents that sit in a named folder have a folder bag; the
+  // rest hold none of its terms, which is what the corpus size says for them.
+  const inFolders = bm25(
+    documents.flatMap((doc) =>
+      (doc.folders?.length ?? 0) === 0
+        ? []
+        : [{ doc, ...documentTerms({ path: '', texts: doc.folders ?? [] }) }],
+    ),
+    queryTokens,
+    documents.length,
+  )
+  const scored = rankWithFolders(documents, own, inFolders)
   // Excerpts only for what is answered: they cost a scan of every text per
   // query token, and ranking never reads them.
-  scored.sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
-  const contextsFor = excerpts ? excerpterFor(query) : () => []
+  const contextsFor = excerpts ? excerpterFor(query, linkLabel) : () => []
   return scored.slice(0, limit).map(({ doc, score }) => ({
     documentId: doc.documentId,
     score,
@@ -286,21 +356,20 @@ interface Match {
 }
 
 /**
- * Where the query matches `lower`: the raw needle if it occurs verbatim,
- * otherwise the earliest matching token.
+ * Where the query matches `folded`: the raw needle if it occurs verbatim,
+ * otherwise the earliest matching token — as a span of the ORIGINAL text,
+ * so the excerpt quotes what the document says, accents included.
  */
-function firstMatch(lower: string, needle: string, tokens: readonly string[]): Match | undefined {
-  const verbatim = needle === '' ? -1 : lower.indexOf(needle)
-  if (verbatim !== -1) {
-    return { index: verbatim, length: needle.length, score: tokens.length + 1 }
-  }
+function firstMatch(folded: Folded, needle: string, tokens: readonly string[]): Match | undefined {
+  const verbatim = spanOf(folded, needle)
+  if (verbatim !== undefined) return { ...verbatim, score: tokens.length + 1 }
   let best: { index: number; length: number } | undefined
   let matched = 0
   for (const token of tokens) {
-    const at = lower.indexOf(token)
-    if (at === -1) continue
+    const at = spanOf(folded, token)
+    if (at === undefined) continue
     matched++
-    if (best === undefined || at < best.index) best = { index: at, length: token.length }
+    if (best === undefined || at.index < best.index) best = at
   }
   return best === undefined ? undefined : { ...best, score: matched }
 }
@@ -315,16 +384,19 @@ function firstMatch(lower: string, needle: string, tokens: readonly string[]): M
  * A query that only matches token-wise centres on the first matching token.
  * Built once per query, so its tokens are cut up once rather than per hit.
  */
-export function excerpterFor(query: string): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
-  const needle = query.trim().toLowerCase()
+export function excerpterFor(
+  query: string,
+  linkLabel?: LinkLabel,
+): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
+  const needle = foldForSearch(query.trim())
   const tokens = [...new Set(tokenize(query))].slice(0, EXCERPT_TOKENS_MAX)
   return (doc) =>
     doc.texts
       .flatMap((text, order) => {
-        const match = firstMatch(text.toLowerCase(), needle, tokens)
+        const match = firstMatch(foldWithOffsets(text), needle, tokens)
         return match === undefined ? [] : [{ text, match, order }]
       })
       .sort((a, b) => b.match.score - a.match.score || a.order - b.order)
       .slice(0, 3)
-      .map(({ text, match }) => snippetAround(text, match.index, match.length))
+      .map(({ text, match }) => snippetAround(text, match.index, match.length, linkLabel))
 }

@@ -86,10 +86,7 @@ minimumReleaseAge: 10080
 # `minimum-release-age-exclude.test.ts` fails once that day arrives, because a
 # hole nobody closes is a hole in the supply-chain hardening above. Empty is
 # the healthy state: every locked version has aged past the window.
-minimumReleaseAgeExclude:
-  # GHSA-27r3-jxmh-p828 (high) is cleared only in 2.4.0, published 2026-10-22;
-  # the prod audit gates every merge. prune on or after 2026-10-30
-  - body-parser@2.4.0
+minimumReleaseAgeExclude: []
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

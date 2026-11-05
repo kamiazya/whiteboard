@@ -32,7 +32,7 @@ it('Group creates a frame and opens no note editor', () => {
   const { container } = render(<Host />)
 
   openAddMenu(container)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Frame' }))
 
   expect(latest.canvas.nodes).toHaveLength(1)
   expect(latest.canvas.nodes[0] !== undefined && isFrame(latest.canvas.nodes[0])).toBe(true)
@@ -58,7 +58,7 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
   const r = root.getBoundingClientRect()
 
   openAddMenu(container)
-  const entry = screen.getByRole('menuitem', { name: 'Group' })
+  const entry = screen.getByRole('menuitem', { name: 'Frame' })
   // Real DragEvents, not fireEvent's synthesised ones: `dataTransfer` is
   // read-only on a DragEvent, so an assigned property never reaches the
   // handler and the drag silently carries nothing.
@@ -104,7 +104,7 @@ it('two creations from the menu do not stack on the same spot', () => {
 
   for (let i = 0; i < 2; i++) {
     openAddMenu(container)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Frame' }))
   }
 
   const [first, second] = latest.canvas.nodes
@@ -120,7 +120,7 @@ it('tapping a menu entry keeps placing it at the viewport centre', () => {
   const { container } = render(<Host />)
 
   openAddMenu(container)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Frame' }))
 
   const centre = soleNodeCentre(latest.canvas)
   expect(centre.x).toBeCloseTo(400, 0)
@@ -155,7 +155,7 @@ it('nothing is ever parked under the dock', () => {
 
   for (let i = 0; i < 5; i++) {
     openAddMenu(container)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Frame' }))
   }
 
   const rootRect = root.getBoundingClientRect()

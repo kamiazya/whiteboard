@@ -2,11 +2,11 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { addressForNameIn } from '../../lib/address-from-name.js'
 import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
-import { pathAfterFirstRename } from '../../lib/first-rename-path.js'
 import { newDocumentPathIn } from '../../lib/new-document-path.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
@@ -26,6 +26,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
+import { DuplicatedToast, useDuplicateFeedback } from './use-duplicate-feedback.js'
 import { useFolderActions } from './use-folder-actions.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
@@ -39,6 +40,7 @@ import {
   BrowseTwoColumns,
   cardMenuItemsFor,
   columnViewOf,
+  KIND_NOUN,
   LoadingColumns,
   PanelPreview,
   PanelRefusals,
@@ -369,15 +371,11 @@ export function WorkspaceFilesPanel({
     [folder, documents],
   )
 
-  /** The address a name typed at creation earns — what the first rename would give it. */
+  /** The address a name typed at creation earns inside the folder being browsed. */
   const pathForName = useCallback(
-    (name: string) =>
-      pathAfterFirstRename(
-        derivedNewPath,
-        name,
-        (documents ?? []).map((row) => row.path),
-      ) ?? derivedNewPath,
-    [derivedNewPath, documents],
+    (name: string, kind: DocumentKind) =>
+      addressForNameIn(folder, name, kind, documents?.map((row) => row.path) ?? []),
+    [folder, documents],
   )
 
   /**
@@ -387,10 +385,10 @@ export function WorkspaceFilesPanel({
    * was MCP or raw HTTP, which left the browser showing a hierarchy it had
    * no way to add to. Naming still follows creation (ADR-0006) — the menu's
    * two kind entries collect nothing — and the dialog behind its third entry
-   * is an opt-in for someone who already knows, never a gate. A path is
-   * still never derived from a name (ADR-0008); the dialog takes both, and
-   * neither field feeds the other.
+   * is an opt-in for someone who already knows, never a gate. A name typed
+   * there makes the address (`pathForName`) unless the path is edited.
    */
+  const flushFolderNamesIntoRef = useRef<(path: string) => void>(() => {})
   const createHere = useCallback(
     async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
       // Every action here clears ALL of the panel's transient reports, not
@@ -402,7 +400,7 @@ export function WorkspaceFilesPanel({
         // No options means nobody expressed an opinion, so the address is
         // derived exactly as it always was. The dialog is the only caller
         // that supplies one.
-        const path = options?.path ?? derivedNewPath
+        let path = options?.path ?? derivedNewPath
         // ONLY this write decides whether the create was refused. Everything
         // below is bookkeeping on a document that already exists, and
         // reporting a failed refresh as "could not create" invites a retry
@@ -410,11 +408,14 @@ export function WorkspaceFilesPanel({
         // form is still open holding the path that now exists.
         try {
           refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
-          await source.createDocument(path, kind, options?.name)
+          // Where it LANDED: an unnamed create may shift past a sibling's name.
+          path = await source.createDocument(path, kind, options?.name)
+          flushFolderNamesIntoRef.current(path)
         } catch (err) {
           outcome.reportCreateRefusal({
             kind,
-            reason: messageOf(err, `Could not create a ${kind} document here.`),
+            reason: messageOf(err, `Could not create ${KIND_NOUN[kind]} here.`),
+            inForm: options !== undefined,
           })
           // Re-thrown so the caller can tell a refusal from a success — the
           // dialog stays open on one and closes on the other, and swallowing
@@ -585,6 +586,9 @@ export function WorkspaceFilesPanel({
     goToFolder: selectFolder,
   })
 
+  flushFolderNamesIntoRef.current = folderActions.flushInto
+  const duplicated = useDuplicateFeedback({ documents, onDuplicateDocument, select: setSelected })
+
   if (listStatus === 'error') {
     return (
       <p role="alert" className="text-destructive text-sm">
@@ -617,7 +621,7 @@ export function WorkspaceFilesPanel({
           tapOpens,
           source,
           openEntry: offeredOpen,
-          onDuplicateDocument,
+          onDuplicateDocument: duplicated.duplicate,
           onRequestDelete,
           onRequestDeleteMany,
           setPeek,
@@ -698,6 +702,7 @@ export function WorkspaceFilesPanel({
             openCardMenu={openCardMenu}
             loadRender={loadRender}
             onGridColumns={setGridColumns}
+            onCreateHere={(kind) => void createHere(kind).catch(() => undefined)}
           />
         )
       default: {
@@ -742,6 +747,7 @@ export function WorkspaceFilesPanel({
             onImportFiles={importer.importFiles}
             chooseColumns={chooseColumns}
             combobox={combobox}
+            onNewFolder={folderActions.openNewFolder}
           />
 
           <PanelRefusals outcome={outcome} />
@@ -756,6 +762,12 @@ export function WorkspaceFilesPanel({
               onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
             />
           )}
+          <SourceTrashSection
+            source={source}
+            revision={revision}
+            listLoaded={documents !== null}
+            onRestored={() => void readList().then(setDocuments, () => undefined)}
+          />
           {selection !== null && (
             <div className="px-2 pb-2">
               <SelectionBar
@@ -765,29 +777,33 @@ export function WorkspaceFilesPanel({
               />
             </div>
           )}
-          {/* Above the columns, and only in the browse view: a search has its
-          own answer to "which one did you mean", and a lane beside it
-          would compete with the results the person asked for. Absent on a
-          host that cannot open a document, since every tile would be
-          inert. */}
-          {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
-            <RecentLane
-              documents={documents}
-              recentIds={recentIds}
-              gridColumns={gridColumns}
-              selectedPath={selectedPath}
-              onSelect={selectOrOpen}
-              onOpen={openEntry}
-              renderThumbnail={(entry) => (
-                <DocumentThumbnail
-                  key={entry.documentId}
-                  document={entry}
-                  loadRender={loadRender}
-                  className="size-full"
-                />
-              )}
-            />
-          )}
+          {/* Above the columns, at the workspace root of the two-column view
+          only: a search has its own answer, the one-column list already
+          shows every document, and inside a folder the lane pushed that
+          folder's own contents down. Absent on a host that cannot open a
+          document, since every tile would be inert. */}
+          {documents !== null &&
+            query.trim() === '' &&
+            columns === 'two' &&
+            folder === '' &&
+            onOpenDocument !== undefined && (
+              <RecentLane
+                documents={documents}
+                recentIds={recentIds}
+                gridColumns={gridColumns}
+                selectedPath={selectedPath}
+                onSelect={selectOrOpen}
+                onOpen={openEntry}
+                renderThumbnail={(entry) => (
+                  <DocumentThumbnail
+                    key={entry.documentId}
+                    document={entry}
+                    loadRender={loadRender}
+                    className="size-full"
+                  />
+                )}
+              />
+            )}
           <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
             {renderColumns()}
             {/* When a tap opens, selection can no longer fill this pane, so it
@@ -802,29 +818,12 @@ export function WorkspaceFilesPanel({
                   findDocument={findListed}
                   onOpen={offeredOpen}
                   onRename={rename.open}
-                  onDuplicateDocument={onDuplicateDocument}
+                  onDuplicateDocument={duplicated.duplicate}
                   onRequestDelete={onRequestDelete}
                 />
               </div>
             )}
           </div>
-          {/* Not while the list is loading. The trash is a SECOND list of the
-          departed workspace's documents and reads on its own, so left
-          mounted it keeps showing that workspace's rows under the new
-          address until its own read answers — measured with a trash read
-          that never answers, which is the window this closes. */}
-          {documents !== null && (
-            <SourceTrashSection
-              source={source}
-              revision={revision}
-              onRestored={() => {
-                // A restore that landed but whose refresh failed leaves the list
-                // stale, not the restore undone — same rule as every other write
-                // here, so the trash section never invents its own error shape.
-                void readList().then(setDocuments, () => undefined)
-              }}
-            />
-          )}
           <PeekDialog
             document={peek}
             loadRender={loadRender}
@@ -855,6 +854,7 @@ export function WorkspaceFilesPanel({
             />
           )}
           {folderActions.layer}
+          <DuplicatedToast copy={duplicated.copy} onOpen={offeredOpen} />
         </section>
       </FolderNamesContext.Provider>
     </FolderActionsContext.Provider>

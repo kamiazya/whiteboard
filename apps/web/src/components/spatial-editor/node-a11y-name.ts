@@ -1,6 +1,7 @@
 import {
   frameLabel,
   isFrame,
+  isImageRef,
   nodeFile,
   nodeText,
   nodeUrl,
@@ -39,6 +40,9 @@ export function nodeA11yName(node: SpatialNode): string {
     return line === '' ? 'Empty note' : clip(line)
   }
   const file = nodeFile(node)
+  // A stored image's reference is an opaque asset id and the node keeps no
+  // file name, so it is named for what it is.
+  if (file !== undefined && isImageRef(file)) return 'Image'
   if (file !== undefined) return `Document ${clip(documentLabel({ path: file }, 'leaf'))}`
   const url = nodeUrl(node)
   if (url !== undefined) return `Link ${clip(url)}`

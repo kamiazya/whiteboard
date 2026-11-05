@@ -5,6 +5,7 @@
  */
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { namedFoldersAbove } from './workspace-folder-name.js'
 import { forgetTrashEntry, readTrashEntries, recordTrashEntry } from './workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
@@ -80,6 +81,40 @@ describe('reading the trash', () => {
     forgetTrashEntry(doc, ID_A)
 
     expect(readTrashEntries(doc).map((row) => row.documentId)).toEqual([ID_B])
+  })
+})
+
+describe('the folder names a trash row keeps', () => {
+  it('records a document under more named folders than a row holds, keeping the nearest', () => {
+    const folders = Array.from({ length: 257 }, (_, depth) =>
+      Array.from({ length: depth + 1 }, () => 'a').join('/'),
+    )
+    const named = new Map(folders.map((path, depth) => [path, `F${depth}`]))
+    const doc = workspace()
+
+    const folderNames = namedFoldersAbove(named, `${folders.at(-1)}/doc`)
+    recordTrashEntry(doc, { ...entry(ID_A, `${folders.at(-1)}/doc`, 1), folderNames })
+
+    const [row] = readTrashEntries(doc)
+    expect(row?.folderNames).toHaveLength(256)
+    expect(row?.folderNames?.[0]?.name).toBe('F1')
+    expect(row?.folderNames?.at(-1)?.name).toBe('F256')
+  })
+})
+
+describe('a trash row written by a newer version', () => {
+  it('is listed, its fields this version does not know set aside', () => {
+    const doc = workspace()
+    doc.getMap(TRASH_MAP).set(ID_A, {
+      ...entry(ID_A, 'week/plan', 1),
+      folderNames: [{ path: 'week', name: 'Week', colour: 'red' }],
+      pinned: true,
+    })
+    doc.commit()
+
+    expect(readTrashEntries(doc)).toEqual([
+      { ...entry(ID_A, 'week/plan', 1), folderNames: [{ path: 'week', name: 'Week' }] },
+    ])
   })
 })
 

@@ -5,12 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenuItem } from '../../components/ui/dropdown-menu.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
+import type { SelectionSource } from '../../lib/spatial/editor-handle.js'
+import type { ExportScope } from '../../lib/spatial/selection-picture.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {
-  onExport?: (format: SceneExportFormat) => void
+  onExport?: (format: SceneExportFormat, scope?: ExportScope) => void
   kind?: 'spatial' | 'markdown'
+  selection?: SelectionSource
   notice?: string | null
   onBookmark?: () => void
   display?: React.ReactNode
@@ -24,6 +27,7 @@ function renderMenu(props?: {
       {...(props?.kind === undefined ? {} : { kind: props.kind })}
       {...(props?.onBookmark === undefined ? {} : { onBookmark: props.onBookmark })}
       {...(props?.notice === undefined ? {} : { notice: props.notice })}
+      {...(props?.selection === undefined ? {} : { selection: props.selection })}
       {...(props?.display === undefined ? {} : { display: props.display })}
     >
       {props?.children}
@@ -183,6 +187,49 @@ describe('DocumentMenu — export entries', () => {
  * a future reader proposing to bring it back here should find the reason
  * it left. This menu carries NO display surface of any shape.
  */
+/** A selection that never changes: what the canvas had selected when the menu opened. */
+function fixedSelection(selectedId: string | null, extraIds: readonly string[] = []) {
+  const value = { selectedId, selectedEdgeId: null, extraIds }
+  return { getSelection: () => value, subscribeSelection: () => () => {} }
+}
+
+describe('DocumentMenu — exporting only the selection', () => {
+  const selectionOnly = () => screen.queryByRole('menuitemcheckbox', { name: /Selection only/ })
+
+  it('offers no selection toggle when the canvas has nothing selected', async () => {
+    renderMenu({ onExport: vi.fn(), kind: 'spatial', selection: fixedSelection(null) })
+    await openMenu()
+    await openExportSubmenu()
+    expect(selectionOnly()).toBeNull()
+  })
+
+  it('exports the picture of the selected nodes once the toggle is on', async () => {
+    const onExport = vi.fn()
+    renderMenu({ onExport, kind: 'spatial', selection: fixedSelection('frame', ['note']) })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(selectionOnly() as HTMLElement)
+    await waitFor(() => expect(selectionOnly()?.getAttribute('aria-checked')).toBe('true'))
+
+    fireEvent.pointerUp(screen.getByText('Export as PNG (with comments)'))
+    await waitFor(() =>
+      expect(onExport).toHaveBeenCalledWith('png-comments', { nodeIds: ['frame', 'note'] }),
+    )
+  })
+
+  it('keeps the JSON Canvas save whole, whatever the toggle says', async () => {
+    const onExport = vi.fn()
+    renderMenu({ onExport, kind: 'spatial', selection: fixedSelection('frame') })
+    await openMenu()
+    await openExportSubmenu()
+    fireEvent.pointerUp(selectionOnly() as HTMLElement)
+    await waitFor(() => expect(selectionOnly()?.getAttribute('aria-checked')).toBe('true'))
+
+    fireEvent.pointerUp(screen.getByText('Save as JSON Canvas (.canvas)'))
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('canvas'))
+  })
+})
+
 describe('DocumentMenu — no display surface', () => {
   it('offers no display row, whatever the page passes', async () => {
     renderMenu({ onExport: vi.fn() })

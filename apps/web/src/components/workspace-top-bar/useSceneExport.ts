@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 import type { AppLogger } from '../../lib/app-logger.js'
+import type { ExportScope } from '../../lib/spatial/selection-picture.js'
 
 // Keyed by SceneExportFormat so a new format must add its own entry rather
 // than silently inheriting a default.
@@ -17,7 +18,7 @@ const EXPORT_CONFIG: Record<
 }
 
 interface UseSceneExportOptions {
-  onExport: ((format: SceneExportFormat) => Promise<Blob | null>) | undefined
+  onExport: ((format: SceneExportFormat, scope?: ExportScope) => Promise<Blob | null>) | undefined
   filenameBase: string
   /** Told, once the file has gone out, what to say about it (e.g. "Exported as PNG"). */
   onExported?: (message: string) => void
@@ -28,18 +29,23 @@ async function textHasAsset(blob: Blob): Promise<boolean> {
   return new TextDecoder().decode(await blob.arrayBuffer()).includes('asset:')
 }
 
+function exportedNotice(label: string, scope: ExportScope | undefined): string {
+  // Kept out of the handler: it already sits at the complexity ceiling.
+  return scope === undefined ? `Exported as ${label}` : `Exported the selection as ${label}`
+}
+
 // Export has no dialog of its own (it's a plain dropdown action), so a
 // failed or unavailable export is surfaced next to the trigger instead.
 export function useSceneExport({ onExport, filenameBase, onExported, log }: UseSceneExportOptions) {
   const [exportError, setExportError] = useState<string | null>(null)
 
   const handleExport = useCallback(
-    async (format: SceneExportFormat) => {
+    async (format: SceneExportFormat, scope?: ExportScope) => {
       if (!onExport) return
       setExportError(null)
       const { extension, label, saved } = EXPORT_CONFIG[format]
       try {
-        const blob = await onExport(format)
+        const blob = await (scope === undefined ? onExport(format) : onExport(format, scope))
         if (!blob) {
           setExportError(`Export as ${label} failed: no data to export.`)
           return
@@ -59,7 +65,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         // current task lets the download start first.
         setTimeout(() => URL.revokeObjectURL(url), 0)
         if (saved === undefined) {
-          onExported?.(`Exported as ${label}`)
+          onExported?.(exportedNotice(label, scope))
         } else {
           // An image in a canvas is an `asset:` reference to the workspace's
           // file, so the saved text does not carry its pixels.

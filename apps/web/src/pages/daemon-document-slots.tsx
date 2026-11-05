@@ -15,6 +15,7 @@ import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
+import { exportFilenameBaseFor } from '../components/workspace-top-bar/export-filename.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
 import { documentLabel } from '../lib/document-label.js'
 import { documentHeading } from '../lib/document-title.js'
@@ -211,7 +212,7 @@ export function daemonDocumentLabels(
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,
     overlayTitle: name,
     headingTitle: documentHeading(chosen),
-    exportFilenameBase: name,
+    exportFilenameBase: exportFilenameBaseFor(chosen, canvas.path),
     // Identity key = workspaceId+path, matching this page's own canvas.
     registryKey: documentSyncKey(canvas.workspaceId, canvas.path),
     workspaceId: canvas.workspaceId,

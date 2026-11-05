@@ -87,6 +87,7 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
+import { anchorResolverFor } from '../../lib/anchor-resolver.js'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
@@ -98,11 +99,12 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
 import { openSceneLink } from '../../lib/scene-link.js'
 import { parseClipboardText } from '../../lib/spatial/clipboard-fragment.js'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { findFreeSpot, indexNodeBoxes } from '../../lib/spatial/geometry.js'
+import { creationObstacles, frameForNewNote } from '../../lib/spatial/frame-interior.js'
+import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
@@ -128,6 +130,7 @@ import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
+import { ConnectToolHint } from './ConnectToolHint.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
@@ -149,6 +152,7 @@ import {
   reduceNavigation,
 } from './navigation.js'
 import { selectionSubject } from './node-a11y-name.js'
+import { noteInFrame, prependToCreation } from './node-factories.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
@@ -158,7 +162,7 @@ import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
-import { TOOL_ANNOUNCEMENT } from './tool-announcement.js'
+import { toolAnnouncement } from './tool-announcement.js'
 import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
 import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
@@ -1151,9 +1155,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     useNativeCanvasListeners(rootRef, handleWheel, longPressRef, activePointerIdRef)
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
-    const createNodeAt = (point: Point) => {
+    const createNodeAt = (point: Point, before: readonly EditorLeafCommand[] = []) => {
       applyResult(
-        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+        prependToCreation(
+          reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+          before,
+        ),
       )
       // Creation selects the new node EXCLUSIVELY. The double-press path
       // collapsed the extras at its empty press already; the palette path
@@ -1164,7 +1171,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const changeTool = (next: EditorTool) => {
       setTool(next)
-      announceOnCanvas(TOOL_ANNOUNCEMENT[next])
+      announceOnCanvas(toolAnnouncement(next, canvas.nodes.length > 0, hasCoarsePointer()))
       toolChosenByUserRef.current = true
       onToolChosen?.(next)
       // A context menu belongs to the mode it opened in; it must not
@@ -1265,20 +1272,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
     const createNodeAtViewportCenter = () => {
-      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      createNodeAt(point)
+      const size = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
+      // With a frame, or a node in one, selected the note is asked for IN it.
+      const frame = frameForNewNote(selectedNode, canvasRef.current.nodes)
+      const inFrame =
+        frame === undefined ? undefined : noteInFrame(frame, canvasRef.current.nodes, size)
+      const point =
+        inFrame?.center ??
+        findFreeSpot(
+          screenToCanvas(viewportCenterScreen(), viewport),
+          size,
+          creationObstacles(canvasRef.current),
+          visibleCanvasRect(),
+        )
+      createNodeAt(point, inFrame?.before)
       panToShow({
         x: Math.round(point.x - NEW_NODE_WIDTH / 2),
         y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: NEW_NODE_HEIGHT,
+        ...size,
       })
     }
 
@@ -1300,8 +1311,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
-      selectedId,
-      extraIds,
       openGroupLabel: setGroupLabelEditId,
     })
     const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({
@@ -1618,6 +1627,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )}
         {canvas.nodes.length === 0 && (
           <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
+        )}
+        {tool === 'connect' && canvas.nodes.length > 0 && (
+          <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
         )}
         <ToolPalette
           onReturnFocus={() => rootRef.current?.focus({ preventScroll: true })}
@@ -2047,6 +2059,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // handler closes over the new id.
                 key={thread.id}
                 thread={thread}
+                orphaned={anchorResolverFor({ kind: 'spatial', canvas })?.(thread) === 'orphaned'}
                 box={(() => {
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }

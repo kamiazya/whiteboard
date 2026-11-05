@@ -16,6 +16,13 @@ const trashEntrySummarySchema = z
     documentId: documentIdSchema,
     path: z.string().min(1),
     name: z.string().min(1).optional(),
+    /**
+     * The names of the folders above it, as they stood when it went: an
+     * emptied folder no longer exists to say what it was called.
+     */
+    folderNames: z
+      .array(z.object({ path: z.string().min(1), name: z.string().min(1) }).strict())
+      .optional(),
     deletedAt: z.number().int().nonnegative(),
   })
   .strict()

@@ -6,6 +6,7 @@ import {
   cycleHeadingLevel,
   inVerbTableOrder,
   type MarkdownVerbId,
+  offeredVerbs,
   selfContainedCommand,
   VERB_BAR_ORDER,
   verb,
@@ -14,7 +15,8 @@ import { useRovingStop } from './use-roving-stop.js'
 import { DESKTOP_BAR_METRICS, layoutVerbBar } from './verb-bar-layout.js'
 import { VERB_ICONS } from './verb-icons.js'
 
-const BAR_ITEMS = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
+const barItems = (canAttach: boolean) =>
+  offeredVerbs(VERB_BAR_ORDER, canAttach).map((id) => ({ id, band: verb(id).band }))
 
 /**
  * The bar's own width, which as a `flex-1` item IS the room left for it.
@@ -50,10 +52,15 @@ function pressVerb(
   id: MarkdownVerbId,
   run: (command: StateCommand) => void,
   openLinkPicker: (() => boolean) | undefined,
+  pickImage: (() => void) | undefined,
 ): void {
   const spec = verb(id)
   if (spec.action.kind === 'levels') {
     run(cycleHeadingLevel)
+    return
+  }
+  if (spec.action.kind === 'attach') {
+    pickImage?.()
     return
   }
   if (spec.action.kind === 'interactive' && openLinkPicker?.() === true) return
@@ -69,6 +76,8 @@ export interface MarkdownVerbBarProps {
    * to pick from, so the verb falls back to its plain bracket wrap.
    */
   readonly openLinkPicker?: () => boolean
+  /** Opens the host's image picker; absent, the bar offers no Image slot. */
+  readonly pickImage?: () => void
   readonly className?: string
 }
 
@@ -90,11 +99,16 @@ export interface MarkdownVerbBarProps {
  * slot that CYCLES rather than a band of four, so every verb is one slot
  * wide and `layoutVerbBar` has a uniform run to fit.
  */
-export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerbBarProps) {
+export function MarkdownVerbBar({
+  run,
+  openLinkPicker,
+  pickImage,
+  className,
+}: MarkdownVerbBarProps) {
   const [ref, width] = useMeasuredWidth()
   // Before the first measurement, showing nothing beats showing a bar that
   // reflows on the next frame.
-  const layout = layoutVerbBar(width, BAR_ITEMS, DESKTOP_BAR_METRICS)
+  const layout = layoutVerbBar(width, barItems(pickImage !== undefined), DESKTOP_BAR_METRICS)
   const visible = width === 0 ? [] : inVerbTableOrder(layout.visible)
 
   // Keep the caret where it is: the verbs resolve their scope from the
@@ -130,7 +144,7 @@ export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerb
                   tabIndex={id === stop ? 0 : -1}
                   onFocus={() => onFocusItem(id)}
                   onMouseDown={keepCaret}
-                  onClick={() => pressVerb(id, run, openLinkPicker)}
+                  onClick={() => pressVerb(id, run, openLinkPicker, pickImage)}
                   className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <span aria-hidden="true" className="[&>svg]:size-4">

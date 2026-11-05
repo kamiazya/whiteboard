@@ -39,6 +39,12 @@ export interface CommentThreadCardProps {
   /** Rewrites ONE message of this conversation, whichever one. */
   readonly onEditMessage: (messageId: string, body: string) => void
   readonly onClose: () => void
+  /**
+   * What the conversation was about is no longer on the canvas. It is still
+   * drawn at its last place (ADR-0026 decision 4: orphaned, never dropped),
+   * so the card says why it floats there and how to put it away.
+   */
+  readonly orphaned?: boolean
 }
 
 const RESOLVED_CARD_STYLE: CSSProperties = {
@@ -54,6 +60,7 @@ export function CommentThreadCard({
   onResolve,
   onEditMessage,
   onClose,
+  orphaned = false,
 }: CommentThreadCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const resolved = thread.status === 'resolved'
@@ -138,6 +145,11 @@ export function CommentThreadCard({
       className="flex flex-col gap-2"
     >
       <CardHeader resolved={resolved} onResolve={onResolve} onClose={onClose} />
+      {orphaned && !resolved ? (
+        <p data-testid="comment-card-orphaned" className="text-muted-foreground text-xs">
+          What this was about has been deleted. Resolve it to put it away.
+        </p>
+      ) : null}
 
       <ol className={cn('flex flex-col gap-3', resolved && 'max-h-14 overflow-hidden opacity-60')}>
         {(resolved ? thread.messages.slice(0, 1) : thread.messages).map((message) => (

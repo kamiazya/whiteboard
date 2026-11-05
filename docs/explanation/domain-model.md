@@ -91,9 +91,9 @@ stable name.
 **Paths are the canonical user-facing identity** in daemon mode: URLs,
 versions and per-document text events all address a document as
 `(workspaceId, path)`, while binary sync rides the workspace record and
-scopes to a document by its `documentId`. A path is assigned at creation
-(derived automatically — `untitled`, `untitled-2`, … — since creation asks
-for no name up front) and can be renamed later; a stored `[[reference]]`
+scopes to a document by its `documentId`. A path is assigned at creation —
+made from the name when one is given there, `untitled`, `untitled-2`, …
+otherwise — and can be renamed later; a stored `[[reference]]`
 survives the rename because it names the `documentId` (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
@@ -109,7 +109,8 @@ untidy.
 A path is not kept in step with a display name. It follows the name exactly
 once: the first time you name a document from its title while its path is still
 the generated one (`untitled`, `untitled-2`, …), the path becomes the name in
-lower case with each run of other characters turned into one hyphen —
+lower case, accents taken off their letters (`É` to `e`, `ß` to `ss`), with each
+run of other characters turned into one hyphen —
 "Checkout Architecture" moves `untitled` to `checkout-architecture`, or
 `checkout-architecture-2` when that path is taken in the same folder. The
 address bar changes in place, with no reload and no extra Back step. After
@@ -118,7 +119,10 @@ never where it lives. A name the path alphabet cannot spell (a title written
 entirely in Japanese, say) gives no path, so the document stays at its
 generated one and the next name may still claim it; the same goes for a name
 that would itself read as generated, like "Untitled 2". A path you chose, in
-**Name and folder…** or by moving the document, is never replaced.
+**Name and folder…** or by moving the document, is never replaced. A name
+given AT creation — in **Name and folder…** or the phone's New sheet — makes
+the path by the same rule, falling back to `note` or `canvas` and the next free
+number when the name has nothing the path alphabet can spell.
 [ADR-0008](../contributing/adr/0008-slug-derivation-and-rename.md) records why
 paths were not derived from names to begin with: every non-Latin title
 collapsed to `untitled-N`.

@@ -22,10 +22,22 @@ import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
-/** Spread out, so the overview has real content to draw and cannot opt out. */
+/**
+ * Spread out, so the overview has real content to draw and cannot opt out;
+ * one box carries a coloured scoped tag, so the legend is chrome here too.
+ */
 const canvas0: SpatialCanvas = {
   nodes: [
-    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 80, text: 'A' }),
+    textNode({
+      id: 'a',
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 80,
+      text: 'A',
+      tags: ['health:ok'],
+      color: '4',
+    }),
     textNode({ id: 'b', x: 900, y: 700, width: 120, height: 80, text: 'B' }),
   ],
   edges: [],
@@ -204,6 +216,7 @@ describe('the assumptions this grid rests on', () => {
 
     expect(names).toContain('tool-palette')
     expect(names).toContain('minimap')
+    expect(names).toContain('legend-overlay')
   })
 
   it('reads both dock sizes out of the class the dock actually uses', () => {

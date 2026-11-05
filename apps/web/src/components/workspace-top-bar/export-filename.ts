@@ -12,3 +12,21 @@ const UNSAFE_IN_FILENAME =
 export function sanitizeExportFilenameBase(base: string): string {
   return base.replace(UNSAFE_IN_FILENAME, '-')
 }
+
+/**
+ * The name an exported file is offered under: the document's display name in
+ * whatever script it is written — `概要.md`, never an ASCII approximation —
+ * with only what a filesystem refuses taken out (`sanitizeExportFilenameBase`),
+ * the ends trimmed, and the trailing dots Windows drops removed. A name that
+ * leaves nothing a person could recognise (absent, blank, only separators)
+ * gives way to the address's last segment, which always reads.
+ */
+export function exportFilenameBaseFor(name: string | null | undefined, path: string): string {
+  let fromName = sanitizeExportFilenameBase(name ?? '').trim()
+  // A loop rather than `/[.\s]+$/`, which backtracks polynomially on a long
+  // run that does not reach the end.
+  while (fromName.endsWith('.') || fromName.endsWith(' '))
+    fromName = fromName.slice(0, -1).trimEnd()
+  if (/[^\s.-]/u.test(fromName)) return fromName
+  return path.slice(path.lastIndexOf('/') + 1)
+}

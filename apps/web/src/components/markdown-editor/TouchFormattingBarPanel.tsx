@@ -15,6 +15,7 @@ import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 import {
   cycleHeadingLevel,
   type MarkdownVerbId,
+  offeredVerbs,
   selfContainedCommand,
   VERB_BAR_ORDER,
   verb,
@@ -22,7 +23,8 @@ import {
 import { layoutVerbBar, TOUCH_BAR_HEIGHT_PX, TOUCH_BAR_METRICS } from './verb-bar-layout.js'
 import { VERB_ICONS } from './verb-icons.js'
 
-const BAR_ITEMS = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
+const barItems = (canAttach: boolean) =>
+  offeredVerbs(VERB_BAR_ORDER, canAttach).map((id) => ({ id, band: verb(id).band }))
 
 function useWindowWidth(): number {
   const [width, setWidth] = useState(() => window.innerWidth)
@@ -87,6 +89,8 @@ export default function TouchFormattingBarPanel() {
     const spec = verb(id)
     if (spec.action.kind === 'levels') {
       editor.run(cycleHeadingLevel)
+    } else if (spec.action.kind === 'attach') {
+      editor.pickImage?.()
     } else if (spec.action.kind === 'interactive' && editor.openLinkPicker?.() === true) {
       // The host opened its picker; the wrap fallback is not wanted.
     } else {
@@ -95,7 +99,7 @@ export default function TouchFormattingBarPanel() {
     }
     setSheetOpen(false)
   }
-  const layout = layoutVerbBar(width, BAR_ITEMS, TOUCH_BAR_METRICS)
+  const layout = layoutVerbBar(width, barItems(editor.pickImage !== undefined), TOUCH_BAR_METRICS)
 
   return createPortal(
     <div

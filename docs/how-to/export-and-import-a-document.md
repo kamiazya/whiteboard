@@ -17,9 +17,15 @@ Open the document, then **More actions → Export…**:
   Tick **2× resolution** for a PNG twice as many pixels wide and tall (an SVG has no pixels
   and is unaffected); untick **With background** for a transparent picture. The menu stays
   open when you tick one, so you can set both before choosing a format.
+- **Selection only (N items, PNG/SVG)** — on a canvas with nodes selected, a third checkbox
+  above those two. Ticked, the four picture entries draw just the selection: a selected
+  group brings the nodes inside it, and an edge, a line or a comment comes along only when
+  what it is attached to does. It is not remembered — it applies to this open of the menu —
+  and **Save as JSON Canvas** always saves the whole document.
 - **Save as Markdown (.md)** — on a note, the only entry its Export… submenu offers: the
   OKF Markdown source, with the document's name as the frontmatter `title`. A note has no
-  picture export.
+  picture export. An image in the note is saved as its `![alt](asset:…)` line, not as
+  pixels ([add an image to a note](add-an-image-to-a-note.md)).
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the
   `x-whiteboard` extension.
 

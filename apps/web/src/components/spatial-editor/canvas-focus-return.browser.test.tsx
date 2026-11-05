@@ -35,7 +35,7 @@ it('keeps the keyboard on the canvas after the dock groups the selection', async
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 160, y: 130 } })
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
   await vi.waitFor(() => expect(focusIsOnCanvas(container)).toBe(true))
 })

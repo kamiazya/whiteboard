@@ -3,9 +3,10 @@
 // covers the lane's own rendering; what only a browser proves is that the two
 // halves meet through storage the panel actually writes to.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { STORAGE_KEY } from '../../lib/recent-documents.js'
+import { forgetSearchQueries } from '../../lib/search-query-memory.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
@@ -27,6 +28,7 @@ const entries = [
 beforeEach(() => localStorage.removeItem(STORAGE_KEY))
 afterEach(() => {
   cleanup()
+  forgetSearchQueries()
   localStorage.removeItem(STORAGE_KEY)
 })
 
@@ -101,6 +103,33 @@ describe('recently opened lane', () => {
     renderPanel('space', only)
     await screen.findByText('Roadmap')
     expect(lane()).toBeNull()
+  })
+
+  it('belongs to the workspace root, not to a folder opened below it', async () => {
+    renderPanel('space', [
+      ...entries,
+      { documentId: 's1', path: 'design/spec', name: 'Spec', kind: 'markdown' },
+    ])
+    await openCard('Roadmap')
+    await screen.findByTestId('recent-lane')
+
+    const grid = screen.getByTestId('folder-contents')
+    await userEvent.click(within(grid).getByRole('button', { name: 'Open folder design' }))
+    await within(screen.getByTestId('folder-contents')).findByText('Spec')
+    expect(lane()).toBeNull()
+  })
+
+  it('steps aside in the one-column list, which already lists everything', async () => {
+    // The column choice is remembered; left behind it would put every later test in one column.
+    onTestFinished(() => localStorage.removeItem('whiteboard.document-browser.columns.v1'))
+    renderPanel('space')
+    await openCard('Roadmap')
+    await screen.findByTestId('recent-lane')
+
+    await userEvent.click(screen.getByRole('button', { name: 'One column' }))
+
+    await waitFor(() => expect(lane()).toBeNull())
+    expect(screen.getByRole('navigation', { name: 'Folder path' })).toBeTruthy()
   })
 
   it('steps aside while a search is showing its own answer', async () => {

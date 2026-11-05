@@ -39,7 +39,7 @@ it('the palette Add group button creates an empty frame at the bottom of the z-o
   render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(isFrame(latest.canvas.nodes[0] as SpatialNode)).toBe(true)
   expect(latest.kinds).toContain('create-group')
@@ -142,6 +142,36 @@ it('Group selection from a multi-selected node frames the selection with padding
   const frame = latest.canvas.nodes[0]
   // Enclosing box (120,120)-(420,280) plus the 24px padding on every side.
   expect(frame).toMatchObject({ x: 96, y: 96, width: 348, height: 208 })
+  // A new frame has nothing to find it by until it is named.
+  await vi.waitFor(() =>
+    expect(document.activeElement).toBe(
+      container.querySelector('[data-testid="group-label-editor"]'),
+    ),
+  )
+})
+
+it('Group selection from a shift-added node frames the whole selection', async () => {
+  const twoLoose: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 300, y: 220, width: 120, height: 60, text: 'B' }),
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeEditorHost({ initial: twoLoose })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await userEvent.click(root, { position: { x: 180, y: 150 } })
+  await userEvent.keyboard('{Shift>}')
+  await userEvent.click(root, { position: { x: 360, y: 250 } })
+  await userEvent.keyboard('{/Shift}')
+
+  rightClick(root, 360, 250)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
+
+  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
+  expect(latest.canvas.nodes[0]).toMatchObject({ x: 96, y: 96, width: 348, height: 208 })
 })
 
 // A member that paints BELOW its frame (member first, frame later in
@@ -200,7 +230,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   fireEvent.click(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
-      (b) => b.getAttribute('aria-label') === 'Group',
+      (b) => b.getAttribute('aria-label') === 'Frame',
     ) as HTMLElement,
   )
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))

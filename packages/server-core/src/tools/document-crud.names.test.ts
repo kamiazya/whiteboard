@@ -1,3 +1,4 @@
+import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -73,5 +74,49 @@ describe('a name given both as `name` and as frontmatter `title`', () => {
       ...content,
     })
     expect(await nameOf(deps, created.documentId)).toBe(expected)
+  })
+})
+
+describe('a frontmatter `title` with no `name` beside it', () => {
+  const OKF = (title: string) => `---\ntype: note\ntitle: ${title}\n---\nbody`
+
+  it('names the document at the asked path, not an unnamed sibling-avoiding one', async () => {
+    const deps = await makeDeps()
+    await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'week/other',
+      kind: 'markdown',
+      name: 'plan',
+    })
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'week/plan',
+      kind: 'markdown',
+      markdown: OKF('Weekly'),
+    })
+
+    expect(created.path).toBe('week/plan')
+  })
+
+  it('is refused when a sibling already shows it, and nothing is created', async () => {
+    const deps = await makeDeps()
+    await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'week/other',
+      kind: 'markdown',
+      name: 'Plan',
+    })
+
+    await expect(
+      wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'week/notes',
+        kind: 'markdown',
+        markdown: OKF(' plan '),
+      }),
+    ).rejects.toThrow(DisplayNameTakenError)
+    const paths = (await deps.documentIndex.listDocuments({ workspaceId: WS })).map((e) => e.path)
+    expect(paths).toEqual(['week/other'])
   })
 })

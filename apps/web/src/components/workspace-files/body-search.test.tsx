@@ -72,10 +72,9 @@ describe('body search', () => {
     const results = await screen.findByTestId('search-results')
     // Not a bare "nothing matches": lexical search cannot cross languages,
     // so the empty state must not read as "this document does not exist".
+    // Said once the content answer is in, naming what that answer covered.
+    await waitFor(() => expect(results.textContent).toMatch(/names, folders and text/i))
     expect(results.textContent).toContain('存在しない語')
-    // Only once the content answer is in: until then the panel is honestly
-    // reporting the narrower scope it has actually searched.
-    await waitFor(() => expect(results.textContent).toMatch(/names, paths and contents/i))
   })
 
   it('never lets a slower answer for an older query win', async () => {
@@ -104,7 +103,31 @@ describe('body search', () => {
     expect(screen.getByTestId('search-results').textContent).toContain('fast answer')
   })
 
-  it('says it searched names and paths only when content search is unavailable', async () => {
+  it('holds the empty message until the search settles, then says what it searched', async () => {
+    let release: ((hits: []) => void) | undefined
+    renderPanel({
+      searchDocuments: () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    })
+    await search('nothingmatchesthis')
+
+    const results = await screen.findByTestId('search-results')
+    await screen.findByText('Searching…')
+    // In flight, nothing has been found NOT to match yet.
+    expect(results.textContent).not.toMatch(/Nothing matches/)
+    await waitFor(() => expect(release).toBeDefined())
+    release?.([])
+    await waitFor(() =>
+      expect(results.textContent).toMatch(
+        /Nothing matches “nothingmatchesthis” in the names, folders and text of this workspace/,
+      ),
+    )
+    expect(screen.queryByText('Searching…')).toBeNull()
+  })
+
+  it('says it searched names and folders only when content search is unavailable', async () => {
     renderPanel({
       searchDocuments: async () => {
         throw new Error('no content search here')
@@ -116,8 +139,8 @@ describe('body search', () => {
     // The fallback answers from names and paths alone. Claiming contents were
     // searched would tell the reader a document does not exist when all that
     // is true is that nobody looked inside it.
-    await waitFor(() => expect(results.textContent).toMatch(/names and paths of this workspace/i))
-    expect(results.textContent).not.toMatch(/contents/i)
+    await waitFor(() => expect(results.textContent).toMatch(/names and folders of this workspace/i))
+    expect(results.textContent).not.toMatch(/text of this workspace/i)
   })
 
   it('re-runs an active search when the documents change underneath it', async () => {

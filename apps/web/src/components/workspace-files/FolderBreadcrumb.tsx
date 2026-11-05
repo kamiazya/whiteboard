@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { folderTrail } from '../../lib/folder-names.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext } from './folder-actions.js'
@@ -24,15 +24,29 @@ export function FolderBreadcrumb({
   const segments = folder === '' ? [] : folder.split('/')
   const trail = folderTrail(folder, useContext(FolderNamesContext))
   const longPress = useLongPressMenu(undefined)
+  // One row that scrolls rather than wraps: a wrapped trail split a folder's
+  // name across two lines and left its menu button floating below. The
+  // deepest folder is the one that matters, so the row starts scrolled to it.
+  // Names arrive after the folder does, and widen the row, so both re-scroll.
+  const row = useRef<HTMLElement | null>(null)
+  const shown = trail.join('/')
+  useEffect(() => {
+    const nav = row.current
+    if (nav !== null && shown !== undefined) nav.scrollLeft = nav.scrollWidth
+  }, [shown])
   return (
     <nav
+      ref={row}
       aria-label="Folder path"
       {...longPress}
-      className="mb-1 flex flex-wrap items-center gap-0.5 text-xs"
+      className="mb-1 flex items-center gap-0.5 overflow-x-auto text-xs whitespace-nowrap [scrollbar-width:none]"
     >
       <Crumb label="Workspace" path="" current={folder === ''} onSelect={onSelect} />
       {segments.map((segment, i) => (
-        <span key={segments.slice(0, i + 1).join('/')} className="flex items-center gap-0.5">
+        <span
+          key={segments.slice(0, i + 1).join('/')}
+          className="flex shrink-0 items-center gap-0.5"
+        >
           <span className="text-muted-foreground">/</span>
           <Crumb
             label={trail[i] ?? segment}
@@ -65,7 +79,7 @@ function Crumb({
         data-folder-path={path}
         aria-current={current ? 'true' : undefined}
         onClick={() => onSelect(path)}
-        className="hover:text-foreground text-muted-foreground aria-[current]:text-foreground rounded px-1 py-0.5 aria-[current]:font-medium"
+        className="hover:text-foreground text-muted-foreground aria-[current]:text-foreground max-w-48 shrink-0 truncate rounded px-1 py-0.5 aria-[current]:font-medium"
       >
         {label}
       </button>

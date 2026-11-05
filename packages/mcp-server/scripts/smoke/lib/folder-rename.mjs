@@ -4,15 +4,22 @@
  * it moves nothing; a name holding "/" is refused at the boundary.
  */
 export async function folderRenameNamesAFolder({ callTool, expectToolError, workspaceId }) {
-  const named = await callTool('wb_workspace_edit', {
+  const renamed = await callTool('wb_workspace_edit', {
     workspaceId,
     ops: [
       { op: 'document.create', path: 'e2e-folder/inner', kind: 'markdown' },
       { op: 'folder.rename', path: 'e2e-folder', name: 'E2E folder' },
     ],
   })
-  if (named.applied !== 2 || named.results[1]?.path !== 'e2e-folder') {
-    throw new Error(`folder.rename returned unexpected shape: ${JSON.stringify(named)}`)
+  if (renamed.applied !== 2 || renamed.results[1]?.path !== 'e2e-folder') {
+    throw new Error(`folder.rename returned unexpected shape: ${JSON.stringify(renamed)}`)
+  }
+  const listed = await callTool('wb_document_list', { workspaceId })
+  const row = listed.folderNames?.find((folder) => folder.path === 'e2e-folder')
+  if (row?.name !== 'E2E folder') {
+    throw new Error(
+      `wb_document_list does not report the folder name: ${JSON.stringify(listed.folderNames)}`,
+    )
   }
   await expectToolError(
     'wb_workspace_edit',
@@ -20,5 +27,7 @@ export async function folderRenameNamesAFolder({ callTool, expectToolError, work
     'with a folder name holding "/"',
     'cannot contain',
   )
-  console.log('[e2e] wb_workspace_edit → folder.rename names a folder, refuses a "/"')
+  console.log(
+    '[e2e] wb_workspace_edit → folder.rename names a folder (listed back by wb_document_list), refuses a "/"',
+  )
 }

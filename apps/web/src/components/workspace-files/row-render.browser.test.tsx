@@ -56,7 +56,7 @@ function sourceOf(
 ): WorkspaceFilesSource {
   return {
     listDocuments: async () => [],
-    createDocument: async () => {},
+    createDocument: async (path) => path,
     renameDocumentPath: async () => {},
     searchDocuments: async () => [],
     setDocumentName: async () => {},

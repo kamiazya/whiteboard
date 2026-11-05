@@ -20,7 +20,8 @@ import {
 } from '../daemon/native-host/install.js'
 import { runNativeHost } from '../daemon/native-host/relay.js'
 import { getLogger } from '../server/log.js'
-import { type FlagTable, scanFlags } from './flag-table.js'
+import { scanFlags } from './flag-table.js'
+import { INSTALL_FLAGS } from './native-host-install-flags.js'
 import {
   nativeHostInstallOutputSchema,
   OPERATOR_JSON_SCHEMA_VERSION,
@@ -43,15 +44,6 @@ export function keepHostAliveOnUnhandledRejection(): () => void {
   }
   process.on('unhandledRejection', onRejection)
   return () => process.off('unhandledRejection', onRejection)
-}
-
-const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
-  booleans: ['--json', '--development'],
-  values: {
-    '--data-dir': 'dataDir',
-    '--manifest-dir': 'manifestDir',
-    '--firefox-manifest-dir': 'firefoxManifestDir',
-  },
 }
 
 const INSTALL_USAGE =

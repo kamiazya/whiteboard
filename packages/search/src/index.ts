@@ -1,3 +1,5 @@
+export { findFolded, foldForSearch } from './fold.js'
+export { folderNamesOf } from './folder-names.js'
 export {
   type AlsoIndex,
   type DocumentTerms,
@@ -7,4 +9,4 @@ export {
   type SearchableDocument,
 } from './full-text.js'
 export { searchableTexts } from './searchable-texts.js'
-export { snippetAround } from './snippet.js'
+export { type LinkLabel, linkLabelsFrom, snippetAround } from './snippet.js'

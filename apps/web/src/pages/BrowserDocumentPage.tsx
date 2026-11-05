@@ -544,8 +544,9 @@ function useBrowserDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
-      createLinkTarget: (path: string, name: string) =>
-        tagsSource.createDocument(path, 'markdown', name),
+      createLinkTarget: async (path: string, name: string) => {
+        await tagsSource.createDocument(path, 'markdown', name)
+      },
       loadReference: browserReferenceLoader,
     },
     openDocument: navigateToDocument,

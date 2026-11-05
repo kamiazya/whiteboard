@@ -12,8 +12,10 @@ export { deriveCopyName, deriveCopyPath } from './derive-copy.js'
 export { deriveWorkspaceSegment } from './derive-workspace-segment.js'
 export {
   displayNameKey,
+  firstDistinctUnnamedPath,
   folderNameRefusal,
   folderNameSchema,
+  isMovedNameTaken,
   isSiblingDisplayNameTaken,
 } from './display-name.js'
 export * from './document-kind.js'

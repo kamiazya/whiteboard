@@ -11,7 +11,11 @@
  * here would put that decision in two places.
  */
 
+import { folderNamesOf, foldForSearch } from '@kamiazya/whiteboard-search'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import type { FolderNames } from '../../lib/folder-names.js'
+
+const NO_NAMES: FolderNames = new Map()
 
 /**
  * Whether one document answers a query. Lived beside the editor header's
@@ -42,21 +46,45 @@ function documentMatchesSearch(
     const carries = (tag: string) => tag.toLowerCase() === wanted
     return (document.tags?.some(carries) ?? false) || (document.carriedTags?.some(carries) ?? false)
   }
+  // Folded the way the content search folds, so a name answers "cafe" for
+  // "Café" here exactly as a body does there.
+  const folded = foldForSearch(q)
+  const has = (text: string) => foldForSearch(text).includes(folded)
   return (
-    document.path.toLowerCase().includes(q) ||
-    (document.name?.toLowerCase().includes(q) ?? false) ||
-    (document.tags?.some((tag) => tag.toLowerCase().includes(q)) ?? false)
+    has(document.path) ||
+    (document.name !== undefined && has(document.name)) ||
+    (document.tags?.some(has) ?? false)
   )
 }
 
+/**
+ * Whether the display name of a folder the document sits in answers the
+ * query — what finds a note filed under a folder renamed to "Operations
+ * Team", whose address still says something else. Not for a `#tag` filter.
+ */
+function folderMatchesSearch(query: string, path: string, names: FolderNames): boolean {
+  const q = foldForSearch(query.trim())
+  if (q === '' || q.startsWith('#')) return false
+  return folderNamesOf(path, names).some((name) => foldForSearch(name).includes(q))
+}
+
+/**
+ * The documents whose own name, path or tags match, then those only a
+ * folder's display name matched — being filed under a word says less about
+ * a document than carrying it, the order the content search keeps too.
+ */
 export function searchDocuments<T extends WorkspaceDocumentEntry>(
   documents: readonly T[],
   query: string,
+  folderNames: FolderNames = NO_NAMES,
 ): readonly T[] {
   if (query.trim() === '') return []
-  return documents
-    .filter((entry) => documentMatchesSearch(query, entry))
-    .sort(compareDocumentEntries)
+  const own = documents.filter((entry) => documentMatchesSearch(query, entry))
+  const matched = new Set(own)
+  const byFolder = documents.filter(
+    (entry) => !matched.has(entry) && folderMatchesSearch(query, entry.path, folderNames),
+  )
+  return [...own.sort(compareDocumentEntries), ...byFolder.sort(compareDocumentEntries)]
 }
 
 /**
@@ -80,11 +108,12 @@ export function withNameMatches<R extends { readonly document: WorkspaceDocument
   rows: readonly R[],
   documents: readonly WorkspaceDocumentEntry[],
   query: string,
+  folderNames: FolderNames = NO_NAMES,
 ): readonly (R | { document: WorkspaceDocumentEntry })[] {
   const produced = new Set(rows.map((row) => row.document.documentId))
   return [
     ...rows,
-    ...searchDocuments(documents, query)
+    ...searchDocuments(documents, query, folderNames)
       .filter((entry) => !produced.has(entry.documentId))
       .map((document) => ({ document })),
   ]

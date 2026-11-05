@@ -89,6 +89,7 @@ export function SourceColumn({
   extensions,
   reconcileExternalValue,
   onRequestLinkPicker,
+  onRequestImage,
 }: {
   value: string
   onChange: (next: string) => void
@@ -101,6 +102,7 @@ export function SourceColumn({
   extensions: Parameters<typeof SourcePane>[0]['extensions']
   reconcileExternalValue: boolean
   onRequestLinkPicker: () => boolean
+  onRequestImage: (() => void) | undefined
 }) {
   return (
     <div
@@ -119,6 +121,7 @@ export function SourceColumn({
         // Offered only where there is something to link TO: with no targets
         // the shortcut would open a picker with nothing in it.
         {...(linkTargets !== undefined && linkTargets.length > 0 ? { onRequestLinkPicker } : {})}
+        {...(onRequestImage === undefined ? {} : { onRequestImage })}
         apiRef={apiRef}
         placeholderText="Write in Markdown…"
         className="markdown-editor-source"

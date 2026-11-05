@@ -2,6 +2,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { documentsRemovedSince } from './removed-documents.js'
+import { setWorkspaceFolderName } from './workspace-folder-name.js'
 import {
   createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
@@ -11,6 +12,7 @@ import {
   importWorkspaceSubtree,
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
+  pruneEmptyFolders,
   readWorkspaceDocuments,
 } from './workspace-tree.js'
 
@@ -43,6 +45,31 @@ function removedBy(doc: LoroDoc, edit: (doc: LoroDoc) => void) {
 }
 
 describe('documentsRemovedSince', () => {
+  it('records the names of the folders above a removed document as they stood before', () => {
+    const doc = new LoroDoc()
+    create(doc, 'term/week/plan', A)
+    create(doc, 'solo', B)
+    setWorkspaceFolderName(doc, { path: 'term', name: 'Term 1' })
+    setWorkspaceFolderName(doc, { path: 'term/week', name: 'Week 6' })
+
+    const removed = removedBy(doc, (d) => {
+      deleteWorkspaceDocument(d, { documentId: A })
+      deleteWorkspaceDocument(d, { documentId: B })
+      pruneEmptyFolders(d)
+    })
+
+    expect(removed.map(({ path, folderNames }) => ({ path, folderNames }))).toEqual([
+      {
+        path: 'term/week/plan',
+        folderNames: [
+          { path: 'term', name: 'Term 1' },
+          { path: 'term/week', name: 'Week 6' },
+        ],
+      },
+      { path: 'solo', folderNames: undefined },
+    ])
+  })
+
   it('answers nothing for an import that only edits content', () => {
     const doc = new LoroDoc()
     create(doc, 'a', A)

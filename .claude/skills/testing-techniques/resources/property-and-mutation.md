@@ -55,7 +55,7 @@ every gate except this loop.
 | Lane | Command | Scope | Reports |
 |---|---|---|---|
 | contracts | `pnpm mutation:contracts` | the `mutate` list in `packages/mcp-server/stryker.config.mjs` (read it there; a copy here goes stale) | local; `check:release-candidate:local` |
-| render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched, run in the weekly leg each falls in, and posted by `pr-report` as a sticky comment that also names any leg that stopped early; weekly, six legs dealt by recorded minutes (`MINUTES`) and merged by `weekly-report` into one `mutation-canvas-render` artifact |
+| render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched, run in the weekly leg each falls in, and posted by `pr-report` as a sticky comment that also names any leg that stopped early; weekly, six legs dealt by recorded minutes (`MINUTES`), each under a Stryker budget below its job limit (sized from `MINUTES` by `mutation-lane.test.ts`), merged by `weekly-report` into one `mutation-canvas-render` artifact — which FAILS when a leg did not finish; the Stryker project excludes every `*cost*`/`*budget*` test, which were 294 of 412 seconds and multiplied per static mutant |
 
 **Locally, scope the run to the file you changed.** The bare `pnpm mutation:render` is the
 WHOLE weekly lane: 3,378 mutants over 22 files, about 209 minutes of mutation by the recorded

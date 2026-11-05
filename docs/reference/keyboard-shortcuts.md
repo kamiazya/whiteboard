@@ -21,7 +21,7 @@ Two rules hold for the whole table:
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |
-| `N` | Add a note at the centre of the view |
+| `N` | Add a note at the centre of the view, or inside the selected frame |
 | `Space` + drag | Pan from any tool, without leaving it |
 
 The four tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
@@ -87,6 +87,13 @@ node you clicked first, and each is a single undo step. Choosing one closes the
 menu so the result is in view, and a screen reader hears what was done (for
 example "Aligned 3 nodes left").
 
+**Tidy** (the right-click menu of a selection, or **Tidy canvas** on empty
+space) lines boxes up and clears overlaps without taking anything out of its
+frame: a frame's contents are tidied inside it, a frame drawn mostly inside
+another, such as one made with **Group selection**, counts as inside it, and
+a frame grows down or right to make room rather than moving away from the
+frames beside it. Frames are never left overlapping one another.
+
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
 and never in an export. A locked node or edge cannot be selected, moved, restyled, or deleted, and
@@ -101,7 +108,13 @@ around it, and a brief "Locked — unlock from the menu" notice says why. A
 frame holding an edge gives way to the edge, so you can select, label or
 restyle that edge by pressing it; the frame is selected from its border.
 
-A frame is carried by its border band and its name strip. A drag that starts on
+A frame carries every unlocked node that sits wholly inside it, whether you
+drag it or nudge it with the arrow keys, and the move is one undo step.
+With a frame selected, or a node that sits inside one, `N` puts the new note
+in that frame's next free spot (the innermost frame, when frames nest), 32px
+clear of what it already holds, and grows the frame if it is full. So typing
+a note, pressing `Escape` and pressing `N` again keeps filling the same frame. A new
+note or frame never lands over a frame's name. A frame is carried by its border band and its name strip. A drag that starts on
 the frame's empty interior sweeps a selection band instead, so you can pick up
 the notes inside without moving the frame; a tap there still selects the frame.
 A press that moves less than a few pixels is a tap: the node stays exactly where
@@ -200,7 +213,9 @@ selection, or nudging several nodes each undo in a single press.
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
 Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the right-click menus. It also
+no key and live in the Select tool's right-click menus — Align and Distribute on
+a selection of two or more nodes — since the Hand tool's right-click offers
+comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
 way in without a keyboard. Press `Esc` to close it; focus returns to where it
 was. The dock's buttons show their shortcut in the tooltip where they have
@@ -248,7 +263,11 @@ undo. Press `Esc` on a new note before typing and it is removed.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
-it ("Hand tool", "Select tool", "Connect tool", "Draw tool").
+it ("Hand tool", "Select tool", "Connect tool", "Draw tool"). On a canvas with
+notes, the Connect tool also shows what to press at the top of the canvas —
+"Click the first note, then the second" ("Tap…" on a touch screen), then "Now
+click the note to connect to" once the first is chosen — and the first line is
+announced with the tool's name.
 
 Every node and edge is listed by name for a screen reader, in the order `Tab`
 walks them: by where they sit, top to bottom and then left to right, not by

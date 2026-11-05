@@ -314,6 +314,20 @@ function useVersionSavePanel(
   return { savingVersion, saveVersionOutcome, saveVersionFromPanel }
 }
 
+/** What the note editor reaches the keeper through: its documents to link, its file store. */
+function keeperPaneSeams(model: DocumentPageModel, announce: AnnounceNotice) {
+  const { files } = model
+  return {
+    linkTargets: files.pickerTargets,
+    onStoreImage: files.adapter.storeImage,
+    onOpenDocument: model.openDocument,
+    ...(files.createLinkTarget === undefined
+      ? {}
+      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
+    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
+  }
+}
+
 /**
  * What the markdown pane is handed. A builder rather than inline JSX because
  * the optional fields are spread-or-nothing (a prop is either given a
@@ -328,7 +342,6 @@ function markdownPaneProps({
   model,
   resolvedTheme,
   references,
-  files,
   threads,
   commentsRail,
   sync,
@@ -339,7 +352,6 @@ function markdownPaneProps({
   model: DocumentPageModel
   resolvedTheme: ResolvedTheme
   references: ReturnType<typeof useReferenceSeams>
-  files: DocumentPageModel['files']
   threads: DocumentPageModel['threads']
   commentsRail: ReturnType<typeof useCommentsRail>
   sync: DocumentPageModel['sync']
@@ -359,12 +371,7 @@ function markdownPaneProps({
     ...(markdown.title === undefined ? {} : { title: markdown.title }),
     references,
     ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
-    linkTargets: files.pickerTargets,
-    onOpenDocument: model.openDocument,
-    ...(files.createLinkTarget === undefined
-      ? {}
-      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
-    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
+    ...keeperPaneSeams(model, announce),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
     selectedThreadId: commentsRail.selectedThreadId,
@@ -586,11 +593,11 @@ function DocumentPageBody({
 
   const [notice, setNotice] = useTransientNotice()
   const { exportError, handleExport } = useSceneExport({
-    onExport: (format) =>
-      sync.exportScene(
-        format,
-        exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
-      ),
+    onExport: (format, scope) =>
+      sync.exportScene(format, {
+        ...exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
+        ...(scope === undefined ? {} : { selection: scope.nodeIds }),
+      }),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
     onExported: setNotice,
     log,
@@ -634,11 +641,12 @@ function DocumentPageBody({
         model={model}
         exportError={exportError}
         notice={notice}
-        onExport={(format) => {
+        onExport={(format, scope) => {
           // Cleared first so a second export of the same kind speaks again.
           setNotice(null)
-          return handleExport(format)
+          return handleExport(format, scope)
         }}
+        selection={selectionSource}
         onBookmark={requestBookmark}
         versionsEnabled={versions.enabled}
       />
@@ -731,7 +739,6 @@ function DocumentPageBody({
                 model,
                 resolvedTheme,
                 references,
-                files,
                 threads,
                 commentsRail,
                 sync,

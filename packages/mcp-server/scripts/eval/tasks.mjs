@@ -273,6 +273,12 @@ export const TASKS = [
     answer: 'teal',
   },
   {
+    name: 'display name of the folder holding the architecture board',
+    prompt:
+      'The architecture board sits inside a folder. What is that folder called when the workspace shows it to a person? Answer with that name only.',
+    answer: 'Diagrams',
+  },
+  {
     name: 'box count on the roadmap',
     prompt: 'How many boxes are on the roadmap board? Answer with the number only.',
     answer: '3',

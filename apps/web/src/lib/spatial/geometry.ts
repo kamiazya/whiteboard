@@ -6,7 +6,7 @@
  * `scene-render.test.ts`'s drift guard.
  */
 import { boxContains, paintOrderOf, topmostHit } from '@kamiazya/whiteboard-canvas-render'
-import { frameHolds, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { frameHolds, frameLabel, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
 export interface Box {
@@ -20,6 +20,8 @@ export interface NodeBox {
   readonly id: string
   /** True for container frames (groups) — hit-testing yields them to content nodes. */
   readonly container?: boolean
+  /** True for a frame with a name, which draws a strip above its box that carries it. */
+  readonly titled?: boolean
   readonly box: Box
 }
 
@@ -30,6 +32,7 @@ export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
   return paintOrderOf(canvas.nodes).map((node) => ({
     id: node.id,
     ...(isFrame(node) ? { container: true } : {}),
+    ...(isFrame(node) && frameLabel(node) !== undefined ? { titled: true } : {}),
     box: { x: node.x, y: node.y, width: node.width, height: node.height },
   }))
 }

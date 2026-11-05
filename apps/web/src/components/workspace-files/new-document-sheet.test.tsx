@@ -80,7 +80,7 @@ describe('New document sheet in the document browser', () => {
     const source = fakeFilesSource({
       listDocuments: () =>
         Promise.resolve([{ documentId: 'd1', path: 'meeting-notes', kind: 'markdown' as const }]),
-      createDocument: vi.fn(() => Promise.resolve()),
+      createDocument: vi.fn((path: string) => Promise.resolve(path)),
     })
     render(<WorkspaceFilesPanel source={source} />)
     await screen.findAllByTestId('card-title')

@@ -3,6 +3,7 @@
 // the parser accepts and the usage never names is one nobody finds.
 import { describe, expect, it } from 'vitest'
 import { USAGE } from './dispatcher.js'
+import { INSTALL_FLAGS } from './native-host-install-flags.js'
 import { SERVER_RUN_FLAGS } from './server-run-args.js'
 
 const usageLine = (command: string) =>
@@ -25,5 +26,17 @@ describe('the usage text names every flag the server run parser accepts', () => 
     const line = usageLine(command as string)
     expect(line).not.toBe('')
     expect((expected as string[]).filter((flag) => !line.includes(flag))).toEqual([])
+  })
+})
+
+describe('the usage text names every flag native-host install accepts', () => {
+  const flags = [...Object.keys(INSTALL_FLAGS.values), ...INSTALL_FLAGS.booleans]
+
+  it('lists them all on the `native-host install` line', () => {
+    expect(flags).toContain('--development')
+    const line =
+      USAGE.split('\n').find((l) => l.startsWith('whiteboard native-host install ')) ?? ''
+    expect(line).not.toBe('')
+    expect(flags.filter((flag) => !line.includes(flag))).toEqual([])
   })
 })

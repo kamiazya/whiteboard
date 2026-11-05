@@ -20,6 +20,7 @@ function growingSource() {
     listDocuments: async () => rows,
     createDocument: async (path, kind) => {
       rows = [...rows, { documentId: 'd2', path, kind }]
+      return path
     },
   })
 }
@@ -80,7 +81,10 @@ describe('create, then open', () => {
           ? [...seed, { documentId: 'd2', path: 'untitled', kind: 'markdown' }]
           : seed
       },
-      createDocument: held === 'write' ? hold : async () => {},
+      createDocument: async (path) => {
+        if (held === 'write') await hold()
+        return path
+      },
     })
     const next = fakeFilesSource({
       listDocuments: async () => [{ documentId: 'e1', path: 'other', kind: 'markdown' }],

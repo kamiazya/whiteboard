@@ -11,7 +11,83 @@ import {
 import { DocumentNameField } from './DocumentNameField.js'
 import { DocumentPathField } from './DocumentPathField.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
-import { documentPathRefusal } from './document-path-refusal.js'
+import { ADDRESS_RULE, documentPathRefusal } from './document-path-refusal.js'
+
+/**
+ * Runs `prime` on the closed-to-OPEN transition only, never on a later prop
+ * change: `defaultPath` is re-derived on every document-list refresh, so
+ * re-priming on it would wipe the name and path someone is halfway through
+ * typing — and would undo the point of keeping the form open after a
+ * refusal, since the correction being made would go with it.
+ *
+ * A ref rather than a run-count flag, for the reason App.tsx's route sync
+ * documents: StrictMode replays an effect with the same props, and a flag
+ * reads that replay as a second opening.
+ */
+function useOnOpening(open: boolean, prime: () => void) {
+  const wasOpenRef = useRef(false)
+  const primeRef = useRef(prime)
+  primeRef.current = prime
+  useEffect(() => {
+    const justOpened = open && !wasOpenRef.current
+    wasOpenRef.current = open
+    if (justOpened) primeRef.current()
+  }, [open])
+}
+
+/**
+ * The form's fields, with Path following Name (and Kind) through
+ * `pathForName` until Path is edited by hand.
+ */
+function useNewDocumentFields(
+  open: boolean,
+  defaultPath: string,
+  pathForName: ((name: string, kind: DocumentKind) => string) | undefined,
+) {
+  const [kind, setKind] = useState<DocumentKind>('spatial')
+  const [name, setName] = useState('')
+  const [path, setPath] = useState(defaultPath)
+  // The form's own refusal, kept apart from the host's `error` so a stale
+  // server message cannot outlive the field that has since been corrected.
+  const [pathIssue, setPathIssue] = useState<string | null>(null)
+  // Whether the path is still the one this form chose; a hand edit ends it.
+  const [pathFollows, setPathFollows] = useState(true)
+
+  useOnOpening(open, () => {
+    setKind('spatial')
+    setName('')
+    setPath(defaultPath)
+    setPathIssue(null)
+    setPathFollows(true)
+  })
+
+  const followName = (nextName: string, nextKind: DocumentKind) => {
+    if (!pathFollows || pathForName === undefined) return
+    const trimmed = nextName.trim()
+    setPath(trimmed === '' ? defaultPath : pathForName(trimmed, nextKind))
+    setPathIssue(null)
+  }
+  return {
+    kind,
+    name,
+    path,
+    pathIssue,
+    setPathIssue,
+    chooseKind: (next: DocumentKind) => {
+      setKind(next)
+      followName(name, next)
+    },
+    typeName: (next: string) => {
+      setName(next)
+      followName(next, kind)
+    },
+    typePath: (next: string) => {
+      setPath(next)
+      setPathIssue(null)
+      setPathFollows(false)
+    },
+  }
+}
 
 /**
  * The long way to create a document, for the person who already knows what
@@ -25,10 +101,12 @@ import { documentPathRefusal } from './document-path-refusal.js'
  * address the plain menu entries would have used: submitting this form
  * untouched produces exactly what not opening it would have.
  *
- * Neither field derives the other (ADR-0008: a path is never invented from a
- * name), which is the same contract `RenameDocumentDialog` states — and this
- * form deliberately mirrors its layout, since the two edit the same two
- * addresses at different moments.
+ * The path FOLLOWS the name while it is being typed (`pathForName`), until
+ * the path is edited by hand — then it is the person's and stays put. An
+ * address made from the name is what links and the URL carry, so a document
+ * called "Q3 hiring plan" lives at `q3-hiring-plan` rather than at an
+ * `untitled-N` nobody can tell from its neighbours. The layout mirrors
+ * `RenameDocumentDialog`'s, since the two edit the same two fields.
  *
  * Kind is the one field here that is not a convenience: nothing rewrites it
  * later, so it is chosen now or it is wrong for good.
@@ -37,6 +115,7 @@ export function NewDocumentDialog({
   open,
   workspace,
   defaultPath,
+  pathForName,
   busy,
   error,
   onCancel,
@@ -47,41 +126,26 @@ export function NewDocumentDialog({
   workspace?: string | undefined
   /** Where a create with no opinion would have put it. */
   defaultPath: string
+  /** The address a typed name earns for a kind; absent, the path never follows the name. */
+  pathForName?: ((name: string, kind: DocumentKind) => string) | undefined
   busy?: boolean
   /** Shown verbatim — the server names the path that actually collided. */
   error?: string | null
   onCancel: () => void
   onSubmit: (kind: DocumentKind, options: { path: string; name: string | undefined }) => void
 }) {
-  const [kind, setKind] = useState<DocumentKind>('spatial')
-  const [name, setName] = useState('')
-  const [path, setPath] = useState(defaultPath)
-  // The form's own refusal, kept apart from the host's `error` so a stale
-  // server message cannot outlive the field that has since been corrected.
-  const [pathIssue, setPathIssue] = useState<string | null>(null)
+  const { kind, name, path, pathIssue, setPathIssue, chooseKind, typeName, typePath } =
+    useNewDocumentFields(open, defaultPath, pathForName)
+  // Said while typing, so an address the keeper would refuse is never
+  // discovered only by pressing Create. Empty is left to the submit, where
+  // it is a missing field rather than a wrong one.
+  const liveIssue = path.trim() === '' ? null : documentPathRefusal(path.trim())
 
-  // Re-primed on the closed-to-OPEN transition only, never on a later
-  // `defaultPath` change: that value is re-derived on every document-list
-  // refresh, so depending on it would wipe the name and path someone is
-  // halfway through typing — and would undo the point of keeping this form
-  // open after a refusal, since the correction being made would go with it.
-  //
-  // A ref rather than a run-count flag, for the reason App.tsx's route sync
-  // documents: StrictMode replays an effect with the same props, and a flag
-  // reads that replay as a second opening.
-  const wasOpenRef = useRef(false)
-  useEffect(() => {
-    const justOpened = open && !wasOpenRef.current
-    wasOpenRef.current = open
-    if (!justOpened) return
-    setKind('spatial')
-    setName('')
-    setPath(defaultPath)
-    setPathIssue(null)
-  }, [open, defaultPath])
-
-  const shownError =
-    pathIssue ?? (error !== null && error !== undefined && error !== '' ? error : null)
+  // A keeper's refusal describes a submission the live issue has already
+  // superseded, so it is shown only while the typed path is acceptable.
+  const keeperError =
+    liveIssue === null && error !== null && error !== undefined && error !== '' ? error : null
+  const shownError = pathIssue ?? keeperError
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
@@ -138,7 +202,7 @@ export function NewDocumentDialog({
                       name="new-document-kind"
                       value={choice.kind}
                       checked={kind === choice.kind}
-                      onChange={() => setKind(choice.kind)}
+                      onChange={() => chooseKind(choice.kind)}
                     />
                     <choice.Icon aria-hidden="true" className="size-4" />
                     {choice.label}
@@ -150,16 +214,21 @@ export function NewDocumentDialog({
                 deleted and made again.
               </span>
             </fieldset>
-            <DocumentNameField value={name} path={path} onChange={setName} />
-            <DocumentPathField
-              workspace={workspace}
-              value={path}
-              onChange={(next) => {
-                setPath(next)
-                setPathIssue(null)
-              }}
-              hint="Where it lives in the workspace. Folders are the path, so design/login sits under design."
-            />
+            <DocumentNameField value={name} path={path} onChange={typeName} />
+            {/* One group, so an empty status line adds no gap of its own. */}
+            <div className="flex flex-col gap-1">
+              <DocumentPathField
+                workspace={workspace}
+                value={path}
+                onChange={typePath}
+                hint={`${ADDRESS_RULE} Folders are the path, so design/login sits under design.`}
+              />
+              {/* Polite and always present (never display:none), so a screen
+                  reader hears the rule break once, as it is typed. */}
+              <p role="status" className="text-destructive text-sm">
+                {pathIssue === null ? (liveIssue ?? '') : ''}
+              </p>
+            </div>
             {/* The form's own refusal wins: it names the field the person is
                 looking at, while `error` describes a submission that has
                 already been superseded by whatever they typed next. */}

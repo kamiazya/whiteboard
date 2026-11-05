@@ -225,6 +225,25 @@ describe('trash routes', () => {
     expect(names).toEqual({ 'untitled-1': 'Team Charter', 'untitled-2': 'Roadmap' })
   })
 
+  it('lists the names of the folders a deleted document stood in', async () => {
+    const WS = 'ws-trash-folder-names'
+    await saveDocument(WS, 'field-trips/trip-log', canvasDoc('a'), { kind: 'spatial' })
+    const app = await appWithRealDeps()
+    const named = await app.request(`/api/workspaces/${WS}/folders/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'field-trips', name: 'Field trips' }),
+    })
+    expect(named.status).toBe(200)
+
+    await app.request(`/api/workspaces/${WS}/documents/field-trips/trip-log`, { method: 'DELETE' })
+
+    const listed = listTrashResponseSchema.parse(
+      await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
+    )
+    expect(listed.entries[0]?.folderNames).toEqual([{ path: 'field-trips', name: 'Field trips' }])
+  })
+
   it('a document a live-sync update removes is restorable, its content and versions with it', async () => {
     const WS = 'ws-trash-sync-delete'
     await saveDocument(WS, 'doomed', canvasDoc('precious'), { kind: 'spatial' })

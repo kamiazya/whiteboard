@@ -1,6 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { BookmarkPlus, Download, EllipsisVertical } from 'lucide-react'
-import type { ReactNode, RefObject } from 'react'
+import { type ReactNode, type RefObject, useState, useSyncExternalStore } from 'react'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -16,6 +16,8 @@ import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 import { usePictureExportPreferences } from '../../hooks/usePictureExportPreferences.js'
+import type { EditorSelection, SelectionSource } from '../../lib/spatial/editor-handle.js'
+import type { ExportScope } from '../../lib/spatial/selection-picture.js'
 
 interface DocumentMenuProps {
   /**
@@ -23,7 +25,13 @@ interface DocumentMenuProps {
    * state through `useSceneExport`). Omitted hides the export entry rather
    * than wiring a control to a capability the page has not set up.
    */
-  readonly onExport?: (format: SceneExportFormat) => void
+  readonly onExport?: (format: SceneExportFormat, scope?: ExportScope) => void
+  /**
+   * What the canvas has selected. While a node is, the pictures can be of
+   * the selection alone; omitted (a note, a past version) offers the whole
+   * document only.
+   */
+  readonly selection?: SelectionSource
   /**
    * What the open document is, which decides the file it can be saved as
    * beside the pictures (a note's Markdown, a canvas's JSON Canvas). Omitted
@@ -91,6 +99,7 @@ interface DocumentMenuProps {
  */
 export function DocumentMenu({
   onExport,
+  selection,
   kind,
   onBookmark,
   notice,
@@ -121,7 +130,7 @@ export function DocumentMenu({
           <TooltipContent>More actions</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
-          {onExport && <ExportSubmenu onExport={onExport} kind={kind} />}
+          {onExport && <ExportSubmenu onExport={onExport} kind={kind} selection={selection} />}
           {onBookmark && (
             <DropdownMenuItem onSelect={onBookmark} className="gap-2">
               <BookmarkPlus aria-hidden="true" className="size-3.5" />
@@ -135,13 +144,53 @@ export function DocumentMenu({
   )
 }
 
+const NO_SELECTION: EditorSelection = { selectedId: null, selectedEdgeId: null, extraIds: [] }
+const NO_SOURCE: SelectionSource = {
+  getSelection: () => NO_SELECTION,
+  subscribeSelection: () => () => {},
+}
+
+function selectedNodeIds(selection: EditorSelection): readonly string[] {
+  return selection.selectedId === null ? [] : [selection.selectedId, ...selection.extraIds]
+}
+
+/**
+ * The "Selection only" choice and the picture export it shapes. A choice made
+ * for this open of the menu, not a remembered preference: what is selected
+ * next time is a different selection.
+ */
+function useSelectionScope(
+  selection: SelectionSource | undefined,
+  kind: DocumentKind | undefined,
+  onExport: (format: SceneExportFormat, scope?: ExportScope) => void,
+) {
+  const source = selection ?? NO_SOURCE
+  const current = useSyncExternalStore(
+    source.subscribeSelection,
+    source.getSelection,
+    source.getSelection,
+  )
+  const nodeIds = kind === 'spatial' ? selectedNodeIds(current) : []
+  const [selectionOnly, setSelectionOnly] = useState(false)
+  const picture = (format: SceneExportFormat) => () =>
+    selectionOnly && nodeIds.length > 0 ? onExport(format, { nodeIds }) : onExport(format)
+  return { nodeIds, selectionOnly, setSelectionOnly, picture }
+}
+
 function ExportSubmenu({
   onExport,
   kind,
+  selection,
 }: {
-  readonly onExport: (format: SceneExportFormat) => void
+  readonly onExport: (format: SceneExportFormat, scope?: ExportScope) => void
   readonly kind: DocumentKind | undefined
+  readonly selection: SelectionSource | undefined
 }) {
+  const { nodeIds, selectionOnly, setSelectionOnly, picture } = useSelectionScope(
+    selection,
+    kind,
+    onExport,
+  )
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className="gap-2">
@@ -149,24 +198,7 @@ function ExportSubmenu({
         Export…
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        {/* A note is text: its export is the .md file. The pictures are of the
-            canvas, and so are the options that shape them. */}
-        {kind !== 'markdown' && (
-          <>
-            <DropdownMenuItem onSelect={() => onExport('png')}>Export as PNG</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onExport('svg')}>Export as SVG</DropdownMenuItem>
-          </>
-        )}
-        {kind === 'spatial' && (
-          <>
-            <DropdownMenuItem onSelect={() => onExport('png-comments')}>
-              Export as PNG (with comments)
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onExport('svg-comments')}>
-              Export as SVG (with comments)
-            </DropdownMenuItem>
-          </>
-        )}
+        <PictureEntries kind={kind} picture={picture} />
         {kind === 'markdown' && (
           <DropdownMenuItem onSelect={() => onExport('md')}>
             Save as Markdown (.md)
@@ -177,17 +209,74 @@ function ExportSubmenu({
             Save as JSON Canvas (.canvas)
           </DropdownMenuItem>
         )}
-        {kind !== 'markdown' && <PictureOptionItems />}
+        {kind !== 'markdown' && (
+          <PictureOptionItems
+            selectionCount={nodeIds.length}
+            selectionOnly={selectionOnly}
+            onSelectionOnlyChange={setSelectionOnly}
+          />
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   )
 }
 
-function PictureOptionItems() {
+function PictureEntries({
+  kind,
+  picture,
+}: {
+  readonly kind: DocumentKind | undefined
+  readonly picture: (format: SceneExportFormat) => () => void
+}) {
+  return (
+    <>
+      {/* A note is text: its export is the .md file. The pictures are of the
+          canvas, and so are the options that shape them. */}
+      {kind !== 'markdown' && (
+        <>
+          <DropdownMenuItem onSelect={picture('png')}>Export as PNG</DropdownMenuItem>
+          <DropdownMenuItem onSelect={picture('svg')}>Export as SVG</DropdownMenuItem>
+        </>
+      )}
+      {kind === 'spatial' && (
+        <>
+          <DropdownMenuItem onSelect={picture('png-comments')}>
+            Export as PNG (with comments)
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={picture('svg-comments')}>
+            Export as SVG (with comments)
+          </DropdownMenuItem>
+        </>
+      )}
+    </>
+  )
+}
+
+function PictureOptionItems({
+  selectionCount,
+  selectionOnly,
+  onSelectionOnlyChange,
+}: {
+  readonly selectionCount: number
+  readonly selectionOnly: boolean
+  readonly onSelectionOnlyChange: (on: boolean) => void
+}) {
   const { options, setScale, setBackground } = usePictureExportPreferences()
   return (
     <>
       <DropdownMenuSeparator />
+      {/* A selected frame brings the nodes inside it, as an embed of the
+          frame's label does. The JSON Canvas save stays the whole document:
+          it is the document, not a picture of it. */}
+      {selectionCount > 0 && (
+        <DropdownMenuCheckboxItem
+          checked={selectionOnly}
+          onCheckedChange={onSelectionOnlyChange}
+          onSelect={(event) => event.preventDefault()}
+        >
+          Selection only ({selectionCount === 1 ? '1 item' : `${selectionCount} items`}, PNG/SVG)
+        </DropdownMenuCheckboxItem>
+      )}
       {/* A choice about the picture entries above, not an action: keeping the
           menu open lets both be set before the export that uses them. An SVG
           has no pixels, so the resolution is named as the PNG's. */}

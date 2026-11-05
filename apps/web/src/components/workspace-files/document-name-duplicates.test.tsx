@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 const TAKEN =
-  'Another document here is already called "plan". Choose a name no other document here has.'
+  'Another document here is already called "Plan". Choose a name no other document here has.'
 
 function renderPanel(overrides: Parameters<typeof fakeFilesSource>[0] = {}) {
   const rows: WorkspaceDocumentEntry[] = [
