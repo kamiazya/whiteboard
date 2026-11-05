@@ -3,7 +3,7 @@
 // the parser accepts and the usage never names is one nobody finds.
 import { describe, expect, it } from 'vitest'
 import { USAGE } from './dispatcher.js'
-import { INSTALL_FLAGS } from './native-host.js'
+import { INSTALL_FLAGS } from './native-host-install-flags.js'
 import { SERVER_RUN_FLAGS } from './server-run-args.js'
 
 const usageLine = (command: string) =>
