@@ -342,7 +342,14 @@ export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe 
     lines: (at) => inkUnder(inputs.paths, at, inputs.tolerance, inputs.isEdgeLocked)?.id,
     nodes: (at) => {
       const pointable = pointableBoxes(inputs.boxes, inputs.isNodeLocked)
-      const id = hitTest(pointable, at) ?? nameStripUnder(pointable, at)
+      const hit = hitTest(pointable, at)
+      // A nested frame's name strip lies inside the frame around it, so the
+      // box test answers the outer frame there; the strip drawn over that
+      // interior is what the press is aimed at.
+      const id =
+        hit === undefined || frameBox(inputs, hit) !== undefined
+          ? (nameStripUnder(pointable, at) ?? hit)
+          : hit
       if (id === undefined) return undefined
       const frame = frameBox(inputs, id)
       // A frame's interior yields to a relation drawn across it: the relation
