@@ -117,23 +117,23 @@ describe('nodeMenuItems', () => {
     expect(onToggleNodeLock).toHaveBeenCalledWith('a', false)
   })
 
-  it('offers Group selection on a single node, framing just that node', () => {
+  it('offers Frame selection on a single node, framing just that node', () => {
     const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
     const groupSelection = vi.fn()
     const items = nodeMenuItems(baseInput(textNode, canvas, { groupSelection }))
-    const groupItem = items.find((item) => labelOf(item) === 'Group selection')
+    const groupItem = items.find((item) => labelOf(item) === 'Frame selection')
     expect(groupItem).toBeDefined()
     ;(groupItem as { onSelect: () => void }).onSelect()
     expect(groupSelection).toHaveBeenCalledWith(['a'])
   })
 
-  it('offers Group selection over a multi-selection, framing every member', () => {
+  it('offers Frame selection over a multi-selection, framing every member', () => {
     const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
     const groupSelection = vi.fn()
     const withExtra = nodeMenuItems(
       baseInput(textNode, canvas, { extraIds: new Set(['b']), groupSelection }),
     )
-    const groupItem = withExtra.find((item) => labelOf(item) === 'Group selection')
+    const groupItem = withExtra.find((item) => labelOf(item) === 'Frame selection')
     expect(groupItem).toBeDefined()
     ;(groupItem as { onSelect: () => void }).onSelect()
     expect(groupSelection).toHaveBeenCalledWith(['a', 'b'])

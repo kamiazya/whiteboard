@@ -90,7 +90,7 @@ example "Aligned 3 nodes left").
 **Tidy** (the right-click menu of a selection, or **Tidy canvas** on empty
 space) lines boxes up and clears overlaps without taking anything out of its
 frame: a frame's contents are tidied inside it, a frame drawn mostly inside
-another, such as one made with **Group selection**, counts as inside it, and
+another, such as one made with **Frame selection**, counts as inside it, and
 a frame grows down or right to make room rather than moving away from the
 frames beside it. Frames are never left overlapping one another.
 
@@ -214,8 +214,8 @@ selection, or nudging several nodes each undo in a single press.
 
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
-Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the Select tool's right-click menus — Align and Distribute on
+Redo under Edit and a closing line that Align, Distribute, Tidy and Frame selection
+have no key and live in the Select tool's right-click menus — Align and Distribute on
 a selection of two or more nodes — since the Hand tool's right-click offers
 comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the
@@ -279,7 +279,7 @@ canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
+"Framed 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the
 Display panel is said back the same way ("Edge routing: Orthogonal", "Line
 jumps: On").
 

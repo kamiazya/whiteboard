@@ -79,6 +79,6 @@ it('grouping a selection announces how many nodes it framed', async () => {
   const root = rootOf(container)
   fireEvent.keyDown(root, { code: 'KeyA', key: 'a', metaKey: true })
   rightClick(root, 100, 70)
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
-  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Grouped 2 nodes'))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame selection' }))
+  await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Framed 2 nodes'))
 })

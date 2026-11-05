@@ -182,7 +182,7 @@ export function useNodeCreation({
    * centre (or nearest the point the canvas menu was opened on), selected, with
    * its name editor open, since an unnamed empty frame has nothing to find
    * it by. It never wraps the selection — framing what is selected is the
-   * menu's Group selection, and a frame that silently nested around the
+   * menu's Frame selection, and a frame that silently nested around the
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {

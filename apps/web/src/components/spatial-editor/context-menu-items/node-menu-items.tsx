@@ -256,9 +256,9 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
   // encloses every selected node, including group frames: nesting is
   // geometric in JSON Canvas, and containment moves already handle nested
   // frames. A lone node is a selection of one, framed the way the dock's
-  // Group frames it.
+  // Frame entry frames it.
   verbs.push({
-    label: 'Group selection',
+    label: 'Frame selection',
     icon: <Frame />,
     onSelect: () => input.groupSelection([node.id, ...extraIds]),
   })

@@ -48,7 +48,7 @@ describe('ShortcutHelpSheet', () => {
     expect(note.textContent).toMatch(/Align/)
     expect(note.textContent).toMatch(/Distribute/)
     expect(note.textContent).toMatch(/Tidy/)
-    expect(note.textContent).toMatch(/Group/)
+    expect(note.textContent).toMatch(/Frame selection/)
     expect(note.textContent).toMatch(/right-click/i)
   })
 
