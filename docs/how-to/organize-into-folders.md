@@ -43,6 +43,10 @@ folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the
 start of a drag.
 
+A drop that cannot be made — the folder already holds a document showing the
+same name, say — moves nothing, and the reason appears at the bottom of the
+screen until you dismiss it.
+
 A move is announced to screen readers as "Moved _name_ to _folder_".
 
 ## Rename a folder

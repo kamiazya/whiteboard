@@ -107,20 +107,45 @@ function NameDialog({
 }
 
 /**
- * The polite line that says a move landed, and the refusal of a drop (no
- * dialog is open to word it).
+ * The polite line that says a move landed, and the refusal of a drop.
+ *
+ * A drop has no dialog to word its refusal, and the layer renders below the
+ * whole list, so the refusal floats over the list like the undo toast:
+ * placed in the flow, a refused drop onto a folder near the top said why
+ * somewhere off the bottom of the screen, which read as nothing happening.
  *
  * No explicit aria-live: Radix hides everything outside an open modal except
  * the subtree of a [aria-live] element, which would leave the panel's own
  * alerts exposed behind the dialog.
  */
-function StatusLines({ announcement, refusal }: { announcement: string; refusal: string | null }) {
+function StatusLines({
+  announcement,
+  refusal,
+  onDismiss,
+}: {
+  announcement: string
+  refusal: string | null
+  onDismiss: () => void
+}) {
   return (
     <>
       <p role="status" className="sr-only">
         {announcement}
       </p>
-      <ErrorLine message={refusal} />
+      {refusal !== null && (
+        <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2">
+          <div className="bg-background border-destructive/40 flex items-center gap-3 rounded-lg border px-4 py-2 shadow-lg">
+            <ErrorLine message={refusal} />
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="hover:bg-accent shrink-0 rounded-md border px-2 py-0.5 text-sm font-medium pointer-coarse:min-h-11 pointer-coarse:px-3"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -166,6 +191,10 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
       <StatusLines
         announcement={announcement}
         refusal={moving === null && dialog === null ? error : null}
+        onDismiss={() => {
+          onCancel()
+          folderNames.dismissRefusal()
+        }}
       />
       <MoveToFolderDialog
         document={moving}

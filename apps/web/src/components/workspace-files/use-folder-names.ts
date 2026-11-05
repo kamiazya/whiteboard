@@ -28,6 +28,7 @@ export interface FolderNamesState {
   readonly flushInto: (path: string) => void
   /** Why the keeper refused a pending name it tried to write, until the next attempt. */
   readonly refusal: string | null
+  readonly dismissRefusal: () => void
   /** Rename a folder: a pending one in place, a standing one through the keeper. */
   readonly rename: (path: string, name: string) => Promise<void>
   /** Whether a folder at `path` can be renamed here at all. */
@@ -122,7 +123,8 @@ function usePendingFolderNames(
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  return { pending, remember, flushInto, refusal }
+  const dismissRefusal = useCallback(() => setRefusal(null), [])
+  return { pending, remember, flushInto, refusal, dismissRefusal }
 }
 
 /**
@@ -166,7 +168,11 @@ export function useFolderNames(
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
-  const { pending, remember, flushInto, refusal } = usePendingFolderNames(source, standing, reload)
+  const { pending, remember, flushInto, refusal, dismissRefusal } = usePendingFolderNames(
+    source,
+    standing,
+    reload,
+  )
 
   useKeepEmptiedNames(source, documents, standing, stored, remember)
 
@@ -193,5 +199,5 @@ export function useFolderNames(
     [source, documents],
   )
 
-  return { names, folders, remember, flushInto, refusal, rename, canRename }
+  return { names, folders, remember, flushInto, refusal, dismissRefusal, rename, canRename }
 }
