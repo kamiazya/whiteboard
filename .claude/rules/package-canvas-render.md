@@ -1316,8 +1316,8 @@ plain floor turns four cases red.
 its box fully contains.**
 Majority rather than contact, so a frame does not swallow a
 neighbour it overlaps by a corner (pinned both ways, and both thresholds
-mutation-checked); frames overlapping each other are resolved by document
-order, first claim winning, which is the rule the scoop already had.
+mutation-checked); frames nest by the same majority, larger area first,
+and a root scoops what its claimed frames hold.
 
 **The margin anchor yields to a row the margin rule cannot move, and the
 EVAL LANE is what found that it had to.**
