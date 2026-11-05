@@ -5,8 +5,8 @@ import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 

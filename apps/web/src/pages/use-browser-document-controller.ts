@@ -1,7 +1,7 @@
 import { documentNameSchema } from '@kamiazya/whiteboard-model'
 import {
-  type DocumentIndex,
   DisplayNameTakenError,
+  type DocumentIndex,
   DocumentNotFoundError,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
