@@ -93,6 +93,9 @@ export function EmptyWorkspaceState({
           onClick={() => onCreate('markdown')}
         />
       </div>
+      <p className="text-muted-foreground max-w-lg px-4 text-xs">
+        Folders come with documents: make your first one, then use New folder above the list.
+      </p>
       {footer}
     </div>
   )
