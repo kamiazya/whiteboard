@@ -1,3 +1,4 @@
+import { isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
@@ -113,7 +114,7 @@ function usePendingFolderNames(
   }, [flush, standing])
 
   const flushInto = useCallback(
-    (documentPath: string) => flush((path) => documentPath.startsWith(`${path}/`)),
+    (documentPath: string) => flush((path) => isSelfOrDescendant(documentPath, path)),
     [flush],
   )
 

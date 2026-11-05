@@ -391,7 +391,6 @@ export function WorkspaceFilesPanel({
    * still never derived from a name (ADR-0008); the dialog takes both, and
    * neither field feeds the other.
    */
-  // Set once the folder actions exist, below the early returns this callback sits above.
   const flushFolderNamesIntoRef = useRef<(path: string) => void>(() => {})
   const createHere = useCallback(
     async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
@@ -588,7 +587,7 @@ export function WorkspaceFilesPanel({
     goToFolder: selectFolder,
   })
 
-  flushFolderNamesIntoRef.current = folderActions.flushFolderNamesInto
+  flushFolderNamesIntoRef.current = folderActions.flushInto
 
   if (listStatus === 'error') {
     return (

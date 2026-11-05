@@ -233,6 +233,26 @@ async function openWhatIsLeft(
 }
 
 /**
+ * A duplicate name is a refusal of what was typed, not a failure of the store:
+ * nothing was written, so the caller keeps the error to say why and
+ * persistence stays healthy.
+ */
+function keepRefusal(err: unknown, into: { current: DisplayNameTakenError | null }): boolean {
+  if (!(err instanceof DisplayNameTakenError)) return false
+  into.current = err
+  return true
+}
+
+/** The snapshot with the refused name put back, unless a later edit already replaced it. */
+function withoutRefusedName(
+  current: DocumentSnapshot | null,
+  refused: string | null,
+  prior: string | null,
+): DocumentSnapshot | null {
+  return current !== null && current.name === refused ? { ...current, name: prior } : current
+}
+
+/**
  * What a mount opens. A deep link that resolves to nothing falls through to
  * the normal default-document flow rather than showing a degraded banner — a
  * stale bookmark must not dead-end the user — unless the workspace holds
@@ -340,10 +360,7 @@ export function useBrowserDocumentController(
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
         } catch (err) {
-          if (err instanceof DisplayNameTakenError) {
-            // A refusal of what was typed, not a failure of the store: nothing
-            // was written, so persistence stays healthy and the caller is told why.
-            refusedRenameRef.current = err
+          if (keepRefusal(err, refusedRenameRef)) {
             setPersistenceRef.current((p) => ({
               kind: 'saved',
               lastSavedAt: p.lastSavedAt ?? null,
@@ -453,15 +470,11 @@ export function useBrowserDocumentController(
       return flushSave().then((ok) => {
         if (ok) return
         const refusal = refusedRenameRef.current
-        if (refusal === null) throw new Error('Failed to save the renamed canvas.')
-        // The sibling's name was never stored: put back the name the header
-        // showed before, unless a later edit has already replaced it.
         refusedRenameRef.current = null
-        if (snapshotRef.current?.name === normalized) {
-          const restored = { ...snapshotRef.current, name: base.name }
-          snapshotRef.current = restored
-          setSnapshot(restored)
-        }
+        if (refusal === null) throw new Error('Failed to save the renamed canvas.')
+        const restored = withoutRefusedName(snapshotRef.current, normalized, base.name)
+        snapshotRef.current = restored
+        setSnapshot(restored)
         throw refusal
       })
     },

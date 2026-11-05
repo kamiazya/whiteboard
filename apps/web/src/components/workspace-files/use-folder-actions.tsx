@@ -242,11 +242,6 @@ export function useFolderActions({
     />
   )
 
-  return {
-    actions,
-    names: folderNames.names,
-    flushFolderNamesInto: folderNames.flushInto,
-    openMovePicker,
-    layer,
-  }
+  const { names, flushInto } = folderNames
+  return { actions, names, flushInto, openMovePicker, layer }
 }
