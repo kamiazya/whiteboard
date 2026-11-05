@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { IDENTITY_VIEWPORT } from '../../lib/spatial/viewport.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 import { useViewportControls } from './use-viewport-controls.js'
 
 const SIZE = { width: 800, height: 600 }
@@ -64,5 +65,21 @@ describe('opening a document whose content is off-screen', () => {
     rerender({ boxes: [] })
     rerender({ boxes: [box('z', 4000, 4000)] })
     expect(result.current.viewport.x).toBeGreaterThan(3000)
+  })
+})
+
+describe('framing content to fit', () => {
+  it('keeps the top row clear for its tool chip and the bottom row clear of the dock', () => {
+    const { result } = mount([box('a', 0, 0), box('b', 0, 2000)])
+    act(() => {
+      result.current.frameContent()
+    })
+    const { x, y, zoom } = result.current.viewport
+    const top = (0 - y) * zoom
+    const bottom = (2080 - y) * zoom
+    expect((0 - x) * zoom).toBeGreaterThanOrEqual(0)
+    // The chip over a selected box is a 44px touch slot 6px above it.
+    expect(top).toBeGreaterThanOrEqual(50)
+    expect(bottom).toBeLessThanOrEqual(SIZE.height - DOCK_OCCLUSION_PX)
   })
 })

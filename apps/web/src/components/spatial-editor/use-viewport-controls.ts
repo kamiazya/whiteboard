@@ -21,11 +21,32 @@ import {
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import { sameInsets } from '../../lib/spatial/viewport-insets.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 import { initialViewport, useRememberViewport } from './use-viewport-memory.js'
 import { useVisibleInsets } from './use-visible-insets.js'
 
 /** Margin around framed content, in screen px. */
 const FRAME_MARGIN_PX = 24
+
+/**
+ * Screen px a framed top row needs above it for the tool chip a selection
+ * draws there — a 44px touch slot and its 6px gap. Framed flush, the chip of
+ * a selected top row sat under the page header, out of reach.
+ */
+const NODE_TOOLS_CLEARANCE_PX = 50
+
+/**
+ * The insets a framing verb fits content inside: the panels over the root,
+ * plus the dock floating over its bottom edge and room for the selection's
+ * tool chip along its top.
+ */
+function framingInsets(insets: ViewportOcclusion): ViewportOcclusion {
+  return {
+    ...insets,
+    top: Math.max(NODE_TOOLS_CLEARANCE_PX, insets.top ?? 0),
+    bottom: Math.max(DOCK_OCCLUSION_PX, insets.bottom ?? 0),
+  }
+}
 
 export interface ViewportControlsInputs {
   rootRef: { current: HTMLDivElement | null }
@@ -80,7 +101,7 @@ function useOpenOnContent({
     if (anyBoxVisible(boxes, shifted, visibleSize(size, insets))) return
     const bounds = contentBounds(boxes)
     if (bounds === undefined) return
-    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX, insets))
+    setViewport(frameViewport(bounds, size, viewport.zoom, FRAME_MARGIN_PX, framingInsets(insets)))
   })
 }
 
@@ -164,7 +185,7 @@ export function useViewportControls({
     const bounds = contentBounds(boxes, ids)
     if (bounds === undefined) return false
     const containerSize = containerSizeOf(rootRef.current)
-    const insets = insetsOf()
+    const insets = framingInsets(insetsOf())
     setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX, insets))
     return true
   }

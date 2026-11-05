@@ -10,6 +10,7 @@ import { userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 
 afterEach(cleanup)
 
@@ -55,17 +56,19 @@ function doublePress(root: HTMLElement, at: [number, number], pointerType = 'mou
   }
 }
 
-it('hand is the DEFAULT tool and sits leftmost in the tool group', () => {
+it('select is the DEFAULT tool, and hand sits leftmost in the tool group', () => {
   const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
   const { container } = render(<Host />)
+  const select = container.querySelector('[data-testid="select-tool-button"]') as HTMLElement
+  expect(select.getAttribute('aria-pressed')).toBe('true')
   const hand = container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement
-  expect(hand.getAttribute('aria-pressed')).toBe('true')
+  expect(hand.getAttribute('aria-pressed')).toBe('false')
   const buttons = [...container.querySelectorAll('[data-testid$="-tool-button"]')]
   expect(buttons[0]?.getAttribute('data-testid')).toBe('hand-tool-button')
 })
 
 it('in hand mode a plain drag pans the viewport — over empty space AND over a node', () => {
-  const { Host, latest } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host, latest } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -91,7 +94,7 @@ it('in hand mode a plain drag pans the viewport — over empty space AND over a 
 })
 
 it('hand mode: a right-click opens the annotation verbs, never the edit catalog', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -112,7 +115,7 @@ it('hand mode: a right-click opens the annotation verbs, never the edit catalog'
 })
 
 it('the dock does NOT swap by mode: the host history cluster stays in hand mode too', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
 
   // Hand is the default. Navigation is not a mode's property, so nothing in
@@ -124,7 +127,7 @@ it('the dock does NOT swap by mode: the host history cluster stays in hand mode 
 })
 
 it('the dock carries zoom-to-fit in every mode, and no zoom percentage anywhere', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const fit = () => container.querySelector('[data-testid="zoom-fit-button"]')
 
@@ -137,7 +140,9 @@ it('the dock carries zoom-to-fit in every mode, and no zoom percentage anywhere'
   for (const id of ['zoom-in-button', 'zoom-out-button', 'zoom-reset-button'])
     expect(container.querySelector(`[data-testid="${id}"]`)).toBeNull()
 
-  // Fit frames the lone node (100,100 200x80) in the middle of the 800x600 root.
+  // Fit frames the lone node (100,100 200x80) in the middle of the 800x600
+  // root's clear strip: below the 50px kept for a selection's tool chip and
+  // above the 70px the dock covers.
   fireEvent.click(fit() as HTMLElement)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -145,11 +150,12 @@ it('the dock carries zoom-to-fit in every mode, and no zoom percentage anywhere'
     container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
   ).getBoundingClientRect()
   expect(Math.abs(svgRect.x + svgRect.width / 2 - r.x - r.width / 2)).toBeLessThan(2)
-  expect(Math.abs(svgRect.y + svgRect.height / 2 - r.y - r.height / 2)).toBeLessThan(2)
+  const clearMiddle = r.y + 50 + (r.height - 50 - DOCK_OCCLUSION_PX) / 2
+  expect(Math.abs(svgRect.y + svgRect.height / 2 - clearMiddle)).toBeLessThan(2)
 })
 
 it('hand mode: a double TAP zooms in and holds the pressed canvas point still', () => {
-  const { Host, latest } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host, latest } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -179,7 +185,7 @@ it('hand mode: a double TAP zooms in and holds the pressed canvas point still', 
 })
 
 it('step zoom is reachable from the keyboard, in every mode', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const zoom = () => Number(/scale\(([\d.]+)\)/.exec(transformOf(container))?.[1])
@@ -201,7 +207,7 @@ it('step zoom is reachable from the keyboard, in every mode', () => {
 })
 
 it('select mode keeps its own double press: it creates a note', () => {
-  const { Host, latest } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host, latest } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
   const root = rootOf(container)
@@ -213,7 +219,7 @@ it('select mode keeps its own double press: it creates a note', () => {
 })
 
 it('switching tools closes an open context menu — no edit affordance survives into hand mode', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -227,7 +233,7 @@ it('switching tools closes an open context menu — no edit affordance survives 
 })
 
 it('entering hand mode clears edit state: selection, open text editor, armed connect', async () => {
-  const { Host, latest } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host, latest } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -271,7 +277,7 @@ it('entering hand mode clears edit state: selection, open text editor, armed con
 })
 
 it('switching to select restores normal behavior (press on a node selects it)', () => {
-  const { Host } = makeEditorHost({ initial, tool: null, editorProps: HOST_PROPS })
+  const { Host } = makeEditorHost({ initial, tool: 'hand', editorProps: HOST_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

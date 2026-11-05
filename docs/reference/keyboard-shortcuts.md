@@ -173,7 +173,9 @@ would. Later edits never move the view.
 When a panel covers part of the canvas, as the inspector does in a narrow
 window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
 frame their target in the part you can still see, and opening a panel over the
-selected node moves it clear.
+selected node moves it clear. **Zoom to fit** and **Zoom to the selection**
+also keep what they frame clear of the dock along the bottom and leave room
+along the top for the action buttons a selected node shows above itself.
 
 
 The dock carries one view control — **zoom to fit** — and it is there in

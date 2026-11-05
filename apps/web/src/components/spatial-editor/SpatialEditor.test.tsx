@@ -165,8 +165,9 @@ describe('SpatialEditorHandle', () => {
       })
 
       // Node "b" spans canvas x 250..330, y 20..60: its centre (290, 40) lands
-      // on the container's centre (400, 300), which is the pan Frame selection makes.
-      expect(transformOf(container)).toBe('scale(1) translate(110px, 260px)')
+      // on the centre of the strip between the tool-chip clearance (50) and
+      // the dock (70) — (400, 290) — which is the pan Frame selection makes.
+      expect(transformOf(container)).toBe('scale(1) translate(110px, 250px)')
     })
 
     it('fitToContent() with no ids frames every node', () => {
@@ -177,7 +178,7 @@ describe('SpatialEditorHandle', () => {
       })
 
       // Both nodes span canvas x 20..330, y 20..80, centred on (175, 50).
-      expect(transformOf(container)).toBe('scale(1) translate(225px, 250px)')
+      expect(transformOf(container)).toBe('scale(1) translate(225px, 240px)')
     })
 
     it('fitToContent brings a node far outside the container into view', () => {
@@ -193,7 +194,7 @@ describe('SpatialEditorHandle', () => {
         ref.current?.fitToContent(['far'])
       })
       // A single box is centred, not pinned to the corner.
-      expect(transformOf(container)).toBe('scale(1) translate(-2650px, -1730px)')
+      expect(transformOf(container)).toBe('scale(1) translate(-2650px, -1740px)')
 
       act(() => {
         ref.current?.fitToContent(['near', 'far'])
