@@ -61,6 +61,20 @@ async function anchorIn(selector: string): Promise<Element> {
   )
 }
 
+/** The drawn link's ink in a card picture, once the picture has landed. */
+async function linkInkIn(selector: string): Promise<Element> {
+  return vi.waitFor(
+    () => {
+      const ink = [...document.querySelectorAll(`${selector} svg text`)].find((text) =>
+        text.textContent?.includes('plan'),
+      )
+      if (ink === undefined) throw new Error(`no drawn link under ${selector} yet`)
+      return ink
+    },
+    { timeout: 20_000 },
+  )
+}
+
 /** Dispatches a click on `anchor`; answers whether the surface prevented it. */
 function clickAnchor(anchor: Element): boolean {
   let prevented: boolean | undefined
@@ -127,9 +141,12 @@ it('a link inside a card picture opens the card, not the link', async () => {
       )}
     />,
   )
-  const anchor = await anchorIn('[data-testid="document-thumbnail"]')
+  const ink = await linkInkIn('[data-testid="document-thumbnail"]')
 
-  expect(clickAnchor(anchor)).toBe(true)
+  // A picture draws the link as ink, not as an anchor, so there is nothing
+  // to follow and the click is the card's.
+  expect(ink.closest('a')).toBeNull()
+  ink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
   expect(opened).toEqual(['linker'])
 })
 
@@ -151,14 +168,15 @@ it('nothing drawn in a card picture takes keyboard focus', async () => {
       )}
     />,
   )
-  const anchor = await anchorIn('[data-testid="document-thumbnail"]')
+  await linkInkIn('[data-testid="document-thumbnail"]')
+  const picture = document.querySelector('[data-testid="document-thumbnail"]') as HTMLElement
   const card = screen.getByRole('button', { name: /linker/i })
 
-  // Focus is the probe rather than a tabindex read: an aria-hidden picture
-  // whose link a Tab can still reach is the defect, however it is reached.
-  ;(anchor as HTMLElement | SVGElement).focus()
-  expect(document.activeElement).not.toBe(anchor)
+  // No anchor and no tabindex at all — an audit reports a focusable link in
+  // an aria-hidden picture whether or not the browser honours `inert` — and
+  // a Tab from the card does not land inside the picture either.
+  expect(picture.querySelectorAll('a, [tabindex]')).toHaveLength(0)
   card.focus()
   await userEvent.tab()
-  expect(anchor.contains(document.activeElement)).toBe(false)
+  expect(picture.contains(document.activeElement)).toBe(false)
 })

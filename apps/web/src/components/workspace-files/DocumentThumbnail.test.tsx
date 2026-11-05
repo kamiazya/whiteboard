@@ -214,6 +214,25 @@ describe('DocumentThumbnail', () => {
     expect(getByTestId('document-thumbnail').getAttribute('aria-hidden')).toBe('true')
   })
 
+  // A link the renderer draws (a [[link]] or an embed's address) is an
+  // <a href> in the SVG: an empty, focusable link inside a hidden picture,
+  // which an audit reports whether or not the browser honours `inert`.
+  it('draws a link in the picture as plain ink, with nothing focusable', async () => {
+    const observers = installObserver()
+    const linked = {
+      ...drawn,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><a href="doc-2" tabindex="0"><text>Plan</text></a><a href="https://example.com"><rect width="4" height="4"/></a><g tabindex="-1"><circle r="2"/></g></svg>',
+    }
+    const { getByTestId } = render(
+      <DocumentThumbnail document={doc} loadRender={async () => linked} />,
+    )
+    act(() => observers[0]?.fire())
+    const host = () => getByTestId('document-thumbnail')
+    await waitFor(() => expect(host().querySelector('svg text')?.textContent).toBe('Plan'))
+    expect(host().querySelectorAll('a, [href], [tabindex]')).toHaveLength(0)
+    expect(host().querySelector('svg rect')).not.toBeNull()
+  })
+
   // The row is a picture of the document, so it has to become the picture
   // the editor draws — a board that names a theme is drawn in the bundled
   // family until this tab holds that theme's face, and must be drawn again
