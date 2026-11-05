@@ -168,7 +168,14 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
             as="span"
             svg={thumbnailSvg(document, drawn)}
             onClickCapture={keepLinksInert}
-            className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]"
+            className={cn(
+              'animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]',
+              // A picture filled from its top-left is cut at the right edge,
+              // through a glyph. It is a picture, so no text ellipsis can say
+              // "continues" — a fade does, and reads the same for any script.
+              fitFor(document, drawn.bounds) === 'cover-start' &&
+                '[mask-image:linear-gradient(to_right,black_85%,transparent)]',
+            )}
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app
               before this: it unmounted in the same frame the render mounted
