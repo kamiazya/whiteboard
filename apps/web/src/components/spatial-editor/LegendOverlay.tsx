@@ -40,9 +40,11 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
       data-editor-overlay
       data-testid="legend-overlay"
       aria-label="Legend"
-      className="bg-background/95 text-foreground rounded border border-border shadow-sm text-xs"
-      // z-10 like the minimap: over the scene, under a dialog.
-      style={{ position: 'absolute', left: 12, top: 12, zIndex: 10, pointerEvents: 'auto' }}
+      // z-10 like the minimap: over the scene, under a dialog. The keyboard
+      // shortcuts button holds the same corner on a fine pointer (it is hidden
+      // on touch), so there the legend starts below it rather than under it.
+      className="bg-background/95 text-foreground absolute top-3 left-3 z-10 rounded border border-border text-xs shadow-sm pointer-fine:top-16"
+      style={{ pointerEvents: 'auto' }}
     >
       {/* The state is DERIVED from `aria-expanded` (the chevron turns on the
           variant), never doubled in a parallel boolean — toggle-state-surface.test.ts. */}
