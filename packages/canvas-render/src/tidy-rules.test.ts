@@ -161,6 +161,53 @@ describe('what makes a hub swap', () => {
     expect(moves).toEqual(hubSwapped)
   })
 
+  it('a hub between its partners stays put, however wide the far one is', () => {
+    // Lying to the left means ending left of the hub: `right` is wider than
+    // the hub and its gap together, which says nothing about which side it
+    // lies on.
+    const nodes = [box('left', 0, 0), box('hub', 160, 0), box('right', 304, 0, 200)]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'left'],
+        ['hub', 'right'],
+      ]),
+    })
+    expect(moves).toEqual([])
+  })
+
+  it('a box a whole band off the hub row is not along it', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 24, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves).toEqual([])
+  })
+
+  it('a frame is never a partner, even when its member is listed first', () => {
+    // A frame's order is its members' business, whichever of a unit's
+    // members comes first in the document.
+    const nodes = [
+      box('m', 280, 32, 160, 60),
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 208, 124, true),
+      box('far', 520, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves.find((m) => m.id === 'hub')).toBeUndefined()
+  })
+
   it('a self-loop does not stop a hub from swapping', () => {
     const moves = tidyNodes(fanRow(), {
       edges: edges([

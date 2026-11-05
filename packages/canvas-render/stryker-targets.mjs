@@ -274,17 +274,45 @@ export const KNOWN_EQUIVALENT = {
   // `applyUnitDeltas` skipping it — or skipping a zero delta — adds nothing.
   // And the output's finiteness check repeats `settleOnce`'s, which already
   // falls back to the finite input for any non-finite rounded rect. Each
-  // verified as the `tidy-units.ts` entries above were. NOT recorded: the
-  // fixpoint loops' bounds and breaks, which change the result on a board
-  // that needs more passes or cycles; and `claimed.has` / `m.id === node.id`
-  // in `buildUnits`, which a frame claimed by an overlapping frame and a
-  // frame of negative size each tell apart.
+  // verified as the `tidy-units.ts` entries above were.
+  //
+  // The rest were each applied by hand against the tests the lane selects
+  // and stayed green, and each is equivalent by construction. Lookups that
+  // cannot miss: every node's rect is in the walk's `settled` map from the
+  // start and every level's nodes are the board's own, so the `frame` /
+  // `rect === undefined` guards (two and three of them) and `settled`'s
+  // `?? []` are never taken; the top level has no floor, so its `outside`
+  // anchors (the object and both arrays) are never read; and `framed` is a
+  // set of node ids, which a string literal never matches. An empty level
+  // (`inner.length === 0`) settles nothing and grows its frame by nothing.
+  // `snapped === at` only spares a zero shift. A missing `otherId` finds no
+  // unit in `byId` anyway, and a unit's member list is never empty, so
+  // `?.` and `.` agree. A `locked` answering `undefined` reads as `false`.
+  // Skipping only immobile zero-delta units in `applyUnitDeltas` applies a
+  // movable unit's zero delta, which adds nothing. And leaving the start
+  // state out of the level loop's `seen` costs at most one pass from a state
+  // that is already a fixpoint. NOT recorded, because some board would tell
+  // them apart: the fixpoint loops' bounds (a board needing more passes than
+  // the cap, or one that cycles),
+  // the signatures' `'|'` separators (two visited states whose coordinates
+  // concatenate alike), and every budget guard, which the cost tests kill
+  // and the lane excludes for run time.
   'src/tidy.ts': {
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 6,
     'EqualityOperator: at >= target -> at > target': 1,
     'ConditionalExpression: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> false': 1,
     'ConditionalExpression: unit.dx === 0 && unit.dy === 0 -> false': 1,
     'ConditionalExpression: !isFiniteRect({ x, y, width, height }) -> false': 1,
+    'ConditionalExpression: frame === undefined -> false': 2,
+    'ConditionalExpression: rect === undefined -> false': 3,
+    'ObjectLiteral: { x: [], y: [] } -> {}': 1,
+    'ConditionalExpression: inner.length === 0 -> false': 1,
+    'ConditionalExpression: snapped === at -> false': 1,
+    'ConditionalExpression: otherId === undefined -> false': 1,
+    'OptionalChaining: unit.members[0]?.frame -> unit.members[0].frame': 1,
+    'ArrowFunction: () => false -> () => undefined': 1,
+    'LogicalOperator: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> !unit.movable && unit.dx === 0 && unit.dy === 0': 1,
+    'ArrayDeclaration: [signature()] -> []': 1,
   },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not
