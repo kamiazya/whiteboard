@@ -44,6 +44,7 @@ import { decodeSpatialSnapshot } from '../../lib/decode-spatial-snapshot.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { imageDataUrl } from '../../lib/image-data-url.js'
+import { decodeNaturalSize, type ImageSize } from '../../lib/image-natural-size.js'
 import { linkEntries, linkTitles } from '../../lib/link-entries.js'
 import { type ReferenceKeyRow, referencesKey } from '../../lib/render-key.js'
 
@@ -95,6 +96,8 @@ const ROW_IMAGES_MAX_BYTES = 512 * 1024
 interface InlinedImage {
   readonly href: string
   readonly bytes: number
+  /** Its natural size, so a stand-alone picture in a note draws at its shape. */
+  readonly size?: ImageSize
 }
 
 /**
@@ -111,7 +114,9 @@ function imageReader(source: WorkspaceFilesSource) {
     const blob = await source.loadImage?.(document, ref)
     if (blob === undefined) return undefined
     const href = await imageDataUrl(blob, ROW_IMAGE_MAX_BYTES)
-    return href === undefined ? undefined : { href, bytes: blob.size }
+    if (href === undefined) return undefined
+    const size = await decodeNaturalSize(href)
+    return { href, bytes: blob.size, ...(size === undefined ? {} : { size }) }
   }
   return (document: WorkspaceDocumentEntry, ref: string): Promise<InlinedImage | undefined> => {
     let inlined = held.get(ref)
@@ -148,7 +153,7 @@ async function inlineRowImages(
     const drawn = image !== undefined && image.bytes <= budget ? image : undefined
     if (drawn !== undefined) {
       budget -= drawn.bytes
-      extras.set(ref, { image: { href: drawn.href } })
+      extras.set(ref, { image: { href: drawn.href, ...drawn.size } })
     }
     rows.push({ target: ref, image: drawn?.href ?? '' })
   })

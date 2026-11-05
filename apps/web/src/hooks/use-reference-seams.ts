@@ -22,6 +22,7 @@ import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { useCallback, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
+import { useImageSizes } from './use-image-sizes.js'
 import { type LoadImageUrl, useImageUrls } from './use-image-urls.js'
 import {
   type PrefetchRequest,
@@ -142,6 +143,10 @@ export function useReferenceSeams({
     loadImage,
   )
 
+  // A picture alone in its paragraph draws at its natural size, which only a
+  // decode can tell; until it answers the picture keeps a line-sized box.
+  const imageSizes = useImageSizes(useMemo(() => [...imageUrls.values()], [imageUrls]))
+
   return useMemo(
     () =>
       referenceSeams(cache, {
@@ -150,9 +155,9 @@ export function useReferenceSeams({
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
         extra: (ref) => {
           const href = imageUrls.get(ref)
-          return href === undefined ? undefined : { image: { href } }
+          return href === undefined ? undefined : { image: { href, ...imageSizes.get(href) } }
         },
       }),
-    [body, cache, imageUrls, resolveAlias, resolveTitle],
+    [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle],
   )
 }
