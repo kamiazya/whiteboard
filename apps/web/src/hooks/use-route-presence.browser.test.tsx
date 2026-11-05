@@ -8,8 +8,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { noteListDeparture, settleListDeparture } from '../lib/list-departure.js'
 import { announceRoute } from '../lib/route-announcer.js'
-import { useDocumentRoutePresence } from './use-route-presence.js'
+import { useDocumentRoutePresence, useListRoutePresence } from './use-route-presence.js'
 
 afterEach(() => {
   cleanup()
@@ -108,5 +109,38 @@ describe('focus when a document opens', () => {
       </>,
     )
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Elsewhere' }))
+  })
+})
+
+function ListPage() {
+  const headingRef = useListRoutePresence()
+  return (
+    <main>
+      <h1 ref={headingRef} tabIndex={-1}>
+        Documents
+      </h1>
+      <button type="button" data-recent-path="plan">
+        Plan (recent)
+      </button>
+      <button type="button" data-doc-path="plan">
+        Plan (card)
+      </button>
+    </main>
+  )
+}
+
+describe('focus when Back returns to the list', () => {
+  afterEach(() => settleListDeparture('plan'))
+
+  it('goes to the Recent tile a document was opened from', () => {
+    noteListDeparture('plan', 'recent')
+    render(<ListPage />)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Plan (recent)' }))
+  })
+
+  it('goes to the card when the document was opened from the grid', () => {
+    noteListDeparture('plan')
+    render(<ListPage />)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Plan (card)' }))
   })
 })

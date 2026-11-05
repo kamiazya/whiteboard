@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { noteListDeparture } from '../../lib/list-departure.js'
+import { type ListSurface, noteListDeparture } from '../../lib/list-departure.js'
 import { openOnSingleActivation } from '../../lib/open-on-single-activation.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
@@ -34,12 +34,20 @@ export function usePanelOpener(
   // the create callback that calls one, on every render of the page above.
   const openRef = useRef(onOpenDocument)
   openRef.current = onOpenDocument
+  /**
+   * `from` is the row Back returns to when it is not the opened document's
+   * own: a link followed in the preview leaves from the card holding it.
+   */
   const openPath = useCallback(
-    (path: string, entry: WorkspaceDocumentEntry | null) => {
+    (
+      path: string,
+      entry: WorkspaceDocumentEntry | null,
+      from?: { readonly path?: string | undefined; readonly surface?: ListSurface },
+    ) => {
       const open = openRef.current
       if (open === undefined) return
       if (entry !== null) remember(entry)
-      noteListDeparture(path)
+      noteListDeparture(from?.path ?? path, from?.surface)
       open(path)
     },
     [remember],
@@ -48,10 +56,15 @@ export function usePanelOpener(
     (entry: WorkspaceDocumentEntry) => openPath(entry.path, entry),
     [openPath],
   )
+  const openFromRecent = useCallback(
+    (entry: WorkspaceDocumentEntry) => openPath(entry.path, entry, { surface: 'recent' }),
+    [openPath],
+  )
   const selectOrOpen = tapOpens ? openEntry : select
   return {
     tapOpens,
     openEntry,
+    openFromRecent,
     openPath,
     selectOrOpen,
     offered: onOpenDocument === undefined ? undefined : openEntry,

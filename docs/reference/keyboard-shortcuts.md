@@ -337,7 +337,10 @@ Whiteboard"). Where keyboard focus lands depends on the page:
   **Create a canvas**, with no click first.
 - **The document list** puts it on its heading, and coming back from a
   document you opened from the list (**Back**, or the browser's back) puts it
-  on that document's card instead, so you carry on where you were.
+  back on the row you opened it from instead — its card, its row in the folder
+  tree or in the search results, or its Recent tile — so you carry on where you
+  were. After following a link in the preview, it goes to the card of the
+  document that held the link.
 - **Settings** does not move focus, so the next Tab starts from the top of the page.
 
 The first Tab stop on every page is **Skip to content**, hidden until it is

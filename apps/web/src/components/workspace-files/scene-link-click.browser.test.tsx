@@ -13,6 +13,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { listDeparture, settleListDeparture } from '../../lib/list-departure.js'
 import { STORAGE_KEY } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -103,6 +104,17 @@ it('a wiki link in the preview opens its target in place', async () => {
   expect(clickAnchor(anchor)).toBe(true)
   await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('plan'))
   expect(onOpenDocument).toHaveBeenCalledTimes(1)
+})
+
+it('a preview link leaves Back to return to the card that held the link', async () => {
+  render(<WorkspaceFilesPanel source={source()} onOpenDocument={() => {}} />)
+  const card = await screen.findByRole('button', { name: /linker/i })
+  await userEvent.click(card)
+  const anchor = await anchorIn('[data-testid="preview-render"]')
+
+  clickAnchor(anchor)
+  expect(listDeparture()).toEqual({ path: 'linker', surface: 'list' })
+  settleListDeparture('linker')
 })
 
 it('a document opened through a preview link joins the Recent lane', async () => {

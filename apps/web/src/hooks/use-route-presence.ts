@@ -107,9 +107,16 @@ export function useListRoutePresence(): RefObject<HTMLHeadingElement | null> {
  */
 function useReturnToCard(headingRef: RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    const path = listDeparture()
-    if (path === null) return
-    const selector = `main [data-doc-path="${CSS.escape(path)}"]`
+    const departure = listDeparture()
+    if (departure === null) return
+    const { path } = departure
+    const card = `main [data-doc-path="${CSS.escape(path)}"]`
+    // The Recent tile when the lane is drawn, else the card: the lane is
+    // first in the page, and it is hidden in a folder or a search.
+    const selector =
+      departure.surface === 'recent'
+        ? `main [data-recent-path="${CSS.escape(path)}"], ${card}`
+        : card
     const unmoved = () => focusIsUnclaimed() || document.activeElement === headingRef.current
     const attempt = (): boolean => {
       const card = unmoved() ? document.querySelector<HTMLElement>(selector) : null
