@@ -292,14 +292,24 @@ Group from the dock, and closing a dialog or the context menu with `Esc`.
 
 ## Moving between pages
 
-Opening a document, returning to the list or opening Settings moves keyboard
-focus to the page's heading and has a screen reader say where you are
-("Roadmap, markdown note", "Plan, canvas", "Documents"). The browser tab is
-titled the same way ("Roadmap · Whiteboard"). An empty document is the
-exception for focus, and the announcement still plays: a new, empty note's
-editor takes it, so you can type at once, and an empty canvas's surface takes
-it, so a shortcut such as `N` works the moment the canvas appears — straight
-after **Create a canvas**, with no click first.
+Opening a document, returning to the list or opening Settings has a screen
+reader say where you are ("Roadmap, markdown note", "Plan, canvas",
+"Documents"), and the browser tab is titled the same way ("Roadmap ·
+Whiteboard"). Where keyboard focus lands depends on the page:
+
+- **A note** puts it on the note's heading, directly above its text. A new,
+  empty note is the exception: its editor takes focus, so you can type at once.
+- **A canvas** puts it on the canvas itself, empty or not, so a shortcut such
+  as `N` or an arrow key works the moment the canvas appears — straight after
+  **Create a canvas**, with no click first.
+- **The document list** puts it on its heading, and coming back from a
+  document you opened from the list (**Back**, or the browser's back) puts it
+  on that document's card instead, so you carry on where you were.
+- **Settings** does not move focus, so the next Tab starts from the top of the page.
+
+The first Tab stop on every page is **Skip to content**, hidden until it is
+focused: it moves focus past the app's header and the page's own header to
+the canvas, the note's editor, or the start of the page's content.
 
 ## Searching the document list
 

@@ -1,7 +1,7 @@
 /**
- * Arriving on a blank canvas: the canvas surface takes the keyboard, so the
- * first key after "Create a canvas" acts on the canvas rather than landing on
- * a heading that does nothing with it. Real routing, real IndexedDB and the
+ * Arriving on a canvas, blank or not: the canvas surface takes the keyboard,
+ * so the first key after "Create a canvas" or opening a board acts on the
+ * canvas rather than landing on a heading that does nothing with it. Real routing, real IndexedDB and the
  * real editor, because the subject is where focus is when the editor arrives.
  */
 
@@ -10,7 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { App } from '../App.js'
 import { documentPath } from '../lib/app-routes.js'
@@ -21,7 +21,7 @@ import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
-claimIsolatedWhiteboardDb('blank-canvas-arrival')
+claimIsolatedWhiteboardDb('canvas-arrival')
 
 const SLOW = { timeout: 15_000 }
 
@@ -37,7 +37,7 @@ function renderApp() {
 
 const surface = () => document.querySelector<HTMLElement>('[role="application"]')
 
-describe('arriving on a blank canvas', () => {
+describe('arriving on a canvas', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
@@ -53,7 +53,7 @@ describe('arriving on a blank canvas', () => {
     await waitFor(() => expect(surface()?.textContent).not.toContain('Double-click to add a note'))
   })
 
-  it('leaves the keyboard where it was on a canvas that has content', async () => {
+  it('gives the canvas the keyboard when it has content too', async () => {
     const router = renderApp()
     await screen.findByText('What will you make first?', undefined, SLOW)
     const boardId = await seedIdbDocument({ path: 'board' })
@@ -63,12 +63,6 @@ describe('arriving on a blank canvas', () => {
       edges: [],
     })
     await new LoroStore().save(boardId, doc.export({ mode: 'snapshot' }))
-    const focused: Element[] = []
-    const record = (event: FocusEvent) => {
-      if (event.target instanceof Element) focused.push(event.target)
-    }
-    document.addEventListener('focusin', record)
-    onTestFinished(() => document.removeEventListener('focusin', record))
     // As after opening a card: the control that opened it is gone, so the
     // arrival is the one deciding where the keyboard goes.
     ;(document.activeElement as HTMLElement | null)?.blur()
@@ -77,6 +71,6 @@ describe('arriving on a blank canvas', () => {
     // Arrived: the tab is titled for the board, and its editor draws the note.
     await waitFor(() => expect(document.title).toBe('Untitled · Whiteboard'), SLOW)
     await waitFor(() => expect(surface()?.querySelector('[role="option"]')).not.toBeNull(), SLOW)
-    expect(focused.some((element) => element.getAttribute('role') === 'application')).toBe(false)
+    await waitFor(() => expect(document.activeElement).toBe(surface()), SLOW)
   })
 })

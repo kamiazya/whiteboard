@@ -87,4 +87,33 @@ describe('route presence', () => {
       SLOW,
     )
   })
+
+  it('gives focus back to the card of the document Back came from', async () => {
+    const router = renderApp()
+    await screen.findByText('What will you make first?', undefined, SLOW)
+    await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    await screen.findByTestId('mock-spatial-editor', undefined, SLOW)
+    await router.navigate(-1)
+    const card = () => document.querySelector<HTMLElement>('main [data-doc-path]')
+    await waitFor(() => expect(card()).not.toBeNull(), SLOW)
+
+    await userEvent.dblClick(card() as HTMLElement)
+    await screen.findByTestId('mock-spatial-editor', undefined, SLOW)
+    await router.navigate(-1)
+    await waitFor(() => expect(document.activeElement).toBe(card()), SLOW)
+  })
+
+  it('offers Skip to content as the first Tab stop of the page', async () => {
+    renderApp()
+    await screen.findByText('What will you make first?', undefined, SLOW)
+    // First in document order is first in Tab order: nothing here sets a
+    // positive tabindex.
+    const first = document.querySelector<HTMLElement>(
+      'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    expect(first?.textContent).toBe('Skip to content')
+    first?.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(document.activeElement).toBe(screen.getByRole('main'))
+  })
 })
