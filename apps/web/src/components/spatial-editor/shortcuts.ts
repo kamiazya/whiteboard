@@ -46,6 +46,8 @@ export type ShortcutId =
   | 'edit-selected-node'
   | 'open-context-menu'
   | 'open-context-menu-shift-f10'
+  | 'leave-canvas-forward'
+  | 'leave-canvas-backward'
   | 'comment-on-selection'
   | 'undo'
   | 'redo'
@@ -204,6 +206,24 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     display: 'Shift+F10',
     description: "Open the selection's menu (the canvas menu when nothing is selected)",
     tools: ['select'],
+  },
+  // The way off the canvas that keeps the selection: Tab walks it, and Escape
+  // then Tab lets go of it first. F6 is the platform's move-between-regions key.
+  {
+    id: 'leave-canvas-forward',
+    section: 'Navigate',
+    keys: ['F6'],
+    shift: false,
+    display: 'F6',
+    description: 'Leave the canvas for the next control, keeping the selection',
+  },
+  {
+    id: 'leave-canvas-backward',
+    section: 'Navigate',
+    keys: ['F6'],
+    shift: true,
+    display: 'Shift+F6',
+    description: 'Leave the canvas for the control before it (the header), keeping the selection',
   },
   {
     id: 'toggle-lock',

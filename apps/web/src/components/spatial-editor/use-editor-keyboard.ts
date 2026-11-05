@@ -32,6 +32,7 @@ import {
   nextInReadingOrder,
 } from '../../lib/spatial/reading-order.js'
 import { isAttachTarget, stepAttachTarget } from './attach-target-walk.js'
+import { focusPastCanvas } from './canvas-focus.js'
 import { withHeldMembers } from './drag-preview.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
@@ -82,6 +83,8 @@ const ROOT_FOCUS_SHORTCUTS: ReadonlySet<ShortcutId> = new Set([
   'edit-selected-node',
   'open-context-menu',
   'open-context-menu-shift-f10',
+  'leave-canvas-forward',
+  'leave-canvas-backward',
 ])
 
 export interface EditorKeyboardInputs {
@@ -259,6 +262,10 @@ export function useEditorKeyboard({
       case 'open-context-menu-shift-f10':
         openSelectionMenu()
         return true
+      case 'leave-canvas-forward':
+        return focusPastCanvas(e.currentTarget, 1)
+      case 'leave-canvas-backward':
+        return focusPastCanvas(e.currentTarget, -1)
       default:
         return false
     }

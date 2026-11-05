@@ -236,7 +236,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 616, // +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 620, // +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in

@@ -38,6 +38,7 @@ pinch zooms in every tool.
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, a frame's label (a frame label is one line: `Enter` saves it), or the selected connection's or line's label |
+| `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
@@ -54,7 +55,10 @@ and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
-selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock.
+To leave without losing the selection, press `F6` (on to the dock) or
+`Shift + F6` (back to the header, where the Display panel shows the selected
+node) — the selection stays exactly as it was. A canvas with no nodes lets `Tab` go straight to the
 dock. Locked nodes and locked connections are skipped, since they cannot be selected.
 
 **Reaching a connection without a pointer.** The `Tab` walk visits each
