@@ -103,6 +103,13 @@ export interface SearchableDocument {
   readonly name?: string
   /** Body / node / label texts, each a separate string so snippets stay per-source. */
   readonly texts: readonly string[]
+  /**
+   * Display names of the named folders the document sits in (`folderNamesOf`).
+   * They find the document, but rank it below every document whose own
+   * name, path or text matched: being filed under "Operations" says less
+   * about a note than saying "operations" does.
+   */
+  readonly folders?: readonly string[]
 }
 
 export interface SearchHit {
@@ -198,6 +205,71 @@ interface TokenBag extends DocumentTerms {
   readonly doc: SearchableDocument
 }
 
+/** Each document's BM25 score over `bags`, out of `corpus` documents; zero ones left out. */
+function bm25(
+  bags: readonly TokenBag[],
+  queryTokens: readonly string[],
+  corpus: number,
+): Map<string, number> {
+  if (bags.length === 0) return new Map()
+  const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
+  // Once per query token, not per (document, token) pair: counting the
+  // documents that hold a token inside the scoring loop made one query
+  // documents² × tokens, seconds on a few hundred notes.
+  const idf = queryTokens.map((token) => {
+    const containing = bags.filter((bag) => bag.counts.has(token)).length
+    return Math.log(1 + (corpus - containing + 0.5) / (containing + 0.5))
+  })
+  const scores = new Map<string, number>()
+  for (const bag of bags) {
+    let score = 0
+    for (const [i, token] of queryTokens.entries()) {
+      const tf = bag.counts.get(token) ?? 0
+      if (tf === 0) continue
+      score +=
+        ((idf[i] ?? 0) * tf * (K1 + 1)) /
+        (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
+    }
+    if (score > 0) scores.set(bag.doc.documentId, score)
+  }
+  return scores
+}
+
+/**
+ * Documents whose own text matched, by that score, then those only a folder
+ * name matched. A folder-only hit's score is its folder score scaled under
+ * the lowest own score, so the scores still descend down the answer.
+ */
+function rankWithFolders(
+  documents: readonly SearchableDocument[],
+  own: ReadonlyMap<string, number>,
+  inFolders: ReadonlyMap<string, number>,
+): { doc: SearchableDocument; score: number }[] {
+  const byId = (a: SearchableDocument, b: SearchableDocument) =>
+    compareCodeUnit(a.documentId, b.documentId)
+  const ownHits = documents
+    .filter((doc) => own.has(doc.documentId))
+    .map((doc) => ({
+      doc,
+      score: own.get(doc.documentId) ?? 0,
+      folder: inFolders.get(doc.documentId) ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score || b.folder - a.folder || byId(a.doc, b.doc))
+  const folderOnly = documents
+    .filter((doc) => !own.has(doc.documentId) && inFolders.has(doc.documentId))
+    .map((doc) => ({ doc, folder: inFolders.get(doc.documentId) ?? 0 }))
+    .sort((a, b) => b.folder - a.folder || byId(a.doc, b.doc))
+  const floor = ownHits.at(-1)?.score
+  const top = folderOnly[0]?.folder ?? 0
+  return [
+    ...ownHits.map(({ doc, score }) => ({ doc, score })),
+    ...folderOnly.map(({ doc, folder }) => ({
+      doc,
+      score: floor === undefined ? folder : (floor * folder) / (folder + top),
+    })),
+  ]
+}
+
 interface SearchOptions {
   readonly limit?: number
   /**
@@ -233,31 +305,25 @@ export function fullTextSearch(
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
 
-  const bags: TokenBag[] = documents.map((doc) => ({ doc, ...termsOf(doc) }))
-  const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
-  // Once per query token, not per (document, token) pair: counting the
-  // documents that hold a token inside the scoring loop made one query
-  // documents² × tokens, seconds on a few hundred notes.
-  const idf = queryTokens.map((token) => {
-    const containing = bags.filter((bag) => bag.counts.has(token)).length
-    return Math.log(1 + (bags.length - containing + 0.5) / (containing + 0.5))
-  })
-
-  const scored: { doc: SearchableDocument; score: number }[] = []
-  for (const bag of bags) {
-    let score = 0
-    for (const [i, token] of queryTokens.entries()) {
-      const tf = bag.counts.get(token) ?? 0
-      if (tf === 0) continue
-      score +=
-        ((idf[i] ?? 0) * tf * (K1 + 1)) /
-        (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
-    }
-    if (score > 0) scored.push({ doc: bag.doc, score })
-  }
+  const own = bm25(
+    documents.map((doc) => ({ doc, ...termsOf(doc) })),
+    queryTokens,
+    documents.length,
+  )
+  // Only the documents that sit in a named folder have a folder bag; the
+  // rest hold none of its terms, which is what the corpus size says for them.
+  const inFolders = bm25(
+    documents.flatMap((doc) =>
+      (doc.folders?.length ?? 0) === 0
+        ? []
+        : [{ doc, ...documentTerms({ path: '', texts: doc.folders ?? [] }) }],
+    ),
+    queryTokens,
+    documents.length,
+  )
+  const scored = rankWithFolders(documents, own, inFolders)
   // Excerpts only for what is answered: they cost a scan of every text per
   // query token, and ranking never reads them.
-  scored.sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
   const contextsFor = excerpts ? excerpterFor(query) : () => []
   return scored.slice(0, limit).map(({ doc, score }) => ({
     documentId: doc.documentId,

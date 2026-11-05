@@ -9,6 +9,10 @@ What it covers:
 - canvas text: text nodes, group labels, and **edge labels** (a diagram's
   meaning lives in its relations, so they are searchable content)
 - document names and paths
+- the display names of the folders a document sits in: after renaming a
+  folder to "Operations Team", "operations" finds the documents inside it.
+  A document that only its folder's name matched ranks below every document
+  whose own name, path or text matched.
 
 Japanese (and other CJK) queries work without any dictionary or download,
 down to a single character — 「た」 finds 「たささたはな」, so a query answers

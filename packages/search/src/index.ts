@@ -1,4 +1,5 @@
 export { findFolded, foldForSearch } from './fold.js'
+export { folderNamesOf } from './folder-names.js'
 export {
   type AlsoIndex,
   type DocumentTerms,

@@ -13,11 +13,12 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useContext } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
+import type { FolderNames } from '../../lib/folder-names.js'
 import type { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
@@ -27,6 +28,7 @@ import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { SearchState } from './use-debounced-document-search.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { type SearchCombobox, usePublishSearchResults } from './use-search-combobox.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -58,14 +60,16 @@ function searchResultRows({
   hits,
   documents,
   query,
+  folderNames,
 }: {
   activeTag: string | null
   hits: SearchState['hits']
   documents: readonly WorkspaceDocumentEntry[]
   query: string
+  folderNames: FolderNames
 }): ComponentProps<typeof SearchResults>['results'] {
   if (activeTag !== null || hits === null) {
-    return searchDocuments(documents, query).map((document) => ({ document }))
+    return searchDocuments(documents, query, folderNames).map((document) => ({ document }))
   }
   return withNameMatches(
     hits.map((hit) => ({
@@ -76,6 +80,7 @@ function searchResultRows({
     })),
     documents,
     query,
+    folderNames,
   )
 }
 
@@ -608,7 +613,8 @@ export function SearchColumn({
   combobox: SearchCombobox
 }) {
   const { hits, searchDegraded, searching } = search
-  const rows = searchResultRows({ activeTag, hits, documents, query })
+  const folderNames = useContext(FolderNamesContext)
+  const rows = searchResultRows({ activeTag, hits, documents, query, folderNames })
   usePublishSearchResults(combobox, rows, onOpenDocument === undefined ? undefined : openEntry)
   return (
     <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">

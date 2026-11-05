@@ -1,7 +1,16 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
+import {
+  compareDocumentPaths,
+  type DocumentEntry,
+  hasDocumentFolders,
+} from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
-import { excerpterFor, fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
+import {
+  excerpterFor,
+  folderNamesOf,
+  fullTextSearch,
+  type SearchableDocument,
+} from '@kamiazya/whiteboard-search'
 import { type DocumentTermsCache, termsCacheFor } from '../search/document-terms-cache.js'
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
@@ -66,6 +75,7 @@ function collectSearchable(
   entries: readonly DocumentEntry[],
   content: ReadonlyMap<string, ContentFacts>,
   parsed: DocumentSearchInput,
+  folderNames: ReadonlyMap<string, string>,
 ): SearchCandidate[] {
   const searchable: SearchCandidate[] = []
   const wanted = parsed.tags === undefined ? undefined : new Set(parsed.tags)
@@ -86,12 +96,19 @@ function collectSearchable(
       documentId: entry.documentId,
       path: entry.path,
       ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...foldersOf(entry.path, folderNames),
       ...(entry.kind === undefined ? {} : { kind: entry.kind }),
       texts: [...facts.texts],
       named,
     })
   }
   return searchable
+}
+
+/** The display names of the named folders above `path`, as an optional field. */
+function foldersOf(path: string, folderNames: ReadonlyMap<string, string>) {
+  const folders = folderNamesOf(path, folderNames)
+  return folders.length === 0 ? {} : { folders }
 }
 
 /**
@@ -170,7 +187,17 @@ export function createDocumentSearchTool(
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
       const content = await vectors.facts.factsFor(parsed.workspaceId, entries)
 
-      const searchable = collectSearchable(entries, content, parsed)
+      // A folder is renamed without its address moving, so its display name
+      // is the only place "Operations Team" is written; the documents inside
+      // are found by it too, ranked below a document that says the words.
+      const folderNames = hasDocumentFolders(deps.documentIndex)
+        ? new Map(
+            (await deps.documentIndex.listFolderNames({ workspaceId: parsed.workspaceId })).map(
+              ({ path, name }) => [path, name] as const,
+            ),
+          )
+        : new Map<string, string>()
+      const searchable = collectSearchable(entries, content, parsed, folderNames)
       const termsOf = terms.termsOf(parsed.workspaceId, entries, content)
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))

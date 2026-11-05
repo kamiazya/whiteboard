@@ -32,6 +32,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
+  folderNamesOf,
   fullTextSearch,
   type SearchableDocument,
   searchableTexts,
@@ -475,13 +476,22 @@ export function createBrowserFilesSource(
     async searchDocuments(query, limit = 20) {
       if (query.trim() === '') return []
       const entries = await this.listDocuments()
+      const folderNames = new Map(
+        hasDocumentFolders(index)
+          ? (await index.listFolderNames({ workspaceId: getBrowserWorkspaceId() })).map(
+              ({ path, name }) => [path, name] as const,
+            )
+          : [],
+      )
       const searchable: SearchableDocument[] = []
       const record = lazyContentRecord()
       for (const entry of entries) {
+        const folders = folderNamesOf(entry.path, folderNames)
         searchable.push({
           documentId: entry.documentId,
           path: entry.path,
           ...optional('name', entry.name),
+          ...(folders.length === 0 ? {} : { folders }),
           texts: await searchableTextsFor(entry, record),
         })
       }
