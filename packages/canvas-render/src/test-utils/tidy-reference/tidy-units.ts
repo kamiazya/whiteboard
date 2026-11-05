@@ -160,9 +160,10 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
     !groups.some(
       (h, hIndex) =>
         h.id !== g.id &&
-        fullyContains(rectOf(h), rectOf(g)) &&
-        (!fullyContains(rectOf(g), rectOf(h)) || hIndex < index),
+        (fullyContains(rectOf(h), rectOf(g)) || mostlyInside(rectOf(h), rectOf(g))) &&
+        (area(h) > area(g) || (area(h) === area(g) && hIndex < index)),
     )
+  const area = (f: TidyNode) => f.width * f.height
   const claimed = new Set<string>()
   const units: Unit[] = []
   let movableCount = 0
@@ -187,11 +188,24 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
   for (const node of nodes) {
     if (claimed.has(node.id)) continue
     if (node.frame && isRoot(node, groups.indexOf(node))) {
-      const members = nodes.filter(
-        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),
+      const holders = [rectOf(node)]
+      const mine = new Set<string>()
+      for (let grew = true; grew; ) {
+        grew = false
+        for (const m of nodes) {
+          if (claimed.has(m.id)) continue
+          if (m.id !== node.id && !holders.some((h) => mostlyInside(h, rectOf(m)))) continue
+          claimed.add(m.id)
+          mine.add(m.id)
+          if (m.frame && m.id !== node.id) holders.push(rectOf(m))
+          grew = true
+        }
+      }
+      pushUnit(
+        node.id,
+        nodes.filter((m) => mine.has(m.id)),
+        rectOf(node),
       )
-      for (const m of members) claimed.add(m.id)
-      pushUnit(node.id, members, rectOf(node))
     }
   }
   for (const node of nodes) {

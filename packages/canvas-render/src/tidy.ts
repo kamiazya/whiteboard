@@ -269,7 +269,7 @@ function hopClear(unit: Unit, ax: Axis, dir: 1 | -1, occupied: readonly Rect[], 
  * collider's centre, ties right/down) until clear of everything placed so
  * far.
  */
-function resolveOverlaps(units: Unit[], origin: Point): void {
+function resolveOverlaps(units: Unit[], origin: Point, floor: Point | undefined): void {
   const occupied: Rect[] = units.filter((u) => !u.movable).map((u) => u.bbox)
   for (const unit of units) {
     if (!unit.movable) continue
@@ -280,7 +280,16 @@ function resolveOverlaps(units: Unit[], origin: Point): void {
           ? AXIS_X
           : AXIS_Y
       const dir = ax.at(unit.bbox, 0.5) < ax.at(firstHit, 0.5) ? -1 : 1
+      const start = ax.near(unit.bbox)
       hopClear(unit, ax, dir, occupied, ax.of(origin))
+      // Inside a frame a hop up or left stops at the margin: past it the
+      // frame would grow up or left to follow, and its top-left is the one
+      // thing it keeps. Hopping the other way finds room the frame can
+      // grow into.
+      if (dir === -1 && floor !== undefined && ax.near(unit.bbox) < ax.of(floor)) {
+        ax.shift(unit, start - ax.near(unit.bbox))
+        hopClear(unit, ax, 1, occupied, ax.of(origin))
+      }
     }
     occupied.push(unit.bbox)
   }
@@ -520,7 +529,7 @@ function runPassesToFixpoint(
     alignBands(units, AXIS_X, origin.x, floor?.x)
     alignBands(units, AXIS_Y, origin.y, floor?.y)
     if (options.edges !== undefined) orderRowsByEdges(units, options.edges)
-    resolveOverlaps(units, origin)
+    resolveOverlaps(units, origin, floor)
     const now = signature()
     if (seen.has(now)) break
     seen.add(now)

@@ -87,6 +87,13 @@ node you clicked first, and each is a single undo step. Choosing one closes the
 menu so the result is in view, and a screen reader hears what was done (for
 example "Aligned 3 nodes left").
 
+**Tidy** (the right-click menu of a selection, or **Tidy canvas** on empty
+space) lines boxes up and clears overlaps without taking anything out of its
+frame: a frame's contents are tidied inside it, a frame drawn mostly inside
+another, such as one made with **Group selection**, counts as inside it, and
+a frame grows down or right to make room rather than moving away from the
+frames beside it. Frames are never left overlapping one another.
+
 A locked node shows a small padlock in its top-right corner so you can tell it
 from one that is simply unresponsive; the padlock appears in the editor only
 and never in an export. A locked node or edge cannot be selected, moved, restyled, or deleted, and
