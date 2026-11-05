@@ -74,6 +74,18 @@ const previewHrefs = () =>
     (node) => node.getAttribute('href'),
   )
 
+/** A store whose uploads finish only when the test says so, in any order. */
+function held() {
+  const waiting: ((result: ImageStoreResult) => void)[] = []
+  return {
+    store: vi.fn(
+      (_file: File) => new Promise<ImageStoreResult>((resolve) => waiting.push(resolve)),
+    ),
+    pending: () => waiting.length,
+    resolve: (index: number, ref: string) => waiting[index]?.({ ok: true, ref }),
+  }
+}
+
 function filesOf(...files: File[]): DataTransfer {
   const data = new DataTransfer()
   for (const file of files) data.items.add(file)
@@ -95,6 +107,22 @@ describe('an image in a note', () => {
     await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:pic)'))
     expect(store).toHaveBeenCalledWith(expect.objectContaining({ name: 'meter.png' }))
     await vi.waitFor(() => expect(previewHrefs()).toContain('blob:asset:pic'))
+  })
+
+  it('keeps words typed during the upload after the picture, caret at their end', async () => {
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+    const upload = held()
+    const { last } = await mount('Pump ok', upload.store)
+    await userEvent.click(await screen.findByRole('button', { name: 'Image…' }))
+    const input = screen.getByLabelText('Choose an image') as HTMLInputElement
+    input.files = filesOf(PNG()).files
+    fireEvent.change(input)
+    await vi.waitFor(() => expect(upload.pending()).toBe(1))
+    await userEvent.keyboard(' hello')
+    upload.resolve(0, 'asset:late')
+    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:late) hello'))
+    await userEvent.keyboard('!')
+    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:late) hello!'))
   })
 
   it('is offered in the editing catalog too', async () => {

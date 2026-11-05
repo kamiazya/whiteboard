@@ -64,6 +64,21 @@ describe('a pending image', () => {
     expect(state.doc.toString()).toBe('ab![p](asset:a1)')
   })
 
+  it('leaves a caret that moved on where the writer left it', () => {
+    let state = apply(stateAt('ab', 1), startPendingImage('t1'))
+    // Typed at the caret while the upload runs: the caret is past the hold.
+    state = state.update({ changes: { from: 1, insert: 'XY' }, selection: { anchor: 3 } }).state
+    state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
+    expect(state.doc.toString()).toBe('a![p](asset:a1)XYb')
+    expect(state.selection.main.head).toBe('a![p](asset:a1)XY'.length)
+  })
+
+  it('puts a caret still at the hold after the picture', () => {
+    let state = apply(stateAt('ab', 1), startPendingImage('t1'))
+    state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
+    expect(state.selection.main.head).toBe('a![p](asset:a1)'.length)
+  })
+
   it('starts at an explicit position, as a drop does', () => {
     let state = apply(stateAt('abcd', 0), startPendingImage('t1', 3))
     state = apply(state, insertPendingImage('t1', '!'))

@@ -57,17 +57,26 @@ export function startPendingImage(token: string, at?: number): StateCommand {
   }
 }
 
-/** Writes `markup` where the upload `token` was held, once; nothing when it is not held. */
+/**
+ * Writes `markup` where the upload `token` was held, once; nothing when it is
+ * not held.
+ *
+ * The caret follows the picture only when it is still where the picture
+ * goes. A writer who kept typing, or moved to another paragraph, while the
+ * file uploaded keeps their caret and their scroll position: the selection
+ * is mapped through the insert like any other edit.
+ */
 export function insertPendingImage(token: string, markup: string): StateCommand {
   return ({ state, dispatch }) => {
     const at = state.field(pendingImages, false)?.get(token)
     if (at === undefined) return false
+    const caret = state.selection.main
+    const caretAtHold = state.selection.ranges.length === 1 && caret.empty && caret.head === at
     dispatch(
       state.update({
         changes: { from: at, insert: markup },
-        selection: { anchor: at + markup.length },
+        ...(caretAtHold ? { selection: { anchor: at + markup.length }, scrollIntoView: true } : {}),
         effects: endPending.of(token),
-        scrollIntoView: true,
         userEvent: 'input',
       }),
     )
