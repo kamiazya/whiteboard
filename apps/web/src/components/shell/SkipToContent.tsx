@@ -19,17 +19,22 @@ export function SkipToContent() {
 /**
  * The page's content entry point: the canvas surface, a note's editor, or
  * else the page's `<main>` itself, so the next Tab is its first control.
+ * An entry that is not drawn is skipped — a note in Read mode keeps its
+ * editor mounted but hidden, and focusing that does nothing.
  */
 function focusPageContent(): void {
   const main = document.querySelector<HTMLElement>('main')
   if (main === null) return
-  const entry =
-    main.querySelector<HTMLElement>('[role="application"]') ??
-    main.querySelector<HTMLElement>('[contenteditable="true"]')
-  if (entry !== null) {
+  const entry = shown(main, '[role="application"]') ?? shown(main, '[contenteditable="true"]')
+  if (entry !== undefined) {
     entry.focus()
     return
   }
   if (!main.hasAttribute('tabindex')) main.tabIndex = -1
   main.focus()
 }
+
+const shown = (main: HTMLElement, selector: string) =>
+  [...main.querySelectorAll<HTMLElement>(selector)].find(
+    (element) => element.getClientRects().length > 0,
+  )
