@@ -36,6 +36,7 @@ import { withHeldMembers } from './drag-preview.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
+import { useKeyboardWalk } from './use-keyboard-walk.js'
 
 /**
  * One keyboard step of zoom — finer than the double press, which jumps. The
@@ -96,6 +97,8 @@ export interface EditorKeyboardInputs {
   selectedInkIds: readonly string[]
   setSelectedInkIds: (ids: readonly string[]) => void
   setSelectedEdgeId: (id: string | null) => void
+  /** Opens the label editor of a connection or a line. */
+  setEdgeLabelEditId: (id: string) => void
   pendingCut: object | null
   setPendingCut: (next: null) => void
   spaceDownRef: { current: boolean }
@@ -141,6 +144,7 @@ export function useEditorKeyboard({
   selectedInkIds,
   setSelectedInkIds,
   setSelectedEdgeId,
+  setEdgeLabelEditId,
   pendingCut,
   setPendingCut,
   spaceDownRef,
@@ -178,16 +182,23 @@ export function useEditorKeyboard({
   /** Nodes traversal can land on: a locked node cannot be selected, so it is not a stop. */
   const traversableNodes = () => canvasRef.current.nodes.filter((node) => !isLocked(node.id))
 
-  const stepThroughNodes = (step: 1 | -1): boolean => {
-    if (handOffTabRef.current && selection === undefined) {
-      handOffTabRef.current = false
-      return false
-    }
+  const walk = useKeyboardWalk({
+    canvasRef,
+    selectedNodeId: selection?.id,
+    selectedInkIds,
+    isLocked,
+    isEdgeLocked,
+    applySelection,
+    setSelectedInkIds,
+    selectOnly,
+  })
+
+  /** Tab's walk, unless the Escape before it handed Tab back to the browser. */
+  const stepThroughStops = (step: 1 | -1): boolean => {
+    const nothingSelected = selection === undefined && selectedInkIds.length === 0
+    const handOff = handOffTabRef.current && nothingSelected
     handOffTabRef.current = false
-    const id = nextInReadingOrder(traversableNodes(), selection?.id ?? null, step)
-    if (id === undefined) return false
-    selectOnly(id)
-    return true
+    return !handOff && walk.step(step)
   }
 
   const selectAdjacent = (key: string): boolean => {
@@ -206,7 +217,13 @@ export function useEditorKeyboard({
 
   /** Enter/F2 on the selection runs the same primary action a double press does. */
   const editSelectedNode = (): boolean => {
-    if (selectedNode === undefined || gestureState.kind !== 'idle') return false
+    if (gestureState.kind !== 'idle') return false
+    const soleInk = selectedInkIds.length === 1 ? selectedInkIds[0] : undefined
+    if (selectedNode === undefined && soleInk !== undefined) {
+      setEdgeLabelEditId(soleInk)
+      return true
+    }
+    if (selectedNode === undefined) return false
     const text = nodeText(selectedNode)
     if (text !== undefined) {
       applyResult(
@@ -231,9 +248,9 @@ export function useEditorKeyboard({
     if (e.target !== e.currentTarget || gestureState.kind !== 'idle') return false
     switch (id) {
       case 'select-next-node':
-        return stepThroughNodes(1)
+        return stepThroughStops(1)
       case 'select-previous-node':
-        return stepThroughNodes(-1)
+        return stepThroughStops(-1)
       case 'select-adjacent-node':
         return selectAdjacent(e.key)
       case 'edit-selected-node':
@@ -414,7 +431,7 @@ export function useEditorKeyboard({
   const clearInkSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (e.key !== 'Escape' || selectedInkIds.length === 0) return false
     e.preventDefault()
-    setSelectedInkIds([])
+    if (!walk.stepBack()) setSelectedInkIds([])
     return true
   }
 

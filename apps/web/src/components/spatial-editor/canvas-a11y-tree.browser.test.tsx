@@ -41,7 +41,7 @@ it('lists every node and edge by name in one labelled listbox', async () => {
   await expect.element(page.getByRole('option', { name: 'Ship' })).toBeInTheDocument()
   await expect.element(page.getByRole('option', { name: 'Frame cluster' })).toBeInTheDocument()
   await expect
-    .element(page.getByRole('option', { name: 'Edge from Review to Ship: then' }))
+    .element(page.getByRole('option', { name: 'Connection from Review to Ship: then' }))
     .toBeInTheDocument()
 })
 

@@ -33,19 +33,19 @@ pinch zooms in every tool.
 |---|---|
 | `Cmd/Ctrl + A` | Select every node |
 | `Shift` + click | Add or remove a node from the selection |
-| `Tab` | Select the next node in reading order; with nothing selected, the first |
-| `Shift + Tab` | Select the previous node in reading order |
+| `Tab` | Select the next node in reading order, visiting the connections and lines that leave a node right after it; with nothing selected, the first node |
+| `Shift + Tab` | Step back through the same walk |
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
-| `Enter` / `F2` | Edit the selected node's text, or a frame's label (a frame label is one line: `Enter` saves it) |
+| `Enter` / `F2` | Edit the selected node's text, a frame's label (a frame label is one line: `Enter` saves it), or the selected connection's or line's label |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
-| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or edge: opens the comment composer, the same one **Comment on this** opens |
-| `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
+| `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
+| `Delete` / `Backspace` | Delete the selected nodes, or the selected connection or line |
 | Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture, or clear the selection; in a text edit, discard what you typed |
+| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
 "Canvas, 5 notes. Tab selects the first note" (frames and connections are counted apart, and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
@@ -55,7 +55,16 @@ the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
 selected makes the next `Tab` the browser's, which is the way on to the bottom dock. A canvas with no nodes lets `Tab` go straight to the
-dock. Locked nodes are skipped, since they cannot be selected.
+dock. Locked nodes and locked connections are skipped, since they cannot be selected.
+
+**Reaching a connection without a pointer.** The `Tab` walk visits each
+connection right after the node it leaves, and each line right after the node
+it starts (or ends) at; a line attached to no node comes after the last node.
+A selected connection is announced with its place among the connections and
+lines, as "Selected: Connection from Web App to API Gateway (2 of 5)". From
+there `Enter` or `F2` edits its label, `Shift + F10` opens its menu (arrow
+ends, sides, colour, comment, lock, delete), `Delete` deletes it, and `Esc`
+goes back to the node you reached it from.
 `Cmd/Ctrl + Arrows` jumps to the closest node in a direction, preferring the
 one straight ahead over a nearer one off to the side; the plain arrow keys
 still nudge.
@@ -70,7 +79,7 @@ targets one by one. With nothing selected, `C` switches to the Connect tool as
 before.
 
 **The menu from the keyboard.** `Shift + F10` (or the `Menu` key) opens the menu
-for what is selected, a node, a set of nodes, an edge or a group, and puts focus on
+for what is selected, a node, a set of nodes, a connection, a line or a group, and puts focus on
 its first row. `Arrow Up` / `Arrow Down` step through the rows, `Home` and
 `End` jump to the first and last, `Enter` runs the one under focus, and `Esc`
 closes the menu and returns focus to the canvas. While a menu is open no other
@@ -269,11 +278,13 @@ notes, the Connect tool also shows what to press at the top of the canvas —
 click the note to connect to" once the first is chosen — and the first line is
 announced with the tool's name.
 
-Every node and edge is listed by name for a screen reader, in the order `Tab`
-walks them: by where they sit, top to bottom and then left to right, not by
-the order they were added, so a note placed above another is read first. The
+Every node, connection and line is listed by name for a screen reader, in the
+order `Tab` walks them: nodes by where they sit, top to bottom and then left to
+right, not by the order they were added, so a note placed above another is read
+first, each followed by the connections and lines that leave it. The
 canvas points at the selected one: a note by its first
-line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
+line, a frame as "Frame cluster", a connection as "Connection from Review to
+Ship: then", a line as "Line from Review to empty space".
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
 "Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the

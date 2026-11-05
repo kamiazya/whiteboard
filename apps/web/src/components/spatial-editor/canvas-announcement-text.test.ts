@@ -52,10 +52,21 @@ describe('what a selection sounds like', () => {
     expect(selectionMessage(board, ['a', 'b'], null)).toBe('Selected 2 nodes')
   })
 
-  it('an edge is named by what it joins', () => {
+  it('a connection is named by what it joins, with its place among the ink', () => {
     const edge = { id: 'e', from: { node: 'a' }, to: { node: 'b' }, label: 'yes' } as const
     expect(selectionMessage({ ...board, edges: [edge] }, [], 'e')).toBe(
-      'Selected: Edge from A to B: yes',
+      'Selected: Connection from A to B: yes (1 of 1)',
+    )
+  })
+
+  it('a line is called a line, never a connection', () => {
+    const line = {
+      id: 'l',
+      from: { kind: 'node', node: 'a' },
+      to: { kind: 'point', point: { x: 0, y: 0 } },
+    } as const
+    expect(selectionMessage({ ...board, lines: [line] }, [], 'l')).toBe(
+      'Selected: Line from A to empty space (1 of 1)',
     )
   })
 

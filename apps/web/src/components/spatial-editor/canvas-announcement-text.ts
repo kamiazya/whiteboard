@@ -6,7 +6,8 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { readingOrder } from '../../lib/spatial/reading-order.js'
-import { edgeA11yName, edgeRoute, nodeA11yName } from './node-a11y-name.js'
+import { inkPlace } from '../../lib/spatial/traversal-order.js'
+import { edgeRoute, inkA11yName, nodeA11yName } from './node-a11y-name.js'
 
 const plural = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`
@@ -78,8 +79,11 @@ export function selectionMessage(
     return `Selected: ${nodeA11yName(node)} (${place} of ${canvas.nodes.length})`
   }
   if (selectedEdgeId !== null) {
-    const edge = canvas.edges.find((entry) => entry.id === selectedEdgeId)
-    return edge === undefined ? undefined : `Selected: ${edgeA11yName(edge, canvas.nodes)}`
+    const name = inkA11yName(canvas, selectedEdgeId)
+    const at = inkPlace(canvas, selectedEdgeId)
+    return name === undefined || at === undefined
+      ? undefined
+      : `Selected: ${name} (${at.place} of ${at.of})`
   }
   return undefined
 }
