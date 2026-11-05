@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 import type { AppLogger } from '../../lib/app-logger.js'
+import type { ExportScope } from '../../lib/spatial/selection-picture.js'
 
 // Keyed by SceneExportFormat so a new format must add its own entry rather
 // than silently inheriting a default.
@@ -17,7 +18,7 @@ const EXPORT_CONFIG: Record<
 }
 
 interface UseSceneExportOptions {
-  onExport: ((format: SceneExportFormat) => Promise<Blob | null>) | undefined
+  onExport: ((format: SceneExportFormat, scope?: ExportScope) => Promise<Blob | null>) | undefined
   filenameBase: string
   /** Told, once the file has gone out, what to say about it (e.g. "Exported as PNG"). */
   onExported?: (message: string) => void
@@ -34,12 +35,12 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
   const [exportError, setExportError] = useState<string | null>(null)
 
   const handleExport = useCallback(
-    async (format: SceneExportFormat) => {
+    async (format: SceneExportFormat, scope?: ExportScope) => {
       if (!onExport) return
       setExportError(null)
       const { extension, label, saved } = EXPORT_CONFIG[format]
       try {
-        const blob = await onExport(format)
+        const blob = await (scope === undefined ? onExport(format) : onExport(format, scope))
         if (!blob) {
           setExportError(`Export as ${label} failed: no data to export.`)
           return
@@ -59,7 +60,7 @@ export function useSceneExport({ onExport, filenameBase, onExported, log }: UseS
         // current task lets the download start first.
         setTimeout(() => URL.revokeObjectURL(url), 0)
         if (saved === undefined) {
-          onExported?.(`Exported as ${label}`)
+          onExported?.(`Exported ${scope === undefined ? '' : 'the selection '}as ${label}`)
         } else {
           // An image in a canvas is an `asset:` reference to the workspace's
           // file, so the saved text does not carry its pixels.

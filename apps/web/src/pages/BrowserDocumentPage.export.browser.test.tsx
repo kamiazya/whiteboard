@@ -1,6 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { selectAt } from '../test-utils/spatial-editor-pointer.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
@@ -378,5 +379,32 @@ describe('BrowserDocumentPage export draws what the screen shows', () => {
     const svg = await exportSvgText()
     const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement
     expect(root.textContent).toContain('Unmistakablefilebody')
+  })
+
+  it('exports only the selected node once Selection only is on', async () => {
+    const boardId = await seedIdbDocument({ path: 'board', makeDefault: true })
+    const board: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'keep', x: 0, y: 0, width: 200, height: 100, text: 'Keepthisone' }),
+        textNode({ id: 'drop', x: 320, y: 0, width: 200, height: 100, text: 'Leavethisout' }),
+      ],
+      edges: [],
+    }
+    await seedContent(boardId, (doc) => writeSpatialCanvas(doc, board))
+    await renderLoaded()
+    await waitFor(() => expect(editorSurfaceText()).toContain('Keepthisone'), { timeout: 10_000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    const root = screen.getByTestId('spatial-editor')
+    const box = (
+      document.querySelector('svg g[data-wb-key="keep"] rect') as SVGRectElement
+    ).getBoundingClientRect()
+    const at = root.getBoundingClientRect()
+    selectAt(root, box.x + box.width / 2 - at.x, box.y + box.height / 2 - at.y)
+
+    fireEvent.pointerUp(await openExportMenuItem('Selection only (1 item, PNG/SVG)'))
+    const svg = await exportSvgText()
+    const text = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent
+    expect(text).toContain('Keepthisone')
+    expect(text).not.toContain('Leavethisout')
   })
 })
