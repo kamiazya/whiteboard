@@ -163,9 +163,16 @@ export function usable(nodes: readonly TidyNode[]): TidyNode[] {
 }
 
 /**
- * Which frames stand OVER which: `h` encloses `g` when its box fully contains
- * `g`'s, identical boxes going to the earlier in document order. A frame is
- * a level's unit root iff none of its enclosers is at that level.
+ * Which frames stand OVER which: `h` encloses `g` when more than half of
+ * `g` is inside `h` — the rule a member is claimed by — and `h` is the
+ * larger, equal areas going to the earlier in document order. A frame is a
+ * level's unit root iff none of its enclosers is at that level.
+ *
+ * Majority rather than full containment because a frame drawn across
+ * another's edge is drawn IN it: as a root of its own it was a second unit
+ * overlapping its container, and the overlap pass carried it — and what it
+ * held — out of the frame it sat in. Ordering by area first is what keeps
+ * the relation acyclic, since majority alone is not antisymmetric.
  *
  * Answered once for the whole board and handed to every level, because the
  * answer does not change between them: a level's nodes are a subsequence of
@@ -189,8 +196,8 @@ export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
   const order = new Map(frames.map((f, i) => [f, i]))
   const at = (f: TidyNode) => order.get(f) ?? 0
   const area = (f: TidyNode) => f.width * f.height
-  // NaN (an overflowing area) only reorders the scan; membership is decided
-  // by `fullyContains` alone.
+  // Finite sides can still multiply to Infinity; two such areas tie, and
+  // document order decides, as it does for any equal pair.
   const smallestFirst = [...frames].sort((a, b) => area(a) - area(b) || at(a) - at(b))
   const enclosers = new Map<TidyNode, TidyNode[]>()
   for (const g of frames) {
@@ -199,8 +206,11 @@ export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
       smallestFirst.filter(
         (h) =>
           h.id !== g.id &&
-          fullyContains(rect(h), rect(g)) &&
-          (!fullyContains(rect(g), rect(h)) || at(h) < at(g)),
+          // Full containment settles the common case without the area
+          // arithmetic; majority is what decides a frame drawn across
+          // another's edge, the same rule a member is claimed by.
+          (fullyContains(rect(h), rect(g)) || mostlyInside(rect(h), rect(g))) &&
+          (area(h) > area(g) || (area(h) === area(g) && at(h) < at(g))),
       ),
     )
   }
@@ -208,11 +218,35 @@ export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
 }
 
 /**
+ * What `root` claims: every yet-unclaimed node more than half inside it, and
+ * — since a frame it claims brings what IT holds, even where that hangs out
+ * past the root — more than half inside any frame claimed so far. Left
+ * behind, those would be separated from their own frame by the overlap pass.
+ * Marks each claimed; answers them in document order.
+ */
+function scoop(root: TidyNode, nodes: readonly TidyNode[], claimed: Set<string>): TidyNode[] {
+  const holders = [rectOf(root)]
+  const mine = new Set<string>()
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const m of nodes) {
+      if (claimed.has(m.id)) continue
+      if (m.id !== root.id && !holders.some((h) => mostlyInside(h, rectOf(m)))) continue
+      claimed.add(m.id)
+      mine.add(m.id)
+      if (m.frame && m.id !== root.id) holders.push(rectOf(m))
+      grew = true
+    }
+  }
+  return nodes.filter((m) => mine.has(m.id))
+}
+
+/**
  * Outermost-rooted single-scoop units: a group is a unit root iff no other
  * group at this level encloses it (`FrameNesting`); each root claims every
- * yet-unclaimed node more than half inside its box in ONE flat scoop, so
- * nested groups and their members can never be double-assigned. Everything
- * else is a singleton unit.
+ * yet-unclaimed node more than half inside its box — or inside a frame it
+ * has claimed — in ONE scoop, so nested groups and their members can never
+ * be double-assigned. Everything else is a singleton unit.
  */
 export function buildUnits(
   nodes: readonly TidyNode[],
@@ -247,12 +281,7 @@ export function buildUnits(
   for (const node of nodes) {
     if (claimed.has(node.id)) continue
     if (node.frame && isRoot(node)) {
-      const frame = rectOf(node)
-      const members = nodes.filter(
-        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(frame, rectOf(m))),
-      )
-      for (const m of members) claimed.add(m.id)
-      pushUnit(node.id, members, frame)
+      pushUnit(node.id, scoop(node, nodes, claimed), rectOf(node))
     }
   }
   for (const node of nodes) {

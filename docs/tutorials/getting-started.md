@@ -82,9 +82,11 @@ A fresh canvas starts empty, with a one-line hint ("Double-click to add a note",
 and start typing immediately (this works in Hand mode too, and never moves the
 view), or open the **+** menu in the bottom dock: tap
 an entry to place it in the middle of the view, or drag one onto the canvas
-to drop it exactly where you want it. **Group** frames what is selected; with
-nothing selected it makes an empty frame in a free spot and opens its name for
-typing, and an empty frame is drawn with a faint tint so it can be found. In **Select** mode, right-clicking
+to drop it exactly where you want it. **Frame** makes a new, empty frame in a free
+spot and opens its name for typing; an empty frame is drawn with a faint tint
+so it can be found. To frame nodes you have already made, select them,
+right-click one and choose **Group selection**, which also opens the new
+frame's name. In **Select** mode, right-clicking
 (long-pressing on touch) empty space offers the same creations, placed where
 you pressed. On touch the menu is a sheet titled for what you pressed, dimmed behind, at most half the screen (it scrolls), and the canvas pans so the pressed object stays visible above it; tap the dimmed area to close it. Hand mode is navigation only, so it deliberately leaves the
 right-click menu closed (a tap on a comment still opens its conversation:

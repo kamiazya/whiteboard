@@ -14,6 +14,23 @@ const box = (
   frame: TidyNode['frame'] = false,
 ): TidyNode => ({ id, frame, x, y, width, height })
 
+const holds = (frame: TidyNode, node: TidyNode) =>
+  node.x >= frame.x &&
+  node.y >= frame.y &&
+  node.x + node.width <= frame.x + frame.width &&
+  node.y + node.height <= frame.y + frame.height
+
+const applyMoves = (
+  nodes: readonly TidyNode[],
+  moves: readonly { id: string; x: number; y: number; width?: number; height?: number }[],
+) =>
+  nodes.map((n) => {
+    const m = moves.find((mv) => mv.id === n.id)
+    return m === undefined
+      ? n
+      : { ...n, x: m.x, y: m.y, width: m.width ?? n.width, height: m.height ?? n.height }
+  })
+
 const edges = (pairs: readonly (readonly [string, string])[]) =>
   pairs.map(([fromNode, toNode]) => ({ from: { node: fromNode }, to: { node: toNode } }))
 
@@ -182,19 +199,20 @@ describe('what makes a hub swap', () => {
 })
 
 describe('who a unit root claims', () => {
-  it('a frame another frame claims is its member, not a second unit for the boxes past it', () => {
-    // `inner` is no group's full contents, so it is a root by the rule, but
-    // `outer` claimed it first. The box inside `inner` and past `outer`'s
-    // edge is then a singleton; scooping it under the claimed frame grows a
-    // frame that is somebody else's member and carries the box off its row.
+  it('a frame claimed by another brings the boxes it holds past that frame', () => {
+    // `inner` is mostly inside `outer`, so it nests there; `n` is inside
+    // `inner` and past `outer`'s edge. Left a singleton, `n` would be a
+    // unit beside `outer` and the overlap pass would carry it out of the
+    // frame it was drawn in. Claimed with `inner`, it is tidied inside it,
+    // and each frame grows to hold what it holds.
     const nodes = [
       box('outer', 0, 0, 400, 200, true),
       box('inner', 200, 0, 300, 200, true),
       box('n', 420, 50, 60, 60),
     ]
-    const moves = tidyNodes(nodes)
-    // It rides with its owner, ungrown.
-    expect(moves.find((m) => m.id === 'inner')).toEqual({ id: 'inner', x: 200, y: 32 })
-    expect(moves.find((m) => m.id === 'n')?.y).toBe(48)
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const at = (id: string) => after.find((b) => b.id === id) as TidyNode
+    expect(holds(at('inner'), at('n'))).toBe(true)
+    expect(holds(at('outer'), at('inner'))).toBe(true)
   })
 })

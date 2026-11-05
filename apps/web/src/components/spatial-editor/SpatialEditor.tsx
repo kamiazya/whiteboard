@@ -70,7 +70,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { isFrame, nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -99,11 +99,12 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
 import { openSceneLink } from '../../lib/scene-link.js'
 import { parseClipboardText } from '../../lib/spatial/clipboard-fragment.js'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { findFreeSpot, indexNodeBoxes } from '../../lib/spatial/geometry.js'
+import { creationObstacles } from '../../lib/spatial/frame-interior.js'
+import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
@@ -151,6 +152,7 @@ import {
   reduceNavigation,
 } from './navigation.js'
 import { selectionSubject } from './node-a11y-name.js'
+import { noteInFrame, prependToCreation } from './node-factories.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
@@ -1153,9 +1155,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     useNativeCanvasListeners(rootRef, handleWheel, longPressRef, activePointerIdRef)
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
-    const createNodeAt = (point: Point) => {
+    const createNodeAt = (point: Point, before: readonly EditorLeafCommand[] = []) => {
       applyResult(
-        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+        prependToCreation(
+          reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+          before,
+        ),
       )
       // Creation selects the new node EXCLUSIVELY. The double-press path
       // collapsed the extras at its empty press already; the palette path
@@ -1267,20 +1272,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
     const createNodeAtViewportCenter = () => {
-      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      createNodeAt(point)
+      const size = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
+      // With a frame selected the note is asked for IN it.
+      const inFrame =
+        selectedNode !== undefined && isFrame(selectedNode)
+          ? noteInFrame(selectedNode, canvasRef.current.nodes, size)
+          : undefined
+      const point =
+        inFrame?.center ??
+        findFreeSpot(
+          screenToCanvas(viewportCenterScreen(), viewport),
+          size,
+          creationObstacles(canvasRef.current),
+          visibleCanvasRect(),
+        )
+      createNodeAt(point, inFrame?.before)
       panToShow({
         x: Math.round(point.x - NEW_NODE_WIDTH / 2),
         y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: NEW_NODE_HEIGHT,
+        ...size,
       })
     }
 
@@ -1302,8 +1312,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
-      selectedId,
-      extraIds,
       openGroupLabel: setGroupLabelEditId,
     })
     const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({

@@ -55,7 +55,7 @@ describe('canvasMenuItems', () => {
     expect(items.map((item) => (item as { label?: string }).label ?? item.kind)).toEqual([
       'Note',
       'Link',
-      'Group',
+      'Frame',
       'separator',
       'Comment here',
       'Show resolved comments',

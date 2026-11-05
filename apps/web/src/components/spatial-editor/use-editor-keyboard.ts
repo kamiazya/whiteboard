@@ -32,6 +32,7 @@ import {
   nextInReadingOrder,
 } from '../../lib/spatial/reading-order.js'
 import { isAttachTarget, stepAttachTarget } from './attach-target-walk.js'
+import { withHeldMembers } from './drag-preview.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
@@ -482,12 +483,12 @@ export function useEditorKeyboard({
     ) {
       e.preventDefault()
       const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
-      // Nudge the WHOLE selection, not just the primary: a multi-selection
-      // that tore apart under the arrow keys was a latent bug select-all
-      // makes trivial to hit. Positions are read from canvasRef, not the
-      // render closure — key auto-repeat delivers keydowns faster than
-      // commits re-render, and a stale base clobbers the previous nudge.
-      const ids = selectedNode === undefined ? [] : [selectedNode.id, ...extraIds]
+      // Positions are read from canvasRef, not the render closure: key
+      // auto-repeat delivers keydowns faster than commits re-render, and a
+      // stale base clobbers the previous nudge.
+      // A frame carries what it holds, as a drag on its border does.
+      const selected = selectedNode === undefined ? [] : [selectedNode.id, ...extraIds]
+      const ids = [...withHeldMembers(canvasRef.current, selected, isLocked)]
       const moves: EditorLeafCommand[] = ids.flatMap((id) => {
         const current = canvasRef.current.nodes.find((n) => n.id === id)
         if (current === undefined) return []
