@@ -30,8 +30,12 @@ const DOCK_BUTTON_WIDTH_CLASS = 'w-9 pointer-coarse:w-11'
 // order-dependent conflict — `transition-colors` and
 // `transition-[transform,...]` both set transition-property, so composing them
 // would reintroduce exactly the width bug this module exists to remove.
+//
+// `shrink-0` because the tool group is a flex row that scrolls when the dock
+// is capped to a phone's width: without it a squeezed row shrank every button
+// to its icon (29px on a 44px-floor touch control) instead of scrolling.
 const DOCK_BUTTON_BASE_CLASS =
-  'flex items-center justify-center rounded-md text-muted-foreground transition-[transform,color,background-color] duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+  'flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[transform,color,background-color] duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 /**
  * How a control that TOGGLES something says it is currently on.

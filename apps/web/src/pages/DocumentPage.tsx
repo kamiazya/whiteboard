@@ -593,11 +593,11 @@ function DocumentPageBody({
 
   const [notice, setNotice] = useTransientNotice()
   const { exportError, handleExport } = useSceneExport({
-    onExport: (format) =>
-      sync.exportScene(
-        format,
-        exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
-      ),
+    onExport: (format, scope) =>
+      sync.exportScene(format, {
+        ...exportOptions({ documentKind, references, fileSeams, threads, model, settingsStore }),
+        ...(scope === undefined ? {} : { selection: scope.nodeIds }),
+      }),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
     onExported: setNotice,
     log,
@@ -641,11 +641,12 @@ function DocumentPageBody({
         model={model}
         exportError={exportError}
         notice={notice}
-        onExport={(format) => {
+        onExport={(format, scope) => {
           // Cleared first so a second export of the same kind speaks again.
           setNotice(null)
-          return handleExport(format)
+          return handleExport(format, scope)
         }}
+        selection={selectionSource}
         onBookmark={requestBookmark}
         versionsEnabled={versions.enabled}
       />

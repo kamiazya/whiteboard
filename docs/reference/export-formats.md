@@ -787,7 +787,7 @@ checkbox in the Export… submenu turns the fill off, and the file is then
 transparent, byte for byte what an export without the option draws. The **2×
 resolution (PNG)** checkbox rasterises a PNG at twice the pixels in each
 direction with the same drawing (the viewBox is unchanged); an SVG ignores it.
-Both are remembered per browser and apply to all four picture entries. The
+Both are remembered per browser and apply to all four picture entries. With nodes selected, a **Selection only** checkbox draws those four from the selection alone — each selected node read as the fragment `^id` names, so a group brings its members — keeping an edge or line only when both attached ends are inside, and a comment only when what it is about is; it is not remembered. The
 daemon's `wb_scene_render` and `POST …/export` do not read these checkboxes; the
 PNG route keeps its own `scale` parameter.
 

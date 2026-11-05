@@ -97,14 +97,17 @@ export function DocumentRowActions({
   onExport,
   onBookmark,
   versionsEnabled,
+  selection,
 }: {
   inspectorSegment: ReactNode
   model: DocumentPageModel
   exportError: string | null | undefined
   notice: string | null
   onExport: (
-    format: Parameters<ReturnType<typeof useSceneExport>['handleExport']>[0],
+    ...args: Parameters<ReturnType<typeof useSceneExport>['handleExport']>
   ) => void | Promise<void>
+  /** The canvas's selection, so a picture can be of it alone. */
+  selection?: SelectionSource | undefined
   onBookmark: () => void
   versionsEnabled: boolean
 }) {
@@ -128,7 +131,8 @@ export function DocumentRowActions({
         </div>
       )}
       <DocumentMenu
-        onExport={(format) => void onExport(format)}
+        onExport={(format, scope) => void onExport(format, scope)}
+        {...(selection === undefined ? {} : { selection })}
         kind={model.documentKind}
         notice={notice}
         {...(versionsEnabled && !removed ? { onBookmark } : {})}

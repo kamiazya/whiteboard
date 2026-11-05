@@ -1,5 +1,5 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { edgeA11yName, nodeA11yName } from './node-a11y-name.js'
 
@@ -23,6 +23,13 @@ describe('node accessible names', () => {
       textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'x'.repeat(200) }),
     )
     expect(name.length).toBeLessThanOrEqual(60)
+  })
+
+  // A stored image's reference is an opaque id, which reads aloud as noise:
+  // the node carries no file name, so it is named for what it is.
+  it('an image is named Image, never by its stored asset id', () => {
+    const image = fileNode({ id: 'i', x: 0, y: 0, width: 100, height: 80, file: 'asset:da39bbe6' })
+    expect(nodeA11yName(image)).toBe('Image')
   })
 
   it('a frame says it is one, with its label when it has one', () => {

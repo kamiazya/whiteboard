@@ -26,7 +26,10 @@ it is not saved in the document and does not change what anyone else sees.
 
 The rail is the surface a whole document has, so it reaches everything —
 including a conversation whose subject has since been deleted, which is
-marked `anchor gone` rather than hidden.
+marked `anchor gone` rather than hidden. On a canvas such a conversation keeps
+its pin where its node used to be, and its card says that what it was about
+has been deleted: deleting a node never deletes the conversations about it,
+including ones a duplicate carried over. **Resolve** puts it away.
 
 ## Comment on a passage of markdown
 
