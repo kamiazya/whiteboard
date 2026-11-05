@@ -37,7 +37,7 @@ export function addressBaseFor(name: string, kind: AddressedKind): string {
  * address and a new folder cannot take a document's. Numbered from `-2`
  * because the unsuffixed address IS the first one.
  */
-export function freePathIn(folder: string, base: string, existingPaths: readonly string[]): string {
+function freePathIn(folder: string, base: string, existingPaths: readonly string[]): string {
   const siblings = new Set(
     existingPaths.flatMap((path) => {
       const rest = pathBelow(folder, path)
