@@ -43,10 +43,7 @@ export function SelectionFacetsSection({
     source.getSelection,
   )
   const subject = inspectorSubject(canvas, selection.selectedId, selection.selectedEdgeId)
-  if (subject === undefined) {
-    const line = (canvas.lines ?? []).find((entry) => entry.id === selection.selectedEdgeId)
-    return line === undefined ? null : <LineSection drawing={isFreehandStroke(line)} />
-  }
+  if (subject === undefined) return lineSectionFor(canvas, selection.selectedEdgeId)
   const extraIds = new Set(selection.extraIds)
   const tagCommands = (after: readonly string[]) =>
     tagWriteCommands(currentCanvas(), subject, selection.selectedId, extraIds, after)
@@ -88,6 +85,11 @@ export function SelectionFacetsSection({
  * its verbs live, rather than leaving the panel to read "Whole canvas" while
  * a stroke is selected.
  */
+const lineSectionFor = (canvas: SpatialCanvas, id: string | null) => {
+  const line = (canvas.lines ?? []).find((entry) => entry.id === id)
+  return line === undefined ? null : <LineSection drawing={isFreehandStroke(line)} />
+}
+
 const LineSection = ({ drawing }: { drawing: boolean }) => (
   <section
     data-testid="selection-facets"

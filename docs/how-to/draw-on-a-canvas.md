@@ -44,6 +44,10 @@ While a drawing is selected the Display panel opens with a **This drawing**
 section above the canvas settings; a drawing has no shape, stencil or tags,
 so the section points you to the menu above.
 
+A screen reader finds each stroke in the canvas's contents list as "Drawing",
+and hears "Selected: Drawing" when one is selected; its end handles read
+"Move the start of this drawing".
+
 A drawing cannot carry a comment: comment on the box it circles instead.
 
 ← Back to [How-to guides](README.md)

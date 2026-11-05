@@ -1,9 +1,9 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import { readingOrder } from '../../lib/spatial/reading-order.js'
 import { canvasChangeMessage, selectionMessage } from './canvas-announcement-text.js'
-import { edgeA11yName, nodeA11yName } from './node-a11y-name.js'
+import { edgeA11yName, lineA11yName, nodeA11yName } from './node-a11y-name.js'
 
 /** The id of the option standing for a node or an edge, under one canvas's prefix. */
 function a11yItemId(prefix: string, kind: 'node' | 'edge', id: string): string {
@@ -66,7 +66,7 @@ function A11yOption({
 
 /**
  * The canvas is drawn, so the accessibility tree has nothing to say about
- * its contents. This is the parallel projection: every node and edge as a
+ * its contents. This is the parallel projection: every node, edge and line as a
  * named, selectable option, in the order Tab walks them, off-screen. Focus
  * stays on the canvas root, which points at the selected option with
  * `aria-activedescendant` — the same virtual-focus arrangement a listbox uses.
@@ -102,12 +102,39 @@ export function CanvasA11yTree({
       aria-multiselectable="true"
       className="sr-only pointer-events-none"
     >
+      <A11yOptions
+        canvas={canvas}
+        nodes={nodes}
+        idPrefix={idPrefix}
+        selectedNodeIds={selectedSet}
+        selectedEdgeId={selectedEdgeId}
+      />
+    </div>
+  )
+}
+
+/** Every node, edge and line as an option, in that order. */
+function A11yOptions({
+  canvas,
+  nodes,
+  idPrefix,
+  selectedNodeIds,
+  selectedEdgeId,
+}: {
+  readonly canvas: SpatialCanvas
+  readonly nodes: readonly SpatialNode[]
+  readonly idPrefix: string
+  readonly selectedNodeIds: ReadonlySet<string>
+  readonly selectedEdgeId: string | null
+}) {
+  return (
+    <>
       {nodes.map((node) => (
         <A11yOption
           key={node.id}
           id={a11yItemId(idPrefix, 'node', node.id)}
           name={nodeA11yName(node)}
-          selected={selectedSet.has(node.id)}
+          selected={selectedNodeIds.has(node.id)}
         />
       ))}
       {canvas.edges.map((edge) => (
@@ -118,6 +145,16 @@ export function CanvasA11yTree({
           selected={edge.id === selectedEdgeId}
         />
       ))}
-    </div>
+      {/* Lines share the edge id space on purpose: one selection key names
+      either, so the active descendant finds a selected stroke unchanged. */}
+      {(canvas.lines ?? []).map((line) => (
+        <A11yOption
+          key={line.id}
+          id={a11yItemId(idPrefix, 'edge', line.id)}
+          name={lineA11yName(line, canvas.nodes)}
+          selected={line.id === selectedEdgeId}
+        />
+      ))}
+    </>
   )
 }

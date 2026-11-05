@@ -44,6 +44,7 @@ export function EdgeBendLayer({
       path={path}
       stored={stored}
       zoom={viewport.zoom}
+      noun={'kind' in edge.from ? 'line' : 'connection'}
       onPress={(press, event) => {
         const root = begin(event)
         if (root === null) return

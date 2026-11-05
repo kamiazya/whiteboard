@@ -173,8 +173,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
   'apps/web/src/components/spatial-editor/DragPreviewLayer.tsx#DragPreviewLayer': 80,
-  'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 102,
-  'apps/web/src/components/spatial-editor/EdgeEndHandles.tsx#EdgeEndHandles': 68,
+  'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 105, // +3: a ruled line's bends are read as the line's, not a connection's
   'apps/web/src/components/spatial-editor/EdgeSelectionHighlight.tsx#EdgeSelectionHighlight': 52,
   'apps/web/src/components/spatial-editor/LegendOverlay.tsx#LegendOverlay': 73,
   'apps/web/src/components/spatial-editor/LinkEmbedLayer.tsx#LinkEmbedLayer': 98,

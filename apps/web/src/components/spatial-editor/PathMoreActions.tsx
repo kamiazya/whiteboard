@@ -37,56 +37,61 @@ export function PathMoreActions({
   const scale = Math.max(zoom, 0.01)
   // The node chip's sizes: a finger needs 44.
   const size = (hasCoarsePointer() ? 44 : 24) / scale
-  const left = right - size
-  const y = top - size - 6 / scale
-  const cx = left + size / 2
-  const cy = y + size / 2
-  const open = () => onOpen({ x: cx, y: cy })
   return (
     <svg
       style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
     >
       <title>Selection actions</title>
-      {/* biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand. */}
-      <g
-        data-testid="path-more-actions"
-        role="button"
-        tabIndex={0}
-        aria-label={`More actions for ${subject}`}
-        aria-haspopup="menu"
-        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-        onPointerDown={(e) => {
-          // Keep the press away from the root's hit-test; the action fires
-          // on pointerup, because the root cancels a touch tap's click.
-          e.stopPropagation()
-        }}
-        onPointerUp={(e) => {
-          e.stopPropagation()
-          open()
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return
-          e.preventDefault()
-          open()
-        }}
-      >
-        <rect
-          x={left}
-          y={y}
-          width={size}
-          height={size}
-          rx={6 / scale}
-          fill="var(--background)"
-          stroke={TOOL_EDGE}
-          strokeWidth={1 / scale}
-        />
-        {/* Three dots as circles rather than a glyph a platform font may
-          draw as emoji or tofu. */}
-        {[-5, 0, 5].map((dx) => (
-          <circle key={dx} cx={cx + dx / scale} cy={cy} r={1.6 / scale} fill={TOOL_INK} />
-        ))}
-      </g>
+      <DotsButton
+        box={{ x: right - size, y: top - size - 6 / scale, size }}
+        scale={scale}
+        label={`More actions for ${subject}`}
+        onOpen={onOpen}
+      />
     </svg>
+  )
+}
+
+function DotsButton({
+  box,
+  scale,
+  label,
+  onOpen,
+}: {
+  readonly box: { readonly x: number; readonly y: number; readonly size: number }
+  readonly scale: number
+  readonly label: string
+  readonly onOpen: (anchor: Point) => void
+}) {
+  const cx = box.x + box.size / 2
+  const cy = box.y + box.size / 2
+  const open = () => onOpen({ x: cx, y: cy })
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+    <g
+      data-testid="path-more-actions"
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      aria-haspopup="menu"
+      style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+      onPointerDown={(e) => {
+        // Keep the press away from the root's hit-test; the action fires on
+        // pointerup, because the root cancels a touch tap's click.
+        e.stopPropagation()
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation()
+        open()
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        open()
+      }}
+    >
+      <DotsGlyph box={box} scale={scale} />
+    </g>
   )
 }
 
@@ -110,4 +115,35 @@ export function pathMenuTarget(
     point,
     variant: rootWidth < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
   }
+}
+
+/** The chip's look: the node chip's quiet pill with three drawn dots. */
+function DotsGlyph({
+  box,
+  scale,
+}: {
+  readonly box: { readonly x: number; readonly y: number; readonly size: number }
+  readonly scale: number
+}) {
+  const cx = box.x + box.size / 2
+  const cy = box.y + box.size / 2
+  return (
+    <>
+      <rect
+        x={box.x}
+        y={box.y}
+        width={box.size}
+        height={box.size}
+        rx={6 / scale}
+        fill="var(--background)"
+        stroke={TOOL_EDGE}
+        strokeWidth={1 / scale}
+      />
+      {/* Three dots as circles rather than a glyph a platform font may draw
+        as emoji or tofu. */}
+      {[-5, 0, 5].map((dx) => (
+        <circle key={dx} cx={cx + dx / scale} cy={cy} r={1.6 / scale} fill={TOOL_INK} />
+      ))}
+    </>
+  )
 }

@@ -1,4 +1,5 @@
 import {
+  type CanvasLine,
   frameLabel,
   isFrame,
   isImageRef,
@@ -8,6 +9,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { documentLabel } from '../../lib/document-label.js'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 
 const NAME_MAX_CHARS = 60
 
@@ -68,6 +70,17 @@ export function edgeA11yName(
 ): string {
   const base = `Edge ${edgeRoute(edge, nodes)}`
   const label = edge.label?.trim()
+  return label === undefined || label === '' ? base : `${base}: ${clip(label)}`
+}
+
+/**
+ * A LINE by name: "Drawing" for a stroke somebody drew, "Line from A to
+ * empty space" for one ruled between two points — never "Edge", because a
+ * line asserts no relation (ADR-0038 decision 2).
+ */
+export function lineA11yName(line: CanvasLine, nodes: readonly SpatialNode[]): string {
+  const base = isFreehandStroke(line) ? 'Drawing' : `Line ${edgeRoute(line, nodes)}`
+  const label = line.label?.trim()
   return label === undefined || label === '' ? base : `${base}: ${clip(label)}`
 }
 

@@ -95,9 +95,12 @@ export function EdgeBendHandles({
   onPress,
   onRemove,
   onNudge,
+  noun = 'connection',
 }: {
   readonly path: readonly Point[]
   readonly stored: readonly Point[]
+  /** What the bends belong to, aloud: a relation is a connection, a ruled stroke a line. */
+  readonly noun?: 'connection' | 'line'
   readonly zoom: number
   readonly onPress: (press: BendPress, event: React.PointerEvent) => void
   readonly onRemove: (index: number) => void
@@ -111,7 +114,7 @@ export function EdgeBendHandles({
     <svg
       style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
     >
-      <title>Connection bends</title>
+      <title>Bends</title>
       {ghostPresses(path, stored, zoom).map((ghost) => (
         <circle
           key={`ghost-${ghost.index}-${ghost.at.x}-${ghost.at.y}`}
@@ -164,7 +167,7 @@ export function EdgeBendHandles({
           // change they can be looking at.
           role="button"
           tabIndex={0}
-          aria-label={`Bend ${index + 1} of the connection`}
+          aria-label={`Bend ${index + 1} of the ${noun}`}
           onKeyDown={(event) => {
             const step = NUDGE_STEP_PX * (event.shiftKey ? NUDGE_SHIFT_FACTOR : 1)
             const delta = NUDGE_KEYS[event.key]

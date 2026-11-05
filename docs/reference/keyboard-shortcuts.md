@@ -274,6 +274,9 @@ walks them: by where they sit, top to bottom and then left to right, not by
 the order they were added, so a note placed above another is read first. The
 canvas points at the selected one: a note by its first
 line, a frame as "Frame cluster", an edge as "Edge from Review to Ship: then".
+A stroke made with Draw is listed after them as "Drawing", and a line dragged out
+to empty space as "Line from Review to empty space"; neither is called a
+connection, because a line asserts no relation.
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 and what you do is said back: "Note added", "Connected Review to Ship",
 "Grouped 3 nodes", "Deleted 2 nodes". Choosing how edges are drawn in the

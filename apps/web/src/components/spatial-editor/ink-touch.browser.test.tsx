@@ -7,6 +7,7 @@
 import type { CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import { tick } from '../../test-utils/async.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
@@ -135,6 +136,9 @@ it('a ruled line keeps the bend it was given', async () => {
   await vi.waitFor(() =>
     expect(container.querySelectorAll('[data-testid="edge-bend-handle"]')).toHaveLength(1),
   )
+  expect(
+    container.querySelector('[data-testid="edge-bend-handle"]')?.getAttribute('aria-label'),
+  ).toBe('Bend 1 of the line')
 })
 
 it('a finger gets a 44px target for each end of a selected line', async () => {
@@ -204,4 +208,27 @@ it('a long-press on a selected drawing opens its menu', async () => {
   // Waited on as a condition: the menu is what the hold produces.
   await vi.waitFor(() => expect(menuLabels(container)).toContain('Delete'), { timeout: 2000 })
   touch(root, 'pointerup', onStroke.x, onStroke.y)
+})
+
+it('names a drawing as a drawing, in the contents list and on its handles', async () => {
+  // A Line is not an Edge: a pen stroke asserts no relation, and hearing
+  // "connection" for one says it does.
+  const { Host } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  const option = () =>
+    [...container.querySelectorAll('[role="option"]')].find(
+      (entry) => entry.getAttribute('aria-label') === 'Drawing',
+    )
+  await vi.waitFor(() => expect(option()).toBeDefined())
+
+  await tapOn(root, onStroke)
+  await vi.waitFor(() => expect(option()?.getAttribute('aria-selected')).toBe('true'))
+  expect(root.getAttribute('aria-activedescendant')).toBe(option()?.id)
+  const ends = [...container.querySelectorAll('[data-testid^="edge-end-handle-"]')].map((end) =>
+    end.getAttribute('aria-label'),
+  )
+  expect(ends).toEqual(['Move the start of this drawing', 'Move the end of this drawing'])
+  await vi.waitFor(() => expect(canvasAnnouncement().trim()).toBe('Selected: Drawing'))
 })

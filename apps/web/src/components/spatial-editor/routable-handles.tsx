@@ -3,12 +3,13 @@ import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { BoxTargetOverlay } from './BoxTargetOverlay.js'
+import type { ContextMenuTarget } from './CanvasContextMenu.js'
 import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeEndHandles } from './EdgeEndHandles.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import type { EditorGesture } from './editor-gesture.js'
 import { otherEndNodeOf } from './gesture-ends.js'
-import { PathMoreActions } from './PathMoreActions.js'
+import { PathMoreActions, pathMenuTarget } from './PathMoreActions.js'
 
 export interface RoutableHandlesProps {
   readonly gesture: EditorGesture
@@ -20,8 +21,11 @@ export interface RoutableHandlesProps {
   readonly boxes: readonly NodeBox[]
   readonly selectableBoxes: readonly NodeBox[]
   readonly createId: (() => string) | undefined
-  /** Opens the selection's menu for the lead id, anchored at a canvas point. */
-  readonly onMoreActions?: (id: string, anchor: Point) => void
+  /** Where the selection's more-actions chip opens its menu, and how wide the editor is. */
+  readonly menu?: {
+    readonly open: (target: ContextMenuTarget) => void
+    readonly rootWidth: number
+  }
 }
 
 /**
@@ -40,8 +44,8 @@ export function RoutableHandles(props: RoutableHandlesProps) {
           offset={inkDragOffset(gesture)}
         />
       )}
-      {props.onMoreActions !== undefined && state.kind === 'idle' && (
-        <MoreActionsChip {...props} onMoreActions={props.onMoreActions} />
+      {props.menu !== undefined && state.kind === 'idle' && (
+        <MoreActionsChip {...props} menu={props.menu} />
       )}
       {selectedRoutable !== undefined && (
         <PathHandles
@@ -61,8 +65,8 @@ function MoreActionsChip({
   gesture,
   selectedInkIds,
   edgePaths,
-  onMoreActions,
-}: RoutableHandlesProps & { readonly onMoreActions: (id: string, anchor: Point) => void }) {
+  menu,
+}: RoutableHandlesProps & { readonly menu: NonNullable<RoutableHandlesProps['menu']> }) {
   const [lead] = selectedInkIds
   if (lead === undefined) return null
   const paths = edgePaths.filter((entry) => selectedInkIds.includes(entry.id))
@@ -71,7 +75,7 @@ function MoreActionsChip({
       paths={paths.map((entry) => entry.path)}
       zoom={gesture.viewport.zoom}
       subject={pathSubject(gesture.canvas, selectedInkIds)}
-      onOpen={(anchor) => onMoreActions(lead, anchor)}
+      onOpen={(anchor) => menu.open(pathMenuTarget(lead, anchor, gesture.viewport, menu.rootWidth))}
     />
   )
 }
@@ -117,6 +121,7 @@ function PathHandles({
       <EdgeEndHandles
         path={path}
         zoom={gesture.viewport.zoom}
+        subject={pathSubject(gesture.canvas, [element.id])}
         onArm={(endpoint, event) => {
           if (event !== undefined) gesture.beginOverlay(event)
           gesture.dispatch({ type: 'pointerdown-end', elementId: element.id, endpoint })
