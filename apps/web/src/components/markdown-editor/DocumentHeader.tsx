@@ -11,18 +11,18 @@ export interface DocumentHeaderProps {
 }
 
 /**
- * The rendered projection of the OKF core facets, shown above the document
- * body in Read mode. Display-only by design: facet EDITING stays in
- * `DocumentProperties` (the header row), which owns the whole-`StoredCoreFacets`
- * emit contract — a second editor here would race it.
- */
-/**
  * The OKF types that say nothing a reader does not already know: a page
  * without core facets stands in its kind (`markdown`), and a note made here
  * is typed `note`. An authored type — `decision`, `lesson-plan` — is shown.
  */
 const UNREMARKABLE_TYPES: ReadonlySet<string> = new Set(['markdown', 'note'])
 
+/**
+ * The rendered projection of the OKF core facets, shown above the document
+ * body in Read mode. Display-only by design: facet EDITING stays in
+ * `DocumentProperties` (the header row), which owns the whole-`StoredCoreFacets`
+ * emit contract — a second editor here would race it.
+ */
 export function DocumentHeader({ title, meta }: DocumentHeaderProps) {
   const tags = meta.tags ?? []
   const type = UNREMARKABLE_TYPES.has(meta.type) ? undefined : meta.type

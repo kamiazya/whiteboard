@@ -137,12 +137,7 @@ export function DocumentMenu({
         </Tooltip>
         <DropdownMenuContent align="end">
           {onExport && <ExportSubmenu onExport={onExport} kind={kind} selection={selection} />}
-          {onPrint && (
-            <DropdownMenuItem onSelect={onPrint} className="gap-2">
-              <Printer aria-hidden="true" className="size-3.5" />
-              Print / Save as PDF…
-            </DropdownMenuItem>
-          )}
+          {onPrint && <PrintItem onPrint={onPrint} />}
           {onBookmark && (
             <DropdownMenuItem onSelect={onBookmark} className="gap-2">
               <BookmarkPlus aria-hidden="true" className="size-3.5" />
@@ -211,26 +206,7 @@ function ExportSubmenu({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <PictureEntries kind={kind} picture={picture} />
-        {kind === 'markdown' && (
-          <DropdownMenuItem
-            onSelect={() => onExport('md')}
-            className="flex-col items-start gap-0.5"
-            aria-describedby="markdown-export-scope"
-          >
-            Save as Markdown (.md)
-            {/* Said where the choice is made: the file is the text, and a
-                handout with its pictures is the print. Hidden from the
-                item's NAME and read as its description instead. */}
-            <span
-              id="markdown-export-scope"
-              aria-hidden="true"
-              className="text-muted-foreground text-xs"
-            >
-              Text only — pictures and embedded diagrams are not included. For a handout, use Print
-              / Save as PDF.
-            </span>
-          </DropdownMenuItem>
-        )}
+        {kind === 'markdown' && <MarkdownSaveItem onSave={() => onExport('md')} />}
         {kind === 'spatial' && (
           <DropdownMenuItem onSelect={() => onExport('canvas')}>
             Save as JSON Canvas (.canvas)
@@ -322,5 +298,33 @@ function PictureOptionItems({
         With background
       </DropdownMenuCheckboxItem>
     </>
+  )
+}
+
+function PrintItem({ onPrint }: { readonly onPrint: () => void }) {
+  return (
+    <DropdownMenuItem onSelect={onPrint} className="gap-2">
+      <Printer aria-hidden="true" className="size-3.5" />
+      Print / Save as PDF…
+    </DropdownMenuItem>
+  )
+}
+
+function MarkdownSaveItem({ onSave }: { readonly onSave: () => void }) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSave}
+      className="flex-col items-start gap-0.5"
+      aria-describedby="markdown-export-scope"
+    >
+      Save as Markdown (.md)
+      {/* Said where the choice is made: the file is the text, and a
+          handout with its pictures is the print. Hidden from the
+          item's NAME and read as its description instead. */}
+      <span id="markdown-export-scope" aria-hidden="true" className="text-muted-foreground text-xs">
+        Text only — pictures and embedded diagrams are not included. For a handout, use Print / Save
+        as PDF.
+      </span>
+    </DropdownMenuItem>
   )
 }

@@ -13,7 +13,7 @@
  * second one here would silently answer for the preview.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type RailBlock,
   railGeometry,
@@ -80,23 +80,7 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
   }
 
   return (
-    // Named as one graphic — "Document map" — and labelled on screen, so the
-    // strip is not an unexplained column of bars. Its bars stay out of the
-    // accessibility tree: the rail duplicates scrolling the panes already
-    // expose to the keyboard, so it is a shortcut rather than the only route,
-    // and announcing every block would be noise.
-    <div
-      role="img"
-      aria-label="Document map: where you are in this note"
-      style={{ width: RAIL_WIDTH_PX }}
-      className={cn('flex shrink-0 flex-col border-l border-border bg-muted/20', className)}
-    >
-      <span
-        aria-hidden="true"
-        className="text-muted-foreground shrink-0 select-none py-0.5 text-center text-[10px] leading-3"
-      >
-        Map
-      </span>
+    <RailFrame className={className}>
       <div
         ref={railRef}
         data-testid="markdown-minimap-rail"
@@ -121,6 +105,32 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
           style={{ top: frame.top, height: frame.height }}
         />
       </div>
+    </RailFrame>
+  )
+}
+
+/**
+ * The rail's frame: named as one graphic — "Document map" — and labelled on
+ * screen, so the strip is not an unexplained column of bars. Its bars stay
+ * out of the accessibility tree: the rail duplicates scrolling the panes
+ * already expose to the keyboard, so it is a shortcut rather than the only
+ * route, and announcing every block would be noise.
+ */
+function RailFrame({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div
+      role="img"
+      aria-label="Document map: where you are in this note"
+      style={{ width: RAIL_WIDTH_PX }}
+      className={cn('flex shrink-0 flex-col border-l border-border bg-muted/20', className)}
+    >
+      <span
+        aria-hidden="true"
+        className="text-muted-foreground shrink-0 select-none py-0.5 text-center text-[10px] leading-3"
+      >
+        Map
+      </span>
+      {children}
     </div>
   )
 }

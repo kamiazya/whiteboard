@@ -118,7 +118,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
   // +3: `tagLibrary`, threaded to the preview pane.
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 86,
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 88, // +2: the print view beside the preview
   // +3: `onRequestImage`, the touch bar's Image slot.
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 56,
   // +1: `pickImage`, offered only by a host that stores files.
@@ -299,7 +299,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
-  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 64,
+  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 68, // +4: decoded picture sizes ride with each href
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   // The receiving half of a cross-origin transfer, as one sequence: announce,
   // listen, accept, report. The workspace list is already split out
@@ -342,7 +342,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
-  'apps/web/src/lib/layout-worker.ts#handleLayout': 68,
+  'apps/web/src/lib/layout-worker.ts#handleLayout': 69, // +1: commentLayer, for a thumbnail drawn without comments
   'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 277,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
@@ -379,7 +379,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 67, // +2: the page heading is where Enter in the title hands focus
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
   // The row's controls in one JSX run; the notice prop is one more spread.
-  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 57, // +4: the export's selection scope passes through to the menu
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 58, // +4: the export's selection scope passes through to the menu; +1: a note's print row
   // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
@@ -436,7 +436,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // most of its lines and splitting them out would be a component per row, which
   // is the shape this bundle exists to avoid. The JSON Canvas row is the third
   // of the three the daemon page was missing.
-  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
+  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 85, // +5: the Move to folder… row and its picker
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
@@ -467,7 +467,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
   // +1: the table rows take the inline typesetter by argument, since the
   // table module may not import the typesetter back.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 190,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 192, // +2: a paragraph that is one picture is a figure
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
   // The inline-run walker's inner steps are NAMED (emitAtomic / placeCollapsed /
