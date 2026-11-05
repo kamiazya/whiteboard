@@ -62,6 +62,17 @@ export function describeMoveDocumentName(
       })
     })
 
+    it('is refused beside the named document it was nested under', async () => {
+      await withIndex(async (index) => {
+        await create(index, workspaceId, 'p', 'R')
+        await create(index, workspaceId, 'p/q')
+        await expect(index.moveDocument({ workspaceId, from: 'p/q', to: 'r' })).rejects.toThrow(
+          DisplayNameTakenError,
+        )
+        expect(await paths(index, workspaceId)).toEqual(['p', 'p/q'])
+      })
+    })
+
     describeMoveKeepsName(withIndex, workspaceId)
   })
 }
@@ -120,6 +131,27 @@ export function describeMoveFolderName(
         await expect(
           index.moveDocument({ workspaceId, from: 'old/w', to: 'term/w' }),
         ).rejects.toThrow(DisplayNameTakenError)
+      })
+    })
+
+    it('is refused beside the named folder it leaves, when that folder stays', async () => {
+      await withIndex(async (index) => {
+        await create(index, workspaceId, 'a/b/x')
+        await create(index, workspaceId, 'a/c')
+        await index.setFolderName({ workspaceId, path: 'a', name: 'B' })
+        await expect(index.moveDocument({ workspaceId, from: 'a/b', to: 'b' })).rejects.toThrow(
+          DisplayNameTakenError,
+        )
+        expect(await paths(index, workspaceId)).toEqual(['a/b/x', 'a/c'])
+      })
+    })
+
+    it('is no duplicate of the named folder the move empties', async () => {
+      await withIndex(async (index) => {
+        await create(index, workspaceId, 'a/b/x')
+        await index.setFolderName({ workspaceId, path: 'a', name: 'B' })
+        await index.moveDocument({ workspaceId, from: 'a/b', to: 'b' })
+        expect(await paths(index, workspaceId)).toEqual(['b/x'])
       })
     })
 

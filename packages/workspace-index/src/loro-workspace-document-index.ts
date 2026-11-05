@@ -700,11 +700,7 @@ function refuseMovedName(
     const kind = root.type
     const name = root.type === 'folder' ? root.name : root.meta.name
     const staying = nodes.flatMap((node) =>
-      // An ancestor of `from` either empties with the move (and is gone) or
-      // stays and collides on path, which was refused before this runs.
-      node.type === kind &&
-      !isSelfOrDescendant(node.path, from) &&
-      !isSelfOrDescendant(from, node.path)
+      node.type === kind && !isSelfOrDescendant(node.path, from) && !emptiedBy(nodes, node, from)
         ? [{ path: node.path, name: node.type === 'folder' ? node.name : node.meta.name }]
         : [],
     )
@@ -712,6 +708,22 @@ function refuseMovedName(
       throw new DisplayNameTakenError(kind, to, name ?? to.slice(to.lastIndexOf('/') + 1))
     }
   }
+}
+
+/**
+ * Whether moving `from` away leaves `node` — one of its ancestors — with no
+ * document under it, so `pruneEmptyFolders` removes it with the move. Every
+ * other ancestor stays, and shows its name beside the moved root like any
+ * sibling: a document always stays, and so does a folder still holding one.
+ */
+function emptiedBy(nodes: readonly WorkspaceNode[], node: WorkspaceNode, from: string): boolean {
+  if (node.type !== 'folder' || !isSelfOrDescendant(from, node.path)) return false
+  return !nodes.some(
+    (other) =>
+      other.type === 'document' &&
+      isSelfOrDescendant(other.path, node.path) &&
+      !isSelfOrDescendant(other.path, from),
+  )
 }
 
 /** The address an unnamed document takes so it does not read like a named sibling. */
