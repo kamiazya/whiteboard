@@ -86,6 +86,37 @@ const visualInkFacetSchema = z.object({
 export const VISUAL_INK_KEY = 'visual.ink/v0'
 
 /**
+ * The weights a stroke can be drawn at. `thin` is the weight every line has
+ * always had, and it is the ABSENT facet — never a stored value — so a
+ * board drawn before widths existed, and every line an import or an agent
+ * wrote, keeps the weight it was drawn at. The same convention as
+ * `visual.shape/v0`'s rect.
+ */
+export const STROKE_WIDTHS = ['thin', 'medium', 'thick'] as const
+
+export type StrokeWidth = (typeof STROKE_WIDTHS)[number]
+
+/**
+ * `visual.stroke/v0` — how heavy a stroke is drawn.
+ *
+ * A facet rather than a field of the line: it says how a line DRAWS, which
+ * is what this plugin is for, and it rides the facet bucket every projection
+ * already carries, so a JSON Canvas or OCIF reader gets it the way it gets
+ * the stroke's `curved` routing. Its own facet rather than a field of
+ * `visual.ink/v0`, because that one is an identity that Group and Ungroup
+ * write and remove whole — a weight stored there would be lost to an
+ * Ungroup.
+ *
+ * Named weights rather than pixels: the renderer scales the THEME's line
+ * weight by them, so a theme that draws heavier draws every weight heavier.
+ */
+const visualStrokeFacetSchema = z.object({
+  width: z.enum(['medium', 'thick']),
+})
+
+export const VISUAL_STROKE_KEY = 'visual.stroke/v0'
+
+/**
  * The most semantic axes one board may declare when it is written.
  *
  * A board declares a handful — the two-axis case above is the one the
@@ -359,6 +390,17 @@ export const visualPlugin = definePlugin({
       // exist, or break one apart by a typo. Grouping is made and unmade by
       // the gesture that draws — and by the menu's Ungroup, which removes
       // the facet rather than editing it.
+    }),
+    defineFacet({
+      name: 'stroke',
+      displayName: 'Stroke',
+      version: 'v0',
+      // EDGE target, where a line's facets live — the slot `visual.ink/v0`
+      // takes for the same reason.
+      targets: ['edge'],
+      schema: visualStrokeFacetSchema,
+      // No editor spec: the width is chosen by the draw tool's options and
+      // by a drawing's own menu, the two places a person picks a pen.
     }),
     defineFacet({
       name: 'shape',
@@ -668,6 +710,24 @@ export function resolveInkGroup(
   if (resolution.kind !== 'resolved') return undefined
   const parsed = visualInkFacetSchema.safeParse(resolution.value)
   return parsed.success ? parsed.data.group : undefined
+}
+
+/**
+ * The weight a stroke is drawn at — `thin` when it carries none, and when
+ * what it carries cannot be read: facets round-trip unvalidated through the
+ * generic bucket, and a weight nobody can read must not take the stroke
+ * down with it.
+ */
+export function resolveStrokeWidth(
+  element: RoutableElement,
+  registry: FacetRegistry = bundledFacetRegistry,
+): StrokeWidth {
+  const stored = element.facets?.[VISUAL_STROKE_KEY]
+  if (stored === undefined) return 'thin'
+  const resolution = registry.resolveFacetPayload(VISUAL_STROKE_KEY, stored)
+  if (resolution.kind !== 'resolved') return 'thin'
+  const parsed = visualStrokeFacetSchema.safeParse(resolution.value)
+  return parsed.success ? parsed.data.width : 'thin'
 }
 
 /**

@@ -73,6 +73,7 @@ import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { RoutingBudget } from './edges/routing-budget.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
+import { weighStroke } from './edges/stroke-weight.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
@@ -145,7 +146,7 @@ function composeEdge(
     options.nodeOutlines,
     options.shapeTable,
   )
-  const appearance = options.appearance.resolveEdge(edge)
+  const appearance = weighStroke(options.appearance.resolveEdge(edge), edge)
   const ink = sketchInkFor(edge.id, options, false)
   return {
     ...routed,
