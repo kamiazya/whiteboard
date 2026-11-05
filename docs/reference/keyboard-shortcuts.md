@@ -266,7 +266,7 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
 | `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
-| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. In a markdown document a blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
+| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. A blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 | `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
 

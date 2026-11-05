@@ -55,7 +55,7 @@ import {
 } from '../markdown-editor/annotation-decorations.js'
 import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
 import { completionPopupTheme, completionTouchAccept } from '../markdown-editor/completion-popup.js'
-import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
+import { endListOnEmptyItem } from '../markdown-editor/exit-empty-list-item.js'
 import {
   activeMarkdownEditorFor,
   followCaret,
@@ -274,7 +274,7 @@ export function MarkdownNodeEditor({
                 // and a backspace — and the dialog read `active` for both.
                 // Add it here when a second source arrives.
                 if (completionStatus(view.state) === 'active') return acceptCompletion(view) || true
-                return exitEmptyListItem(view)
+                return endListOnEmptyItem(view)
               },
             },
           ]),
