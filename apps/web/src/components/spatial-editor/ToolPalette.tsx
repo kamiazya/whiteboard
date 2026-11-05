@@ -473,7 +473,7 @@ export function ToolPalette({
                 type="button"
                 role="menuitem"
                 aria-label={entry.label}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent pointer-coarse:min-h-11 focus-visible:bg-accent focus-visible:outline-none"
                 // Tapping keeps the viewport-center placement; dragging hands
                 // the choice of place to the person making the thing, which is
                 // what stops the view jumping to wherever the center happened
