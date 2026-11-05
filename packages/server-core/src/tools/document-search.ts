@@ -9,6 +9,7 @@ import {
   excerpterFor,
   folderNamesOf,
   fullTextSearch,
+  linkLabelsFrom,
   type SearchableDocument,
 } from '@kamiazya/whiteboard-search'
 import { type DocumentTermsCache, termsCacheFor } from '../search/document-terms-cache.js'
@@ -231,7 +232,11 @@ export function createDocumentSearchTool(
       if (embedder === undefined) {
         // The returned page IS the prefix of the full ranking here, so the
         // index is the rank.
-        const hits = fullTextSearch(searchable, query, { limit: parsed.limit, termsOf })
+        const hits = fullTextSearch(searchable, query, {
+          limit: parsed.limit,
+          termsOf,
+          linkLabel: linkLabelsFrom(entries),
+        })
         return {
           results: hits.map((hit, index) =>
             describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
@@ -248,7 +253,7 @@ export function createDocumentSearchTool(
         excerpts: false,
         termsOf,
       })
-      const excerptsOf = excerpterFor(query)
+      const excerptsOf = excerpterFor(query, linkLabelsFrom(entries))
       const excerpt = (documentId: string): string[] => {
         const doc = byId.get(documentId)
         return doc === undefined ? [] : excerptsOf(doc)

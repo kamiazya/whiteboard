@@ -87,7 +87,9 @@ describe('GET /backlinks', () => {
     const one = await backlinksOf(deps, target.documentId)
     expect(one.backlinks).toHaveLength(1)
     expect(one.backlinks[0]?.contexts).toHaveLength(1)
-    expect(one.backlinks[0]?.contexts[0]).toContain('[[target]]')
+    // The excerpt reads each link as the preview does: [[target]] by the
+    // target's name, the unresolved [[Release plan]] as its own words.
+    expect(one.backlinks[0]?.contexts[0]).toBe('see Release plan and Release plan')
   })
 
   it('reports spatial references: embed node, file-node path ref, text-node wikilink', async () => {

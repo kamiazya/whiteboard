@@ -34,6 +34,7 @@ import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard
 import {
   folderNamesOf,
   fullTextSearch,
+  linkLabelsFrom,
   type SearchableDocument,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
@@ -508,15 +509,17 @@ export function createBrowserFilesSource(
       const { emojiSearchText } = await import(
         '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
       )
-      return fullTextSearch(searchable, query, { limit, alsoIndex: emojiSearchText }).flatMap(
-        (hit) => {
-          const document = byId.get(hit.documentId)
-          rank += 1
-          return document === undefined
-            ? []
-            : [{ document, contexts: [...hit.contexts], lexicalRank: rank }]
-        },
-      )
+      return fullTextSearch(searchable, query, {
+        limit,
+        alsoIndex: emojiSearchText,
+        linkLabel: linkLabelsFrom(entries),
+      }).flatMap((hit) => {
+        const document = byId.get(hit.documentId)
+        rank += 1
+        return document === undefined
+          ? []
+          : [{ document, contexts: [...hit.contexts], lexicalRank: rank }]
+      })
     },
 
     async setDocumentName(entry, name): Promise<void> {

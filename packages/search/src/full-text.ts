@@ -1,6 +1,6 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { type Folded, foldForSearch, foldWithOffsets, spanOf } from './fold.js'
-import { snippetAround } from './snippet.js'
+import { type LinkLabel, snippetAround } from './snippet.js'
 
 /**
  * Dictionary-free lexical search: latin runs tokenize as lowercased words,
@@ -285,6 +285,8 @@ interface SearchOptions {
    * then the caller's to have applied when it built them.
    */
   readonly termsOf?: (doc: SearchableDocument) => DocumentTerms
+  /** What a `[[link]]` in an excerpt shows: its target's display name (`snippetAround`). */
+  readonly linkLabel?: LinkLabel
 }
 
 /**
@@ -300,6 +302,7 @@ export function fullTextSearch(
     excerpts = true,
     alsoIndex,
     termsOf = (doc) => documentTerms(doc, alsoIndex),
+    linkLabel,
   }: SearchOptions = {},
 ): SearchHit[] {
   const queryTokens = [...new Set(tokenize(query))]
@@ -324,7 +327,7 @@ export function fullTextSearch(
   const scored = rankWithFolders(documents, own, inFolders)
   // Excerpts only for what is answered: they cost a scan of every text per
   // query token, and ranking never reads them.
-  const contextsFor = excerpts ? excerpterFor(query) : () => []
+  const contextsFor = excerpts ? excerpterFor(query, linkLabel) : () => []
   return scored.slice(0, limit).map(({ doc, score }) => ({
     documentId: doc.documentId,
     score,
@@ -381,7 +384,10 @@ function firstMatch(folded: Folded, needle: string, tokens: readonly string[]): 
  * A query that only matches token-wise centres on the first matching token.
  * Built once per query, so its tokens are cut up once rather than per hit.
  */
-export function excerpterFor(query: string): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
+export function excerpterFor(
+  query: string,
+  linkLabel?: LinkLabel,
+): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
   const needle = foldForSearch(query.trim())
   const tokens = [...new Set(tokenize(query))].slice(0, EXCERPT_TOKENS_MAX)
   return (doc) =>
@@ -392,5 +398,5 @@ export function excerpterFor(query: string): (doc: Pick<SearchableDocument, 'tex
       })
       .sort((a, b) => b.match.score - a.match.score || a.order - b.order)
       .slice(0, 3)
-      .map(({ text, match }) => snippetAround(text, match.index, match.length))
+      .map(({ text, match }) => snippetAround(text, match.index, match.length, linkLabel))
 }

@@ -81,7 +81,12 @@ describe('backlinks', () => {
     const out = backlinksIn(entries as never, new Map([[B, { refs, texts: [] }]]), A)
     expect(out.backlinks).toHaveLength(1)
     expect(out.backlinks[0]?.contexts).toEqual(
-      refs.slice(0, 3).map((ref) => snippetAround(text, ref.index, ref.length)),
+      // The id link reads as the document it names, by its path's leaf.
+      refs
+        .slice(0, 3)
+        .map((ref) =>
+          snippetAround(text, ref.index, ref.length, (t) => (t === A ? 'plan' : undefined)),
+        ),
     )
   })
 })

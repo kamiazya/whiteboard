@@ -1,7 +1,7 @@
 import { createUniqueNameResolver, findNextReference } from '@kamiazya/whiteboard-codec'
 import { compareCodeUnit, documentKindSchema, documentPathSchema } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { snippetAround } from '@kamiazya/whiteboard-search'
+import { type LinkLabel, linkLabelsFrom, snippetAround } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 
 /**
@@ -71,9 +71,27 @@ const rawReferenceSchema = z.union([
 ])
 export type RawReference = z.infer<typeof rawReferenceSchema>
 
-/** The excerpt a backlink shows for `ref`. */
-function referenceContext(ref: RawReference): string {
-  return ref.via === 'wikilink' ? snippetAround(ref.text, ref.index, ref.length) : ref.context
+/**
+ * The excerpt a backlink shows for `ref`, every `[[link]]` in it read as the
+ * display name of what it points at. Labelled when ASKED, from the current
+ * listing, rather than at extraction: a rename moves the name without
+ * touching the source, so a label cut into the facts would go stale.
+ */
+function referenceContext(ref: RawReference, labelOf: LinkLabel): string {
+  return ref.via === 'wikilink'
+    ? snippetAround(ref.text, ref.index, ref.length, labelOf)
+    : ref.context
+}
+
+/** Link labels from the documents the aggregate holds, by path and by id. */
+function labelsOf(alive: ReadonlyMap<string, DocumentReferenceFacts>): LinkLabel {
+  return linkLabelsFrom(
+    [...alive].map(([documentId, facts]) => ({
+      documentId,
+      path: facts.path,
+      ...(facts.name === undefined ? {} : { name: facts.name }),
+    })),
+  )
 }
 
 const documentReferenceFactsSchema = z
@@ -137,12 +155,13 @@ export class ReferenceAggregate {
     // each reference is then a string comparison.
     const byPath = resolve(target.path) === documentId ? target.path : undefined
 
+    const labelOf = labelsOf(alive)
     const backlinks: BacklinkEntry[] = []
     for (const [sourceId, facts] of alive) {
       if (sourceId === documentId) continue
       const contexts = firstContexts(
         resolving(facts.refs, documentId, target.path, byPath),
-        referenceContext,
+        (ref) => referenceContext(ref, labelOf),
       )
       if (contexts.length > 0) backlinks.push(sourceEntry(sourceId, facts, contexts))
     }
@@ -197,10 +216,14 @@ function* unlinkedNameSpansIn(
 }
 
 /** A snippet around every unlinked occurrence of `name`, across `texts`. */
-function* unlinkedContexts(texts: readonly string[], name: string): Iterable<string> {
+function* unlinkedContexts(
+  texts: readonly string[],
+  name: string,
+  labelOf: LinkLabel,
+): Iterable<string> {
   for (const text of texts) {
     for (const span of unlinkedNameSpansIn(text, name)) {
-      yield snippetAround(text, span.index, span.length)
+      yield snippetAround(text, span.index, span.length, labelOf)
     }
   }
 }
@@ -217,10 +240,11 @@ function mentionsOfIn(
   target: { readonly documentId: string; readonly name: string },
   sources: ReadonlyMap<string, DocumentReferenceFacts>,
 ): BacklinkEntry[] {
+  const labelOf = labelsOf(sources)
   const mentions: BacklinkEntry[] = []
   for (const [sourceId, facts] of sources) {
     if (sourceId === target.documentId) continue
-    const contexts = firstContexts(unlinkedContexts(facts.texts, target.name), (c) => c)
+    const contexts = firstContexts(unlinkedContexts(facts.texts, target.name, labelOf), (c) => c)
     if (contexts.length > 0) mentions.push(sourceEntry(sourceId, facts, contexts))
   }
   return mentions.sort(

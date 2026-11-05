@@ -18,7 +18,9 @@ Japanese (and other CJK) queries work without any dictionary or download,
 down to a single character — 「た」 finds 「たささたはな」, so a query answers
 while it is still being typed. Accents on Latin letters do not have to match:
 "cafe" finds "Café" and "equipe" finds "Équipe", either way round, while
-Japanese voiced kana stay distinct (が does not match か). Results come back ranked, with a context excerpt around each match, and can
+Japanese voiced kana stay distinct (が does not match か). Results come back ranked, with a context excerpt around each match (a
+`[[link]]` in an excerpt reads as the name of the document it points at, and
+an excerpt never cuts one in half), and can
 be narrowed by `kind` (markdown / spatial) or by tags.
 
 Example prompts:
