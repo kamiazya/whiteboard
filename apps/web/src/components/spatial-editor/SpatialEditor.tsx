@@ -125,7 +125,7 @@ import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
 import { activeDescendantId, CanvasA11yTree } from './CanvasA11yTree.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
-import { CanvasEmptyHint, emptyHintRef } from './CanvasEmptyHint.js'
+import { CanvasEmptyHint, canvasIsEmpty, emptyHintRef } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
@@ -1616,9 +1616,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setPendingCut(null)}
           />
         )}
-        {canvas.nodes.length === 0 && (
-          <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />
-        )}
+        {canvasIsEmpty(canvas) && <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />}
         <LayoutStatus current={sceneCurrent} />
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
@@ -1878,7 +1876,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
           aria-label={canvasRootLabel(canvas, selectedId, selectedEdgeId)}
-          aria-describedby={emptyHintRef(canvas.nodes.length, emptyHintId)}
+          aria-describedby={emptyHintRef(canvas, emptyHintId)}
           aria-activedescendant={activeDescendantId(a11yIdPrefix, selectedId, selectedEdgeId)}
           // A Tab stop: the keyboard's way in to the canvas, where Tab then
           // walks the nodes (see use-editor-keyboard.ts). Edge selection also

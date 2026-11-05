@@ -1,3 +1,5 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+
 /**
  * The one-line cue on a canvas with nothing on it. An empty canvas is
  * otherwise a blank sheet: creation lives behind the dock's "+" and a
@@ -28,7 +30,12 @@ export function CanvasEmptyHint({
   )
 }
 
+/** Whether a canvas holds nothing at all: no node, and no line or drawing either. */
+export function canvasIsEmpty(canvas: SpatialCanvas): boolean {
+  return canvas.nodes.length === 0 && (canvas.lines ?? []).length === 0
+}
+
 /** The `aria-describedby` value for the canvas root: the cue's id while the canvas is empty, nothing once it is not. */
-export function emptyHintRef(nodeCount: number, id: string): string | undefined {
-  return nodeCount === 0 ? id : undefined
+export function emptyHintRef(canvas: SpatialCanvas, id: string): string | undefined {
+  return canvasIsEmpty(canvas) ? id : undefined
 }

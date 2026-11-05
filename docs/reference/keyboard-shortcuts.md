@@ -49,7 +49,7 @@ pinch zooms in every tool.
 | `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
-"Canvas, 5 notes. Tab selects the first note" (frames and connections are counted apart, and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
+"Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
 nodes top to bottom, then left to right (two nodes at exactly the same spot always come in the same order),
 and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
