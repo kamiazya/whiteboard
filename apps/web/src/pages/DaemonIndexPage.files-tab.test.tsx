@@ -156,8 +156,8 @@ describe('DaemonIndexPage tree view', () => {
     // The document one level down is reachable without navigating into it.
     const tree = screen.getByRole('tree')
     expect(within(tree).getByText('design')).not.toBeNull()
-    // And the trail belongs to whatever narrows the view, which here nothing does.
-    expect(screen.queryByRole('navigation', { name: 'Folder path' })).toBeNull()
+    // The trail stays: it still says where you are and where a new document lands.
+    expect(screen.getByRole('navigation', { name: 'Folder path' })).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Two columns' }))
     await screen.findByTestId('folder-contents')

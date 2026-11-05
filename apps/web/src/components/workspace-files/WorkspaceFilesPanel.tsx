@@ -764,23 +764,12 @@ export function WorkspaceFilesPanel({
               onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
             />
           )}
-          {/* Not while the list is loading. The trash is a SECOND list of the
-          departed workspace's documents and reads on its own, so left
-          mounted it keeps showing that workspace's rows under the new
-          address until its own read answers — measured with a trash read
-          that never answers, which is the window this closes. */}
-          {documents !== null && (
-            <SourceTrashSection
-              source={source}
-              revision={revision}
-              onRestored={() => {
-                // A restore that landed but whose refresh failed leaves the list
-                // stale, not the restore undone — same rule as every other write
-                // here, so the trash section never invents its own error shape.
-                void readList().then(setDocuments, () => undefined)
-              }}
-            />
-          )}
+          <SourceTrashSection
+            source={source}
+            revision={revision}
+            listLoaded={documents !== null}
+            onRestored={() => void readList().then(setDocuments, () => undefined)}
+          />
           {selection !== null && (
             <div className="px-2 pb-2">
               <SelectionBar

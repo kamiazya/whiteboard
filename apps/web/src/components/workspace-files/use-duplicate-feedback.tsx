@@ -12,6 +12,25 @@ interface DuplicatedCopy {
 /** Long enough to read the line and reach the button on a phone, like the undo toast. */
 const DUPLICATED_WINDOW_MS = 10_000
 
+/** The first document in the asked-about folder that was not listed before. */
+function arrivedIn(
+  documents: readonly WorkspaceDocumentEntry[],
+  before: { readonly ids: ReadonlySet<string>; readonly folder: string },
+): WorkspaceDocumentEntry | undefined {
+  return documents.find(
+    (entry) => !before.ids.has(entry.documentId) && folderOf(entry.path) === before.folder,
+  )
+}
+
+/** Clears `value` once it has been shown for the window. */
+function useExpiry<T>(value: T | null, clear: (next: null) => void) {
+  useEffect(() => {
+    if (value === null) return
+    const timer = setTimeout(() => clear(null), DUPLICATED_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [value, clear])
+}
+
 /**
  * What a Duplicate made, found in the next listing: the first document in the
  * source's folder that was not listed when the duplicate was asked for. The
@@ -40,9 +59,7 @@ export function useDuplicateFeedback({
   useEffect(() => {
     const pending = asked.current
     if (pending === null || documents === null) return
-    const found = documents.find(
-      (entry) => !pending.ids.has(entry.documentId) && folderOf(entry.path) === pending.folder,
-    )
+    const found = arrivedIn(documents, pending)
     if (found === undefined) return
     asked.current = null
     setCopy({ entry: found, from: pending.from })
@@ -52,11 +69,7 @@ export function useDuplicateFeedback({
       ?.scrollIntoView?.({ block: 'nearest' })
   }, [documents, select])
 
-  useEffect(() => {
-    if (copy === null) return
-    const timer = setTimeout(() => setCopy(null), DUPLICATED_WINDOW_MS)
-    return () => clearTimeout(timer)
-  }, [copy])
+  useExpiry(copy, setCopy)
 
   const listed = useRef(documents)
   listed.current = documents

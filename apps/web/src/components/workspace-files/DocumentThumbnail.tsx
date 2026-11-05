@@ -78,6 +78,19 @@ function thumbnailSvg(document: WorkspaceDocumentEntry, drawn: DocumentRender): 
 }
 
 /**
+ * The drawn picture's box. A picture filled from its top-left is cut at the
+ * right edge, through a glyph; it is a picture, so no text ellipsis can say
+ * "continues" — a fade does, and reads the same for any script.
+ */
+function pictureClass(document: WorkspaceDocumentEntry, drawn: DocumentRender): string {
+  return cn(
+    'animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]',
+    fitFor(document, drawn.bounds) === 'cover-start' &&
+      '[mask-image:linear-gradient(to_right,black_85%,transparent)]',
+  )
+}
+
+/**
  * The kind icon, before a picture lands or in place of one. An empty
  * document says so under it: a blank pane reads as a picture that failed to
  * draw.
@@ -168,14 +181,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
             as="span"
             svg={thumbnailSvg(document, drawn)}
             onClickCapture={keepLinksInert}
-            className={cn(
-              'animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full [&>svg]:[text-rendering:geometricPrecision]',
-              // A picture filled from its top-left is cut at the right edge,
-              // through a glyph. It is a picture, so no text ellipsis can say
-              // "continues" — a fade does, and reads the same for any script.
-              fitFor(document, drawn.bounds) === 'cover-start' &&
-                '[mask-image:linear-gradient(to_right,black_85%,transparent)]',
-            )}
+            className={pictureClass(document, drawn)}
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app
               before this: it unmounted in the same frame the render mounted

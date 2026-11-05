@@ -93,11 +93,24 @@ export function EmptyWorkspaceState({
           onClick={() => onCreate('markdown')}
         />
       </div>
+      <FolderHint footer={footer} />
+    </div>
+  )
+}
+
+/**
+ * Under the two objects: where folders come from — a folder exists only while
+ * a document is in it, so this screen cannot make one — then the page's own
+ * footer.
+ */
+function FolderHint({ footer }: { footer: ReactNode }) {
+  return (
+    <>
       <p className="text-muted-foreground max-w-lg px-4 text-xs">
         Folders come with documents: make your first one, then use New folder above the list.
       </p>
       {footer}
-    </div>
+    </>
   )
 }
 

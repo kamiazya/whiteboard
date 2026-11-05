@@ -69,6 +69,13 @@ function useStoredFolderNames(
   return { stored, reload }
 }
 
+/** Why the keeper refused a name, and the way to put it away. */
+function useRefusal() {
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const dismissRefusal = useCallback(() => setRefusal(null), [])
+  return { refusal, setRefusal, dismissRefusal }
+}
+
 /**
  * Names given to folders no document is in yet, and the flush that writes one
  * once the listing shows a document under it. The pending name stays until
@@ -82,7 +89,7 @@ function usePendingFolderNames(
 ) {
   const [pending, setPending] = useState<FolderNames>(new Map())
   const writing = useRef(new Set<string>())
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const { refusal, setRefusal, dismissRefusal } = useRefusal()
 
   // SCOPE RESET — a name given in the departed workspace names nothing here.
   useEffect(() => {
@@ -123,7 +130,6 @@ function usePendingFolderNames(
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  const dismissRefusal = useCallback(() => setRefusal(null), [])
   return { pending, remember, flushInto, refusal, dismissRefusal }
 }
 

@@ -171,6 +171,17 @@ interface FolderActionsLayerProps {
   onCloseMenu: () => void
 }
 
+/** Where a document can be moved: the root and every folder, but not where it is. */
+function destinationsFor(
+  moving: WorkspaceDocumentEntry | null,
+  folders: readonly string[],
+): string[] {
+  if (moving === null) return []
+  return ['', ...[...folders].sort(compareCodeUnit)].filter(
+    (each) => each !== folderOf(moving.path),
+  )
+}
+
 /**
  * Everything the folder actions put on screen: the move picker, the folder
  * dialog, the folder's own menu and the status lines.
@@ -179,12 +190,7 @@ export function FolderActionsLayer(props: FolderActionsLayerProps) {
   const { folderNames, announcement, moving, menu, dialog, busy, error } = props
   const { onCancel, onMoveTo, onSubmitName, refuseName, planNewFolder, onMenuChoice, onCloseMenu } =
     props
-  const destinations =
-    moving === null
-      ? []
-      : ['', ...[...folderNames.folders].sort(compareCodeUnit)].filter(
-          (each) => each !== folderOf(moving.path),
-        )
+  const destinations = destinationsFor(moving, folderNames.folders)
 
   return (
     <>

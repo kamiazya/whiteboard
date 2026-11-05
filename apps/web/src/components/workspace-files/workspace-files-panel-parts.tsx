@@ -494,6 +494,18 @@ export function columnViewOf(
   return columns === 'one' ? { kind: 'browseOne', documents } : { kind: 'browseTwo', documents }
 }
 
+/** A card's picture: the document's own render, filling the card's picture box. */
+function cardThumbnail(loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']) {
+  return (entry: WorkspaceDocumentEntry) => (
+    <DocumentThumbnail
+      key={entry.documentId}
+      document={entry}
+      loadRender={loadRender}
+      className="size-full"
+    />
+  )
+}
+
 /**
  * The folder tree beside the folder's own contents. Below `md` the folder
  * column goes: the breadcrumb already walks the same hierarchy, and three
@@ -575,14 +587,7 @@ export function BrowseTwoColumns({
             onDocumentContextMenu={openCardMenu}
             onColumnCount={onGridColumns}
             onCreateHere={onCreateHere}
-            renderThumbnail={(entry) => (
-              <DocumentThumbnail
-                key={entry.documentId}
-                document={entry}
-                loadRender={loadRender}
-                className="size-full"
-              />
-            )}
+            renderThumbnail={cardThumbnail(loadRender)}
           />
         </div>
       </div>
