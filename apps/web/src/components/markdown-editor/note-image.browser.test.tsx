@@ -147,6 +147,24 @@ describe('an image in a note', () => {
     await vi.waitFor(() => expect(last()).toBe('a![meter](asset:p1)b'))
   })
 
+  it('pasted several at once keeps their order, one per line', async () => {
+    const upload = held()
+    const { content, last } = await mount('ab', upload.store)
+    const named = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' })
+    fireEvent(
+      content,
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: filesOf(named('one.png'), named('two.png')),
+      }),
+    )
+    await vi.waitFor(() => expect(upload.pending()).toBe(2))
+    upload.resolve(1, 'asset:two')
+    upload.resolve(0, 'asset:one')
+    await vi.waitFor(() => expect(last()).toBe('ab![one](asset:one)\n![two](asset:two)'))
+  })
+
   it('dropped as a file is stored and written into the note', async () => {
     const { content, last } = await mount('ab', stored('asset:d1'))
     const box = content.getBoundingClientRect()

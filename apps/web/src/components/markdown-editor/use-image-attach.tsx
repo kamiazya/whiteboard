@@ -54,27 +54,42 @@ function intakeFor(
   sourceApiRef: RefObject<SourcePaneApi | null>,
   setNotice: SetNotice,
 ) {
-  /** Holds the position through `hold`, then writes the picture there once stored. */
-  const store = (file: File, hold: (token: string) => void) => {
+  /**
+   * Holds the position through `hold`, then writes the pictures there once
+   * every one is stored. A batch (several files pasted or dropped together)
+   * is held as ONE position and written in its own order, a picture per
+   * line: held separately, each would land in front of the ones that
+   * finished before it, so the note's order would be the uploads' finishing
+   * order reversed.
+   */
+  const store = (files: readonly File[], hold: (token: string) => void) => {
     const save = storeRef.current
     if (save === undefined) return
-    const refusal = imageRefusal(file)
-    if (refusal !== null) return setNotice(refusal)
+    const refusal = files.map(imageRefusal).find((reason) => reason !== null) ?? null
+    const accepted = files.filter((file) => imageRefusal(file) === null)
+    if (accepted.length === 0) return setNotice(refusal)
     const token = `image-${++nextToken}`
     hold(token)
-    setNotice(`Uploading ${file.name}…`)
-    void save(file).then((result) => {
-      setNotice(result.ok ? null : result.reason)
-      if (result.ok) {
-        sourceApiRef.current?.run(insertPendingImage(token, imageMarkup(file.name, result.ref)))
-      } else sourceApiRef.current?.applyEffects(dropPendingImage(token))
+    setNotice(
+      accepted.length === 1
+        ? `Uploading ${accepted[0]?.name}…`
+        : `Uploading ${accepted.length} images…`,
+    )
+    void Promise.all(accepted.map((file) => save(file))).then((results) => {
+      const markup = results.flatMap((result, i) =>
+        result.ok ? [imageMarkup(accepted[i]?.name ?? '', result.ref)] : [],
+      )
+      const failed = results.find((result) => !result.ok)
+      setNotice(failed === undefined || failed.ok ? refusal : failed.reason)
+      if (markup.length > 0) sourceApiRef.current?.run(insertPendingImage(token, markup.join('\n')))
+      else sourceApiRef.current?.applyEffects(dropPendingImage(token))
     })
   }
   /** Takes the event over only when it carries an image this editor can store. */
   const intake = (event: Event, view: EditorView, files: File[], at?: number) => {
     if (files.length === 0 || storeRef.current === undefined) return false
     event.preventDefault()
-    for (const file of files) store(file, (token) => startPendingImage(token, at)(view))
+    store(files, (token) => startPendingImage(token, at)(view))
     return true
   }
   const extension: Extension[] = [
@@ -88,7 +103,7 @@ function intakeFor(
     }),
   ]
   const picked = (file: File) =>
-    store(file, (token) => sourceApiRef.current?.run(startPendingImage(token)))
+    store([file], (token) => sourceApiRef.current?.run(startPendingImage(token)))
   return { extension, picked }
 }
 
