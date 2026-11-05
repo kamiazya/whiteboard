@@ -83,7 +83,7 @@ it('empty space offers the full creation set, anchored at the click point', asyn
     expect(container.textContent).toContain(label)
   }
 
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))
   const frame = latest.canvas.nodes.find((n) => isFrame(n))
   if (frame === undefined) throw new Error('frame missing')

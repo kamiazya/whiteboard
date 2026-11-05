@@ -39,7 +39,7 @@ it('the palette Add group button creates an empty frame at the bottom of the z-o
   render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(isFrame(latest.canvas.nodes[0] as SpatialNode)).toBe(true)
   expect(latest.kinds).toContain('create-group')
@@ -230,7 +230,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   fireEvent.click(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
-      (b) => b.getAttribute('aria-label') === 'Group',
+      (b) => b.getAttribute('aria-label') === 'Frame',
     ) as HTMLElement,
   )
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))

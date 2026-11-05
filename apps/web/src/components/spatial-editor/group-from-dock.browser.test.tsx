@@ -16,9 +16,9 @@ afterEach(cleanup)
 const centreNote = textNode({ id: 'a', x: 300, y: 250, width: 200, height: 100, text: 'centre' })
 const populated: SpatialCanvas = { nodes: [centreNote], edges: [] }
 
-async function chooseGroup() {
+async function chooseFrame() {
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
 }
 
 function frameOf(canvas: SpatialCanvas): SpatialNode {
@@ -35,7 +35,7 @@ it('Group with a node selected makes a new frame beside it with its name editor 
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 400, y: 300 } })
 
-  await chooseGroup()
+  await chooseFrame()
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(2))
   expect(overlaps(frameOf(latest.canvas), centreNote)).toBe(false)
@@ -50,7 +50,7 @@ it('Group with a frame selected does not nest, and its typed name fires no short
   // The frame's border band selects it.
   await userEvent.click(rootOf(container), { position: { x: 202, y: 250 } })
 
-  await chooseGroup()
+  await chooseFrame()
   await vi.waitFor(() =>
     expect(document.activeElement).toBe(
       container.querySelector('[data-testid="group-label-editor"]'),
@@ -69,7 +69,7 @@ it('Group with nothing selected lands in free space, selected, with its name edi
   const { Host, latest } = makeEditorHost({ initial: populated })
   const { container } = render(<Host />)
 
-  await chooseGroup()
+  await chooseFrame()
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(2))
   expect(overlaps(frameOf(latest.canvas), centreNote)).toBe(false)
@@ -84,7 +84,7 @@ it("typing into the new frame's editor names it", async () => {
   const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
 
-  await chooseGroup()
+  await chooseFrame()
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="group-label-editor"]')).not.toBeNull(),
   )
@@ -97,7 +97,7 @@ it('an empty frame draws a faint fill so it stays visible', async () => {
   const { Host } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
 
-  await chooseGroup()
+  await chooseFrame()
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="group-label-editor"]')).not.toBeNull(),
   )

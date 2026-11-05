@@ -77,7 +77,7 @@ A fresh canvas starts empty, with a one-line hint ("Double-click to add a note",
 and start typing immediately (this works in Hand mode too, and never moves the
 view), or open the **+** menu in the bottom dock: tap
 an entry to place it in the middle of the view, or drag one onto the canvas
-to drop it exactly where you want it. **Group** makes a new, empty frame in a free
+to drop it exactly where you want it. **Frame** makes a new, empty frame in a free
 spot and opens its name for typing; an empty frame is drawn with a faint tint
 so it can be found. To frame nodes you have already made, select them,
 right-click one and choose **Group selection**, which also opens the new

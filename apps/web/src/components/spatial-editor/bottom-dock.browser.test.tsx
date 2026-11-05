@@ -113,7 +113,7 @@ it('creation entries live in the + menu, which opens upward inside the viewport'
   const items = [...menu.querySelectorAll('[role="menuitem"]')].map((b) =>
     b.getAttribute('aria-label'),
   )
-  expect(items).toEqual(['Note', 'Link', 'Group', 'Document'])
+  expect(items).toEqual(['Note', 'Link', 'Frame', 'Document'])
 
   // Opens upward from the dock and stays inside the host, above the dock.
   const menuRect = menu.getBoundingClientRect()

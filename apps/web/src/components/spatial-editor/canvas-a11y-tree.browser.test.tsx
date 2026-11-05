@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { canvasAnnouncement } from '../../lib/canvas-announcer.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -75,8 +76,9 @@ it('grouping a selection announces how many nodes it framed', async () => {
     ],
     edges: [],
   })
-  fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
-  await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
+  const root = rootOf(container)
+  fireEvent.keyDown(root, { code: 'KeyA', key: 'a', metaKey: true })
+  rightClick(root, 100, 70)
+  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
   await vi.waitFor(() => expect(canvasAnnouncement()).toBe('Grouped 2 nodes'))
 })

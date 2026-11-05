@@ -16,7 +16,7 @@
 export const CREATION_LABELS = {
   note: 'Note',
   link: 'Link',
-  group: 'Group',
+  group: 'Frame',
   document: 'Document',
   image: 'Image',
 } as const
