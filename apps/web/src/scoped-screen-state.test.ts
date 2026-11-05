@@ -469,6 +469,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // supplies the "list" the old prefixes carried.
   generationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
+  openMovePickerRef:
+    'no subject: the Move to folder picker’s opener, reassigned by MoveOpenDocument on every render from the path it is given — it holds no document of its own, so a switch re-renders it with the new path',
   currentDocumentIdRef:
     'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
   isFirstDocumentUrlSyncRef:
@@ -513,6 +515,8 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // same rule, same wording as the browser page's entries for them.
   duplicateError: 'cleared on switch',
   isDuplicating: 'cleared on switch',
+  openMovePickerRef:
+    'no subject: the Move to folder picker’s opener, reassigned by MoveOpenDocument on every render from the path it is given — it holds no document of its own, so a switch re-renders it with the new path',
   currentDocumentIdRef:
     'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
 }
