@@ -1,11 +1,12 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
-import { useCallback, useState } from 'react'
+import { type RefObject, useCallback, useRef, useState } from 'react'
 import { z } from 'zod'
 import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentPathTakenMessage } from '../../lib/document-path-taken.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { FolderNames } from '../../lib/folder-names.js'
+import { documentLanding, focusLanding } from './folder-landing.js'
 
 /**
  * The rename flow: which document the dialog is open for, whether a submit is
@@ -37,6 +38,12 @@ export interface RenameDocument {
     name: string | undefined,
     newPath: string,
   ) => Promise<void>
+  /**
+   * The dialog's close: after a saved rename, focus lands on the renamed
+   * document's card. Radix would hand it back to the menu item that opened
+   * the dialog, which is gone by then, so it fell to <body>.
+   */
+  readonly onCloseAutoFocus: (event: Event) => void
 }
 
 /**
@@ -71,6 +78,8 @@ interface RenameDocumentDeps {
   readonly refreshAndSelect: (path: string) => Promise<unknown>
   /** The documents listed now, so a name a sibling already shows is refused before sending. */
   readonly listed: { readonly current: readonly WorkspaceDocumentEntry[] }
+  /** The panel, where the renamed document's card is looked for. */
+  readonly rootRef: RefObject<HTMLElement | null>
 }
 
 export function useRenameDocument({
@@ -78,8 +87,10 @@ export function useRenameDocument({
   moveDocument,
   refreshAndSelect,
   listed,
+  rootRef,
 }: RenameDocumentDeps): RenameDocument {
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
+  const landing = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -108,6 +119,7 @@ export function useRenameDocument({
         } else {
           await refreshAndSelect(entry.path)
         }
+        landing.current = newPath
         setRenaming(null)
       } catch (err) {
         // The server names the PRODUCED path that collided, which on a
@@ -130,5 +142,16 @@ export function useRenameDocument({
     [source, moveDocument, refreshAndSelect, listed],
   )
 
-  return { renaming, busy, error, open, cancel, submit }
+  const onCloseAutoFocus = useCallback(
+    (event: Event) => {
+      const path = landing.current
+      landing.current = null
+      if (path !== null && focusLanding(rootRef.current, documentLanding(path))) {
+        event.preventDefault()
+      }
+    },
+    [rootRef],
+  )
+
+  return { renaming, busy, error, open, cancel, submit, onCloseAutoFocus }
 }
