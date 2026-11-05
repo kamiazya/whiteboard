@@ -74,6 +74,12 @@ export interface BrowserDocumentController {
    */
   placeByName(): Promise<void>
   /**
+   * Moves the open document to `to` (Move to folder…). Resolves once the
+   * move landed and the snapshot carries the new path, which the page's
+   * address follows; rejects with the keeper's refusal.
+   */
+  movePath(to: string): Promise<void>
+  /**
    * True once a URL named a document that is not there AND the workspace
    * holds none to fall back to. The page leaves for the list then: seeding a
    * document at the requested path would turn a dead link into an empty
@@ -528,6 +534,23 @@ export function useBrowserDocumentController(
     }
   }, [flushSave])
 
+  const movePath = useCallback(
+    async (to: string): Promise<void> => {
+      if (!(await flushSave())) return
+      const base = snapshotRef.current
+      if (base === null || base.path === to) return
+      // The files source's move, for the reason `placeByName` gives.
+      await createBrowserFilesSource({
+        index: indexRef.current,
+        loro: loroRef.current,
+      }).renameDocumentPath(base.path, to)
+      const moved = { ...(snapshotRef.current ?? base), path: to }
+      snapshotRef.current = moved
+      setSnapshot(moved)
+    },
+    [flushSave],
+  )
+
   const followRecordedName = useCallback((name: string | null) => {
     const base = snapshotRef.current
     if (base === null || pendingSnapshotRef.current !== null || savePromiseRef.current !== null)
@@ -713,6 +736,7 @@ export function useBrowserDocumentController(
     renameDocument,
     followRecordedName,
     placeByName,
+    movePath,
     deleteDocument,
     startFresh,
     listDocuments,

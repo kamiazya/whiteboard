@@ -133,6 +133,7 @@ function useBrowserDocument(
     renameDocument,
     followRecordedName,
     placeByName,
+    movePath,
     listDocuments,
     switchDocument,
     duplicateDocument,
@@ -479,6 +480,7 @@ function useBrowserDocument(
       const handle = browserWorkspaceHandleOrNull()
       navigate(handle === null ? indexPath() : workspaceFolderPath(handle, snapshot?.path ?? ''))
     },
+    move: { source: tagsSource, path: documentPath, moveTo: movePath },
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)

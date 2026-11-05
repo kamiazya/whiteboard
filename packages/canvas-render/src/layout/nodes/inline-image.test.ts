@@ -204,3 +204,80 @@ describe('an inline image asks the caller where its picture is', () => {
     })
   })
 })
+
+/**
+ * A picture alone in its paragraph is a FIGURE, not a glyph: drawn one text
+ * line tall it is unreadable. When the caller knows its natural size, it
+ * draws at that size, scaled down to the column with its aspect kept. One
+ * mixed into prose stays line-sized, and one whose size nobody knows keeps
+ * the line box rather than guessing a shape that would letterbox it.
+ */
+describe('a picture alone in its paragraph draws at its natural size', () => {
+  const sized = (
+    children: object[],
+    size: { width: number; height: number } | undefined,
+    maxWidth = 600,
+  ) =>
+    typesetMdastBlocks(paragraph(children), {
+      ...options,
+      maxWidth,
+      references: {
+        resolveAlias: () => null,
+        resolveTitle: () => undefined,
+        resolveEmbed: () => undefined,
+        resolveReference: (ref: string) =>
+          ref === 'asset:pic' ? { image: { href: 'blob:pic', ...size } } : undefined,
+      },
+    }).nodes
+
+  const blockHeight = (nodes: ReturnType<typeof sized>) => {
+    const first = nodes[0]
+    return first !== undefined && 'bbox' in first ? first.bbox.h : undefined
+  }
+
+  const imageRun = (nodes: ReturnType<typeof sized>) =>
+    nodes
+      .flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+      .find((run) => run.paints !== undefined)
+
+  it('keeps a picture narrower than the column at its own size', () => {
+    const nodes = sized([{ type: 'image', url: 'asset:pic', alt: 'diagram' }], {
+      width: 320,
+      height: 200,
+    })
+    expect(imageRun(nodes)?.bbox).toMatchObject({ x: 0, y: 0, w: 320, h: 200 })
+    expect(imageRun(nodes)?.text).toBe('diagram')
+    expect(blockHeight(nodes)).toBe(200)
+  })
+
+  it('scales a wider one down to the column, keeping its aspect', () => {
+    const nodes = sized([{ type: 'image', url: 'asset:pic' }], { width: 1200, height: 600 }, 300)
+    expect(imageRun(nodes)?.bbox).toMatchObject({ w: 300, h: 150 })
+    expect(blockHeight(nodes)).toBe(150)
+  })
+
+  it('ignores the whitespace around it, and still sizes it', () => {
+    const nodes = sized(
+      [
+        { type: 'text', value: ' ' },
+        { type: 'image', url: 'asset:pic' },
+        { type: 'text', value: '\n' },
+      ],
+      { width: 100, height: 50 },
+    )
+    expect(imageRun(nodes)?.bbox).toMatchObject({ w: 100, h: 50 })
+  })
+
+  it('stays line-sized inside prose, and when its size is unknown', () => {
+    const inline = sized(
+      [
+        { type: 'text', value: 'see ' },
+        { type: 'image', url: 'asset:pic' },
+      ],
+      { width: 320, height: 200 },
+    )
+    expect(imageRun(inline)?.bbox.h).toBeLessThan(40)
+    const unknown = sized([{ type: 'image', url: 'asset:pic' }], undefined)
+    expect(imageRun(unknown)?.bbox.h).toBeLessThan(40)
+  })
+})

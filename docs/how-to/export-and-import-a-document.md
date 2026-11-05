@@ -24,8 +24,11 @@ Open the document, then **More actions → Export…**:
   and **Save as JSON Canvas** always saves the whole document.
 - **Save as Markdown (.md)** — on a note, the only entry its Export… submenu offers: the
   OKF Markdown source, with the document's name as the frontmatter `title`. A note has no
-  picture export. An image in the note is saved as its `![alt](asset:…)` line, not as
-  pixels ([add an image to a note](add-an-image-to-a-note.md)).
+  picture export. The file is text only: an image in the note is saved as its
+  `![alt](asset:…)` line, not as pixels ([add an image to a note](add-an-image-to-a-note.md)),
+  and an embedded document as its `![[…]]` line. The entry says so under its name, and when
+  the note has either, the confirmation says the pictures and embedded diagrams are not
+  included. For a handout with them, print the note instead (below).
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the
   `x-whiteboard` extension.
 
@@ -33,6 +36,20 @@ The browser downloads the file, and a notice confirms it ("Saved as Markdown"). 
 a canvas is saved as an `asset:` reference to the workspace's file, not as its pixels, so
 the notice says the images are referenced. Use PNG or SVG when the pixels must travel.
 See the [export formats reference](../reference/export-formats.md#web-app-exports).
+
+## Print a note, or save it as a PDF
+
+Open the note, then **More actions → Print / Save as PDF…**. The note switches to **Read**
+for the print, and the browser's print dialog opens; choose a printer, or **Save as PDF** as
+the destination for a file. When the dialog closes the note goes back to the view you had.
+
+What prints is the read view and nothing else: the title, then the body with its pictures
+and embedded canvases, over as many pages as it takes. A page breaks between paragraphs,
+pictures and embeds, never through one (a single block taller than a page is the
+exception). The app around the note — the top bar, the toolbars, the scroll overview — does
+not print. Comments on an embedded canvas are left out, as they are wherever a canvas is
+shown inside something else. The browser's own **Print** (`Ctrl+P` / `Cmd+P`) prints the
+same thing in **Read** and **Split**; from **Write**, use the menu entry.
 
 ## Bring a file in
 

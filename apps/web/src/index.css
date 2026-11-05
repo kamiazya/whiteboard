@@ -801,3 +801,64 @@ body {
     opacity: 0;
   }
 }
+
+/* Printing a note (note-print.tsx): only its read view prints. Everything
+ * that neither holds the print content nor sits inside it is the app and is
+ * dropped; the chain of boxes down to it loses the fixed heights and clipping
+ * the app shell scrolls inside, so the body runs on over as many pages as it
+ * takes instead of one page cut off where the screen ends. Scoped by `:has`
+ * to a page that carries a note, so printing anything else is untouched. */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  html:has([data-print-content]),
+  html:has([data-print-content]) body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body:has([data-print-content])
+    *:not([data-print-content], :has([data-print-content]), [data-print-content] *) {
+    display: none !important;
+  }
+
+  body:has([data-print-content]) :has([data-print-content]),
+  [data-print-content] {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+
+  [data-print-content]:has(.note-print-view) .note-print-screen {
+    display: none !important;
+  }
+
+  .note-print-view {
+    color: #000;
+  }
+
+  .note-print-view h1 {
+    margin: 0 0 12pt;
+    font-size: 22pt;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  /* One strip per block (print-bands.ts): a page breaks between blocks, never
+   * through a picture or an embedded diagram. */
+  .note-print-view [data-testid="note-print-band"] {
+    display: block;
+    width: 100%;
+    height: auto;
+    break-inside: avoid;
+  }
+}

@@ -15,7 +15,7 @@ import { mayAutofocus } from '../../lib/focus-claim.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
-import { exitEmptyListItem } from './exit-empty-list-item.js'
+import { endListOnEmptyItem } from './exit-empty-list-item.js'
 import {
   activeMarkdownEditorFor,
   followCaret,
@@ -308,7 +308,7 @@ export function SourcePane({
         // an EMPTY list item must delete the marker, not march it down
         // another line. Everywhere else this reports unhandled and
         // continuation runs as usual.
-        Prec.highest(keymap.of([{ key: 'Enter', run: exitEmptyListItem }])),
+        Prec.highest(keymap.of([{ key: 'Enter', run: endListOnEmptyItem }])),
         ...markdownEditingBase(),
         ...(placeholderText !== undefined ? [placeholder(placeholderText)] : []),
         // Host extensions last, after every built-in: a CRDT binding must

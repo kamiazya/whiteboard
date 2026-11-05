@@ -116,6 +116,26 @@ export function regionsOf(
 const REGION_OUTLINE_RADIUS_PX = 6
 
 /**
+ * The options a canvas drawn INSIDE another document is laid out with: its
+ * annotation layer switched off. An embedded board is the board, not the
+ * conversation about it — its cards would cover the content and travel into
+ * whatever the host is printed or exported as — so the comments stay on its
+ * own page. The host's threads are dropped too: they are keyed by the
+ * host's node ids, and a nested board holding a same-id node would draw
+ * them there. An empty `comments` replaces the board's own envelope copy.
+ */
+export function withoutCommentLayer(options: ResolvedLayoutOptions): ResolvedLayoutOptions {
+  return {
+    ...options,
+    comments: [],
+    threads: [],
+    passagesByNode: new Map(),
+    regionsByThread: new Map(),
+    messagesByThread: new Map(),
+  }
+}
+
+/**
  * One dashed outline per node set or region: the box the conversation is
  * about, drawn so its pin has something to point at. Ids `${threadId}/region`
  * and `commentChrome: true`, like the pin. Resolved ones follow the pin's

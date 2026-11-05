@@ -415,4 +415,38 @@ describe('an empty note in Read mode', () => {
     expect(screen.getByText('Nothing to preview yet. Switch to Write to start.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Write' })).toBeTruthy()
   })
+
+  // In Split the source pane is already open beside the preview, so telling
+  // the reader to switch to it sends them looking for something on screen.
+  it('in Split, points at the pane beside it rather than at the Write control', () => {
+    render(<MarkdownEditor theme="light" value="" onChange={() => {}} initialViewMode="split" />)
+    expect(screen.queryByText(/Switch to Write/)).toBeNull()
+    expect(screen.getByText(/What you write appears here/)).toBeTruthy()
+  })
+})
+
+describe('the Read header names a type only when the note has one of its own', () => {
+  const header = (type: string) => {
+    render(
+      <MarkdownEditor
+        theme="light"
+        value="body"
+        onChange={() => {}}
+        title="Week 1"
+        meta={{ type }}
+        initialViewMode="read"
+      />,
+    )
+    return screen.getByTestId('markdown-document-header').textContent ?? ''
+  }
+
+  it('shows no chip for a plain note, whose type is only its kind', () => {
+    expect(header('markdown')).toBe('Week 1')
+    cleanup()
+    expect(header('note')).toBe('Week 1')
+  })
+
+  it('labels an authored type as a type', () => {
+    expect(header('lesson-plan')).toContain('Type: lesson-plan')
+  })
 })

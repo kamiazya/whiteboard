@@ -58,8 +58,20 @@ export interface ResolvedReference {
    * the caller's.
    */
   readonly missing?: boolean
-  /** A renderable image: `href` is emitted verbatim into the SVG — a data: URI in exports, a blob:/app URL in the editor. */
-  readonly image?: { readonly href: string; readonly alt?: string }
+  /**
+   * A renderable image: `href` is emitted verbatim into the SVG — a data: URI
+   * in exports, a blob:/app URL in the editor. `width`/`height` are its
+   * NATURAL size in px, when the caller has decoded it: a picture standing
+   * alone in a body's paragraph draws at that size (scaled down to the
+   * column), and without it keeps a line-sized box, since a guessed aspect
+   * would letterbox it.
+   */
+  readonly image?: {
+    readonly href: string
+    readonly alt?: string
+    readonly width?: number
+    readonly height?: number
+  }
   /** The referenced spatial canvas, for inline embedding. */
   readonly canvas?: SpatialCanvas
   /** A referenced markdown document's already-parsed body. */

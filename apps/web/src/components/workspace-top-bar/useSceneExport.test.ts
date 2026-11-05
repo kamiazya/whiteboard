@@ -178,6 +178,29 @@ describe('useSceneExport', () => {
     expect(onExported).toHaveBeenCalledExactlyOnceWith('Saved as Markdown')
   })
 
+  it('says the pictures and embedded diagrams of a note are not in its .md', async () => {
+    stubDownloads()
+    const onExported = vi.fn()
+    const onExport = vi
+      .fn()
+      .mockResolvedValueOnce(new Blob(['# Week 1\n\n![diagram](asset:b2f6)\n']))
+      .mockResolvedValueOnce(new Blob(['See ![[water-cycle/diagram|Diagram]]\n']))
+      .mockResolvedValueOnce(new Blob(['[a link](x) and [[a note]]\n']))
+    const { result } = renderHook(() =>
+      useSceneExport({ onExport, filenameBase: 'week-1', onExported }),
+    )
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await result.current.handleExport('md')
+      })
+    }
+    const leftOut =
+      'Saved as Markdown — pictures and embedded diagrams are not included; for a handout, use Print / Save as PDF'
+    expect(onExported).toHaveBeenNthCalledWith(1, leftOut)
+    expect(onExported).toHaveBeenNthCalledWith(2, leftOut)
+    expect(onExported).toHaveBeenNthCalledWith(3, 'Saved as Markdown')
+  })
+
   it('downloads a canvas as .canvas and says images are referenced when it names one', async () => {
     const { downloads } = stubDownloads()
     const onExported = vi.fn()

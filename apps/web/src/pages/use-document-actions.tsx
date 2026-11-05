@@ -16,10 +16,15 @@
  */
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { Braces, Copy, Trash2 } from 'lucide-react'
+import { Braces, Copy, FolderInput, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { DeleteOpenDocumentDialog } from '../components/document-editor/DeleteOpenDocumentDialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import {
+  MoveOpenDocument,
+  type OpenMovePicker,
+} from '../components/workspace-files/MoveOpenDocument.js'
+import type { WorkspaceFilesSource } from '../lib/files-source.js'
 import { useAnnounceNotice } from './document-notice.js'
 import { useDeleteDocument } from './use-delete-document.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
@@ -40,6 +45,16 @@ export interface UseDocumentActionsOptions {
    * not arrived, which is the same answer either way: no row.
    */
   readonly canvas: SpatialCanvas | null
+  /**
+   * What "Move to folder…" needs: the keeper's files source (null hides the
+   * row), the open document's path, and the page's own move, which follows
+   * the document to its new address.
+   */
+  readonly move?: {
+    readonly source: WorkspaceFilesSource | null
+    readonly path: string | null
+    readonly moveTo: (newPath: string) => Promise<void>
+  }
 }
 
 export interface DocumentActionSlots {
@@ -90,6 +105,7 @@ export function useDocumentActions({
   duplicateDocument,
   deleteDocument,
   onDeleted,
+  move,
 }: UseDocumentActionsOptions): DocumentActionSlots {
   // The document on screen NOW, for an async handler that started under a
   // different one: a page switches documents in place rather than remounting,
@@ -97,6 +113,8 @@ export function useDocumentActions({
   const currentDocumentIdRef = useRef<string | null>(null)
   currentDocumentIdRef.current = documentId ?? null
   const documentOpsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const openMovePickerRef = useRef<OpenMovePicker | null>(null)
+  const movable = move !== undefined && move.source !== null && move.path !== null
 
   const { isDuplicating, duplicateError, handleDuplicate } = useDuplicateDocument({
     documentId: documentId ?? null,
@@ -116,6 +134,12 @@ export function useDocumentActions({
     menuItems: (
       <>
         {canvas !== null && <CopyAsJsonCanvasItem canvas={canvas} />}
+        {movable && (
+          <DropdownMenuItem onSelect={() => openMovePickerRef.current?.()}>
+            <FolderInput aria-hidden="true" className="size-3.5" />
+            Move to folder…
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
           <Copy aria-hidden="true" className="size-3.5" />
           Duplicate
@@ -130,13 +154,23 @@ export function useDocumentActions({
       </>
     ),
     afterMenu: (
-      <DeleteOpenDocumentDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        documentKind={documentKind}
-        triggerRef={documentOpsButtonRef}
-        onConfirm={() => void handleDelete()}
-      />
+      <>
+        <DeleteOpenDocumentDialog
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          documentKind={documentKind}
+          triggerRef={documentOpsButtonRef}
+          onConfirm={() => void handleDelete()}
+        />
+        {movable && move.source !== null && (
+          <MoveOpenDocument
+            source={move.source}
+            path={move.path}
+            moveTo={move.moveTo}
+            openRef={openMovePickerRef}
+          />
+        )}
+      </>
     ),
     ...(duplicateError === null && deleteError === null
       ? {}

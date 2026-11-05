@@ -13,7 +13,7 @@
  * second one here would silently answer for the preview.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type RailBlock,
   railGeometry,
@@ -80,38 +80,57 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
   }
 
   return (
-    // Pointer-only on purpose, and `aria-hidden`: the rail duplicates
-    // scrolling that the panes themselves already expose to the keyboard, so
-    // it is a shortcut rather than the only route. No keyboard-only user
-    // depends on it.
-    <div
-      ref={railRef}
-      data-testid="markdown-minimap-rail"
-      {...RAIL_ATTRS}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      style={{ width: RAIL_WIDTH_PX }}
-      className={cn(
-        'relative shrink-0 cursor-pointer touch-none overflow-hidden border-l',
-        'border-border bg-muted/20',
-        className,
-      )}
-    >
-      {geometry.rows.map((row, index) => (
-        <div
-          key={`${row.top}-${index}`}
-          className="bg-muted-foreground/45 absolute rounded-[1px]"
-          style={{ top: row.top, left: row.left, width: row.width, height: row.height }}
-        />
-      ))}
+    <RailFrame className={className}>
       <div
-        data-testid="markdown-minimap-viewport"
-        // The rail IS the scrollbar, so where you are has to read at a glance
-        // against the bars behind it — a marker subtle enough to hunt for
-        // fails at the one job it has.
-        className="border-foreground/40 bg-foreground/10 pointer-events-none absolute inset-x-0 border-y"
-        style={{ top: frame.top, height: frame.height }}
-      />
+        ref={railRef}
+        data-testid="markdown-minimap-rail"
+        {...RAIL_ATTRS}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        className="relative min-h-0 flex-1 cursor-pointer touch-none overflow-hidden"
+      >
+        {geometry.rows.map((row, index) => (
+          <div
+            key={`${row.top}-${index}`}
+            className="bg-muted-foreground/45 absolute rounded-[1px]"
+            style={{ top: row.top, left: row.left, width: row.width, height: row.height }}
+          />
+        ))}
+        <div
+          data-testid="markdown-minimap-viewport"
+          // The rail IS the scrollbar, so where you are has to read at a glance
+          // against the bars behind it — a marker subtle enough to hunt for
+          // fails at the one job it has.
+          className="border-foreground/40 bg-foreground/10 pointer-events-none absolute inset-x-0 border-y"
+          style={{ top: frame.top, height: frame.height }}
+        />
+      </div>
+    </RailFrame>
+  )
+}
+
+/**
+ * The rail's frame: named as one graphic — "Document map" — and labelled on
+ * screen, so the strip is not an unexplained column of bars. Its bars stay
+ * out of the accessibility tree: the rail duplicates scrolling the panes
+ * already expose to the keyboard, so it is a shortcut rather than the only
+ * route, and announcing every block would be noise.
+ */
+function RailFrame({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div
+      role="img"
+      aria-label="Document map: where you are in this note"
+      style={{ width: RAIL_WIDTH_PX }}
+      className={cn('flex shrink-0 flex-col border-l border-border bg-muted/20', className)}
+    >
+      <span
+        aria-hidden="true"
+        className="text-muted-foreground shrink-0 select-none py-0.5 text-center text-[10px] leading-3"
+      >
+        Map
+      </span>
+      {children}
     </div>
   )
 }

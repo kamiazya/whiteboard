@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { BookmarkPlus, Download, EllipsisVertical } from 'lucide-react'
+import { BookmarkPlus, Download, EllipsisVertical, Printer } from 'lucide-react'
 import { type ReactNode, type RefObject, useState, useSyncExternalStore } from 'react'
 import {
   DropdownMenu,
@@ -44,6 +44,11 @@ interface DocumentMenuProps {
    * list of points to name one in.
    */
   readonly onBookmark?: () => void
+  /**
+   * Prints the document — a note prints its read view, over pages, without
+   * the app around it. Omitted hides the row: only a note has a print view.
+   */
+  readonly onPrint?: () => void
   /**
    * What the row just did, for the polite status region it carries ("Exported
    * as PNG", "Copied as JSON Canvas"). The page owns the actions, so it owns
@@ -102,6 +107,7 @@ export function DocumentMenu({
   selection,
   kind,
   onBookmark,
+  onPrint,
   notice,
   triggerRef,
   children,
@@ -131,6 +137,7 @@ export function DocumentMenu({
         </Tooltip>
         <DropdownMenuContent align="end">
           {onExport && <ExportSubmenu onExport={onExport} kind={kind} selection={selection} />}
+          {onPrint && <PrintItem onPrint={onPrint} />}
           {onBookmark && (
             <DropdownMenuItem onSelect={onBookmark} className="gap-2">
               <BookmarkPlus aria-hidden="true" className="size-3.5" />
@@ -199,11 +206,7 @@ function ExportSubmenu({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <PictureEntries kind={kind} picture={picture} />
-        {kind === 'markdown' && (
-          <DropdownMenuItem onSelect={() => onExport('md')}>
-            Save as Markdown (.md)
-          </DropdownMenuItem>
-        )}
+        {kind === 'markdown' && <MarkdownSaveItem onSave={() => onExport('md')} />}
         {kind === 'spatial' && (
           <DropdownMenuItem onSelect={() => onExport('canvas')}>
             Save as JSON Canvas (.canvas)
@@ -295,5 +298,33 @@ function PictureOptionItems({
         With background
       </DropdownMenuCheckboxItem>
     </>
+  )
+}
+
+function PrintItem({ onPrint }: { readonly onPrint: () => void }) {
+  return (
+    <DropdownMenuItem onSelect={onPrint} className="gap-2">
+      <Printer aria-hidden="true" className="size-3.5" />
+      Print / Save as PDF…
+    </DropdownMenuItem>
+  )
+}
+
+function MarkdownSaveItem({ onSave }: { readonly onSave: () => void }) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSave}
+      className="flex-col items-start gap-0.5"
+      aria-describedby="markdown-export-scope"
+    >
+      Save as Markdown (.md)
+      {/* Said where the choice is made: the file is the text, and a
+          handout with its pictures is the print. Hidden from the
+          item's NAME and read as its description instead. */}
+      <span id="markdown-export-scope" aria-hidden="true" className="text-muted-foreground text-xs">
+        Text only — pictures and embedded diagrams are not included. For a handout, use Print / Save
+        as PDF.
+      </span>
+    </DropdownMenuItem>
   )
 }

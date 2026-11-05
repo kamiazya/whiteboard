@@ -25,8 +25,9 @@ it in the same way.
 
 Open the document's menu — right-click its card or row, tap the **…** button
 on it (shown on a touch screen), long-press it, or press Shift+F10 on a focused
-card — and choose **Move to folder…**. The picker lists the workspace root and every folder, plus **New
-folder…**:
+card — and choose **Move to folder…**. With the document open, the same entry is in its
+**More actions** menu at the top right, and the page follows the document to its new address.
+The picker lists the workspace root and every folder, plus **New folder…**:
 
 - Arrow keys walk the list, **Enter** picks, **Escape** cancels.
 - Each folder is listed by its names from the top down — `Class / Week 6` —

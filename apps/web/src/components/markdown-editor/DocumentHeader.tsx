@@ -11,6 +11,13 @@ export interface DocumentHeaderProps {
 }
 
 /**
+ * The OKF types that say nothing a reader does not already know: a page
+ * without core facets stands in its kind (`markdown`), and a note made here
+ * is typed `note`. An authored type — `decision`, `lesson-plan` — is shown.
+ */
+const UNREMARKABLE_TYPES: ReadonlySet<string> = new Set(['markdown', 'note'])
+
+/**
  * The rendered projection of the OKF core facets, shown above the document
  * body in Read mode. Display-only by design: facet EDITING stays in
  * `DocumentProperties` (the header row), which owns the whole-`StoredCoreFacets`
@@ -18,6 +25,7 @@ export interface DocumentHeaderProps {
  */
 export function DocumentHeader({ title, meta }: DocumentHeaderProps) {
   const tags = meta.tags ?? []
+  const type = UNREMARKABLE_TYPES.has(meta.type) ? undefined : meta.type
   return (
     <header
       data-testid="markdown-document-header"
@@ -28,16 +36,20 @@ export function DocumentHeader({ title, meta }: DocumentHeaderProps) {
           {title}
         </h2>
       )}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <span className="border-border text-muted-foreground rounded-md border px-2 py-0.5 text-xs font-medium">
-          {meta.type}
-        </span>
-        {tags.map((tag) => (
-          <span key={tag} className="text-muted-foreground text-xs">
-            #{tag}
-          </span>
-        ))}
-      </div>
+      {(type !== undefined || tags.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          {type !== undefined && (
+            <span className="border-border text-muted-foreground rounded-md border px-2 py-0.5 text-xs font-medium">
+              Type: {type}
+            </span>
+          )}
+          {tags.map((tag) => (
+            <span key={tag} className="text-muted-foreground text-xs">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
     </header>
   )
 }
