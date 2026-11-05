@@ -53,12 +53,20 @@ export function useDuplicateFeedback({
     readonly ids: ReadonlySet<string>
     readonly folder: string
     readonly from: string
+    readonly askedAt: number
   } | null>(null)
   const [copy, setCopy] = useState<DuplicatedCopy | null>(null)
 
   useEffect(() => {
     const pending = asked.current
     if (pending === null || documents === null) return
+    // The page answers a duplicate with nothing, so one that failed leaves
+    // its request armed; past the window, whatever arrives in that folder
+    // is somebody else's document, not the copy.
+    if (Date.now() - pending.askedAt > DUPLICATED_WINDOW_MS) {
+      asked.current = null
+      return
+    }
     const found = arrivedIn(documents, pending)
     if (found === undefined) return
     asked.current = null
@@ -81,6 +89,7 @@ export function useDuplicateFeedback({
         ids: new Set(rows.map((entry) => entry.documentId)),
         folder: folderOf(path),
         from: source === undefined ? path : documentLabel(source, 'leaf'),
+        askedAt: Date.now(),
       }
       onDuplicateDocument?.(path)
     },
