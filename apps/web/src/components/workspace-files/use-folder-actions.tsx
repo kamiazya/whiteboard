@@ -126,9 +126,12 @@ function layerHandlers({
       folder: string,
       created: readonly { readonly path: string; readonly name: string }[] = [],
     ) => {
-      // Named before the move, so the flush finds them once the document lands.
+      // Named only once the move landed: a refused move makes no folder, and a
+      // remembered name would leave one in the picker. The flush finds the
+      // names when the listing shows the document there.
+      if (!(await moveInto(entry, folder))) return
       for (const each of created) folderNames.remember(each.path, each.name)
-      if (await moveInto(entry, folder)) setMoving(null)
+      setMoving(null)
     },
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
@@ -233,7 +236,7 @@ export function useFolderActions({
       menu={menu}
       dialog={dialog}
       busy={busy}
-      error={error}
+      error={error ?? folderNames.refusal}
       onCloseMenu={() => setMenu(null)}
       {...handlers}
     />

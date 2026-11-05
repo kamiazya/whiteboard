@@ -3,6 +3,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { FolderNames } from '../../lib/folder-names.js'
 import { foldersOf } from './folder-moves.js'
+import { refusalMessage } from './use-rename-document.js'
 
 /**
  * What each folder is called, for every folder-shaped surface — the tree, the
@@ -24,6 +25,8 @@ export interface FolderNamesState {
    * the document exists, and an effect waiting for the listing would never run.
    */
   readonly flushInto: (path: string) => void
+  /** Why the keeper refused a pending name it tried to write, until the next attempt. */
+  readonly refusal: string | null
   /** Rename a folder: a pending one in place, a standing one through the keeper. */
   readonly rename: (path: string, name: string) => Promise<void>
   /** Whether a folder at `path` can be renamed here at all. */
@@ -77,11 +80,13 @@ function usePendingFolderNames(
 ) {
   const [pending, setPending] = useState<FolderNames>(new Map())
   const writing = useRef(new Set<string>())
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   // SCOPE RESET — a name given in the departed workspace names nothing here.
   useEffect(() => {
     setPending(new Map())
     writing.current = new Set()
+    setRefusal(null)
   }, [source])
 
   const flush = useCallback(
@@ -91,8 +96,9 @@ function usePendingFolderNames(
       for (const [path, name] of pending) {
         if (!shouldWrite(path) || writing.current.has(path)) continue
         writing.current.add(path)
+        setRefusal(null)
         void write(path, name)
-          .then(reload, () => undefined)
+          .then(reload, (err: unknown) => setRefusal(refusalMessage(err)))
           .finally(() => {
             writing.current.delete(path)
             setPending((current) => withEntry(current, path, undefined))
@@ -115,7 +121,7 @@ function usePendingFolderNames(
     setPending((current) => withEntry(current, path, name))
   }, [])
 
-  return { pending, remember, flushInto }
+  return { pending, remember, flushInto, refusal }
 }
 
 /**
@@ -133,7 +139,7 @@ export function useFolderNames(
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
-  const { pending, remember, flushInto } = usePendingFolderNames(source, standing, reload)
+  const { pending, remember, flushInto, refusal } = usePendingFolderNames(source, standing, reload)
 
   const names = useMemo(() => new Map([...stored, ...pending]), [stored, pending])
   const folders = useMemo(() => [...new Set([...standing, ...pending.keys()])], [standing, pending])
@@ -158,5 +164,5 @@ export function useFolderNames(
     [source, documents],
   )
 
-  return { names, folders, remember, flushInto, rename, canRename }
+  return { names, folders, remember, flushInto, refusal, rename, canRename }
 }

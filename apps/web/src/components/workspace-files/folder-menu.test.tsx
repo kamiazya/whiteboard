@@ -190,6 +190,18 @@ describe('a new subfolder', () => {
     )
   })
 
+  it('says so when the keeper refuses the name it was about to write', async () => {
+    const { source, relist } = renderWithFolders({
+      refuseName: () => new DisplayNameTakenError('folder', 'class/w6/week-8', 'Week 8'),
+    })
+    await submitFolderName('New subfolder…', 'w6', 'Week 8')
+    await screen.findByRole('navigation', { name: 'Folder path' })
+    await source.createDocument('class/w6/week-8/untitled', 'markdown')
+    relist()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('already called')
+  })
+
   it('refuses a name a sibling folder already shows, its segment included', async () => {
     renderWithFolders()
     const dialog = await submitFolderName('New subfolder…', 'class', 'W7', 'tree')
