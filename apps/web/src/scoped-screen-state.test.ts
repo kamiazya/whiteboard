@@ -202,6 +202,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // Mirrors `documents`, which the reset clears, and is reassigned every
   // render, so a switch empties it on the render that follows.
   listedRef: 'no subject: mirrors the listed documents, reassigned every render',
+  flushFolderNamesIntoRef: 'no subject: mirrors the folder layer’s flush, reassigned every render',
   lastReadListRef:
     'no subject: holds the PREVIOUS source’s identity so the reset block can tell a real switch from a StrictMode replay — clearing it would make every replay read as a switch, which is the trap the effect’s own note describes',
   // No path of its own — a kind and the store's words — and it was still

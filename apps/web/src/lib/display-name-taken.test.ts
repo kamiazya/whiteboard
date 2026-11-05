@@ -15,6 +15,14 @@ describe('refuseTakenDocumentName', () => {
     expect(thrown).toBeInstanceOf(DisplayNameTakenError)
   })
 
+  it('quotes the sibling as it is called, not the variant that was typed', () => {
+    expect(() =>
+      refuseTakenDocumentName([sibling], { path: 'plan', name: 'ROADMAP ', documentId: 'b' }),
+    ).toThrow(
+      'Another document here is already called "Roadmap". Choose a name no other document here has.',
+    )
+  })
+
   it('lets a document keep its own name', () => {
     expect(() =>
       refuseTakenDocumentName([sibling], { path: 'roadmap', name: 'Roadmap', documentId: 'a' }),

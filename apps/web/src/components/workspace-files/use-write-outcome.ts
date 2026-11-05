@@ -36,17 +36,16 @@ interface PinRefusal {
  * actually collided, and an address the message will not name cannot be
  * corrected.
  *
- * The dialog renders `reason` too, so both are in the DOM while it is open.
- * Only one is ANNOUNCED — Radix marks the page behind a modal `aria-hidden`
- * (measured: DOM 2, accessible 1) — and dismissing the form clears this, so
- * the panel's generic line never outlives the submission it describes. That
- * is why there is no "which surface asked" flag here: it would be a second
- * rule for an outcome the clearing already produces, and no test could tell
- * the two apart.
+ * `inForm` says a dialog or sheet asked and is showing `reason` itself. The
+ * panel then draws no line of its own: Radix hides the page behind a modal
+ * from the accessibility tree, but not from sight, and a second red line
+ * behind the overlay read as a second failure. Dismissing the form clears
+ * this either way.
  */
 interface CreateRefusal {
   readonly kind: DocumentKind
   readonly reason: string
+  readonly inForm: boolean
 }
 
 /**

@@ -466,12 +466,13 @@ export function createBrowserFilesSource(
       }))
     },
 
-    async createDocument(path: string, kind: DocumentKind, name?: string): Promise<void> {
-      await createSeededDocumentAt(index, loro, {
+    async createDocument(path: string, kind: DocumentKind, name?: string): Promise<string> {
+      const entry = await createSeededDocumentAt(index, loro, {
         path,
         kind,
         ...(name === undefined ? {} : { name }),
       })
+      return entry.path
     },
 
     async importDocument(path: string, imported: ImportedDocument): Promise<void> {

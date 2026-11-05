@@ -41,7 +41,9 @@ describe('RenameDocumentDialog — a path the model refuses', () => {
     const { dialog, onSubmit, path } = renderDialog()
     fireEvent.change(path, { target: { value: 'design/Meeting notes' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-    expect(within(dialog).getByRole('alert').textContent).toMatch(/segment/i)
+    expect(within(dialog).getByRole('alert').textContent).toMatch(
+      /letters a–z, digits and hyphens/i,
+    )
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

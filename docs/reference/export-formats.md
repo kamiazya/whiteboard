@@ -825,6 +825,13 @@ document's own source rather than a picture. An image on a canvas is saved as an
 "images are referenced, not embedded" when the canvas has one; the picture exports above
 are the ones that carry the pixels.
 
+Every export is offered under the document's name, in whatever script it is
+written — a note called 概要 saves as `概要.md`. Only characters a filesystem
+refuses (`/ \ : * ? " < > |`, control characters and bidirectional marks) are
+replaced with `-`, the ends are trimmed, and trailing dots are dropped. A
+document with no name, or one whose name leaves nothing else, is offered under
+the last part of its path (`gaiyo.md` for `notes/gaiyo`).
+
 **Import** reads the same two sources back: `.md`/`.markdown` through the OKF parser
 (frontmatter optional) and `.canvas`/`.json` through the JSON Canvas parser, creating one
 document per file; see [Export and import a document](../how-to/export-and-import-a-document.md#bring-a-file-in).

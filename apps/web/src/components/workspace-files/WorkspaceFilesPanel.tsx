@@ -2,11 +2,11 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { addressForNameIn } from '../../lib/address-from-name.js'
 import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
-import { pathAfterFirstRename } from '../../lib/first-rename-path.js'
 import { newDocumentPathIn } from '../../lib/new-document-path.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
@@ -40,6 +40,7 @@ import {
   BrowseTwoColumns,
   cardMenuItemsFor,
   columnViewOf,
+  KIND_NOUN,
   LoadingColumns,
   PanelPreview,
   PanelRefusals,
@@ -370,15 +371,11 @@ export function WorkspaceFilesPanel({
     [folder, documents],
   )
 
-  /** The address a name typed at creation earns — what the first rename would give it. */
+  /** The address a name typed at creation earns inside the folder being browsed. */
   const pathForName = useCallback(
-    (name: string) =>
-      pathAfterFirstRename(
-        derivedNewPath,
-        name,
-        (documents ?? []).map((row) => row.path),
-      ) ?? derivedNewPath,
-    [derivedNewPath, documents],
+    (name: string, kind: DocumentKind) =>
+      addressForNameIn(folder, name, kind, documents?.map((row) => row.path) ?? []),
+    [folder, documents],
   )
 
   /**
@@ -388,9 +385,8 @@ export function WorkspaceFilesPanel({
    * was MCP or raw HTTP, which left the browser showing a hierarchy it had
    * no way to add to. Naming still follows creation (ADR-0006) — the menu's
    * two kind entries collect nothing — and the dialog behind its third entry
-   * is an opt-in for someone who already knows, never a gate. A path is
-   * still never derived from a name (ADR-0008); the dialog takes both, and
-   * neither field feeds the other.
+   * is an opt-in for someone who already knows, never a gate. A name typed
+   * there makes the address (`pathForName`) unless the path is edited.
    */
   const flushFolderNamesIntoRef = useRef<(path: string) => void>(() => {})
   const createHere = useCallback(
@@ -404,7 +400,7 @@ export function WorkspaceFilesPanel({
         // No options means nobody expressed an opinion, so the address is
         // derived exactly as it always was. The dialog is the only caller
         // that supplies one.
-        const path = options?.path ?? derivedNewPath
+        let path = options?.path ?? derivedNewPath
         // ONLY this write decides whether the create was refused. Everything
         // below is bookkeeping on a document that already exists, and
         // reporting a failed refresh as "could not create" invites a retry
@@ -412,12 +408,14 @@ export function WorkspaceFilesPanel({
         // form is still open holding the path that now exists.
         try {
           refuseTakenDocumentName(listedRef.current, { path, name: options?.name })
-          await source.createDocument(path, kind, options?.name)
+          // Where it LANDED: an unnamed create may shift past a sibling's name.
+          path = await source.createDocument(path, kind, options?.name)
           flushFolderNamesIntoRef.current(path)
         } catch (err) {
           outcome.reportCreateRefusal({
             kind,
-            reason: messageOf(err, `Could not create a ${kind} document here.`),
+            reason: messageOf(err, `Could not create ${KIND_NOUN[kind]} here.`),
+            inForm: options !== undefined,
           })
           // Re-thrown so the caller can tell a refusal from a success — the
           // dialog stays open on one and closes on the other, and swallowing

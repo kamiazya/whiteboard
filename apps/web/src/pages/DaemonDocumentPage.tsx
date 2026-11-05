@@ -95,8 +95,9 @@ function linkTargetCreator(
   return source === null
     ? {}
     : {
-        createLinkTarget: (path: string, name: string) =>
-          source.createDocument(path, 'markdown', name),
+        createLinkTarget: async (path: string, name: string) => {
+          await source.createDocument(path, 'markdown', name)
+        },
       }
 }
 

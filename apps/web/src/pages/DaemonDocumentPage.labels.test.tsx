@@ -136,7 +136,7 @@ describe('DaemonDocumentPage labels', () => {
     await openPage()
 
     await waitFor(() => expect(seen.overlayTitle).toBe(PATH))
-    expect(seen.filenameBase).toBe('notes-untitled-3')
+    expect(seen.filenameBase).toBe('untitled-3')
   })
 })
 
@@ -144,7 +144,9 @@ describe('daemonDocumentLabels names', () => {
   const canvas = { workspaceId: 'w1', path: PATH }
   const nameOf = (names: Parameters<typeof daemonDocumentLabels>[1]) => {
     const labels = daemonDocumentLabels(canvas, names, DOCUMENT_ID)
-    expect(labels.exportFilenameBase).toBe(labels.overlayTitle)
+    expect(labels.exportFilenameBase).toBe(
+      labels.overlayTitle === PATH ? 'untitled-3' : labels.overlayTitle,
+    )
     return labels.overlayTitle
   }
 

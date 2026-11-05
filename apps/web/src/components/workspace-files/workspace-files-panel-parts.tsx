@@ -1,4 +1,4 @@
-import { SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   CheckCircle2,
   Columns2,
@@ -83,6 +83,12 @@ function useSearchResultRows({
   )
 }
 
+/** A kind as people say it — never "spatial document", which is the model's word. */
+export const KIND_NOUN: Readonly<Record<DocumentKind, string>> = {
+  spatial: 'a canvas',
+  markdown: 'a note',
+}
+
 /**
  * What the last write refused to do, if anything. Three separate `role=alert`
  * paragraphs rather than one, because each names a different subject and a
@@ -95,9 +101,9 @@ function useSearchResultRows({
 export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWriteOutcome> }) {
   return (
     <>
-      {outcome.createRefusal !== null && (
+      {outcome.createRefusal !== null && !outcome.createRefusal.inForm && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {outcome.createRefusal.kind} document here.{' '}
+          Could not create {KIND_NOUN[outcome.createRefusal.kind]} here.{' '}
           {outcome.createRefusal.reason}
         </p>
       )}
@@ -257,7 +263,7 @@ export function PanelToolbar({
   creating: boolean
   workspace: WorkspaceFilesPanelProps['workspace']
   derivedNewPath: string
-  pathForName: (name: string) => string
+  pathForName: ComponentProps<typeof NewDocumentMenu>['pathForName']
   outcome: ReturnType<typeof useWriteOutcome>
   createHere: ComponentProps<typeof NewDocumentMenu>['onCreate']
   onImportFiles: ComponentProps<typeof NewDocumentMenu>['onImportFiles']

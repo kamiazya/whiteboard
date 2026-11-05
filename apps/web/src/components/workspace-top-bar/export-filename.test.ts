@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { sanitizeExportFilenameBase } from './export-filename'
+import { exportFilenameBaseFor, sanitizeExportFilenameBase } from './export-filename'
 
 describe('sanitizeExportFilenameBase', () => {
   it('replaces filesystem-unsafe characters with a hyphen', () => {
@@ -37,5 +37,22 @@ describe('sanitizeExportFilenameBase', () => {
     ]
     const name = String.fromCodePoint(...neighbours)
     expect(sanitizeExportFilenameBase(name)).toBe(name)
+  })
+})
+
+describe('exportFilenameBaseFor', () => {
+  it('keeps a name in any script, Japanese included', () => {
+    expect(exportFilenameBaseFor('概要', 'folder/gaiyo')).toBe('概要')
+    expect(exportFilenameBaseFor('Équipe Ops — plan', 'equipe-ops')).toBe('Équipe Ops — plan')
+  })
+
+  it('trims, and drops the trailing dots and spaces a filesystem refuses', () => {
+    expect(exportFilenameBaseFor('  Notes v2.  ', 'n')).toBe('Notes v2')
+  })
+
+  it("falls back to the address's last segment when the name leaves nothing", () => {
+    expect(exportFilenameBaseFor(undefined, 'folder/gaiyo')).toBe('gaiyo')
+    expect(exportFilenameBaseFor('  ', 'folder/gaiyo')).toBe('gaiyo')
+    expect(exportFilenameBaseFor('///', 'folder/gaiyo')).toBe('gaiyo')
   })
 })

@@ -38,6 +38,7 @@ function renderWithFolders(
     },
     createDocument: async (path, kind, name) => {
       rows = [...rows, { documentId: `d${rows.length + 1}`, path, kind, ...(name ? { name } : {}) }]
+      return path
     },
     renameDocumentPath: async (from, to) => {
       rows = rows.map((row) => (row.path === from ? { ...row, path: to } : row))
@@ -116,7 +117,7 @@ describe('a folder’s display name', () => {
     })
     const dialog = await submitFolderName('Rename…', 'w7', ' week 6 ')
     expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another folder here is already called "week 6". Choose a name no other folder here has.',
+      'Another folder in "class" is already called "Week 6". Choose a name no other folder there has.',
     )
     expect(source.setFolderName).not.toHaveBeenCalled()
   })
@@ -206,7 +207,7 @@ describe('a new subfolder', () => {
     renderWithFolders()
     const dialog = await submitFolderName('New subfolder…', 'class', 'W7', 'tree')
     expect((await within(dialog).findByRole('alert')).textContent).toBe(
-      'Another folder here is already called "W7". Choose a name no other folder here has.',
+      'Another folder in "class" is already called "w7". Choose a name no other folder there has.',
     )
     expect(dialog.isConnected).toBe(true)
   })

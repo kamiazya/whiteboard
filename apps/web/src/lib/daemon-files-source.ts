@@ -1,5 +1,5 @@
 import { serializeOkf } from '@kamiazya/whiteboard-codec'
-import { type DocumentKind, imageRefId } from '@kamiazya/whiteboard-model'
+import { imageRefId } from '@kamiazya/whiteboard-model'
 import {
   createDocument,
   DaemonApiError,
@@ -197,6 +197,15 @@ function listingMembers(
   }
 }
 
+/** Where a create landed, once the write's list bookkeeping has run. */
+async function landedPath(
+  afterWrite: (write: Promise<unknown>) => Promise<void>,
+  created: Promise<{ readonly path: string }>,
+): Promise<string> {
+  await afterWrite(created)
+  return (await created).path
+}
+
 export function createDaemonFilesSource(
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -241,8 +250,8 @@ export function createDaemonFilesSource(
     },
     ...listingMembers(list, afterWrite, { daemonFetch, daemonBaseUrl, workspaceId }),
 
-    createDocument: (path: string, kind: DocumentKind, name?: string) =>
-      afterWrite(createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)),
+    createDocument: (...args: Parameters<WorkspaceFilesSource['createDocument']>) =>
+      landedPath(afterWrite, createDocument(daemonFetch, daemonBaseUrl, workspaceId, ...args)),
 
     async importDocument(path: string, imported: ImportedDocument): Promise<void> {
       // The create route takes a markdown document's text and no canvas
