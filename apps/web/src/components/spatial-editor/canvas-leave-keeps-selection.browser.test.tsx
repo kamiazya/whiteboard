@@ -26,6 +26,7 @@ function mount() {
     <>
       <button type="button">Before the canvas</button>
       <host.Host />
+      <button type="button">After the canvas</button>
     </>,
   )
   rootOf(container).focus()
@@ -52,7 +53,9 @@ it('F6 moves focus on past the canvas and keeps the selection', async () => {
   const { container } = mount()
   await userEvent.keyboard('{Tab}{Tab}')
   await userEvent.keyboard('{F6}')
-  await vi.waitFor(() => expect(document.activeElement === rootOf(container)).toBe(false))
-  expect(document.activeElement === document.body).toBe(false)
+  // The controls drawn inside the canvas (the dock, a node's links) are
+  // still the canvas: F6 goes past all of them.
+  await expect.element(page.getByRole('button', { name: 'After the canvas' })).toHaveFocus()
+  expect(rootOf(container).contains(document.activeElement)).toBe(false)
   expect(selectedNames()).toEqual(['Second'])
 })

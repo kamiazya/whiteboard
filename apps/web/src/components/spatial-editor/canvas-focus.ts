@@ -31,13 +31,11 @@ export function focusPastCanvas(root: HTMLElement, direction: 1 | -1): boolean {
   )
   const at = stops.indexOf(root)
   if (at < 0) return false
+  // A control drawn inside the root (the dock, a link in a node) is still
+  // the canvas, in both directions.
+  const outside = (element: HTMLElement) => !root.contains(element)
   const target =
-    direction === 1
-      ? stops.slice(at + 1).find((element) => element !== root)
-      : stops
-          .slice(0, at)
-          .reverse()
-          .find((element) => !root.contains(element))
+    direction === 1 ? stops.slice(at + 1).find(outside) : stops.slice(0, at).reverse().find(outside)
   if (target === undefined) return false
   target.focus()
   return true
