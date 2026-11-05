@@ -61,7 +61,8 @@ still unnamed takes its name from its first heading only when no other
 document in its folder already shows that name; otherwise it stays
 **Untitled** until you name it. **Duplicate** names the copy
 "Name (copy)", or the first "Name (copy 2)", "Name (copy 3)" … that nothing
-beside it shows.
+beside it shows. The copy is selected in the list, and a
+"Duplicated _name_" notice offers **Open** for it.
 
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so

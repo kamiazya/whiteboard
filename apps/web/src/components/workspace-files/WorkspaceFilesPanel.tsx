@@ -26,6 +26,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
+import { DuplicatedToast, useDuplicateFeedback } from './use-duplicate-feedback.js'
 import { useFolderActions } from './use-folder-actions.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { ImportReportLine, useImportFiles } from './use-import-files.js'
@@ -588,6 +589,7 @@ export function WorkspaceFilesPanel({
   })
 
   flushFolderNamesIntoRef.current = folderActions.flushInto
+  const duplicated = useDuplicateFeedback({ documents, onDuplicateDocument, select: setSelected })
 
   if (listStatus === 'error') {
     return (
@@ -621,7 +623,7 @@ export function WorkspaceFilesPanel({
           tapOpens,
           source,
           openEntry: offeredOpen,
-          onDuplicateDocument,
+          onDuplicateDocument: duplicated.duplicate,
           onRequestDelete,
           onRequestDeleteMany,
           setPeek,
@@ -808,7 +810,7 @@ export function WorkspaceFilesPanel({
                   findDocument={findListed}
                   onOpen={offeredOpen}
                   onRename={rename.open}
-                  onDuplicateDocument={onDuplicateDocument}
+                  onDuplicateDocument={duplicated.duplicate}
                   onRequestDelete={onRequestDelete}
                 />
               </div>
@@ -861,6 +863,7 @@ export function WorkspaceFilesPanel({
             />
           )}
           {folderActions.layer}
+          <DuplicatedToast copy={duplicated.copy} onOpen={offeredOpen} />
         </section>
       </FolderNamesContext.Provider>
     </FolderActionsContext.Provider>
