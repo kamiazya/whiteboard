@@ -28,4 +28,11 @@ describe('refuseTakenDocumentName', () => {
       refuseTakenDocumentName([sibling], { path: 'roadmap', name: 'Roadmap', documentId: 'a' }),
     ).not.toThrow()
   })
+
+  it('reads a blank-named sibling as showing its segment', () => {
+    const blank = { documentId: 'a', path: 'roadmap', name: '  ' }
+    expect(() =>
+      refuseTakenDocumentName([blank], { path: 'plan', name: 'Roadmap', documentId: 'b' }),
+    ).toThrow('Another document here is already called "roadmap".')
+  })
 })

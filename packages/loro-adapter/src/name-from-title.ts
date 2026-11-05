@@ -2,7 +2,7 @@
 // keeper: the browser's store and the daemon, which names on every content
 // write, take the same bytes, so a note typed into at `untitled` must come out
 // named the same way whichever of them keeps it.
-import { displayNameKey, leafOfPath } from '@kamiazya/whiteboard-model'
+import { displayNameKey, leafOfPath, shownName } from '@kamiazya/whiteboard-model'
 import type { LoroDoc, LoroTreeNode } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -31,6 +31,9 @@ function isGeneratedDocumentPath(path: string): boolean {
 
 const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
 
+/** A document node's meta with its name left out, for a reader that takes the name as it stands. */
+const documentMetaSchema = workspaceNodeMetaSchema.omit({ name: true })
+
 /**
  * Whether `title` is what another DOCUMENT beside `node` shows — its name, or
  * its segment when it has none — compared as the keepers' sibling rule
@@ -43,10 +46,15 @@ function siblingDocumentShows(workspace: LoroDoc, node: LoroTreeNode, title: str
   const siblings = node.parent()?.children() ?? workspace.getTree(WORKSPACE_TREE_KEY).roots()
   for (const sibling of siblings) {
     if (sibling.id === node.id) continue
-    const meta = workspaceNodeMetaSchema.safeParse(
+    // The name is read loosely: a blank one a merge left behind is no reason
+    // to stop seeing the document, which shows its segment instead.
+    const meta = documentMetaSchema.safeParse(
       Object.fromEntries(META_KEYS.map((field) => [field, sibling.data.get(field)])),
     )
-    if (meta.success && displayNameKey(meta.data.name ?? meta.data.segment) === key) return true
+    if (!meta.success) continue
+    const stored = sibling.data.get('name')
+    const name = typeof stored === 'string' ? stored : undefined
+    if (displayNameKey(shownName({ path: meta.data.segment, name })) === key) return true
   }
   return false
 }

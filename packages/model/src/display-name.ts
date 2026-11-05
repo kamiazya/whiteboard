@@ -62,6 +62,24 @@ function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
 }
 
 /**
+ * What an entry — a document or a folder — shows where a person reads it: the
+ * name somebody gave it, or its own last segment when it has none. A BLANK
+ * name counts as none, because it shows nothing a person could read and every
+ * surface falls back to the segment for it; comparing the blank instead would
+ * let a sibling take the very segment the blank-named entry is showing.
+ *
+ * One answer for every writer judging "what does a sibling show" — the
+ * keepers' sibling rule and the heading seeder — so the two cannot drift.
+ */
+export function shownName(entry: {
+  readonly path: string
+  readonly name?: string | null | undefined
+}): string {
+  const { name } = entry
+  return name === undefined || name === null || name.trim() === '' ? leafOfPath(entry.path) : name
+}
+
+/**
  * Whether `target.name` duplicates what a sibling of `target.path` shows —
  * the siblings being the entries of `others` directly under the same parent,
  * each showing its name or, unnamed, its own segment. `others` is one KIND of
@@ -76,7 +94,7 @@ export function isSiblingDisplayNameTaken(
   const shown: string[] = []
   for (const other of others) {
     if (parentOfPath(other.path) !== parent) continue
-    shown.push(other.name ?? leafOfPath(other.path))
+    shown.push(shownName(other))
   }
   return isDisplayNameTaken(target.name, shown)
 }
@@ -94,8 +112,8 @@ export function isMovedNameTaken(
   staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
   move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
 ): boolean {
-  const shown = move.name ?? leafOfPath(move.to)
-  const wasShown = move.name ?? leafOfPath(move.from)
+  const shown = shownName({ path: move.to, name: move.name })
+  const wasShown = shownName({ path: move.from, name: move.name })
   if (
     parentOfPath(move.from) === parentOfPath(move.to) &&
     displayNameKey(shown) === displayNameKey(wasShown)

@@ -1,4 +1,4 @@
-import { displayNameKey, leafOfPath, parentOfPath } from '@kamiazya/whiteboard-model'
+import { displayNameKey, parentOfPath, shownName } from '@kamiazya/whiteboard-model'
 import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 
 /**
@@ -43,9 +43,9 @@ export function refuseTakenDocumentName(
     (each) =>
       each.documentId !== target.documentId &&
       parentOfPath(each.path) === parent &&
-      displayNameKey(each.name ?? leafOfPath(each.path)) === key,
+      displayNameKey(shownName(each)) === key,
   )
   if (holder !== undefined) {
-    throw new DisplayNameTakenError('document', target.path, holder.name ?? leafOfPath(holder.path))
+    throw new DisplayNameTakenError('document', target.path, shownName(holder))
   }
 }

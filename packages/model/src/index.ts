@@ -17,6 +17,7 @@ export {
   folderNameSchema,
   isMovedNameTaken,
   isSiblingDisplayNameTaken,
+  shownName,
 } from './display-name.js'
 export * from './document-kind.js'
 export {

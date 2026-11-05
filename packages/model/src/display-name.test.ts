@@ -3,7 +3,9 @@ import {
   displayNameKey,
   folderNameRefusal,
   folderNameSchema,
+  isMovedNameTaken,
   isSiblingDisplayNameTaken,
+  shownName,
 } from './display-name.js'
 import { DOCUMENT_NAME_MAX_LENGTH } from './ids.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -70,7 +72,11 @@ describe('the display-name comparison', () => {
     expect(displayNameKey(displayNameKey(name))).toBe(displayNameKey(name))
   })
 
-  fcTest.prop([nameArb], withDefaults())(
+  // A sibling's blank name shows its segment instead (`shownName`), so the
+  // comparison is asked only of names a sibling can show.
+  const shownArb = nameArb.filter((name) => name.trim() !== '')
+
+  fcTest.prop([shownArb], withDefaults())(
     'finds a name among its padded, recased and decomposed variants',
     (name) => {
       expect(isDisplayNameTaken(` ${name} `, [name.normalize('NFD')])).toBe(true)
@@ -101,5 +107,34 @@ describe('isSiblingDisplayNameTaken', () => {
   it('treats the workspace root as a parent like any other', () => {
     expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'top' })).toBe(true)
     expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'Week 6' })).toBe(false)
+  })
+})
+
+describe('shownName', () => {
+  it('shows the name somebody gave', () => {
+    expect(shownName({ path: 'class/plan', name: 'Weekly plan' })).toBe('Weekly plan')
+  })
+
+  it('shows the last segment of an unnamed entry', () => {
+    expect(shownName({ path: 'class/plan' })).toBe('plan')
+    expect(shownName({ path: 'plan', name: undefined })).toBe('plan')
+  })
+
+  it('shows the last segment of an entry whose name is blank', () => {
+    expect(shownName({ path: 'class/plan', name: '' })).toBe('plan')
+    expect(shownName({ path: 'class/plan', name: '   ' })).toBe('plan')
+  })
+
+  it('makes a blank-named sibling refuse its own segment as a name', () => {
+    const others = [{ path: 'class/plan', name: ' ' }]
+    expect(isSiblingDisplayNameTaken(others, { path: 'class/other', name: 'Plan' })).toBe(true)
+    expect(isSiblingDisplayNameTaken(others, { path: 'class/other', name: ' ' })).toBe(false)
+  })
+
+  it('reads a blank-named moving entry as showing its segment', () => {
+    const staying = [{ path: 'b/plan', name: 'x' }, { path: 'b/other' }]
+    expect(isMovedNameTaken(staying, { from: 'a/other', to: 'b/moved', name: '' })).toBe(false)
+    expect(isMovedNameTaken(staying, { from: 'a/plan', to: 'b/other-2', name: '' })).toBe(false)
+    expect(isMovedNameTaken(staying, { from: 'a/x', to: 'b/x', name: '' })).toBe(true)
   })
 })
