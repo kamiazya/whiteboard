@@ -11,6 +11,7 @@
  * here would put that decision in two places.
  */
 
+import { foldForSearch } from '@kamiazya/whiteboard-search'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 
 /**
@@ -42,10 +43,14 @@ function documentMatchesSearch(
     const carries = (tag: string) => tag.toLowerCase() === wanted
     return (document.tags?.some(carries) ?? false) || (document.carriedTags?.some(carries) ?? false)
   }
+  // Folded the way the content search folds, so a name answers "cafe" for
+  // "Café" here exactly as a body does there.
+  const folded = foldForSearch(q)
+  const has = (text: string) => foldForSearch(text).includes(folded)
   return (
-    document.path.toLowerCase().includes(q) ||
-    (document.name?.toLowerCase().includes(q) ?? false) ||
-    (document.tags?.some((tag) => tag.toLowerCase().includes(q)) ?? false)
+    has(document.path) ||
+    (document.name !== undefined && has(document.name)) ||
+    (document.tags?.some(has) ?? false)
   )
 }
 

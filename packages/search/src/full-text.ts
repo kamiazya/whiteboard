@@ -1,4 +1,5 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { type Folded, foldForSearch, foldWithOffsets, spanOf } from './fold.js'
 import { snippetAround } from './snippet.js'
 
 /**
@@ -48,7 +49,7 @@ export function tokenizeForIndex(text: string): string[] {
  * answers false; answers false itself when it was stopped.
  */
 function tokenizeRuns(text: string, unigrams: boolean, emit: (token: string) => boolean): boolean {
-  for (const match of text.toLowerCase().matchAll(WORD)) {
+  for (const match of foldForSearch(text).matchAll(WORD)) {
     for (const stretch of scriptStretches(match[0])) {
       if (!emitStretch(stretch, unigrams, emit)) return false
     }
@@ -286,21 +287,20 @@ interface Match {
 }
 
 /**
- * Where the query matches `lower`: the raw needle if it occurs verbatim,
- * otherwise the earliest matching token.
+ * Where the query matches `folded`: the raw needle if it occurs verbatim,
+ * otherwise the earliest matching token — as a span of the ORIGINAL text,
+ * so the excerpt quotes what the document says, accents included.
  */
-function firstMatch(lower: string, needle: string, tokens: readonly string[]): Match | undefined {
-  const verbatim = needle === '' ? -1 : lower.indexOf(needle)
-  if (verbatim !== -1) {
-    return { index: verbatim, length: needle.length, score: tokens.length + 1 }
-  }
+function firstMatch(folded: Folded, needle: string, tokens: readonly string[]): Match | undefined {
+  const verbatim = spanOf(folded, needle)
+  if (verbatim !== undefined) return { ...verbatim, score: tokens.length + 1 }
   let best: { index: number; length: number } | undefined
   let matched = 0
   for (const token of tokens) {
-    const at = lower.indexOf(token)
-    if (at === -1) continue
+    const at = spanOf(folded, token)
+    if (at === undefined) continue
     matched++
-    if (best === undefined || at < best.index) best = { index: at, length: token.length }
+    if (best === undefined || at.index < best.index) best = at
   }
   return best === undefined ? undefined : { ...best, score: matched }
 }
@@ -316,12 +316,12 @@ function firstMatch(lower: string, needle: string, tokens: readonly string[]): M
  * Built once per query, so its tokens are cut up once rather than per hit.
  */
 export function excerpterFor(query: string): (doc: Pick<SearchableDocument, 'texts'>) => string[] {
-  const needle = query.trim().toLowerCase()
+  const needle = foldForSearch(query.trim())
   const tokens = [...new Set(tokenize(query))].slice(0, EXCERPT_TOKENS_MAX)
   return (doc) =>
     doc.texts
       .flatMap((text, order) => {
-        const match = firstMatch(text.toLowerCase(), needle, tokens)
+        const match = firstMatch(foldWithOffsets(text), needle, tokens)
         return match === undefined ? [] : [{ text, match, order }]
       })
       .sort((a, b) => b.match.score - a.match.score || a.order - b.order)

@@ -63,4 +63,12 @@ describe('SearchResults', () => {
     const grid = screen.getByTestId('search-results-grid')
     expect(grid.textContent).toContain('plans/roadmap')
   })
+
+  it('highlights the accented original for an unaccented query', () => {
+    const cafe = [
+      { document: { documentId: 'c', path: 'suppliers/list', name: 'Café supplier list' } },
+    ]
+    render(<SearchResults results={cafe} query="cafe" onSelect={vi.fn()} />)
+    expect(screen.getAllByTestId('search-match').map((m) => m.textContent)).toContain('Café')
+  })
 })

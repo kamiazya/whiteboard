@@ -117,3 +117,15 @@ describe('tag matching', () => {
     expect(searchDocuments(docs, '#misc').map((d) => d.documentId)).toEqual([])
   })
 })
+
+describe('searchDocuments folding', () => {
+  it('matches a name whatever accents either side carries', () => {
+    const accented: WorkspaceDocumentEntry[] = [
+      { documentId: 'a', path: 'suppliers/list', name: 'Café supplier list' },
+      { documentId: 'b', path: 'quipe-ops/untitled-8', name: 'Équipe Ops' },
+    ]
+    expect(searchDocuments(accented, 'cafe').map((d) => d.documentId)).toEqual(['a'])
+    expect(searchDocuments(accented, 'equipe').map((d) => d.documentId)).toEqual(['b'])
+    expect(searchDocuments(accented, 'ÉQUIPE').map((d) => d.documentId)).toEqual(['b'])
+  })
+})

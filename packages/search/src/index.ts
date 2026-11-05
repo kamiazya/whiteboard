@@ -1,3 +1,4 @@
+export { findFolded, foldForSearch } from './fold.js'
 export {
   type AlsoIndex,
   type DocumentTerms,

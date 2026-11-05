@@ -13,6 +13,7 @@
  * re-run the search with their eyes.
  */
 
+import { findFolded } from '@kamiazya/whiteboard-search'
 import { LayoutGrid, List } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
@@ -258,22 +259,23 @@ function listProps(
 }
 
 /**
- * The text with its first case-insensitive match marked. First only: one
- * highlight answers "why is this row here", and a title that matches four
- * times painted four times reads as damage rather than emphasis.
+ * The text with its first match marked, compared the way search compares
+ * (case and Latin accents folded) but marked on the text as written, so
+ * "cafe" lights up "Café". First only: one highlight answers "why is this
+ * row here", and a title that matches four times painted four times reads
+ * as damage rather than emphasis.
  */
 function Highlighted({ text, query }: { text: string; query: string }) {
-  const q = query.trim().toLowerCase()
-  if (q === '') return <>{text}</>
-  const at = text.toLowerCase().indexOf(q)
-  if (at === -1) return <>{text}</>
+  const found = findFolded(text, query.trim())
+  if (found === undefined) return <>{text}</>
+  const end = found.index + found.length
   return (
     <>
-      {text.slice(0, at)}
+      {text.slice(0, found.index)}
       <mark data-testid="search-match" className="rounded-sm bg-primary/20 text-inherit">
-        {text.slice(at, at + q.length)}
+        {text.slice(found.index, end)}
       </mark>
-      {text.slice(at + q.length)}
+      {text.slice(end)}
     </>
   )
 }
