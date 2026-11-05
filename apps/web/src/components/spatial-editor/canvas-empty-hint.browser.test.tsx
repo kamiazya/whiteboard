@@ -42,10 +42,12 @@ it('an empty canvas on a coarse pointer says to tap +', () => {
   expect(screen.getByTestId('canvas-empty-hint').textContent).toBe('Tap + to add a note')
 })
 
-it('an empty canvas on a fine pointer says to double-click', () => {
+it('an empty canvas on a fine pointer says to double-click or press N', () => {
   coarse = false
   mount([])
-  expect(screen.getByTestId('canvas-empty-hint').textContent).toBe('Double-click to add a note')
+  expect(screen.getByTestId('canvas-empty-hint').textContent).toBe(
+    'Double-click or press N to add a note',
+  )
 })
 
 it('the hint never catches a press meant for the canvas', () => {

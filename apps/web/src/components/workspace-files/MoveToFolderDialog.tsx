@@ -259,10 +259,12 @@ export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
             <ErrorLine message={error} />
             {/* The pointer path, said once where a pointer user is already
               moving something; nothing else on screen hints at it. A touch
-              screen offers no drag, so it is not promised there. */}
+              screen offers no drag, so it is not promised there. A keyboard
+              user cannot drag, so the way back here is said beside it. */}
             {!hasCoarsePointer() && (
               <p className="text-muted-foreground text-xs">
-                Next time, you can also drag a card onto a folder.
+                Next time, you can also drag a card onto a folder, or press Shift+F10 on a card and
+                choose Move to folder….
               </p>
             )}
             <DialogActions cancelLabel="Cancel" onCancel={onCancel} />

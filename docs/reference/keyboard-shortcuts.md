@@ -232,7 +232,7 @@ selection, or nudging several nodes each undo in a single press.
 The sheet lists every shortcut above for your platform (`⌘` on macOS,
 `Ctrl` elsewhere), grouped as Tools, Navigate, Edit, Arrange, View, Text and Help, with Undo and
 Redo under Edit and a closing line that Align, Distribute, Tidy and Group have
-no key and live in the Select tool's right-click menus — Align and Distribute on
+no key and live in the Select tool's right-click menus (`Shift + F10` opens the same menus from the keyboard) — Align and Distribute on
 a selection of two or more nodes — since the Hand tool's right-click offers
 comments only. It also
 opens from the **Keyboard shortcuts** button in the bottom dock, which is the

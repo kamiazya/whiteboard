@@ -52,6 +52,12 @@ describe('ShortcutHelpSheet', () => {
     expect(note.textContent).toMatch(/right-click/i)
   })
 
+  it('names the keyboard way into those menus beside right-click', () => {
+    render(<ShortcutHelpSheet open onOpenChange={() => {}} />)
+    const text = screen.getByTestId('shortcut-help-menu-only').textContent ?? ''
+    expect(text).toMatch(/Shift\+F10/)
+  })
+
   // The Hand tool's right-click offers comments only, so the arrange
   // actions are reached from the Select tool — and Align/Distribute from a
   // selection of two or more nodes, the only menu that carries them.
