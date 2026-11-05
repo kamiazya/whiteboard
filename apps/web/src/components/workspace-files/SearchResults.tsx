@@ -59,11 +59,17 @@ export interface SearchResultsProps {
   /**
    * Whether document CONTENT was actually looked at. False while a content
    * search is unavailable, still in flight, or bypassed by a `#tag` filter —
-   * cases where the answer came from names and paths alone, and an empty
+   * cases where the answer came from names and folders alone, and an empty
    * state claiming otherwise would report a document as missing when nobody
    * looked inside it.
    */
   searchedContents?: boolean
+  /**
+   * Whether an answer is still on its way. An empty list then means nothing
+   * has been found YET, not that nothing matches, so the empty message waits
+   * — beside "Searching…" it contradicted itself.
+   */
+  pending?: boolean
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
   /**
@@ -324,6 +330,7 @@ export function SearchResults({
   results,
   query,
   searchedContents = true,
+  pending = false,
   selectedPath,
   onSelect,
   onActivate,
@@ -346,6 +353,7 @@ export function SearchResults({
   // for a bigger picture, the way Finder's icon view does.
   const [layout, setLayout] = useState<'list' | 'grid'>('list')
 
+  if (results.length === 0 && pending) return null
   if (results.length === 0) {
     // Say what was searched, not just that nothing came back. Search here is
     // lexical: it finds the words a document actually contains, so a query
@@ -357,7 +365,7 @@ export function SearchResults({
     return (
       <p className={cn('text-muted-foreground text-sm', className)}>
         Nothing matches “{query.trim()}” in the{' '}
-        {searchedContents ? 'names, paths and contents' : 'names and paths'} of this workspace.
+        {searchedContents ? 'names, folders and text' : 'names and folders'} of this workspace.
       </p>
     )
   }

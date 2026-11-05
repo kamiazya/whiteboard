@@ -51,7 +51,7 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  * Two answers, and the difference is where the search HAPPENED. A `#tag`
  * query is a FILTER over what is already loaded and never leaves the client;
  * so is the fallback while content search is unreachable or still in flight,
- * because the names and paths already in hand are a real answer rather than
+ * because the names and folders already in hand are a real answer rather than
  * a blank pane. Everything else is the source's own hits, widened with the
  * documents whose NAME matches — a content index does not rank a name.
  */
@@ -631,7 +631,7 @@ export function SearchColumn({
         >
           {searching !== 'idle' ? '' : resultsAnnouncement(rows.length, query)}
           {searchDegraded &&
-            ' Searching names and paths only — this workspace’s content search is unavailable.'}
+            ' Searching names and folders only — this workspace’s content search is unavailable.'}
         </p>
         {searching === 'slow' && (
           <p className="text-muted-foreground mb-1 text-xs" aria-hidden="true">
@@ -648,6 +648,7 @@ export function SearchColumn({
           combobox={combobox}
           query={query}
           searchedContents={activeTag === null && hits !== null}
+          pending={searching !== 'idle'}
           selectedPath={selectedPath}
           onSelect={tapOpens ? openEntry : setSelected}
           onDocumentContextMenu={openCardMenu}
