@@ -48,13 +48,20 @@ has a name the lists call it **Untitled** (**Untitled 2** for `untitled-2`), the
 word its title box shows; the first time
 you give it a name in its title, its path becomes that name (`untitled` to
 `checkout-architecture`), and from then on the path stays put. If you already know what the document is called and where
-it goes, **Name and folder…** in that menu takes both up front; leaving its
-form untouched creates exactly what the plain entries would have.
+it goes, **Name and folder…** in that menu takes both up front. Its **Path**
+follows the **Name** as you type — `Q3 hiring plan` fills in `q3-hiring-plan`,
+accents are spelled without their marks, and a name in a script the address
+cannot spell gives `note` or `canvas` and the next free number — until you edit
+the path yourself. The hint under it says what an address may hold (letters
+a–z, digits and hyphens, `/` between folders), and a path it cannot hold is
+said while you type it, not after **Create**. Leaving the form untouched
+creates exactly what the plain entries would have.
 
 On a phone, or any touch screen, **New** opens a sheet from the bottom edge
 instead. Its first field is the name, with the keyboard already up; type it and
 press **Canvas** or **Markdown note**, and the document is created under that
-name at the path the name earns (`Meeting notes` becomes `meeting-notes`).
+name at the path the name earns (`Meeting notes` becomes `meeting-notes`;
+`概要` becomes `note`, or the next free `note-2`, `note-3` …).
 Leave the name empty and it starts at `untitled` as above.
 
 Two documents side by side in one folder cannot share a name: the sheet, the
