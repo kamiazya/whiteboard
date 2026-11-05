@@ -484,6 +484,27 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(listJson.documents.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
+  it('answers 409 display_name_taken when the move lands beside a sibling showing its name', async () => {
+    await createTestDocument(serverDeps, {
+      workspaceId: 'session1',
+      path: 'week/plan',
+      name: 'Plan',
+    })
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'month/x', name: 'plan' })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
+    const res = await app.request('/api/workspaces/session1/documents/month/x/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'week/x' }),
+    })
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: 'display_name_taken' })
+
+    const listRes = await app.request('/api/workspaces/session1/documents')
+    const listJson = (await listRes.json()) as { documents: { path: string }[] }
+    expect(listJson.documents.map((c) => c.path).sort()).toEqual(['month/x', 'week/plan'])
+  })
+
   it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old path', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const baseDoc = new LoroDoc()

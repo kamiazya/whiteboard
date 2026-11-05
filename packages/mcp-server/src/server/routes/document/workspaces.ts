@@ -501,6 +501,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         const owned = firstOwned(err, [
           notFoundAs(`Document "${path}" not found`),
           moveIntoSelf,
+          displayNameTaken,
           pathTakenAs(),
           corruptStored,
           pastWorkspaceCeiling,
