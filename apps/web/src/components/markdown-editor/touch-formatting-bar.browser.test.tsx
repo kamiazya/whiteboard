@@ -218,6 +218,52 @@ it('"…" opens the overflow sheet, and a verb from it acts on the document', as
   expect(screen.queryByRole('menuitem', { name: 'Code block' })).toBeNull()
 })
 
+it('offers a note that stores files its Image verb from the sheet', async () => {
+  const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+  render(
+    <>
+      <MarkdownEditor
+        theme="light"
+        value="Pump ok"
+        onChange={vi.fn()}
+        initialViewMode="write"
+        onStoreImage={async () => ({ ok: true, ref: 'asset:x' })}
+      />
+      <TouchFormattingBar />
+    </>,
+  )
+  ;(document.querySelector('.cm-content') as HTMLElement).focus()
+  await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
+  raiseKeyboard(300)
+  await vi.waitFor(() => expect(bar()).not.toBeNull())
+
+  await userEvent.click(screen.getByRole('button', { name: 'More formatting' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Image…' }))
+  expect(click).toHaveBeenCalledTimes(1)
+  click.mockRestore()
+})
+
+it('offers no Image verb on a host that stores no files', async () => {
+  render(
+    <>
+      <MarkdownNodeEditor
+        label="Note"
+        box={BOX}
+        initialText=""
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />
+      <TouchFormattingBar />
+    </>,
+  )
+  await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
+  raiseKeyboard(300)
+  await vi.waitFor(() => expect(bar()).not.toBeNull())
+  await userEvent.click(screen.getByRole('button', { name: 'More formatting' }))
+  await screen.findByRole('menuitem', { name: 'Code block' })
+  expect(screen.queryByRole('menuitem', { name: 'Image…' })).toBeNull()
+})
+
 it('never shows on a fine pointer', async () => {
   coarse = false
   render(

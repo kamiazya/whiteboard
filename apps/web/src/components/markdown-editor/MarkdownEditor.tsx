@@ -56,6 +56,7 @@ import type { SourcePaneApi } from './SourcePane.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { SplitDivider, useSplitDrag } from './split-divider.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { type StoreImage, useImageAttach } from './use-image-attach.js'
 import { useLinkFollow } from './use-link-follow.js'
 import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
@@ -133,6 +134,8 @@ export interface MarkdownEditorProps {
    * cannot make documents on its own.
    */
   onCreateLinkTarget?: LinkTargetCreator
+  /** Stores a picked, pasted or dropped image with the keeper; absent, no Image verb. */
+  onStoreImage?: StoreImage
   /** The open document's own path: a `[[` naming it is a self-link, never a Create row. */
   ownPath?: string
   /**
@@ -248,9 +251,6 @@ function countWords(value: string): number {
  *   through useMarkdownFragments (async MathJax/mermaid behind
  *   cache-backed sync seams); until a source's first render lands, math
  *   shows the escaped-source placeholder and a fence the plain code block.
- * - `[[wikiLink]]` / `![[embed]]` resolution needs a workspace-index-backed
- *   resolver for `resolveReferences`, which does not exist at this
- *   component's boundary; without one they stay literal bracket text.
  *
  * Preview recomputation is trailing-edge debounced so a keystroke does not
  * synchronously re-parse and re-layout the whole document — the debounce
@@ -273,6 +273,7 @@ export function MarkdownEditor({
   linkTargets,
   onOpenDocument,
   onCreateLinkTarget,
+  onStoreImage,
   ownPath,
   fragmentLoaders,
   sourceExtensions,
@@ -335,6 +336,8 @@ export function MarkdownEditor({
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const sourceApiRef = useRef<SourcePaneApi | null>(null)
+  const imageAttach = useImageAttach(onStoreImage, sourceApiRef)
 
   const applyProposalEffects = useCallback((effects: readonly StateEffect<unknown>[]) => {
     sourceApiRef.current?.applyEffects(effects)
@@ -357,11 +360,13 @@ export function MarkdownEditor({
       linkFollow.extension,
       annotationExtension,
       passageProposals.extension,
+      ...imageAttach.extension,
       ...(sourceExtensions ?? []),
     ],
     [
       annotationExtension,
       completionExtension,
+      imageAttach.extension,
       linkFollow.extension,
       passageProposals.extension,
       sourceExtensions,
@@ -409,7 +414,6 @@ export function MarkdownEditor({
 
   const sourceWrapRef = useRef<HTMLDivElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
-  const sourceApiRef = useRef<SourcePaneApi | null>(null)
   /**
    * The open catalog and where it is anchored, in coordinates relative to
    * the editor root (ContextMenu positions against its offsetParent).
@@ -417,6 +421,14 @@ export function MarkdownEditor({
   // The range itself lives in the editor state (see SourcePane's pinnedRange),
   // which maps it through any edit made while the dialog is open.
   const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
+  // Every opener of the picker: with nothing to link to there is nothing to pick.
+  const requestLinkPicker = (): boolean => {
+    if (linkTargets === undefined || linkTargets.length === 0) return false
+    const scope = sourceApiRef.current?.pinScope()
+    if (scope === undefined) return false
+    setLinkPicker({ query: scope.text, text: scope.text })
+    return true
+  }
 
   // The projection travels in as a STATE EFFECT rather than as an extension:
   // the view is created once per mount (see SourcePane), so an extension
@@ -730,14 +742,9 @@ export function MarkdownEditor({
       run: (command) => sourceApiRef.current?.run(command),
       close: () => setCatalog(null),
       ...(linkTargets !== undefined && linkTargets.length > 0
-        ? {
-            openLinkPicker: () => {
-              const scope = sourceApiRef.current?.pinScope()
-              if (scope === undefined) return
-              setLinkPicker({ query: scope.text, text: scope.text })
-            },
-          }
+        ? { openLinkPicker: requestLinkPicker }
         : {}),
+      ...(imageAttach.pickImage === undefined ? {} : { pickImage: imageAttach.pickImage }),
       ...linkFollow.catalogLinkRows(value, sourceApiRef.current?.caretOffset() ?? 0),
       ...(annotation.open !== undefined && annotation.anchor() !== null
         ? { composeThread: annotation.open }
@@ -745,7 +752,7 @@ export function MarkdownEditor({
     })
     // `catalog` is read so the rows are rebuilt on each opening: the
     // selection they describe is the one at THAT moment.
-  }, [annotation, catalog, linkTargets, value])
+  }, [annotation, catalog, imageAttach.pickImage, linkTargets, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
@@ -767,13 +774,8 @@ export function MarkdownEditor({
         runVerb={(command) => {
           sourceApiRef.current?.run(command)
         }}
-        openLinkPicker={() => {
-          if (linkTargets === undefined || linkTargets.length === 0) return false
-          const scope = sourceApiRef.current?.pinScope()
-          if (scope === undefined) return false
-          setLinkPicker({ query: scope.text, text: scope.text })
-          return true
-        }}
+        openLinkPicker={requestLinkPicker}
+        {...(imageAttach.pickImage === undefined ? {} : { pickImage: imageAttach.pickImage })}
         {...(effectiveMode === 'read'
           ? {}
           : {
@@ -802,12 +804,8 @@ export function MarkdownEditor({
           // A CRDT binding owns editor<->document sync; the controlled
           // reconcile path would race it (see SourcePane).
           reconcileExternalValue={sourceExtensions === undefined}
-          onRequestLinkPicker={() => {
-            const scope = sourceApiRef.current?.pinScope()
-            if (scope === undefined) return false
-            setLinkPicker({ query: scope.text, text: scope.text })
-            return true
-          }}
+          onRequestLinkPicker={requestLinkPicker}
+          onRequestImage={imageAttach.pickImage}
         />
         {effectiveMode === 'split' && <SplitDivider ratio={splitRatio} {...divider} />}
         {effectiveMode !== 'write' && (
@@ -890,6 +888,7 @@ export function MarkdownEditor({
           }}
         />
       )}
+      {imageAttach.element}
       {catalog !== null && (
         <ContextMenu
           label="Editing actions"

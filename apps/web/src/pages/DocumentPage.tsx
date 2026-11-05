@@ -314,6 +314,20 @@ function useVersionSavePanel(
   return { savingVersion, saveVersionOutcome, saveVersionFromPanel }
 }
 
+/** What the note editor reaches the keeper through: its documents to link, its file store. */
+function keeperPaneSeams(model: DocumentPageModel, announce: AnnounceNotice) {
+  const { files } = model
+  return {
+    linkTargets: files.pickerTargets,
+    onStoreImage: files.adapter.storeImage,
+    onOpenDocument: model.openDocument,
+    ...(files.createLinkTarget === undefined
+      ? {}
+      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
+    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
+  }
+}
+
 /**
  * What the markdown pane is handed. A builder rather than inline JSX because
  * the optional fields are spread-or-nothing (a prop is either given a
@@ -328,7 +342,6 @@ function markdownPaneProps({
   model,
   resolvedTheme,
   references,
-  files,
   threads,
   commentsRail,
   sync,
@@ -339,7 +352,6 @@ function markdownPaneProps({
   model: DocumentPageModel
   resolvedTheme: ResolvedTheme
   references: ReturnType<typeof useReferenceSeams>
-  files: DocumentPageModel['files']
   threads: DocumentPageModel['threads']
   commentsRail: ReturnType<typeof useCommentsRail>
   sync: DocumentPageModel['sync']
@@ -359,12 +371,7 @@ function markdownPaneProps({
     ...(markdown.title === undefined ? {} : { title: markdown.title }),
     references,
     ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
-    linkTargets: files.pickerTargets,
-    onOpenDocument: model.openDocument,
-    ...(files.createLinkTarget === undefined
-      ? {}
-      : { onCreateLinkTarget: createLinkTargetAnnouncing(files.createLinkTarget, announce) }),
-    ...(model.topBar?.path === undefined ? {} : { ownPath: model.topBar.path }),
+    ...keeperPaneSeams(model, announce),
     threads: threads.annotations,
     threadMarks: threads.threadMarks,
     selectedThreadId: commentsRail.selectedThreadId,
@@ -731,7 +738,6 @@ function DocumentPageBody({
                 model,
                 resolvedTheme,
                 references,
-                files,
                 threads,
                 commentsRail,
                 sync,

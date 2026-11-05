@@ -29,6 +29,8 @@ Guides:
   trace from Settings when a touch or drag misbehaved.
 - **[choose-a-theme](choose-a-theme.md)** — draw a canvas hand-drawn or neon, from the Display
   panel or through `wb_facet_set`, and ask `wb_scene_render` or an export for that look.
+- **[add-an-image-to-a-note](add-an-image-to-a-note.md)** — put a picture in a markdown note
+  by picking, pasting or dropping it.
 - **[tick-off-tasks](tick-off-tasks.md)** — keep a `- [ ]` checklist in a markdown document and
   tick items off by clicking the box in the preview.
 - **[define-your-own-stencils](define-your-own-stencils.md)** — dress a box by what it IS, and

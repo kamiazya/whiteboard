@@ -63,6 +63,8 @@ const VERB_COVERAGE = {
   rule: 'covered',
   strikethrough: 'covered',
   math: 'covered',
+  image:
+    'not modelled: writes nothing until the keeper has stored a file; image-markup.test.ts and note-image.browser.test.tsx',
 } satisfies Record<MarkdownVerbId, SurfaceCoverage>
 
 /**
@@ -462,6 +464,8 @@ describe('markdown editor verbs', () => {
     // run never made change anything has asserted nothing about its own
     // behaviour, however green the properties above look.
     for (const id of Object.keys(VERB_COVERAGE) as MarkdownVerbId[]) {
+      // A verb the ledger says is not modelled here is not driven at all.
+      if (VERB_COVERAGE[id] !== 'covered') continue
       expect(
         effects[id],
         `editing verb "${id}" was driven ${drives[id]} times and never changed the document — the generator cannot reach the arrangement it acts on, so its properties are vacuous. Make the generator denser, do not lower the bar`,

@@ -236,6 +236,11 @@ export interface SourcePaneProps {
    * the bar wraps instead.
    */
   onRequestLinkPicker?: () => boolean
+  /**
+   * Lets the keyboard-docked bar's Image slot open the editor's picker.
+   * Read at mount: absent, the bar offers no Image slot for this pane.
+   */
+  onRequestImage?: () => void
 }
 
 /**
@@ -256,6 +261,7 @@ export function SourcePane({
   extensions,
   reconcileExternalValue = true,
   onRequestLinkPicker,
+  onRequestImage,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -265,6 +271,8 @@ export function SourcePane({
   onChangeRef.current = onChange
   const onRequestLinkPickerRef = useRef(onRequestLinkPicker)
   onRequestLinkPickerRef.current = onRequestLinkPicker
+  const onRequestImageRef = useRef(onRequestImage)
+  onRequestImageRef.current = onRequestImage
   // Filled once the view exists; the focus/blur handlers below read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
   const leaveHintId = useId()
@@ -362,6 +370,9 @@ export function SourcePane({
     viewRef.current = view
     const active = activeMarkdownEditorFor(view, {
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
+      ...(onRequestImageRef.current === undefined
+        ? {}
+        : { pickImage: () => onRequestImageRef.current?.() }),
     })
     activeRef.current = active
     if (apiRef) {
