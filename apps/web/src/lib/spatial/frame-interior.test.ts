@@ -1,6 +1,11 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
-import { frameTitleAt, nameStrips, nextSpotInFrame, pointInsideFrame } from './frame-interior.js'
+import {
+  creationObstacles,
+  frameTitleAt,
+  nextSpotInFrame,
+  pointInsideFrame,
+} from './frame-interior.js'
 
 const frame = groupNode({ id: 'g', x: 200, y: 200, width: 400, height: 300, label: 'Edge' })
 const size = { width: 200, height: 100 }
@@ -50,5 +55,8 @@ it('a full frame grows down to take the next note', () => {
 
 it('a named frame reserves its name strip; an unnamed one draws none', () => {
   const unnamed = groupNode({ id: 'u', x: 0, y: 0, width: 100, height: 50 })
-  expect(nameStrips([frame, unnamed])).toEqual([{ x: 200, y: 156, width: 400, height: 44 }])
+  const obstacles = creationObstacles({ nodes: [frame, unnamed], edges: [] })
+  // Both boxes, and one strip: the named frame's.
+  expect(obstacles).toHaveLength(3)
+  expect(obstacles).toContainEqual({ x: 200, y: 156, width: 400, height: 44 })
 })

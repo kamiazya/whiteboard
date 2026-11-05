@@ -196,7 +196,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1740, // +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1746, // +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -498,9 +498,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // once per settle pass: the oracle
   // `packages/canvas-render/src/tidy-nesting.property.test.ts` holds the
   // production tidy to, so it cannot be split without ceasing to be the copy.
-  'packages/canvas-render/src/test-utils/tidy-reference/tidy-units.ts#buildUnits': 54,
   'packages/canvas-render/src/theme/spatial-theme.ts#buildTheme': 119,
-  'packages/canvas-render/src/tidy-units.ts#buildUnits': 55,
   'packages/canvas-viewer/src/CanvasViewer.tsx#CanvasViewer': 136,
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,

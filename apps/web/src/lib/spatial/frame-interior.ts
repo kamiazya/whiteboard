@@ -1,6 +1,12 @@
-import { frameHolds, frameLabel, isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  frameHolds,
+  frameLabel,
+  isFrame,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { Box } from './geometry.js'
-import { boxContains } from './geometry.js'
+import { boxContains, indexNodeBoxes } from './geometry.js'
 import type { Point } from './viewport.js'
 
 /** How far above a frame's top edge its name starts (the renderer's label band). */
@@ -26,8 +32,13 @@ function frameTitleBox(frame: SpatialNode): Box {
  * The name strips of every named frame: space a new box should not land on,
  * since a note over a frame's name hides what the frame is called.
  */
-export function nameStrips(nodes: readonly SpatialNode[]): Box[] {
+function nameStrips(nodes: readonly SpatialNode[]): Box[] {
   return nodes.filter((node) => isFrame(node) && frameLabel(node) !== undefined).map(frameTitleBox)
+}
+
+/** What a created box should not land on: every node, and every frame's name. */
+export function creationObstacles(canvas: SpatialCanvas): Box[] {
+  return [...indexNodeBoxes(canvas).map((b) => b.box), ...nameStrips(canvas.nodes)]
 }
 
 /**

@@ -102,8 +102,8 @@ import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/command
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { nameStrips, nextSpotInFrame } from '../../lib/spatial/frame-interior.js'
-import { findFreeSpot, indexNodeBoxes } from '../../lib/spatial/geometry.js'
+import { creationObstacles } from '../../lib/spatial/frame-interior.js'
+import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
@@ -150,6 +150,7 @@ import {
   reduceNavigation,
 } from './navigation.js'
 import { selectionSubject } from './node-a11y-name.js'
+import { noteInFrame, prependToCreation } from './node-factories.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
@@ -1153,19 +1154,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
     const createNodeAt = (point: Point, before: readonly EditorLeafCommand[] = []) => {
-      const result = reduceGesture(
-        gestureState,
-        canvas,
-        { type: 'dblclick-empty', point },
-        { createId },
-      )
-      // `before` (a frame growing to hold the note) joins the note in ONE
-      // batch, so the two undo as one step.
-      const [created, ...others] = result.commands
       applyResult(
-        created?.kind === 'create-node' && others.length === 0 && before.length > 0
-          ? { ...result, commands: [{ kind: 'batch', commands: [...before, created] }] }
-          : { ...result, commands: [...before, ...result.commands] },
+        prependToCreation(
+          reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+          before,
+        ),
       )
       // Creation selects the new node EXCLUSIVELY. The double-press path
       // collapsed the extras at its empty press already; the palette path
@@ -1279,46 +1272,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const createNodeAtViewportCenter = () => {
       const size = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
       // With a frame selected the note is asked for IN it.
-      if (selectedNode !== undefined && isFrame(selectedNode)) {
-        const spot = nextSpotInFrame(selectedNode, canvasRef.current.nodes, size)
-        const grow: EditorLeafCommand[] =
-          spot.grownHeight === undefined
-            ? []
-            : [
-                {
-                  kind: 'resize-node',
-                  id: selectedNode.id,
-                  x: selectedNode.x,
-                  y: selectedNode.y,
-                  width: selectedNode.width,
-                  height: spot.grownHeight,
-                },
-              ]
-        createNodeAt(spot.center, grow)
-        panToShow({
-          x: spot.center.x - size.width / 2,
-          y: spot.center.y - size.height / 2,
-          ...size,
-        })
-        return
-      }
-      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
-      const occupied = [
-        ...indexNodeBoxes(canvasRef.current).map((b) => b.box),
-        ...nameStrips(canvasRef.current.nodes),
-      ]
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      createNodeAt(point)
+      const inFrame =
+        selectedNode !== undefined && isFrame(selectedNode)
+          ? noteInFrame(selectedNode, canvasRef.current.nodes, size)
+          : undefined
+      const point =
+        inFrame?.center ??
+        findFreeSpot(
+          screenToCanvas(viewportCenterScreen(), viewport),
+          size,
+          creationObstacles(canvasRef.current),
+          visibleCanvasRect(),
+        )
+      createNodeAt(point, inFrame?.before)
       panToShow({
         x: Math.round(point.x - NEW_NODE_WIDTH / 2),
         y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: NEW_NODE_HEIGHT,
+        ...size,
       })
     }
 

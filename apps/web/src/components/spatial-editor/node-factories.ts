@@ -17,10 +17,12 @@
  */
 import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-model'
 import { boundsOf, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
+import type { EditorLeafCommand } from '../../lib/spatial/commands.js'
+import { nextSpotInFrame } from '../../lib/spatial/frame-interior.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
-import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
+import { type GestureResult, NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
 
 /** Link nodes are label-only chrome — a note-height box would be mostly
  * empty, so they (and file-reference cards) get a shorter default. */
@@ -148,4 +150,38 @@ export function groupEnclosure(
     width: bounds.width + 2 * paddingPx,
     height: bounds.height + 2 * paddingPx,
   }
+}
+
+/**
+ * Where a note asked for IN `frame` goes, and the grow that has to land
+ * before it when the frame is full (`nextSpotInFrame`).
+ */
+export function noteInFrame(
+  frame: SpatialNode,
+  nodes: readonly SpatialNode[],
+  size: Size,
+): { readonly center: Point; readonly before: readonly EditorLeafCommand[] } {
+  const spot = nextSpotInFrame(frame, nodes, size)
+  if (spot.grownHeight === undefined) return { center: spot.center, before: [] }
+  const { id, x, y, width } = frame
+  return {
+    center: spot.center,
+    before: [{ kind: 'resize-node', id, x, y, width, height: spot.grownHeight }],
+  }
+}
+
+/**
+ * `before` and a creation in ONE batch, so they undo as one step. A result
+ * that is not a lone creation (an edit committed on the way) keeps its
+ * commands and takes `before` ahead of them.
+ */
+export function prependToCreation(
+  result: GestureResult,
+  before: readonly EditorLeafCommand[],
+): GestureResult {
+  if (before.length === 0) return result
+  const [created, ...others] = result.commands
+  return created?.kind === 'create-node' && others.length === 0
+    ? { ...result, commands: [{ kind: 'batch', commands: [...before, created] }] }
+    : { ...result, commands: [...before, ...result.commands] }
 }

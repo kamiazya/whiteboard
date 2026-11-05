@@ -2,9 +2,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { nameStrips } from '../../lib/spatial/frame-interior.js'
+import { creationObstacles } from '../../lib/spatial/frame-interior.js'
 import type { Box } from '../../lib/spatial/geometry.js'
-import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
@@ -110,10 +109,7 @@ export function useNodeCreation({
     const centerScreen =
       root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
     const preferred = screenToCanvas(centerScreen, viewport)
-    const occupied = [
-      ...indexNodeBoxes(canvasRef.current).map((b) => b.box),
-      ...nameStrips(canvasRef.current.nodes),
-    ]
+    const occupied = creationObstacles(canvasRef.current)
     return resolveSpawnPoint(at, preferred, size, occupied, visibleCanvasRect())
   }
 

@@ -152,6 +152,23 @@ export function usable(nodes: readonly TidyNode[]): TidyNode[] {
  * contains in ONE flat scoop, so nested groups and their members can never
  * be double-assigned. Everything else is a singleton unit.
  */
+function scoop(root: TidyNode, nodes: readonly TidyNode[], claimed: Set<string>): TidyNode[] {
+  const holders = [rectOf(root)]
+  const mine = new Set<string>()
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const m of nodes) {
+      if (claimed.has(m.id)) continue
+      if (m.id !== root.id && !holders.some((h) => mostlyInside(h, rectOf(m)))) continue
+      claimed.add(m.id)
+      mine.add(m.id)
+      if (m.frame && m.id !== root.id) holders.push(rectOf(m))
+      grew = true
+    }
+  }
+  return nodes.filter((m) => mine.has(m.id))
+}
+
 export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
   const locked = options.locked ?? (() => false)
   const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
@@ -188,24 +205,7 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
   for (const node of nodes) {
     if (claimed.has(node.id)) continue
     if (node.frame && isRoot(node, groups.indexOf(node))) {
-      const holders = [rectOf(node)]
-      const mine = new Set<string>()
-      for (let grew = true; grew; ) {
-        grew = false
-        for (const m of nodes) {
-          if (claimed.has(m.id)) continue
-          if (m.id !== node.id && !holders.some((h) => mostlyInside(h, rectOf(m)))) continue
-          claimed.add(m.id)
-          mine.add(m.id)
-          if (m.frame && m.id !== node.id) holders.push(rectOf(m))
-          grew = true
-        }
-      }
-      pushUnit(
-        node.id,
-        nodes.filter((m) => mine.has(m.id)),
-        rectOf(node),
-      )
+      pushUnit(node.id, scoop(node, nodes, claimed), rectOf(node))
     }
   }
   for (const node of nodes) {

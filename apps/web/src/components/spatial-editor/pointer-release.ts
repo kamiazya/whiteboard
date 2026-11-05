@@ -257,6 +257,24 @@ export function releaseDrawing(
 }
 
 /**
+ * On a frame's name strip — its handle — a double press edits the name; the
+ * interior is the frame's paper, and a double press there adds a note.
+ */
+function frameDoublePress(
+  frame: SpatialNode,
+  result: GestureResult,
+  at: Point,
+  ctx: PointerReleaseContext,
+): void {
+  if (frameTitleAt(ctx.canvas.nodes, at) === frame.id) {
+    ctx.applyResult(result)
+    ctx.setGroupLabelEditId(frame.id)
+    return
+  }
+  ctx.createNodeAt(pointInsideFrame(frame, at, { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }))
+}
+
+/**
  * A double press on a node that never moved runs the object's PRIMARY action.
  *
  * Each arm asks what the node HOLDS rather than narrowing on the stored
@@ -274,15 +292,7 @@ function runPrimaryAction(
   ctx: PointerReleaseContext,
 ): boolean {
   if (node === undefined) return false
-  const {
-    applyResult,
-    canvas,
-    createNodeAt,
-    isImageFileRef,
-    missingFileRef,
-    onOpenDocument,
-    openLinkNode,
-  } = ctx
+  const { applyResult, canvas, isImageFileRef, missingFileRef, onOpenDocument, openLinkNode } = ctx
   const text = nodeText(node)
   if (text !== undefined) {
     applyResult(
@@ -296,15 +306,7 @@ function runPrimaryAction(
     return true
   }
   if (isFrame(node)) {
-    // A frame's name strip is its handle, so a press there picks the frame;
-    // a double press on it edits the name. The interior is paper that
-    // belongs to the frame, and a double press there adds a note.
-    if (frameTitleAt(canvas.nodes, at) === node.id) {
-      applyResult(result)
-      ctx.setGroupLabelEditId(node.id)
-      return true
-    }
-    createNodeAt(pointInsideFrame(node, at, { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }))
+    frameDoublePress(node, result, at, ctx)
     return true
   }
   const file = nodeFile(node)
