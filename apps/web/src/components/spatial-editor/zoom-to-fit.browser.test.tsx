@@ -128,3 +128,39 @@ it("the node menu's Zoom to selection frames the viewport exactly as Shift+2", (
   fireEvent.keyDown(root, { code: 'Digit2', key: '@', shiftKey: true })
   expect(fromMenu).toBe(transformOf(container))
 })
+
+it('Shift+1 keeps every node clear of the overview map in the corner', () => {
+  // Content as tall as the viewport, so the fit runs a node into the corner.
+  const cornered: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 400, height: 200, text: 'A' }),
+      textNode({ id: 'b', x: 2000, y: 1400, width: 400, height: 200, text: 'B' }),
+    ],
+    edges: [],
+  }
+  const { Host } = makeEditorHost({ initial: cornered })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  fireEvent.keyDown(root, { code: 'Digit1', key: '!', shiftKey: true })
+
+  const r = root.getBoundingClientRect()
+  const map = (
+    container.querySelector('[data-testid="minimap"]') as HTMLElement
+  ).getBoundingClientRect()
+  const card = {
+    left: map.x - r.x,
+    top: map.y - r.y,
+    right: map.right - r.x,
+    bottom: map.bottom - r.y,
+  }
+  const boxes = nodeBoxes(container)
+  expect(boxes.length).toBeGreaterThanOrEqual(2)
+  for (const box of boxes) {
+    const overlaps =
+      box.left < card.right &&
+      card.left < box.right &&
+      box.top < card.bottom &&
+      card.top < box.bottom
+    expect(overlaps).toBe(false)
+  }
+})

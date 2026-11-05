@@ -211,7 +211,7 @@ export function daemonDocumentLabels(
     documentKey: documentSyncKey(canvas.workspaceId, canvas.path),
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,
     overlayTitle: name,
-    headingTitle: documentHeading(chosen),
+    headingTitle: documentHeading(chosen, canvas.path),
     exportFilenameBase: exportFilenameBaseFor(chosen, canvas.path),
     // Identity key = workspaceId+path, matching this page's own canvas.
     registryKey: documentSyncKey(canvas.workspaceId, canvas.path),

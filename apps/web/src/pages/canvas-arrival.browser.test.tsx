@@ -69,7 +69,7 @@ describe('arriving on a canvas', () => {
     await router.navigate(documentPath(BROWSER_DEFAULT_ADDRESS, 'board'))
 
     // Arrived: the tab is titled for the board, and its editor draws the note.
-    await waitFor(() => expect(document.title).toBe('Untitled · Whiteboard'), SLOW)
+    await waitFor(() => expect(document.title).toBe('board · Whiteboard'), SLOW)
     await waitFor(() => expect(surface()?.querySelector('[role="option"]')).not.toBeNull(), SLOW)
     await waitFor(() => expect(document.activeElement).toBe(surface()), SLOW)
   })

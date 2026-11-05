@@ -2,7 +2,6 @@ import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/white
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ReactNode, RefObject } from 'react'
 import { useId, useRef, useState } from 'react'
-import { documentHeading } from '../../lib/document-title.js'
 import { noteFocusPlaced } from '../../lib/focus-claim.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { announceRoute } from '../../lib/route-announcer.js'
@@ -21,6 +20,8 @@ export interface DocumentPropertiesProps {
    * document; the box shows its placeholder.
    */
   readonly title: string
+  /** What the box shows for an unnamed document: the name the document list shows for it. */
+  readonly unnamedTitle: string
   /**
    * Absent when this backend cannot rename — the title then renders
    * read-only rather than accepting keystrokes it would discard.
@@ -69,6 +70,7 @@ const TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as con
 export function DocumentProperties({
   inline = false,
   title,
+  unnamedTitle,
   onTitleChange,
   onTitleSettled,
   finishFocusRef,
@@ -161,10 +163,10 @@ export function DocumentProperties({
             const typed = typedRef.current
             typedRef.current = null
             if (typed === null || typed.trim() === editBaselineRef.current.trim()) return
-            editing.announceWhenStored(`Renamed to ${documentHeading(typed.trim())}`)
+            editing.announceWhenStored(`Renamed to ${typed.trim() || unnamedTitle}`)
             onTitleSettled?.(typed.trim())
           }}
-          placeholder="Untitled"
+          placeholder={unnamedTitle}
           className={`text-foreground placeholder:text-muted-foreground focus-visible:outline-ring min-w-[10ch] shrink truncate pointer-coarse:min-h-11 rounded-sm bg-transparent font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
             inline ? 'text-sm' : 'text-base'
           }`}

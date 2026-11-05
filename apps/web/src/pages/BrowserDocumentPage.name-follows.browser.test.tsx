@@ -143,9 +143,9 @@ describe('BrowserDocumentPage title follows the record', () => {
     expect(titleValue()).toBe('Meeting')
   })
 
-  // The title box reads empty for a name equal to the path, and the page's
-  // heading says "Untitled" rather than echoing the address.
-  it('reads Untitled once the name is cleared elsewhere', async () => {
+  // The title box reads empty once the name is gone, and the page's heading
+  // says what the document list shows for it: the last part of its path.
+  it('reads the path leaf once the name is cleared elsewhere', async () => {
     const documentId = await seedIdbDocument({
       path: 'weekly',
       name: 'Weekly review',
@@ -162,7 +162,7 @@ describe('BrowserDocumentPage title follows the record', () => {
     })
 
     await waitFor(
-      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled'),
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('weekly'),
       { timeout: 10_000 },
     )
     expect(titleValue()).toBe('')

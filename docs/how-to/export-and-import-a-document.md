@@ -44,7 +44,8 @@ for the print, and the browser's print dialog opens; choose a printer, or **Save
 the destination for a file. When the dialog closes the note goes back to the view you had.
 
 What prints is the read view and nothing else: the title, then the body with its pictures
-and embedded canvases, over as many pages as it takes. A page breaks between paragraphs,
+and embedded canvases, over as many pages as it takes. A body that already opens with the
+title as its heading prints it once. A page breaks between paragraphs,
 pictures and embeds, never through one (a single block taller than a page is the
 exception). The app around the note — the top bar, the toolbars, the scroll overview — does
 not print. Comments on an embedded canvas are left out, as they are wherever a canvas is

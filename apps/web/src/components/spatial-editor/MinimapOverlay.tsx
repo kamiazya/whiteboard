@@ -189,6 +189,7 @@ function MinimapSurface({
       // in Select mode or a pan in Hand mode, underneath the navigation it
       // was meant to perform.
       data-editor-overlay
+      data-viewport-corner
       data-testid="minimap"
       aria-hidden="true"
       style={{ width, height }}

@@ -36,7 +36,9 @@ it. Where the editor cannot make documents the row is not offered.
 Write `[[path|your own words]]` when the link should read as something
 other than the target's name. A `[[Display name]]` is **not** a link — it
 stays literal bracket text; display names label links at render time
-instead of addressing them.
+instead of addressing them. A link or embed of a document with no name is
+labelled as the documents list shows it — **Untitled 2** for `untitled-2`,
+the last part of the path otherwise — never by its address.
 
 On a **canvas**, a document embedded through the palette's Document entry,
 a file node pointing at a document path, and a `[[...]]` inside a text node

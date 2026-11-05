@@ -103,6 +103,21 @@ it('renames and moves from the card menu, and the store sees both', async () => 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 })
 
+it('gives focus back to the renamed card once the rename is saved', async () => {
+  const source = renderPanel()
+  const dialog = await openRenameFromMenu()
+  const name = within(dialog).getByRole('textbox', { name: /Name/ })
+  await userEvent.clear(name)
+  await userEvent.type(name, 'Sign-in flow{Enter}')
+  await waitFor(() => expect(source.setDocumentName).toHaveBeenCalled())
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await waitFor(() =>
+    expect(document.activeElement?.closest('[data-doc-path]')?.getAttribute('data-doc-path')).toBe(
+      'design/login',
+    ),
+  )
+})
+
 it('keeps the dialog open and shows the reason when the move is refused', async () => {
   const source = renderPanel({
     renameDocumentPath: async () => {

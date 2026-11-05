@@ -34,16 +34,20 @@ function Page({
   kind,
   heading = true,
   surface = true,
+  hydrating = false,
 }: {
   kind: 'markdown' | 'spatial'
   heading?: boolean
   surface?: boolean
+  hydrating?: boolean
 }) {
   const headingRef = useDocumentRoutePresence(
     {
       scopeKey: 'doc-1',
       srTitle: 'Plan',
-      markdown: { hydrating: false, body: 'Some text' },
+      // The browser keeper's page always offers its editor autofocus; the
+      // editor takes it only for an empty body.
+      markdown: { autoFocus: true, hydrating, body: hydrating ? null : 'Some text' },
       sync: { loaded: true, canvas: BOARD },
     },
     kind,
@@ -77,6 +81,13 @@ describe('focus when a document opens', () => {
 
   it('puts a note on its heading when the heading mounts after arrival', () => {
     const { rerender } = render(<Page kind="markdown" heading={false} />)
+    expect(document.activeElement).toBe(document.body)
+    rerender(<Page kind="markdown" />)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }))
+  })
+
+  it('puts a note on its heading once its body arrives after arrival', () => {
+    const { rerender } = render(<Page kind="markdown" hydrating />)
     expect(document.activeElement).toBe(document.body)
     rerender(<Page kind="markdown" />)
     expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }))

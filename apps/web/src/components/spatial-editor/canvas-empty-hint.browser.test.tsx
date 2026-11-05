@@ -5,6 +5,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../../index.css'
+import { freehandLine } from '../../lib/spatial/freehand.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 const realMatchMedia = window.matchMedia
@@ -22,12 +23,14 @@ afterEach(() => {
   window.matchMedia = realMatchMedia
 })
 
-function mount(nodes: Parameters<typeof SpatialEditor>[0]['canvas']['nodes']) {
+type Canvas = Parameters<typeof SpatialEditor>[0]['canvas']
+
+function mount(nodes: Canvas['nodes'], lines?: Canvas['lines']) {
   return render(
     <div className="relative bg-background" style={{ width: 390, height: 600 }}>
       <SpatialEditor
         defaultTool="select"
-        canvas={{ nodes, edges: [] }}
+        canvas={{ nodes, edges: [], ...(lines === undefined ? {} : { lines }) }}
         onChange={vi.fn()}
         theme="light"
         fileRefOptions={[]}
@@ -60,4 +63,24 @@ it('the hint is gone once the canvas has a node', () => {
   coarse = true
   mount([textNode({ id: 'n1', x: 20, y: 20, width: 200, height: 80, text: 'hello' })])
   expect(screen.queryByTestId('canvas-empty-hint')).toBeNull()
+})
+
+it('a canvas holding only a drawing is not empty and draws no hint', () => {
+  coarse = true
+  const loop = freehandLine(
+    'ink-1',
+    [
+      { x: 60, y: 60 },
+      { x: 160, y: 40 },
+      { x: 200, y: 140 },
+      { x: 80, y: 160 },
+    ],
+    1,
+  )
+  if (loop === undefined) throw new Error('the fixture stroke was refused')
+  mount([], [loop])
+  expect(screen.queryByTestId('canvas-empty-hint')).toBeNull()
+  const canvas = screen.getByRole('application')
+  expect(canvas.getAttribute('aria-label')).toBe('Canvas, 1 drawing. Tab selects the first drawing')
+  expect(canvas.hasAttribute('aria-describedby')).toBe(false)
 })

@@ -79,11 +79,55 @@ describe('route presence', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'New document' }))
     await userEvent.click(await screen.findByTestId('new-document-markdown'))
-    await waitFor(() => expect(announcement()).toBe('Untitled, markdown note'), SLOW)
-    expect(document.title).toBe('Untitled · Whiteboard')
+    // The second unnamed document: the list shows it as Untitled 2, so does the page.
+    await waitFor(() => expect(announcement()).toBe('Untitled 2, markdown note'), SLOW)
+    expect(document.title).toBe('Untitled 2 · Whiteboard')
     // The heading stood aside, so the editor's own autofocus still lands.
     await waitFor(
       () => expect(document.activeElement).toBe(document.querySelector('[contenteditable="true"]')),
+      SLOW,
+    )
+  })
+
+  it('puts focus on the heading of a note opened from the list', async () => {
+    const router = renderApp()
+    await screen.findByText('What will you make first?', undefined, SLOW)
+    await userEvent.click(screen.getByRole('button', { name: 'Create a markdown note' }))
+    const editor = () => document.querySelector<HTMLElement>('[contenteditable="true"]')
+    await waitFor(() => expect(document.activeElement).toBe(editor()), SLOW)
+    await userEvent.keyboard('Some text')
+    await waitFor(() => expect(editor()?.textContent).toContain('Some text'), SLOW)
+    await router.navigate(-1)
+    const card = () => document.querySelector<HTMLElement>('main [data-doc-path]')
+    await waitFor(() => expect(card()).not.toBeNull(), SLOW)
+    card()?.focus()
+
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(announcement()).toMatch(/markdown note$/), SLOW)
+    await waitFor(
+      () => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 })),
+      SLOW,
+    )
+  })
+
+  it('names an unnamed document the way the list does', async () => {
+    const router = renderApp()
+    await screen.findByText('What will you make first?', undefined, SLOW)
+    await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    await screen.findByTestId('mock-spatial-editor', undefined, SLOW)
+    await router.navigate(-1)
+    await screen.findAllByTestId('card-title', undefined, SLOW)
+    await userEvent.click(screen.getByRole('button', { name: 'New document' }))
+    await userEvent.click(await screen.findByTestId('new-document-spatial'))
+
+    await waitFor(() => expect(announcement()).toBe('Untitled 2, canvas'), SLOW)
+    expect(document.title).toBe('Untitled 2 · Whiteboard')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled 2')
+    await waitFor(
+      () =>
+        expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('placeholder')).toBe(
+          'Untitled 2',
+        ),
       SLOW,
     )
   })

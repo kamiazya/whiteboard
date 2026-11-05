@@ -55,6 +55,14 @@ interface EditorExitHintProps {
    * any marked element as an open popup and stands down.
    */
   readonly canvasOverlay?: boolean
+  /** The editor holds one line, so a bare Enter keeps it and the strip names that key. */
+  readonly singleLine?: boolean
+}
+
+/** The key that keeps the draft: a bare Enter for one line, the platform's chord otherwise. */
+function doneKey(singleLine: boolean): string {
+  if (singleLine) return '↩'
+  return isMacPlatform() ? '⌘↩' : 'Ctrl+↩'
 }
 
 /**
@@ -77,6 +85,7 @@ export function EditorExitHint({
   onDone,
   onCancel,
   canvasOverlay = false,
+  singleLine = false,
 }: EditorExitHintProps) {
   const scale = placement?.scale === undefined ? undefined : `scale(${placement.scale})`
   if (onDone !== undefined && onCancel !== undefined && hasCoarsePointer()) {
@@ -171,7 +180,7 @@ export function EditorExitHint({
             }
       }
     >
-      <kbd className={KBD}>{isMacPlatform() ? '⌘↩' : 'Ctrl+↩'}</kbd>
+      <kbd className={KBD}>{doneKey(singleLine)}</kbd>
       <span>Done</span>
       <span className="opacity-60">·</span>
       <kbd className={KBD}>esc</kbd>

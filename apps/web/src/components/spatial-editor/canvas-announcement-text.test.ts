@@ -37,6 +37,28 @@ describe('what a canvas change sounds like', () => {
     expect(canvasChangeMessage(two, { nodes: [{ ...a, x: 5 }, b], edges: [] })).toBeUndefined()
   })
 
+  it('a deleted drawing or line is named as a node deletion is', () => {
+    const stroke = freehandLine(
+      's',
+      [
+        { x: 0, y: 0 },
+        { x: 20, y: 30 },
+        { x: 40, y: 10 },
+      ],
+      1,
+    ) as CanvasLine
+    const ruled: CanvasLine = {
+      id: 'l',
+      from: { kind: 'point', point: { x: 0, y: 0 } },
+      to: { kind: 'point', point: { x: 90, y: 0 } },
+    }
+    expect(canvasChangeMessage({ ...empty, lines: [stroke] }, { ...empty, lines: [] })).toBe(
+      'Deleted 1 drawing',
+    )
+    expect(canvasChangeMessage({ ...empty, lines: [stroke, ruled] }, empty)).toBe('Deleted 2 lines')
+    expect(canvasChangeMessage({ ...empty, lines: [ruled] }, empty)).toBe('Deleted 1 line')
+  })
+
   it('several nodes at once are counted, not itemised', () => {
     expect(canvasChangeMessage(empty, { nodes: [a, b, c], edges: [] })).toBe('3 nodes added')
   })

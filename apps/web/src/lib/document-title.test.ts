@@ -11,9 +11,10 @@ describe('document title', () => {
     expect(documentArrival('Plan', 'spatial')).toBe('Plan, canvas')
   })
 
-  it('headlines an unnamed document with the title box placeholder, not its address', () => {
-    expect(documentHeading(null)).toBe('Untitled')
-    expect(documentHeading('')).toBe('Untitled')
-    expect(documentHeading('Plan')).toBe('Plan')
+  it('headlines an unnamed document with the name the list shows for it', () => {
+    expect(documentHeading(null, 'untitled')).toBe('Untitled')
+    expect(documentHeading('', 'projects/untitled-2')).toBe('Untitled 2')
+    expect(documentHeading(undefined, 'notes/plan')).toBe('plan')
+    expect(documentHeading('Plan', 'untitled-2')).toBe('Plan')
   })
 })

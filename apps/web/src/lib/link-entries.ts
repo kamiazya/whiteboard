@@ -14,7 +14,7 @@ import type { LinkTarget } from './link-target.js'
 export type LinkableDocument = {
   readonly documentId: string
   readonly path: string
-  /** Absent or null when the document has none → the path labels the link. */
+  /** Absent or null when the document has none → the name the list shows for it labels the link. */
   readonly name?: string | null
   /** Optional to match LinkTarget and an older daemon's kind-less summary. */
   readonly kind?: DocumentKind
@@ -34,13 +34,15 @@ export function linkEntries(documents: readonly LinkableDocument[]): readonly Un
 
 /**
  * The render-time label for a linked document: what a bare `[[path]]` or
- * `[[id]]` shows instead of its address. One lookup, shared by both pages
- * so the two keepers cannot label the same link differently.
+ * `[[id]]` shows instead of its address — an unnamed document under the name
+ * the document list shows for it (`Untitled 2`), never its address. One
+ * lookup, shared by both pages so the two keepers cannot label the same link
+ * differently.
  */
 export function linkTitles(
   documents: readonly LinkableDocument[],
 ): (documentId: string) => string | undefined {
-  const byId = new Map(documents.map((entry) => [entry.documentId, documentLabel(entry, 'path')]))
+  const byId = new Map(documents.map((entry) => [entry.documentId, documentLabel(entry, 'leaf')]))
   return (documentId) => byId.get(documentId)
 }
 

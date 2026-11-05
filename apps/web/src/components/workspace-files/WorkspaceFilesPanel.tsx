@@ -543,7 +543,13 @@ export function WorkspaceFilesPanel({
   // The rename flow owns its own three states (see use-rename-document.ts)
   // and takes `moveDocument` directly — it is declared above, so no ref
   // bridges the two.
-  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect, listed: listedRef })
+  const rename = useRenameDocument({
+    source,
+    moveDocument,
+    refreshAndSelect,
+    listed: listedRef,
+    rootRef,
+  })
   const importer = useImportFiles({
     source,
     folder,
@@ -835,6 +841,7 @@ export function WorkspaceFilesPanel({
             busy={rename.busy}
             error={rename.error}
             onCancel={rename.cancel}
+            onCloseAutoFocus={rename.onCloseAutoFocus}
             onSubmit={(name, newPath) => {
               if (rename.renaming === null) return
               void rename.submit(rename.renaming, name, newPath)

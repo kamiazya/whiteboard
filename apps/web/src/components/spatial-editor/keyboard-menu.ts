@@ -1,4 +1,5 @@
 import { commentCornerOf, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { canvasToScreen, type Point, type Viewport } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
@@ -111,12 +112,25 @@ export function canvasRootLabel(
   selectedEdgeId: string | null,
 ): string {
   const hasSelection = selectedId !== null || selectedEdgeId !== null
-  if (canvas.nodes.length === 0) return 'Canvas, empty'
+  const lines = canvas.lines ?? []
+  if (canvas.nodes.length === 0 && lines.length === 0) return 'Canvas, empty'
   const frames = canvas.nodes.filter(isFrame).length
+  const notes = canvas.nodes.length - frames
+  const drawings = lines.filter(isFreehandStroke).length
+  const ruled = lines.length - drawings
   const parts = [
-    countOf(canvas.nodes.length - frames, 'note', 'notes'),
+    ...(notes > 0 ? [countOf(notes, 'note', 'notes')] : []),
     ...(frames > 0 ? [countOf(frames, 'frame', 'frames')] : []),
     ...(canvas.edges.length > 0 ? [countOf(canvas.edges.length, 'connection', 'connections')] : []),
+    ...(drawings > 0 ? [countOf(drawings, 'drawing', 'drawings')] : []),
+    ...(ruled > 0 ? [countOf(ruled, 'line', 'lines')] : []),
   ]
-  return `Canvas, ${parts.join(', ')}. ${hasSelection ? 'Tab selects the next node' : 'Tab selects the first note'}`
+  return `Canvas, ${parts.join(', ')}. ${hasSelection ? 'Tab selects the next node' : `Tab selects the first ${firstStopNoun(canvas)}`}`
+}
+
+/** What Tab reaches first from nothing: a node when there is one, else the first line or drawing. */
+function firstStopNoun(canvas: SpatialCanvas): string {
+  if (canvas.nodes.length > 0) return 'note'
+  const [first] = canvas.lines ?? []
+  return first !== undefined && isFreehandStroke(first) ? 'drawing' : 'line'
 }

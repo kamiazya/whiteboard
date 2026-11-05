@@ -37,7 +37,7 @@ pinch zooms in every tool.
 | `Shift + Tab` | Step back through the same walk |
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
-| `Enter` / `F2` | Edit the selected node's text, a frame's label (a frame label is one line: `Enter` saves it), or the selected connection's or line's label |
+| `Enter` / `F2` | Edit the selected node's text, a frame's label, or the selected connection's or line's label (a frame's, connection's or line's label is one line: `Enter` saves it) |
 | `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
@@ -49,7 +49,7 @@ pinch zooms in every tool.
 | `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
-"Canvas, 5 notes. Tab selects the first note" (frames and connections are counted apart, and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
+"Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
 nodes top to bottom, then left to right (two nodes at exactly the same spot always come in the same order),
 and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
@@ -193,8 +193,9 @@ When a panel covers part of the canvas, as the inspector does in a narrow
 window, **Zoom to fit**, **Zoom to the selection** and the jump to a comment
 frame their target in the part you can still see, and opening a panel over the
 selected node moves it clear. **Zoom to fit** and **Zoom to the selection**
-also keep what they frame clear of the dock along the bottom and leave room
-along the top for the action buttons a selected node shows above itself.
+also keep what they frame clear of the dock along the bottom and of the
+overview map in the corner, and leave room along the top for the action
+buttons a selected node shows above itself.
 
 
 The dock carries one view control — **zoom to fit** — and it is there in
@@ -275,9 +276,10 @@ The formatting bar above a markdown document is one `Tab` stop. `Left` and `Righ
 
 The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
-to B" for a relation's label. Each is described as "Escape discards, Ctrl+Enter
-keeps" (`Command` on a Mac), and pressing `Esc` announces "Discarded" so a
-thrown-away draft is not silent. The one exception is a note you have just
+to B" for a relation's label. A note's text is described as "Escape discards,
+Ctrl+Enter keeps" (`Command` on a Mac); a frame's name and a connection's or
+line's label, being one line, as "Escape discards, Enter keeps". Pressing
+`Esc` announces "Discarded" so a thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
 undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
@@ -316,7 +318,7 @@ south-east resize handle (the arrow keys resize from it), the right-hand
 connect handle and the actions button.
 
 Whatever you finish on the canvas leaves the keyboard on it: keeping a label
-with `Ctrl + Enter` or discarding it with `Esc`, completing a connection, choosing
+with `Enter` (or `Ctrl + Enter`) or discarding it with `Esc`, completing a connection, choosing
 Group from the dock, and closing a dialog or the context menu with `Esc`.
 `Delete`, the arrow keys and undo work straight away, with no click first.
 

@@ -38,6 +38,7 @@ export function RenameDocumentDialog({
   error,
   onCancel,
   onSubmit,
+  onCloseAutoFocus,
 }: {
   /** The document being renamed, or null when the dialog is closed. */
   document: WorkspaceDocumentEntry | null
@@ -49,6 +50,8 @@ export function RenameDocumentDialog({
   onCancel: () => void
   /** An empty trimmed name arrives as undefined: "clear it". */
   onSubmit: (name: string | undefined, newPath: string) => void
+  /** Where focus goes as the dialog closes; Radix's own return when absent or not prevented. */
+  onCloseAutoFocus?: (event: Event) => void
 }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
@@ -66,7 +69,7 @@ export function RenameDocumentDialog({
 
   return (
     <Dialog open={document !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
         <form
           // `min-w-0`: this form is a GRID item of DialogContent, so its
           // automatic minimum size is its min-content width — and the path
