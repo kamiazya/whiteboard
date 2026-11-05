@@ -40,6 +40,15 @@ describe('linkTitles', () => {
     expect(titleOf(OTHER)).toBe('notes')
     expect(titleOf('01ARZ3NDEKTSV4RRFFQ69G5FAX')).toBeUndefined()
   })
+
+  it('labels an unnamed document as the list shows it, not by its address', () => {
+    const titleOf = linkTitles([
+      { path: 'untitled', documentId: ID, kind: 'spatial' },
+      { path: 'projects/untitled-2', documentId: OTHER, kind: 'markdown' },
+    ])
+    expect(titleOf(ID)).toBe('Untitled')
+    expect(titleOf(OTHER)).toBe('Untitled 2')
+  })
 })
 
 describe('linkTargets', () => {
