@@ -37,7 +37,8 @@ folder…**:
   the two first. This holds for dragging, for a rename that changes the path,
   and for a folder moved under a folder with a same-named folder.
 
-With a mouse or a pen you can also drag a card or row onto a folder — a folder
+With a mouse or a pen you can also drag a card or row onto a folder (the
+picker says so once, under its list) — a folder
 card, a folder in the tree beside the list, or **Workspace** for the root. The
 folder highlights while the document is over it. On a touch screen the menu is
 the way; dragging is not offered, so a long press cannot be mistaken for the

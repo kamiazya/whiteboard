@@ -105,6 +105,38 @@ describe('moving a document to a folder from its menu', () => {
   })
 })
 
+describe('the picker’s hint at the pointer path', () => {
+  it('says once that a card can be dragged onto a folder instead', async () => {
+    renderWithFolders()
+    const dialog = await openPicker('Login flow')
+    expect(within(dialog).getByText(/drag a card onto a folder/)).toBeTruthy()
+  })
+
+  it('says nothing about dragging on a touch screen, where no drag is offered', async () => {
+    const realMatchMedia = window.matchMedia
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList
+    try {
+      renderWithFolders()
+      const card = (await screen.findAllByTestId('card-title'))
+        .find((each) => each.textContent === 'Login flow')
+        ?.closest('li') as HTMLElement
+      fireEvent.click(within(card).getByRole('button', { name: 'Login flow actions' }))
+      const menu = await screen.findByRole('menu', { name: 'Document actions' })
+      fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move to folder…' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Move to folder' })
+      expect(within(dialog).queryByText(/drag a card onto a folder/)).toBeNull()
+    } finally {
+      window.matchMedia = realMatchMedia
+    }
+  })
+})
+
 describe('a move into a new folder that the keeper refuses', () => {
   it('leaves no phantom folder in the picker', async () => {
     const source = renderWithFolders()

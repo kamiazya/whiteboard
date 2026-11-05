@@ -2,6 +2,7 @@ import { Folder } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import {
   type FolderNames,
   folderDisplayName,
@@ -256,6 +257,14 @@ export function MoveToFolderDialog(props: MoveToFolderDialogProps) {
               onNewFolder={() => setNaming(true)}
             />
             <ErrorLine message={error} />
+            {/* The pointer path, said once where a pointer user is already
+              moving something; nothing else on screen hints at it. A touch
+              screen offers no drag, so it is not promised there. */}
+            {!hasCoarsePointer() && (
+              <p className="text-muted-foreground text-xs">
+                Next time, you can also drag a card onto a folder.
+              </p>
+            )}
             <DialogActions cancelLabel="Cancel" onCancel={onCancel} />
           </>
         )}
