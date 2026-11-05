@@ -1,10 +1,10 @@
 import {
   deriveCopyName,
   deriveCopyPath,
-  generateDocumentId,
-  isSelfOrDescendant,
   firstDistinctUnnamedPath,
+  generateDocumentId,
   isMovedNameTaken,
+  isSelfOrDescendant,
   isSiblingDisplayNameTaken,
   SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'

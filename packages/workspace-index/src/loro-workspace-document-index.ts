@@ -43,10 +43,10 @@ import {
   deriveCopyName,
   deriveCopyPath,
   displayNameKey,
-  generateDocumentId,
-  isSelfOrDescendant,
   firstDistinctUnnamedPath,
+  generateDocumentId,
   isMovedNameTaken,
+  isSelfOrDescendant,
   isSiblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
 import type {

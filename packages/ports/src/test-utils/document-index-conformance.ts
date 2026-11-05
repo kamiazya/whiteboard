@@ -10,11 +10,11 @@ import {
   workspaceEntrySchema,
 } from '../index.js'
 import { describeDuplicateDocumentName } from './document-index-duplicate-name-conformance.js'
+import { describeRefusedInput } from './document-index-input-conformance.js'
 import {
   describeMoveDocumentName,
   describeUnnamedCreate,
 } from './document-index-move-name-conformance.js'
-import { describeRefusedInput } from './document-index-input-conformance.js'
 import { describeRenameHeldBy } from './document-index-rename-held-conformance.js'
 
 type SeedWorkspace = (entry: WorkspaceEntry) => Promise<void>
