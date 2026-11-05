@@ -14,6 +14,7 @@ import {
   MARKDOWN_BODY_KEY,
   readTrashEntries,
   readWorkspaceDocuments,
+  setWorkspaceFolderName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -93,6 +94,24 @@ describe('a workspace-document update that removes a document', () => {
     const restored = await restoredFrom(blobs, OTHER, store)
     expect(restored && readWorkspaceDocuments(restored).map((each) => each.documentId)).toEqual([
       OTHER,
+    ])
+  })
+
+  it('records the display names of the folders it left, for a restore to show again', async () => {
+    const seeded = seed()
+    setWorkspaceFolderName(seeded, { path: 'folder', name: 'Shelf' })
+    const store = new StoredDoc(seeded)
+    const update = updateFrom(store, (replica) =>
+      deleteWorkspaceDocument(replica, { documentId: OTHER }),
+    )
+
+    await applyWorkspaceDocumentUpdate(deps(store, new FakeBlobStore()), {
+      workspaceId: WS,
+      update,
+    })
+
+    expect(readTrashEntries(store.get())).toMatchObject([
+      { documentId: OTHER, folderNames: [{ path: 'folder', name: 'Shelf' }] },
     ])
   })
 

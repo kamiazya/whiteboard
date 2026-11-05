@@ -56,3 +56,45 @@ export function setWorkspaceFolderName(
   doc.commit()
   return true
 }
+
+/**
+ * The named folders above `path` among `named`, shallowest first: what a
+ * trash row keeps so a restore can show them again. Looked up by prefix
+ * rather than scanned, so a delete of many documents costs their depth each.
+ */
+export function namedFoldersAbove(
+  named: ReadonlyMap<string, string>,
+  path: string,
+): Array<{ readonly path: string; readonly name: string }> {
+  const out: Array<{ readonly path: string; readonly name: string }> = []
+  const segments = path.split('/')
+  for (let depth = 1; depth < segments.length; depth++) {
+    const folder = segments.slice(0, depth).join('/')
+    const name = named.get(folder)
+    if (name !== undefined) out.push({ path: folder, name })
+  }
+  return out
+}
+
+/** Every named folder's name by path, read once from a record. */
+export function folderNamesByPath(doc: LoroDoc): Map<string, string> {
+  return new Map(readWorkspaceFolderNames(doc).map(({ path, name }) => [path, name]))
+}
+
+/**
+ * Gives back the names a trash row kept, to the folders standing again and
+ * showing none. A name a folder has been given since wins, and one the model
+ * refuses (a row is synced data) is skipped rather than failing the restore.
+ * Not checked against siblings: a duplicate that arrives by restore is kept,
+ * never renamed.
+ */
+export function reapplyFolderNames(
+  doc: LoroDoc,
+  names: ReadonlyArray<{ readonly path: string; readonly name: string }>,
+): void {
+  const named = new Set(readWorkspaceFolderNames(doc).map((folder) => folder.path))
+  for (const { path, name } of names) {
+    if (named.has(path) || folderNameRefusal(name) !== null) continue
+    setWorkspaceFolderName(doc, { path, name })
+  }
+}

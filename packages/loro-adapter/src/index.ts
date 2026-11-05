@@ -92,7 +92,13 @@ export {
   type TouchedDocument,
 } from './touched-documents.js'
 export { duplicateWorkspaceDocument } from './workspace-duplicate.js'
-export { readWorkspaceFolderNames, setWorkspaceFolderName } from './workspace-folder-name.js'
+export {
+  folderNamesByPath,
+  namedFoldersAbove,
+  readWorkspaceFolderNames,
+  reapplyFolderNames,
+  setWorkspaceFolderName,
+} from './workspace-folder-name.js'
 export {
   forgetTrashEntry,
   readTrashEntries,

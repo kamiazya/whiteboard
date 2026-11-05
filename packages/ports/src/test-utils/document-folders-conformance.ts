@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { DocumentFolders, DocumentIndex } from '../index.js'
+import type { DocumentFolders, DocumentIndex, DocumentTrash } from '../index.js'
 import { DisplayNameTakenError, DocumentNotFoundError, WorkspaceNotFoundError } from '../index.js'
 
-type FolderIndex = DocumentIndex & DocumentFolders
+type FolderIndex = DocumentIndex & DocumentFolders & DocumentTrash
 
 type MakeFolderIndex = () => Promise<{
   index: FolderIndex
@@ -43,6 +43,8 @@ export function describeDocumentFoldersConformance(makeIndex: MakeFolderIndex): 
   describe('DocumentFolders', () => {
     describeFolderNaming(withIndex)
     describeFolderNameLifetime(withIndex)
+    describeFolderNameSurvivesTrash(withIndex)
+    describeFolderNameRestoreRules(withIndex)
     describeFolderRefusals(withIndex)
     describeFolderDuplicates(withIndex)
   })
@@ -110,6 +112,72 @@ function describeFolderNameLifetime(withIndex: WithIndex): void {
       await create(index, 'a/x', 'ws-other')
       await rename(index, 'a', 'Archive')
       await expect(names(index, 'ws-other')).resolves.toEqual([])
+    })
+  })
+}
+
+function describeFolderNameSurvivesTrash(withIndex: WithIndex): void {
+  it('brings a folder back with its name when its last document is restored', async () => {
+    await withIndex(async (index) => {
+      const { documentId } = await index.createDocument({
+        workspaceId: WS,
+        path: 'term/week-6/plan',
+        kind: 'markdown',
+      })
+      await rename(index, 'term', 'Term 1')
+      await rename(index, 'term/week-6', 'Week 6')
+
+      await index.deleteDocument({ workspaceId: WS, path: 'term/week-6/plan' })
+      await expect(names(index)).resolves.toEqual([])
+      await index.restoreDocument({ workspaceId: WS, documentId })
+
+      await expect(names(index)).resolves.toEqual([
+        { path: 'term', name: 'Term 1' },
+        { path: 'term/week-6', name: 'Week 6' },
+      ])
+    })
+  })
+}
+
+function describeFolderNameRestoreRules(withIndex: WithIndex): void {
+  const trashAndRestore = async (index: FolderIndex, path: string, documentId: string) => {
+    await index.deleteDocument({ workspaceId: WS, path })
+    const restored = await index.restoreDocument({ workspaceId: WS, documentId })
+    expect(restored?.path).toBe(path)
+  }
+
+  it('keeps a name the folder has been given since, on restore', async () => {
+    await withIndex(async (index) => {
+      const { documentId } = await index.createDocument({
+        workspaceId: WS,
+        path: 'a/x',
+        kind: 'markdown',
+      })
+      await rename(index, 'a', 'Old')
+      await index.deleteDocument({ workspaceId: WS, path: 'a/x' })
+      await create(index, 'a/y')
+      await rename(index, 'a', 'New')
+
+      await index.restoreDocument({ workspaceId: WS, documentId })
+
+      await expect(names(index)).resolves.toEqual([{ path: 'a', name: 'New' }])
+    })
+  })
+
+  it('names only the folders that were named, and none for a document at the root', async () => {
+    await withIndex(async (index) => {
+      const { documentId } = await index.createDocument({
+        workspaceId: WS,
+        path: 'a/b/x',
+        kind: 'markdown',
+      })
+      const root = await index.createDocument({ workspaceId: WS, path: 'top', kind: 'markdown' })
+      await rename(index, 'a/b', 'Bee')
+
+      await trashAndRestore(index, 'a/b/x', documentId)
+      await trashAndRestore(index, 'top', root.documentId)
+
+      await expect(names(index)).resolves.toEqual([{ path: 'a/b', name: 'Bee' }])
     })
   })
 }
