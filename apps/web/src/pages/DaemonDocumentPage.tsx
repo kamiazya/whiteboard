@@ -51,7 +51,7 @@ import { useDaemonDocumentController } from './use-daemon-document-controller.js
 import { useDocumentActions } from './use-document-actions.js'
 import { useListFollowsRecord } from './use-follow-workspace-writes.js'
 import { useDaemonOwnEditBaseline } from './use-own-edit-baseline.js'
-import { usePlaceByName } from './use-place-by-name.js'
+import { useMoveByPath, usePlaceByName } from './use-place-by-name.js'
 import { useReplicaReconcile } from './use-replica-reconcile.js'
 
 export interface DaemonDocumentPageProps {
@@ -278,6 +278,19 @@ function useDaemonDocument(
   // page itself does not choose an editor.
   const documentKind: DocumentKind = currentSummary?.kind ?? 'spatial'
 
+  // The workspace's tag vocabulary for every tag row and the board's colour
+  // by intent (ADR-0040 decision 5): read through the same files source the
+  // document browser uses, once per workspace.
+  const tagsWorkspaceId = canvas?.workspaceId
+  const tagsSource = useMemo(
+    () =>
+      tagsWorkspaceId === undefined
+        ? null
+        : createDaemonFilesSource(daemonFetch, daemonBaseUrl, tagsWorkspaceId),
+    [daemonFetch, daemonBaseUrl, tagsWorkspaceId],
+  )
+  const moveTo = useMoveByPath(controller, daemonFetch, daemonBaseUrl, onPathMoved)
+
   const documentActions = useDocumentActions({
     documentId: currentDocumentId,
     documentKind,
@@ -288,6 +301,7 @@ function useDaemonDocument(
     duplicateDocument: controller.duplicateDocument,
     deleteDocument: controller.deleteDocument,
     onDeleted: onNavigateBack,
+    move: { source: tagsSource, path: controller.path, moveTo },
   })
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
@@ -418,17 +432,6 @@ function useDaemonDocument(
     }
   }
 
-  // The workspace's tag vocabulary for every tag row and the board's colour
-  // by intent (ADR-0040 decision 5): read through the same files source the
-  // document browser uses, once per workspace.
-  const tagsWorkspaceId = canvas?.workspaceId
-  const tagsSource = useMemo(
-    () =>
-      tagsWorkspaceId === undefined
-        ? null
-        : createDaemonFilesSource(daemonFetch, daemonBaseUrl, tagsWorkspaceId),
-    [daemonFetch, daemonBaseUrl, tagsWorkspaceId],
-  )
   const tagVocabulary = useTagVocabulary(tagsSource)
   const facetRegistry = useStencilRegistry(tagsSource)
 
