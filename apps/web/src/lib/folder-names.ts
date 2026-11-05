@@ -1,11 +1,9 @@
 import {
-  deriveWorkspaceSegment,
   displayNameKey,
-  documentPathSchema,
   folderNameRefusal,
   isSiblingDisplayNameTaken,
-  pathBelow,
 } from '@kamiazya/whiteboard-model'
+import { addressForNameIn } from './address-from-name.js'
 import { displayNameTakenMessage } from './display-name-taken.js'
 
 /** What a folder is called on screen, by path: only the NAMED folders are in it. */
@@ -50,25 +48,7 @@ export function folderTrail(path: string, names: FolderNames = NO_NAMES): string
  * a folder may not reuse.
  */
 export function newFolderSegmentIn(parent: string, name: string, taken: readonly string[]): string {
-  // The segment directly under `parent` of every path below it: a document
-  // there holds its own address, and one deeper holds its folder's.
-  const siblings = new Set(
-    taken.flatMap((path) => {
-      const rest = pathBelow(parent, path)
-      return rest === undefined ? [] : [rest.split('/')[0] ?? rest]
-    }),
-  )
-  const derived = deriveWorkspaceSegment(name) ?? 'folder'
-  const base = documentPathSchema.safeParse(joinFolder(parent, derived)).success
-    ? derived
-    : 'folder'
-  let leaf = base
-  for (let n = 2; siblings.has(leaf); n++) leaf = `${base}-${n}`
-  return joinFolder(parent, leaf)
-}
-
-function joinFolder(parent: string, leaf: string): string {
-  return parent === '' ? leaf : `${parent}/${leaf}`
+  return addressForNameIn(parent, name, 'folder', taken)
 }
 
 /**

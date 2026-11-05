@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { deriveWorkspaceSegment } from './derive-workspace-segment.js'
-import { workspaceSegmentSchema } from './ids.js'
+import { WORKSPACE_DISPLAY_NAME_MAX_LENGTH, workspaceSegmentSchema } from './ids.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 /**
@@ -35,6 +35,48 @@ describe('deriveWorkspaceSegment', () => {
     expect(deriveWorkspaceSegment('---')).toBeUndefined()
     expect(deriveWorkspaceSegment('')).toBeUndefined()
   })
+
+  it('transliterates Latin diacritics rather than dropping the letter', () => {
+    expect(deriveWorkspaceSegment('Équipe Ops')).toBe('equipe-ops')
+    expect(deriveWorkspaceSegment('Café Müller')).toBe('cafe-muller')
+    expect(deriveWorkspaceSegment('İstanbul')).toBe('istanbul')
+  })
+
+  it('spells the Latin letters that carry no combining mark', () => {
+    expect(deriveWorkspaceSegment('Straße')).toBe('strasse')
+    expect(deriveWorkspaceSegment('Æsir Œuvre')).toBe('aesir-oeuvre')
+    expect(deriveWorkspaceSegment('Ørsted Łódź')).toBe('orsted-lodz')
+  })
+
+  it('folds full-width and ligature forms to their ASCII letters', () => {
+    expect(deriveWorkspaceSegment('Ｑ３ ﬁles')).toBe('q3-files')
+  })
+
+  it('stays inside the segment bound when a letter spells as two', () => {
+    const segment = deriveWorkspaceSegment('ß'.repeat(WORKSPACE_DISPLAY_NAME_MAX_LENGTH))
+    expect(segment).toBe('s'.repeat(WORKSPACE_DISPLAY_NAME_MAX_LENGTH))
+  })
+
+  /**
+   * Accented Latin, the table's letters, CJK, emoji and separators, so the
+   * mark-stripping, the table and the fallback to absent are each reached.
+   */
+  const wideNameArb = fc.string({
+    unit: fc.constantFrom(...Array.from('aÉüßæØİﬁＡ1 -/.。設🚀'), 'e\u0301'),
+    maxLength: 260,
+  })
+
+  fcTest.prop([wideNameArb], withDefaults())(
+    'a derived segment is never empty, always a segment, and derives to itself',
+    (displayName) => {
+      const segment = deriveWorkspaceSegment(displayName)
+      if (segment === undefined) return
+      expect(segment).not.toBe('')
+      expect(workspaceSegmentSchema.safeParse(segment).success).toBe(true)
+      expect(segment).toMatch(/^[a-z0-9-]+$/)
+      expect(deriveWorkspaceSegment(segment)).toBe(segment)
+    },
+  )
 
   fcTest.prop([nameArb], withDefaults())(
     'never yields a leading, trailing or doubled dash',

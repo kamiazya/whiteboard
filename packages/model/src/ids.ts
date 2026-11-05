@@ -148,10 +148,10 @@ export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must b
 
 /**
  * The longest workspace display name a request may carry, and the longest
- * segment. They are one number because a segment is DERIVED from a name
- * (`deriveWorkspaceSegment` replaces each run of characters with one hyphen, so
- * never lengthens it): a name the schema admits then always yields a segment
- * the segment schema admits. 200 holds any title a person writes and keeps a
+ * segment. They are one number because a segment is DERIVED from a name, and
+ * `deriveWorkspaceSegment` cuts its candidate to this bound (a letter it
+ * spells as two, `ß` as `ss`, could otherwise lengthen a name): a name the
+ * schema admits then always yields a segment the segment schema admits. 200 holds any title a person writes and keeps a
  * workspace list a screen can show; a name past it was a paste, not a name.
  */
 export const WORKSPACE_DISPLAY_NAME_MAX_LENGTH = 200

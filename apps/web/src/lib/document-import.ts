@@ -11,6 +11,7 @@
 import { parseOkf, parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
+import { addressBaseFor } from './address-from-name.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
 export const IMPORT_ACCEPT = '.md,.markdown,.canvas,.json'
@@ -52,18 +53,6 @@ function stemOf(fileName: string): string {
   return fileName.replace(EXTENSION, '')
 }
 
-/**
- * A path segment holds ASCII letters, digits and interior hyphens only, so
- * everything else collapses to a hyphen — the name a person sees is the
- * document's `name`, which keeps the file's own spelling.
- */
-function pathBaseOf(stem: string): string {
-  return stem
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
 function refused(fileName: string, detail: string): ImportResult {
   return { ok: false, reason: `${fileName} could not be imported: ${detail}` }
 }
@@ -77,8 +66,11 @@ export function readImportedFile(fileName: string, text: string): ImportResult {
     }
   }
   const stem = stemOf(fileName)
-  const pathBase = pathBaseOf(stem)
-  if (extension === '.canvas' || extension === '.json') {
+  // The name a person sees keeps the file's own spelling; the address is
+  // made from it by the one segment rule every create uses.
+  const isCanvas = extension === '.canvas' || extension === '.json'
+  const pathBase = addressBaseFor(stem, isCanvas ? 'spatial' : 'markdown')
+  if (isCanvas) {
     const parsed = parseSpatial(text)
     if (!parsed.ok) return refused(fileName, `not valid JSON Canvas (${parsed.error.message})`)
     return { ok: true, document: { kind: 'spatial', canvas: parsed.value, name: stem, pathBase } }
