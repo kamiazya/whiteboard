@@ -17,6 +17,8 @@ export interface RailBlock {
   readonly y: number
   readonly w: number
   readonly h: number
+  /** Set on a heading block; the print view keeps one with what follows. */
+  readonly heading?: true
 }
 
 interface RailRow {

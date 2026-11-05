@@ -47,7 +47,8 @@ What prints is the read view and nothing else: the title, then the body with its
 and embedded canvases, over as many pages as it takes. A body that already opens with the
 title as its heading prints it once. A page breaks between paragraphs,
 pictures and embeds, never through one (a single block taller than a page is the
-exception). The app around the note — the top bar, the toolbars, the scroll overview — does
+exception), and never right after a heading: a heading prints on the same page as the
+block it introduces. The app around the note — the top bar, the toolbars, the scroll overview — does
 not print. Comments on an embedded canvas are left out, as they are wherever a canvas is
 shown inside something else. The browser's own **Print** (`Ctrl+P` / `Cmd+P`) prints the
 same thing in **Read** and **Split**; from **Write**, use the menu entry.

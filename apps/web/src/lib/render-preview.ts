@@ -19,7 +19,7 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { outlineFromScene } from './document-outline.js'
+import { outlineBlocks } from './document-outline.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
@@ -156,11 +156,12 @@ function blockBoxes(scene: Scene): readonly RailBlock[] {
   const bounds = sceneBounds(scene)
   const originY = bounds.y - PREVIEW_PADDING_PX
   const originX = bounds.x - PREVIEW_PADDING_PX
-  return outlineFromScene(scene).map((rect) => ({
+  return outlineBlocks(scene).map(({ rect, heading }) => ({
     x: rect.x - originX,
     y: rect.y - originY,
     w: rect.w,
     h: rect.h,
+    ...(heading ? { heading: true as const } : {}),
   }))
 }
 

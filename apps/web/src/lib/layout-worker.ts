@@ -165,7 +165,7 @@ async function handleOutline(request: OutlineRequest): Promise<void> {
         // A scene block carries no colour of its own; resolving it here is
         // what makes a markdown outline the same TYPE as a spatial one to
         // every consumer, rather than one each consumer has to default.
-        rects: blocks.map((block) => ({ ...block, color: resolveRectColor(undefined) })),
+        rects: blocks.map(({ x, y, w, h }) => ({ x, y, w, h, color: resolveRectColor(undefined) })),
       }
       self.postMessage(done)
       remember(request.cacheKey, elapsed, done)

@@ -65,13 +65,23 @@ function isDrawable(bbox: { x: number; y: number; w: number; h: number }): boole
  * outvote the heading above it once `projectRectsToBoard` caps by area.
  */
 export function outlineFromScene(scene: Scene): FaviconRect[] {
-  const rects: FaviconRect[] = []
+  return outlineBlocks(scene).map((block) => block.rect)
+}
+
+/** {@link outlineFromScene}'s rects, each with whether its block is a heading. */
+export function outlineBlocks(
+  scene: Scene,
+): { readonly rect: FaviconRect; readonly heading: boolean }[] {
+  const blocks: { readonly rect: FaviconRect; readonly heading: boolean }[] = []
   for (const node of scene.nodes as readonly SceneNode[]) {
     const bbox = (node as { bbox?: { x: number; y: number; w: number; h: number } }).bbox
     if (bbox === undefined || !isDrawable(bbox)) continue
-    rects.push({ x: bbox.x, y: bbox.y, w: inkWidth(node) ?? bbox.w, h: bbox.h })
+    blocks.push({
+      rect: { x: bbox.x, y: bbox.y, w: inkWidth(node) ?? bbox.w, h: bbox.h },
+      heading: node.kind === 'heading',
+    })
   }
-  return rects
+  return blocks
 }
 
 /**
