@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   displayNameKey,
+  firstDistinctUnnamedPath,
   folderNameRefusal,
   folderNameSchema,
-  isMovedNameTaken,
-  isSiblingDisplayNameTaken,
+  movedDisplayNameTaken,
   shownName,
+  siblingDisplayNameTaken,
 } from './display-name.js'
 import { DOCUMENT_NAME_MAX_LENGTH } from './ids.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -46,10 +47,11 @@ describe('folderNameRefusal', () => {
 
 /** The comparison alone: every sibling at the workspace root, where `x` is the target's path. */
 const isDisplayNameTaken = (name: string, siblings: string[]) =>
-  isSiblingDisplayNameTaken(
+  siblingDisplayNameTaken(
+    'document',
     siblings.map((shown, i) => ({ path: `s${i}`, name: shown })),
     { path: 'x', name },
-  )
+  ) !== undefined
 
 describe('the display-name comparison', () => {
   it('compares trimmed, case-insensitively', () => {
@@ -85,7 +87,7 @@ describe('the display-name comparison', () => {
   )
 })
 
-describe('isSiblingDisplayNameTaken', () => {
+describe('siblingDisplayNameTaken', () => {
   const siblings = [
     { path: 'a/week-6', name: 'Week 6' },
     { path: 'a/plans' },
@@ -94,47 +96,132 @@ describe('isSiblingDisplayNameTaken', () => {
     { path: 'top', name: 'Top' },
   ]
 
-  it('compares against what each direct sibling shows: its name, else its segment', () => {
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'week 6' })).toBe(true)
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Plans' })).toBe(true)
+  it('answers what the direct sibling shows: its name, else its segment', () => {
+    expect(siblingDisplayNameTaken('document', siblings, { path: 'a/new', name: 'week 6' })).toBe(
+      'Week 6',
+    )
+    expect(siblingDisplayNameTaken('document', siblings, { path: 'a/new', name: 'Plans' })).toBe(
+      'plans',
+    )
   })
 
   it('looks only under the same parent, never deeper or in another folder', () => {
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Inner' })).toBe(false)
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'a/new', name: 'Elsewhere' })).toBe(false)
+    expect(
+      siblingDisplayNameTaken('document', siblings, { path: 'a/new', name: 'Inner' }),
+    ).toBeUndefined()
+    expect(
+      siblingDisplayNameTaken('document', siblings, { path: 'a/new', name: 'Elsewhere' }),
+    ).toBeUndefined()
   })
 
   it('treats the workspace root as a parent like any other', () => {
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'top' })).toBe(true)
-    expect(isSiblingDisplayNameTaken(siblings, { path: 'new', name: 'Week 6' })).toBe(false)
+    expect(siblingDisplayNameTaken('document', siblings, { path: 'new', name: 'top' })).toBe('Top')
+    expect(
+      siblingDisplayNameTaken('document', siblings, { path: 'new', name: 'Week 6' }),
+    ).toBeUndefined()
+  })
+})
+
+describe('movedDisplayNameTaken', () => {
+  const staying = [{ path: 'week/plan', name: 'Q3 Planning' }, { path: 'week/notes' }]
+
+  it('answers the name the sibling shows where the entry lands', () => {
+    expect(
+      movedDisplayNameTaken('document', staying, {
+        from: 'month/x',
+        to: 'week/x',
+        name: 'q3 planning',
+      }),
+    ).toBe('Q3 Planning')
+    expect(movedDisplayNameTaken('document', staying, { from: 'month/x', to: 'week/NOTES' })).toBe(
+      'notes',
+    )
+  })
+
+  it('is no duplicate when the entry keeps the label it showed in the same folder', () => {
+    expect(
+      movedDisplayNameTaken('document', staying, {
+        from: 'week/a',
+        to: 'week/b',
+        name: 'Q3 planning',
+      }),
+    ).toBeUndefined()
   })
 })
 
 describe('shownName', () => {
-  it('shows the name somebody gave', () => {
-    expect(shownName({ path: 'class/plan', name: 'Weekly plan' })).toBe('Weekly plan')
+  it('shows the name somebody gave, trimmed', () => {
+    expect(shownName('document', { path: 'class/plan', name: 'Weekly plan' })).toBe('Weekly plan')
+    expect(shownName('document', { path: 'class/plan', name: ' Weekly plan ' })).toBe('Weekly plan')
+    expect(shownName('document', { path: 'untitled-3', name: 'untitled' })).toBe('untitled')
   })
 
   it('shows the last segment of an unnamed entry', () => {
-    expect(shownName({ path: 'class/plan' })).toBe('plan')
-    expect(shownName({ path: 'plan', name: undefined })).toBe('plan')
+    expect(shownName('document', { path: 'class/plan' })).toBe('plan')
+    expect(shownName('document', { path: 'plan', name: undefined })).toBe('plan')
+    expect(shownName('document', { path: 'notes/roadmap', name: null })).toBe('roadmap')
   })
 
   it('shows the last segment of an entry whose name is blank', () => {
-    expect(shownName({ path: 'class/plan', name: '' })).toBe('plan')
-    expect(shownName({ path: 'class/plan', name: '   ' })).toBe('plan')
+    expect(shownName('document', { path: 'class/plan', name: '' })).toBe('plan')
+    expect(shownName('document', { path: 'class/plan', name: '   ' })).toBe('plan')
+  })
+
+  it('shows an unnamed generated address as Untitled, numbered as the address is', () => {
+    expect(shownName('document', { path: 'notes/untitled' })).toBe('Untitled')
+    expect(shownName('document', { path: 'untitled-3', name: ' ' })).toBe('Untitled 3')
+    expect(shownName('document', { path: 'untitled-1' })).toBe('untitled-1')
+  })
+
+  it('shows an unnamed folder by its segment, whatever the segment says', () => {
+    expect(shownName('folder', { path: 'class/untitled-3' })).toBe('untitled-3')
+    expect(shownName('folder', { path: 'class/untitled-3', name: ' Week 3 ' })).toBe('Week 3')
   })
 
   it('makes a blank-named sibling refuse its own segment as a name', () => {
     const others = [{ path: 'class/plan', name: ' ' }]
-    expect(isSiblingDisplayNameTaken(others, { path: 'class/other', name: 'Plan' })).toBe(true)
-    expect(isSiblingDisplayNameTaken(others, { path: 'class/other', name: ' ' })).toBe(false)
+    expect(siblingDisplayNameTaken('document', others, { path: 'class/other', name: 'Plan' })).toBe(
+      'plan',
+    )
+    expect(
+      siblingDisplayNameTaken('document', others, { path: 'class/other', name: ' ' }),
+    ).toBeUndefined()
+  })
+
+  it('makes an unnamed generated sibling refuse the label it shows', () => {
+    const others = [{ path: 'class/untitled-3' }]
+    expect(
+      siblingDisplayNameTaken('document', others, { path: 'class/x', name: 'untitled 3' }),
+    ).toBe('Untitled 3')
+    expect(
+      siblingDisplayNameTaken('document', others, { path: 'class/x', name: 'Untitled' }),
+    ).toBeUndefined()
   })
 
   it('reads a blank-named moving entry as showing its segment', () => {
     const staying = [{ path: 'b/plan', name: 'x' }, { path: 'b/other' }]
-    expect(isMovedNameTaken(staying, { from: 'a/other', to: 'b/moved', name: '' })).toBe(false)
-    expect(isMovedNameTaken(staying, { from: 'a/plan', to: 'b/other-2', name: '' })).toBe(false)
-    expect(isMovedNameTaken(staying, { from: 'a/x', to: 'b/x', name: '' })).toBe(true)
+    expect(
+      movedDisplayNameTaken('document', staying, { from: 'a/other', to: 'b/moved', name: '' }),
+    ).toBe(undefined)
+    expect(
+      movedDisplayNameTaken('document', staying, { from: 'a/plan', to: 'b/other-2', name: '' }),
+    ).toBeUndefined()
+    expect(movedDisplayNameTaken('document', staying, { from: 'a/x', to: 'b/x', name: '' })).toBe(
+      'x',
+    )
+  })
+})
+
+describe('firstDistinctUnnamedPath', () => {
+  const free = () => false
+
+  it('moves an unnamed document off the label a named sibling shows', () => {
+    const siblings = [{ path: 'notes/plan-doc', name: 'Untitled' }]
+    expect(firstDistinctUnnamedPath('notes/untitled', siblings, free)).toBe('notes/untitled-2')
+  })
+
+  it('keeps a generated address beside unnamed generated siblings, which read apart', () => {
+    const siblings = [{ path: 'notes/untitled' }, { path: 'notes/untitled-2' }]
+    expect(firstDistinctUnnamedPath('notes/untitled-3', siblings, free)).toBe('notes/untitled-3')
   })
 })

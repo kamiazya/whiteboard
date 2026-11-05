@@ -14,11 +14,7 @@ import {
   planReferenceRewrite,
   rewriteReferenceTargets,
 } from '@kamiazya/whiteboard-codec'
-import {
-  isSiblingDisplayNameTaken,
-  type TagBearerKind,
-  tagsInUse,
-} from '@kamiazya/whiteboard-model'
+import { siblingDisplayNameTaken, type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
@@ -159,8 +155,9 @@ function setFolderName(state: State, path: string, name: string | undefined): Re
   const others = [...standing]
     .filter((other) => other !== path)
     .map((other) => ({ path: other, name: state.folderNames.get(other) }))
-  if (isSiblingDisplayNameTaken(others, { path, name })) {
-    const message = new DisplayNameTakenError('folder', path, name).message
+  const shown = siblingDisplayNameTaken('folder', others, { path, name })
+  if (shown !== undefined) {
+    const message = new DisplayNameTakenError('folder', path, shown).message
     return jsonResponse({ error: 'display_name_taken', message }, 409)
   }
   state.folderNames.set(path, name.trim())

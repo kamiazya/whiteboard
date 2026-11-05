@@ -4,7 +4,7 @@
  * drive this through a write; here each gate is held on its own, where
  * removing one cannot be absorbed by whatever the keeper does around it.
  */
-import { isSiblingDisplayNameTaken } from '@kamiazya/whiteboard-model'
+import { siblingDisplayNameTaken } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -417,7 +417,7 @@ describe('the heading seeder agrees with the sibling write rule', () => {
   ]
   const siblingArbitrary = fc.record({
     folder: fc.constantFrom('class', 'other'),
-    segment: fc.constantFrom('plan', 'review', 'a'),
+    segment: fc.constantFrom('plan', 'review', 'a', 'untitled-2'),
     name: fc.option(fc.constantFrom('Plan', 'REVIEW', 'a', ' plan ', '', '  ', 'x'), {
       nil: undefined,
     }),
@@ -428,7 +428,10 @@ describe('the heading seeder agrees with the sibling write rule', () => {
   })
 
   fcTest.prop(
-    [siblingsArbitrary, fc.constantFrom('Plan', 'plan', 'Review', 'a', 'x', 'Elsewhere')],
+    [
+      siblingsArbitrary,
+      fc.constantFrom('Plan', 'plan', 'Review', 'a', 'x', 'Elsewhere', 'Untitled 2'),
+    ],
     withDefaults(),
   )('leaves the note unnamed exactly when a sibling shows the title', (siblings, title) => {
     const workspace = workspaceWith('class/untitled', `# ${title}`)
@@ -443,13 +446,14 @@ describe('the heading seeder agrees with the sibling write rule', () => {
     })
     workspace.commit()
     seedNameFromTitle(workspace, DOC)
-    const taken = isSiblingDisplayNameTaken(
+    const taken = siblingDisplayNameTaken(
+      'document',
       siblings.map((sibling) => ({
         path: `${sibling.folder}/${sibling.segment}`,
         name: sibling.name,
       })),
       { path: 'class/untitled', name: title },
     )
-    expect(readWorkspaceDocumentName(workspace, DOC)).toBe(taken ? null : title)
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBe(taken === undefined ? title : null)
   })
 })

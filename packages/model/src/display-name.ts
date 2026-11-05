@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { leafOfPath, parentOfPath } from './document-path.js'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from './ids.js'
+import { isGeneratedDocumentPath, UNTITLED_DOCUMENT_WORD } from './unnamed-document.js'
 
 /**
  * Why `name` cannot be a folder's display name, or `null` when it can.
@@ -49,78 +50,101 @@ export function displayNameKey(name: string): string {
 }
 
 /**
- * Whether `name` is already the display name of one of `siblings` — the
- * names the other folders, or the other documents, under the same parent
- * show. A writer refuses a duplicate it can SEE; one that arrives by merging
- * two replicas' edits is kept, since nothing could have refused it and a
- * rename nobody made would be worse than two equal names.
+ * Which of `siblings` — the names the other folders, or the other documents,
+ * under the same parent show — `name` duplicates, as that sibling shows it;
+ * `undefined` when none. A writer refuses a duplicate it can SEE; one that
+ * arrives by merging two replicas' edits is kept, since nothing could have
+ * refused it and a rename nobody made would be worse than two equal names.
  */
-function isDisplayNameTaken(name: string, siblings: Iterable<string>): boolean {
+function siblingShowing(name: string, siblings: Iterable<string>): string | undefined {
   const key = displayNameKey(name)
-  for (const sibling of siblings) if (displayNameKey(sibling) === key) return true
-  return false
+  for (const sibling of siblings) if (displayNameKey(sibling) === key) return sibling
+  return undefined
 }
 
 /**
- * What an entry — a document or a folder — shows where a person reads it: the
- * name somebody gave it, or its own last segment when it has none. A BLANK
- * name counts as none, because it shows nothing a person could read and every
- * surface falls back to the segment for it; comparing the blank instead would
- * let a sibling take the very segment the blank-named entry is showing.
+ * The two kinds of entry a workspace names. They are compared apart: a
+ * folder and a document may show one name side by side.
+ */
+export const namedEntryKindSchema = z.enum(['document', 'folder'])
+export type NamedEntryKind = z.infer<typeof namedEntryKindSchema>
+
+/**
+ * What an entry shows where a person reads it in its folder: the name
+ * somebody gave it, trimmed, or — unnamed — its own last segment, except that
+ * an unnamed DOCUMENT at an address the new-document flow generated shows
+ * `Untitled`, numbered as the address is (`untitled-3` shows `Untitled 3`).
  *
- * One answer for every writer judging "what does a sibling show" — the
- * keepers' sibling rule and the heading seeder — so the two cannot drift.
+ * A BLANK name counts as none, because it shows nothing a person could read;
+ * comparing the blank instead would let a sibling take the very label the
+ * blank-named entry is showing. A generated address is no word anybody chose,
+ * so it reads as the title box's word for an unnamed document — numbered,
+ * since two of them can sit in one folder and must not read as one. A folder
+ * has no generated address, so its segment is what it shows.
+ *
+ * One answer for every reader of "what does this entry show" — the keepers'
+ * sibling rule, the heading seeder, a duplicate's name and the web's labels —
+ * so none of them can drift from another.
  */
-export function shownName(entry: {
-  readonly path: string
-  readonly name?: string | null | undefined
-}): string {
-  const { name } = entry
-  return name === undefined || name === null || name.trim() === '' ? leafOfPath(entry.path) : name
+export function shownName(
+  kind: NamedEntryKind,
+  entry: { readonly path: string; readonly name?: string | null | undefined },
+): string {
+  const name = entry.name?.trim()
+  if (name !== undefined && name !== '') return name
+  const leaf = leafOfPath(entry.path)
+  if (kind === 'folder' || !isGeneratedDocumentPath(leaf)) return leaf
+  return `${UNTITLED_DOCUMENT_WORD}${leaf.slice('untitled'.length).replace('-', ' ')}`
 }
 
 /**
- * Whether `target.name` duplicates what a sibling of `target.path` shows —
- * the siblings being the entries of `others` directly under the same parent,
- * each showing its name or, unnamed, its own segment. `others` is one KIND of
- * entry (folders, or documents: the two are compared separately) and leaves
- * the target itself out, which only the caller can identify.
+ * The name a sibling of `target.path` already shows that `target.name`
+ * duplicates — the siblings being the entries of `others`, all of `kind`,
+ * directly under the same parent, each showing its `shownName` — or
+ * `undefined` when `target.name` is free. `others` leaves the target itself
+ * out, which only the caller can identify.
+ *
+ * The SIBLING's name is what a refusal quotes, never the one typed: "plan"
+ * beside a document called "Plan" would read as a claim that something is
+ * called "plan".
  */
-export function isSiblingDisplayNameTaken(
-  others: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+export function siblingDisplayNameTaken(
+  kind: NamedEntryKind,
+  others: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   target: { readonly path: string; readonly name: string },
-): boolean {
+): string | undefined {
   const parent = parentOfPath(target.path)
   const shown: string[] = []
   for (const other of others) {
     if (parentOfPath(other.path) !== parent) continue
-    shown.push(shownName(other))
+    shown.push(shownName(kind, other))
   }
-  return isDisplayNameTaken(target.name, shown)
+  return siblingShowing(target.name, shown)
 }
 
 /**
- * Whether moving the entry at `from` to `to` makes it show a name a sibling
- * already shows. `staying` is every entry of the same KIND that is not part
- * of the moving subtree; `name` is the moving entry's own display name. An
- * entry that keeps the label it already showed under the same parent (an
- * unnamed one renamed in place changes its label; a named one does not) is
- * no new duplicate, so re-saving a form over one that merged in is not
- * refused.
+ * The name a sibling already shows that moving the entry at `from` to `to`
+ * would make it show too, or `undefined` when the move makes no duplicate.
+ * `staying` is every entry of the same KIND that is not part of the moving
+ * subtree; `name` is the moving entry's own display name. An entry that keeps
+ * the label it already showed under the same parent (an unnamed one renamed
+ * in place changes its label; a named one does not) is no new duplicate, so
+ * re-saving a form over one that merged in is not refused.
  */
-export function isMovedNameTaken(
-  staying: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+export function movedDisplayNameTaken(
+  kind: NamedEntryKind,
+  staying: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   move: { readonly from: string; readonly to: string; readonly name?: string | undefined },
-): boolean {
-  const shown = shownName({ path: move.to, name: move.name })
-  const wasShown = shownName({ path: move.from, name: move.name })
+): string | undefined {
+  const shown = shownName(kind, { path: move.to, name: move.name })
+  const wasShown = shownName(kind, { path: move.from, name: move.name })
   if (
     parentOfPath(move.from) === parentOfPath(move.to) &&
     displayNameKey(shown) === displayNameKey(wasShown)
   ) {
-    return false
+    return undefined
   }
-  return isSiblingDisplayNameTaken(staying, { path: move.to, name: shown })
+  return siblingDisplayNameTaken(kind, staying, { path: move.to, name: shown })
 }
 
 /**
@@ -133,15 +157,15 @@ export function isMovedNameTaken(
  */
 export function firstDistinctUnnamedPath(
   path: string,
-  siblings: Iterable<{ readonly path: string; readonly name?: string | undefined }>,
+  siblings: Iterable<{ readonly path: string; readonly name?: string | null | undefined }>,
   isOccupied: (candidate: string) => boolean,
 ): string | null {
   const others = [...siblings]
   const reads = (candidate: string): boolean =>
-    isSiblingDisplayNameTaken(others, {
+    siblingDisplayNameTaken('document', others, {
       path: candidate,
-      name: leafOfPath(candidate),
-    })
+      name: shownName('document', { path: candidate }),
+    }) !== undefined
   if (!reads(path)) return path
   for (let n = 2; n < 1000; n++) {
     const candidate = `${path}-${n}`

@@ -219,6 +219,10 @@ function describeFolderDuplicates(withIndex: WithIndex): void {
       await rename(index, 'term/week-6', 'Week 6')
 
       await expect(rename(index, 'term/w7', ' week 6 ')).rejects.toThrow(DisplayNameTakenError)
+      // Quoted as the sibling is called, not as it was typed.
+      await expect(rename(index, 'term/w7', ' week 6 ')).rejects.toThrow(
+        'Another folder here is already called "Week 6".',
+      )
       await expect(names(index)).resolves.toEqual([{ path: 'term/week-6', name: 'Week 6' }])
     })
   })

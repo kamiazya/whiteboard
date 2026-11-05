@@ -94,7 +94,7 @@ describe('canvas CRUD routes', () => {
     const res = await create('week/other', 'plan')
 
     expect(res.status).toBe(409)
-    expect(apiErrorReason(await res.json())).toMatch(/already called "plan"/)
+    expect(apiErrorReason(await res.json())).toMatch(/already called "Plan"/)
     expect((await create('month/plan', 'Plan')).status).toBe(201)
   })
 

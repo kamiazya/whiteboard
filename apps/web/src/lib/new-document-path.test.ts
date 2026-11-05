@@ -69,7 +69,7 @@ describe('newDocumentPathIn', () => {
 
 describe('a generated path against the naming gate', () => {
   // Every keeper names a note after its heading only while its path is one
-  // this generator chose (loro-adapter's `isGeneratedDocumentPath`). The two
+  // this generator chose (model's `isGeneratedDocumentPath`). The two
   // have to agree, or a note made here keeps the name `untitled` however
   // plainly its first line says what it is.
   // Twelve notes reach a two-digit suffix, and each prefix of the run is the

@@ -69,8 +69,19 @@ describe('POST …/documents/<path>/duplicate', () => {
     expect(res.status).toBe(200)
     const { document } = duplicateDocumentResponseSchema.parse(await res.json())
     expect(document).toMatchObject({ path: 'notes/roadmap-copy', kind: 'markdown' })
-    expect(document.name).toBe('notes/roadmap (copy)')
+    expect(document.name).toBe('roadmap (copy)')
     expect(readMarkdownBody(await getDoc(WS, 'notes/roadmap-copy'))).toBe('# Roadmap\n\nship it')
+  })
+
+  it('names the copy of an unnamed document at a generated address after its "Untitled 3" label', async () => {
+    await saveDocument(WS, 'untitled-3', note('draft'), { kind: 'markdown' })
+    const app = await appWithRealDeps()
+
+    const res = await app.request(documentDuplicateApiUrl(WS, 'untitled-3'), { method: 'POST' })
+
+    expect(res.status).toBe(200)
+    const { document } = duplicateDocumentResponseSchema.parse(await res.json())
+    expect(document).toMatchObject({ path: 'untitled-3-copy', name: 'Untitled 3 (copy)' })
   })
 
   it('answers 404 for a path no document holds, and makes nothing', async () => {

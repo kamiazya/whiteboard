@@ -2,7 +2,7 @@
 // keeper: the browser's store and the daemon, which names on every content
 // write, take the same bytes, so a note typed into at `untitled` must come out
 // named the same way whichever of them keeps it.
-import { displayNameKey, leafOfPath, shownName } from '@kamiazya/whiteboard-model'
+import { displayNameKey, isGeneratedDocumentPath, shownName } from '@kamiazya/whiteboard-model'
 import type { LoroDoc, LoroTreeNode } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -13,21 +13,6 @@ import {
   workspaceNodeMetaSchema,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
-
-/**
- * Whether a path is one the new-document flow chose, rather than one a person
- * did — the shape apps/web's `newDocumentPathIn` produces, which a property
- * there holds this predicate to.
- *
- * The pair matters because "nobody has named this yet" is not something the
- * tree records: clearing a name in the rename dialog leaves the same absent
- * `name` a brand-new document has. A still-generated path is the closest
- * honest proxy — someone who cleared the name of a document they had also
- * placed somewhere has engaged with naming, and must not be overridden.
- */
-function isGeneratedDocumentPath(path: string): boolean {
-  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(leafOfPath(path))
-}
 
 const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
 
@@ -54,7 +39,8 @@ function siblingDocumentShows(workspace: LoroDoc, node: LoroTreeNode, title: str
     if (!meta.success) continue
     const stored = sibling.data.get('name')
     const name = typeof stored === 'string' ? stored : undefined
-    if (displayNameKey(shownName({ path: meta.data.segment, name })) === key) return true
+    if (displayNameKey(shownName('document', { path: meta.data.segment, name })) === key)
+      return true
   }
   return false
 }

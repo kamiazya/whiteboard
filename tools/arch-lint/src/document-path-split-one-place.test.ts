@@ -39,14 +39,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: st
     count: 1,
     why: 'splits an HTTP route path to read its action segment',
   },
-  'packages/model/src/derive-copy.ts': {
-    count: 1,
-    why: 'a document path; keeps the folder with its trailing slash for a length budget — debt, move to parentOfPath/leafOfPath',
-  },
-  'packages/workspace-index/src/loro-workspace-document-index.ts': {
-    count: 1,
-    why: 'a document path in a refusal message — debt, move to leafOfPath',
-  },
 }
 
 const files: string[] = []
