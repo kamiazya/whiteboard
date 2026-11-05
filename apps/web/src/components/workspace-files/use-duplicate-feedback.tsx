@@ -31,32 +31,20 @@ function useExpiry<T>(value: T | null, clear: (next: null) => void) {
   }, [value, clear])
 }
 
-/**
- * What a Duplicate made, found in the next listing: the first document in the
- * source's folder that was not listed when the duplicate was asked for. The
- * page owns the write and answers nothing, so the copy is recognised by
- * having arrived rather than by a path the page would have to hand back.
- *
- * The copy is selected and scrolled to, because "Name (copy)" appearing
- * somewhere in a long folder was otherwise the only sign anything happened.
- */
-export function useDuplicateFeedback({
-  documents,
-  onDuplicateDocument,
-  select,
-}: {
-  documents: readonly WorkspaceDocumentEntry[] | null
-  onDuplicateDocument: ((path: string) => void) | undefined
-  select: (entry: WorkspaceDocumentEntry) => void
-}) {
-  const asked = useRef<{
-    readonly ids: ReadonlySet<string>
-    readonly folder: string
-    readonly from: string
-    readonly askedAt: number
-  } | null>(null)
-  const [copy, setCopy] = useState<DuplicatedCopy | null>(null)
+interface DuplicateAsked {
+  readonly ids: ReadonlySet<string>
+  readonly folder: string
+  readonly from: string
+  readonly askedAt: number
+}
 
+/** Watches each listing for the copy an armed request is waiting on, and selects it. */
+function useCopyArrival(
+  documents: readonly WorkspaceDocumentEntry[] | null,
+  asked: { current: DuplicateAsked | null },
+  setCopy: (copy: DuplicatedCopy) => void,
+  select: (entry: WorkspaceDocumentEntry) => void,
+) {
   useEffect(() => {
     const pending = asked.current
     if (pending === null || documents === null) return
@@ -75,8 +63,30 @@ export function useDuplicateFeedback({
     document
       .querySelector(`[data-doc-path="${CSS.escape(found.path)}"]`)
       ?.scrollIntoView?.({ block: 'nearest' })
-  }, [documents, select])
+  }, [documents, select, asked, setCopy])
+}
 
+/**
+ * What a Duplicate made, found in the next listing: the first document in the
+ * source's folder that was not listed when the duplicate was asked for. The
+ * page owns the write and answers nothing, so the copy is recognised by
+ * having arrived rather than by a path the page would have to hand back.
+ *
+ * The copy is selected and scrolled to, because "Name (copy)" appearing
+ * somewhere in a long folder was otherwise the only sign anything happened.
+ */
+export function useDuplicateFeedback({
+  documents,
+  onDuplicateDocument,
+  select,
+}: {
+  documents: readonly WorkspaceDocumentEntry[] | null
+  onDuplicateDocument: ((path: string) => void) | undefined
+  select: (entry: WorkspaceDocumentEntry) => void
+}) {
+  const asked = useRef<DuplicateAsked | null>(null)
+  const [copy, setCopy] = useState<DuplicatedCopy | null>(null)
+  useCopyArrival(documents, asked, setCopy, select)
   useExpiry(copy, setCopy)
 
   const listed = useRef(documents)

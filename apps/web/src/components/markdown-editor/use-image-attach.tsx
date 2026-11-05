@@ -74,6 +74,37 @@ function strandedMessage(fileName: string | null | undefined): string {
     : `${fileName} was uploaded but not added: the note was reopened meanwhile. Add it again with Image….`
 }
 
+function uploadingNotice(files: readonly File[]): string {
+  return files.length === 1 ? `Uploading ${files[0]?.name}…` : `Uploading ${files.length} images…`
+}
+
+/**
+ * Writes what a batch stored at its held position, says what did not
+ * store, and — when the editor that held the position is gone — says the
+ * pictures were stored but not added.
+ */
+function writeStored(
+  api: SourcePaneApi | null,
+  token: string,
+  files: readonly File[],
+  results: readonly ImageStoreResult[],
+  refusal: string | null,
+  setNotice: SetNotice,
+): void {
+  const markup = results.flatMap((result, i) =>
+    result.ok ? [imageMarkup(files[i]?.name ?? '', result.ref)] : [],
+  )
+  const failed = results.find((result) => !result.ok)
+  setNotice(failed === undefined || failed.ok ? refusal : failed.reason)
+  if (markup.length === 0) return api?.applyEffects(dropPendingImage(token))
+  let inserted = false
+  api?.run((target) => {
+    inserted = insertPendingImage(token, markup.join('\n'))(target)
+    return inserted
+  })
+  if (!inserted) setStranded(strandedMessage(markup.length === 1 ? files[0]?.name : null))
+}
+
 /**
  * The intake itself, built once per editor: the paste and drop handlers are
  * installed at view creation, so they read the seam through `storeRef`.
@@ -99,25 +130,10 @@ function intakeFor(
     if (accepted.length === 0) return setNotice(refusal)
     const token = `image-${++nextToken}`
     hold(token)
-    setNotice(
-      accepted.length === 1
-        ? `Uploading ${accepted[0]?.name}…`
-        : `Uploading ${accepted.length} images…`,
+    setNotice(uploadingNotice(accepted))
+    void Promise.all(accepted.map((file) => save(file))).then((results) =>
+      writeStored(sourceApiRef.current, token, accepted, results, refusal, setNotice),
     )
-    void Promise.all(accepted.map((file) => save(file))).then((results) => {
-      const markup = results.flatMap((result, i) =>
-        result.ok ? [imageMarkup(accepted[i]?.name ?? '', result.ref)] : [],
-      )
-      const failed = results.find((result) => !result.ok)
-      setNotice(failed === undefined || failed.ok ? refusal : failed.reason)
-      if (markup.length === 0) return sourceApiRef.current?.applyEffects(dropPendingImage(token))
-      let inserted = false
-      sourceApiRef.current?.run((target) => {
-        inserted = insertPendingImage(token, markup.join('\n'))(target)
-        return inserted
-      })
-      if (!inserted) setStranded(strandedMessage(markup.length === 1 ? accepted[0]?.name : null))
-    })
   }
   /** Takes the event over only when it carries an image this editor can store. */
   const intake = (event: Event, view: EditorView, files: File[], at?: number) => {
