@@ -87,3 +87,41 @@ export function insetsFromCovers(
 export function sameInsets(a: ViewportOcclusion, b: ViewportOcclusion): boolean {
   return a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right
 }
+
+/**
+ * `insets` widened so that nothing framed inside them lands under one of
+ * `cards` — chrome floating in a corner of `root` (the overview map) rather
+ * than spanning an edge, which `insetsFromCovers` rightly leaves alone for
+ * the verbs that only keep one box in view. A FIT is different: it places
+ * everything at once, and a box framed under the card is a box the fit hid.
+ *
+ * Each card can be cleared along either of the two edges it is nearest, and
+ * the one costing the smaller share of the visible area is taken.
+ */
+export function insetsClearingCorners(
+  root: RectLike,
+  cards: readonly RectLike[],
+  insets: Required<ViewportOcclusion>,
+): Required<ViewportOcclusion> {
+  let next = insets
+  for (const card of cards) {
+    if (card.right <= root.left || card.left >= root.right) continue
+    if (card.bottom <= root.top || card.top >= root.bottom) continue
+    const vertical: Edge = card.top + card.bottom > root.top + root.bottom ? 'bottom' : 'top'
+    const horizontal: Edge = card.left + card.right > root.left + root.right ? 'right' : 'left'
+    const depth = {
+      top: card.bottom - root.top,
+      bottom: root.bottom - card.top,
+      left: card.right - root.left,
+      right: root.right - card.left,
+    }
+    const widen = (edge: Edge) => ({ ...next, [edge]: Math.max(next[edge], depth[edge]) })
+    const area = (candidate: Required<ViewportOcclusion>) =>
+      Math.max(0, root.right - root.left - candidate.left - candidate.right) *
+      Math.max(0, root.bottom - root.top - candidate.top - candidate.bottom)
+    const byHeight = widen(vertical)
+    const byWidth = widen(horizontal)
+    next = area(byHeight) >= area(byWidth) ? byHeight : byWidth
+  }
+  return next
+}

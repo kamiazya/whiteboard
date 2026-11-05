@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { insetsFromCovers } from './viewport-insets.js'
+import { insetsClearingCorners, insetsFromCovers } from './viewport-insets.js'
 
 const root = { left: 0, top: 0, right: 400, bottom: 600 }
 
@@ -45,5 +45,37 @@ describe('insetsFromCovers', () => {
       { left: 0, top: 400, right: 400, bottom: 600 },
     ]
     expect(insetsFromCovers(root, covers).bottom).toBe(200)
+  })
+})
+
+describe('insetsClearingCorners', () => {
+  // A portrait tablet: the overview card sits in the bottom-right corner above the dock.
+  const tablet = { left: 0, top: 0, right: 820, bottom: 1086 }
+  const base = { top: 50, bottom: 70, left: 0, right: 0 }
+  const minimap = { left: 645, top: 960, right: 803, bottom: 1070 }
+
+  it('keeps fitted content off a corner card by giving up the cheaper edge', () => {
+    // Clearing its top costs 126px of height (12%); clearing its left 175px of width (21%).
+    expect(insetsClearingCorners(tablet, [minimap], base)).toEqual({ ...base, bottom: 126 })
+  })
+
+  it('clears a corner card on a wide root by giving up width instead', () => {
+    const wide = { left: 0, top: 0, right: 1600, bottom: 600 }
+    const card = { left: 1400, top: 400, right: 1584, bottom: 584 }
+    expect(insetsClearingCorners(wide, [card], base)).toEqual({ ...base, right: 200 })
+  })
+
+  it('leaves the insets alone when a card already sits inside them', () => {
+    const inDock = { left: 645, top: 1030, right: 803, bottom: 1070 }
+    expect(insetsClearingCorners(tablet, [inDock], { ...base, bottom: 70 })).toEqual({
+      ...base,
+      bottom: 70,
+    })
+  })
+
+  it('ignores a card outside the root', () => {
+    expect(
+      insetsClearingCorners(tablet, [{ left: 900, top: 0, right: 1000, bottom: 100 }], base),
+    ).toEqual(base)
   })
 })

@@ -189,6 +189,8 @@ function MinimapSurface({
       // in Select mode or a pan in Hand mode, underneath the navigation it
       // was meant to perform.
       data-editor-overlay
+      // A fit keeps the content it frames out from under this corner.
+      data-viewport-corner
       data-testid="minimap"
       aria-hidden="true"
       style={{ width, height }}
