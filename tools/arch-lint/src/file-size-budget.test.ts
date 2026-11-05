@@ -510,7 +510,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The errands the LLM-driven tool-surface eval asks a model to run, each
   // with its prompt and the outcome it is graded by. It is a table, so it
   // grows by the number of tasks the eval holds.
-  'packages/mcp-server/scripts/eval/tasks.mjs': 1041,
+  'packages/mcp-server/scripts/eval/tasks.mjs': 1047,
   // The stdio round-trip smoke: every registered tool exercised through one
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
