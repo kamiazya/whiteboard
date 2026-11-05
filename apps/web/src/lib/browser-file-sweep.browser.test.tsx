@@ -12,6 +12,7 @@ import {
 import {
   conformanceVerdictFor,
   FILE_COLLECTION_CONFORMANCE,
+  noteBody,
 } from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -396,6 +397,19 @@ describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
           })
           ids.set(step.path, documentId)
           await draw(documentId, step.draws)
+          break
+        }
+        case 'note': {
+          const { documentId } = await index.createDocument({
+            workspaceId,
+            path: step.path,
+            kind: 'markdown',
+          })
+          await rewrite(documentId, () => {
+            const doc = new LoroDoc()
+            doc.getText('body').insert(0, noteBody(step.draws))
+            return doc
+          })
           break
         }
         case 'draw':
