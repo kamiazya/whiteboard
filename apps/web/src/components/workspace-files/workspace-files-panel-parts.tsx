@@ -228,12 +228,6 @@ function NewFolderButton({ onClick }: { onClick: () => void }) {
 /**
  * The row above the columns: where you are, what you are looking for, and
  * the two things you can change about the view.
- *
- * The trail belongs to whatever NARROWS the view, which is why it has two
- * conditions rather than one. In one-column mode nothing narrows — the tree
- * already shows every level at once — and while searching the results are
- * from everywhere, so a trail would name a folder the list is not confined
- * to.
  */
 export function PanelToolbar({
   columns,
@@ -270,7 +264,7 @@ export function PanelToolbar({
   onNewFolder?: ((folder: string) => void) | undefined
 }) {
   const browsing = query.trim() === ''
-  const trail = columns === 'two' && browsing
+  const trail = browsing
   const newFolder = columns === 'two' && browsing && onNewFolder !== undefined
   return (
     // Two rows below `sm`: at a phone's width one row gave the search box
@@ -280,10 +274,9 @@ export function PanelToolbar({
       {(trail || newFolder) && (
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="min-w-0 flex-1">
-            {/* The trail belongs to whatever narrows the view. In one-column
-              mode nothing does — the tree already shows every level at once —
-              and while searching the results are from everywhere, so a trail
-              would name a folder the list is not confined to. */}
+            {/* Absent while searching: the results are from everywhere, so a
+              trail would name a folder the list is not confined to. In the
+              one-column list it still says where a new document lands. */}
             {trail && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
           </div>
           {/* Two columns only: the one-column tree draws no empty folder to land in. */}

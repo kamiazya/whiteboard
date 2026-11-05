@@ -33,7 +33,8 @@ result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the
 first row of cards — before that it would show every card twice. On a phone
-or a narrow window the strip is left out altogether, since the list is right below. Use the
+or a narrow window the strip is left out altogether, since the list is right below; it is also left out inside a
+folder and in the one-column list, which already shows every document. Use the
 toolbar to search everything or move a document to a new path; to put a
 document in a folder, use **Move to folder…** in its menu or drag it onto the
 folder ([organize into folders](../how-to/organize-into-folders.md)). **Back to

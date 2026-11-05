@@ -773,29 +773,33 @@ export function WorkspaceFilesPanel({
               />
             </div>
           )}
-          {/* Above the columns, and only in the browse view: a search has its
-          own answer to "which one did you mean", and a lane beside it
-          would compete with the results the person asked for. Absent on a
-          host that cannot open a document, since every tile would be
-          inert. */}
-          {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
-            <RecentLane
-              documents={documents}
-              recentIds={recentIds}
-              gridColumns={gridColumns}
-              selectedPath={selectedPath}
-              onSelect={selectOrOpen}
-              onOpen={openEntry}
-              renderThumbnail={(entry) => (
-                <DocumentThumbnail
-                  key={entry.documentId}
-                  document={entry}
-                  loadRender={loadRender}
-                  className="size-full"
-                />
-              )}
-            />
-          )}
+          {/* Above the columns, at the workspace root of the two-column view
+          only: a search has its own answer, the one-column list already
+          shows every document, and inside a folder the lane pushed that
+          folder's own contents down. Absent on a host that cannot open a
+          document, since every tile would be inert. */}
+          {documents !== null &&
+            query.trim() === '' &&
+            columns === 'two' &&
+            folder === '' &&
+            onOpenDocument !== undefined && (
+              <RecentLane
+                documents={documents}
+                recentIds={recentIds}
+                gridColumns={gridColumns}
+                selectedPath={selectedPath}
+                onSelect={selectOrOpen}
+                onOpen={openEntry}
+                renderThumbnail={(entry) => (
+                  <DocumentThumbnail
+                    key={entry.documentId}
+                    document={entry}
+                    loadRender={loadRender}
+                    className="size-full"
+                  />
+                )}
+              />
+            )}
           <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
             {renderColumns()}
             {/* When a tap opens, selection can no longer fill this pane, so it
