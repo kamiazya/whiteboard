@@ -31,12 +31,25 @@ function prepareBoxes(host: HTMLElement | null, source: string): Element[] {
 /** Half of the 44px a coarse pointer is owed around a box drawn at ~13px. */
 const COARSE_REACH_PX = 22
 
+/** Where the words drawn on a box's line end: the box itself when it has none. */
+function lineRight(host: HTMLElement, box: DOMRect): number {
+  let right = box.right
+  for (const text of host.querySelectorAll('text')) {
+    const rect = text.getBoundingClientRect()
+    if (rect.left >= box.left && rect.top < box.bottom && rect.bottom > box.top) {
+      right = Math.max(right, rect.right)
+    }
+  }
+  return right
+}
+
 /**
  * The box a press beside one was meant for: the nearest box on the press's
- * line, when the press is on that box or to its right — the item's own words,
- * since the box is drawn where a bullet would go. A drawn box is ~13px, and a
- * finger needs more: a coarse press reaches a box 22px away, the rest half a
- * line. A press on a link is the link's.
+ * line, when the press is on that box or on the item's own words to its
+ * right — the box is drawn where a bullet would go. A drawn box is ~13px,
+ * and a finger needs more: a coarse press reaches a box 22px away, the rest
+ * half a line. A press on a link is the link's, and one in the empty space
+ * past the words is nobody's.
  */
 function boxBeside(host: HTMLElement, target: Element, x: number, y: number): Element | null {
   if (target.closest('a') !== null) return null
@@ -45,12 +58,24 @@ function boxBeside(host: HTMLElement, target: Element, x: number, y: number): El
   for (const box of host.querySelectorAll(CHECKBOX)) {
     const rect = box.getBoundingClientRect()
     const dy = Math.abs(y - (rect.top + rect.height / 2))
-    const sideways = x >= rect.left - Math.max(reach - rect.width / 2, 0)
+    const sideways =
+      x >= rect.left - Math.max(reach - rect.width / 2, 0) && x <= lineRight(host, rect) + reach
     if (sideways && dy <= Math.max(reach, rect.height) && (best === null || dy < best.dy)) {
       best = { box, dy }
     }
   }
   return best?.box ?? null
+}
+
+/**
+ * Whether a click is a plain press: a single click with nothing selected.
+ * The words beside a box are also text a reader selects — a drag across
+ * them ends in a click, and a double-click to pick a word is two — so only
+ * a press like that reaches a box through its words. A hit on the box
+ * itself needs no such test.
+ */
+function plainPress(event: MouseEvent<HTMLDivElement>): boolean {
+  return event.detail === 1 && (window.getSelection()?.isCollapsed ?? true)
 }
 
 /** The drawn box under or beside a press, and the source line behind it, if they agree. */
@@ -141,7 +166,10 @@ function activationHandlers(
 ) {
   return {
     onClick: (event: MouseEvent<HTMLDivElement>) => {
-      toggleFrom(event.target, { x: event.clientX, y: event.clientY })
+      toggleFrom(
+        event.target,
+        plainPress(event) ? { x: event.clientX, y: event.clientY } : undefined,
+      )
     },
     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
       if ((event.key === 'Enter' || event.key === ' ') && toggleFrom(event.target)) {
