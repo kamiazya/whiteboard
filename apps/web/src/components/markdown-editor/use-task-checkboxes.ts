@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { taskItemText, taskLineNumbers } from '../../lib/task-toggle.js'
 
 const CHECKBOX = '[role="checkbox"]'
@@ -27,14 +28,42 @@ function prepareBoxes(host: HTMLElement | null, source: string): Element[] {
   return boxes
 }
 
-/** The drawn box under `target` and the source line behind it, if they agree. */
+/** Half of the 44px a coarse pointer is owed around a box drawn at ~13px. */
+const COARSE_REACH_PX = 22
+
+/**
+ * The box a press beside one was meant for: the nearest box on the press's
+ * line, when the press is on that box or to its right — the item's own words,
+ * since the box is drawn where a bullet would go. A drawn box is ~13px, and a
+ * finger needs more: a coarse press reaches a box 22px away, the rest half a
+ * line. A press on a link is the link's.
+ */
+function boxBeside(host: HTMLElement, target: Element, x: number, y: number): Element | null {
+  if (target.closest('a') !== null) return null
+  const reach = hasCoarsePointer() ? COARSE_REACH_PX : 0
+  let best: { box: Element; dy: number } | null = null
+  for (const box of host.querySelectorAll(CHECKBOX)) {
+    const rect = box.getBoundingClientRect()
+    const dy = Math.abs(y - (rect.top + rect.height / 2))
+    const sideways = x >= rect.left - Math.max(reach - rect.width / 2, 0)
+    if (sideways && dy <= Math.max(reach, rect.height) && (best === null || dy < best.dy)) {
+      best = { box, dy }
+    }
+  }
+  return best?.box ?? null
+}
+
+/** The drawn box under or beside a press, and the source line behind it, if they agree. */
 function locateBox(
   host: HTMLElement | null,
   source: string,
   target: EventTarget | null,
+  at?: { readonly x: number; readonly y: number },
 ): { index: number; line: number } | null {
-  const box = target instanceof Element ? target.closest(CHECKBOX) : null
-  if (host === null || box === null) return null
+  if (host === null || !(target instanceof Element)) return null
+  const box =
+    target.closest(CHECKBOX) ?? (at === undefined ? null : boxBeside(host, target, at.x, at.y))
+  if (box === null) return null
   const drawn = Array.from(host.querySelectorAll(CHECKBOX))
   const lines = taskLineNumbers(source)
   const index = drawn.indexOf(box)
@@ -85,8 +114,8 @@ export function useTaskCheckboxes(
   const pending = useRef<{ index: number; keyed: KeyedSvgRender } | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const toggleFrom = useCallback(
-    (target: EventTarget | null): boolean => {
-      const hit = onToggleTask && locateBox(hostRef.current, source, target)
+    (target: EventTarget | null, at?: { readonly x: number; readonly y: number }): boolean => {
+      const hit = onToggleTask && locateBox(hostRef.current, source, target, at)
       if (!hit) return false
       pending.current = { index: hit.index, keyed }
       onToggleTask(hit.line)
@@ -107,10 +136,12 @@ export function useTaskCheckboxes(
   return { hostRef, announcement, handlers: onToggleTask ? activationHandlers(toggleFrom) : {} }
 }
 
-function activationHandlers(toggleFrom: (target: EventTarget | null) => boolean) {
+function activationHandlers(
+  toggleFrom: (target: EventTarget | null, at?: { x: number; y: number }) => boolean,
+) {
   return {
     onClick: (event: MouseEvent<HTMLDivElement>) => {
-      toggleFrom(event.target)
+      toggleFrom(event.target, { x: event.clientX, y: event.clientY })
     },
     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
       if ((event.key === 'Enter' || event.key === ' ') && toggleFrom(event.target)) {

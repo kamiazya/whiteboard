@@ -82,3 +82,40 @@ describe('task checkboxes in the preview', () => {
     expect(document.activeElement).toBe(boxes()[2])
   })
 })
+
+describe('a task item in the preview, read on a phone', () => {
+  const realMatchMedia = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = realMatchMedia
+  })
+
+  it('toggles when its words are tapped, not only its box', async () => {
+    render(<Harness mode="read" />)
+    await expect.poll(() => boxes().length).toBe(3)
+    const words = [...document.querySelectorAll('[data-testid="markdown-preview-pane"] text')].find(
+      (each) => each.textContent === 'first',
+    )
+    expect(words).toBeDefined()
+    await userEvent.click(words as Element)
+    await expect.poll(() => latest).toBe(BODY.replace('- [ ] first', '- [x] first'))
+  })
+
+  it('takes a coarse tap that lands just beside the box', async () => {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList
+    render(<Harness mode="read" />)
+    await expect.poll(() => boxes().length).toBe(3)
+    const box = (boxes()[0] as Element).getBoundingClientRect()
+    const pane = document.querySelector('[data-testid="markdown-preview-pane"]') as HTMLElement
+    const host = pane.getBoundingClientRect()
+    await userEvent.click(pane, {
+      position: { x: box.left - host.left - 10, y: box.top - host.top + box.height / 2 },
+    })
+    await expect.poll(() => latest).toBe(BODY.replace('- [ ] first', '- [x] first'))
+  })
+})
