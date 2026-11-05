@@ -45,7 +45,8 @@ describe('searching from the page', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByTestId('search-results').textContent).toContain('untitled')
+        const results = screen.getByTestId('search-results')
+        expect(results.querySelector('[data-doc-path="untitled"]')).not.toBeNull()
       },
       { timeout: 10_000 },
     )

@@ -1,32 +1,37 @@
 /**
  * What a search found, from anywhere in the workspace.
  *
- * Every row carries its full path, which the folder view deliberately does
- * not: there, the path is the pane you are standing in and repeating it on
- * every card would be noise. Here it is the only thing that says where the
- * document actually is, and the reason someone searched. (The two surveyed
- * apps that flatten hierarchy WITHOUT restoring location per row — Finder and
- * Figma — both carry standing user complaints about exactly that.)
+ * Every row says where the document is, which the folder view deliberately
+ * does not: there, the location is the pane you are standing in and
+ * repeating it on every card would be noise. Here it is the only thing that
+ * says where the document actually is, and the reason someone searched. (The
+ * two surveyed apps that flatten hierarchy WITHOUT restoring location per row
+ * — Finder and Figma — both carry standing user complaints about exactly
+ * that.) It is said in the folders' DISPLAY names, as the tree says it: the
+ * address is what links and the URL carry, and a folder named in a script
+ * the address charset cannot spell has an address nobody would recognise.
  *
- * The matched substring is marked in place, in the title and in the path:
+ * The matched substring is marked in place, in the title and the location:
  * a result list that will not say why a row is present makes the reader
  * re-run the search with their eyes.
  */
 
 import { findFolded } from '@kamiazya/whiteboard-search'
 import { LayoutGrid, List } from 'lucide-react'
-import { type KeyboardEvent, type ReactNode, useId, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useContext, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
+import { type FolderNames, folderDisplayName, folderTrail } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
+import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 import { type SearchCombobox, searchOptionId } from './use-search-combobox.js'
 
 /**
  * A row: the document, and the excerpts that say why it is here. Empty
- * contexts mean the match was in the name or the path — both already on
- * the row — so there is nothing more to show.
+ * contexts mean the match was in the name, the address or a folder's name —
+ * the row shows the name and the folders — so there is nothing more to show.
  */
 interface SearchResultRow {
   readonly document: WorkspaceDocumentEntry
@@ -77,7 +82,7 @@ export interface SearchResultsProps {
 }
 
 /**
- * Why a row is here when its title and path do not say: that it matched by
+ * Why a row is here when its title and location do not say: that it matched by
  * meaning, and the content excerpt around the match.
  */
 function MatchReason({
@@ -131,8 +136,8 @@ function MatchReason({
  * saying the same thing. They had already drifted: the grid carried a
  * comment the list did not, and every other line was duplicated verbatim.
  *
- * The path stays on the card in BOTH forms. Dropping it from the grid would
- * reintroduce the Finder/Figma gap the list avoids.
+ * The location stays on the card in BOTH forms. Dropping it from the grid
+ * would reintroduce the Finder/Figma gap the list avoids.
  */
 function SearchResultCard({
   row: { document: entry, contexts, lexicalRank, semanticRank },
@@ -156,6 +161,7 @@ function SearchResultCard({
   combobox: SearchResultsProps['combobox']
 }) {
   const uid = useId()
+  const folderNames = useContext(FolderNamesContext)
   const pathId = `${uid}-path`
   const excerptId = `${uid}-excerpt`
   return (
@@ -206,11 +212,18 @@ function SearchResultCard({
           <span data-testid="result-title" className="truncate text-sm">
             <Highlighted text={titleOf(entry)} query={query} />
           </span>
-          <span id={pathId} className="text-muted-foreground truncate font-mono text-xs">
-            <Highlighted text={entry.path} query={query} />
+          <span
+            id={pathId}
+            data-testid="result-location"
+            // The address, for whoever needs to type a link to it; secondary,
+            // so it waits behind a hover rather than taking the line.
+            title={entry.path}
+            className="text-muted-foreground truncate text-xs"
+          >
+            <Highlighted text={locationOf(entry.path, folderNames)} query={query} />
           </span>
           {(entry.tags?.length ?? 0) > 0 && (
-            /* A #tag query matches nothing visible in title or path, so the
+            /* A #tag query matches nothing visible in title or location, so the
              row must show the tag that put it here. */
             <span className="text-muted-foreground truncate text-[11px]">
               {entry.tags?.map((tag) => `#${tag}`).join(' ')}
@@ -280,6 +293,13 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   )
 }
 
+/** The folders a document sits in, top down, as they are called; the workspace for one at its top. */
+function locationOf(path: string, names: FolderNames): string {
+  const cut = path.lastIndexOf('/')
+  if (cut === -1) return folderDisplayName('', names)
+  return folderTrail(path.slice(0, cut), names).join(' / ')
+}
+
 function titleOf(entry: WorkspaceDocumentEntry): string {
   return documentLabel(entry, 'leaf')
 }
@@ -321,7 +341,7 @@ export function SearchResults({
           if (row !== undefined) onDocumentContextMenu(row.document, x, y)
         },
   )
-  // List first: the row form carries the path inline beside the title, which
+  // List first: the row form carries the location inline beside the title, which
   // is the stronger answer to "where is this" — the grid trades that density
   // for a bigger picture, the way Finder's icon view does.
   const [layout, setLayout] = useState<'list' | 'grid'>('list')

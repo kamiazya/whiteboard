@@ -28,7 +28,9 @@ document in the pane beside the list, and a double-click — or Enter on a
 focused one — opens it. That holds for the cards, the **Recent** strip and
 search results alike. Each card shows a small picture of its document — a
 note's picture is cropped to the text it holds — and a document with nothing
-in it yet shows its kind with **Empty** under it. Search keeps your query in the box when you open a
+in it yet shows its kind with **Empty** under it. Each search result says
+where its document is by the names of its folders, as the folder tree shows
+them (hover the line for the document's address). Search keeps your query in the box when you open a
 result and come back. A **Recent** strip above the cards lists the documents you
 opened last — however you opened them: a card, a link, a reload, search or
 **Create** — and appears only once there are more documents than fit in the

@@ -504,7 +504,11 @@ describe('DaemonIndexPage tree view', () => {
     })
 
     const results = await screen.findByTestId('search-results')
-    expect(results.textContent).toContain('notes/design')
+    // Where it is, said by folder: the row stands in `notes`.
+    await waitFor(() => {
+      const row = results.querySelector('[data-doc-path="notes/design"]')
+      expect(row?.querySelector('[data-testid="result-location"]')?.textContent).toBe('notes')
+    })
     // The folder view is replaced, not shown beside the results.
     expect(screen.queryByTestId('folder-contents')).toBeNull()
     // And the trail is gone, because the results are not confined to a folder.
