@@ -1,5 +1,6 @@
 import { folderNameRefusal } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
+import { TRASH_FOLDER_NAMES_MAX } from './workspace-trash.js'
 import { walk } from './workspace-tree.js'
 
 /**
@@ -73,7 +74,9 @@ export function namedFoldersAbove(
     const name = named.get(folder)
     if (name !== undefined) out.push({ path: folder, name })
   }
-  return out
+  // A row holds a bounded list, and a path may nest past it; the nearest are
+  // the names a restore shows first.
+  return out.slice(-TRASH_FOLDER_NAMES_MAX)
 }
 
 /** Every named folder's name by path, read once from a record. */

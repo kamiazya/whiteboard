@@ -8,9 +8,13 @@ import { z } from 'zod'
 /** Where a deleted document's evacuated bytes are recorded. */
 export const WORKSPACE_TRASH_KEY = 'trash'
 
-/** What the trash records about a document that was deleted. */
-export const trashEntrySchema = z
-  .object({
+/** The most folder names one trash row keeps — the nearest, when more were named. */
+export const TRASH_FOLDER_NAMES_MAX = 256
+
+const folderNameRowSchema = z.object({ path: z.string().min(1), name: z.string().min(1) })
+
+function trashEntryShape(folderNameRow: z.ZodType<{ path: string; name: string }>) {
+  return {
     documentId: documentIdSchema,
     /** Where it was, for a listing a human can read. */
     path: z.string().min(1),
@@ -24,17 +28,28 @@ export const trashEntrySchema = z
      * can show them again: an empty folder is not kept, so the delete that
      * emptied one took its name with it. Absent when none had a name.
      */
-    folderNames: z
-      .array(z.object({ path: z.string().min(1), name: z.string().min(1) }).strict())
-      .max(256)
-      .optional(),
+    folderNames: z.array(folderNameRow).max(TRASH_FOLDER_NAMES_MAX).optional(),
     deletedAt: z.number().int().nonnegative(),
     blob: z.object({
       algorithm: z.literal('sha-256'),
       digestHex: z.string().regex(/^[0-9a-f]{64}$/),
     }),
-  })
-  .strict()
+  }
+}
+
+/** What the trash records about a document that was deleted. */
+export const trashEntrySchema = z.object(trashEntryShape(folderNameRowSchema.strict())).strict()
+
+/**
+ * The same row as READ: a key this version does not know is set aside rather
+ * than failing the row. The row syncs, so a newer peer's field reaches an
+ * older reader, and a strict read would drop the whole row — hiding the
+ * document from the listing and its bytes from the file scan that keeps them.
+ * Only the read strips; nothing writes a read row back, so the unknown field
+ * stays in the record for the peer that understands it.
+ */
+const trashEntryReadSchema = z.object(trashEntryShape(folderNameRowSchema))
+
 export type TrashEntry = z.infer<typeof trashEntrySchema>
 
 /**
@@ -54,7 +69,7 @@ export function readTrashEntries(doc: LoroDoc): TrashEntry[] {
   const raw = doc.getMap(WORKSPACE_TRASH_KEY).toJSON() as Record<string, unknown>
   const out: TrashEntry[] = []
   for (const value of Object.values(raw)) {
-    const parsed = trashEntrySchema.safeParse(value)
+    const parsed = trashEntryReadSchema.safeParse(value)
     // A damaged entry is skipped rather than thrown on: it is one row of a
     // trash listing, and refusing the whole listing would hide every other
     // recoverable document behind it.
