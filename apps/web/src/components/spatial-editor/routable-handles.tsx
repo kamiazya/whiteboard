@@ -1,4 +1,4 @@
-import type { CanvasEdge, CanvasLine } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -8,6 +8,7 @@ import { EdgeEndHandles } from './EdgeEndHandles.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import type { EditorGesture } from './editor-gesture.js'
 import { otherEndNodeOf } from './gesture-ends.js'
+import { PathMoreActions } from './PathMoreActions.js'
 
 export interface RoutableHandlesProps {
   readonly gesture: EditorGesture
@@ -19,6 +20,8 @@ export interface RoutableHandlesProps {
   readonly boxes: readonly NodeBox[]
   readonly selectableBoxes: readonly NodeBox[]
   readonly createId: (() => string) | undefined
+  /** Opens the selection's menu for the lead id, anchored at a canvas point. */
+  readonly onMoreActions?: (id: string, anchor: Point) => void
 }
 
 /**
@@ -37,6 +40,9 @@ export function RoutableHandles(props: RoutableHandlesProps) {
           offset={inkDragOffset(gesture)}
         />
       )}
+      {props.onMoreActions !== undefined && state.kind === 'idle' && (
+        <MoreActionsChip {...props} onMoreActions={props.onMoreActions} />
+      )}
       {selectedRoutable !== undefined && (
         <PathHandles
           gesture={gesture}
@@ -49,6 +55,37 @@ export function RoutableHandles(props: RoutableHandlesProps) {
       )}
     </>
   )
+}
+
+function MoreActionsChip({
+  gesture,
+  selectedInkIds,
+  edgePaths,
+  onMoreActions,
+}: RoutableHandlesProps & { readonly onMoreActions: (id: string, anchor: Point) => void }) {
+  const [lead] = selectedInkIds
+  if (lead === undefined) return null
+  const paths = edgePaths.filter((entry) => selectedInkIds.includes(entry.id))
+  return (
+    <PathMoreActions
+      paths={paths.map((entry) => entry.path)}
+      zoom={gesture.viewport.zoom}
+      subject={pathSubject(gesture.canvas, selectedInkIds)}
+      onOpen={(anchor) => onMoreActions(lead, anchor)}
+    />
+  )
+}
+
+/**
+ * What a selected path is called aloud. A drawn stroke is a drawing and a
+ * relation a connection (vocabulary: a Line is not an Edge), and a ruled
+ * line is neither.
+ */
+function pathSubject(canvas: SpatialCanvas, ids: readonly string[]): string {
+  if (ids.length > 1) return `${ids.length} selected items`
+  const line = (canvas.lines ?? []).find((entry) => entry.id === ids[0])
+  if (line === undefined) return 'this connection'
+  return isFreehandStroke(line) ? 'this drawing' : 'this line'
 }
 
 /**

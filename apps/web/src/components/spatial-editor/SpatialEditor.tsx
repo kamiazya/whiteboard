@@ -154,6 +154,7 @@ import {
 import { selectionSubject } from './node-a11y-name.js'
 import { noteInFrame, prependToCreation } from './node-factories.js'
 import { NodeTargetDialogs } from './node-target-dialogs.js'
+import { pathMenuTarget } from './PathMoreActions.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
 import { RoutableHandles } from './routable-handles.js'
@@ -1534,6 +1535,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           boxes={boxes}
           selectableBoxes={selectableBoxes}
           createId={createId}
+          onMoreActions={(edgeId, point) =>
+            setContextMenu(pathMenuTarget(edgeId, point, viewport, rootSize.width))
+          }
         />
         {inPlaceEditors}
       </>

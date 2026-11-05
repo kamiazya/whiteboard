@@ -27,4 +27,23 @@ your hand took, and reshaping it is drawing it again. A line ruled between two
 points — one dragged out of a box's connect handle — keeps its round bend
 handles, so its bends can still be placed by hand.
 
+## Recolour, label or delete a drawing
+
+Select the drawing, then:
+
+- press the **⋯** button that appears above its top-right corner (on a touch
+  screen it is a finger-sized target), or
+- right-click it, or press and hold it on a touch screen.
+
+Each opens the drawing's menu: **Colour**, the arrowheads at its ends,
+**Edit label**, **Group** / **Ungroup** for strokes drawn as one, **Lock**
+(when the page offers locks) and **Delete**. With a keyboard, `Delete` or
+`Backspace` removes the selected drawing too.
+
+While a drawing is selected the Display panel opens with a **This drawing**
+section above the canvas settings; a drawing has no shape, stencil or tags,
+so the section points you to the menu above.
+
+A drawing cannot carry a comment: comment on the box it circles instead.
+
 ← Back to [How-to guides](README.md)

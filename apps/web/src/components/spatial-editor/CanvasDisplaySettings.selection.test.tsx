@@ -89,6 +89,29 @@ describe('Display panel with a selection', () => {
     expect(within(screen.getByTestId('selection-facets')).getByText('This edge')).not.toBeNull()
   })
 
+  it('leads with the selected drawing, and says where its actions are', () => {
+    // A stroke carries none of the facets this form writes, so the section
+    // is a heading and a pointer — but it is about the stroke, and without
+    // it the panel read "Whole canvas" while a drawing was selected.
+    const withInk: SpatialCanvas = {
+      ...canvas,
+      lines: [
+        {
+          id: 'ink1',
+          from: { kind: 'point', point: { x: 0, y: 0 }, end: 'none' },
+          to: { kind: 'point', point: { x: 90, y: 40 }, end: 'none' },
+          bends: [{ x: 40, y: 30 }],
+          facets: { 'visual.edges/v0': { routing: 'curved' } },
+        },
+      ],
+    }
+    const { source } = sourceOf({ selectedId: null, selectedEdgeId: 'ink1', extraIds: [] })
+    render(<CanvasDisplaySettings canvas={withInk} onChange={() => {}} selectionSource={source} />)
+    const section = screen.getByTestId('selection-facets')
+    expect(within(section).getByText('This drawing')).not.toBeNull()
+    expect(within(section).getByText(/more-actions button/)).not.toBeNull()
+  })
+
   it('writes a facet pick to the node through onChange', () => {
     const { source } = sourceOf({ selectedId: 'n1', selectedEdgeId: null, extraIds: [] })
     let latest = canvas

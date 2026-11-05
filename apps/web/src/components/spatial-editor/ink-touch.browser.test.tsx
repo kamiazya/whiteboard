@@ -158,3 +158,50 @@ it('a finger gets a 44px target for each end of a selected line', async () => {
     window.matchMedia = realMatchMedia
   }
 })
+
+const menuLabels = (container: HTMLElement) =>
+  [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
+
+it('a tapped drawing gets a more-actions chip whose Delete removes it', async () => {
+  const { Host, latest } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  await tapOn(root, onStroke)
+  const chip = await vi.waitFor(() => {
+    const found = container.querySelector('[aria-label="More actions for this drawing"]')
+    expect(found).not.toBeNull()
+    return found as HTMLElement
+  })
+  const r = chip.getBoundingClientRect()
+  // A finger's target, the same floor the node chip keeps.
+  expect(Math.min(r.width, r.height)).toBeGreaterThanOrEqual(24)
+  touch(chip, 'pointerdown', r.width / 2, r.height / 2)
+  await tick()
+  touch(chip, 'pointerup', r.width / 2, r.height / 2)
+  await vi.waitFor(() => expect(menuLabels(container)).toContain('Delete'))
+
+  const remove = [...container.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent?.trim() === 'Delete',
+  ) as HTMLElement
+  remove.click()
+  await vi.waitFor(() => expect(latest.canvas.lines ?? []).toEqual([]))
+})
+
+it('a long-press on a selected drawing opens its menu', async () => {
+  const { Host } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  await tapOn(root, onStroke)
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+  const r = root.getBoundingClientRect()
+  const under = document.elementFromPoint(r.left + onStroke.x, r.top + onStroke.y) as HTMLElement
+  const ur = under.getBoundingClientRect()
+  touch(under, 'pointerdown', r.left + onStroke.x - ur.left, r.top + onStroke.y - ur.top)
+  // Waited on as a condition: the menu is what the hold produces.
+  await vi.waitFor(() => expect(menuLabels(container)).toContain('Delete'), { timeout: 2000 })
+  touch(root, 'pointerup', onStroke.x, onStroke.y)
+})
