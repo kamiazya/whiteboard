@@ -395,9 +395,17 @@ describe('BrowserDocumentPage export draws what the screen shows', () => {
     await waitFor(() => expect(editorSurfaceText()).toContain('Keepthisone'), { timeout: 10_000 })
     fireEvent.click(screen.getByRole('button', { name: 'Select' }))
     const root = screen.getByTestId('spatial-editor')
-    const box = (
-      document.querySelector('svg g[data-wb-key="keep"] rect') as SVGRectElement
-    ).getBoundingClientRect()
+    // The text reaches the accessibility tree before the scene's SVG is drawn,
+    // so wait for the box itself rather than its words.
+    const rect = await waitFor(
+      () => {
+        const found = document.querySelector('svg g[data-wb-key="keep"] rect')
+        expect(found).not.toBeNull()
+        return found as SVGRectElement
+      },
+      { timeout: 10_000 },
+    )
+    const box = rect.getBoundingClientRect()
     const at = root.getBoundingClientRect()
     selectAt(root, box.x + box.width / 2 - at.x, box.y + box.height / 2 - at.y)
 

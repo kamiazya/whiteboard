@@ -6,6 +6,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { STORAGE_KEY } from '../../lib/recent-documents.js'
+import { forgetSearchQueries } from '../../lib/search-query-memory.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
@@ -27,6 +28,7 @@ const entries = [
 beforeEach(() => localStorage.removeItem(STORAGE_KEY))
 afterEach(() => {
   cleanup()
+  forgetSearchQueries()
   localStorage.removeItem(STORAGE_KEY)
 })
 
