@@ -117,18 +117,21 @@ const REGION_OUTLINE_RADIUS_PX = 6
 
 /**
  * The options a canvas drawn INSIDE another document is laid out with: its
- * annotation layer switched off. An embedded board is the board, not the
- * conversation about it — its cards would cover the content and travel into
- * whatever the host is printed or exported as — so the comments stay on its
- * own page. The host's threads are dropped too: they are keyed by the
- * host's node ids, and a nested board holding a same-id node would draw
- * them there. An empty `comments` replaces the board's own envelope copy.
+ * annotation layer and the host's proposals switched off. An embedded board
+ * is the board, not the conversation about it — its cards would cover the
+ * content and travel into whatever the host is printed or exported as — so
+ * the comments stay on its own page. The host's threads and proposals are
+ * dropped too: both are the HOST's, keyed by its node ids, so a nested board
+ * would outline a host addition again inside every embed, and a host patch
+ * or removal on any same-id node it holds. An empty `comments` replaces the
+ * board's own envelope copy.
  */
-export function withoutCommentLayer(options: ResolvedLayoutOptions): ResolvedLayoutOptions {
+export function withoutOverlays(options: ResolvedLayoutOptions): ResolvedLayoutOptions {
   return {
     ...options,
     comments: [],
     threads: [],
+    proposals: [],
     passagesByNode: new Map(),
     regionsByThread: new Map(),
     messagesByThread: new Map(),

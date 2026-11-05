@@ -119,3 +119,61 @@ describe('a canvas embedded in another document draws no comment layer', () => {
     expect(drawn.text.join(' ')).not.toContain('snow')
   })
 })
+
+/** Proposal chrome found BELOW a top-level node — inside what it embeds. */
+function nestedProposalChrome(nodes: readonly SceneNode[]): number {
+  let count = 0
+  const visit = (node: SceneNode) => {
+    const entry = node as {
+      proposalChrome?: unknown
+      runs?: readonly SceneNode[]
+      children?: readonly SceneNode[]
+    }
+    if (entry.proposalChrome !== undefined) count += 1
+    for (const run of entry.runs ?? []) visit(run)
+    for (const child of entry.children ?? []) visit(child)
+  }
+  for (const node of nodes) {
+    const entry = node as { runs?: readonly SceneNode[]; children?: readonly SceneNode[] }
+    for (const run of entry.runs ?? []) visit(run)
+    for (const child of entry.children ?? []) visit(child)
+  }
+  return count
+}
+
+describe('a canvas embedded in another document draws none of the host’s proposals', () => {
+  const host: SpatialCanvas = {
+    nodes: [
+      fileNode({ id: 'f', x: 0, y: 0, width: 600, height: 400, file: BOARD }),
+      textNode({ id: 't', x: 0, y: 500, width: 600, height: 400, text: `![[${BOARD}]]` }),
+    ],
+    edges: [],
+  }
+  const proposals = [
+    {
+      id: 'p1',
+      createdAt: '2026-09-06T00:00:00.000Z',
+      changes: [
+        {
+          id: 'node:c',
+          status: 'open' as const,
+          op: 'node.add' as const,
+          node: textNode({ id: 'c', x: 40, y: 20, width: 120, height: 60, text: 'C' }),
+        },
+      ],
+    },
+  ]
+
+  it('outlines the change on the host and inside neither embed', () => {
+    const scene = layoutSpatialCanvas(host, {
+      ...base,
+      references,
+      expandFileNode: () => true,
+      proposals,
+    })
+    const drawn = walk(scene.nodes)
+    expect(drawn.text.filter((each) => each === 'Evaporation')).toHaveLength(2)
+    expect(scene.nodes.some((node) => (node as { id?: string }).id === 'node:c/outline')).toBe(true)
+    expect(nestedProposalChrome(scene.nodes)).toBe(0)
+  })
+})
