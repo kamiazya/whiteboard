@@ -377,9 +377,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // and one small geometry, pinned by example and by a property over
     // touching pairs in `edge-touching-boxes.test.ts`, its guards each
     // mutated by hand against them; nothing in it is a cost model or a search.
+    //
+    // 119 with `layout/edges/straight-detour.ts`, the straight style's
+    // corner search. It IS a search, so it is a lane candidate; it stays out
+    // until its `MINUTES` figure is measured, which takes a Stryker run of
+    // its own. Until then `straight-detour.properties.test.ts` holds it — an
+    // oracle written from the definition, checked against three hand
+    // mutations (the escape test, a corner's clearance, a skipped
+    // obstacle), each of which it caught.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 118,
+      production: 119,
     })
   })
 

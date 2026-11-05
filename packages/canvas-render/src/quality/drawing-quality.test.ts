@@ -63,7 +63,10 @@ describe('drawing quality across the corpus', () => {
         ...DEBT_FREE,
         crossings: 0,
         bends: 6,
-        edgeLengthPx: 3208,
+        // 3208 -> 2837 when a straight connection with something in its way
+        // started bending at the corner of what blocks it rather than going
+        // round one box covering everything in the way.
+        edgeLengthPx: 2837,
         unevenGaps: 0,
         envelopePx: { w: 802, h: 862 },
         // Even the reference: the router draws the two same-row edges inside
@@ -72,7 +75,9 @@ describe('drawing quality across the corpus', () => {
         // also climbs over Auth. Nothing else on the board turns back. A
         // finding about the router's side choice for a neighbour on the same
         // row, which this column exists to expose; a fix is judged here.
-        reversals: 3,
+        // 3 -> 2 with the corner detours: api->search now passes Auth at its
+        // corners instead of climbing over a box covering both.
+        reversals: 2,
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
@@ -109,9 +114,12 @@ describe('drawing quality across the corpus', () => {
         sharedInkPx: 0,
         crossings: 0,
         // api->auth, Auth overlapping API gateway, is drawn as its contact
-        // mark rather than as a loop under both boxes.
-        bends: 0,
-        edgeLengthPx: 2495,
+        // mark rather than as a loop under both boxes. The one bend is price
+        // the corner detours paid: with the two edges into API gateway's top
+        // now drawn straight to it, the side search moves cli->api to the
+        // gateway's left side, one turn (edge length 2495 -> 2635).
+        bends: 1,
+        edgeLengthPx: 2635,
         // The Clients row's gaps differ by 14px; the Services row has an
         // overlap where a gap should be.
         unevenGaps: 2,
@@ -120,7 +128,7 @@ describe('drawing quality across the corpus', () => {
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
-        bendsPerEdge: 0,
+        bendsPerEdge: 0.13,
         overlapsPerPair: 0.04,
         density: 0.2,
       },
@@ -162,7 +170,10 @@ describe('drawing quality across the corpus', () => {
         // bend and left it orphaned between two frames. Claimed, it stays
         // in its row at (640, 384) and the frame grows to 872 to hold it.
         crossings: 0,
-        bends: 0,
+        // 0 -> 1 with the corner detours, which also moved 2068 -> 2102
+        // below: search->sqlite bends once at the corner of a box in its
+        // way, and auth->sqlite straightens to a vertical.
+        bends: 1,
         // 2663 -> 2047, a fifth of the ink, and a shorter envelope for a
         // wider one: 824x884 -> 872x772, 8% less area. Earlier readings on
         // this row: 2708 before tidy banded on centres, 2663 after; 2019
@@ -171,7 +182,7 @@ describe('drawing quality across the corpus', () => {
         // few pixels and lengthens the edges between the frames by 2.4%.
         // Every debt column on this board is unchanged, and the composition
         // axis reads the same change as `worstRatio` 1.4 -> 1.16.
-        edgeLengthPx: 2068,
+        edgeLengthPx: 2102,
         // One more gap that is not like its neighbours, paid for the above:
         // the frame that grew is wider than the two it sits between.
         unevenGaps: 3,
@@ -180,7 +191,7 @@ describe('drawing quality across the corpus', () => {
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
-        bendsPerEdge: 0,
+        bendsPerEdge: 0.13,
         overlapsPerPair: 0,
         density: 0.19,
       },
@@ -306,7 +317,7 @@ describe('drawing quality across the corpus', () => {
         // One of them across the Web app edge.
         crossings: 1,
         bends: 4,
-        edgeLengthPx: 2957,
+        edgeLengthPx: 2942,
         // The layers sit 300 and 280 apart.
         unevenGaps: 2,
         envelopePx: { w: 822, h: 802 },
@@ -426,8 +437,10 @@ describe('drawing quality across the corpus', () => {
     expect([lane.crossings, lane.bends]).toEqual([1, 4])
     // Debt-free without them; what the router then draws on its own for
     // eight edges converging on one box is price, and pinned as such.
+    // Two crossings went when a blocked straight connection started
+    // bending at the corner of what is in its way.
     expect(free).toMatchObject(DEBT_FREE)
-    expect([free.crossings, free.bends]).toEqual([2, 7])
+    expect([free.crossings, free.bends]).toEqual([0, 7])
   })
 
   it('every reference carries no debt', () => {

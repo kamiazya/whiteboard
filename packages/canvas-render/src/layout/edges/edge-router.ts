@@ -43,6 +43,7 @@ import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } fro
 import { routeOnGrid } from './grid-route.js'
 import type { RouteEnds, RouteObstacles } from './route-ends.js'
 import type { RoutingBudget } from './routing-budget.js'
+import { cornerDetour, type DetourObstacle } from './straight-detour.js'
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
@@ -121,28 +122,48 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
 }
 
 /**
- * A path from `start` to `end` that steps around everything in `obstacles`.
+ * A path from `start` to `end` that steps around what is in its way.
  *
- * Four candidates — over, under, left of, right of the blocking region — each
- * a pair of waypoints on one side of it. The shortest candidate that is
- * itself clear wins; if none is clear the shortest is used anyway, because
- * layout has to return SOMETHING and a route that still crosses is better
- * than a thrown error or a straight line through everything.
+ * The direct segment when nothing blocks it; otherwise the shortest path
+ * through the corners of the boxes actually in the way (`cornerDetour`), which
+ * keeps a straight connection as close to one line as the board allows. The
+ * edge's own two boxes are in that search too, tested by their strict
+ * interior, so a turn never takes the line back through the box it leaves or
+ * the one it reaches.
  *
- * Deliberately not a visibility graph or A*: this runs per edge on every
- * layout, and four candidates against a union box handles the arrangements
- * that actually occur (a node or two sitting between two others). A denser
- * search belongs behind the routing-style setting, not in the default path.
+ * When the corner search finds nothing within its budget, four candidates
+ * round the box covering everything in the way — over, under, left of, right
+ * of it — and the shortest clear one wins; if none is clear the shortest is
+ * used anyway, because layout has to return SOMETHING and a route that still
+ * crosses is better than a thrown error or a straight line through
+ * everything.
  */
 function routeStraight(
   start: Point,
   end: Point,
   inflated: readonly Rect[],
   raw: readonly Rect[],
+  endpointRects: readonly Rect[],
 ): Point[] {
   const region = blockingRegion(start, end, inflated)
   if (region === undefined) return [start, end]
-  return bestCandidate(detourCandidates(start, end, region), inflated, raw)
+  const obstacles: DetourObstacle[] = [
+    ...inflated.map((block, i) => ({ block, body: raw[i] as Rect, escapable: true })),
+    ...endpointRects.map((body) => ({ block: strictInterior(body), body, escapable: false })),
+  ]
+  return (
+    cornerDetour(start, end, obstacles, OBSTACLE_CLEARANCE_PX) ??
+    bestCandidate(detourCandidates(start, end, region), inflated, raw)
+  )
+}
+
+/**
+ * The part of `rect` a line may not enter: everything but its border, so a
+ * leg arriving at an anchor on the border, or running along it, is clear.
+ */
+function strictInterior(rect: Rect): Rect {
+  const inset = Math.min(0.5, rect.w / 2, rect.h / 2)
+  return { x: rect.x + inset, y: rect.y + inset, w: rect.w - 2 * inset, h: rect.h - 2 * inset }
 }
 
 /** Below this outward-to-tangential ratio (~14°), an approach reads as
@@ -209,26 +230,27 @@ function routeStraightWithApproach(
   }: RouteEnds,
   { inflated, raw }: RouteObstacles,
 ): Point[] {
+  const own = [fromRect, toRect]
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
-  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
+  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw, own)
   if (toSideways && !fromSideways) {
     const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
     if (slid !== undefined) {
-      return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
+      return withoutRepeats([...routeStraight(slid, entry, inflated, raw, own), end])
     }
   }
   if (fromSideways && !toSideways) {
     const exit = stubFrom(start, fromSide, fromDepth)
     const slid = slideAlongSide(end, toRect, toSide, exit)
     if (slid !== undefined) {
-      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
+      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw, own)])
     }
   }
   const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
-  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
+  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own), end])
 }
 function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)

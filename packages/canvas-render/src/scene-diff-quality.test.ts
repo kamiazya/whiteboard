@@ -124,7 +124,10 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
 
   it('moving the far-corner leaf node re-lays only its own neighbourhood', () => {
     const edited = layout(editNode(canvas, leafId, (n) => ({ ...n, x: (n.x ?? 0) + 10 })))
-    expect(diffCount(base, edited)).toEqual({ changed: 11, total: 178 })
+    // 11 -> 4 when a straight connection blocked on its way stopped going
+    // round one box covering everything in the way: a 10px move used to
+    // reshape every detour whose union box the leaf was part of.
+    expect(diffCount(base, edited)).toEqual({ changed: 4, total: 178 })
   })
 
   it('moving the hub node reaches the edges it anchors, and no further', () => {
