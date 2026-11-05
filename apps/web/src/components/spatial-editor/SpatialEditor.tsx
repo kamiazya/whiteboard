@@ -1300,8 +1300,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
-      selectedId,
-      extraIds,
       openGroupLabel: setGroupLabelEditId,
     })
     const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({
