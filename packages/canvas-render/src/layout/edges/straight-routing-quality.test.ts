@@ -14,7 +14,9 @@
 //   outside every node rect).
 // - PRICE: `length` against `direct` (the distance between the two drawn
 //   ends), `worstRatio` (the single longest detour relative to its direct
-//   distance), `bends`, `crossings` and `borderInk`. A change that buys
+//   distance), `grazingEnds` (a first or last leg running within ~14
+//   degrees of the side it leaves or reaches, so it meets the box edge-on),
+//   `bends`, `crossings` and `borderInk`. A change that buys
 //   shorter routes with ink through a body or a title is a trade to state,
 //   not a win.
 //
@@ -95,6 +97,31 @@ function layoutStraight(testCase: RoutingCase): { paths: Map<string, Path>; titl
 /** A route this much longer than its direct distance reads as a detour, not a line. */
 const LONG_DETOUR_RATIO = 1.5
 
+/** Below this outward-to-along ratio (~14 degrees) a leg reads as running along the side it ends on. */
+const GRAZING_RATIO = 0.25
+
+/**
+ * Whether the leg from `anchor` to `next` meets `rect` edge-on: `anchor` lies
+ * on one of its sides and the leg runs nearly along that side, so the line
+ * (and an arrowhead on it) slides into the box rather than arriving at it.
+ */
+function grazes(anchor: MetricPoint, next: MetricPoint, rect: MetricRect): boolean {
+  const sides = [
+    { d: Math.abs(anchor.x - rect.x), n: { x: -1, y: 0 } },
+    { d: Math.abs(anchor.x - (rect.x + rect.w)), n: { x: 1, y: 0 } },
+    { d: Math.abs(anchor.y - rect.y), n: { x: 0, y: -1 } },
+    { d: Math.abs(anchor.y - (rect.y + rect.h)), n: { x: 0, y: 1 } },
+  ].sort((a, b) => a.d - b.d)
+  const side = sides[0]
+  if (side === undefined || side.d > 0.5) return false
+  const vx = next.x - anchor.x
+  const vy = next.y - anchor.y
+  if (vx === 0 && vy === 0) return false
+  const outward = side.n.x * vx + side.n.y * vy
+  const along = Math.abs(side.n.x * vy - side.n.y * vx)
+  return outward <= along * GRAZING_RATIO
+}
+
 type Board = {
   violations: { foreign: number; 'own-endpoint': number }
   interiorInk: number
@@ -104,6 +131,7 @@ type Board = {
   ratio: number
   worstRatio: number
   longDetours: number
+  grazingEnds: number
   bends: number
   crossings: number
   borderInk: number
@@ -120,6 +148,7 @@ function score(
   let direct = 0
   let worst = 1
   let longDetours = 0
+  let grazingEnds = 0
   let bendCount = 0
   let crossingCount = 0
   let border = 0
@@ -139,6 +168,12 @@ function score(
       if (span > 0) worst = Math.max(worst, travelled / span)
       if (travelled > LONG_DETOUR_RATIO * span) longDetours++
       bendCount += bends(path)
+      const fromNode = testCase.nodes.find((n) => n.id === endNode(edge.from))
+      const toNode = testCase.nodes.find((n) => n.id === endNode(edge.to))
+      const second = path[1]
+      const penultimate = path[path.length - 2]
+      if (fromNode && second && grazes(start, second, rectOf(fromNode))) grazingEnds++
+      if (toNode && penultimate && grazes(end, penultimate, rectOf(toNode))) grazingEnds++
       for (const n of testCase.nodes) {
         const rect = rectOf(n)
         border += borderInk(path, rect)
@@ -162,6 +197,7 @@ function score(
     ratio: Math.round((length / direct) * 1000) / 1000,
     worstRatio: Math.round(worst * 100) / 100,
     longDetours,
+    grazingEnds,
     bends: bendCount,
     crossings: crossingCount,
     borderInk: Math.round(border),
@@ -192,6 +228,12 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 //   falls only as a side effect of shorter routes. Making it zero means
 //   handing the measured title boxes to the router and to the side search's
 //   cost model alike.
+//
+// `grazingEnds` was added after that change, and read back against the code
+// before it: 2/111/374/209 there (persona, generated, synthetic, lattice)
+// against 5/386/167/118 here. A corner leg can arrive nearly along its
+// target's side — on the stacked boards three times as often as the old
+// detour did — which no other column could see.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -204,6 +246,7 @@ describe('straight routing quality', () => {
       ratio: 1.202,
       worstRatio: 1.4,
       longDetours: 0,
+      grazingEnds: 5,
       bends: 6,
       crossings: 3,
       borderInk: 0,
@@ -221,6 +264,7 @@ describe('straight routing quality', () => {
       ratio: 1.118,
       worstRatio: 1.58,
       longDetours: 6,
+      grazingEnds: 386,
       bends: 786,
       crossings: 112,
       borderInk: 0,
@@ -238,6 +282,7 @@ describe('straight routing quality', () => {
       ratio: 1.072,
       worstRatio: 7.67,
       longDetours: 125,
+      grazingEnds: 167,
       bends: 1896,
       crossings: 188,
       borderInk: 998,
@@ -255,6 +300,7 @@ describe('straight routing quality', () => {
       ratio: 1.023,
       worstRatio: 1.53,
       longDetours: 3,
+      grazingEnds: 118,
       bends: 1416,
       crossings: 590,
       borderInk: 0,
