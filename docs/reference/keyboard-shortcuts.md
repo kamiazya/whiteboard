@@ -110,8 +110,10 @@ restyle that edge by pressing it; the frame is selected from its border.
 
 A frame carries every unlocked node that sits wholly inside it, whether you
 drag it or nudge it with the arrow keys, and the move is one undo step.
-With a frame selected, `N` puts the new note in the frame's next free spot,
-32px clear of what it already holds, and grows the frame if it is full. A new
+With a frame selected, or a node that sits inside one, `N` puts the new note
+in that frame's next free spot (the innermost frame, when frames nest), 32px
+clear of what it already holds, and grows the frame if it is full. So typing
+a note, pressing `Escape` and pressing `N` again keeps filling the same frame. A new
 note or frame never lands over a frame's name. A frame is carried by its border band and its name strip. A drag that starts on
 the frame's empty interior sweeps a selection band instead, so you can pick up
 the notes inside without moving the frame; a tap there still selects the frame.

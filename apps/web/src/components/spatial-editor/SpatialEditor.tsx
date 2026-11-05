@@ -70,7 +70,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { isFrame, nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -103,7 +103,7 @@ import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/command
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { creationObstacles } from '../../lib/spatial/frame-interior.js'
+import { creationObstacles, frameForNewNote } from '../../lib/spatial/frame-interior.js'
 import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
@@ -1273,11 +1273,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const createNodeAtViewportCenter = () => {
       const size = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
-      // With a frame selected the note is asked for IN it.
+      // With a frame, or a node in one, selected the note is asked for IN it.
+      const frame = frameForNewNote(selectedNode, canvasRef.current.nodes)
       const inFrame =
-        selectedNode !== undefined && isFrame(selectedNode)
-          ? noteInFrame(selectedNode, canvasRef.current.nodes, size)
-          : undefined
+        frame === undefined ? undefined : noteInFrame(frame, canvasRef.current.nodes, size)
       const point =
         inFrame?.center ??
         findFreeSpot(

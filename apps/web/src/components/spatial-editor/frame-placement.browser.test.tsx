@@ -5,7 +5,8 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { frameHolds } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
@@ -64,6 +65,30 @@ it('N with a full frame selected grows the frame to hold the note', () => {
   expect(frameHolds(frame, note)).toBe(true)
   // One step to undo, not a grow and a note apart.
   expect(latest.commands.length).toBe(commandsBefore + 1)
+})
+
+it('N after a typed note in a frame keeps the next note in that frame', async () => {
+  const initial: SpatialCanvas = {
+    nodes: [groupNode({ id: 'g', x: 80, y: 80, width: 322, height: 225, label: 'Risks' })],
+    edges: [],
+  }
+  const { Host, latest } = makeEditorHost({ initial })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 200, 200)
+  root.focus()
+  const editor = () => container.querySelector('[data-testid="text-node-editor"]')
+  for (const text of ['Alpha', 'Beta']) {
+    await userEvent.keyboard('n')
+    await expect.element(page.getByRole('textbox', { name: 'Text of Empty note' })).toBeVisible()
+    await userEvent.keyboard(`${text}{Escape}`)
+    await vi.waitFor(() => expect(editor()).toBeNull())
+  }
+
+  const frame = latest.canvas.nodes.find((n) => n.id === 'g') as SpatialNode
+  const notes = latest.canvas.nodes.filter((n) => n.id !== 'g')
+  expect(notes).toHaveLength(2)
+  for (const note of notes) expect(frameHolds(frame, note)).toBe(true)
 })
 
 it('a new note does not land over a frame name', () => {
