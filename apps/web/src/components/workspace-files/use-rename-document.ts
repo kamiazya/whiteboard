@@ -118,9 +118,10 @@ export function useRenameDocument({
   // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
   // lets scoped-screen-state.test.ts verify the setters from here.
   const cancel = useCallback(() => {
+    landing.current = null
     setRenaming(null)
     setError(null)
-  }, [])
+  }, [landing])
 
   const submit = useCallback(
     async (entry: WorkspaceDocumentEntry, name: string | undefined, newPath: string) => {

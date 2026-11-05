@@ -168,6 +168,9 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // delete, which is the worst place for that class of mistake.
   selection: 'cleared on switch',
   renaming: 'cleared on switch',
+  // Where a saved rename landed, spent by the dialog's close; the reset's
+  // cancel drops it too, so a switch never focuses the departed card's path.
+  landing: 'cleared on switch',
   // The rename form's refusal and in-flight flag, named from inside its own
   // hook. Cleared with the dialog, which the reset closes.
   error: 'cleared on switch',
