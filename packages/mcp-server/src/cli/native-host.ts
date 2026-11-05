@@ -45,7 +45,7 @@ export function keepHostAliveOnUnhandledRejection(): () => void {
   return () => process.off('unhandledRejection', onRejection)
 }
 
-const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
+export const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
   booleans: ['--json', '--development'],
   values: {
     '--data-dir': 'dataDir',
