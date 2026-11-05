@@ -62,17 +62,20 @@ function useRoutePresence({
     if (routeKey === null) return
     announceRoute(latest.current.announcement)
     arrivalSaid.current = latest.current.announcement
-    headingOwed.current = latest.current.claimsFocus ? routeKey : null
+    headingOwed.current = routeKey
   }, [routeKey])
-  // Every render, until paid: the heading is focused once it exists, unless
-  // something else has taken focus meanwhile.
+  // Every render, until paid: the heading is focused once it exists and the
+  // page claims focus, unless something else has taken focus meanwhile. A
+  // page that stands aside only while it loads (a note whose body has not
+  // arrived, which might be the empty one its editor takes focus for) is
+  // waited for rather than written off at arrival.
   useEffect(() => {
     if (headingOwed.current === null || headingOwed.current !== routeKey) return
-    if (!latest.current.claimsFocus || !focusIsUnclaimed()) {
+    if (!focusIsUnclaimed()) {
       headingOwed.current = null
       return
     }
-    if (headingRef.current === null) return
+    if (!latest.current.claimsFocus || headingRef.current === null) return
     headingRef.current.focus({ preventScroll: true })
     headingOwed.current = null
   })

@@ -88,6 +88,27 @@ describe('route presence', () => {
     )
   })
 
+  it('puts focus on the heading of a note opened from the list', async () => {
+    const router = renderApp()
+    await screen.findByText('What will you make first?', undefined, SLOW)
+    await userEvent.click(screen.getByRole('button', { name: 'Create a markdown note' }))
+    const editor = () => document.querySelector<HTMLElement>('[contenteditable="true"]')
+    await waitFor(() => expect(document.activeElement).toBe(editor()), SLOW)
+    await userEvent.keyboard('Some text')
+    await waitFor(() => expect(editor()?.textContent).toContain('Some text'), SLOW)
+    await router.navigate(-1)
+    const card = () => document.querySelector<HTMLElement>('main [data-doc-path]')
+    await waitFor(() => expect(card()).not.toBeNull(), SLOW)
+    card()?.focus()
+
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(announcement()).toMatch(/markdown note$/), SLOW)
+    await waitFor(
+      () => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 })),
+      SLOW,
+    )
+  })
+
   it('gives focus back to the card of the document Back came from', async () => {
     const router = renderApp()
     await screen.findByText('What will you make first?', undefined, SLOW)
