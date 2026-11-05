@@ -245,30 +245,25 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
-  // Both live on `mostlyInside`'s last line, and both are equivalent for the
-  // same reason, stated in full beside the code: `area` is positive there, so
-  // `w * h * 2 > area` already implies `w * h > 0`. The span checks exist to
-  // rule out two NEGATIVE spans — a box diagonally across the canvas, whose
-  // product is positive — and nothing else. So `w > 0` and `w >= 0` differ
-  // only at `w === 0`, where the product is 0 and fails the majority test
-  // either way; and `&&` -> `||` differs only where exactly one span is
-  // positive, where the product is non-positive and fails it too. Verified by
-  // applying each edit and running the file's property, which kills the five
-  // non-equivalent mutants on the same two functions.
+  // `mostlyInside`'s span check: `area` is positive there, so `w * h * 2 >
+  // area` already implies `w * h > 0`, and at `w === 0` the product is 0 and
+  // fails the majority test whichever comparison admitted it. The reasoning
+  // is beside the code; verified by applying the edit and running the file's
+  // property.
   //
-  // The other two are `buildUnits`', each equivalent by construction.
-  // `h.id !== g.id` only excludes `g` itself, and for `g` the last conjunct is
-  // already `!true || at(g) < at(g)`, false (ids are unique in a canvas).
-  // `at(h) < at(g)` -> false makes every twin of an identical pair a root,
-  // but the earlier twin is visited first and claims the later one, so the
-  // later is skipped as claimed. Each verified by applying the edit and
-  // running tidy's suites, drawing-quality and server-core's
-  // canvas-edit/propose tests, which stay green.
+  // The other three change no output of `buildUnits`, each verified by
+  // applying the edit and running tidy's suites and the drawing, composition
+  // and facet scoreboards, which stay green. `frameNesting` builds an
+  // encloser list for every frame on the board, and a level's frames are the
+  // board's own objects, so its `?? []` fallback is never taken. A missing
+  // `locked` defaults to a function answering `false`; one answering
+  // `undefined` is read through `!` and `.some` alike. And `units.length < 2`
+  // is a shortcut: sorting a level of one unit by document order returns it.
   'src/tidy-units.ts': {
     'EqualityOperator: w > 0 -> w >= 0': 1,
-    'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
-    'ConditionalExpression: h.id !== g.id -> true': 1,
-    'ConditionalExpression: at(h) < at(g) -> false': 1,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+    'ArrowFunction: () => false -> () => undefined': 1,
+    'ConditionalExpression: units.length < 2 -> false': 1,
   },
   // Guards that change no output of `tidyNodes`. A yield anchor list seeded
   // with a string (both of `anchorsToYieldTo`'s arrays) is read only by

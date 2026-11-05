@@ -137,14 +137,15 @@ export function mostlyInside(outer: Rect, inner: Rect): boolean {
   const w = Math.min(outer.x + outer.w, inner.x + inner.w) - Math.max(outer.x, inner.x)
   const h = Math.min(outer.y + outer.h, inner.y + inner.h) - Math.max(outer.y, inner.y)
   // Past the line above `area` is positive, so `w * h * 2 > area` already
-  // implies `w * h > 0`. The two span checks therefore rule out exactly ONE
-  // case the product cannot: both spans NEGATIVE — two boxes separated on
-  // both axes, whose product is positive and can exceed half the area, which
-  // would have a frame claim a box diagonally across the canvas. They are
-  // not boundary guards, and no input distinguishes `w > 0` from `w >= 0`
-  // here, nor `&&` from `||` between them (recorded in KNOWN_EQUIVALENT with
-  // this reasoning, so the lane's survivors on this line are not re-chased).
-  return w > 0 && h > 0 && w * h * 2 > area
+  // implies `w * h > 0` — which a negative span on ONE axis fails on its
+  // own. What the product cannot rule out is both spans NEGATIVE: two boxes
+  // separated on both axes, whose product is positive and can exceed half
+  // the area, which would have a frame claim a box diagonally across the
+  // canvas. One span's sign settles that case, so one check is all there is:
+  // a second, on `h`, could not change any answer. Nor does any
+  // input tell `w > 0` from `w >= 0`: at `w === 0` the product is 0 and fails
+  // the majority test anyway (recorded in KNOWN_EQUIVALENT).
+  return w > 0 && w * h * 2 > area
 }
 
 export function overlapsWithMargin(a: Rect, b: Rect): boolean {
@@ -181,39 +182,44 @@ export function usable(nodes: readonly TidyNode[]): TidyNode[] {
  * frames has as many levels as frames — cubic, 323s for the 2000 a canvas
  * may hold.
  *
- * Each frame's enclosers are listed smallest first, so a level's question is
- * usually settled by the first entry: the frame just around it, which is a
- * member of the same level unless it is the level's own root.
+ * Each frame's enclosers are listed in document order. They were sorted
+ * smallest first once, so that a level's question would usually be settled
+ * by the first entry; counted on 2000-frame chains, the scan took the same
+ * number of steps either way listed innermost or outermost first, and 1.3x
+ * as many unsorted on a shuffled one — inside a walk the level budget
+ * already bounds, for a sort no test could tell from its absence.
  */
 export interface FrameNesting {
   readonly enclosers: (frame: TidyNode) => readonly TidyNode[]
 }
 
 export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
-  const frames = nodes.filter((n) => n.frame)
-  const rects = new Map(frames.map((f) => [f, rectOf(f)]))
-  const rect = (f: TidyNode) => rects.get(f) ?? rectOf(f)
-  const order = new Map(frames.map((f, i) => [f, i]))
-  const at = (f: TidyNode) => order.get(f) ?? 0
-  const area = (f: TidyNode) => f.width * f.height
   // Finite sides can still multiply to Infinity; two such areas tie, and
   // document order decides, as it does for any equal pair.
-  const smallestFirst = [...frames].sort((a, b) => area(a) - area(b) || at(a) - at(b))
+  const frames = nodes
+    .filter((n) => n.frame)
+    .map((node, at) => ({ node, rect: rectOf(node), area: node.width * node.height, at }))
   const enclosers = new Map<TidyNode, TidyNode[]>()
   for (const g of frames) {
     enclosers.set(
-      g,
-      smallestFirst.filter(
-        (h) =>
-          h.id !== g.id &&
-          // Full containment settles the common case without the area
-          // arithmetic; majority is what decides a frame drawn across
-          // another's edge, the same rule a member is claimed by.
-          (fullyContains(rect(h), rect(g)) || mostlyInside(rect(h), rect(g))) &&
-          (area(h) > area(g) || (area(h) === area(g) && at(h) < at(g))),
-      ),
+      g.node,
+      frames
+        .filter(
+          (h) =>
+            // Full containment settles the common case without the area
+            // arithmetic; majority is what decides a frame drawn across
+            // another's edge, the same rule a member is claimed by.
+            (fullyContains(h.rect, g.rect) || mostlyInside(h.rect, g.rect)) &&
+            // Strict on both, so a frame never encloses itself: that is
+            // what keeps `g` out of its own list without asking its id.
+            (h.area > g.area || (h.area === g.area && h.at < g.at)),
+        )
+        .map((h) => h.node),
     )
   }
+  // Every frame of the board has an entry, and a level's frames are the
+  // board's own objects, so the fallback is never taken (recorded in
+  // KNOWN_EQUIVALENT).
   return { enclosers: (frame) => enclosers.get(frame) ?? [] }
 }
 
@@ -225,16 +231,20 @@ export function frameNesting(nodes: readonly TidyNode[]): FrameNesting {
  * Marks each claimed; answers them in document order.
  */
 function scoop(root: TidyNode, nodes: readonly TidyNode[], claimed: Set<string>): TidyNode[] {
+  // The root is claimed before the walk rather than recognised by id inside
+  // it: a box with both sides negative is not "more than half inside"
+  // itself, so it cannot be left to the majority test.
   const holders = [rectOf(root)]
-  const mine = new Set<string>()
+  const mine = new Set<string>([root.id])
+  claimed.add(root.id)
   for (let grew = true; grew; ) {
     grew = false
     for (const m of nodes) {
       if (claimed.has(m.id)) continue
-      if (m.id !== root.id && !holders.some((h) => mostlyInside(h, rectOf(m)))) continue
+      if (!holders.some((h) => mostlyInside(h, rectOf(m)))) continue
       claimed.add(m.id)
       mine.add(m.id)
-      if (m.frame && m.id !== root.id) holders.push(rectOf(m))
+      if (m.frame) holders.push(rectOf(m))
       grew = true
     }
   }
@@ -255,7 +265,8 @@ export function buildUnits(
 ): Unit[] {
   const locked = options.locked ?? (() => false)
   const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
-  const atLevel = new Set(nodes.filter((n) => n.frame))
+  // Every node, not only the frames: an encloser list holds nothing else.
+  const atLevel = new Set(nodes)
   const isRoot = (g: TidyNode) => !nesting.enclosers(g).some((h) => atLevel.has(h))
   const claimed = new Set<string>()
   const units: Unit[] = []

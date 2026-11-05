@@ -245,4 +245,18 @@ describe('who a unit root claims', () => {
     expect(holds(at('straddler'), at('twin'))).toBe(true)
     expect(holds(at('outer'), at('straddler'))).toBe(true)
   })
+
+  it('a box that is not a frame never holds one, however much of it covers', () => {
+    // Only a frame collects what lies over it. A text box drawn across a
+    // whole frame is a neighbour, so the frame still roots its own unit and
+    // carries its member wherever the overlap pass sends it.
+    const nodes = [
+      box('note', 0, 0, 600, 400),
+      box('grp', 100, 100, 200, 100, true),
+      box('m', 116, 116, 100, 60),
+    ]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const at = (id: string) => after.find((b) => b.id === id) as TidyNode
+    expect(holds(at('grp'), at('m'))).toBe(true)
+  })
 })

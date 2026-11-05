@@ -7,7 +7,14 @@
 // property slow enough to time out.
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { createTidyBudget, spendTidy, type TidyBudget, tidyBoxes } from './tidy-units.js'
+import {
+  buildUnits,
+  createTidyBudget,
+  spendTidy,
+  type TidyBudget,
+  type TidyNode,
+  tidyBoxes,
+} from './tidy-units.js'
 
 describe('the boxes a canvas gives tidy', () => {
   it("carries each node's rectangle and says which of them are frames", () => {
@@ -36,5 +43,30 @@ describe("a tidy's work account", () => {
     expect(spendTidy(budget, account, all)).toBe(true)
     expect(budget[account]).toBe(0)
     expect(spendTidy(budget, account, 1)).toBe(false)
+  })
+})
+
+describe('who belongs to whom', () => {
+  const frame = (id: string, x: number, y: number, width: number, height: number): TidyNode => ({
+    id,
+    frame: true,
+    x,
+    y,
+    width,
+    height,
+  })
+
+  it('assigns every node to exactly one unit, a root claimed through another root included', () => {
+    // `f` is mostly inside `r`. `g` is larger than `f` and holds it, so
+    // nothing encloses `g` and it is a root of its own; but `g` is also more
+    // than half over `f`, so `r`'s scoop claims it through `f` first. A
+    // second unit for `g` would move it twice.
+    const nodes = [
+      frame('r', 0, 0, 1000, 400),
+      frame('f', 780, 100, 400, 100),
+      frame('g', 780, 100, 720, 100),
+    ]
+    const members = buildUnits(nodes, {}).flatMap((u) => u.members.map((m) => m.id))
+    expect([...members].sort()).toEqual(['f', 'g', 'r'])
   })
 })
