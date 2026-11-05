@@ -156,21 +156,7 @@ export function useTaskCheckboxes(
     },
     [onToggleTask, source],
   )
-  // A key or press outside the preview means the reader has moved on: the
-  // box no longer gets focus back. Focus alone cannot tell — writing the
-  // toggle through the source view moves focus there itself.
-  useEffect(() => {
-    const movedOn = (event: Event) => {
-      if (event.target instanceof Node && hostRef.current?.contains(event.target)) return
-      pending.current = null
-    }
-    document.addEventListener('keydown', movedOn, true)
-    document.addEventListener('pointerdown', movedOn, true)
-    return () => {
-      document.removeEventListener('keydown', movedOn, true)
-      document.removeEventListener('pointerdown', movedOn, true)
-    }
-  }, [])
+  useForgetOnMovingOn(hostRef, pending)
   // Declared after the keyed patcher's layout effect has run for this commit,
   // so the boxes it just painted are the ones made focusable.
   useEffect(() => {
@@ -182,6 +168,29 @@ export function useTaskCheckboxes(
     setAnnouncement(said)
   }, [keyed, onToggleTask, source])
   return { hostRef, announcement, handlers: onToggleTask ? activationHandlers(toggleFrom) : {} }
+}
+
+/**
+ * A key or press outside the preview means the reader has moved on: the box
+ * no longer gets focus back. Focus alone cannot tell — writing the toggle
+ * through the source view moves focus there itself.
+ */
+function useForgetOnMovingOn(
+  hostRef: MutableRefObject<HTMLDivElement | null>,
+  pending: MutableRefObject<PendingToggle | null>,
+): void {
+  useEffect(() => {
+    const movedOn = (event: Event) => {
+      if (event.target instanceof Node && hostRef.current?.contains(event.target)) return
+      pending.current = null
+    }
+    document.addEventListener('keydown', movedOn, true)
+    document.addEventListener('pointerdown', movedOn, true)
+    return () => {
+      document.removeEventListener('keydown', movedOn, true)
+      document.removeEventListener('pointerdown', movedOn, true)
+    }
+  }, [hostRef, pending])
 }
 
 function activationHandlers(
