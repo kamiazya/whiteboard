@@ -183,6 +183,12 @@ type MarkdownVerbAction =
       readonly kind: 'interactive'
       readonly fallback: { readonly open: string; readonly close: string }
     }
+  /**
+   * Asks the host for a file and writes a reference to what the keeper
+   * stored. With no file there is nothing to write, so it has no fallback
+   * and a host that stores no files offers no such verb at all.
+   */
+  | { readonly kind: 'attach' }
 
 export type MarkdownVerbId =
   | 'heading'
@@ -195,6 +201,7 @@ export type MarkdownVerbId =
   | 'strikethrough'
   | 'code'
   | 'link'
+  | 'image'
   | 'math'
   | 'bullet-list'
   | 'ordered-list'
@@ -291,6 +298,8 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     key: 'Mod-k',
     action: { kind: 'interactive', fallback: { open: '[[', close: ']]' } },
   },
+  // The picture lands as `![name](asset:…)` at the caret; see image-markup.ts.
+  { id: 'image', label: 'Image…', band: 'inline', action: { kind: 'attach' } },
   { id: 'math', label: 'Math', band: 'inline', action: { kind: 'wrap', open: '$' } },
   {
     id: 'bullet-list',
@@ -386,7 +395,20 @@ export const VERB_BAR_ORDER: readonly MarkdownVerbId[] = [
   'rule',
   'strikethrough',
   'math',
+  'image',
 ]
+
+/**
+ * The ids a host can offer: an `attach` verb only where the host stores
+ * files, since it has nothing to degrade to — a button that cannot write is
+ * worse than none.
+ */
+export function offeredVerbs(
+  ids: readonly MarkdownVerbId[],
+  canAttach: boolean,
+): readonly MarkdownVerbId[] {
+  return canAttach ? ids : ids.filter((id) => verb(id).action.kind !== 'attach')
+}
 
 /**
  * The given ids in the TABLE's order — which is the reading order, bands
@@ -402,8 +424,9 @@ export function inVerbTableOrder(ids: readonly MarkdownVerbId[]): readonly Markd
 
 /**
  * The document transform a verb performs with no further input, or `null`
- * when it has none — `levels` needs a level chosen and `interactive` needs
- * the dialog's answer, so neither reduces to a single command.
+ * when it has none — `levels` needs a level chosen, `interactive` the
+ * dialog's answer and `attach` a stored file, so none reduces to a single
+ * command (`interactive` degrades to its wrap instead).
  */
 export function selfContainedCommand(spec: MarkdownVerbSpec): StateCommand | null {
   const action = spec.action
@@ -415,6 +438,7 @@ export function selfContainedCommand(spec: MarkdownVerbSpec): StateCommand | nul
     case 'interactive':
       return wrapSelectionWith(action.fallback.open, action.fallback.close)
     case 'levels':
+    case 'attach':
       return null
   }
 }

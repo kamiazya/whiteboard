@@ -10,10 +10,14 @@
  * stories; each interprets every step, so a step one keeper cannot take
  * fails its suite instead of being skipped.
  */
+import { newImageRef } from '@kamiazya/whiteboard-model'
+
 type FileCollectionStep =
   /** An upload old enough that no grace window still covers it. */
   | { readonly op: 'upload'; readonly fileId: string }
   | { readonly op: 'create'; readonly path: string; readonly draws: readonly string[] }
+  /** A markdown note whose BODY embeds each image inline, as the note editor writes one. */
+  | { readonly op: 'note'; readonly path: string; readonly draws: readonly string[] }
   /** Replaces what the document draws. */
   | { readonly op: 'draw'; readonly path: string; readonly draws: readonly string[] }
   /**
@@ -32,6 +36,14 @@ type FileCollectionStep =
   | { readonly op: 'delete'; readonly path: string }
   /** Out of the trash for good, its versions with it. */
   | { readonly op: 'purge'; readonly path: string }
+
+/**
+ * The body a `note` step stores: one inline image per id, in the form the
+ * note editor inserts. Declared here so both keepers store the same text.
+ */
+export function noteBody(fileIds: readonly string[]): string {
+  return fileIds.map((id) => `Reading ![${id}](${newImageRef(id)})`).join('\n\n')
+}
 
 export type FileCollectionKeeper = 'daemon' | 'browser'
 
@@ -66,7 +78,9 @@ export const FILE_COLLECTION_CONFORMANCE: FileCollectionScenario = {
     { op: 'upload', fileId: 'img-proposed' },
     { op: 'upload', fileId: 'img-dismissed' },
     { op: 'upload', fileId: 'img-orphan' },
+    { op: 'upload', fileId: 'img-noted' },
     { op: 'create', path: 'kept', draws: ['img-live'] },
+    { op: 'note', path: 'site-note', draws: ['img-noted'] },
     { op: 'propose', path: 'kept', draws: ['img-proposed'], status: 'open' },
     { op: 'propose', path: 'kept', draws: ['img-dismissed'], status: 'dismissed' },
     { op: 'create', path: 'versioned', draws: ['img-then'] },
@@ -82,7 +96,7 @@ export const FILE_COLLECTION_CONFORMANCE: FileCollectionScenario = {
     { op: 'delete', path: 'purged' },
     { op: 'purge', path: 'purged' },
   ],
-  kept: ['img-live', 'img-proposed', 'img-then', 'img-trashed', 'img-trashed-then'],
+  kept: ['img-live', 'img-noted', 'img-proposed', 'img-then', 'img-trashed', 'img-trashed-then'],
   collected: ['img-dismissed', 'img-orphan', 'img-purged'],
   knownDivergences: [],
 }

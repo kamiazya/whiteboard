@@ -76,6 +76,8 @@ const VERB_COVERAGE = {
     'not modelled: its meaning comes from the lines above; list-nesting.model.property.test.ts',
   'code-block':
     'not modelled: takes the caret into the fence, where what a verb means is undecided; B1-B3 in editor-verbs.property.test.ts',
+  image:
+    'not modelled: writes nothing until the keeper has stored a file; image-markup.test.ts and note-image.browser.test.tsx',
   table:
     'not modelled: takes the caret into a cell, where what a verb means is undecided; B1 and B3 in editor-verbs.property.test.ts',
 } satisfies Record<MarkdownVerbId, SurfaceCoverage>

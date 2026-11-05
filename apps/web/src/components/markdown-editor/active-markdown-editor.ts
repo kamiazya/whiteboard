@@ -30,6 +30,8 @@ export interface ActiveMarkdownEditor {
    * on hosts without a picker.
    */
   readonly openLinkPicker?: () => boolean
+  /** Opens the host's image picker. Absent on hosts that store no files. */
+  readonly pickImage?: () => void
 }
 
 let current: ActiveMarkdownEditor | null = null

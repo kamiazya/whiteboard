@@ -11,9 +11,11 @@ import { writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
   conformanceVerdictFor,
   FILE_COLLECTION_CONFORMANCE,
+  noteBody,
 } from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -82,6 +84,13 @@ it('reaches the verdict every keeper reaches on the shared scenario', async () =
       case 'create':
         await saveDocument(WORKSPACE, step.path, drawing(step.draws))
         break
+      case 'note': {
+        const doc = new LoroDoc()
+        doc.getText('body').insert(0, noteBody(step.draws))
+        doc.commit()
+        await saveDocument(WORKSPACE, step.path, doc, { kind: 'markdown' })
+        break
+      }
       case 'draw':
         await saveDocument(WORKSPACE, step.path, drawing(step.draws), { overwrite: true })
         break

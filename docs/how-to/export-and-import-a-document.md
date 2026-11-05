@@ -19,7 +19,8 @@ Open the document, then **More actions → Export…**:
   open when you tick one, so you can set both before choosing a format.
 - **Save as Markdown (.md)** — on a note, the only entry its Export… submenu offers: the
   OKF Markdown source, with the document's name as the frontmatter `title`. A note has no
-  picture export.
+  picture export. An image in the note is saved as its `![alt](asset:…)` line, not as
+  pixels ([add an image to a note](add-an-image-to-a-note.md)).
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the
   `x-whiteboard` extension.
 

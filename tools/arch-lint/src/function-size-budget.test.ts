@@ -102,7 +102,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentFacetsEditor': 117,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 110,
-  'apps/web/src/components/markdown-editor/EditorToolbar.tsx#EditorToolbar': 135,
+  // +1: `pickImage`, the note's Image verb on the inline bar.
+  'apps/web/src/components/markdown-editor/EditorToolbar.tsx#EditorToolbar': 136,
   'apps/web/src/components/markdown-editor/LinkPickerDialog.tsx#LinkPickerDialog': 160,
   // The two COLUMNS live in `editor-columns.tsx`, the split's drag in
   // `split-divider.tsx`, the pane scroll sync in `use-pane-scroll-sync.ts` and
@@ -118,14 +119,17 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // editor's complexity rather than its structure.
   // +3: `tagLibrary`, threaded to the preview pane.
   'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 86,
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
-  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
+  // +3: `onRequestImage`, the touch bar's Image slot.
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 56,
+  // +1: `pickImage`, offered only by a host that stores files.
+  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 61,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
   // +2: `tagLibrary`, so an embedded board is coloured by intent.
   'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 66,
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
-  'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
+  // +2: the Image verb opens the host's picker.
+  'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 130,
   'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 56,
   // The `ViewPlugin.define` callback of a module-level constant: one closure over the
   // tap's state and the three listeners that read it.

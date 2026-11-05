@@ -19,6 +19,7 @@ import {
   levelCommand,
   MARKDOWN_EDITOR_VERBS,
   type MarkdownVerbBand,
+  type MarkdownVerbSpec,
   selfContainedCommand,
 } from './editor-verbs.js'
 import { VERB_ICONS } from './verb-icons.js'
@@ -30,6 +31,8 @@ export interface VerbCatalogHost {
   readonly run: (command: StateCommand) => void
   /** Opens the host's link picker; absent when there is nothing to pick from. */
   readonly openLinkPicker?: () => void
+  /** Opens the host's image picker; absent when the host stores no files. */
+  readonly pickImage?: () => void
   /** Follows the `[[link]]` under the caret; absent when the caret is not in a resolved one. */
   readonly openLink?: () => void
   /** Creates the note an unresolved `[[link]]` under the caret names; absent otherwise. */
@@ -64,12 +67,12 @@ export function verbCatalogItems(host: VerbCatalogHost): readonly ContextMenuIte
       continue
     }
 
-    // The one verb that asks before it writes. With nothing to pick from
-    // there is nothing to ask, and it falls through to the wrap the table
-    // declares for exactly that case.
+    // A verb that asks before it writes opens the host's dialog. With nothing
+    // to link to, the link verb falls through to the wrap the table declares
+    // for that case; with no file store, the image verb has no row at all.
     const icon = VERB_ICONS[spec.id]
-    if (spec.action.kind === 'interactive' && host.openLinkPicker !== undefined) {
-      const open = host.openLinkPicker
+    const open = dialogOpener(spec, host)
+    if (open !== undefined) {
       items.push({
         label: spec.label,
         icon,
@@ -80,6 +83,7 @@ export function verbCatalogItems(host: VerbCatalogHost): readonly ContextMenuIte
       })
       continue
     }
+    if (spec.action.kind === 'attach') continue
 
     const command = selfContainedCommand(spec)
     // A verb with neither a dialog nor a self-contained command has no
@@ -92,6 +96,13 @@ export function verbCatalogItems(host: VerbCatalogHost): readonly ContextMenuIte
 
   items.push(...linkRows(host), ...commentRows(host))
   return items
+}
+
+/** The host's dialog for a verb that asks first, or undefined when it has none. */
+function dialogOpener(spec: MarkdownVerbSpec, host: VerbCatalogHost): (() => void) | undefined {
+  if (spec.action.kind === 'interactive') return host.openLinkPicker
+  if (spec.action.kind === 'attach') return host.pickImage
+  return undefined
 }
 
 /** The rows for the `[[link]]` under the caret, behind a separator, or none. */
