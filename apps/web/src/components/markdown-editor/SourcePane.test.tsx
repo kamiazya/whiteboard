@@ -1,10 +1,25 @@
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SourcePane } from './SourcePane.js'
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
 })
+
+function stubCoarsePointer() {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }))
+}
+
+function leaveHint(container: HTMLElement): string {
+  const hintId = container.querySelector('.cm-content')?.getAttribute('aria-describedby')
+  return document.getElementById(hintId as string)?.textContent ?? ''
+}
 
 describe('SourcePane', () => {
   it('renders the given value as the CodeMirror document text', () => {
@@ -32,5 +47,16 @@ describe('SourcePane', () => {
     const hintId = content?.getAttribute('aria-describedby')
     expect(hintId).toBeTruthy()
     expect(document.getElementById(hintId as string)?.textContent).toMatch(/Escape.*Tab/)
+  })
+
+  // On a phone the words name keys nobody has; a keyboard attached to a
+  // touch device is noticed by its first key press, and the hint returns.
+  it('keeps the keyboard hint silent on a touch screen until a key is pressed', () => {
+    stubCoarsePointer()
+    const { container } = render(<SourcePane value="note" onChange={() => {}} />)
+    expect(leaveHint(container)).toBe('')
+
+    fireEvent.keyDown(container.querySelector('.cm-content') as HTMLElement, { key: 'Tab' })
+    expect(leaveHint(container)).toMatch(/Escape.*Tab/)
   })
 })
