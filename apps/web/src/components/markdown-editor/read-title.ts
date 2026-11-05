@@ -18,7 +18,11 @@ function titleHeading(body: string, title: string | undefined) {
   return { whole, line }
 }
 
-/** Whether `body` opens with a `# Title` heading repeating the document's name. */
+/**
+ * Whether `body` opens with a `# Title` heading repeating the document's name
+ * — so a print of the drawn body (any mode but Read under a header) leaves out
+ * its own title line rather than printing the name twice.
+ */
 export function opensWithTitle(body: string, title: string | undefined): boolean {
   return titleHeading(body, title) !== undefined
 }

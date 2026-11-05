@@ -82,6 +82,22 @@ interface RenameDocumentDeps {
   readonly rootRef: RefObject<HTMLElement | null>
 }
 
+/** Where focus goes as the dialog closes: the card of the document a saved rename landed on. */
+function useRenameLanding(rootRef: RefObject<HTMLElement | null>) {
+  const landing = useRef<string | null>(null)
+  const onCloseAutoFocus = useCallback(
+    (event: Event) => {
+      const path = landing.current
+      landing.current = null
+      if (path !== null && focusLanding(rootRef.current, documentLanding(path))) {
+        event.preventDefault()
+      }
+    },
+    [rootRef],
+  )
+  return { landing, onCloseAutoFocus }
+}
+
 export function useRenameDocument({
   source,
   moveDocument,
@@ -90,7 +106,7 @@ export function useRenameDocument({
   rootRef,
 }: RenameDocumentDeps): RenameDocument {
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
-  const landing = useRef<string | null>(null)
+  const { landing, onCloseAutoFocus } = useRenameLanding(rootRef)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -140,17 +156,6 @@ export function useRenameDocument({
       }
     },
     [source, moveDocument, refreshAndSelect, listed],
-  )
-
-  const onCloseAutoFocus = useCallback(
-    (event: Event) => {
-      const path = landing.current
-      landing.current = null
-      if (path !== null && focusLanding(rootRef.current, documentLanding(path))) {
-        event.preventDefault()
-      }
-    },
-    [rootRef],
   )
 
   return { renaming, busy, error, open, cancel, submit, onCloseAutoFocus }

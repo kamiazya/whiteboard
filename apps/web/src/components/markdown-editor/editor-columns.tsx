@@ -194,6 +194,7 @@ export function PreviewColumn({
   onToggleTask: Parameters<typeof PreviewPane>[0]['onToggleTask']
 }) {
   const drawnBody = shownBody(value, mode, meta !== undefined, title)
+  const printTitle = opensWithTitle(drawnBody, title) ? undefined : title
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
     // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — the interactive element is the anchor inside, which is natively keyboard-activatable
@@ -204,13 +205,7 @@ export function PreviewColumn({
       className="min-w-0 flex-1 overflow-auto"
       onClick={onPreviewClick}
     >
-      <NotePrintView
-        // The drawn body may already open with the name as its heading (any
-        // mode but Read under a header); printing both reads as a mistake.
-        title={opensWithTitle(drawnBody, title) ? undefined : title}
-        hostRef={scrollRef}
-        blocksRef={blocksRef}
-      />
+      <NotePrintView title={printTitle} hostRef={scrollRef} blocksRef={blocksRef} />
       <div
         ref={innerRef}
         className="note-print-screen relative mx-auto px-6 py-8"
