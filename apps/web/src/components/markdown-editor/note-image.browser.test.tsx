@@ -108,7 +108,7 @@ describe('an image in a note', () => {
     input.files = filesOf(PNG()).files
     fireEvent.change(input)
 
-    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:pic)'))
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:pic)'))
     expect(store).toHaveBeenCalledWith(expect.objectContaining({ name: 'meter.png' }))
     await vi.waitFor(() => expect(previewHrefs()).toContain('blob:asset:pic'))
   })
@@ -124,9 +124,9 @@ describe('an image in a note', () => {
     await vi.waitFor(() => expect(upload.pending()).toBe(1))
     await userEvent.keyboard(' hello')
     upload.resolve(0, 'asset:late')
-    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:late) hello'))
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:late)\n\n hello'))
     await userEvent.keyboard('!')
-    await vi.waitFor(() => expect(last()).toBe('Pump ok![meter](asset:late) hello!'))
+    await vi.waitFor(() => expect(last()).toBe('Pump ok\n\n![meter](asset:late)\n\n hello!'))
   })
 
   it('is offered in the editing catalog too', async () => {
@@ -148,10 +148,10 @@ describe('an image in a note', () => {
         clipboardData: filesOf(PNG()),
       }),
     )
-    await vi.waitFor(() => expect(last()).toBe('a![meter](asset:p1)b'))
+    await vi.waitFor(() => expect(last()).toBe('a\n\n![meter](asset:p1)\n\nb'))
   })
 
-  it('pasted several at once keeps their order, one per line', async () => {
+  it('pasted several at once keeps their order, a paragraph each', async () => {
     const upload = held()
     const { content, last } = await mount('ab', upload.store)
     const named = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' })
@@ -166,7 +166,7 @@ describe('an image in a note', () => {
     await vi.waitFor(() => expect(upload.pending()).toBe(2))
     upload.resolve(1, 'asset:two')
     upload.resolve(0, 'asset:one')
-    await vi.waitFor(() => expect(last()).toBe('ab![one](asset:one)\n![two](asset:two)'))
+    await vi.waitFor(() => expect(last()).toBe('ab\n\n![one](asset:one)\n\n![two](asset:two)'))
   })
 
   it('dropped as a file is stored and written into the note', async () => {

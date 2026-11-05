@@ -1,4 +1,4 @@
-import { type StateCommand, StateEffect, StateField } from '@codemirror/state'
+import { type EditorState, type StateCommand, StateEffect, StateField } from '@codemirror/state'
 
 /**
  * What a note's body says for an uploaded picture: an ordinary markdown
@@ -57,9 +57,29 @@ export function startPendingImage(token: string, at?: number): StateCommand {
   }
 }
 
+/** The line breaks that make `at` a block boundary: none, one, or a blank line's two. */
+function breaksBefore(state: EditorState, at: number): string {
+  if (at === 0) return ''
+  const before = state.doc.sliceString(Math.max(0, at - 2), at)
+  if (before.endsWith('\n\n')) return ''
+  return before.endsWith('\n') ? '\n' : '\n\n'
+}
+
+function breaksAfter(state: EditorState, at: number): string {
+  if (at === state.doc.length) return ''
+  const after = state.doc.sliceString(at, at + 2)
+  if (after.startsWith('\n\n')) return ''
+  return after.startsWith('\n') ? '\n' : '\n\n'
+}
+
 /**
  * Writes `markup` where the upload `token` was held, once; nothing when it is
  * not held.
+ *
+ * As a block of its own: a picture on the line under a sentence, with no
+ * blank line between, is part of that sentence's paragraph to markdown and
+ * is drawn inline at its end. A blank line is added before it, and after it
+ * when text follows, unless one is already there.
  *
  * The caret follows the picture only when it is still where the picture
  * goes. A writer who kept typing, or moved to another paragraph, while the
@@ -72,10 +92,13 @@ export function insertPendingImage(token: string, markup: string): StateCommand 
     if (at === undefined) return false
     const caret = state.selection.main
     const caretAtHold = state.selection.ranges.length === 1 && caret.empty && caret.head === at
+    const lead = breaksBefore(state, at)
+    const insert = `${lead}${markup}${breaksAfter(state, at)}`
+    const end = at + lead.length + markup.length
     dispatch(
       state.update({
-        changes: { from: at, insert: markup },
-        ...(caretAtHold ? { selection: { anchor: at + markup.length }, scrollIntoView: true } : {}),
+        changes: { from: at, insert },
+        ...(caretAtHold ? { selection: { anchor: end }, scrollIntoView: true } : {}),
         effects: endPending.of(token),
         userEvent: 'input',
       }),

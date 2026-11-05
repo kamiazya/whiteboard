@@ -14,7 +14,8 @@ With the caret where the picture should go, do any of these:
 
 While the file uploads the editor says "Uploading *name*…". It is stored in the same place a
 canvas's **Add > Image** stores pictures — this browser, or the daemon that keeps the
-workspace — and the note gets one line of Markdown where the caret was:
+workspace — and the note gets one line of Markdown where the caret was, as a paragraph of its
+own (a blank line is added before it, and after it when text follows):
 
 ```markdown
 ![meter reading](asset:…)
@@ -22,7 +23,7 @@ workspace — and the note gets one line of Markdown where the caret was:
 
 You can keep writing while it uploads: the picture goes where the caret was when the upload
 began, and the caret stays where you are. Several images pasted or dropped together go in
-together once all are stored, in the order you gave them, one per line.
+together once all are stored, in the order you gave them, each in its own paragraph.
 
 The text in the brackets is the picture's alt text, taken from the file name. Edit it in the
 source to describe the picture. **Split** and **Read** show the picture itself.

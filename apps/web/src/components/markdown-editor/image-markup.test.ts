@@ -48,20 +48,47 @@ function apply(state: EditorState, command: ReturnType<typeof insertPendingImage
   return next
 }
 
+describe('a pending image as its own block', () => {
+  const insertAt = (doc: string, at: number) => {
+    let state = apply(stateAt(doc, at), startPendingImage('t1'))
+    state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
+    return state
+  }
+
+  it('opens a paragraph of its own after the line it was added on', () => {
+    expect(insertAt('Photo below:', 12).doc.toString()).toBe('Photo below:\n\n![p](asset:a1)')
+  })
+
+  it('completes a blank line the writer had begun', () => {
+    expect(insertAt('Photo below:\n', 13).doc.toString()).toBe('Photo below:\n\n![p](asset:a1)')
+  })
+
+  it('adds nothing where a block already starts and ends', () => {
+    expect(insertAt('a\n\n\n\nb', 3).doc.toString()).toBe('a\n\n![p](asset:a1)\n\nb')
+    expect(insertAt('', 0).doc.toString()).toBe('![p](asset:a1)')
+  })
+
+  it('keeps the text after it out of its paragraph', () => {
+    const state = insertAt('ab', 1)
+    expect(state.doc.toString()).toBe('a\n\n![p](asset:a1)\n\nb')
+    expect(state.selection.main.head).toBe('a\n\n![p](asset:a1)'.length)
+  })
+})
+
 describe('a pending image', () => {
   it('lands where the caret was when the upload started, after edits before it', () => {
     let state = apply(stateAt('ab', 1), startPendingImage('t1'))
     // Typed at the start while the upload runs.
     state = state.update({ changes: { from: 0, insert: 'XY' } }).state
     state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
-    expect(state.doc.toString()).toBe('XYa![p](asset:a1)b')
+    expect(state.doc.toString()).toBe('XYa\n\n![p](asset:a1)\n\nb')
   })
 
   it('is written once, and a second answer for the same upload writes nothing', () => {
     let state = apply(stateAt('ab', 2), startPendingImage('t1'))
     state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
     state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
-    expect(state.doc.toString()).toBe('ab![p](asset:a1)')
+    expect(state.doc.toString()).toBe('ab\n\n![p](asset:a1)')
   })
 
   it('leaves a caret that moved on where the writer left it', () => {
@@ -69,19 +96,19 @@ describe('a pending image', () => {
     // Typed at the caret while the upload runs: the caret is past the hold.
     state = state.update({ changes: { from: 1, insert: 'XY' }, selection: { anchor: 3 } }).state
     state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
-    expect(state.doc.toString()).toBe('a![p](asset:a1)XYb')
-    expect(state.selection.main.head).toBe('a![p](asset:a1)XY'.length)
+    expect(state.doc.toString()).toBe('a\n\n![p](asset:a1)\n\nXYb')
+    expect(state.selection.main.head).toBe('a\n\n![p](asset:a1)\n\nXY'.length)
   })
 
   it('puts a caret still at the hold after the picture', () => {
     let state = apply(stateAt('ab', 1), startPendingImage('t1'))
     state = apply(state, insertPendingImage('t1', '![p](asset:a1)'))
-    expect(state.selection.main.head).toBe('a![p](asset:a1)'.length)
+    expect(state.selection.main.head).toBe('a\n\n![p](asset:a1)'.length)
   })
 
   it('starts at an explicit position, as a drop does', () => {
     let state = apply(stateAt('abcd', 0), startPendingImage('t1', 3))
     state = apply(state, insertPendingImage('t1', '!'))
-    expect(state.doc.toString()).toBe('abc!d')
+    expect(state.doc.toString()).toBe('abc\n\n!\n\nd')
   })
 })

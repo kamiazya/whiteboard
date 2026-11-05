@@ -99,7 +99,7 @@ function writeStored(
   if (markup.length === 0) return api?.applyEffects(dropPendingImage(token))
   let inserted = false
   api?.run((target) => {
-    inserted = insertPendingImage(token, markup.join('\n'))(target)
+    inserted = insertPendingImage(token, markup.join('\n\n'))(target)
     return inserted
   })
   if (!inserted) setStranded(strandedMessage(markup.length === 1 ? files[0]?.name : null))
@@ -117,8 +117,8 @@ function intakeFor(
   /**
    * Holds the position through `hold`, then writes the pictures there once
    * every one is stored. A batch (several files pasted or dropped together)
-   * is held as ONE position and written in its own order, a picture per
-   * line: held separately, each would land in front of the ones that
+   * is held as ONE position and written in its own order, a paragraph per
+   * picture: held separately, each would land in front of the ones that
    * finished before it, so the note's order would be the uploads' finishing
    * order reversed.
    */
