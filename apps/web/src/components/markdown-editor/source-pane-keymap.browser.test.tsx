@@ -119,9 +119,10 @@ describe('SourcePane markdown ergonomics (real browser)', () => {
     const { onChange, editable } = mountEditor()
     await focusEditable(editable)
     // First Enter continues to "- "; the second, on the now-empty item,
-    // deletes the marker and leaves the caret on the emptied line.
+    // deletes the marker and leaves a blank line, so "after" is a paragraph
+    // rather than a lazy continuation of "one".
     await userEvent.keyboard('- one{Enter}{Enter}after')
-    expect(lastValue(onChange)).toBe('- one\nafter')
+    expect(lastValue(onChange)).toBe('- one\n\nafter')
   })
 
   it('Enter on an empty quote line leaves the quote', async () => {
