@@ -141,7 +141,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     section: 'Tools',
     keys: ['n'],
     display: 'N',
-    description: 'Add a note at the centre of the view',
+    description: 'Add a note at the centre of the view, or inside the selected frame',
   },
   // Keyboard traversal of existing nodes. Table-dispatched, but only when the
   // canvas root itself holds focus: a Tab or Enter that originates in the dock,

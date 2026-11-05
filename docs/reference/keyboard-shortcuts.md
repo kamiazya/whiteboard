@@ -21,7 +21,7 @@ Two rules hold for the whole table:
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
 | `D` | Draw — drag across the board to leave a freehand stroke |
-| `N` | Add a note at the centre of the view |
+| `N` | Add a note at the centre of the view, or inside the selected frame |
 | `Space` + drag | Pan from any tool, without leaving it |
 
 The four tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
@@ -109,7 +109,10 @@ frame holding an edge gives way to the edge, so you can select, label or
 restyle that edge by pressing it; the frame is selected from its border.
 
 A frame carries every unlocked node that sits wholly inside it, whether you
-drag it or nudge it with the arrow keys, and the move is one undo step. A frame is carried by its border band and its name strip. A drag that starts on
+drag it or nudge it with the arrow keys, and the move is one undo step.
+With a frame selected, `N` puts the new note in the frame's next free spot,
+32px clear of what it already holds, and grows the frame if it is full. A new
+note or frame never lands over a frame's name. A frame is carried by its border band and its name strip. A drag that starts on
 the frame's empty interior sweeps a selection band instead, so you can pick up
 the notes inside without moving the frame; a tap there still selects the frame.
 A press that moves less than a few pixels is a tap: the node stays exactly where
