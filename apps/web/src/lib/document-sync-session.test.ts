@@ -809,16 +809,23 @@ describe('createDocumentSyncSession', () => {
     expect(deps.onStatusChange).toHaveBeenCalledWith('error')
   })
 
-  it('writes nothing after a live update made the document unreadable, queued edits included', async () => {
-    // Refusing the update left the session writable: an edit after it, or one
-    // still inside its debounce window, would push onto a record this build
-    // cannot read whole, and the page shows a read failure over it.
+  /** A session on a two-node canvas, with one edit committed so the undo stack holds a step. */
+  async function sessionWithOneCommittedEdit() {
     const backend = makeFakeBackend()
     const deps = makeDeps()
     const session = createDocumentSyncSession(backend, deps)
     session.connect()
     const snapshot = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshot)
+    const first: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_A.id }
+    session.onChange(applyCommand(session.getCanvas(), first), first)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    return { backend, deps, session, snapshot }
+  }
+
+  /** An older peer's update that brings a node in a retired shape, from the snapshot the session got. */
+  function retiredShapeUpdate(snapshot: Uint8Array): Uint8Array {
     const peer = new LoroDoc()
     peer.import(snapshot)
     const from = peer.version()
@@ -826,16 +833,47 @@ describe('createDocumentSyncSession', () => {
       .getMap('nodes')
       .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
     peer.commit()
-    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_A.id }
+    return peer.export({ mode: 'update', from })
+  }
+
+  it('writes nothing after a live update made the document unreadable: queued edits, later edits, undo, redo and locks', async () => {
+    // Refusing the update left the session writable: an edit after it, or one
+    // still inside its debounce window, would push onto a record this build
+    // cannot read whole, and the page shows a read failure over it. The
+    // undo stack and the lock plane write through the same document.
+    const { backend, deps, session, snapshot } = await sessionWithOneCommittedEdit()
+    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
     session.onChange(applyCommand(session.getCanvas(), queued), queued)
 
-    backend._ctrl.handlers!.onRemoteUpdate(peer.export({ mode: 'update', from }))
+    backend._ctrl.handlers!.onRemoteUpdate(retiredShapeUpdate(snapshot))
     await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape'))
     const after: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
     session.onChange(applyCommand(session.getCanvas(), after), after)
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(session.undo()).toBe(false)
+    expect(session.redo()).toBe(false)
+    session.setNodeLock(TEXT_NODE_B.id, true)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+  })
+
+  it('a readable snapshot after a refused one takes writes again', async () => {
+    // A reconnect replays the snapshot; one this build reads whole is the
+    // document again, and the person's next edit lands on it. The edits
+    // refused meanwhile are not replayed: each carried a whole canvas taken
+    // against a record the page had already stopped showing.
+    const { backend, deps, session, snapshot } = await sessionWithOneCommittedEdit()
+    backend._ctrl.handlers!.onRemoteUpdate(retiredShapeUpdate(snapshot))
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape'))
+
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+    const edit: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), edit), edit)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(2)
+    expect(session.getCanvas().nodes.map((node) => node.id)).toEqual([TEXT_NODE_A.id])
   })
 
   it('a thread command is published at once, before the debounced commit lands', async () => {
