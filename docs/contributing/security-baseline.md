@@ -173,9 +173,9 @@ auditor persona clean too.
 | OSPS-QA-07.01 | one non-author human approval before merging | gap-owner | needs a second human maintainer |
 | OSPS-SA-03.02 | threat model and attack surface analysis | met | [explanation/security-model](../explanation/security-model.md) — trust boundaries and protections per runtime |
 | OSPS-VM-04.02 | non-affecting vulnerabilities in a VEX document | met | `.github/security/whiteboard.openvex.json`, held equal to the audit suppressions by `vex-audit-ignores.test.ts` |
-| OSPS-VM-05.01 | threshold for remediating SCA findings | met | `SECURITY.md` "Remediation thresholds" |
-| OSPS-VM-05.02 | SCA violations addressed before any release | met | `release.yml` audits the lockfile and the packed tarball before it publishes |
-| OSPS-VM-05.03 | every change checked for vulnerable or malicious dependencies, and blocked | met | `pnpm audit:prod` in CI, `dependency-review.yml` on every PR, and `minimumReleaseAge` (seven days) in `pnpm-workspace.yaml` against a freshly published malicious version. Owner: add `dependency-review` as a required check, since it runs as its own workflow outside `ci-gate` |
+| OSPS-VM-05.01 | threshold for remediating SCA findings | gap-technical | `SECURITY.md` "Remediation thresholds" sets the vulnerability threshold; no license-finding threshold is stated yet |
+| OSPS-VM-05.02 | SCA violations addressed before any release | gap-technical | `release.yml` audits the lockfile and the packed tarball before the npm package publishes; the container image (`docker-publish-sign` needs `build-docker`, not the audit) and the web deploy are not gated on an audit |
+| OSPS-VM-05.03 | every change checked for vulnerable or malicious dependencies, and blocked | gap-owner | `pnpm audit:prod` in CI, `dependency-review.yml` on every PR, and `minimumReleaseAge` (seven days) in `pnpm-workspace.yaml` against a freshly published malicious version. Owner: add `dependency-review` as a required check, since it runs as its own workflow outside `ci-gate` |
 | OSPS-VM-06.01 | threshold for remediating SAST findings | met | `SECURITY.md` "Remediation thresholds" |
 | OSPS-VM-06.02 | every change checked for weaknesses, and blocked | met | CodeQL is a required check |
 

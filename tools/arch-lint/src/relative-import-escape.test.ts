@@ -31,6 +31,8 @@ import { REPO_ROOT, relativeToRepo, walk, workspaceDirs } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource, sourceCandidates } from './value-import-closure.js'
 
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
 const scopeModule = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/affected.mjs')).href
 )) as {

@@ -253,8 +253,11 @@ describe('dependency-review.yml — a pull request adding a vulnerable dependenc
   })
 
   it('holds a read-only token', () => {
+    const jobs = Object.values(workflow.jobs ?? {})
+    expect(jobs.length, 'the walk must reach a job').toBeGreaterThan(0)
+    expect(workflow.permissions, 'the root must declare its permissions').toBeDefined()
     expect(writeScopes(workflow.permissions)).toEqual([])
-    for (const job of Object.values(workflow.jobs ?? {})) {
+    for (const job of jobs) {
       expect(writeScopes(job.permissions)).toEqual([])
     }
   })
@@ -291,8 +294,11 @@ describe('zizmor.yml — workflow findings fail the pull request', () => {
 
   it('reads the repository config and holds a read-only token', () => {
     expect(existsSync(join(REPO_ROOT, '.github/zizmor.yml'))).toBe(true)
+    const jobs = Object.values(workflow.jobs ?? {})
+    expect(jobs.length, 'the walk must reach a job').toBeGreaterThan(0)
+    expect(workflow.permissions, 'the root must declare its permissions').toBeDefined()
     expect(writeScopes(workflow.permissions)).toEqual([])
-    for (const job of Object.values(workflow.jobs ?? {})) {
+    for (const job of jobs) {
       expect(writeScopes(job.permissions)).toEqual([])
     }
   })

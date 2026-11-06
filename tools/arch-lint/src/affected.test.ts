@@ -41,6 +41,8 @@ interface Plan {
 }
 type Readers = Record<string, { testReaders: string[]; sourceReaders: string[] }>
 
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
 const affected = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/affected.mjs')).href
 )) as {
@@ -80,12 +82,16 @@ const affected = (await import(
   UNSCOPED_JOBS: Record<string, string>
 }
 
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
 const vitestProjects = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
 )) as {
   deriveSharedLayerProjectNames: (root: string) => string[]
   readBrowserProjectNames: (root: string) => string[]
 }
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
 const gate = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/ci-gate.mjs')).href
 )) as {

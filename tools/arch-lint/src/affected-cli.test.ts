@@ -21,6 +21,8 @@ type Spawn = (
   opts: Record<string, unknown>,
 ) => { status: number | null; error?: Error }
 
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
 const { main } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/affected-cli.mjs')).href
 )) as {
