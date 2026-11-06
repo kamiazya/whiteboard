@@ -233,10 +233,9 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 //   592). A diagonal through a corner gap crosses a neighbour the old
 //   detour's outer lane went round.
 // - synthetic `foreign` 21 -> 25 while `own-endpoint` fell 52 -> 20 and
-//   interior ink 5763 -> 3446. Each new foreign one crosses a box the router
-//   never saw: one touched on its border by an anchor is dropped from the
-//   obstacles, and the side search, seeing different routes, now settles on
-//   anchors that touch it.
+//   interior ink 5763 -> 3446. Each new foreign one crossed a box the router
+//   never saw: one touched on its border by an anchor was dropped from the
+//   obstacles (closed below).
 // - `grazingEnds` 2/111/374/209 -> 1/110/119/0 (persona, generated,
 //   synthetic, lattice). The corner paths alone made it 5/386/167/118 — a
 //   leg on from a corner beside the target can arrive nearly along its
@@ -267,6 +266,11 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 // The persona board stays at 1 crossing: every configuration with none
 // steps BOTH a1->b6 and a3->b1 round (2869px or more against 2304), and no
 // single-edge move reaches one.
+//
+// Then a box an anchor only TOUCHES stayed an obstacle for the straight
+// style (escaped by its strict interior), as the side search's cost model
+// already treated it. Synthetic foreign 22 -> 7, interior ink 2898 ->
+// 1765; crossings 161 -> 166, long detours 152 -> 157, worst 7.67 -> 8.4.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -306,19 +310,19 @@ describe('straight routing quality', () => {
 
   it('reports the synthetic corpus', { timeout: 180_000 }, () => {
     expect(score(syntheticLayouts(2000), routedOnly)).toEqual({
-      violations: { foreign: 22, 'own-endpoint': 19 },
-      interiorInk: 2898,
+      violations: { foreign: 7, 'own-endpoint': 20 },
+      interiorInk: 1765,
       titleCrossings: 0,
       // ratio 1.116, worst 11.63, 245 long detours before.
-      length: 866004,
-      direct: 800052,
-      ratio: 1.082,
-      worstRatio: 7.67,
-      longDetours: 152,
+      length: 867182,
+      direct: 800079,
+      ratio: 1.084,
+      worstRatio: 8.4,
+      longDetours: 157,
       grazingEnds: 114,
-      bends: 2051,
-      crossings: 161,
-      borderInk: 876,
+      bends: 2081,
+      crossings: 166,
+      borderInk: 994,
     })
   })
 

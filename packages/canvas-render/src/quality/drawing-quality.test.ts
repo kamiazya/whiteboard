@@ -215,9 +215,12 @@ describe('drawing quality across the corpus', () => {
         nodeOverlaps: 1,
         overlapAreaPx: 2000,
         straddles: 0,
-        // The last message's route to Browser runs up through the first.
-        edgeThroughNode: 1,
-        throughInkPx: 62,
+        // The last message's route to Browser ran up through the first,
+        // which overlaps Browser's head where the anchor touches it; a box
+        // an anchor only touches stayed out of the router's way until the
+        // straight style kept it as an obstacle.
+        edgeThroughNode: 0,
+        throughInkPx: 0,
         labelOverNode: 0,
         labelOverLabel: 0,
         labelCovered: 0,
@@ -234,7 +237,7 @@ describe('drawing quality across the corpus', () => {
         sharedInkPx: 0,
         crossings: 0,
         bends: 0,
-        edgeLengthPx: 937,
+        edgeLengthPx: 927,
         unevenGaps: 1,
         envelopePx: { w: 1010, h: 520 },
         // `right` with two arrows against it until the vote stopped being

@@ -121,3 +121,27 @@ describe('a straight connection that would cross another to save length', () => 
     ).toBe(true)
   })
 })
+
+describe('a box an anchor only touches', () => {
+  it('is still in the way of the line to that anchor', () => {
+    // e lands on n3's left side at a point on n2's top border, n2 reaching
+    // up under n3. A box touched by an anchor can still be gone round, and
+    // the direct line ran through n2's body.
+    const nodes = [
+      node('n0', 369, 90, 89, 42),
+      node('n1', 5, 200, 101, 141),
+      node('n2', 95, 149, 194, 101),
+      node('n3', 173, 123, 102, 52),
+    ]
+    const edges = [{ id: 'e', from: { node: 'n1' }, to: { node: 'n3' } }]
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const { path } = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e'))
+    const n2 = rectOf(nodes[2]!)
+    // An end strictly inside n2 cannot be reached without entering it, which
+    // is the scoreboard's exemption too; any other route must stay out.
+    const within = (p: { x: number; y: number }) =>
+      p.x > n2.x && p.x < n2.x + n2.w && p.y > n2.y && p.y < n2.y + n2.h
+    const unavoidable = within(path[0]!) || within(path[path.length - 1]!)
+    expect(unavoidable ? 0 : interiorInk(path, n2)).toBe(0)
+  })
+})

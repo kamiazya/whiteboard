@@ -652,6 +652,13 @@ function selfLoopRoute(
  * neighbour's margin band, `bestCandidate`'s second tier accepts a band
  * crossing to escape rather than tunnelling through the node itself.
  *
+ * The straight style keeps a box an anchor merely TOUCHES: its corner search
+ * escapes a box by its strict interior, so a line can leave a border point
+ * and still go round the body behind it — and the side search's cost model
+ * already prices ink through such a box, so dropping it made the two
+ * disagree. The orthogonal routes test clearance inclusively and keep the
+ * older rule.
+ *
  * `labels` (a frame's title) join the list on the same terms as a node: text
  * drawn outside every box is as much in the way as a box.
  *
@@ -666,11 +673,13 @@ function routeObstacles(
   end: Point,
   others: readonly Rect[] | undefined,
   labels: readonly Rect[],
+  touchedBlocks: boolean,
 ): { obstacles: Rect[]; rawObstacles: Rect[] } {
   const fromId = endNode(edge.from)
   const toId = endNode(edge.to)
   const boxes = others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  const clear = (rect: Rect) => !containsPoint(rect, start) && !containsPoint(rect, end)
+  const holds = touchedBlocks ? strictlyContains : containsPoint
+  const clear = (rect: Rect) => !holds(rect, start) && !holds(rect, end)
   const grown = (margin: number) => (rect: Rect) => ({
     x: rect.x - margin,
     y: rect.y - margin,
@@ -687,6 +696,12 @@ function routeObstacles(
     rawObstacles: [...rawBoxes, ...rawLabels],
     obstacles: [...inflatedBoxes, ...rawLabels.map(grown(LABEL_MARGIN_PX))],
   }
+}
+
+function strictlyContains(rect: Rect, point: Point): boolean {
+  return (
+    point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
+  )
 }
 
 /**
@@ -791,7 +806,15 @@ export function routeEdge(
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
-  const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others, labels)
+  const { obstacles, rawObstacles } = routeObstacles(
+    nodes,
+    edge,
+    start,
+    end,
+    others,
+    labels,
+    style === 'straight',
+  )
   const ends: RouteEnds = {
     start,
     end,

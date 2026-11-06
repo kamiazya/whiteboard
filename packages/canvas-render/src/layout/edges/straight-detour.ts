@@ -127,8 +127,12 @@ function firstBlocker(
       ) {
         continue
       }
+      // Escaped by the strict interior, so a leg may leave a point on the
+      // body's own border: an anchor can touch a box it does not connect.
       const rect =
-        o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b)) ? o.body : o.block
+        o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b))
+          ? strictInterior(o.body)
+          : o.block
       if (segmentCrossesRect(a, b, rect)) return i
     }
     return undefined
