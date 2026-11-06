@@ -11,7 +11,7 @@ import {
 import { useAnnouncer } from '../annotations/announcer.js'
 import { FolderActionsLayer, type FolderDialog, type FolderMenu } from './FolderActionsLayer.js'
 import type { FolderActions } from './folder-actions.js'
-import { documentLanding, focusLanding, folderLanding } from './folder-landing.js'
+import { documentLanding, focusLanding, folderLanding, refocus } from './folder-landing.js'
 import { pathInFolder } from './folder-moves.js'
 import { useFolderMoves } from './use-folder-moves.js'
 import { type FolderNamesState, useFolderNames } from './use-folder-names.js'
@@ -27,9 +27,13 @@ function useFolderSurfaceActions(
   rootRef: RefObject<HTMLElement | null>,
   setMenu: (menu: FolderMenu) => void,
   setGathering: (folder: string) => void,
+  rename: Pick<FolderActions, 'renameFolder' | 'canRename'>,
 ): FolderActions {
+  const { renameFolder, canRename } = rename
   return useMemo(
     () => ({
+      renameFolder,
+      canRename,
       dropInto: (folder, documentPath) => {
         const entry = documents?.find((each) => each.path === documentPath)
         if (entry !== undefined) void moveInto(entry, folder)
@@ -40,7 +44,7 @@ function useFolderSurfaceActions(
       },
       gatherInto: setGathering,
     }),
-    [documents, moveInto, rootRef, setMenu, setGathering],
+    [documents, moveInto, rootRef, setMenu, setGathering, renameFolder, canRename],
   )
 }
 
@@ -223,14 +227,7 @@ function useDialogLanding(rootRef: RefObject<HTMLElement | null>) {
         return
       }
       if (from === null) return
-      if (from.element instanceof HTMLElement && from.element.isConnected) {
-        from.element.focus()
-        if (document.activeElement === from.element) {
-          event.preventDefault()
-          return
-        }
-      }
-      if (focusLanding(rootRef.current, from.about)) event.preventDefault()
+      if (refocus(from.element) || focusLanding(rootRef.current, from.about)) event.preventDefault()
     },
     [rootRef],
   )
@@ -251,6 +248,40 @@ function useMovePickerOpener(
     },
     [setError, setMoving, openedFrom],
   )
+}
+
+/** The empty folder's "Move documents here…", noting where it was opened from. */
+function useGatherOpener(
+  openedFrom: (about: readonly string[]) => void,
+  setGathering: (folder: string) => void,
+) {
+  return useCallback(
+    (folder: string) => {
+      openedFrom(folderLanding(folder))
+      setGathering(folder)
+    },
+    [openedFrom, setGathering],
+  )
+}
+
+/**
+ * A folder's F2: its Rename dialog when it can be renamed here. Read through
+ * a ref, since the handlers are rebuilt every render and the surfaces'
+ * context would change with them.
+ */
+function useRenameAsk(
+  onMenuChoice: (kind: FolderDialog['kind'], folder: string) => void,
+  canRename: (folder: string) => boolean,
+): Pick<FolderActions, 'renameFolder' | 'canRename'> {
+  const choose = useRef(onMenuChoice)
+  choose.current = onMenuChoice
+  const renameFolder = useCallback(
+    (folder: string) => {
+      if (canRename(folder)) choose.current('rename', folder)
+    },
+    [canRename],
+  )
+  return useMemo(() => ({ renameFolder, canRename }), [renameFolder, canRename])
 }
 
 /** Which surface is open, each naming a path — cleared when the workspace changes. */
@@ -308,21 +339,16 @@ export function useFolderActions({
   const surfaces = useOpenSurfaces(source, setError)
   const { moving, setMoving, menu, setMenu, dialog, gathering, setGathering } = surfaces
   const { landOn, openedFrom, onCloseAutoFocus } = useDialogLanding(rootRef)
-  const gatherFrom = useCallback(
-    (folder: string) => {
-      openedFrom(folderLanding(folder))
-      setGathering(folder)
-    },
-    [openedFrom, setGathering],
-  )
+  const gatherFrom = useGatherOpener(openedFrom, setGathering)
 
-  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, gatherFrom)
   const openMovePicker = useMovePickerOpener(setError, setMoving, openedFrom)
   const handlers = layerHandlers({
     ...surfaces,
     ...{ documents, folderNames, moveInto, renameFolder, goToFolder, setError, announce, landOn },
     openedFrom,
   })
+  const rename = useRenameAsk(handlers.onMenuChoice, folderNames.canRename)
+  const actions = useFolderSurfaceActions(documents, moveInto, rootRef, setMenu, gatherFrom, rename)
 
   const layer = (
     <FolderActionsLayer

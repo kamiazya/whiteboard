@@ -18,7 +18,6 @@ import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { PeekDialog } from './PeekDialog.js'
 import { RecentLane } from './RecentLane.js'
-import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SelectionBar } from './SelectionBar.js'
 import { SourceTrashSection } from './SourceTrashSection.js'
 import { TagStrip } from './TagStrip.js'
@@ -44,6 +43,7 @@ import {
   LoadingColumns,
   PanelPreview,
   PanelRefusals,
+  PanelRenameDialog,
   PanelToolbar,
   SearchColumn,
 } from './workspace-files-panel-parts.js'
@@ -705,6 +705,7 @@ export function WorkspaceFilesPanel({
             setSelected={setSelected}
             toggleSelected={toggleSelected}
             openCardMenu={openCardMenu}
+            onRename={rename.open}
             loadRender={loadRender}
             onGridColumns={setGridColumns}
             onCreateHere={(kind) => void createHere(kind).catch(() => undefined)}
@@ -839,18 +840,7 @@ export function WorkspaceFilesPanel({
             findDocument={findListed}
             onClose={() => setPeek(null)}
           />
-          <RenameDocumentDialog
-            document={rename.renaming}
-            workspace={workspace}
-            busy={rename.busy}
-            error={rename.error}
-            onCancel={rename.cancel}
-            onCloseAutoFocus={rename.onCloseAutoFocus}
-            onSubmit={(name, newPath) => {
-              if (rename.renaming === null) return
-              void rename.submit(rename.renaming, name, newPath)
-            }}
-          />
+          <PanelRenameDialog rename={rename} workspace={workspace} />
           {cardMenu !== null && (
             <ContextMenu
               x={cardMenu.x}

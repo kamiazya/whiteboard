@@ -65,9 +65,11 @@ including the name you just gave a folder the move made.
 ## Rename a folder
 
 Right-click a folder (a card in the list or an entry in the tree) and choose
-**Rename…**. On a touch screen use the **…** button beside the folder —
-the segments of the folder path above the list carry one too — or long-press
-it. Type the new name and press **Enter**; **Escape** cancels. Only the name
+**Rename…**, or focus it and press **F2**. **Shift+F10** or the Menu key opens
+the same menu from the keyboard. In the tree a **…** button shows beside a
+folder while the pointer is over it or the row has focus. On a touch screen use
+the **…** button beside the folder — the segments of the folder path above the
+list carry one too — or long-press it. Type the new name and press **Enter**; **Escape** cancels. Only the name
 changes: the folder's address, every document's path under it and every link
 into it stay as they are.
 
@@ -79,6 +81,10 @@ the other folder's name as it is written and, for a folder inside another, the
 folder it is in: 'Another folder in "Q3 Planning" is already called "Hiring"'. Two
 folders that came to share a name by syncing two copies of the workspace keep
 both names; nothing is renamed for you.
+
+A document is renamed the same way: **Rename…** in its menu, or **F2** on its
+focused card. A saved rename is announced as "Renamed _old name_ to _new
+name_".
 
 Names nobody typed follow the same rule without asking you. A note that is
 still unnamed takes its name from its first heading only when no other
