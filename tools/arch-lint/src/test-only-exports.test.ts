@@ -221,6 +221,32 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentRecordByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPathByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentNameByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPinByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentDuplicateByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsPageByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionDocumentByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionRestoreByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/document-url.ts#documentByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/daemon-client/src/api-contracts/document-url.ts#documentFileByIdApiUrl':
+    "the id-addressed twin of a path builder; apps/web's keeper calls it once its document-by-id call sites move off the path form, and daemon-client-urls.routes.test.ts requests it against the daemon's routes meanwhile",
+  'packages/mcp-server/src/server/routes/document/path-route.ts#onDocumentRoute':
+    'production reaches it through onDocumentAction, onDocumentFile and onDocumentsRoute, which register the id form beside the path form; exported so a probe route can be registered directly to hold what its middleware and handler share',
+  'packages/mcp-server/src/server/routes/document/path-route.ts#resolvedDocumentOf':
+    "the read of the one per-request id resolution, for a route's own middleware; no production middleware needs it yet, and the once-per-request test holds that a second reader costs no second lookup",
   'packages/model/src/utf16-max.ts#UTF16_MAX_PARAM':
     'the tag utf16Max puts on its refusal issue; production writes it in its own module, and the bounded-string probe in model/test-utils recognises a length refusal by it rather than by a copied literal',
   'packages/loro-adapter/src/content-digest.ts#stableStringify':

@@ -234,6 +234,32 @@ function pathArb(pattern: string, seed: Seeded): fc.Arbitrary<{ path: string; se
   )
 }
 
+/**
+ * What `:documentId` means by route family. Under `/trash/` it names the
+ * trashed entry — a restore is one-shot (the second finds nothing restorable),
+ * so that one is drawn at real weight. Under `/documents/` it names a LIVE
+ * document, which only the happy draw and the weighted arm reach.
+ */
+function documentIdFor(
+  pattern: string,
+  seed: Seeded,
+): { happy: string; drawn: fc.Arbitrary<{ text: string; seeded: boolean }> } {
+  const live = pattern.includes('/documents/:documentId')
+  const main = live ? seed.spatialId : seed.trashedId
+  const others = live
+    ? [seed.markdownId, seed.trashedId, 'nope']
+    : [seed.spatialId, seed.markdownId, 'nope']
+  return {
+    happy: main,
+    drawn: fc
+      .oneof(
+        { weight: 4, arbitrary: fc.constant(main) },
+        { weight: 1, arbitrary: fc.constantFrom(...others) },
+      )
+      .map((d) => ({ text: d, seeded: d !== 'nope' })),
+  }
+}
+
 function fillPattern(
   pattern: string,
   seed: Seeded,
@@ -245,7 +271,7 @@ function fillPattern(
       const seededText = (): string | null => {
         if (segment === ':workspaceId') return seed.workspace
         if (segment === '*') return SPATIAL_PATH
-        if (segment === ':documentId') return seed.trashedId
+        if (segment === ':documentId') return documentIdFor(pattern, seed).happy
         if (segment === ':id') return seed.versionId
         if (segment === ':fileId') return FILE_ID
         return segment.startsWith(':') ? null : segment
@@ -265,17 +291,7 @@ function fillPattern(
         seeded: p === SPATIAL_PATH || p === MARKDOWN_PATH,
       }))
     }
-    if (segment === ':documentId') {
-      // The trashed one at real weight: a restore is one-shot (the second
-      // finds nothing restorable), so the first draws decide whether the
-      // route ever answers.
-      return fc
-        .oneof(
-          { weight: 4, arbitrary: fc.constant(seed.trashedId) },
-          { weight: 1, arbitrary: fc.constantFrom(seed.spatialId, seed.markdownId, 'nope') },
-        )
-        .map((d) => ({ text: d, seeded: d !== 'nope' }))
-    }
+    if (segment === ':documentId') return documentIdFor(pattern, seed).drawn
     if (segment === ':fileId') {
       return fc
         .oneof({ weight: 3, arbitrary: fc.constant(FILE_ID) }, { weight: 1, arbitrary: segmentArb })

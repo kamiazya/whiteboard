@@ -118,6 +118,70 @@ export function versionRestoreApiUrl(workspaceId: string, path: string, versionI
   return documentsFamilyUrl(workspaceId, path, `versions/${enc(versionId)}/restore`)
 }
 
+// The same family addressed by document id: `.../documents/:documentId[/<suffix>]`.
+function documentByIdFamilyUrl(
+  workspaceId: string,
+  documentId: string,
+  suffix: DocumentsSuffix,
+): string {
+  const base = `${workspaceDocumentsApiUrl(workspaceId)}/${enc(documentId)}`
+  return suffix === '' ? base : `${base}/${suffix}`
+}
+
+/** DELETE a document and everything under it. */
+export function documentRecordByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, '')
+}
+
+export function documentPathByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, 'path')
+}
+
+export function documentNameByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, 'name')
+}
+
+export function documentPinByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, 'pin')
+}
+
+export function documentDuplicateByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, 'duplicate')
+}
+
+export function documentVersionsByIdApiUrl(workspaceId: string, documentId: string): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, 'versions')
+}
+
+export function documentVersionsPageByIdApiUrl(
+  workspaceId: string,
+  documentId: string,
+  query: ListVersionsRequest = {},
+): string {
+  const params = new URLSearchParams()
+  if (query.cursor !== undefined) params.set('cursor', query.cursor)
+  if (query.limit !== undefined) params.set('limit', String(query.limit))
+  const search = params.toString()
+  const base = documentVersionsByIdApiUrl(workspaceId, documentId)
+  return search === '' ? base : `${base}?${search}`
+}
+
+export function versionDocumentByIdApiUrl(
+  workspaceId: string,
+  documentId: string,
+  versionId: string,
+): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, `versions/${enc(versionId)}/document`)
+}
+
+export function versionRestoreByIdApiUrl(
+  workspaceId: string,
+  documentId: string,
+  versionId: string,
+): string {
+  return documentByIdFamilyUrl(workspaceId, documentId, `versions/${enc(versionId)}/restore`)
+}
+
 /** The workspace trash listing; restore appends /:documentId/restore. */
 export function trashApiUrl(workspaceId: string): string {
   return `${workspaceApiUrl(workspaceId)}/trash`

@@ -58,6 +58,26 @@ export function documentFileApiUrl(workspaceId: string, path: string, fileId: st
   return `/api/w/${encodePathSegment(workspaceId)}/document/${encodeDocumentPath(path)}/file/${encodePathSegment(fileId)}`
 }
 
+/**
+ * The same actions addressed by the document's id, which survives a rename
+ * where a path does not: `/api/workspaces/:ws/documents/:documentId/<action>`.
+ */
+export function documentByIdApiUrl(
+  workspaceId: string,
+  documentId: string,
+  action: DocumentApiAction,
+): string {
+  return `/api/workspaces/${encodePathSegment(workspaceId)}/documents/${encodePathSegment(documentId)}/${action}`
+}
+
+export function documentFileByIdApiUrl(
+  workspaceId: string,
+  documentId: string,
+  fileId: string,
+): string {
+  return `/api/workspaces/${encodePathSegment(workspaceId)}/documents/${encodePathSegment(documentId)}/files/${encodePathSegment(fileId)}`
+}
+
 /** The workspace's own record, which a keeper moves between hosts (`snapshot`/`update`/`promote`). */
 export const WORKSPACE_DOCUMENT_API_ACTIONS = ['snapshot', 'update', 'promote'] as const
 export type WorkspaceDocumentApiAction = (typeof WORKSPACE_DOCUMENT_API_ACTIONS)[number]

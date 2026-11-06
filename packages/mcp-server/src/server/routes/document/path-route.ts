@@ -5,13 +5,20 @@ import {
   documentPathForFile,
   parseDocumentApiPath,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
+import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import { errorBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type { Context, Hono, HonoRequest, MiddlewareHandler, Next } from 'hono'
 import {
   validateDocumentPath,
   validateWorkspaceHandle,
   validationErrorBody,
 } from '../../validators.js'
-import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import {
+  parseWorkspaceHandle,
+  refuseMalformedHandle,
+  workspaceIdFromHandle,
+} from '../../workspace-handle.js'
 
 export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
 
@@ -85,6 +92,7 @@ export function onDocumentAction(
     return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), path)
   }
   const scoped = scopedTo((c) => pathOf(c) !== null, middleware)
+  onDocumentRoute(app, method, `/${action}`, handler, ...middleware)
   app[method](DOCUMENT_WILDCARD, ...(scoped as []), dispatch)
 }
 
@@ -109,6 +117,13 @@ export function onDocumentFile(
     return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), file.path, file.fileId)
   }
   const scoped = scopedTo((c) => fileOf(c) !== null, middleware)
+  onDocumentRoute(
+    app,
+    method,
+    '/files/:fileId',
+    (c, workspaceId, path, params) => handler(c, workspaceId, path, params.fileId as string),
+    ...middleware,
+  )
   app[method](DOCUMENT_WILDCARD, ...(scoped as []), dispatch)
 }
 
@@ -122,6 +137,76 @@ type DocumentsHandler = (
   path: string,
   params: Record<string, string>,
 ) => Promise<Response> | Response
+
+const resolvedDocuments = new WeakMap<HonoRequest, DocumentEntry | null>()
+
+/**
+ * What the document-id address resolved to for this request: the entry, `null`
+ * for an id naming nothing live (unknown, another workspace's, or trashed), or
+ * `undefined` when the request carries no id address or was not resolved.
+ */
+export function resolvedDocumentOf(c: Context): DocumentEntry | null | undefined {
+  return resolvedDocuments.get(c.req)
+}
+
+/**
+ * Resolves `:documentId` to its placement ONCE per request, ahead of every
+ * route registered through `onDocumentRoute`, so a route's own middleware and
+ * its handler read one answer instead of asking the index twice. Keyed on the
+ * HonoRequest for the reason `workspaceIdFromHandle`'s memo is.
+ *
+ * A middleware rather than an option of each router: the index is reached only
+ * through the port on `ServerDeps` (ADR-0018), and most routers hold no deps.
+ * A malformed workspace handle or a non-ULID segment passes through; the route
+ * words its own refusal.
+ */
+export function resolveDocumentAddress(deps: Pick<ServerDeps, 'documentIndex'>): MiddlewareHandler {
+  return async (c, next) => {
+    const documentId = c.req.param('documentId') ?? ''
+    const handle = c.req.param('workspaceId') ?? ''
+    if (!documentIdSchema.safeParse(documentId).success) return next()
+    if (refuseMalformedHandle(c, handle) !== null) return next()
+    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const entry = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
+    resolvedDocuments.set(c.req, entry)
+    return next()
+  }
+}
+
+const isDocumentId = (c: Context) => documentIdSchema.safeParse(c.req.param('documentId')).success
+
+/**
+ * Registers `<method> /api/workspaces/:workspaceId/documents/:documentId<suffix>`
+ * and hands the handler the placement the id resolves to, so an address that
+ * names a document by id reaches the same handler as one that names its path.
+ *
+ * A `:documentId` that is not a canonical ULID falls through to the path
+ * family, which shares this URL grammar until the path form leaves.
+ */
+export function onDocumentRoute(
+  app: Hono,
+  method: 'get' | 'post' | 'put' | 'delete' | 'patch',
+  suffix: '' | `/${string}`,
+  handler: DocumentsHandler,
+  ...middleware: MiddlewareHandler[]
+): void {
+  const dispatch = async (c: Context, next: Next) => {
+    const documentId = c.req.param('documentId') ?? ''
+    if (!documentIdSchema.safeParse(documentId).success) return next()
+    const parsed = await parseWorkspaceHandle(c, c.req.param('workspaceId') ?? '')
+    if ('refusal' in parsed) return parsed.refusal
+    const entry = resolvedDocumentOf(c)
+    if (entry === undefined) {
+      throw new Error('document id route mounted without resolveDocumentAddress')
+    }
+    if (entry === null) {
+      return c.json(errorBody('not_found', `Document "${documentId}" not found`), 404)
+    }
+    return handler(c, parsed.workspaceId, entry.path, c.req.param())
+  }
+  const pattern = `/api/workspaces/:workspaceId/documents/:documentId${suffix}`
+  app[method](pattern, ...(scopedTo(isDocumentId, middleware) as []), dispatch)
+}
 
 /**
  * The whole parse behind `onDocumentsRoute`, as a pure function of the URL.
@@ -181,5 +266,7 @@ export function onDocumentsRoute(
     return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
   }
   const owns = (c: Context) => matchDocumentsTail(c.req.path, suffixPattern) !== null
+  const suffix = suffixPattern.map((segment) => `/${segment}`).join('') as '' | `/${string}`
+  onDocumentRoute(app, method, suffix, handler, ...middleware)
   app[method](DOCUMENTS_WILDCARD, ...(scopedTo(owns, middleware) as []), dispatch)
 }
