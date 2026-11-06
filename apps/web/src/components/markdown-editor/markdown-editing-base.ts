@@ -71,12 +71,14 @@ const markdownHighlightStyle = HighlightStyle.define([
  * - Backspace on an empty list or quote marker removes the marker.
  * - A marker retyped over the one auto-continuation already wrote is
  *   swallowed instead of doubled.
- * - A task cycled from the keyboard or a button is announced
- *   (`task-announcer.ts`), on every host, since every host offers the verb.
+ * - With `announceTasks`, a task cycled from the keyboard or a button is
+ *   announced (`task-announcer.ts`). Only a host that offers the Task verb
+ *   asks: the region is a second status region on every other one, and a
+ *   comment composer's own announcements would share the page with it.
  * - Prose, not code: long paragraphs soft-wrap instead of growing a
  *   horizontal scrollbar.
  */
-export function markdownEditingBase(): Extension[] {
+export function markdownEditingBase({ announceTasks = false } = {}): Extension[] {
   return [
     syntaxHighlighting(markdownHighlightStyle),
     emojiShortcodeMarks(),
@@ -86,7 +88,7 @@ export function markdownEditingBase(): Extension[] {
     Prec.highest(keymap.of([{ key: 'Backspace', run: backspaceEmptyMarkup }])),
     keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
     swallowRetypedMarkerExtension(),
-    taskAnnouncer,
+    ...(announceTasks ? [taskAnnouncer] : []),
     EditorView.lineWrapping,
   ]
 }
