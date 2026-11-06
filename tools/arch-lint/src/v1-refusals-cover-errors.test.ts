@@ -143,6 +143,10 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes',
   ReservedMapKeyError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and its writes go through schemas that drop a __proto__ key',
+  RetiredShapeWrittenError:
+    'raised by the sync operations (workspace-document update, promote) on a CRDT update; /api/v1 writes documents from JSON, through readers that refuse a retired shape on read',
+  RetiredCommentPlaneWrittenError:
+    'raised by the sync operations (workspace-document update, promote) on a CRDT update; /api/v1 writes documents from JSON, through readers that refuse a retired comment plane on read',
   UnreadableDocumentContentError:
     "raised by opening a tree document's container over a key holding another kind (documentContainers, nodeRoots); /api/v1 reads through the projection, and its whole-content write leaves such a key alone and a trash copy drops it",
   OpenChangesCeilingError:

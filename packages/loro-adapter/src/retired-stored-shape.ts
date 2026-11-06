@@ -24,7 +24,7 @@ import {
  * the FORMAT's extension key, because the model was the format. Spelled as it
  * stood; only the JSON Canvas projection still writes it, never the record.
  */
-const PRE_ADR_0037_EXTENSION_KEY = 'x-whiteboard'
+export const PRE_ADR_0037_EXTENSION_KEY = 'x-whiteboard'
 
 /**
  * A document holding a shape this version no longer reads. The bytes stay
@@ -85,7 +85,13 @@ export function retiredCanvasShape(canvasMap: LoroMap): string | null {
  * body in, inside the spatial canvas. Spelled as it stood; nothing writes it,
  * and a document still holding one is refused (below).
  */
-const RETIRED_BODY_NODE_ID = 'okf-body'
+export const RETIRED_BODY_NODE_ID = 'okf-body'
+
+/** The body's length; a host that can peek reads an absent body as empty without opening it. */
+const bodyLength = (doc: DocumentContainers): number =>
+  doc.peekText === undefined
+    ? doc.getText(MARKDOWN_BODY_KEY).length
+    : (doc.peekText(MARKDOWN_BODY_KEY)?.length ?? 0)
 
 /**
  * Whether this document's body is still the retired `okf-body` text node: an
@@ -96,7 +102,7 @@ const RETIRED_BODY_NODE_ID = 'okf-body'
 function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
   const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
   if (nodes?.get(RETIRED_BODY_NODE_ID) === undefined) return null
-  return doc.getText(MARKDOWN_BODY_KEY).length > 0
+  return bodyLength(doc) > 0
     ? null
     : `a markdown body stored as the \`${RETIRED_BODY_NODE_ID}\` canvas text node`
 }
@@ -108,7 +114,7 @@ function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
  * a spatial document a text node is content.
  */
 export function retiredMarkdownCanvasShape(doc: DocumentContainers): string | null {
-  if (doc.getText(MARKDOWN_BODY_KEY).length > 0) return null
+  if (bodyLength(doc) > 0) return null
   const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
   const holdsText = (nodes?.values() ?? []).some(
     (raw) => typeof recordOf(recordOf(raw)?.resource)?.content === 'string',

@@ -25,6 +25,8 @@ export const syncWriteRefusalCodeSchema = z.enum([
   'unreadable_document_meta',
   'invalid_document_root',
   'reserved_map_key',
+  'retired_stored_shape',
+  'retired_comment_plane',
   'document_kind_changed',
   'document_name_too_long',
   'folder_name_refused',
