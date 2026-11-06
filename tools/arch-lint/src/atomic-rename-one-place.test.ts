@@ -35,8 +35,6 @@ const FS_MODULES: ReadonlySet<string> = new Set([
 ])
 const RENAMES: ReadonlySet<string> = new Set(['rename', 'renameSync'])
 
-const MIGRATION_HISTORY =
-  "a migration's text is what it ran with, and a step already recorded as applied is not edited after the fact"
 /** Relative path -> how many fs renames the file holds, and why. Both-sided. */
 const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
   [HELPER]: {
@@ -47,10 +45,6 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
     calls: 1,
     why: "the synchronous secret writer; it fsyncs before the rename and syncs the directory through the helper module's syncDirectorySync",
   },
-  'packages/mcp-server/src/server/tenant/data-layout.ts': {
-    calls: 1,
-    why: 'moves a whole legacy directory into the tenant layout; no file data is staged',
-  },
   'packages/mcp-server/src/server/store/backup-pass.ts': {
     calls: 1,
     why: 'seals a finished backup by renaming its staging DIRECTORY; syncTree fsyncs every file and directory in it before, and the parent is synced after',
@@ -58,18 +52,6 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
   'packages/mcp-server/src/server/store/db/migration-lock.ts': {
     calls: 1,
     why: 'moves a stale lock aside so only one of two racing replacers wins; no file data is staged',
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0012-ulid-remaining-document-ids.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
   },
 }
 
@@ -176,6 +158,6 @@ describe('a file is renamed into place in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(8)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
   })
 })

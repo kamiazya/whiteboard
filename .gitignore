@@ -183,3 +183,6 @@ snapshot-post-reload.md
 
 # Personal Codex agmsg hook (machine/user-specific absolute paths; like .claude/settings.local.json)
 .codex/hooks.json
+
+# Cargo build output (CARGO_TARGET_DIR overrides where it goes).
+/target/

@@ -79,6 +79,7 @@ const affected = (await import(
   TEST_INVENTORY_READERS: Record<string, string>
   PROJECT_JOBS: string[]
   PACKAGE_JOBS: Record<string, { packages: string[]; why: string }>
+  PATH_JOBS: Record<string, { scope: { files: string[]; trees: string[] }; why: string }>
   UNSCOPED_JOBS: Record<string, string>
 }
 
@@ -253,6 +254,55 @@ describe('the selection on a synthetic graph', () => {
   })
 })
 
+describe('the Cargo workspace is scoped by path, not by the pnpm graph', () => {
+  const RUST_PATHS = [
+    'Cargo.toml',
+    'Cargo.lock',
+    'rust-toolchain.toml',
+    'rustfmt.toml',
+    'deny.toml',
+    '.cargo/config.toml',
+    'crates/core/det/src/lib.rs',
+    'crates/fuzz/Cargo.lock',
+    'crates/fuzz/fuzz_targets/det_utf16_len.rs',
+    'crates/wasm-size-ledger.json',
+    'crates/about.hbs',
+  ]
+
+  it.each(RUST_PATHS)('runs the Rust jobs and none of the vitest matrix for %s', (path) => {
+    const result = plan([path])
+    expect(result.everything, result.reasons.join('\n')).toBe(false)
+    expect(result.jobs.rust?.run).toBe(true)
+    expect(result.jobs['rust-fuzz-pr']?.run).toBe(true)
+    expect(result.jobs.rust?.reason).toContain(path)
+    for (const id of ['test-unit', 'test-jsdom', 'test-browser']) {
+      expect(result.jobs[id]?.run, id).toBe(false)
+    }
+  })
+
+  it('skips the Rust jobs for a change that reaches no Rust path, and says why', () => {
+    const result = plan(['apps/web/src/App.tsx', 'docs/reference/x.md'])
+    for (const id of ['rust', 'rust-fuzz-pr']) {
+      expect(result.jobs[id]?.run, id).toBe(false)
+      expect(result.jobs[id]?.projects).toBeNull()
+      expect(result.jobs[id]?.reason).toMatch(/none of .*crates.* changed/)
+    }
+  })
+
+  it('does not read a crate-shaped name outside the Rust trees as Rust', () => {
+    // `crates-two/` is no Rust tree: unattributed, so it fails closed.
+    expect(plan(['crates-two/x.rs']).everything).toBe(true)
+    expect(plan(['packages/model/Cargo.toml']).jobs.rust?.run).toBe(false)
+  })
+
+  it('runs the Rust jobs when a Rust script changes, as part of everything', () => {
+    const result = plan(['tools/checks/src/rust-check.mjs'])
+    expect(result.everything).toBe(true)
+    expect(result.jobs.rust?.run).toBe(true)
+    expect(result.jobs['rust-fuzz-pr']?.run).toBe(true)
+  })
+})
+
 describe('a path belongs to the innermost node around it', () => {
   it('attributes a nested node by its own directory, whichever order the nodes come in', () => {
     const outer = node('outer', 'crates/outer')
@@ -411,6 +461,7 @@ describe('every package, project and job is reachable by some rule', () => {
     const tables = [
       affected.PROJECT_JOBS,
       Object.keys(affected.PACKAGE_JOBS),
+      Object.keys(affected.PATH_JOBS),
       Object.keys(affected.UNSCOPED_JOBS),
     ]
     for (const job of ciJobs) {
@@ -444,6 +495,29 @@ describe('every package, project and job is reachable by some rule', () => {
       ...(real.readers.skills?.testReaders ?? []),
       ...(real.readers.skills?.sourceReaders ?? []),
     ]).toContain('@kamiazya/whiteboard-mcp')
+  })
+
+  it('names only Rust paths that exist, so a scope cannot drift off the tree', () => {
+    const scopes = Object.values(affected.PATH_JOBS).map((job) => job.scope)
+    expect(scopes.length).toBeGreaterThan(0)
+    for (const { files, trees } of scopes) {
+      for (const path of [...files, ...trees])
+        expect(existsSync(join(REPO_ROOT, path)), path).toBe(true)
+    }
+  })
+
+  it('runs the Rust jobs, and not the TS matrix, for a crate change on the real tree', () => {
+    const result = affected.planScope({
+      changes: [{ path: 'crates/core/det/src/lib.rs', status: 'M' }],
+      event: 'pull_request',
+      ...real,
+    })
+    expect(result.everything, result.reasons.join('\n')).toBe(false)
+    expect(result.jobs.rust?.run).toBe(true)
+    expect(result.jobs['rust-fuzz-pr']?.run).toBe(true)
+    for (const id of ['test-unit', 'test-jsdom', 'test-browser', 'widget-smoke']) {
+      expect(result.jobs[id]?.run, id).toBe(false)
+    }
   })
 
   it("still has apps/web's test-file inventory, the reason TEST_INVENTORY_READERS exists", () => {
@@ -510,7 +584,11 @@ interface YamlStep {
 const workflow = parseYaml(readFileSync(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')) as {
   jobs: Record<string, { steps?: YamlStep[] }>
 }
-const SCOPED = [...affected.PROJECT_JOBS, ...Object.keys(affected.PACKAGE_JOBS)]
+const SCOPED = [
+  ...affected.PROJECT_JOBS,
+  ...Object.keys(affected.PACKAGE_JOBS),
+  ...Object.keys(affected.PATH_JOBS),
+]
 const NOT_AFFECTED = 'Not affected by this change'
 
 describe('every scoped job skips its work on its own detection, and only then', () => {

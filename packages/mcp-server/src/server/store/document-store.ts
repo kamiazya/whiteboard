@@ -150,8 +150,8 @@ async function findRegistryRow(
  * exactly when a stored record does.
  *
  * Serves ADR-0019's `segment`/`displayName` identity layers when the row
- * carries them — absent, never `null`/`''`, for a legacy workspace that
- * predates migration 0018 or was never given either.
+ * carries them — absent, never `null`/`''`, for a workspace that was never
+ * given either.
  */
 export function workspaceRegistry(scope: StoreScope = globalStoreScope): WorkspaceRegistry {
   return {
@@ -402,8 +402,9 @@ export async function getDoc(
   // reaches it only through the record. So the record is asked first —
   // reading it through is what evicts the projections a foreign write
   // outdated — and the cache then serves what is left. No per-document
-  // delta replay runs here: replaying a legacy oplog into a projection would
-  // resurrect pre-fold state over current content.
+  // delta replay runs here: the workspace record is the document's whole
+  // history, and a per-document oplog replayed over it would only lay older
+  // state over current content.
   validateWorkspaceId(workspaceId)
   await openWorkspaceDocIfStored(workspaceId, scope)
   return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
@@ -475,8 +476,8 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
         const db = await scope.db()
         const result = await deleteDocument()
 
-        // Version rows no longer cascade from a documents row (migration 0016
-        // dropped the FK — a tree-only document has no row to cascade from), so
+        // Version rows cascade from nothing (a document lives in the tree and
+        // has no row to cascade from), so
         // delete-completeness lives here for a delete that left nothing a
         // restore could bring back, and in the purge for one that did.
         if (!(await isInTrash(workspaceId, documentId, scope))) {
@@ -522,8 +523,8 @@ export async function deleteDocument(
   // document-crud.ts) — deliberately, so no delete path can skip the
   // cleanup. The bracket takes the workspace write lock, and after the
   // document goes it deletes the versions rows only when the trash holds
-  // nothing a restore could rejoin them to (migration 0016 dropped the
-  // cascade, so nothing else would).
+  // nothing a restore could rejoin them to (no foreign key cascades them,
+  // so nothing else would).
   return createDocumentTeardown(scope).around({ workspaceId, documentId, path }, async () => {
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete
@@ -718,9 +719,8 @@ export async function renameDocumentPath(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     const entry = workspaceDoc === null ? null : resolveWorkspaceDocument(workspaceDoc, oldPath)
-    // A path only the rows know is a pre-fold legacy document; renaming one
-    // before the boot fold has absorbed it is not a supported operation —
-    // the fold will place it, and the rename can happen after.
+    // The tree is the only place a document is placed: a path it does not
+    // hold names nothing, and "already gone" is the answer.
     if (entry === null) return null
     const documentId = entry.documentId
     if (oldPath === newPath) return { documentId }

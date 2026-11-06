@@ -328,6 +328,8 @@ A workspace's uploaded images sit under the tenant that owns them — on a local
 - `tenants/<tenantId>/workspaces/<workspaceId>/files/<fileId>` — a workspace's uploaded images
 - `tenants/<tenantId>/blobs/<first 2 hex of the digest>/<rest>` — the content of each document deleted from a workspace, kept so the trash can restore it, and destroyed once that document is restored or deleted permanently from the trash
 
+A data directory that still holds an earlier release's layout — `blobs/` or a `<workspaceId>/files/` at its top, or `trusted-web-origins.json` — is refused at startup rather than rearranged; the error says how to export its documents and import them into a fresh one.
+
 Files a person asked to have written out (an exported PNG or SVG) land in `<workspaceId>/exports/` at the top of the data directory, not under the tenant. No MCP tool writes files into the tree: `wb_scene_render` and `wb_document_get` answer in the tool result.
 
 See [architecture](../explanation/architecture.md) for how each layer reads and writes this tree.

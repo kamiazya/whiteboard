@@ -144,7 +144,7 @@ export function createWorkspaceReplicaKeyStore(
       return (await tierFor(workspaceId)) ?? defaultTier
     },
     async setTier(workspaceId, tier) {
-      // The column is untyped text (migration 0029 added no CHECK), so a
+      // The column is untyped text (the schema declares no CHECK), so a
       // bad value would otherwise only surface as a throw from `tierFor` on
       // the NEXT read, far from the write that caused it.
       const validated = replicaTierSchema.nullable().parse(tier)

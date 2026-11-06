@@ -123,8 +123,7 @@ a later sweep does not "fix" them.
   calls a thing to its users is a product decision this rule does not reach.
 - **Assertions ABOUT the old word.** `resolve.test.ts` still writes
   `[[canvas:<ULID>]]` — it exists to prove that spelling has no meaning left.
-  `model/src/spatial.ts` comments that a format saying `canvasId` teaches the
-  wrong thing. Rewriting either inverts what it says.
+  Rewriting it inverts what it says.
 - **Migrations, their fixtures, and the ADRs.** Each names the shape as it
   stood at its point in the log. ADR-0007/0008/0009 keep `slug` and
   `OpenCanvas` behind a dated note: a decision record is history, and
@@ -245,11 +244,12 @@ real defect at least once.
   `git diff origin/main -- .../migrations/` coming back empty — not an
   exclusion list, which a merge resets. The same trap bites plain tests: a
   fixture asserting the OLD word is load-bearing too.
-- **A boot-time writer can undo a migration.** `prepareDataDir` runs migrations
-  and THEN re-invokes `importFsBlobs`, so a routine still holding the old
-  literal re-seeds rows the migration just corrected. Pass the prefix as a
+- **A boot-time writer can undo a migration.** `prepareDataDir` runs the
+  migrations and THEN the boot-time seeding, so a seeding routine still holding
+  an old literal re-seeds rows a migration just corrected. Pass the value as a
   parameter: the migration passes the value it was RECORDED with, the boot path
-  passes the live one.
+  passes the live one. (The routine that taught this went with the migration
+  squash; the trap did not.)
 - **`pragma defer_foreign_keys` fails misleadingly.** It reads back as `1` and
   the UPDATE still raises `FOREIGN KEY constraint failed`, because the pragma
   only has effect inside an explicit transaction and kysely's Migrator does not
