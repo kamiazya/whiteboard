@@ -135,8 +135,10 @@ menu you used.
 
 A folder exists only while a document is in it, and the dialog says so before
 you create it: the new folder is empty until you put a document there, and its
-name is kept by the page until then and saved with the folder once a document
-lands in it. The empty folder offers **New note here** and **New canvas here**,
+name is kept in this browser tab until then — a reload or coming back to the
+folder in the same tab still shows it, and so does a folder you make inside it
+— and saved with the folder once a document lands in it. A new tab or a new
+browser session does not have it. The empty folder offers **New note here** and **New canvas here**,
 which create the document inside it, and **Move documents here…**, which lists
 every other document in the workspace with a checkbox and where it is now: tick
 the ones to file there and choose **Move here**. Leaving it empty lets it go,

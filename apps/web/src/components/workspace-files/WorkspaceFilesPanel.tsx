@@ -589,6 +589,7 @@ export function WorkspaceFilesPanel({
     rootRef,
     moveDocument,
     goToFolder: selectFolder,
+    memoryScope,
   })
 
   flushFolderNamesIntoRef.current = folderActions.flushInto
