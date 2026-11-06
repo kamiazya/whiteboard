@@ -746,11 +746,48 @@ describe('createDocumentSyncSession', () => {
     expect(session.getCanvas().nodes).toEqual([])
   })
 
-  it('refuses a LIVE update that brings the retired plane in, instead of throwing out of the import', async () => {
-    // Only the snapshot was guarded; an older peer syncing a row into the
-    // flat plane after load reached readAnnotations inside the import
-    // subscription, and the throw escaped it as an unhandled rejection
-    // while the session kept serving the stale canvas.
+  it('refuses a record holding a node in a retired stored shape, rather than opening without it', () => {
+    // No reader serves the node-kind union before ADR-0038 (owner decision
+    // 27): read as usual, the `.strict()` model would drop the node unseen.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, twoNodeCanvas())
+    doc
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    doc.commit()
+
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape')
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+    expect(session.getCanvas().nodes).toEqual([])
+  })
+
+  it.each([
+    {
+      reason: 'retired-comment-plane',
+      write: (peer: LoroDoc) =>
+        peer.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' }),
+    },
+    {
+      reason: 'retired-stored-shape',
+      write: (peer: LoroDoc) =>
+        peer
+          .getMap('nodes')
+          .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 }),
+    },
+  ])('refuses a LIVE update that brings $reason in, instead of throwing out of the import', async ({
+    reason,
+    write,
+  }) => {
+    // Only the snapshot was guarded; an older peer syncing a retired shape
+    // after load reached the readers inside the import subscription, and
+    // the throw escaped it as an unhandled rejection while the session kept
+    // serving the stale canvas.
     const backend = makeFakeBackend()
     const deps = makeDeps()
     const session = createDocumentSyncSession(backend, deps)
@@ -761,17 +798,107 @@ describe('createDocumentSyncSession', () => {
     const peer = new LoroDoc()
     peer.import(snapshot)
     const from = peer.version()
-    peer.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' })
+    write(peer)
     peer.commit()
 
     backend._ctrl.handlers!.onRemoteUpdate(peer.export({ mode: 'update', from }))
 
     // The import subscription delivers on a later tick; a throw there is an
     // unhandled rejection the test runner reports, not a return value.
-    await vi.waitFor(() =>
-      expect(deps.onBackendError).toHaveBeenCalledWith('retired-comment-plane'),
-    )
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith(reason))
     expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+  })
+
+  /** A session on a two-node canvas, with one edit committed so the undo stack holds a step. */
+  async function sessionWithOneCommittedEdit() {
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const snapshot = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshot)
+    const first: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_A.id }
+    session.onChange(applyCommand(session.getCanvas(), first), first)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    return { backend, deps, session, snapshot }
+  }
+
+  /** An older peer's update that brings a node in a retired shape, from the snapshot the session got. */
+  function retiredShapeUpdate(snapshot: Uint8Array): Uint8Array {
+    const peer = new LoroDoc()
+    peer.import(snapshot)
+    const from = peer.version()
+    peer
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    peer.commit()
+    return peer.export({ mode: 'update', from })
+  }
+
+  it('writes nothing after a live update made the document unreadable: queued edits, later edits, undo, redo and locks', async () => {
+    // Refusing the update left the session writable: an edit after it, or one
+    // still inside its debounce window, would push onto a record this build
+    // cannot read whole, and the page shows a read failure over it. The
+    // undo stack and the lock plane write through the same document.
+    const { backend, deps, session, snapshot } = await sessionWithOneCommittedEdit()
+    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), queued), queued)
+
+    backend._ctrl.handlers!.onRemoteUpdate(retiredShapeUpdate(snapshot))
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape'))
+    const after: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), after), after)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(session.undo()).toBe(false)
+    expect(session.redo()).toBe(false)
+    session.setNodeLock(TEXT_NODE_B.id, true)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+  })
+
+  it('a snapshot refused after the document was loaded drops queued and later edits too', async () => {
+    // A reconnect replays the snapshot; one in a retired shape (an older
+    // peer wrote the record between the two connections) is refused the way
+    // the first was, and the session stops writing the way a refused live
+    // update stops it.
+    const { backend, deps, session } = await sessionWithOneCommittedEdit()
+    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), queued), queued)
+    const retired = new LoroDoc()
+    writeSpatialCanvas(retired, twoNodeCanvas())
+    retired
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    retired.commit()
+
+    backend._ctrl.handlers!.onSnapshot(retired.export({ mode: 'snapshot' }))
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape')
+    const after: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), after), after)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(session.undo()).toBe(false)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+  })
+
+  it('a readable snapshot after a refused one takes writes again', async () => {
+    // A reconnect replays the snapshot; one this build reads whole is the
+    // document again, and the person's next edit lands on it. The edits
+    // refused meanwhile are not replayed: each carried a whole canvas taken
+    // against a record the page had already stopped showing.
+    const { backend, deps, session, snapshot } = await sessionWithOneCommittedEdit()
+    backend._ctrl.handlers!.onRemoteUpdate(retiredShapeUpdate(snapshot))
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape'))
+
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+    const edit: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), edit), edit)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(2)
+    expect(session.getCanvas().nodes.map((node) => node.id)).toEqual([TEXT_NODE_A.id])
   })
 
   it('a thread command is published at once, before the debounced commit lands', async () => {

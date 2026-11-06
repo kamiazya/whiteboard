@@ -5,7 +5,6 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
-  holdsRetiredCommentPlane,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -40,6 +39,9 @@ export type BackendErrorReason =
   // A record still holding comments in the plane before threads, which no
   // reader serves; refused rather than shown without them (decision 27).
   | 'retired-comment-plane'
+  // A record holding a node, edge, canvas or body shape an older version
+  // stored and no reader serves; refused rather than shown without it.
+  | 'retired-stored-shape'
 
 import type {
   CommentThread,
@@ -66,6 +68,7 @@ import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
+import { unreadableContent, unreadableSnapshot } from './unreadable-snapshot.js'
 
 const log = getAppLogger('document-sync')
 
@@ -402,6 +405,12 @@ export function createDocumentSyncSession(
   const canvasChanged = createSubscribers<[SpatialCanvas, 'local' | 'external']>()
   // Chains every onChange firing's commit so firings apply to the Loro doc
   // strictly in schedule order, never in async-settle order.
+  // Set once a snapshot or a live update brought in a shape this build does
+  // not read whole (the page shows a read failure over the stale canvas);
+  // every write is dropped from then on, queued ones included, since a push
+  // would land on a record the person cannot see. A readable snapshot
+  // (a reconnect) clears it.
+  let unreadable = false
   let commitChain: Promise<void> = Promise.resolve()
   // Counts onChange firings that have been chained onto commitChain but have
   // not yet settled. Lets dispose() tell "nothing was pending, safe to
@@ -598,8 +607,10 @@ export function createDocumentSyncSession(
     // The same refusal the snapshot gets: an update from an older peer can
     // bring the retired plane in after load, and a throw here would escape
     // the import subscription unhandled while the stale canvas stays up.
-    if (holdsRetiredCommentPlane(content)) {
-      deps.onBackendError('retired-comment-plane')
+    const refusal = unreadableContent(content)
+    if (refusal !== null) {
+      unreadable = true
+      deps.onBackendError(refusal)
       deps.onStatusChange('error')
       return
     }
@@ -691,7 +702,7 @@ export function createDocumentSyncSession(
     const commitBody = bodyOpsPending
     bodyOpsPending = false
     const hasTargets = pendingTargets.size > 0 && latestNext !== null
-    if (!doc || (!hasTargets && !commitBody)) {
+    if (!doc || unreadable || (!hasTargets && !commitBody)) {
       pendingTargets.clear()
       latestNext = null
       return
@@ -708,16 +719,11 @@ export function createDocumentSyncSession(
     // unguarded throw would reject the chain and silently skip every later
     // firing's commit for the rest of the session.
     const guardedCommit = (): void => {
+      // Judged again here: a live update can refuse the document between
+      // the firing and its turn on the chain.
+      if (unreadable) return
       if (commitBody) targetDoc.commit()
-      for (const command of commands) {
-        try {
-          // Inside the try, contentOf included: guardedCommit's contract is
-          // that the chain never rejects.
-          if (next !== null) commitTarget(targetDoc, prev ?? next, next, command)
-        } catch (err) {
-          log.error('scene commit failed; skipping this target', err)
-        }
-      }
+      if (next !== null) commitTargets(targetDoc, prev ?? next, next, commands)
     }
     // Chained with a resolved-only continuation (never `.catch`) because
     // guardedCommit never rejects, so the chain itself never rejects either —
@@ -731,6 +737,23 @@ export function createDocumentSyncSession(
         pendingCommitCount--
         void settleAfterCommitDrained()
       })
+  }
+
+  /** Each target on its own: guardedCommit's contract is that the chain never rejects. */
+  function commitTargets(
+    targetDoc: LoroDoc,
+    prev: SpatialCanvas,
+    next: SpatialCanvas,
+    commands: readonly EditorCommand[],
+  ): void {
+    for (const command of commands) {
+      try {
+        // Inside the try, contentOf included.
+        commitTarget(targetDoc, prev, next, command)
+      } catch (err) {
+        log.error('scene commit failed; skipping this target', err)
+      }
+    }
   }
 
   // Nowhere to write once the document is removed; the page was told already.
@@ -758,7 +781,7 @@ export function createDocumentSyncSession(
    * not ours to commit — the editor remounts on the new binding instead.
    */
   function bodyEdited(bound: LoroDoc): void {
-    if (bound !== doc || removed) return
+    if (bound !== doc || removed || unreadable) return
     persistence.edited()
     bodyOpsPending = true
     debounce.arm()
@@ -767,7 +790,6 @@ export function createDocumentSyncSession(
   const bodyBindingOf = bodyBindingFor({
     contentOf,
     onEdited: bodyEdited,
-    isCurrent: (target) => target === doc,
   })
   function getBodyBinding(): BodyBinding | null {
     return bodyBindingOf(doc)
@@ -876,25 +898,14 @@ export function createDocumentSyncSession(
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
         if (doc !== null && documentRemoved(newDoc)) return
-        // A scoped session's contract with its backend: the workspace bytes
-        // hold this document's tree node. Bytes that do not are unreadable
-        // FOR THIS DOCUMENT — reported like any other unreadable content,
-        // never thrown into the accessors (which would take React down with
-        // a doc the session cannot serve anyway).
-        if (
-          deps.contentDocumentId !== undefined &&
-          resolveWorkspaceDocumentById(newDoc, deps.contentDocumentId) === null
-        ) {
-          deps.onBackendError('corrupt-snapshot')
+        const refusal = unreadableSnapshot(newDoc, deps.contentDocumentId, contentOf)
+        if (refusal !== null) {
+          unreadable = true
+          deps.onBackendError(refusal)
           deps.onStatusChange('error')
           return
         }
-        const arriving = contentOf(newDoc)
-        if (arriving !== null && holdsRetiredCommentPlane(arriving)) {
-          deps.onBackendError('retired-comment-plane')
-          deps.onStatusChange('error')
-          return
-        }
+        unreadable = false
         doc = newDoc
         undoManager = new UndoManager(newDoc, {
           mergeInterval: 500,
@@ -1091,8 +1102,9 @@ export function createDocumentSyncSession(
   }
 
   function onChange(next: SpatialCanvas, command: EditorCommand): void {
-    // No document, nowhere to write: shown ink would read as kept work.
-    if (removed || !doc) return
+    // No document, or one this build cannot read whole: nowhere to write,
+    // and shown ink would read as kept work.
+    if (removed || !doc || unreadable) return
     // Published immediately (not debounced) so a controlled SpatialEditor's
     // own re-render reflects the edit right away; only the Loro write is
     // debounced in the background.
@@ -1181,7 +1193,7 @@ export function createDocumentSyncSession(
   }
 
   function undo(): boolean {
-    if (!doc || removed) return false
+    if (!doc || removed || unreadable) return false
     // An edit still inside its debounce window is the most recent thing the
     // person did and is not in the document yet, so taking it back IS the
     // undo — the committed stack is left alone.
@@ -1196,7 +1208,7 @@ export function createDocumentSyncSession(
   }
 
   function redo(): boolean {
-    if (!undoManager || !doc || removed) return false
+    if (!undoManager || !doc || removed || unreadable) return false
     if (!undoManager.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
     // against the document as it stood before this redo.
@@ -1227,7 +1239,7 @@ export function createDocumentSyncSession(
   // VALUE is unchanged, so subscribers get a lock notification rather than a
   // canvas publish.
   function writeLocks(write: (content: DocumentContainers) => void): void {
-    const content = liveContent()
+    const content = unreadable ? null : liveContent()
     if (content === null) return
     write(content)
     notifyLocksChanged()

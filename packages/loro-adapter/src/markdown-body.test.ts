@@ -3,28 +3,24 @@
 // the daemon (`wb_document_set`, the sync session's `set-body` command) and
 // apps/web's browser-kept editor go through it.
 //
-// The `okf-body` TEXT NODE is history: documents an older writer left still
-// carry one, so `readMarkdownBody` falls back to it and `writeMarkdownBody`
-// clears it on the next write. Nothing writes one any more — that is what
-// these tests pin.
+// The `okf-body` TEXT NODE is history, and no reader serves it: a document
+// an older writer left holding one is REFUSED by name rather than read as a
+// note with no body. Nothing writes one any more — that is what these tests
+// pin.
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readCommentThreads, writeCommentThread } from './comment-threads.js'
-import {
-  readEdgeLocks,
-  readNodeLocks,
-  readSpatialCanvas,
-  setEdgeLock,
-  setNodeLock,
-  writeSpatialCanvas,
-} from './loro-bridge.js'
+import { readDocumentContent } from './document-content.js'
+import { writeDocumentKind } from './document-envelope.js'
+import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
+import { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 
-/** The shape `wb_document_set` writes. */
+/** The shape an older `wb_document_set` wrote, and nothing writes now. */
 function withBodyNode(doc: LoroDoc, text: string): LoroDoc {
   writeSpatialCanvas(doc, {
     nodes: [textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text })],
@@ -40,40 +36,41 @@ function withBodyContainer(doc: LoroDoc, text: string): LoroDoc {
   return doc
 }
 
+describe('readMarkdownBody on a recorded spatial document', () => {
+  it('does not refuse a canvas node named okf-body, which is content there', () => {
+    // Hydration reads the body of every kind of document; a spatial document
+    // whose canvas edit minted that id must not throw on the way in.
+    const doc = withBodyNode(new LoroDoc(), 'a box, not a body')
+    writeDocumentKind(doc, 'spatial')
+    expect(readMarkdownBody(doc)).toBe('')
+  })
+})
+
 describe('readMarkdownBody', () => {
   it('reads the body text container', () => {
     expect(readMarkdownBody(withBodyContainer(new LoroDoc(), BODY))).toBe(BODY)
   })
 
-  it('reads the okf-body text node', () => {
-    expect(readMarkdownBody(withBodyNode(new LoroDoc(), BODY))).toBe(BODY)
+  it('refuses a body stored as the okf-body text node, naming it', () => {
+    const doc = withBodyNode(new LoroDoc(), BODY)
+    expect(() => readMarkdownBody(doc)).toThrow(RetiredStoredShapeError)
+    expect(() => readMarkdownBody(doc)).toThrow(/`okf-body`/)
+    expect(retiredStoredShapeIn(doc)).toMatch(/`okf-body`/)
   })
 
-  it('falls back to the first text node for a document written before the id was stable', () => {
+  it('refuses a markdown document whose body is a text node written before the id was stable', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [textNode({ id: 'legacy', x: 0, y: 0, width: 600, height: 400, text: BODY })],
       edges: [],
     })
-    expect(readMarkdownBody(doc)).toBe(BODY)
+    writeDocumentKind(doc, 'markdown')
+    expect(() => readDocumentContent(doc)).toThrow(RetiredStoredShapeError)
   })
 
-  it('prefers the stable-id node over an earlier text node', () => {
-    const doc = new LoroDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [
-        textNode({ id: 'aside', x: 0, y: 0, width: 10, height: 10, text: 'not the body' }),
-        textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: BODY }),
-      ],
-      edges: [],
-    })
-    expect(readMarkdownBody(doc)).toBe(BODY)
-  })
-
-  it('prefers the text container when a document somehow carries both', () => {
-    // Not a shape anything writes today. Fixed anyway, because "whichever
-    // the reader happened to check first" is not an answer, and the
-    // container is the live-edited one wherever both exist.
+  it('reads the container of a document that holds both, since the container is current', () => {
+    // An okf-body node beside a non-empty container cannot hide a body: the
+    // container is the one every writer since has written.
     const doc = withBodyNode(new LoroDoc(), 'from the node')
     withBodyContainer(doc, 'from the container')
     expect(readMarkdownBody(doc)).toBe('from the container')
@@ -81,15 +78,6 @@ describe('readMarkdownBody', () => {
 
   it('answers with the empty string for a document with no body at all', () => {
     expect(readMarkdownBody(new LoroDoc())).toBe('')
-  })
-
-  it('ignores a non-text node when looking for the body', () => {
-    const doc = new LoroDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [fileNode({ id: 'okf-body', x: 0, y: 0, width: 10, height: 10, file: 'x' })],
-      edges: [],
-    })
-    expect(readMarkdownBody(doc)).toBe('')
   })
 })
 
@@ -122,42 +110,6 @@ describe('writeMarkdownBody', () => {
     const doc = new LoroDoc()
     writeMarkdownBody(doc, BODY)
     expect(readSpatialCanvas(doc).nodes).toEqual([])
-  })
-
-  it('supersedes a legacy okf-body node left by an older writer', () => {
-    // Stored documents keep their text node until something rewrites them.
-    // A rewrite must not leave the old node behind to be read back later —
-    // that is exactly the stale-read the two representations enabled.
-    const doc = withBodyNode(new LoroDoc(), 'stale from the node')
-    writeMarkdownBody(doc, 'fresh')
-    expect(readMarkdownBody(doc)).toBe('fresh')
-    expect(readSpatialCanvas(doc).nodes).toEqual([])
-  })
-
-  it('supersedes every element an older writer left, with its lock, and keeps the tags', () => {
-    const doc = new LoroDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [
-        textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: 'old' }),
-        textNode({ id: 'aside', x: 700, y: 0, width: 10, height: 10, text: 'aside' }),
-      ],
-      edges: [{ id: 'e', from: { node: 'okf-body' }, to: { node: 'aside' } }],
-      lines: [
-        {
-          id: 'l',
-          from: { kind: 'node', node: 'aside' },
-          to: { kind: 'point', point: { x: 9, y: 9 } },
-        },
-      ],
-      tags: ['weekly'],
-    })
-    setNodeLock(doc, 'aside', true)
-    setEdgeLock(doc, 'l', true)
-    writeMarkdownBody(doc, 'fresh')
-    const canvas = readSpatialCanvas(doc)
-    expect(canvas).toMatchObject({ nodes: [], edges: [], tags: ['weekly'] })
-    expect(canvas.lines ?? []).toEqual([])
-    expect([...readNodeLocks(doc), ...readEdgeLocks(doc)]).toEqual([])
   })
 })
 
@@ -224,8 +176,7 @@ describe('writeMarkdownBody writes only what changed', () => {
 
 /**
  * A note's comment threads are user content that lives beside the body, not
- * in it, so no body write may take them down — neither the everyday write
- * on an empty canvas nor the one that supersedes a legacy `okf-body` node.
+ * in it, so no body write may take them down.
  */
 describe('writeMarkdownBody leaves the comment threads alone', () => {
   const textThread: CommentThread = {
@@ -240,15 +191,6 @@ describe('writeMarkdownBody leaves the comment threads alone', () => {
     createdAt: '2026-09-02T00:00:00.000Z',
     messages: [{ id: 'm1', body: 'tighten this', author: 'human:yuki' }],
   }
-
-  it('keeps a legacy okf-body note threads across the write that supersedes the node', () => {
-    const doc = withBodyNode(new LoroDoc(), 'the body')
-    writeCommentThread(doc, textThread)
-    writeMarkdownBody(doc, 'the body, edited')
-    expect(readMarkdownBody(doc)).toBe('the body, edited')
-    expect(readSpatialCanvas(doc).nodes).toEqual([])
-    expect(readCommentThreads(doc).map((thread) => thread.id)).toEqual(['t1'])
-  })
 
   it('keeps the threads and adds only the splice when the canvas is already empty', () => {
     const doc = new LoroDoc()

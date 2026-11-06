@@ -7,7 +7,11 @@
 // whenever a DIFFERENT document was edited, which is the property that makes
 // that analysis usable as a change signal at all.
 
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
@@ -30,9 +34,8 @@ function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
 
 /**
  * Seeds a workspace holding a canvas with one file node, plus the markdown
- * document it references. The markdown document is written the way
- * `wb_document_set` writes one — a single `okf-body` text node — because
- * that IS a markdown document's stored shape on this side.
+ * document it references, its body in the text container every writer
+ * writes.
  */
 async function seedWorkspace(
   store: FakeDocumentStore,
@@ -64,19 +67,7 @@ async function seedWorkspace(
   })
   await seedDoc(store, NOTE_ID, (doc) => {
     writeDocumentKind(doc, 'markdown')
-    writeSpatialCanvas(doc, {
-      nodes: [
-        textNode({
-          id: 'okf-body',
-          x: 0,
-          y: 0,
-          width: 600,
-          height: 400,
-          text: '# Weekly notes\n\nShipped the markdown file node.',
-        }),
-      ],
-      edges: [],
-    })
+    writeMarkdownBody(doc, '# Weekly notes\n\nShipped the markdown file node.')
   })
 }
 
@@ -300,19 +291,7 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
     // Edit ONLY the referenced document.
     await seedDoc(store, NOTE_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
-      writeSpatialCanvas(doc, {
-        nodes: [
-          textNode({
-            id: 'okf-body',
-            x: 0,
-            y: 0,
-            width: 600,
-            height: 400,
-            text: '# Rewritten\n\nCompletely different content now.',
-          }),
-        ],
-        edges: [],
-      })
+      writeMarkdownBody(doc, '# Rewritten\n\nCompletely different content now.')
     })
 
     const after = await snapshot.execute({

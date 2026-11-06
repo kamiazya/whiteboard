@@ -1,27 +1,17 @@
 // How long the text is that a map VALUE carries — a node, an edge, a line,
-// a message are each one value — measured the way every reader lifts it, for
+// a message are each one value — measured the way every reader reads it, for
 // the sync judge's value bounds.
-import { liftStoredNode } from './legacy-lifts.js'
 
-/**
- * A node value's text as the reader lifts it (`liftStoredNode`): a value
- * carrying a legacy kind is read from its `text` whatever `resource` it also
- * holds, so the judge measures the lifted value rather than guessing which
- * field wins. The longer of the two, since a value the lift leaves holding
- * both is one the reader drops anyway.
- */
+/** A node value's text: its resource's inline content, which is what every reader shows. */
 export function nodeTextLength(value: unknown): number {
-  const lifted = liftStoredNode(value)
-  if (typeof lifted !== 'object' || lifted === null) return 0
-  const resource = (lifted as { resource?: unknown }).resource
-  return Math.max(fieldLength(resource, 'content'), fieldLength(lifted, 'text'))
+  if (typeof value !== 'object' || value === null) return 0
+  return fieldLength((value as { resource?: unknown }).resource, 'content')
 }
 
 /**
- * A node value's longest location as every reader lifts it: the resource's
- * `location` or `subpath`, the legacy `url`, `file` or `subpath` field, or a
- * group's `background` — an image location every reader of image references
- * follows.
+ * A node value's longest location as every reader follows it: the resource's
+ * `location` or `subpath`, or a group's `background` — an image location
+ * every reader of image references follows.
  */
 export function nodeLocationLength(value: unknown): number {
   if (typeof value !== 'object' || value === null) return 0
@@ -29,7 +19,7 @@ export function nodeLocationLength(value: unknown): number {
   return Math.max(
     fieldLength(resource, 'location'),
     fieldLength(resource, 'subpath'),
-    ...['url', 'file', 'subpath', 'background'].map((field) => fieldLength(value, field)),
+    fieldLength(value, 'background'),
   )
 }
 

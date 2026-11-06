@@ -222,7 +222,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // beside the canvas (the effect itself is `thread-commands.ts`), and a
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
-  'apps/web/src/lib/document-sync-session.ts': 1285, // +8: a live update holding the retired comment plane is refused on arrival, not thrown out of the import
+  'apps/web/src/lib/document-sync-session.ts': 1297, // +20: a document a live update made unreadable takes no further write, queued ones included
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -375,7 +375,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The three cases pinning undo: the document agreeing with the screen after an
   // undo and after a redo, and a taken-back write settling as saved rather than
   // reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2655,
+  'apps/web/src/lib/document-sync-session.test.ts': 2699, // +44: an unreadable document (by a live update or a reconnect snapshot) takes no write from an edit, undo, redo or a lock, and a readable reconnect takes writes again
   // One example per rule of every command arm, ink included: a table of ink
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
@@ -386,7 +386,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a wait here reports more than "it expired"; both the page embed and its
   // sibling, the note-body embed, have failed on CI from branches that cannot
   // reach them, so the note covers the two as one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1093,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 997, // main's seeding through the tree plus the okf-body refusal case, in place of the two pre-unification ones
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // The cancel case: the page's effect cleanup has to stop the replica refresh
   // and the push it armed, and both schedulers' mocks have to answer a spy

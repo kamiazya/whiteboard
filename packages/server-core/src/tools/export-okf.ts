@@ -2,9 +2,9 @@ import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
 import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
+  readDocumentContent,
   readDocumentKind,
   readFacets,
-  readMarkdownBody,
   readTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { loadDocument } from '../document-io.js'
@@ -62,7 +62,10 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     )
   }
   const facets = readFacets(doc)
-  const body = readMarkdownBody(doc)
+  // Through the one by-kind reader, so a note whose body an older writer left
+  // in a canvas text node is refused rather than exported empty.
+  const content = readDocumentContent(doc, 'markdown')
+  const body = content.kind === 'markdown' ? content.body : ''
   // The trust family lives in its own bucket (ADR-0016 decision 4) and is
   // projected back to the frontmatter ROOT, where OKF puts it — the same
   // projection `title` gets from the workspace name.

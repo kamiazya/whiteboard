@@ -15,7 +15,7 @@ import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
  * what jsdom cannot exercise.
  */
 
-import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
@@ -833,135 +833,39 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     )
   })
 
-  describe('a body written the pre-unification way', () => {
+  it('refuses a note whose body is still the okf-body node, rather than opening it empty', async () => {
     // The MCP document write used to store a body as an `okf-body` TEXT NODE
-    // rather than the `body` text container CodeMirror binds to. Both sides
-    // now write the container, but documents in the old shape are already in
-    // stores — and only a real browser can show what CodeMirror actually
-    // displays for one, which is the half a hook test cannot reach.
-    const LEGACY_BODY = 'body stored as an okf-body node'
-
-    async function seedLegacyNote(name: string): Promise<string> {
-      const legacyId = await seedIdbDocument({
-        path: 'legacy-note',
-        name,
-        kind: 'markdown',
-        makeDefault: true,
-      })
-      const doc = new Loro()
-      writeSpatialCanvas(doc, {
-        nodes: [
-          textNode({
-            id: MARKDOWN_BODY_NODE_ID,
-            x: 0,
-            y: 0,
-            width: 600,
-            height: 400,
-            text: LEGACY_BODY,
-          }),
-        ],
-        edges: [],
-      })
-      doc.commit()
-      // Overwrites the empty record `seedIdbDocument` wrote: this suite is
-      // about a body stored as a spatial text node, which is the shape a
-      // pre-OKF note has on disk.
-      await seedTreeContent(legacyId, doc.export({ mode: 'snapshot' }))
-      return legacyId
-    }
-
-    it('stays editable without losing the body it opened with', async () => {
-      // This needs a real browser for the CRDT binding. `LoroSyncPlugin`
-      // syncs the `body` CONTAINER into CodeMirror on mount, overwriting the
-      // `value` prop — so for a document whose prose is still in a node, the
-      // editor settles on the placeholder while the preview shows the text,
-      // and the next edit saves over the original.
-      //
-      // Asserted AFTER a full edit/save/remount cycle rather than on first
-      // paint: the value prop is briefly visible before the binding takes
-      // over, so an assertion at mount can pass on a frame that is about to
-      // be replaced. By the reopen there is no path that puts the old body
-      // on screen unless it really was converted and persisted.
-      const store = new BrowserDocumentIndex()
-      await seedLegacyNote('Legacy note')
-      const first = renderPage(<BrowserDocumentPage store={store} />)
-
-      // focusEditable rather than focus() on the node resolved a moment ago:
-      // under load the contentDOM can arrive late or be swapped, and focus()
-      // on a detached element is a spec'd no-op that no wait here would
-      // recover from — the keystrokes simply go nowhere. It also answers the
-      // reason a click is wrong on this page: there are TWO role=textbox
-      // elements (the title input and CodeMirror's content), so a click
-      // locator on the contenteditable is ambiguous under strict mode.
-      await focusEditable(() => document.querySelector('[contenteditable="true"]'))
-      await userEvent.keyboard('{Control>}{End}{/Control}{Enter}and an appended line')
-      // The same 10s ceiling the embed waits below use, and for the same
-      // reason: `userEvent.keyboard` resolving means the keys were DISPATCHED,
-      // not that the page applied them, and testing-library's default retry
-      // budget is 1000ms of the RUNNER's clock. Under CI's stress lane — every
-      // test file a PR touched in one process, 290 of them — that ran out
-      // mid-word: `expected 'body stored as an okf-body nodeand ' to contain
-      // 'and an appended line'`, four of twenty characters in.
-      //
-      // Not established, and said rather than implied: whether the remaining
-      // keystrokes were LATE or genuinely DROPPED cannot be separated from one
-      // reading, and it did not reproduce locally (the file alone, the file
-      // under 12 CPU hogs with --repeats=3, or the whole 290-file set). A
-      // budget only fixes the first. If they are dropped this fails again and
-      // says so, which is why the assertion is unchanged.
-      await waitFor(
-        () => {
-          expect(document.querySelector('.cm-content')?.textContent).toContain(
-            'and an appended line',
-          )
-        },
-        { timeout: 10_000 },
-      )
-
-      await waitForSaved()
-      first.unmount()
-
-      renderPage(<BrowserDocumentPage store={store} />)
-      await waitFor(
-        () => {
-          const text = document.querySelector('.cm-content')?.textContent
-          expect(text).toContain(LEGACY_BODY)
-          expect(text).toContain('and an appended line')
-        },
-        { timeout: 10_000 },
-      )
+    // rather than the `body` container CodeMirror binds to. No reader serves
+    // that shape: bound as usual, the editor opens on nothing and the next
+    // keystroke saves a body that hides the prose.
+    const legacyId = await seedIdbDocument({
+      path: 'legacy-note',
+      name: 'Legacy note',
+      kind: 'markdown',
+      makeDefault: true,
     })
-
-    it('renders as an ![[embed]] target', async () => {
-      const store = new BrowserDocumentIndex()
-      const LEGACY_ID = await seedLegacyNote('Legacy embed target')
-      await seedIdbDocument({
-        path: 'embed-source',
-        name: 'Embed source',
-        kind: 'markdown',
-        makeDefault: true,
-      })
-      renderPage(<BrowserDocumentPage store={store} />)
-
-      // focusEditable rather than focus() on the node resolved a moment ago:
-      // under load the contentDOM can arrive late or be swapped, and focus()
-      // on a detached element is a spec'd no-op that no wait here would
-      // recover from — the keystrokes simply go nowhere. It also answers the
-      // reason a click is wrong on this page: there are TWO role=textbox
-      // elements (the title input and CodeMirror's content), so a click
-      // locator on the contenteditable is ambiguous under strict mode.
-      await focusEditable(() => document.querySelector('[contenteditable="true"]'))
-      await userEvent.keyboard(`![[[[${LEGACY_ID}]]{Enter}{Enter}trailing`)
-      await expectTypedSource(`![[${LEGACY_ID}]]\n\ntrailing`)
-
-      await waitFor(
-        () => {
-          const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
-          expect(preview?.textContent).toContain(LEGACY_BODY)
-        },
-        { timeout: 10_000 },
-      )
+    const doc = new Loro()
+    // Spelled as it stood: the shape an older writer left, which nothing writes.
+    doc.getMap('nodes').set('okf-body', {
+      id: 'okf-body',
+      x: 0,
+      y: 0,
+      width: 600,
+      height: 400,
+      resource: { mimeType: 'text/markdown', content: 'body stored as an okf-body node' },
     })
+    doc.commit()
+    await seedTreeContent(legacyId, doc.export({ mode: 'snapshot' }))
+
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole('alert').textContent).toMatch(/form this version no longer reads/i)
+      },
+      { timeout: 10_000 },
+    )
+    expect(document.querySelector('[contenteditable="true"].cm-content')).toBeNull()
   })
 
   /**

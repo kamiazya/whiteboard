@@ -117,6 +117,14 @@ create.
 superset, so reading an existing record is a total lift through the JSON Canvas
 parser — no row is lost and no document needs rewriting before it is read.
 
+> **2026-11-06: the lift is retired.** The read-time lifts this decision
+> relied on (`x-whiteboard` on a stored node, edge or canvas, and ADR-0038's
+> pre-resource node-kind union) are deleted. A record still holding either
+> shape is refused by name with `RetiredStoredShapeError`: `/api/v1` answers
+> 409 `retired_stored_shape`, an MCP tool fails with the error's message,
+> and the editor shows its read-failure screen. The stored bytes are left as
+> they are. The paragraph above records what shipped until then.
+
 **6. OKF's remaining step is narrower, and is sequenced last.**
 
 The parse side already preserves rather than models. What is left is that
