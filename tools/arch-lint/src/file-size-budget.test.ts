@@ -222,7 +222,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // beside the canvas (the effect itself is `thread-commands.ts`), and a
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
-  'apps/web/src/lib/document-sync-session.ts': 1277,
+  'apps/web/src/lib/document-sync-session.ts': 1285, // +8: a live update holding the retired comment plane is refused on arrival, not thrown out of the import
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
