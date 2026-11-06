@@ -223,7 +223,8 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['F6'],
     shift: false,
     display: 'F6',
-    description: 'Leave the canvas for the next control, keeping the selection',
+    description:
+      'Leave the canvas for the next control (wrapping to the header), keeping the selection',
   },
   {
     id: 'leave-canvas-backward',

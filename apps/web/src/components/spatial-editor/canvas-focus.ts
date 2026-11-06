@@ -23,7 +23,8 @@ function isTabbable(element: HTMLElement): boolean {
 /**
  * Moves focus from the canvas root to the next Tab stop after it in the page
  * (forward) or the last one before it (backward) — what Tab would do from the
- * root, without walking the selection there. Answers false when there is none.
+ * root, without walking the selection there — wrapping round the page's ends.
+ * Answers false only when nothing outside the canvas can take focus.
  */
 export function focusPastCanvas(root: HTMLElement, direction: 1 | -1): boolean {
   const stops = [...document.querySelectorAll<HTMLElement>(TABBABLE)].filter(
@@ -34,8 +35,10 @@ export function focusPastCanvas(root: HTMLElement, direction: 1 | -1): boolean {
   // A control drawn inside the root (the dock, a link in a node) is still
   // the canvas, in both directions.
   const outside = (element: HTMLElement) => !root.contains(element)
-  const target =
-    direction === 1 ? stops.slice(at + 1).find(outside) : stops.slice(0, at).reverse().find(outside)
+  // Past the page's end it wraps, the way a browser's own F6 cycles its
+  // regions: a key that sometimes does nothing reads as a key that is broken.
+  const after = [...stops.slice(at + 1), ...stops.slice(0, at)]
+  const target = (direction === 1 ? after : after.reverse()).find(outside)
   if (target === undefined) return false
   target.focus()
   return true
