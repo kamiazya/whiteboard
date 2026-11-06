@@ -103,6 +103,11 @@ comments anyway. The app notices and says so — "This daemon is too old to
 duplicate without comments — update it" — rather than reporting a clean
 copy; the copy that daemon made is left for you to keep or delete.
 
+When a duplicate fails, the page says so above the list and reads the list
+again, in the browser and on a daemon alike. A failure can come after the copy
+was already made — the answer lost on its way back — so check the list for a
+copy before trying again.
+
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.

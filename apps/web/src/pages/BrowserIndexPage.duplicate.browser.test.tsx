@@ -144,3 +144,34 @@ it('reports a refusing list as a list failure, not as a failed duplicate', async
   refuseListing = false
   expect(await store.index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toHaveLength(2)
 })
+
+/**
+ * A duplicate that fails AFTER the keeper wrote — the read-back of the copy,
+ * say — leaves a copy the list has not seen. The page cannot tell that apart
+ * from a write that never happened, so it says the duplicate failed and reads
+ * the list again, as the daemon keeper's page does.
+ */
+it('re-reads the list after a failed duplicate and keeps the failure shown', async () => {
+  const store = await seedOne()
+  const failing = new Proxy(store.index, {
+    get(target, prop) {
+      const held = Reflect.get(target, prop)
+      if (prop !== 'duplicateDocument') {
+        return typeof held === 'function' ? held.bind(target) : held
+      }
+      return async (...args: Parameters<typeof store.index.duplicateDocument>) => {
+        await target.duplicateDocument(...args)
+        throw new Error('the answer was lost')
+      }
+    },
+  })
+  renderPage(store, failing)
+  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+
+  await duplicateTheOnlyRow()
+
+  await waitFor(() => expect(titles().sort()).toEqual(['Alpha', 'Alpha (copy)']), {
+    timeout: 15_000,
+  })
+  expect(screen.getByRole('alert').textContent).toContain('Failed to duplicate')
+})

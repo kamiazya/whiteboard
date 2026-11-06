@@ -236,7 +236,9 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   loaded: 'cleared on switch',
   loadError: 'cleared on switch',
   createError: 'no subject: a refused create; no path of its own',
-  duplicateError: 'no subject: a refused duplicate; the path it was about is `duplicatingPath`',
+  // A refusal names the workspace it happened in, and the browser keeper's
+  // page drops its own on a switch too.
+  duplicateError: 'cleared on switch',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
   deleting: 'no subject: an in-flight flag; the path it is about is `pendingDelete`',
   generation:

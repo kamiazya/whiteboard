@@ -954,6 +954,60 @@ describe('DaemonIndexPage', () => {
     expect(duplicateBtn.disabled).toBe(false)
   })
 
+  /**
+   * A refused request does not prove the daemon wrote nothing: the copy can
+   * exist while the answer is lost. So the list is re-read after a failure,
+   * as the browser keeper's page does, rather than left showing a state
+   * nobody knows to be current.
+   */
+  it('re-reads the list after a failed duplicate and keeps the failure shown', async () => {
+    let rows = [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }]
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: { 'ws-a': () => rows },
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
+      onDuplicateDocument: () => {
+        rows = [
+          ...rows,
+          { path: 'alpha-copy', name: 'Alpha (copy)', updatedAt: rows[0]!.updatedAt },
+        ]
+        return jsonResponse({ title: 'Upstream timed out' }, 500)
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await selectCard('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('card-title').map((each) => each.textContent)).toEqual([
+        'Alpha',
+        'Alpha (copy)',
+      ]),
+    )
+    expect(screen.getByRole('alert').textContent).toMatch(/timed out/i)
+  })
+
+  it('drops a failed duplicate’s alert when the workspace switches', async () => {
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', name: 'Beta', updatedAt: new Date().toISOString() }],
+      },
+      onDuplicateDocument: () => jsonResponse({ title: 'Not found' }, 404),
+    })
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
+    await selectCard('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/not found/i)
+
+    switchWorkspace(rerender, 'ws-b')
+    expect(await screen.findByText('Beta')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('does not apply a stale duplicate completion to a workspace the user has since switched away from', async () => {
     let release: ((res: Response) => void) | undefined
     installFakeDaemonFetch({
