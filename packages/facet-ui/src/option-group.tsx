@@ -283,6 +283,17 @@ function isFocusVisible(element: Element): boolean {
   }
 }
 
+/**
+ * The ring, for a keyboard's focus only: a tap or a click leaves focus on the
+ * radio too, and a ring there reads as a second, heavier "selected" next to
+ * the fill every other option uses.
+ */
+function ringOnKeyboardFocus(event: React.FocusEvent<HTMLLabelElement>): void {
+  if (!isFocusVisible(event.target)) return
+  event.currentTarget.style.outline = `2px solid ${RING}`
+  event.currentTarget.style.outlineOffset = '1px'
+}
+
 export function FacetOption({
   name,
   label,
@@ -318,14 +329,7 @@ export function FacetOption({
       style={selected ? cell.on : cell.off}
       // A card prints its word, so a tooltip repeating it is noise.
       title={glyph === undefined || card ? undefined : label}
-      onFocus={(event) => {
-        // A keyboard's focus only: a tap or a click leaves focus on the radio
-        // too, and a ring there reads as a second, heavier "selected" next to
-        // the fill every other option uses.
-        if (!isFocusVisible(event.target)) return
-        event.currentTarget.style.outline = `2px solid ${RING}`
-        event.currentTarget.style.outlineOffset = '1px'
-      }}
+      onFocus={ringOnKeyboardFocus}
       onBlur={(event) => {
         event.currentTarget.style.outline = 'none'
       }}

@@ -133,9 +133,9 @@ const BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"
  * overview does not undo the answer that lifted it.
  */
 function useBottomChromeClearance(
-  surface: RefObject<HTMLDivElement | null>,
   active: boolean,
-): number | undefined {
+): readonly [RefObject<HTMLDivElement | null>, number | undefined] {
+  const surface = useRef<HTMLDivElement>(null)
   const [lift, setLift] = useState<number | undefined>(undefined)
   useLayoutEffect(() => {
     const own = surface.current
@@ -172,8 +172,8 @@ function useBottomChromeClearance(
       resize?.disconnect()
       mutations?.disconnect()
     }
-  }, [surface, active])
-  return lift
+  }, [active])
+  return [surface, lift]
 }
 
 export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlayProps) {
@@ -220,6 +220,16 @@ export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlay
   )
 }
 
+/** Centres the canvas on the overview point under the pointer. */
+function navigateFrom(
+  event: React.PointerEvent<HTMLDivElement>,
+  fit: ReturnType<typeof fitMinimap>,
+  onNavigate: MinimapOverlayProps['onNavigate'],
+): void {
+  const rect = event.currentTarget.getBoundingClientRect()
+  onNavigate(unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, fit))
+}
+
 function MinimapSurface({
   boxes,
   viewportRect,
@@ -230,13 +240,9 @@ function MinimapSurface({
 }: Omit<MinimapOverlayProps, 'collapsible'> & { readonly raised?: boolean }) {
   const fit = fitMinimap(boxes, viewportRect, { width, height }, PADDING_PX)
   const marker = projectBox(viewportRect, fit)
-  const surface = useRef<HTMLDivElement>(null)
-  const lift = useBottomChromeClearance(surface, !raised)
-
-  const navigateTo = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    onNavigate(unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, fit))
-  }
+  const [surface, lift] = useBottomChromeClearance(!raised)
+  const navigateTo = (event: React.PointerEvent<HTMLDivElement>) =>
+    navigateFrom(event, fit, onNavigate)
 
   return (
     // Not a <button>: the target is a POSITION, not an action, so the useful
@@ -253,7 +259,7 @@ function MinimapSurface({
       data-viewport-corner
       data-testid="minimap"
       aria-hidden="true"
-      style={lift === undefined ? { width, height } : { width, height, bottom: lift }}
+      style={{ width, height, bottom: lift }}
       // z-10 matches the dock. Without a stacking context of its own the
       // scene paints over the overview — it is later in the DOM and its
       // nodes are positioned, so document order wins.
