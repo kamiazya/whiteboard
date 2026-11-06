@@ -9,7 +9,11 @@ import { stackedFramesBoard } from '../../test-utils/routing-corpus.js'
 import { crossings, interiorInk, pathLength } from '../../test-utils/routing-metrics.js'
 import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
+import { createRoutingBudget, type RoutingBudget } from './routing-budget.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
+
+/** A layout account with nothing left in it. */
+const spentBudget = (): RoutingBudget => ({ grid: 0, pairs: 0, trials: 0, repairs: 0 })
 
 const rectOf = (n: SpatialNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
@@ -123,6 +127,93 @@ describe('a straight connection that would cross another to save length', () => 
     expect(anchors.get('e')?.around).toBeUndefined()
     const { path } = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e'))
     expect(path).toHaveLength(3)
+  })
+
+  it('keeps the corner route when the routing budget is spent before shortening', () => {
+    // The search seeds every straight edge stepping round and relies on its
+    // last pass to hand the corner route back; a layout whose account is
+    // already spent never reaches that pass, and a detour nothing confirmed
+    // must not be what it draws.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edges = [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }]
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight', undefined, spentBudget())
+    expect(anchors.get('e')?.around).toBeUndefined()
+  })
+
+  it('keeps a stepping-round choice the search priced before the budget ran out', () => {
+    // A search cut short has priced some of its seeds and not others: those
+    // it priced are its own answer and stay, the rest go back to the corner.
+    // On this board the full layout spends 15342 trial visits and steps
+    // a1_b6 and a3_b1 round. Its first run adopts a3_b1 stepping round on
+    // other sides and then runs out before it has priced a1_b6, for any
+    // account in [3154, 4294) — measured by scanning `trials` in steps of 38.
+    // Below that window nothing was adopted; above it the first run
+    // finishes. A change to what a trial costs moves the window: re-scan and
+    // re-centre.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight', undefined, {
+      ...createRoutingBudget(),
+      trials: 3700,
+    })
+    expect(anchors.get('a3_b1')?.around).toBe(true)
+    expect(anchors.get('a1_b6')?.around).toBeUndefined()
+  })
+
+  it('keeps a stepping-round edge whose corner route the search priced', () => {
+    // e's sides are named, so stepping round is its only alternative; its
+    // corner route crosses o, an orthogonal edge, and stepping round does
+    // not. The search prices e's corner (and keeps stepping round), then runs
+    // out before s2, whose seed nothing priced. The full layout spends 143
+    // trial visits; e is priced and s2 not for any account in [50, 93),
+    // measured one visit at a time.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+      node('p', 0, 330, 40, 30),
+      node('q', 300, 330, 40, 30),
+      node('d', 600, 0, 100, 60),
+      node('f', 600, 300, 100, 60),
+    ]
+    const edges = [
+      {
+        id: 'e',
+        from: { node: 'a', side: 'bottom' as const },
+        to: { node: 'b', side: 'top' as const },
+      },
+      { id: 'o', from: { node: 'p' }, to: { node: 'q' } },
+      { id: 's2', from: { node: 'd' }, to: { node: 'f' } },
+    ]
+    const style = (edge: { id: string }): 'orthogonal' | 'straight' =>
+      edge.id === 'o' ? 'orthogonal' : 'straight'
+    const full = assignEdgeAnchors(nodes, edges, style)
+    expect(full.get('e')?.around).toBe(true)
+    const cut = assignEdgeAnchors(nodes, edges, style, undefined, {
+      ...createRoutingBudget(),
+      trials: 70,
+    })
+    expect(cut.get('e')?.around).toBe(true)
+    expect(cut.get('s2')?.around).toBeUndefined()
+  })
+
+  it('keeps an overridden edge stepping round on a spent budget', () => {
+    // A frozen (overridden) edge is not the search's to shorten: what it
+    // carries is the committed state, confirmed by the search that made it.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edges = [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }]
+    const frozen = new Map([
+      ['e', { fromSide: 'bottom' as const, toSide: 'top' as const, around: true as const }],
+    ])
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight', frozen, spentBudget())
+    expect(anchors.get('e')?.around).toBe(true)
   })
 
   it('routes round the box covering everything in the way when asked', () => {

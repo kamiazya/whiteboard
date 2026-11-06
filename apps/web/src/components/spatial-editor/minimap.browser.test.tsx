@@ -37,6 +37,21 @@ it('shows an overview once the canvas has content', () => {
 // roughly 730px of container they overlap. The predicate is the container's
 // width, not the viewport's: a narrow editor column on a wide screen collides
 // exactly the same way, and a media query would miss it.
+it('paints an opaque panel, so canvas text never shows through the overview', () => {
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
+  const minimap = minimapOf(container)
+  expect(minimap).toBeTruthy()
+  const background = getComputedStyle(minimap as HTMLElement).backgroundColor
+  // Any alpha below one lets the scene through. Computed colours come back
+  // as `rgba(r, g, b, a)` or in a CSS Color 4 form with `/ a`.
+  const alpha =
+    /\/\s*([\d.]+)\s*\)$/.exec(background)?.[1] ??
+    /^rgba\((?:[^,]+,){3}\s*([\d.]+)\)$/.exec(background)?.[1]
+  expect(background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(alpha === undefined ? 1 : Number(alpha), background).toBe(1)
+})
+
 it('stays away when the editor is too narrow to hold it beside the dock', () => {
   const { Host } = makeEditorHost({ initial: spread, size: { width: 390, height: 600 } })
   const { container } = render(<Host />)

@@ -32,7 +32,8 @@ describe('Trash after a delete', () => {
     rerender(ui(2))
 
     const toast = await screen.findByRole('status')
-    expect(toast.textContent).toContain('Deleted Meeting notes')
+    // The sentence alone: the Undo button is outside the live region.
+    expect(toast.textContent).toBe('Deleted Meeting notes')
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
 
     await waitFor(() => expect(restore).toHaveBeenCalledWith('d1'))

@@ -309,7 +309,7 @@ export function SourcePane({
         // another line. Everywhere else this reports unhandled and
         // continuation runs as usual.
         Prec.highest(keymap.of([{ key: 'Enter', run: endListOnEmptyItem }])),
-        ...markdownEditingBase(),
+        ...markdownEditingBase({ announceTasks: variant === 'document' }),
         ...(placeholderText !== undefined ? [placeholder(placeholderText)] : []),
         // Host extensions last, after every built-in: a CRDT binding must
         // observe the final document the built-ins produce.

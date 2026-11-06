@@ -171,6 +171,13 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // Where a saved rename landed, spent by the dialog's close; the reset's
   // cancel drops it too, so a switch never focuses the departed card's path.
   landing: 'cleared on switch',
+  // Which control opened the rename dialog, and the path it was opened for.
+  // The reset's cancel closes the dialog and the close spends it, but the
+  // close runs AFTER the switch, so a dismissed dialog can focus a card at
+  // the same path in the new workspace. A fix needs the reset to drop it
+  // without the dismiss path doing so (cancel is also the Escape handler).
+  openedFor:
+    'survives: spent by the dialog close, which runs after the switch; the reset needs its own drop, since cancel is also what Escape calls',
   // The rename form's refusal and in-flight flag, named from inside its own
   // hook. Cleared with the dialog, which the reset closes.
   error: 'cleared on switch',

@@ -16,6 +16,7 @@ import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { type AroundLedger, aroundLedger } from './around-ledger.js'
 import { bestRepairedPair } from './coincident-ends.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import type { AnchorGroups } from './edge-anchors.js'
@@ -609,6 +610,7 @@ function shortened(
   score: ConfigScore,
   edges: readonly RoutableElement[],
   locked: ReadonlySet<string> | undefined,
+  search: AroundLedger,
 ): ReadonlyMap<string, SidePair> {
   for (const [index, edge] of edges.entries()) {
     const chosen = score.sideOf(edge.id)
@@ -616,8 +618,11 @@ function shortened(
     const trial = new Map(score.sides())
     trial.set(edge.id, { fromSide: chosen.fromSide, toSide: chosen.toSide })
     const evaluated = score.evaluateTrial(trial, index)
-    if (evaluated === undefined) break
+    if (evaluated === undefined) return search.unconfirmedDropped(score.sides())
     if (!lessCost(score.cost(), evaluated.cost)) score.adopt(trial, evaluated)
+    // The corner route cost something here, so stepping round is the
+    // search's own answer for this edge.
+    else search.confirmed.add(edge.id)
   }
   return score.sides()
 }
@@ -679,6 +684,8 @@ function optimizeSideChoices(
   // The layout's account (`routing-budget.ts`). Past it no trial is adopted,
   // so the search ends on the sides it has reached: a partial repair.
   budget: RoutingBudget = createRoutingBudget(),
+  // `initial`'s seeded `around`s (`steppingRound`; see `aroundLedger`).
+  seeded: ReadonlySet<string> = new Set(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const score = createConfigScore(
@@ -697,7 +704,8 @@ function optimizeSideChoices(
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
   // crossings is healthy, and reshuffling it purely to shave bends is
   // churn, not repair.
-  const shorten = () => shortened(score, edges, locked)
+  const search = aroundLedger(seeded)
+  const shorten = () => shortened(score, edges, locked, search)
   if (!hasRepairableProblem(score.cost())) return shorten()
 
   /**
@@ -729,6 +737,7 @@ function optimizeSideChoices(
       if (evaluated === undefined) return 'exhausted'
       if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
         score.adopt(trial, evaluated)
+        search.adopted(edge.id, candidate)
         return 'adopted'
       }
     }
@@ -739,7 +748,7 @@ function optimizeSideChoices(
     let improved = false
     for (const edge of trialEdgesFor(edges, align, score.contribution)) {
       const outcome = locked?.has(edge.id) ? 'kept' : improveEdge(edge)
-      if (outcome === 'exhausted') return score.sides()
+      if (outcome === 'exhausted') return search.unconfirmedDropped(score.sides())
       if (!hasRepairableProblem(score.cost())) return shorten()
       improved ||= outcome === 'adopted'
     }
@@ -873,14 +882,16 @@ function steppingRound(
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   locked: ReadonlySet<string> | undefined,
-): ReadonlyMap<string, SidePair> {
+): { sides: ReadonlyMap<string, SidePair>; seeded: ReadonlySet<string> } {
   const around = new Map(seed)
+  const seeded = new Set<string>()
   for (const edge of edges) {
     const pair = seed.get(edge.id)
     if (pair === undefined || locked?.has(edge.id) || styleOf(edge) !== 'straight') continue
     around.set(edge.id, { ...pair, around: true })
+    seeded.add(edge.id)
   }
-  return around
+  return { sides: around, seeded }
 }
 
 /**
@@ -932,7 +943,12 @@ function optimizeAcrossRegions(
     // layout-wide map would therefore buy nothing and hold every completed
     // region's paths until the layout finished.
     const routeCache = new Map<string, readonly Point[]>()
-    const run = (from: ReadonlyMap<string, SidePair>, align: boolean, p: typeof pins) =>
+    const run = (
+      from: ReadonlyMap<string, SidePair>,
+      align: boolean,
+      p: typeof pins,
+      seeded?: ReadonlySet<string>,
+    ) =>
       optimizeSideChoices(
         nodes,
         labels,
@@ -944,8 +960,10 @@ function optimizeAcrossRegions(
         p,
         routeCache,
         budget,
+        seeded,
       )
-    return run(run(steppingRound(seed, regionEdges, styleOf, locked), false, undefined), true, pins)
+    const stepping = steppingRound(seed, regionEdges, styleOf, locked)
+    return run(run(stepping.sides, false, undefined, stepping.seeded), true, pins)
   }
 
   if (edges.length <= CROSSING_OPT_MAX_EDGES) return bothRuns(edges, initial)

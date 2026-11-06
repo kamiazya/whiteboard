@@ -131,6 +131,18 @@ describe('snippetAround strips markdown markup around the match', () => {
     expect(out).not.toMatch(/\*\*|\[\[|\]\]/)
     expect(out).toContain('Ops')
   })
+  it('drops a heading or list marker the cut leaves at the end of the excerpt', () => {
+    // The radius ends right after `##` (or `-`), before the space that
+    // makes it a marker, so the line-start rule never saw a marker to drop.
+    for (const marker of ['##', '-', '1.']) {
+      const value = `ロードマップ${'b'.repeat(CONTEXT_RADIUS - 1 - marker.length)}\n${marker} Next steps`
+      const cutAfter = 'ロードマップ'.length + CONTEXT_RADIUS
+      expect(value.slice(cutAfter - marker.length, cutAfter)).toBe(marker)
+      const out = snippetAround(value, 0, 'ロードマップ'.length)
+      expect(out.endsWith('…')).toBe(true)
+      expect(out).not.toContain(marker)
+    }
+  })
 })
 
 /**

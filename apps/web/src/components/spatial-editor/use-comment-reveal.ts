@@ -18,7 +18,7 @@ import type {
   Viewport,
   ViewportOcclusion,
 } from '../../lib/spatial/viewport.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
 
 /** Long enough to be seen after a pan, short enough not to read as state. */
 const PULSE_MS = 1400
@@ -30,16 +30,16 @@ export interface RevealPulse {
 }
 
 /** The dock paints over the bottom edge too; whichever covers more wins. */
-const withDock = (insets: ViewportOcclusion): ViewportOcclusion => ({
+const withDock = (insets: ViewportOcclusion, root: HTMLElement | null): ViewportOcclusion => ({
   ...insets,
-  bottom: Math.max(DOCK_OCCLUSION_PX, insets.bottom ?? 0),
+  bottom: Math.max(bottomChromeOcclusionPx(root), insets.bottom ?? 0),
 })
 
 type RevealInputs = Parameters<typeof useCommentReveal>[0]
 
 function viewportFor(box: Box, inputs: RevealInputs): Viewport | undefined {
   const { viewport, rootRef, containerSizeOf, insetsOf } = inputs
-  const occlusion = withDock(insetsOf?.() ?? {})
+  const occlusion = withDock(insetsOf?.() ?? {}, rootRef.current)
   return viewportRevealing(box, viewport, containerSizeOf(rootRef.current), occlusion)
 }
 

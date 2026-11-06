@@ -211,7 +211,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 270, // +1: the eraser's dock button
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 224, // the tools are a table now
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 108, // +1: a posted comment is announced; +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
@@ -250,7 +250,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
-  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 156, // +4: a new frame from the dock takes the frame search, so its name strip stays clear; +5: Group frames a selection and opens the new frame's name
+  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 159, // +4: a new frame from the dock takes the frame search, so its name strip stays clear; +5: Group frames a selection and opens the new frame's name; +3: the loose-note row placement and the measured dock occlusion met here from two lanes
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
   'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
@@ -271,7 +271,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // — the whole of what both layouts draw, counted once.
   // +1: the search box's combobox handle, which makes the list its listbox.
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 117,
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 103, // +1: the tag library's badge
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   // The two list effects do not repeat one another on a mount; the lines are the
   // guard plus the paragraph saying which run it skips and which it must not.
@@ -291,7 +291,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 66, // +2: the results announcement and arrow-key handoff
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
-  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
+  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 70, // +7: a dismissal returns to its opener, and a saved rename is announced
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
   // +11: the reveal request and the anchor chip label.
   'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 199,

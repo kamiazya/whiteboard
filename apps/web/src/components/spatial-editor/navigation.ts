@@ -57,6 +57,20 @@ export const DOUBLE_PRESS_WINDOW_MS = 400
  */
 export const DOUBLE_PRESS_SLOP_PX = 40
 
+/**
+ * How far apart a MOUSE or pen's two clicks may land and still be a double
+ * click — the size desktop platforms use, give or take. A finger keeps
+ * `DOUBLE_PRESS_SLOP_PX`: a deliberate double tap wanders far more than a
+ * double click does, and the 200px between two clicks meant to deselect
+ * twice is far more than either.
+ */
+const DOUBLE_CLICK_SLOP_PX = 8
+
+/** The distance two presses by `pointerType` may land apart and still be one double press. */
+export function doublePressSlopPx(pointerType: string): number {
+  return pointerType === 'touch' ? DOUBLE_PRESS_SLOP_PX : DOUBLE_CLICK_SLOP_PX
+}
+
 /** How much closer a hand-mode double press gets. */
 const DOUBLE_PRESS_ZOOM_FACTOR = 2
 

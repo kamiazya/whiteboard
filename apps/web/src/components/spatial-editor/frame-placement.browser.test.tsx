@@ -67,6 +67,30 @@ it('N with a full frame selected grows the frame to hold the note', () => {
   expect(latest.commands.length).toBe(commandsBefore + 1)
 })
 
+it('N in a full frame grows it away from the frame under it, never into it', () => {
+  const later = groupNode({ id: 'l', x: 80, y: 440, width: 264, height: 200, label: 'Later' })
+  const initial: SpatialCanvas = {
+    nodes: [
+      groupNode({ id: 'g', x: 80, y: 80, width: 264, height: 296, label: 'Next' }),
+      later,
+      textNode({ id: 'a', x: 112, y: 112, width: 200, height: 100, text: 'A' }),
+      textNode({ id: 'b', x: 112, y: 244, width: 200, height: 100, text: 'B' }),
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeEditorHost({ initial })
+  const { container } = render(<Host />)
+  selectAt(rootOf(container), 82, 200)
+
+  fireEvent.keyDown(rootOf(container), { key: 'n', code: 'KeyN' })
+
+  const note = created(latest, ['g', 'l', 'a', 'b'])
+  const frame = latest.canvas.nodes.find((n) => n.id === 'g') as SpatialNode
+  expect(frameHolds(frame, note)).toBe(true)
+  expect(intersects(frame, later)).toBe(false)
+  expect(intersects(note, later)).toBe(false)
+})
+
 it('N after a typed note in a frame keeps the next note in that frame', async () => {
   const initial: SpatialCanvas = {
     nodes: [groupNode({ id: 'g', x: 80, y: 80, width: 322, height: 225, label: 'Risks' })],
@@ -103,4 +127,28 @@ it('a new note does not land over a frame name', () => {
 
   const note = created(latest, ['g'])
   expect(intersects(note, { x: 250, y: 316, width: 300, height: 44 })).toBe(false)
+})
+
+it('Add > Frame lays frames out left to right on one top line, a gap apart', async () => {
+  const { Host, latest } = makeEditorHost({
+    initial: { nodes: [], edges: [] },
+    size: { width: 1600, height: 900 },
+  })
+  const { container } = render(<Host />)
+  const labelEditor = () => container.querySelector('[data-testid="group-label-editor"]')
+  for (const name of ['Went well', 'To improve', 'Actions']) {
+    await userEvent.click(page.getByRole('button', { name: 'Add' }))
+    await userEvent.click(page.getByRole('menuitem', { name: 'Frame' }))
+    await vi.waitFor(() => expect(document.activeElement).toBe(labelEditor()))
+    await userEvent.keyboard(`${name}{Control>}{Enter}{/Control}`)
+    await vi.waitFor(() => expect(labelEditor()).toBeNull())
+  }
+
+  const frames = [...latest.canvas.nodes].sort((a, b) => a.x - b.x)
+  expect(frames.map((f) => f.label)).toEqual(['Went well', 'To improve', 'Actions'])
+  const [first, second, third] = frames as [SpatialNode, SpatialNode, SpatialNode]
+  expect(second.y).toBe(first.y)
+  expect(third.y).toBe(first.y)
+  expect(second.x).toBeGreaterThanOrEqual(first.x + first.width + 32)
+  expect(third.x).toBeGreaterThanOrEqual(second.x + second.width + 32)
 })

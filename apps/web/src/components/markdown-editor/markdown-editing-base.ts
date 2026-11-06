@@ -18,6 +18,7 @@ import { emojiShortcodeMarks } from './emoji-shortcode-marks.js'
 import { backspaceEmptyMarkup } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
 import { swallowRetypedMarkerExtension } from './swallow-retyped-marker.js'
+import { taskAnnouncer } from './task-announcer.js'
 
 /**
  * Markdown token styling, as class names rather than inline colors: the
@@ -35,6 +36,11 @@ import { swallowRetypedMarkerExtension } from './swallow-retyped-marker.js'
  * and the enclosing heading's, and a `HighlightStyle` applies every matching
  * rule — so `.cm-md-marker` has to win on the shared properties by order in
  * the stylesheet, not by being the only match.
+ *
+ * `tags.list` is deliberately unstyled: lang-markdown puts it on a list's
+ * whole TEXT, not its marker (the marker is `processingInstruction`), so
+ * styling it muted every list item to the markers' grey and the list read as
+ * disabled beside the paragraphs around it.
  */
 const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, class: 'cm-md-heading' },
@@ -45,7 +51,6 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.url, class: 'cm-md-url' },
   { tag: tags.monospace, class: 'cm-md-code' },
   { tag: tags.quote, class: 'cm-md-quote' },
-  { tag: tags.list, class: 'cm-md-list' },
   { tag: tags.contentSeparator, class: 'cm-md-separator' },
   { tag: tags.labelName, class: 'cm-md-label' },
   { tag: tags.processingInstruction, class: 'cm-md-marker' },
@@ -66,10 +71,14 @@ const markdownHighlightStyle = HighlightStyle.define([
  * - Backspace on an empty list or quote marker removes the marker.
  * - A marker retyped over the one auto-continuation already wrote is
  *   swallowed instead of doubled.
+ * - With `announceTasks`, a task cycled from the keyboard or a button is
+ *   announced (`task-announcer.ts`). Only a host that offers the Task verb
+ *   asks: the region is a second status region on every other one, and a
+ *   comment composer's own announcements would share the page with it.
  * - Prose, not code: long paragraphs soft-wrap instead of growing a
  *   horizontal scrollbar.
  */
-export function markdownEditingBase(): Extension[] {
+export function markdownEditingBase({ announceTasks = false } = {}): Extension[] {
   return [
     syntaxHighlighting(markdownHighlightStyle),
     emojiShortcodeMarks(),
@@ -79,6 +88,7 @@ export function markdownEditingBase(): Extension[] {
     Prec.highest(keymap.of([{ key: 'Backspace', run: backspaceEmptyMarkup }])),
     keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
     swallowRetypedMarkerExtension(),
+    ...(announceTasks ? [taskAnnouncer] : []),
     EditorView.lineWrapping,
   ]
 }

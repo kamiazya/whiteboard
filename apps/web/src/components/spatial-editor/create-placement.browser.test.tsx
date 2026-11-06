@@ -8,7 +8,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFrame } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -177,3 +178,35 @@ function transformOfRoot(container: HTMLElement): string {
   return (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style
     .transform
 }
+
+it('Add > Note lays notes out in the order made, a gap clear of each other', async () => {
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
+  const { container } = render(<Host />)
+  const editor = () => container.querySelector('[data-testid="text-node-editor"]')
+  for (const text of ['one', 'two', 'three', 'four']) {
+    await userEvent.click(page.getByRole('button', { name: 'Add' }))
+    await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
+    await vi.waitFor(() => expect(editor()).not.toBeNull())
+    await userEvent.keyboard(`${text}{Escape}`)
+    await vi.waitFor(() => expect(editor()).toBeNull())
+  }
+
+  const notes = latest.canvas.nodes
+  expect(notes.map((n) => n.resource?.content)).toEqual(['one', 'two', 'three', 'four'])
+  for (const [i, note] of notes.entries()) {
+    for (const other of notes.slice(i + 1)) {
+      const apart =
+        other.x >= note.x + note.width + 32 ||
+        note.x >= other.x + other.width + 32 ||
+        other.y >= note.y + note.height + 32 ||
+        note.y >= other.y + other.height + 32
+      expect(apart, `${note.resource?.content} / ${other.resource?.content}`).toBe(true)
+    }
+  }
+  // Reading order is creation order: each one right of the last, or a row below.
+  for (const [i, note] of notes.slice(1).entries()) {
+    const previous = notes[i] as (typeof notes)[number]
+    const sameRow = note.y === previous.y && note.x > previous.x
+    expect(sameRow || note.y > previous.y + previous.height).toBe(true)
+  }
+})

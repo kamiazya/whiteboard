@@ -162,11 +162,10 @@ export function noteInFrame(
   size: Size,
 ): { readonly center: Point; readonly before: readonly EditorLeafCommand[] } {
   const spot = nextSpotInFrame(frame, nodes, size)
-  if (spot.grownHeight === undefined) return { center: spot.center, before: [] }
-  const { id, x, y, width } = frame
+  if (spot.grow === undefined) return { center: spot.center, before: [] }
   return {
     center: spot.center,
-    before: [{ kind: 'resize-node', id, x, y, width, height: spot.grownHeight }],
+    before: [{ kind: 'resize-node', id: frame.id, ...spot.grow }],
   }
 }
 

@@ -29,6 +29,10 @@ function addedMessage(added: readonly SpatialNode[], next: SpatialCanvas) {
         (node) => node.id !== only.id && !isFrame(node) && frameHolds(only, node),
       )
       if (members.length > 0) return `Framed ${plural(members.length, 'node', 'nodes')}`
+      // Made one after another, frames would each say the same words, and a
+      // screen reader may skip a polite message identical to the last.
+      const frames = next.nodes.filter(isFrame).length
+      if (frames > 1) return `Frame ${frames} added`
     }
     return ADDED[nodeKind(only) ?? ''] ?? 'Node added'
   }
@@ -77,6 +81,31 @@ function membershipMessage(prev: SpatialCanvas, next: SpatialCanvas): string | u
     return now === undefined ? undefined : `${name} moved into ${frameName(now)}`
   if (now === undefined) return `${name} left ${frameName(was)}`
   return `${name} moved from ${frameName(was)} into ${frameName(now)}`
+}
+
+const distance = (delta: number, ahead: string, back: string): string[] =>
+  delta === 0 ? [] : [`${Math.abs(delta)} ${delta > 0 ? ahead : back}`]
+
+/**
+ * Where a run of arrow-key nudges left the selection, said once the run has
+ * settled: who moved, the run's whole distance, and — for one node — the frame
+ * it ended in. Each press saying something would drown the reader.
+ */
+export function nudgeSettledMessage(
+  canvas: SpatialCanvas,
+  ids: readonly string[],
+  moved: { readonly dx: number; readonly dy: number },
+): string | undefined {
+  const nodes = canvas.nodes.filter((node) => ids.includes(node.id))
+  const [only] = nodes
+  if (only === undefined) return undefined
+  const who = nodes.length === 1 ? nodeA11yName(only) : `${nodes.length} nodes`
+  const steps = [...distance(moved.dx, 'right', 'left'), ...distance(moved.dy, 'down', 'up')]
+  if (steps.length === 0) return `${who} back where ${nodes.length === 1 ? 'it was' : 'they were'}`
+  const message = `${who} moved ${steps.join(', ')}`
+  if (nodes.length > 1) return message
+  const frame = frameOf(only, canvas.nodes)
+  return `${message}, ${frame === undefined ? 'not in a frame' : `in ${frameName(frame)}`}`
 }
 
 /**

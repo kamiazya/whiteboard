@@ -9,6 +9,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
+  bystanderOverrides,
   CARRIED_RESIDE_STEP_PX,
   canReuseCarriedSides,
   carriedByGesture,
@@ -189,6 +190,42 @@ describe('frozenSidesOf', () => {
       ],
     }
     expect(frozenSidesOf(scene)).toEqual(new Map([['e1', { fromSide: 'bottom', toSide: 'left' }]]))
+  })
+})
+
+describe('bystanderOverrides', () => {
+  const frozen = new Map([
+    ['still', { fromSide: 'bottom' as const, toSide: 'top' as const }],
+    ['round', { fromSide: 'right' as const, toSide: 'left' as const }],
+    ['carried', { fromSide: 'left' as const, toSide: 'right' as const }],
+  ])
+  const committed = new Map([
+    ['still', { from: { x: 1, y: 2 }, fromLaneDepth: 20, to: { x: 3, y: 4 }, toLaneDepth: 32 }],
+    // The committed search stepped this one round what was in its way.
+    ['round', { from: { x: 5, y: 6 }, to: { x: 7, y: 8 }, around: true as const }],
+    ['carried', { from: { x: 9, y: 9 }, around: true as const }],
+  ])
+  const overrides = bystanderOverrides(frozen, committed, new Set(['carried']))
+
+  it('pins every bystander at its committed sides, anchors and lanes', () => {
+    expect(overrides.get('still')).toEqual({
+      fromSide: 'bottom',
+      toSide: 'top',
+      from: { x: 1, y: 2 },
+      fromLaneDepth: 20,
+      to: { x: 3, y: 4 },
+      toLaneDepth: 32,
+    })
+  })
+
+  it('keeps a bystander that stepped round stepping round', () => {
+    expect(overrides.get('round')?.around).toBe(true)
+    // Only one that did: a corner route is not turned into a detour.
+    expect(overrides.get('still')?.around).toBeUndefined()
+  })
+
+  it('leaves carried edges to the optimizer', () => {
+    expect(overrides.has('carried')).toBe(false)
   })
 })
 
