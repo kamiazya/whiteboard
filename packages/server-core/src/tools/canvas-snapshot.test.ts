@@ -6,7 +6,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
@@ -94,7 +94,6 @@ describe('wb_canvas_snapshot tool', () => {
       // has to tell "no lines" from "this server does not report lines"
       // cannot, and an optional array is exactly that ambiguity.
       lines: [],
-      comments: [],
       nodeCount: 4,
       edgeCount: 1,
       lineCount: 0,
@@ -604,39 +603,28 @@ describe('projectCanvasSnapshot — what an edge and a line keep, and when it re
   })
 })
 
-describe('wb_canvas_snapshot comments', () => {
-  const openThread = (id: string, anchor: CommentThread['anchor']): CommentThread => ({
-    id,
-    anchor,
-    status: 'open',
-    messages: [{ id: `${id}-m`, body: `about ${id}` }],
-  })
-
-  test('lists a thread anchored on the canvas and leaves out one anchored on the whole document', async () => {
+describe('wb_canvas_snapshot and the annotation layer', () => {
+  test('carries no comments: the conversation is read whole from wb_document_get', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a' })],
         edges: [],
       })
-      writeCommentThread(doc, openThread('pin', { kind: 'spatial', x: 3, y: 4 }))
-      writeCommentThread(doc, openThread('whole', { kind: 'document' }))
+      writeCommentThread(doc, {
+        id: 'pin',
+        anchor: { kind: 'spatial', x: 3, y: 4 },
+        status: 'open',
+        messages: [{ id: 'pin-m', body: 'about pin' }],
+      })
     })
 
-    const result = await createCanvasSnapshotTool(await makeDeps(store)).execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-    })
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
-    // `comments` is the canvas's own layer: each entry stands at a canvas
-    // position, which a document-level thread does not have.
-    expect(result.comments.map((comment) => comment.id)).toEqual(['pin'])
-  })
-
-  test('tells a reader the document-level threads are not in the list, and where to find them', async () => {
-    const { description } = createCanvasSnapshotTool(await makeDeps(new FakeDocumentStore()))
-
-    expect(description).toMatch(/whole-document/i)
-    expect(description).toContain('wb_document_get')
+    expect(result).not.toHaveProperty('comments')
+    expect(Object.keys(tool.outputSchema.shape)).not.toContain('comments')
+    expect(tool.description).toMatch(/comment/i)
+    expect(tool.description).toContain('wb_document_get')
   })
 })

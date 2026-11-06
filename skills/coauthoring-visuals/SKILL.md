@@ -220,8 +220,8 @@ is part of the loop: read them before you redraw, and answer in the thread rathe
 - **Read.** `wb_document_get({ workspaceId, documentIds: [documentId] })` returns, on each document of either
   kind, a `threads` list: every thread whole, with its anchor (a node, an edge, a point, a quoted
   passage, or the document as a whole), its `open` or `resolved` status, and every message with
-  author and time. A document nobody commented on has no `threads`. `wb_canvas_snapshot`'s
-  `comments` carry only each thread's opening message, so it is not the read for the conversation.
+  author and time. A document nobody commented on has no `threads`. `wb_canvas_snapshot` carries
+  no comments, so it is not the read for the conversation.
 - **Reply.** `wb_thread_edit({ workspaceId, documentId, ops: [{ op: "message.add", threadId, body }] })`.
   Its answer is the document's threads, so you see the conversation you joined.
 - **Open or close.** `thread.add` opens a thread on an anchor, `thread.resolve` closes one

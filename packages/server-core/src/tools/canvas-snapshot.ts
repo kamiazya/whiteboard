@@ -4,7 +4,6 @@ import {
   type CanvasEdge,
   type CanvasLine,
   canvasColorSchema,
-  canvasCommentSchema,
   canvasEdgeSchema,
   canvasLineSchema,
   documentIdSchema,
@@ -159,12 +158,6 @@ export const canvasSnapshotSchema = z
     lineCount: z.number().int().nonnegative(),
     /** True when ANY of the three lists, or a node's text, was cut. */
     truncated: z.boolean(),
-    /**
-     * The annotation layer (ADR-0024), resolved records included — they are
-     * the conversation about the board, which is exactly what a reader
-     * deciding what to change needs to see.
-     */
-    comments: z.array(canvasCommentSchema),
     /**
      * Present only when asked for. Derived from a full LAYOUT pass, which is
      * why it is opt-in: these boxes are where things actually get drawn
@@ -342,7 +335,6 @@ export function projectCanvasSnapshot(
     nodes: projected.map((entry) => entry.node),
     edges,
     lines: allLines.slice(0, SNAPSHOT_MAX_EDGES).map(projectLine),
-    comments: canvas.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,
     lineCount: allLines.length,
@@ -394,7 +386,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_snapshot' as const,
     description:
-      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge and every line with its bends and facets. Long text and large boards are cut, and the true totals (nodeCount, edgeCount, lineCount) are reported alongside so nothing is hidden silently. Comments hold only the opening message of a thread, and leave out whole-document threads, which have no place on the canvas; wb_document_get has every thread whole. Prefer this over wb_document_get when reading a canvas to decide what to change.',
+      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge and every line with its bends and facets. Long text and large boards are cut, and the true totals (nodeCount, edgeCount, lineCount) are reported alongside so nothing is hidden silently. Comments are not part of the board: wb_document_get reads every thread whole. Prefer this over wb_document_get when reading a canvas to decide what to change.',
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
