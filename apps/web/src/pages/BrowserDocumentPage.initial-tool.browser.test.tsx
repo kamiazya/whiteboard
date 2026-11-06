@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -16,7 +16,7 @@ claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
 // document the backend actually loads — the input the opening tool once
 // depended on, and must not any more.
 async function mountLoaded(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

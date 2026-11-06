@@ -72,8 +72,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'apps/web/src/lib/browser-idb-upgrades.ts': { count: 1, why: 'ordinary English' },
-  'apps/web/src/lib/browser-idb.ts': { count: 2, why: 'ordinary English' },
   'apps/web/src/lib/document-outline.ts': { count: 2, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.test.ts': { count: 1, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.ts': { count: 1, why: 'ordinary English' },
@@ -82,18 +80,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     why: 'says the flow is gone, or what a migration drops',
   },
   'apps/web/src/lib/render-preview.ts': { count: 1, why: 'ordinary English' },
-  'apps/web/src/lib/user-settings-store.property.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/lib/user-settings-store.test.ts': {
-    count: 2,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/lib/user-settings-store.ts': {
-    count: 2,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'packages/canvas-render/src/layout/edges/edge-anchors.ts': { count: 1, why: 'ordinary English' },
   'packages/canvas-render/src/layout/edges/grid-route.ts': { count: 1, why: 'ordinary English' },
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': { count: 2, why: 'ordinary English' },

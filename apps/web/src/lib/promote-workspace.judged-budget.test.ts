@@ -16,12 +16,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
 claimIsolatedWhiteboardDb('promote-workspace-judged-budget-node')
@@ -68,7 +68,7 @@ function noteBody(text: string): Uint8Array {
 
 /** A note saved three times, oldest first: a long body, then two short ones. */
 async function noteWithThreeVersions(): Promise<string[]> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const docs = new BrowserWorkspaceDocs()
@@ -81,7 +81,7 @@ async function noteWithThreeVersions(): Promise<string[]> {
     [2_000, 'b'.repeat(20)],
     [3_000, 'c'.repeat(20)],
   ] as const) {
-    expect(await seedWorkspaceDocumentContent(note.documentId, noteBody(body))).toBe(true)
+    await seedTreeContent(note.documentId, noteBody(body))
     now.mockReturnValue(at)
     ids.push((await store.save(workspaceId, 'note', { label: `at ${at}` })).id)
   }

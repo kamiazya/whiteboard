@@ -17,11 +17,11 @@ import {
   versionsBackendContract,
 } from '../test-utils/versions-backend.contract.js'
 import { BrowserBackend } from './browser-backend.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -51,7 +51,7 @@ function textOf(doc: LoroDoc | null): string | undefined {
 async function browserHarness(): Promise<VersionsBackendHarness> {
   await clearWhiteboardDb()
   const workspaceId = getBrowserWorkspaceId()
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await index.createWorkspace({ workspaceId })
   const { documentId } = await index.createDocument({
     workspaceId,

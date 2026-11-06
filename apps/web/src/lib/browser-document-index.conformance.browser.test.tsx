@@ -28,9 +28,9 @@ import {
   describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BLOBS_STORE, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { inTransaction, request } from './idb-tx.js'
 
 let caseN = 0
@@ -46,11 +46,11 @@ function deleteDb(name: string): Promise<void> {
   })
 }
 
-async function freshIndex(): Promise<{ index: FoldingBrowserIndex; dbName: string }> {
+async function freshIndex(): Promise<{ index: BrowserDocumentIndex; dbName: string }> {
   caseN += 1
   const dbName = `whiteboard-folding-conformance-${caseN}`
   await deleteDb(dbName)
-  return { index: new FoldingBrowserIndex(dbName), dbName }
+  return { index: new BrowserDocumentIndex(dbName), dbName }
 }
 
 /** Every blob the index's store holds; the trash suite only evacuates documents. */
@@ -67,7 +67,7 @@ async function blobCount(dbName: string): Promise<number> {
   }
 }
 
-describe('FoldingBrowserIndex', () => {
+describe('BrowserDocumentIndex', () => {
   describeDocumentIndexConformance(async () => {
     const { index, dbName } = await freshIndex()
     return {
@@ -89,21 +89,21 @@ describe('FoldingBrowserIndex', () => {
 // The class declares the pins and trash ports too, and the browser's pinned
 // list and trash are served from it — so it is held to their suites, not only
 // to the one its inner index already passes.
-describe('FoldingBrowserIndex pins', () => {
+describe('BrowserDocumentIndex pins', () => {
   describeDocumentPinsConformance(async () => {
     const { index, dbName } = await freshIndex()
     return { index, dispose: () => deleteDb(dbName) }
   })
 })
 
-describe('FoldingBrowserIndex folders', () => {
+describe('BrowserDocumentIndex folders', () => {
   describeDocumentFoldersConformance(async () => {
     const { index, dbName } = await freshIndex()
     return { index, dispose: () => deleteDb(dbName) }
   })
 })
 
-describe('FoldingBrowserIndex trash', () => {
+describe('BrowserDocumentIndex trash', () => {
   describeDocumentTrashConformance(async () => {
     const { index, dbName } = await freshIndex()
     return {
@@ -155,7 +155,7 @@ function markdownContent(dbName: string) {
   }
 }
 
-describe('FoldingBrowserIndex duplicates', () => {
+describe('BrowserDocumentIndex duplicates', () => {
   describeDocumentDuplicatesConformance(async () => {
     const { index, dbName } = await freshIndex()
     return { index, content: markdownContent(dbName), dispose: () => deleteDb(dbName) }

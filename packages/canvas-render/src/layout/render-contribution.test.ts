@@ -13,7 +13,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
   layoutSpatialCanvas,
@@ -151,3 +151,13 @@ describe('a render contribution', () => {
 // Imported late so the "nothing wired" case above reads as the default rather
 // than as this constant.
 import { visualRenderContribution as VISUAL_FOR_TEST } from '@kamiazya/whiteboard-plugin-visual/render'
+
+// What a contribution may NOT carry. Edge routing is canvas-render's own
+// (`routeEdge`, and the bends a model edge stores), so no plugin ABI for an
+// edge algorithm exists; and a node's silhouette is read from its facets and
+// the theme, never handed in per call.
+it('accepts no contributed edge router and no per-call outline override', () => {
+  expectTypeOf<RenderContribution>().not.toHaveProperty('routers')
+  expectTypeOf<RenderContribution>().not.toHaveProperty('readRouting')
+  expectTypeOf<SpatialLayoutOptions>().not.toHaveProperty('nodeOutlines')
+})

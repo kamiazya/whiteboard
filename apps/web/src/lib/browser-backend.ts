@@ -4,7 +4,6 @@ import type {
   SyncWriteRefusal,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
-  adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -17,12 +16,11 @@ import {
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { Loro, type LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs, saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { foldOrServeTheTree } from './fold-workspace.js'
-import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { touchContentTimestamp } from './loro-store.js'
 import {
   listenToWorkspace,
   type WorkspaceBroadcast,
@@ -34,49 +32,13 @@ import { isWorkspaceRemovedError } from './workspace-tombstone.js'
 /**
  * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
  * needs to place the document in the workspace tree when it is not there yet
- * (a fresh document, or a record the startup fold could not classify) — the
- * page already holds all three from the index row it loaded.
+ * — the page already holds all three from the index row it loaded.
  */
 export interface BrowserBackendTarget {
   documentId: string
   path: string
   kind: DocumentKind
   name?: string
-}
-
-/**
- * A record this session must not place an empty node over. The first three
- * know the record is unreadable; `read-unavailable` refuses from the opposite
- * knowledge — it knows NOTHING, and falling through would take the "there is
- * no old record" branch and shadow a document that may be sitting on disk
- * intact, reached by a transient IndexedDB failure.
- */
-function isUnreadableLegacyRecord(
-  kind: string,
-): kind is 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'read-unavailable' {
-  return (
-    kind === 'corrupt-snapshot' ||
-    kind === 'corrupt-delta' ||
-    kind === 'unsupported-version' ||
-    kind === 'read-unavailable'
-  )
-}
-
-/** The node for this document: adopted from a readable legacy record, or empty. */
-function placeDocumentNode(
-  workspaceDoc: LoroDoc,
-  target: { documentId: string; path: string; kind: DocumentKind; name?: string },
-  legacy: { kind: string; snapshot?: Uint8Array; deltas?: readonly Uint8Array[] },
-): ReturnType<typeof createWorkspaceDocumentAtPath> {
-  const { documentId, path, kind, name } = target
-  const placement = { path, documentId, kind, ...(name === undefined ? {} : { name }) }
-  if (legacy.kind !== 'ok' || legacy.snapshot === undefined) {
-    return createWorkspaceDocumentAtPath(workspaceDoc, placement)
-  }
-  const source = new Loro()
-  source.import(legacy.snapshot)
-  for (const delta of legacy.deltas ?? []) source.import(delta)
-  return adoptWorkspaceDocument(workspaceDoc, placement, source)
 }
 
 /**
@@ -127,15 +89,6 @@ const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: nul
  * (`DocumentStoreWorkspaceDocs.save`): append a delta per push, fold when the
  * log passes the budget, never write when nothing changed.
  *
- * connect() runs the startup fold first, so per-document records written by
- * older builds (or seeded by tests through the old stores) are in the tree
- * before the snapshot is delivered. A record the fold deliberately left
- * behind is handled here, where the page's own knowledge fills the gap:
- * a pre-kind row is adopted under the kind the page opened it as, and an
- * unreadable record surfaces its load failure instead of being shadowed by
- * an empty tree node — the old record stays the damaged document's home.
- *
- *
  * TOCTOU safety: all writes are serialized through a per-instance promise
  * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
  * order.
@@ -143,7 +96,6 @@ const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: nul
 export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
   private readonly docs: WorkspaceDocs
-  private readonly legacy: LoroStore
   private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
   /** The live workspace document — set once connect() has delivered it. */
@@ -166,10 +118,9 @@ export class BrowserBackend implements DocumentBackend {
   /** How far into the stored record a catch-up has read this copy; null before the first. */
   private cursor: WorkspaceDocCursor | null = null
 
-  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs, legacy?: LoroStore) {
+  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs) {
     this.target = target
     this.docs = docs ?? new BrowserWorkspaceDocs()
-    this.legacy = legacy ?? new LoroStore()
   }
 
   connect(handlers: DocumentBackendHandlers): void {
@@ -505,20 +456,7 @@ export class BrowserBackend implements DocumentBackend {
     }
   }
 
-  /**
-   * Any per-document records first fold into the tree, so a document created
-   * by an older build is served from the same place as everything else.
-   * Derived work list — a second connect finds nothing pending. A failure
-   * leaves `placeMissingDocument` to classify this backend's own document.
-   */
-  private async foldLegacyRecords(): Promise<void> {
-    await foldOrServeTheTree(getAppLogger('browser-backend'))
-  }
-
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
-    await this.foldLegacyRecords()
-    if (this.isStale(handlers)) return
-
     const workspaceId = getBrowserWorkspaceId()
     const hear = this.hearFromTheStart(workspaceId, handlers)
     let workspaceDoc: LoroDoc
@@ -577,24 +515,15 @@ export class BrowserBackend implements DocumentBackend {
   }
 
   /**
-   * The document is not in the tree after the fold. Three explanations, three
-   * answers:
-   *
-   * - its old record is UNREADABLE → surface that record's own failure and
-   *   deliver nothing. Creating an empty node here would shadow a document
-   *   that still exists, which reads as "your work is gone" over data that is
-   *   sitting on disk.
-   * - its old record reads but the fold could not classify it (a pre-kind
-   *   row) → adopt it under the kind the page opened it as; the page's row is
-   *   the same knowledge the fold lacked.
-   * - there is no old record → a fresh document; place an empty node.
+   * The document is not in the tree: a document the page resolved from an
+   * index with no record behind it, placed as an empty node.
    *
    * Unless the record already answers for the id: then it is in the trash —
    * deleted after the page resolved it — and a node placed here would stand
    * beside the trashed copy and turn its restore into a second node under one
    * id. `read-unavailable` for the reason the path collision below gives.
    *
-   * Returns false when delivery must stop (the unreadable and trashed cases).
+   * Returns false when delivery must stop (the trashed and collision cases).
    */
   private async placeMissingDocument(
     workspaceId: string,
@@ -608,14 +537,15 @@ export class BrowserBackend implements DocumentBackend {
       if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
       return false
     }
-    const legacy = await this.legacy.load(this.target.documentId)
-    if (isUnreadableLegacyRecord(legacy.kind)) {
-      if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
-      return false
-    }
-    const placed = placeDocumentNode(workspaceDoc, this.target, legacy)
+    const { documentId, path, kind, name } = this.target
+    const placed = createWorkspaceDocumentAtPath(workspaceDoc, {
+      path,
+      documentId,
+      kind,
+      ...(name === undefined ? {} : { name }),
+    })
     if (placed === null) {
-      // Neither helper placed the target: a DIFFERENT document already owns
+      // The target was not placed: a DIFFERENT document already owns
       // `path` (the id itself is absent, or this method was not reached).
       // Delivering anyway hands the session bytes with no node for this
       // document, which it reports as `corrupt-snapshot` — and the page

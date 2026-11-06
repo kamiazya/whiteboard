@@ -9,10 +9,9 @@ import type { DocRef } from './doc-ref.js'
  * This is a STORED value, not an in-memory label: it is the daemon's `docKey`
  * column on `documentSnapshots` / `documentSnapshotChunks` /
  * `documentFrontiers` / `documentDeltas`, and the browser's key into the
- * matching IndexedDB stores. Changing it means migrating those rows — see
- * mcp-server's `0013-document-dockey-prefix` — and moving every frozen
- * literal that a boot-time routine still writes, which is why `importFsBlobs`
- * takes its prefix from here rather than spelling it itself.
+ * matching IndexedDB stores. Changing it means migrating those rows in both
+ * keepers, and any writer that spelled the prefix itself would go on writing
+ * the old one — so every writer takes it from here.
  *
  * It lives in `ports` rather than beside one implementation for the reason
  * above: two stores that disagree about this string are two stores that

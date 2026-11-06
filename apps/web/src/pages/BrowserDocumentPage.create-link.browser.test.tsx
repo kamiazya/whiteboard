@@ -2,9 +2,9 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
@@ -25,7 +25,7 @@ describe('BrowserDocumentPage link create (real IndexedDB)', () => {
   })
 
   it('creates the note, rewrites the link and says so', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'week-1', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
     await focusEditable(() =>
@@ -54,7 +54,7 @@ describe('BrowserDocumentPage link create (real IndexedDB)', () => {
   })
 
   it('opens the made note with its name in the title field', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'week-1', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
     await focusEditable(() =>

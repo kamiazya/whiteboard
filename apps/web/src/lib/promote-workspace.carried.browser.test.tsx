@@ -14,13 +14,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
@@ -88,7 +88,7 @@ async function storePicture(id: string) {
  * the canvas no longer draws, and a trashed canvas that drew another.
  */
 async function seedWorkspace() {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const docs = new BrowserWorkspaceDocs()
@@ -96,21 +96,14 @@ async function seedWorkspace() {
   const gone = await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
   await storePicture('only-in-a-version')
   await storePicture('only-in-the-trash')
-  expect(
-    await seedWorkspaceDocumentContent(
-      sketch.documentId,
-      canvasWith([picture('only-in-a-version')]),
-    ),
-  ).toBe(true)
-  expect(
-    await seedWorkspaceDocumentContent(gone.documentId, canvasWith([picture('only-in-the-trash')])),
-  ).toBe(true)
+  await seedTreeContent(sketch.documentId, canvasWith([picture('only-in-a-version')]))
+  await seedTreeContent(gone.documentId, canvasWith([picture('only-in-the-trash')]))
   const drafted = await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', {
     label: 'as drafted',
     operator: { kind: 'human', displayName: 'Yuki' },
   })
   const plain = textNode({ id: 't', x: 0, y: 0, width: 80, height: 40, text: 'redrawn' })
-  expect(await seedWorkspaceDocumentContent(sketch.documentId, canvasWith([plain]))).toBe(true)
+  await seedTreeContent(sketch.documentId, canvasWith([plain]))
   await index.deleteDocument({ workspaceId, path: 'gone' })
   return { sketch, gone, drafted }
 }

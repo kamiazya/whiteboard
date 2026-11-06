@@ -96,7 +96,7 @@ describe('the transfer names its destination a keeper', () => {
     expect(source('lib/replica-store.ts')).toContain('daemonBaseUrl')
   })
 
-  it("does not touch the migration's own spelling of the stored key", () => {
+  it('does not touch the stored spelling of the key', () => {
     // Pinned to the DECLARATION rather than to the file, because
     // `user-settings-store.ts` spells `daemonBaseUrl` many times and a
     // `toContain` over the whole file passes while a sweep renames some of
@@ -104,14 +104,12 @@ describe('the transfer names its destination a keeper', () => {
     // green — the same membership-versus-count weakness review caught in
     // `chunk-size-one-place.test.ts` earlier the same day.
     //
-    // `legacyPromotionResultSchema` is what the v3 migration reads an OLD
-    // payload through, so it is untouchable twice over: a stored shape, and
-    // a migration's own text, which `vocabulary.md` calls history and never
-    // renamed.
+    // The promotion record is a STORED shape: renaming the field reads every
+    // record already written as one that never named its daemon.
     const settings = source('lib/user-settings-store.ts')
-    const legacy = /const legacyPromotionResultSchema = z[\s\S]*?\n {2}\}\)/.exec(settings)
-    expect(legacy, 'legacyPromotionResultSchema is no longer declared').not.toBeNull()
-    expect(legacy?.[0]).toContain('daemonBaseUrl: httpUrl.optional()')
+    const stored = /const promotionResultCommonFields = \{[\s\S]*?\n\}/.exec(settings)
+    expect(stored, 'promotionResultCommonFields is no longer declared').not.toBeNull()
+    expect(stored?.[0]).toContain('daemonBaseUrl: httpUrl.optional()')
   })
 
   it('the caller passes the new name without adopting it', () => {

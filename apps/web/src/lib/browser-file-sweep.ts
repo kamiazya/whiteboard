@@ -13,16 +13,18 @@
  *
  * It stands down rather than guess, in four cases:
  *
- * - a per-document record the startup fold has not taken into a workspace
- *   (or could not read) — its images are named by nothing the scan walks;
+ * - a per-document record an older build wrote outside the workspace tree
+ *   (the browser keeper refuses that workspace) — its images are named by
+ *   nothing the scan walks;
  * - a record that will not open, or something inside one the scan could not
  *   judge — the shared definition's fail-closed answer;
  * - a record that MOVED while the scan ran: what it judged no longer exists.
  *   That is the daemon's fence; what remains after it is covered by the grace
  *   window, which keeps a fresh upload whose node has not been saved yet.
  *
- * ponytail: a per-document record that stays unreadable keeps every sweep
- * standing down; clearing it (Start fresh, or deleting it) lets them run.
+ * ponytail: a per-document record keeps every sweep standing down for as
+ * long as it is stored; nothing in this build clears one, so only clearing
+ * the site's data lets them run.
  */
 import { DEFAULT_FILE_GRACE_MS, scanFileReferences } from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'

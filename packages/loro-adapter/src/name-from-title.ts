@@ -139,10 +139,9 @@ export function seedNameFromTitle(workspace: LoroDoc, documentId: string): void 
  * which reads as a rename nobody made. Before the caller's save, so the name
  * rides the same write and its fan-out.
  *
- * Two writes inside this package call `writeWorkspaceDocumentContent` bare on
+ * One write inside this package calls `writeWorkspaceDocumentContent` bare on
  * purpose, because the caller supplies the name: `duplicateWorkspaceDocument`
- * (the copy's name is chosen) and `adoptWorkspaceDocument` (a fold carries the
- * name the document already had). A browser create writes no content at all —
+ * (the copy's name is chosen). A browser create writes no content at all —
  * its node starts empty — so it has nothing to name from.
  * `document-content-write-one-place.test.ts` keeps the bare write inside here.
  */

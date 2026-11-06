@@ -11,13 +11,13 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { LoroStore } from '../lib/loro-store.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { setViewport } from '../test-utils/viewport.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 
@@ -58,8 +58,8 @@ it('colours a tag from its chip, so the box carrying it is drawn in it and the l
     ],
     edges: [],
   })
-  await new LoroStore().save(id, doc.export({ mode: 'snapshot' }))
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  await seedTreeContent(id, doc.export({ mode: 'snapshot' }))
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
   await waitFor(() => expect(boxFill()).not.toBeNull(), { timeout: 15_000 })
   const before = boxFill()

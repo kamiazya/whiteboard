@@ -8,9 +8,9 @@ import 'fake-indexeddb/auto'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -20,7 +20,7 @@ claimIsolatedWhiteboardDb('browserindexpage-tree-view')
 
 /** One note in the workspace tree, the plane a create in this app writes. */
 async function seedRoadmap(): Promise<void> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -35,7 +35,7 @@ function renderPage() {
   const onOpenDocument = vi.fn()
   render(
     <MemoryRouter initialEntries={['/']}>
-      <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={onOpenDocument} />
+      <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={onOpenDocument} />
     </MemoryRouter>,
     { container: document.body },
   )

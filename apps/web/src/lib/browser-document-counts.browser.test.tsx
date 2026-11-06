@@ -4,7 +4,11 @@
  * because the count cannot be had without them.
  */
 
-import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  createWorkspaceDocumentAtPath,
+  writeWorkspaceDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -12,16 +16,13 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
-import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore } from './loro-store.js'
 
 const DB_NAME = claimIsolatedWhiteboardDb('browser-doc-counts')
 const ACTIVE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -46,42 +47,22 @@ function spatialDoc(text: string): Loro {
   return doc
 }
 
-/**
- * An OLDER build's documents: rows in the legacy per-document plane, which
- * only the startup fold moves into the tree. Only the original browser
- * workspace can have these — multi-workspace arrived after the tree did.
- */
-async function seedLegacy(workspaceId: string, paths: readonly string[]): Promise<void> {
-  await new IdbDocumentIndex(DB_NAME).createWorkspace({ workspaceId })
-  for (const path of paths) {
-    const entry = await seedLegacyRow({ workspaceId, path, kind: 'spatial' }, DB_NAME)
-    await new LoroStore(DB_NAME).save(
-      entry.documentId,
-      spatialDoc(path).export({ mode: 'snapshot' }),
-    )
-  }
-}
-
 /** What every workspace created today holds: documents already in the tree. */
 async function seedTree(workspaceId: string, paths: readonly string[]): Promise<void> {
   await new IdbDocumentIndex(DB_NAME).createWorkspace({ workspaceId })
   const docs = new BrowserWorkspaceDocs(DB_NAME)
   const workspace = await docs.create(workspaceId)
-  for (const [i, path] of paths.entries()) {
-    adoptWorkspaceDocument(
-      workspace,
-      { path, documentId: `01ARZ3NDEKTSV4RRFFQ69G5F0${i}`, kind: 'spatial' },
-      spatialDoc(path),
-    )
+  for (const path of paths) {
+    const documentId = generateDocumentId()
+    createWorkspaceDocumentAtPath(workspace, { path, documentId, kind: 'spatial' })
+    writeWorkspaceDocumentContent(workspace, documentId, spatialDoc(path))
   }
   await docs.save(workspaceId, workspace)
 }
 
 it('counts each workspace separately', async () => {
-  // One workspace per plane, because both are real and only one of them
-  // is reached by the fold.
-  await seedLegacy(ACTIVE, ['design', 'archive/notes'])
-  await seedTree(SECOND, ['only-one'])
+  await seedTree(ACTIVE, ['design', 'archive/notes'])
+  await seedTree(SECOND, ['only-one-other'])
 
   const counts = await browserDocumentCounts(DB_NAME)
 
@@ -91,11 +72,10 @@ it('counts each workspace separately', async () => {
   // not count, so the absence has to fail here or nowhere.
   //
   // Asserted as a SUBSET rather than the whole key set: opening a fresh
-  // database runs its upgrade chain, which seeds a `'local'` row and then
-  // rekeys it to a freshly minted canonical ULID. That third workspace is
-  // the database's, not this test's, and pinning an exact set would make
-  // this fail whenever the migrations change something it never meant to
-  // assert about.
+  // database creates its baseline, which mints a workspace row of its own
+  // under a fresh canonical ULID. That third workspace is the database's,
+  // not this test's, and pinning an exact set would make this fail whenever
+  // the baseline changes something it never meant to assert about.
   expect(counts.has(ACTIVE)).toBe(true)
   expect(counts.has(SECOND)).toBe(true)
   expect(counts.get(ACTIVE)).toBe(2)
@@ -113,21 +93,15 @@ it('answers 0 for a workspace that exists and holds nothing', async () => {
   expect(counts.get(ACTIVE)).toBe(0)
 })
 
-it('counts a document the fold left behind, as the list does', async () => {
+it('leaves a refused workspace uncounted rather than counting it as empty', async () => {
   const logged = expectLoggedFailures()
-  await seedLegacy(ACTIVE, ['readable'])
-  // An envelope from a build this one does not know: the fold skips it and
-  // the legacy row keeps serving it, so the list still shows it.
-  const damaged = await seedLegacyRow(
-    { workspaceId: ACTIVE, path: 'damaged', kind: 'spatial' },
-    DB_NAME,
-  )
-  await seedSyncDocument(damaged.documentId, { raw: { v: 99 } }, DB_NAME)
+  await seedTree(SECOND, ['kept'])
+  await new IdbDocumentIndex(DB_NAME).createWorkspace({ workspaceId: ACTIVE })
+  await seedLegacyRow({ workspaceId: ACTIVE, path: 'old', kind: 'spatial' }, DB_NAME)
 
   const counts = await browserDocumentCounts(DB_NAME)
-  const listed = await new FoldingBrowserIndex(DB_NAME).listDocuments({ workspaceId: ACTIVE })
 
-  expect(listed.map((row) => row.path)).toEqual(['damaged', 'readable'])
-  expect(counts.get(ACTIVE)).toBe(listed.length)
-  expect(logged.join('\n')).toContain('startup fold left documents behind')
+  expect(counts.has(ACTIVE)).toBe(false)
+  expect(counts.get(SECOND)).toBe(1)
+  expect(logged.join('\n')).toContain('could not count a workspace')
 })

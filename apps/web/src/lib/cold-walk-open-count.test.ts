@@ -14,12 +14,15 @@ import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import {
+  seedTreeContent,
+  seedWorkspaceDocumentContent,
+} from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('cold-walk-open-count')
@@ -28,8 +31,8 @@ const DOCUMENTS = 20
 // Seeding twenty documents through fake IndexedDB outlasts the default under a loaded parallel run.
 const SEEDED_WALK_TIMEOUT_MS = 30_000
 
-async function seedWorkspace(): Promise<{ index: FoldingBrowserIndex; documentIds: string[] }> {
-  const index = new FoldingBrowserIndex()
+async function seedWorkspace(): Promise<{ index: BrowserDocumentIndex; documentIds: string[] }> {
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const documentIds: string[] = []
   for (let n = 0; n < DOCUMENTS; n++) {
@@ -42,9 +45,7 @@ async function seedWorkspace(): Promise<{ index: FoldingBrowserIndex; documentId
     writeDocumentKind(doc, 'markdown')
     writeCoreFacets(doc, { type: 'note', tags: [`t${n % 7}`] })
     writeMarkdownBody(doc, `Body ${n} links [[docs/d0]].`)
-    expect(
-      await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' })),
-    ).toBe(true)
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     documentIds.push(entry.documentId)
   }
   return { index, documentIds }

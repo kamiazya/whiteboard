@@ -139,32 +139,21 @@ setter, and the chain it fed — `DocumentPage`'s `drawAs` state,
 `SpatialEditorPane`'s and `SpatialEditor`'s prop, `useWorkerScene`'s and
 `use-drag-layers`' option, `CanvasContextMenu`'s swatch palette, and the
 `style` parameter of `useThemeFaceFor` / `useEditingFontFamily` — went with
-it. The argument survives one layer down, at `lib/spatial/scene-render*`,
-`lib/theme-fonts` and `LayoutRequest.style`, where a headless caller still
-asks for `'clean'`; the editor reaches all of them with the `'document'`
-default. `SpatialEditor.theme.test.tsx` pins that the editor draws the theme
+it. The argument is gone from this app too (2026-11-06): nothing asked for
+another look, so `editorLayoutBase` fixes `style: 'document'` and no option,
+request field or helper parameter carries one. `style` survives in
+canvas-render and in `wb_scene_render`. `SpatialEditor.theme.test.tsx` pins that the editor draws the theme
 the canvas names and reads it from the canvas rather than hardcoding one
 look — two themes, because one case passes against a hardcode too.
 
 Three consequences, each with its guard:
 
-- **The render key gains no axis, and the two LAYOUT caches still carry
-  one.** The theme is a canvas facet, so a document's content digest already
-  changes when its theme does, and the registered assets are part of the
-  build id. No surface in this app draws a document in two looks, which is
-  what would need an axis on `render-key.ts`. The caches are the other
-  answer to the same question, and they keep their axis because `style`
-  still crosses below the chrome: the layout worker's body-memo store
-  (`lib/layout-content-caches.ts`) is keyed on the UI mode AND the request's
-  `style` — absent normalised to `'document'`, the default both threads take
-  — and canvas-render's own text-node body key carries the resolved theme id.
-  Without them a `'clean'` request and a `'document'` one of the same node
-  shared an entry, and whichever was laid out first answered the other, so a
-  body could be served painted in the other look's ink. The **Draw as** row
-  that made that reachable from the UI is gone (see above), and the axis
-  stays: a headless caller still asks for `'clean'` through the same
-  composition. An un-themed canvas keys identically under every style, so
-  nothing else's cache churns.
+- **No cache carries a look axis.** The theme is a canvas facet, so a
+  document's content digest changes with it, and canvas-render's text-node
+  body key carries the resolved theme id — which keeps an unthemed body from
+  answering a themed layout of the same node
+  (`layout-worker-theme.browser.test.tsx`). The worker's body-memo store is
+  keyed on UI mode and reference wire only.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an
@@ -345,24 +334,24 @@ than truncating a paste.
 
 ### The settings migrations are total, and say so under a property
 
-`lib/user-settings-store.property.test.ts` draws whole v1, v2 and v3
-payloads from the legacy schemas (URL fields overridden to real http(s)
-URLs, since a random string is never one) and requires each chain to the
-live shape (`migrateV3(migrateV2(migrateV1(v1)))`, and so on) to parse under
-the live `.strict()` schema while carrying each field across by name — or,
-for what v4 retired, provably dropping it — then reads each through the real
-store from `localStorage` and round-trips a live payload through
-`save`/`load`. The class it closes is the one `vocabulary.md` records: the
-loader falls back to defaults on ANY parse failure, so a migration emitting
-one key the live schema does not admit discards a user's whole payload
-silently. The schemas and the migrations are exported for it and for nothing
-else.
+`lib/user-settings-store.property.test.ts` draws whole v4 payloads from
+`legacyV4SettingsSchema` (URL strings overridden to real http(s) URLs, since
+a random string is never one) and requires `migrateV4` to parse under the
+live `.strict()` schema, carrying each field by name and provably dropping
+the two retired stamps, then reads it through the real store from
+`localStorage` and round-trips a live payload through `save`/`load`. v4 is
+the only step left: a v1, v2 or v3 payload is not read at all and the store
+starts from the defaults (no compatibility, 0.0.x). The class it closes is
+unchanged: the loader falls back to defaults on ANY parse failure, so a
+migration emitting one key the live schema does not admit discards a whole
+payload silently. The schema and the migration are exported for it and for
+nothing else.
 
 The URL override matches a STRING only. It first matched by path, which also
-caught the `knownDaemonBaseUrls` ARRAY: a string drawn for an array is
+caught an ARRAY field the v1 shape had: a string drawn for an array is
 refused by its own schema, so the field was never generated and every
 property passed over it — found by a mutation that kept a retired field and
-left all seven properties green.
+left every property green.
 
 ### The SharedWorker protocol is posted through its own type
 
@@ -384,9 +373,9 @@ back; until then the worker writes nothing for that document.
 `lib/idb-stored-shapes.property.browser.test.tsx` writes through each
 production writer and reads through its reader, against the real
 IndexedDB: the blob store, the document-file store (its v2 record and the
-v1 record it rewrites on read), the document index's workspace rows
-and the legacy document rows it reads (written by `test-utils/seed-legacy-row.ts`,
-since no build writes one any more), the document store's snapshot and delta log, and the
+v1 record it rewrites on read), the document index's workspace rows (a
+per-document row is not read: a workspace holding one is refused,
+`holdsPreTreeRecords`), the document store's snapshot and delta log, and the
 version store's rows. Inputs are drawn from the writer's input space, or
 from the port's schema where the writer takes one; a `z.custom` /
 `z.instanceof` field is overridden by path, since the walk cannot know

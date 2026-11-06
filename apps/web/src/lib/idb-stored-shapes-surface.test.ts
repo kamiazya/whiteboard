@@ -79,16 +79,6 @@ const STORED_SHAPE_COVERAGE: Record<string, StoredShapeCoverage> = {
   'idb-document-index.ts': 'round-tripped: IdbDocumentIndex',
   'idb-document-store.ts': 'round-tripped: IdbDocumentStore',
   'browser-version-store.ts': 'round-tripped: BrowserVersionStore',
-
-  // The entry follows the migrations rather than the filename: `browser-idb.ts`
-  // kept the opener and stopped parsing anything, so the scan no longer sees
-  // it at all and an entry left there would be stale.
-  'browser-idb-upgrades.ts': notModelled(
-    'it holds the upgrade steps, so what matters is what a walk does with a record it CANNOT ' +
-      'parse — carried verbatim rather than dropped, which a round trip of parseable records ' +
-      'would never exercise. browser-idb-migration.browser.test.tsx drives the upgrades against ' +
-      'seeded old-version databases',
-  ),
   'browser-workspace-id.ts': notModelled(
     'it reads a registry row the index already round-trips through the same port read schema ' +
       'the index uses, and refuses a record not keyed by a canonical id, rather than reading a ' +

@@ -11,12 +11,12 @@ import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-connections')
 
@@ -35,7 +35,7 @@ function LocationProbe() {
   return <output data-testid="location">{useLocation().pathname}</output>
 }
 
-async function note(index: FoldingBrowserIndex, path: string, name: string, body: string) {
+async function note(index: BrowserDocumentIndex, path: string, name: string, body: string) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
@@ -45,13 +45,11 @@ async function note(index: FoldingBrowserIndex, path: string, name: string, body
   const doc = new Loro()
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, body)
-  expect(
-    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' })),
-  ).toBe(true)
+  await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 }
 
 it('shows the Linked from chip with the backlink count and opens the source', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId(), segment: 'default' })
   await note(index, 'beta', 'Beta', 'The target.')
   await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
@@ -77,7 +75,7 @@ it('shows the Linked from chip with the backlink count and opens the source', as
 })
 
 it('links a mention from the panel, and the source moves to the backlinks', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId(), segment: 'default' })
   await note(index, 'beta', 'Beta', 'The target.')
   await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')

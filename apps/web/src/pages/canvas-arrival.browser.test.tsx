@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { App } from '../App.js'
 import { documentPath } from '../lib/app-routes.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
 import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
@@ -22,6 +21,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 
 claimIsolatedWhiteboardDb('canvas-arrival')
 
@@ -70,7 +70,7 @@ describe('arriving on a canvas', () => {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 80, text: 'Held' })],
       edges: [],
     })
-    await new LoroStore().save(boardId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(boardId, doc.export({ mode: 'snapshot' }))
     // As after opening a card: the control that opened it is gone, so the
     // arrival is the one deciding where the keyboard goes.
     ;(document.activeElement as HTMLElement | null)?.blur()

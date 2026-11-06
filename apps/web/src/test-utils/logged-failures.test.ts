@@ -4,7 +4,7 @@ import { expectLoggedFailure, formatLoggedFailure, recordLoggedFailure } from '.
 
 describe('formatLoggedFailure', () => {
   it('is the spelling a record is matched and reported in', async () => {
-    recordLoggedFailure('warn', ['startup fold left documents behind', { left: 2 }])
+    recordLoggedFailure('warn', ['a background write left documents behind', { left: 2 }])
     await expectLoggedFailure('{"left":2}')
   })
 

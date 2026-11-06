@@ -91,7 +91,6 @@ function layoutCanvasMiniature(
   const scene = options.layoutNestedCanvas(canvas, {
     ...withoutOverlays(options),
     // Per-canvas silhouettes, for the reason composeFileEmbed gives.
-    explicitNodeOutlines: undefined,
     activeEmbedPath: new Set(box.embedPath),
     embedDepth: box.embedPath.length,
   })

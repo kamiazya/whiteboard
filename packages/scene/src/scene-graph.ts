@@ -179,7 +179,7 @@ export interface TextRunNode {
  * geometry, because outlines derive from bbox + id — so `translateScene` needs
  * no knowledge of them and `scaleScene` scales them implicitly.
  */
-export type ShapeId = string
+type ShapeId = string
 
 export interface ShapeSceneNode {
   readonly kind: 'shape'

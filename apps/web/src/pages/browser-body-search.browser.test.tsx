@@ -3,12 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedTreeContent, seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 // The page, its source and the panel together — the seam the unit tests
@@ -25,7 +24,7 @@ describe('searching from the page', () => {
   it('finds a document by a word only its body carries', async () => {
     // Seeded as an older build left it; the page's own index folds it into
     // the workspace tree on its first read.
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'untitled',
       kind: 'markdown',
@@ -33,11 +32,11 @@ describe('searching from the page', () => {
     const doc = new Loro()
     writeDocumentKind(doc, 'markdown')
     writeMarkdownBody(doc, 'A QuotaExceededError arrives on save.')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={vi.fn()} />
+        <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={vi.fn()} />
       </MemoryRouter>,
     )
     const box = await screen.findByLabelText('Search documents', undefined, { timeout: 10_000 })

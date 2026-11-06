@@ -423,8 +423,8 @@ describe('ReplicaReadPage', () => {
       expect(readMarkdownBody(documentContainers(record!, DOC_MD))).toContain('offline addition')
     })
     // Decision 3's boundary: a data-plane edit files NOTHING in any index —
-    // no phantom document rows under either workspace id.
-    await expect(new IdbDocumentIndex().listDocuments({ workspaceId: DAEMON_WS })).rejects.toThrow()
+    // no phantom document row under the daemon workspace's id.
+    expect(await new IdbDocumentIndex().holdsPreTreeRecords(DAEMON_WS)).toBe(false)
   })
 
   it('a markdown edit the store refuses leaves a not-saved alert and a logged failure', async () => {

@@ -46,6 +46,7 @@ import {
 import { clientCountResponseSchema } from '../shared/api-contracts/document-runtime.js'
 import { exportRequestSchema, exportResponseSchema } from '../shared/api-contracts/export.js'
 import { exportSvgRequestSchema } from '../shared/api-contracts/export-svg.js'
+import { fc } from '../shared/test-utils/fast-check.js'
 import type { Rule } from './_test-route-fuzz-lane.js'
 
 export const RULES: Record<string, Rule> = {
@@ -123,6 +124,19 @@ export const RULES: Record<string, Rule> = {
     answers: 'json',
     body: setFolderNameRequestSchema,
     response: setFolderNameResponseSchema,
+    // Only `notes` names a folder the seed holds; the shared draw gives it
+    // one draw in five, and with the workspace and body arms on top the row
+    // answered 1 to 9 of its 40 requests over ten runs — a starved ledger
+    // one CI run in sixty. Weighted so the folder is the usual draw and a
+    // document path or an unknown folder still refuses often enough to be
+    // judged: 8 to 15 of 40 answered over eight runs afterwards.
+    override: (path) =>
+      path === 'path' || path.endsWith('.path')
+        ? fc.oneof(
+            { weight: 3, arbitrary: fc.constant('notes') },
+            { weight: 1, arbitrary: fc.constantFrom('notes/other', 'board', 'fresh') },
+          )
+        : undefined,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/pin': {
     answers: 'json',

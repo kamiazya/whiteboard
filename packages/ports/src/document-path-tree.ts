@@ -89,13 +89,3 @@ export function planSubtreeMove(rows: readonly PathRow[], from: string, to: stri
   // vacating it, by exactly the number of segments the move removes.
   return { ok: true, moves: [...moves].sort((left, right) => depth(left.from) - depth(right.from)) }
 }
-
-/**
- * The first path strictly below `path`, or `undefined`. Both stores refuse
- * to delete a document that still has one: every document can hold children,
- * so a cascade is reachable from a single call naming one path, and deletion
- * is the operation with nothing to undo it.
- */
-export function findDescendantPath(rows: readonly PathRow[], path: string): string | undefined {
-  return rows.find((row) => row.path !== path && isSelfOrDescendant(row.path, path))?.path
-}

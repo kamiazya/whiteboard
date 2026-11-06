@@ -32,9 +32,9 @@
  * override, `As saved` / `Clean` / a preview per registered theme. Removed
  * (user decision, 2026-09-10): it was the panel's widest row and the one
  * that could not be drawn, since "preview neon" and "neon" differ by
- * whether the pick is SAVED, which no glyph says. Its `style` argument
- * survives at every render entry point as decision 6 describes — headless
- * defaults to `clean`, the editor to `document` — with no UI that sets it.
+ * whether the pick is SAVED, which no glyph says. Every surface of this
+ * app now draws the theme the document names; the `style` argument survives
+ * below it, in canvas-render and in `wb_scene_render`.
  */
 import {
   type FacetRegistry,

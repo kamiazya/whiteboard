@@ -1,8 +1,9 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { expectTypedSource, waitForOrSayWhen } from '../test-utils/late-arrival.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 /**
  * Markdown-canvas 導線 (real IndexedDB + real CodeMirror): create a markdown
  * note through the top bar's "New markdown note…" item, type into the real
@@ -21,7 +22,6 @@ import { Loro } from 'loro-crdt'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { LoroStore } from '../lib/loro-store.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -36,12 +36,12 @@ claimIsolatedWhiteboardDb('browserdocumentpage-markdown')
  * a machine under load. Nothing else is faked: the rows, the transactions and
  * their ordering are IndexedDB's own.
  */
-class SlowNameWriteIndex extends FoldingBrowserIndex {
+class SlowNameWriteIndex extends BrowserDocumentIndex {
   constructor(private readonly delayMs: number) {
     super()
   }
   override async setDocumentName(
-    input: Parameters<FoldingBrowserIndex['setDocumentName']>[0],
+    input: Parameters<BrowserDocumentIndex['setDocumentName']>[0],
   ): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, this.delayMs))
     return super.setDocumentName(input)
@@ -158,7 +158,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   // here, so these suites seed the document rather than driving a create
   // control this page no longer has.
   it('a markdown document opens the markdown editor; the typed body survives a remount', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
 
@@ -216,7 +216,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   // The page binds the source view to the document, which makes the editor's
   // own onChange a no-op: the toggle has to be written through the view.
   it('ticking a task checkbox in the preview rewrites the stored body', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
     const editable = await waitFor(() => {
@@ -251,7 +251,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
    * after the page is torn down and rebuilt.
    */
   it('the OKF summary and describes fields survive a remount', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
     await findMarkdownTitleInput()
@@ -286,7 +286,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a markdown canvas has no Display row — edge routing is spatial-only', async () => {
-    const spatialStore = new FoldingBrowserIndex()
+    const spatialStore = new BrowserDocumentIndex()
     const spatial = renderPage(<BrowserDocumentPage store={spatialStore} />)
 
     // A spatial canvas is where it is offered — as the leading member of
@@ -298,7 +298,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     })
     spatial.unmount()
 
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
@@ -318,7 +318,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a markdown note offers no Copy as JSON Canvas - it holds no canvas', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
@@ -340,7 +340,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a markdown note reaches its own history, and can bookmark a point', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
@@ -360,7 +360,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it("the title survives a remount and is the document's one name", async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
 
@@ -403,7 +403,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('keeps the body when core facets are written, and vice versa', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
 
@@ -517,7 +517,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'diagram-a',
       name: 'Diagram A',
@@ -563,7 +563,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('spatial documents still open the spatial editor after a markdown note exists', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     // Distinctly-named spatial canvas so the round trip back to it is
     // unambiguous (the fresh markdown note is also 'untitled').
     await seedIdbDocument({
@@ -596,7 +596,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   // `linkTargets` is optional, so the verb quietly degrades to its bracket
   // wrap while typecheck and every component test stay green.
   it("offers the page's own documents to the link picker", async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'neighbour-note',
       name: 'Neighbour note',
@@ -627,7 +627,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a [[path]] wikiLink resolves, shows the display name, and opens that note', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const TARGET_ID = await seedIdbDocument({
       path: 'target-note',
       name: 'Target note',
@@ -689,7 +689,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it("a block ![[embed]] renders the target note's body inline in the preview", async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const TARGET_ID = await seedIdbDocument({
       path: 'embed-target',
       name: 'Embed target',
@@ -704,7 +704,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // Seed the target's Loro body through the same store the page loads from.
     const targetDoc = new Loro()
     targetDoc.getText('body').insert(0, 'unmistakable embedded body text')
-    await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
+    await seedTreeContent(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
     renderPage(<BrowserDocumentPage store={store} />)
 
     // focusEditable rather than focus() on the node resolved a moment ago:
@@ -739,7 +739,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a block ![[embed]] of a canvas draws that canvas inline in the preview', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const BOARD_ID = await seedIdbDocument({
       path: 'embed-board',
       name: 'Embed board',
@@ -765,7 +765,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       ],
       edges: [],
     })
-    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    await seedTreeContent(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
     renderPage(<BrowserDocumentPage store={store} />)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
@@ -786,7 +786,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a ![[canvas#Group]] embed draws that group only, under a breadcrumb', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const BOARD_ID = await seedIdbDocument({
       path: 'embed-board',
       name: 'Embed board',
@@ -807,7 +807,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       ],
       edges: [],
     })
-    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    await seedTreeContent(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
     renderPage(<BrowserDocumentPage store={store} />)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
@@ -855,9 +855,9 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       resource: { mimeType: 'text/markdown', content: 'body stored as an okf-body node' },
     })
     doc.commit()
-    await new LoroStore().save(legacyId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(legacyId, doc.export({ mode: 'snapshot' }))
 
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
     await waitFor(
       () => {
@@ -866,6 +866,38 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     expect(document.querySelector('[contenteditable="true"].cm-content')).toBeNull()
+  })
+
+  /**
+   * Someone who types `# Weekly review` has said what the note is called.
+   * Before this the workspace kept calling it `untitled` — in the card, the
+   * URL and every search result — and the only fix was typing the same words
+   * again into the rename dialog. The two cases below are the seed and its
+   * gate; the pure halves are covered by title-from-body and
+   * new-document-path, so what these pin is the WIRING through a real save.
+   */
+  it('names an unnamed note after the title its body announces', async () => {
+    const store = new BrowserDocumentIndex()
+    await seedIdbDocument({ path: 'untitled', kind: 'markdown', makeDefault: true })
+    renderPage(<BrowserDocumentPage store={store} />)
+
+    const resolveEditable = () => document.querySelector('[contenteditable="true"]')
+    await waitFor(() => expect(resolveEditable()).not.toBeNull())
+    await focusEditable(resolveEditable)
+    await userEvent.keyboard('# Weekly review')
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('# Weekly review')
+    })
+
+    await waitFor(
+      async () => {
+        const row = (await listBrowserDocuments(new BrowserDocumentIndex())).find(
+          (r) => r.kind === 'markdown',
+        )
+        expect(row?.name).toBe('Weekly review')
+      },
+      { timeout: 10_000 },
+    )
   })
 
   /**
@@ -878,12 +910,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
    * because it looks deliberate.
    */
   it('keeps up with a heading that outlasts the save debounce', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'untitled', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new BrowserDocumentIndex())).find((r) => r.kind === 'markdown')
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')
     await waitFor(() => expect(resolveEditable()).not.toBeNull())
@@ -904,7 +936,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('never touches a name a person chose', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'untitled',
       name: 'Meeting',
@@ -914,7 +946,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new BrowserDocumentIndex())).find((r) => r.kind === 'markdown')
     const before = (await markdownRow())?.updatedAt
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')
@@ -931,12 +963,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('leaves a note with no title unnamed rather than inventing one', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'untitled', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new BrowserDocumentIndex())).find((r) => r.kind === 'markdown')
     const before = (await markdownRow())?.updatedAt
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')

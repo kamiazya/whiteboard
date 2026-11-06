@@ -8,8 +8,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { DocumentFileStore } from '../lib/document-file-store.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
@@ -30,7 +30,7 @@ afterEach(cleanup)
 
 it('stores a pasted image with the browser keeper and draws it in the note', async () => {
   await seedIdbDocument({ path: 'site', kind: 'markdown', makeDefault: true })
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
   const editable = () => document.querySelector<HTMLElement>('.cm-content')
   await focusEditable(editable)
 

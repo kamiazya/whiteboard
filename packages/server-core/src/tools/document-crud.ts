@@ -95,8 +95,7 @@ function segmentToMint(handle: string, namespace: string): string {
  * chooses, and the handle the caller sent is filed as its `segment`.
  *
  * A handle that cannot BE a segment is refused rather than minted with none
- * — see `WorkspaceSegmentUnusableError` for why that is not the same choice
- * migration 0019 makes when backfilling workspaces that already exist.
+ * — see `WorkspaceSegmentUnusableError`.
  */
 async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> {
   // The flag has always been an IDEMPOTENT bootstrap — a no-op when the

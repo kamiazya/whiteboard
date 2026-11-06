@@ -15,6 +15,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { idbContentClock } from '../lib/browser-document-summary.js'
 import { openWhiteboardDb, WORKSPACES_STORE } from '../lib/browser-idb.js'
 import {
@@ -24,7 +25,6 @@ import {
   switchBrowserWorkspace,
 } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { announceWorkspaceRemoved } from '../lib/workspace-broadcast.js'
 import { TOMBSTONE_STORE, writeTombstone } from '../lib/workspace-tombstone.js'
@@ -47,7 +47,7 @@ const titles = () => screen.queryAllByTestId('card-title').map((each) => each.te
 
 /** A moved workspace holding one note, beside a neighbour holding another. */
 async function seedTwoWorkspaces(): Promise<string> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   const movedId = await resolveBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId: movedId })
   await createSeededDocument(index, new LoroStore(), idbContentClock(), undefined, 'markdown')
@@ -75,7 +75,7 @@ async function removeElsewhere(workspaceId: string): Promise<void> {
 function renderList() {
   render(
     <MemoryRouter initialEntries={['/']}>
-      <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={vi.fn()} />
+      <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={vi.fn()} />
     </MemoryRouter>,
   )
 }
@@ -99,7 +99,7 @@ it('on hearing the move, lists a workspace still kept here and says why', async 
 
 it('drops the notice once the person switches to another workspace', async () => {
   const movedId = await seedTwoWorkspaces()
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await index.createWorkspace({ workspaceId: THIRD })
   await index.createDocument({ workspaceId: THIRD, path: 'elsewhere', kind: 'markdown' })
   renderList()
@@ -128,7 +128,7 @@ it('meeting the refusal on a load, moves off it instead of reporting a failure',
 })
 
 it('a create that meets the refusal moves off it instead of reporting a failure', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   const movedId = await resolveBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId: movedId })
   await index.createWorkspace({ workspaceId: NEIGHBOUR })
