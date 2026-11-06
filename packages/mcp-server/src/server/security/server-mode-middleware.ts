@@ -132,7 +132,7 @@ async function sessionGrant(
   const open = await people.sessions.open(session, (people.now ?? Date.now)())
   if (open === null) return undefined
   if (requiredScopes.some((scope) => !SESSION_SCOPES.includes(scope))) {
-    return { refusal: { status: 403, code: 'auth.forbidden' } }
+    return { refusal: { status: 403, code: 'auth_forbidden' } }
   }
   const { person, authenticatedAt, expiresAt } = open
   return {

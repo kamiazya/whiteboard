@@ -146,7 +146,6 @@ export function createReplicaKeyRouter({
     if (invalidId) return c.json(invalidId, 400)
 
     const parsed = await readJsonBody(c, setReplicaTierRequestSchema, {
-      voice: 'code',
       refuseShape: invalidRequestBody,
     })
     if ('refusal' in parsed) return parsed.refusal

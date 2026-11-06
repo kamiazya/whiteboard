@@ -171,14 +171,16 @@ describe('the gate judges the run, and refuses everything but success', () => {
 
   it('passes a real green run of this workflow', () => {
     // Captured from an actual run (36360686717, the first with `native-host-windows`),
-    // so the fixture cannot drift into a shape the gate happens to like.
+    // so the fixture cannot drift into a shape the gate happens to like. Jobs
+    // added since are appended as plain success rows (today: `rust`,
+    // `rust-fuzz-pr`), for the reason the red fixture gives below.
     expect(run(fixture('green'))).toEqual([])
   })
 
   it('fails a real red run of this workflow', () => {
     // Captured from the run whose dry-run-docker job really failed. A job
     // added to the workflow after that capture is appended to it as a plain
-    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`, `scope`), since `needs` is read live and a
+    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`, `scope`, `rust`, `rust-fuzz-pr`), since `needs` is read live and a
     // needed job absent from the run is one of the failures this gate
     // reports — and a red run is not something to re-capture on demand.
     // This is what settles the question the `needs` form could not: the gate

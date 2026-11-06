@@ -350,7 +350,9 @@ async function acceptUpdate(page, toast, version) {
       return post.apply(this, args)
     }
   })
-  await toast.getByRole('button', { name: 'Reload' }).click()
+  // The live region is the message alone; the buttons sit beside it on the
+  // toast's surface, so the click is scoped to that surface, not the region.
+  await toast.locator('..').getByRole('button', { name: 'Reload' }).click()
   await until(
     'the page to reload onto a controller',
     () =>
@@ -402,7 +404,7 @@ async function acceptUpdateWhileRequesting(page, toast, version) {
       return post.apply(this, args)
     }
   })
-  await toast.getByRole('button', { name: 'Reload' }).click()
+  await toast.locator('..').getByRole('button', { name: 'Reload' }).click()
   await until(
     'the page to be replaced after the update was accepted',
     () => page.evaluate(() => window.__smokeFirstDocument === undefined),

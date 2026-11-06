@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { migrations } from './migrations/index.js'
-import { PUBLISHED_MIGRATION_NAMES } from './published-migration-names.js'
+import { PUBLISHED_MIGRATION_NAMES, RETIRED_MIGRATION_NAMES } from './published-migration-names.js'
 
 // Drift guard for migration names that have shipped in published releases.
 //
@@ -35,5 +35,14 @@ describe('published migration names manifest', () => {
         'that recorded it. If this is deliberate (disposable-DB policy), remove ' +
         'them from the manifest in this same commit AND add an upgrade note.',
     ).toEqual([])
+  })
+
+  // A retired name is how a database written before the baseline is
+  // recognised and refused. One reused by a new migration would read as
+  // applied on exactly those databases, and the refusal would never fire.
+  it('never ships a retired name again', () => {
+    expect(RETIRED_MIGRATION_NAMES.length).toBeGreaterThan(40)
+    const shipped = new Set<string>(Object.keys(migrations))
+    expect(RETIRED_MIGRATION_NAMES.filter((name) => shipped.has(name))).toEqual([])
   })
 })

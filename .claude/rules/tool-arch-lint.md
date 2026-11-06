@@ -437,8 +437,9 @@ library the HTTP app composes (now `server/stdio-root.ts` beside
 `server/sync-streams.ts`, `sync-audience.ts` and `viewport-requests.ts`, the
 scheduler to `store/auto-version.ts`, the fetch-model contract to
 `shared/api-contracts/search-fetch-model.ts`, and the legacy trust-file purge
-to `server/purge-legacy-trust-file.ts`. The eight were cross-checked against
-an independent directory-level import matrix first. Type-only edges count, as
+to its own top-level module (since deleted: an old trust store is refused at
+boot now). The eight were cross-checked against an independent
+directory-level import matrix first. Type-only edges count, as
 in the web guard.
 
 ## `route-portability.test.ts`: which routes could leave Node
@@ -730,6 +731,20 @@ since neither may import model. `v1-refusals-cover-errors.test.ts` holds every
 error class in ports, model and server-core to a `REFUSALS` row or a reasoned
 `EXEMPT` entry. `script-entry-check` keeps a script's is-main test on `is-run-as-script.mjs` (a path needing URL-encoding made the hand form exit 0 having run nothing); `serve-dist-one-place` keeps static serving on `serve-dist.mjs`. `docs-tool-names.test.ts` holds every `wb_*` / `canvas_*` token
 in `docs/**` (minus ADRs), `skills/` and `README.md` to `registeredTools()`.
+
+## The guards read `crates/**/*.rs` too
+
+`rust-source.ts` lexes a Rust file's comments (`//`, `///`, `//!`, nested
+`/* */`, skipping string, char, byte and raw literals) and measures a `fn`
+from its line to its closing brace with comments and literals blanked, which
+is reliable because Rust braces must balance. The file and function size
+budgets, vocabulary-check, and the chronology, retired-pairing,
+file-pointer, identifier-pointer and no-logger-claim comment guards all read
+`.rs` through it; stacked-doc-comments and dead-refs do not, since rustdoc
+joins every `///` and `useRef` is React's. `crate-map.ts` reads
+`crates/architecture-map.json`, and `crate-architecture-map.test.ts` holds
+the tree, the TS map (`absorbs`) and `.claude/rules/crates.md`'s table to
+it. A `planned` crate resolves by directory only in the docs-path guard.
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 

@@ -44,7 +44,7 @@ describe('createIsolatedDb (memory)', () => {
     const handle = await createIsolatedDb({ dataDir: scratch, memory: true })
     try {
       expect(await tableExists(handle.rawDb, 'workspaces')).toBe(true)
-      // Migration 0017 dropped it, so a false here is the answer the callers assert.
+      // The schema has no documents table, so a false here is the answer the callers assert.
       expect(await tableExists(handle.rawDb, 'documents')).toBe(false)
     } finally {
       await handle.dispose()

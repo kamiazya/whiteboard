@@ -388,8 +388,7 @@ class TooManyThreadMessagesError extends TextBreachRefusalError {
 /**
  * A document node's content key left holding a scalar, another kind of
  * container, or nothing — what every reader and writer of the document opens
- * as the container the bridge declares. The same answer the per-document
- * route gives a root a node cannot hold (`RootNoDocumentHoldsError`).
+ * as the container the bridge declares.
  */
 class ContentRootKindError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES['content-root']
@@ -551,27 +550,6 @@ export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
       `This update would leave workspace nodes this keeper cannot read (${nodes.join(', ')}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment`,
     )
     this.name = 'UnreadableDocumentMetaError'
-  }
-}
-
-/**
- * A document's sync write refused because it adds roots no workspace node can
- * take as content: named after a key the node keeps for itself (its id,
- * segment, kind, name or stamps), or after a content container but of another
- * kind. A document's content and its node's meta share one map, so kept, the
- * first would rewrite the node — hiding it from every listing, or naming it at
- * any length — from a grant that may only edit content. Nothing of the write
- * was kept.
- */
-export class RootNoDocumentHoldsError extends SyncWriteRefusalError {
-  readonly code = 'invalid_document_root'
-  readonly status = 400
-
-  constructor(public readonly roots: readonly string[]) {
-    super(
-      `This update adds root containers a workspace document cannot hold (${roots.map((root) => JSON.stringify(root)).join(', ')}): a document's id, segment, kind, name and timestamps belong to its place in the workspace, and a content container keeps the kind it has`,
-    )
-    this.name = 'RootNoDocumentHoldsError'
   }
 }
 

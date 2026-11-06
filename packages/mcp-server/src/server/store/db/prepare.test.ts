@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,7 @@ import { saveDaemonRecord } from '../../../daemon/daemon-registry.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
 import { readProcessStartMs } from '../../../shared/process-identity.js'
 import { captureLogsForTests } from '../../log.js'
+import { IncompatibleDatabaseError } from './incompatible-database.js'
 import { closeDb, getDb } from './index.js'
 import { runMigrations } from './migrator.js'
 import { clearPrepareCache, prepareDataDir } from './prepare.js'
@@ -33,7 +34,7 @@ describe('prepareDataDir', () => {
   it('applies migrations to a fresh dataDir', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    // A migrated db has the workspaces table (from 0001-init); the raw
+    // A migrated db has the workspaces table (from 0001-baseline); the raw
     // Kysely handle answering the query without throwing is the pin.
     await expect(db.selectFrom('workspaces').select(['id']).execute()).resolves.toEqual([])
   })
@@ -50,6 +51,35 @@ describe('prepareDataDir', () => {
     await expect(prepareDataDir(tempDir)).rejects.toThrow('boom')
     await expect(prepareDataDir(tempDir)).resolves.toBeUndefined()
     expect(vi.mocked(runMigrations)).toHaveBeenCalledTimes(2)
+  })
+})
+
+// A layout this build no longer reads is refused before the database is
+// opened, so nothing is created beside it and nothing in it moves: the
+// person decides what to keep, through the export the message names.
+describe('prepareDataDir: a data directory in a retired layout', () => {
+  it.each([
+    ['the flat blob store', async () => mkdir(join(tempDir, 'blobs', 'ab'), { recursive: true })],
+    [
+      'a flat workspace files directory',
+      async () => mkdir(join(tempDir, 'ws-1', 'files'), { recursive: true }),
+    ],
+    [
+      'the retired web-origin trust store',
+      async () => writeFile(join(tempDir, 'trusted-web-origins.json'), '{}'),
+    ],
+  ])('refuses %s with the export and re-import path, touching nothing', async (_name, seed) => {
+    await seed()
+    const before = (await readdir(tempDir, { recursive: true })).sort()
+
+    const err = await prepareDataDir(tempDir).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    const message = (err as Error).message
+    expect(message).toContain(tempDir)
+    expect(message).toContain('earlier release')
+    expect(message).toContain('Import file')
+    expect(vi.mocked(runMigrations)).not.toHaveBeenCalled()
+    expect((await readdir(tempDir, { recursive: true })).sort()).toEqual(before)
   })
 })
 

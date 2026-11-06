@@ -126,21 +126,3 @@ export const LEDGER: Ledger = {
   workspaceReplicaKeys: { workspaceId: text, key: blob, salt: blob, createdAt: integer },
   tenants: { id: text, createdAt: integer },
 }
-
-// Columns the schema declares NOT NULL that the migrations created nullable.
-// Each is a deliberate gap with a stated reason, and each is checked from the
-// other side: an entry whose column has since become NOT NULL fails, so the
-// list cannot outlive the debt.
-export const NULLABLE_IN_DATABASE: {
-  [T in keyof DatabaseSchema]?: { [C in keyof Selectable<DatabaseSchema[T]>]?: string }
-} = {
-  memberProfiles: {
-    accountId:
-      'migration 0032 added it nullable (SQLite ADD COLUMN takes no NOT NULL without a default); every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',
-    handle:
-      'migration 0046 added it nullable for the same reason and filled every row; every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',
-  },
-  workspaceMemberships: {
-    role: 'migration 0036 added it nullable for the same reason; every insert carries one. ponytail: rebuild the table if a NULL ever turns up.',
-  },
-}

@@ -15,6 +15,7 @@
 import { syncWriteRefusalOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import {
   createWorkspaceDocumentAtPath,
+  type DocumentContainers,
   documentContainers,
   moveWorkspaceNodeToPath,
   readMarkdownBody,
@@ -89,6 +90,17 @@ async function setup() {
   return { post, snapshot }
 }
 
+/** The workspace record holding one spatial document, `board`, written through its own route. */
+async function seededBoard() {
+  const { post, snapshot } = await setup()
+  const url = `/api/w/${WS}/workspace-document`
+  const seeded = updateFrom(await snapshot(`${url}/snapshot`), (doc) => {
+    createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: DOC_ID, kind: 'spatial' })
+  })
+  expect((await post(`${url}/update`, seeded)).status).toBe(200)
+  return { post, snapshot, url }
+}
+
 /** What a client holding `base` sends after `edit`. */
 function updateFrom(base: LoroDoc, edit: (doc: LoroDoc) => void): Uint8Array {
   const client = base.fork()
@@ -117,22 +129,6 @@ describe('an editor sync write past the markdown size limit', () => {
     expect(syncWriteRefusalOf(await refused.json()).code).toBe('markdown_too_large')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readMarkdownBody(documentContainers(stored, DOC_ID))).toHaveLength(MARKDOWN_MAX_CHARS)
-  })
-
-  it('on the per-document route answers 413 and the stored body is unchanged', async () => {
-    const { post, snapshot } = await setup()
-    const url = `/api/w/${WS}/document/notes`
-    const seeded = updateFrom(new LoroDoc(), (doc) => fill(doc.getText('body'), MARKDOWN_MAX_CHARS))
-    expect((await post(`${url}/update`, seeded)).status).toBe(200)
-
-    const refused = await post(
-      `${url}/update`,
-      updateFrom(await snapshot(`${url}/snapshot`), (doc) => doc.getText('body').insert(0, '!')),
-    )
-
-    expect(refused.status).toBe(413)
-    expect(syncWriteRefusalOf(await refused.json()).code).toBe('markdown_too_large')
-    expect(readMarkdownBody(await snapshot(`${url}/snapshot`))).toHaveLength(MARKDOWN_MAX_CHARS)
   })
 
   it('on the promote route answers 413 and nothing of the record is merged', async () => {
@@ -211,22 +207,13 @@ describe('a workspace-document update moving a document outside the path grammar
 })
 
 describe('an editor sync write giving a node text past the node limit', () => {
-  it('on the per-document route answers 413 node_text_too_large and stores nothing', async () => {
-    const { post, snapshot } = await setup()
-    const url = `/api/w/${WS}/document/board`
-    expect(
-      (
-        await post(
-          `${url}/update`,
-          updateFrom(new LoroDoc(), () => {}),
-        )
-      ).status,
-    ).toBe(200)
+  it('answers 413 node_text_too_large and stores nothing', async () => {
+    const { post, snapshot, url } = await seededBoard()
 
     const refused = await post(
       `${url}/update`,
       updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
-        writeSpatialNode(doc, {
+        writeSpatialNode(documentContainers(doc, DOC_ID), {
           id: 'big',
           resource: { mimeType: 'text/markdown', content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) },
           x: 0,
@@ -239,7 +226,8 @@ describe('an editor sync write giving a node text past the node limit', () => {
 
     expect(refused.status).toBe(413)
     expect(syncWriteRefusalOf(await refused.json()).code).toBe('node_text_too_large')
-    expect(readSpatialCanvas(await snapshot(`${url}/snapshot`)).nodes).toEqual([])
+    const stored = await snapshot(`${url}/snapshot`)
+    expect(readSpatialCanvas(documentContainers(stored, DOC_ID)).nodes).toEqual([])
   })
 })
 
@@ -296,7 +284,7 @@ describe('an editor sync write giving a label, a location, a comment message or 
   it.each([
     {
       code: 'node_location_too_large',
-      edit: (doc: LoroDoc) =>
+      edit: (doc: DocumentContainers) =>
         writeSpatialNode(
           doc,
           linkNode({
@@ -311,7 +299,7 @@ describe('an editor sync write giving a label, a location, a comment message or 
     },
     {
       code: 'label_too_large',
-      edit: (doc: LoroDoc) =>
+      edit: (doc: DocumentContainers) =>
         writeSpatialNode(
           doc,
           groupNode({
@@ -326,7 +314,7 @@ describe('an editor sync write giving a label, a location, a comment message or 
     },
     {
       code: 'comment_too_large',
-      edit: (doc: LoroDoc) =>
+      edit: (doc: DocumentContainers) =>
         writeCommentThread(doc, {
           id: 't',
           anchor: { kind: 'document' },
@@ -336,25 +324,19 @@ describe('an editor sync write giving a label, a location, a comment message or 
     },
     {
       code: 'tags_too_large',
-      edit: (doc: LoroDoc) =>
+      edit: (doc: DocumentContainers) =>
         writeSpatialNode(doc, {
           ...linkNode({ id: 'k', x: 0, y: 0, width: 200, height: 60, url: 'https://example.com/' }),
           tags: Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `t${i}`),
         }),
     },
   ])('answers 413 $code, a code the client contract reads', async ({ code, edit }) => {
-    const { post, snapshot } = await setup()
-    const url = `/api/w/${WS}/document/board`
-    expect(
-      (
-        await post(
-          `${url}/update`,
-          updateFrom(new LoroDoc(), () => {}),
-        )
-      ).status,
-    ).toBe(200)
+    const { post, snapshot, url } = await seededBoard()
 
-    const refused = await post(`${url}/update`, updateFrom(await snapshot(`${url}/snapshot`), edit))
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) => edit(documentContainers(doc, DOC_ID))),
+    )
 
     expect(refused.status).toBe(413)
     expect(syncWriteRefusalOf(await refused.json()).code).toBe(code)

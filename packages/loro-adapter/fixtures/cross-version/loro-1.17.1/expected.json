@@ -1,0 +1,316 @@
+{
+  "loroVersion": "1.17.1",
+  "value": {
+    "tree": [
+      {
+        "parent": null,
+        "index": 0,
+        "meta": {
+          "segment": "notes"
+        },
+        "id": "0@1",
+        "fractional_index": "80",
+        "children": [
+          {
+            "parent": "0@1",
+            "index": 0,
+            "meta": {
+              "canvas": {},
+              "facets": {},
+              "kind": "markdown",
+              "updatedAt": 1000,
+              "trust": {},
+              "threads": {
+                "t1": {
+                  "status": "open",
+                  "anchor": {
+                    "nodeId": "n1",
+                    "kind": "spatial",
+                    "y": 20,
+                    "x": 10
+                  },
+                  "messages": {
+                    "m1": {
+                      "id": "m1",
+                      "body": "Which report?"
+                    }
+                  }
+                }
+              },
+              "document": {},
+              "lines": {},
+              "name": "Weekly",
+              "proposals": {},
+              "edges": {},
+              "createdAt": 1000,
+              "segment": "weekly",
+              "comments": {},
+              "nameChosen": true,
+              "edgeLocks": {},
+              "body": "# Weekly review\n\nShip the report on Friday morning. The draft is not written.\n",
+              "nodes": {},
+              "nodeLocks": {},
+              "core": {},
+              "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F01"
+            },
+            "id": "2@1",
+            "fractional_index": "80",
+            "children": []
+          }
+        ]
+      },
+      {
+        "parent": null,
+        "index": 1,
+        "meta": {
+          "segment": "boards"
+        },
+        "id": "22@1",
+        "fractional_index": "8180",
+        "children": []
+      },
+      {
+        "parent": null,
+        "index": 2,
+        "meta": {
+          "canvas": {},
+          "facets": {},
+          "kind": "markdown",
+          "updatedAt": 1000,
+          "trust": {},
+          "threads": {},
+          "document": {},
+          "lines": {},
+          "proposals": {},
+          "edges": {},
+          "createdAt": 1000,
+          "segment": "archive",
+          "comments": {},
+          "edgeLocks": {},
+          "body": "",
+          "nodes": {},
+          "nodeLocks": {},
+          "core": {},
+          "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F03"
+        },
+        "id": "44@1",
+        "fractional_index": "8280",
+        "children": [
+          {
+            "parent": "44@1",
+            "index": 0,
+            "meta": {
+              "canvas": {},
+              "facets": {},
+              "kind": "spatial",
+              "updatedAt": 1000,
+              "trust": {},
+              "threads": {},
+              "document": {},
+              "lines": {},
+              "proposals": {},
+              "edges": {},
+              "createdAt": 1000,
+              "segment": "plan",
+              "comments": {},
+              "edgeLocks": {},
+              "body": "",
+              "nodes": {
+                "n1": {
+                  "width": 160,
+                  "y": 120,
+                  "resource": {
+                    "mimeType": "text/markdown",
+                    "content": "Collect numbers"
+                  },
+                  "height": 80,
+                  "id": "n1",
+                  "x": 0
+                }
+              },
+              "nodeLocks": {},
+              "core": {},
+              "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F02"
+            },
+            "id": "24@1",
+            "fractional_index": "80",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "frontiers": [
+    {
+      "peer": "2",
+      "counter": 10
+    },
+    {
+      "peer": "1",
+      "counter": 146
+    }
+  ],
+  "midFrontiers": [
+    {
+      "peer": "1",
+      "counter": 136
+    }
+  ],
+  "midValue": {
+    "tree": [
+      {
+        "parent": null,
+        "index": 0,
+        "meta": {
+          "segment": "notes"
+        },
+        "id": "0@1",
+        "fractional_index": "80",
+        "children": [
+          {
+            "parent": "0@1",
+            "index": 0,
+            "meta": {
+              "canvas": {},
+              "facets": {},
+              "kind": "markdown",
+              "updatedAt": 1000,
+              "trust": {},
+              "threads": {},
+              "document": {},
+              "lines": {},
+              "proposals": {},
+              "edges": {},
+              "createdAt": 1000,
+              "segment": "weekly",
+              "comments": {},
+              "edgeLocks": {},
+              "body": "# Weekly review\n\nShip the report on Friday. The draft is not written.\n",
+              "nodes": {},
+              "nodeLocks": {},
+              "core": {},
+              "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F01"
+            },
+            "id": "2@1",
+            "fractional_index": "80",
+            "children": []
+          }
+        ]
+      },
+      {
+        "parent": null,
+        "index": 1,
+        "meta": {
+          "segment": "boards"
+        },
+        "id": "22@1",
+        "fractional_index": "8180",
+        "children": [
+          {
+            "parent": "22@1",
+            "index": 0,
+            "meta": {
+              "canvas": {},
+              "facets": {},
+              "kind": "spatial",
+              "updatedAt": 1000,
+              "trust": {},
+              "threads": {},
+              "document": {},
+              "lines": {},
+              "proposals": {},
+              "edges": {
+                "e1": {
+                  "to": {
+                    "node": "n2"
+                  },
+                  "id": "e1",
+                  "from": {
+                    "node": "n1"
+                  }
+                }
+              },
+              "createdAt": 1000,
+              "segment": "plan",
+              "comments": {},
+              "edgeLocks": {},
+              "body": "",
+              "nodes": {
+                "n1": {
+                  "width": 160,
+                  "y": 0,
+                  "resource": {
+                    "mimeType": "text/markdown",
+                    "content": "Collect numbers"
+                  },
+                  "height": 80,
+                  "id": "n1",
+                  "x": 0
+                },
+                "n2": {
+                  "width": 160,
+                  "y": 0,
+                  "resource": {
+                    "mimeType": "text/markdown",
+                    "content": "Write the draft"
+                  },
+                  "height": 80,
+                  "id": "n2",
+                  "x": 240
+                }
+              },
+              "nodeLocks": {},
+              "core": {},
+              "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F02"
+            },
+            "id": "24@1",
+            "fractional_index": "80",
+            "children": []
+          }
+        ]
+      },
+      {
+        "parent": null,
+        "index": 2,
+        "meta": {
+          "canvas": {},
+          "facets": {},
+          "kind": "markdown",
+          "updatedAt": 1000,
+          "trust": {},
+          "threads": {},
+          "document": {},
+          "lines": {},
+          "proposals": {},
+          "edges": {},
+          "createdAt": 1000,
+          "segment": "archive",
+          "comments": {},
+          "edgeLocks": {},
+          "body": "",
+          "nodes": {},
+          "nodeLocks": {},
+          "core": {},
+          "documentId": "01ARZ3NDEKTSV4RRFFQ69G5F03"
+        },
+        "id": "44@1",
+        "fractional_index": "8280",
+        "children": []
+      }
+    ]
+  },
+  "noteBodyDelta": [
+    {
+      "insert": "# Weekly review\n\nShip the "
+    },
+    {
+      "insert": "report on Friday morning",
+      "attributes": {
+        "comment-t1": true
+      }
+    },
+    {
+      "insert": ". The draft is not written.\n"
+    }
+  ]
+}

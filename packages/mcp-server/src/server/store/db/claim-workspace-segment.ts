@@ -11,7 +11,7 @@ import { isSegmentUniqueViolation } from './upsert-workspace.js'
  * it every time without ever taking a name from a workspace that has one or
  * from the workspace that holds the segment.
  *
- * A collision is an answer, not an error. The unique index (migration 0018)
+ * A collision is an answer, not an error. The unique index (`workspaces_namespace_segment_unique`)
  * is what refuses a held segment, in the same statement as the write, so
  * there is no window between a check and the update for another process on
  * the data directory to fall into.

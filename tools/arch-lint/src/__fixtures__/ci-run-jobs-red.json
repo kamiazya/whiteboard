@@ -84,5 +84,7 @@
     "status": "completed",
     "conclusion": "success"
   },
-  { "conclusion": "success", "name": "scope", "status": "completed" }
+  { "conclusion": "success", "name": "scope", "status": "completed" },
+  { "conclusion": "success", "name": "rust", "status": "completed" },
+  { "conclusion": "success", "name": "rust-fuzz-pr", "status": "completed" }
 ]

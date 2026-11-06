@@ -1076,6 +1076,13 @@ Success: stdout contains `{"schemaVersion":1,"ok":true,"operation":"restore"}`,
 exit 0. The stale `server-mode.json` is removed from the restored tree
 automatically; a fresh record is written when the new container starts.
 
+A backup taken by a release from before the storage reset (its `blobs.json`
+records a `schemaVersion` below 3) is refused, and the error says how to carry
+its documents across instead: restore it with that earlier release, export
+each document from the web app, and import it into a fresh deployment. The
+database such a backup holds would be refused at startup anyway — see
+[Database Migration Errors](../contributing/mcp-debugging.md#database-migration-errors).
+
 Then stop the running container, which holds the old data and the port, and
 start a new one pointing at the restored directory. The image is the one the
 Quick start built; substitute a published one (`ghcr.io/kamiazya/whiteboard`)

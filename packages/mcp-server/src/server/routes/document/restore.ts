@@ -173,7 +173,6 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       // The body is optional and its absence means in-place: an empty request
       // is the commonest restore there is, so it must not be a refusal.
       const asked = await readJsonBody(c, restoreVersionRequestSchema, {
-        voice: 'code',
         optional: true,
         refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
       })

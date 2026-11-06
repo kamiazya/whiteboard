@@ -24,7 +24,7 @@ export const PUBLIC_URL = 'https://example.com'
 export const bearerNamesItsSubject: AsyncAuthStrategy = {
   async authorize({ authorizationHeader }) {
     const sub = authorizationHeader?.replace(/^Bearer /, '')
-    if (!sub) return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+    if (!sub) return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
     return {
       ok: true,
       context: {

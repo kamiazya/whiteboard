@@ -41,30 +41,30 @@ describe('onDocumentAction', () => {
   })
 
   // Every action shares one wildcard, so a middleware the route lists has to
-  // be scoped to its own action: an update's body ceiling and content slot
-  // must not run for a sibling action's request.
+  // be scoped to its own action: an export's body ceiling must not run for a
+  // sibling action's request.
   it("runs a route's middleware only for its own action", async () => {
     const app = new Hono()
     const ran: string[] = []
     onDocumentAction(
       app,
       'post',
-      'update',
-      (c) => c.json({ hit: 'update' }),
+      'export',
+      (c) => c.json({ hit: 'export' }),
       async (_c, next) => {
-        ran.push('update middleware')
+        ran.push('export middleware')
         await next()
       },
     )
-    onDocumentAction(app, 'post', 'export', (c) => c.json({ hit: 'export' }))
+    onDocumentAction(app, 'post', 'export-svg', (c) => c.json({ hit: 'export-svg' }))
+
+    const svg = await app.request('/api/w/ws1/document/doc/export-svg', { method: 'POST' })
+    expect(await svg.json()).toEqual({ hit: 'export-svg' })
+    expect(ran).toEqual([])
 
     const exported = await app.request('/api/w/ws1/document/doc/export', { method: 'POST' })
     expect(await exported.json()).toEqual({ hit: 'export' })
-    expect(ran).toEqual([])
-
-    const updated = await app.request('/api/w/ws1/document/doc/update', { method: 'POST' })
-    expect(await updated.json()).toEqual({ hit: 'update' })
-    expect(ran).toEqual(['update middleware'])
+    expect(ran).toEqual(['export middleware'])
   })
 })
 
@@ -92,10 +92,10 @@ describe('onDocumentFile', () => {
         await next()
       },
     )
-    onDocumentAction(app, 'put', 'update', (c) => c.json({ hit: 'update' }))
+    onDocumentAction(app, 'put', 'snapshot', (c) => c.json({ hit: 'snapshot' }))
 
-    const updated = await app.request('/api/w/ws1/document/doc/update', { method: 'PUT' })
-    expect(await updated.json()).toEqual({ hit: 'update' })
+    const read = await app.request('/api/w/ws1/document/doc/snapshot', { method: 'PUT' })
+    expect(await read.json()).toEqual({ hit: 'snapshot' })
     expect(ran).toEqual([])
   })
 })

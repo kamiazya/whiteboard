@@ -39,18 +39,36 @@ function write(path: string, text: string) {
   writeFileSync(join(root, path), text)
 }
 
+// A git hook exports these for the repository being pushed; inherited, they
+// point every git command at that repository, and the fixture's `commit`s land
+// on the real branch under pre-push. Scrubbed per call, since `main` runs git
+// in-process from `process.env`.
+const REPO_POINTERS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']
+
+function withoutRepoPointers<T>(run: () => T): T {
+  const saved = Object.fromEntries(REPO_POINTERS.map((key) => [key, process.env[key]]))
+  for (const key of REPO_POINTERS) delete process.env[key]
+  try {
+    return run()
+  } finally {
+    for (const key of REPO_POINTERS) if (saved[key] !== undefined) process.env[key] = saved[key]
+  }
+}
+
 function git(...args: string[]) {
-  execFileSync('git', args, {
-    cwd: root,
-    stdio: 'ignore',
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 't',
-      GIT_AUTHOR_EMAIL: 't@example.invalid',
-      GIT_COMMITTER_NAME: 't',
-      GIT_COMMITTER_EMAIL: 't@example.invalid',
-    },
-  })
+  withoutRepoPointers(() =>
+    execFileSync('git', args, {
+      cwd: root,
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 't',
+        GIT_AUTHOR_EMAIL: 't@example.invalid',
+        GIT_COMMITTER_NAME: 't',
+        GIT_COMMITTER_EMAIL: 't@example.invalid',
+      },
+    }),
+  )
 }
 
 function project(dir: string, name: string) {
@@ -91,7 +109,11 @@ afterEach(() => {
 function jobOutputs(args: string[]): Record<string, string> {
   const output = join(root, 'github-output')
   writeFileSync(output, '')
-  expect(main(['job', ...args], { repoRoot: root, env: { GITHUB_OUTPUT: output } })).toBe(0)
+  expect(
+    withoutRepoPointers(() =>
+      main(['job', ...args], { repoRoot: root, env: { GITHUB_OUTPUT: output } }),
+    ),
+  ).toBe(0)
   return Object.fromEntries(
     readFileSync(output, 'utf-8')
       .split('\n')
@@ -101,6 +123,30 @@ function jobOutputs(args: string[]): Record<string, string> {
 }
 
 describe('affected-cli job', () => {
+  it("keeps its commits in the fixture under a hook's exported GIT_DIR", () => {
+    const other = mkdtempSync(join(tmpdir(), 'affected-cli-other-'))
+    const originalGitDir = process.env.GIT_DIR
+    try {
+      withoutRepoPointers(() =>
+        execFileSync('git', ['init', '-q'], { cwd: other, stdio: 'ignore' }),
+      )
+      process.env.GIT_DIR = join(other, '.git')
+      write('packages/base/src/index.ts', 'export const a = 2\n')
+      git('commit', '-q', '-am', 'change base')
+      const out = jobOutputs(['test-shared', '--event', 'pull_request', '--base', 'HEAD^1'])
+      expect(JSON.parse(out.projects ?? '')).toEqual(['base-node', 'top-node'])
+      const otherLog = execFileSync('git', ['-C', other, 'rev-list', '--all', '--count'], {
+        env: { ...process.env, GIT_DIR: join(other, '.git') },
+        encoding: 'utf8',
+      })
+      expect(otherLog.trim()).toBe('0')
+    } finally {
+      if (originalGitDir === undefined) delete process.env.GIT_DIR
+      else process.env.GIT_DIR = originalGitDir
+      rmSync(other, { recursive: true, force: true })
+    }
+  })
+
   it('selects the changed package and its dependent, not the bystander, on a pull request', () => {
     write('packages/base/src/index.ts', 'export const a = 2\n')
     git('commit', '-q', '-am', 'change base')
@@ -131,6 +177,22 @@ describe('affected-cli job', () => {
     expect(out.run).toBe('true')
     expect(JSON.parse(out.projects ?? '')).toEqual(['aside-node', 'base-node', 'top-node'])
     expect(out.reason).toMatch(/selection unavailable/)
+  })
+
+  it('runs a path-scoped job for a change under its tree, and skips it otherwise', () => {
+    // Each commit stages its own paths: `jobOutputs` leaves a root file that
+    // `add -A` would sweep in, and an unattributed root file selects everything.
+    write('crates/core/src/lib.rs', '\n')
+    git('add', 'crates')
+    git('commit', '-q', '-m', 'a crate')
+    const out = jobOutputs(['rust', '--event', 'pull_request', '--base', 'HEAD^1'])
+    expect(out.run).toBe('true')
+    expect(out.reason).toContain('crates/core/src/lib.rs')
+    expect(JSON.parse(out.projects ?? '')).toEqual([])
+    write('packages/aside/src/index.ts', 'export const b = 1\n')
+    git('add', 'packages')
+    git('commit', '-q', '-m', 'aside only')
+    expect(jobOutputs(['rust', '--event', 'pull_request', '--base', 'HEAD^1']).run).toBe('false')
   })
 
   it('refuses a job that is not scoped', () => {
