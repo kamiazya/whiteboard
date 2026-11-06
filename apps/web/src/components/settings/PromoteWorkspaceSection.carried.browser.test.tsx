@@ -17,17 +17,17 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { BrowserVersionStore } from '../../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { replicaKeyBody } from '../../test-utils/replica-key-fetch.js'
-import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 claimIsolatedWhiteboardDb('promote-section-carried')
@@ -78,19 +78,14 @@ function daemonStub(target: LoroDoc, confirms: boolean) {
 
 /** A canvas with a labelled saved version, and a second canvas in the Trash. */
 async function seedVersionAndTrash(): Promise<void> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
   await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
   const content = new LoroDoc()
   writeCanvasText(content, 'as drafted')
-  expect(
-    await seedWorkspaceDocumentContent(
-      sketch.documentId,
-      new Uint8Array(content.export({ mode: 'snapshot' })),
-    ),
-  ).toBe(true)
+  await seedTreeContent(sketch.documentId, new Uint8Array(content.export({ mode: 'snapshot' })))
   await new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index }).save(
     workspaceId,
     'sketch',

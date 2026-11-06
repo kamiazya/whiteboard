@@ -22,35 +22,26 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  DOCUMENT_PATH_SEGMENT_PATTERN,
-  generateDocumentId,
-  nodeText,
-} from '@kamiazya/whiteboard-model'
+import { generateDocumentId, nodeText } from '@kamiazya/whiteboard-model'
 import {
   afterAllFloor,
   arbitraryForSchema,
   textNode,
   workspaceSegmentArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
-import type { DocRef, DocumentEntry } from '@kamiazya/whiteboard-ports'
-import {
-  chunkSnapshot,
-  createDocumentInputSchema,
-  createWorkspaceInputSchema,
-} from '@kamiazya/whiteboard-ports'
+import type { DocRef } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, createWorkspaceInputSchema } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { DOCUMENT_FILES_STORE, openWhiteboardDb } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore, documentFileRecordSchema } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { IdbDocumentStore } from './idb-document-store.js'
@@ -203,38 +194,21 @@ describe('DocumentFileStore', () => {
 })
 
 describe('IdbDocumentIndex', () => {
-  const documentPathArb = fc
-    .array(fc.stringMatching(DOCUMENT_PATH_SEGMENT_PATTERN), { minLength: 1, maxLength: 3 })
-    .map((segments) => segments.join('/'))
   const workspaceArb = arbitraryForSchema(createWorkspaceInputSchema.omit({ workspaceId: true }), {
     override: (path) =>
       path === '$.segment' ? fc.option(workspaceSegmentArbitrary, { nil: undefined }) : undefined,
   })
-  const documentArb = arbitraryForSchema(createDocumentInputSchema.omit({ workspaceId: true }), {
-    override: (path) => (path === '$.path' ? documentPathArb : undefined),
-  })
-  const byPath = (a: DocumentEntry, b: DocumentEntry) => (a.path < b.path ? -1 : 1)
 
-  fcTest.prop(
-    [
-      workspaceArb,
-      fc.uniqueArray(documentArb, { selector: (d) => d.path, minLength: 1, maxLength: 4 }),
-    ],
-    withDefaults({ numRuns: 15 }),
-  )('lists the workspace and its legacy rows as they were written', async (workspace, docs) => {
-    const index = new IdbDocumentIndex()
-    const workspaceId = generateDocumentId()
-    await index.createWorkspace({ workspaceId, ...workspace })
-    expect(await index.listWorkspaces()).toContainEqual({ workspaceId, ...workspace })
-    expect(await index.resolveWorkspace(workspaceId)).toEqual({ workspaceId, ...workspace })
-
-    // No build writes a row any more; the reader is what is under test, as
-    // the fold reads what older builds left.
-    const written: DocumentEntry[] = []
-    for (const doc of docs) written.push(await seedLegacyRow({ workspaceId, ...doc }))
-    const listed = await index.listDocuments({ workspaceId })
-    expect([...listed].sort(byPath)).toEqual([...written].sort(byPath))
-  })
+  fcTest.prop([workspaceArb], withDefaults({ numRuns: 15 }))(
+    'lists and resolves a workspace row as it was written',
+    async (workspace) => {
+      const index = new IdbDocumentIndex()
+      const workspaceId = generateDocumentId()
+      await index.createWorkspace({ workspaceId, ...workspace })
+      expect(await index.listWorkspaces()).toContainEqual({ workspaceId, ...workspace })
+      expect(await index.resolveWorkspace(workspaceId)).toEqual({ workspaceId, ...workspace })
+    },
+  )
 })
 
 describe('IdbDocumentStore', () => {
@@ -291,7 +265,7 @@ describe('BrowserVersionStore', () => {
   let workspaceId: string
 
   beforeAll(async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
     const { documentId } = await index.createDocument({ workspaceId, path: PATH, kind: 'spatial' })

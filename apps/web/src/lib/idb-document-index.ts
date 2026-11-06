@@ -1,14 +1,13 @@
 /**
- * The browser's workspace registry and its legacy document rows, over
- * IndexedDB.
+ * The browser's workspace registry, over IndexedDB, and the probe for the
+ * per-document rows older builds wrote.
  *
- * Two roles, and only two. The REGISTRY — create, list, resolve and rename a
- * workspace — which `FoldingBrowserIndex` and the shell switcher
- * (`browser-workspaces.ts`) both keep here. And the legacy ROWS older builds
- * wrote one per document, which the startup fold lists and retires
- * (`fold-workspace.ts`). A document this build creates lives in the
- * workspace tree, never here, so nothing writes a row any more: this is not
- * a `DocumentIndex`, and a test that needs a legacy row writes one directly
+ * The REGISTRY — create, list, resolve and rename a workspace — is what
+ * `BrowserDocumentIndex` and the shell switcher (`browser-workspaces.ts`)
+ * both keep here. The per-document rows are not read: a document this build
+ * creates lives in the workspace tree, and a workspace that still holds one
+ * of those rows is refused whole (`holdsPreTreeRecords`). So this is not a
+ * `DocumentIndex`, and a test that needs such a row writes one directly
  * (`test-utils/seed-legacy-row.ts`).
  *
  * Its writes still keep the `DocumentIndex` port's heavy invariant, that a
@@ -25,13 +24,8 @@
 import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import {
   type CreateWorkspaceInput,
-  compareDocumentPaths,
   createWorkspaceInputSchema,
-  type DocumentEntry,
-  documentEntrySchema,
-  type ListDocumentsInput,
   type RenameWorkspaceInput,
-  type ResolveDocumentByIdInput,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   storedWorkspaceEntrySchema,
@@ -41,50 +35,11 @@ import {
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
-import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
 import { refuseIfRemovedIn, TOMBSTONE_STORE } from './workspace-tombstone.js'
-
-/**
- * A row as stored: the port's own entry shape plus the `workspaceId` the
- * store keys on. `name` and `kind` are absent rather than null when unset,
- * matching `DocumentEntry` — IndexedDB round-trips `undefined` properties by
- * dropping them, so writing the entry shape directly keeps the read path free
- * of null-to-absent conversions the daemon's SQL twin has to perform.
- *
- * Derived from `documentEntrySchema` rather than written beside it, and
- * every read below hydrates through it — the same discipline
- * `listWorkspaces` applies with `storedWorkspaceEntrySchema.parse`. A cast here
- * let a corrupt row (a devtools edit, a buggy writer, schema drift) flow
- * into the UI wearing the contract's type; the parse fails loudly and names
- * the field instead.
- */
-const indexRowSchema = documentEntrySchema.extend({ workspaceId: z.string().min(1) })
-type IndexRow = z.infer<typeof indexRowSchema>
-
-function toEntry(row: IndexRow): DocumentEntry {
-  return {
-    documentId: row.documentId,
-    path: row.path,
-    ...(row.kind === undefined ? {} : { kind: row.kind }),
-    ...(row.name === undefined ? {} : { name: row.name }),
-  }
-}
-
-async function requireWorkspace(tx: IDBTransaction, workspaceId: string): Promise<void> {
-  const found = await request(tx.objectStore(WORKSPACES_STORE).getKey(workspaceId))
-  if (found === undefined) throw new WorkspaceNotFoundError(workspaceId)
-}
-
-/** Every row in one workspace, unordered. */
-async function rowsIn(tx: IDBTransaction, workspaceId: string): Promise<IndexRow[]> {
-  const range = IDBKeyRange.bound([workspaceId], [workspaceId, []])
-  const rows = await request(tx.objectStore(DOCUMENT_INDEX_STORE).getAll(range))
-  return rows.map((row) => indexRowSchema.parse(row))
-}
 
 const log = getAppLogger('idb-document-index')
 
@@ -110,7 +65,7 @@ export class IdbDocumentIndex {
   /**
    * `dbName`: only tests pass this; see `openWhiteboardDb`'s note on why it
    * exists. `readsAwaitIssuedWrites: false` is for reads a tracked writer can
-   * reach — the startup fold's, and `FoldingBrowserIndex`'s own — see `tx`.
+   * reach — `BrowserDocumentIndex`'s own — see `tx`.
    */
   constructor(
     private readonly dbName?: string,
@@ -131,8 +86,9 @@ export class IdbDocumentIndex {
       return trackIndexWrite(inTransaction(this.dbName, stores, mode, body))
     }
     // Some reads go without waiting because a tracked write can be what is
-    // running them: the save loop's rename asks for the fold, and a fold read
-    // that waited here would wait on that loop, which waits on the fold.
+    // running them: the save loop's rename asks whether its workspace is
+    // refused, and a probe that waited here would wait on that loop, which
+    // waits on the probe.
     if (this.options.readsAwaitIssuedWrites === false) {
       return inTransaction(this.dbName, stores, mode, body)
     }
@@ -155,7 +111,7 @@ export class IdbDocumentIndex {
       // blind `put` of the input let the bare `{ workspaceId }` call clear
       // whatever identity layers the row already carried.
       //
-      // Load-bearing for `FoldingBrowserIndex`, whose `createWorkspace`
+      // Load-bearing for `BrowserDocumentIndex`, whose `createWorkspace`
       // writes its registry half through this call: `ensureBrowserWorkspace`
       // re-creates the browser workspace bare on every boot path, and an
       // overwrite here would strip the identity `renameWorkspace` — right
@@ -240,33 +196,18 @@ export class IdbDocumentIndex {
     })
   }
 
-  async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {
-    return this.tx([WORKSPACES_STORE, DOCUMENT_INDEX_STORE], 'readonly', async (tx) => {
-      // Before the rows, not after: an absent workspace answers with an error
-      // rather than an empty list, which is the same answer a real but empty
-      // workspace would give.
-      await requireWorkspace(tx, workspaceId)
-      const rows = await rowsIn(tx, workspaceId)
-      // Sorted here rather than relying on the key order. The two agree today
-      // — an array key sorts element-wise and `path` is the second element —
-      // but the port ships `compareDocumentPaths` precisely so no store
-      // re-derives the rule, and IndexedDB's collation is not that rule.
-      return rows.sort((a, b) => compareDocumentPaths(a.path, b.path)).map(toEntry)
-    })
-  }
-
   /**
-   * Drops the row naming `documentId`, whatever sits below its path. Not the
-   * port's delete, which refuses a parent: this retires a row whose document
-   * the workspace tree now answers for, and a row below it is retired on its
-   * own turn. Absent is fine — a retirement interrupted after this ran
-   * repeats it.
+   * Whether `workspaceId` still holds a row in the per-document index older
+   * builds wrote — a document that predates the workspace tree. Nothing this
+   * build does writes one, so an answer of false stays false; a true one is
+   * a workspace the browser keeper refuses rather than reads
+   * (`BrowserStorageRefusedError`). A count, not a parse: any row there at
+   * all is a document the tree does not hold.
    */
-  async retireDocument({ workspaceId, documentId }: ResolveDocumentByIdInput): Promise<void> {
-    await this.tx([DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
-      const store = tx.objectStore(DOCUMENT_INDEX_STORE)
-      const key = await request(store.index('byId').getKey([workspaceId, documentId]))
-      if (key !== undefined) await request(store.delete(key))
+  async holdsPreTreeRecords(workspaceId: string): Promise<boolean> {
+    return this.tx([DOCUMENT_INDEX_STORE], 'readonly', async (tx) => {
+      const range = IDBKeyRange.bound([workspaceId], [workspaceId, []])
+      return (await request(tx.objectStore(DOCUMENT_INDEX_STORE).count(range))) > 0
     })
   }
 }

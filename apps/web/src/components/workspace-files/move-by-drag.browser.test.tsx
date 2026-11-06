@@ -7,10 +7,10 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../../index.css'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
@@ -23,7 +23,7 @@ beforeEach(async () => {
 })
 
 async function seedAndRender(extra: { path: string; name: string }[] = []) {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const ids: Record<string, string> = {}

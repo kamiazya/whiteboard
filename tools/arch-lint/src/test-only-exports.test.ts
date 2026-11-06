@@ -71,7 +71,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/hooks/use-document-file-seams.ts#toFacetCard',
   'apps/web/src/hooks/use-tag-vocabulary.ts#readTagVocabulary',
   'apps/web/src/lib/block-range-at.ts#blockRangeAt',
-  'apps/web/src/lib/browser-idb.ts#DB_VERSION',
   'apps/web/src/lib/browser-workspace-id.ts#getBrowserWorkspaceIdentity',
   'apps/web/src/lib/destructive-copy.ts#DestructiveDescription',
   'apps/web/src/lib/extension-bridge-fetch.ts#createBridgeFetch',
@@ -88,9 +87,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/theme-fonts.ts#loadedThemeFaces',
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
-  'apps/web/src/lib/user-settings-store.ts#migrateV1',
-  'apps/web/src/lib/user-settings-store.ts#migrateV2',
-  'apps/web/src/lib/user-settings-store.ts#migrateV3',
   'apps/web/src/lib/user-settings-store.ts#migrateV4',
   'packages/canvas-render/src/layout/comment-placement.ts#commentBubbleCandidates',
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreSegmentPair',
@@ -207,9 +203,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
  * re-export), not a test reaching into an internal.
  */
 const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
-  'apps/web/src/lib/browser-idb-upgrades.ts#discardPlaintextReplicas',
-  'apps/web/src/lib/browser-idb-upgrades.ts#mintBrowserWorkspaceSegment',
-  'apps/web/src/lib/browser-idb-upgrades.ts#rekeyBrowserWorkspace',
   'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
   'packages/canvas-render/src/layout/comment-placement.ts#COMMENT_BUBBLE_OFFSET_PX',
   'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
@@ -254,8 +247,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the longest an edit waits; the sustained-edit test asserts the write lands inside it',
   'apps/web/src/lib/search-query-memory.ts#forgetSearchQueries':
     'the remembered search query is module state that outlives a page by design, so an index-page suite forgets it between tests',
-  'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
-    'the one await a test has over a startup fold an unmount left running, so clearing the database cannot land between its listing and its record open; production never deletes storage under a running fold',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
     'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
   'packages/daemon-client/src/api-contracts/document.ts#updateDocumentResponseSchema':
@@ -363,10 +354,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 146
+const DEBT_CEILING = 142
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 17
+const PUBLISHED_CEILING = 14
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

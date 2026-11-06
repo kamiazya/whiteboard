@@ -22,13 +22,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import {
+  seedTreeContent,
+  seedWorkspaceDocumentContent,
+} from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { BROWSER_FILE_ADAPTER } from './document-embed-content.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { countBrowserWorkspaceDocuments, promoteWorkspace } from './promote-workspace.js'
 
 claimIsolatedWhiteboardDb('promote-workspace')
@@ -107,7 +110,7 @@ describe('promoteWorkspace', () => {
   beforeEach(clearWhiteboardDb)
 
   it('posts the record; ids resolve on the target, the collision shadows, and referenced image bytes travel', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const roadmap = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -135,12 +138,10 @@ describe('promoteWorkspace', () => {
       nodes: [fileNode({ id: 'img', file: stored.ref, x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
-    expect(
-      await seedWorkspaceDocumentContent(
-        contested.documentId,
-        new Uint8Array(content.export({ mode: 'snapshot' })),
-      ),
-    ).toBe(true)
+    await seedTreeContent(
+      contested.documentId,
+      new Uint8Array(content.export({ mode: 'snapshot' })),
+    )
 
     // The confirmation UI states the document count BEFORE promoting, from
     // the same record the transfer will read.
@@ -182,7 +183,7 @@ describe('promoteWorkspace', () => {
   })
 
   it('sends the very bytes the record holds, with no attestation beside them', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -203,7 +204,7 @@ describe('promoteWorkspace', () => {
   })
 
   it('a referenced image whose bytes are gone is reported missing, never a failed promotion', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const sketch = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -217,12 +218,7 @@ describe('promoteWorkspace', () => {
       ],
       edges: [],
     })
-    expect(
-      await seedWorkspaceDocumentContent(
-        sketch.documentId,
-        new Uint8Array(content.export({ mode: 'snapshot' })),
-      ),
-    ).toBe(true)
+    await seedTreeContent(sketch.documentId, new Uint8Array(content.export({ mode: 'snapshot' })))
 
     const result = await promoteWorkspace({
       fetch: daemonStub(new LoroDoc()),
@@ -237,7 +233,7 @@ describe('promoteWorkspace', () => {
 
   /** A spatial document referencing one stored image per entry, each with its own type and bytes. */
   async function seedImages(images: ReadonlyArray<{ id: string; type: string; blob: Blob }>) {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const sketch = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -329,7 +325,7 @@ describe('promoteWorkspace', () => {
   })
 
   it('a 404 target is a structured failure naming the missing daemon workspace', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -354,7 +350,7 @@ describe('promoteWorkspace', () => {
   })
 
   it('a refusal with no readable reason is a structured failure naming the status', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -374,7 +370,7 @@ describe('promoteWorkspace', () => {
   })
 
   it('a thrown fetch is a structured network failure, never a rejection', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),

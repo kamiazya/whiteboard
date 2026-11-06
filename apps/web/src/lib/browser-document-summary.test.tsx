@@ -10,7 +10,7 @@
 
 // jsdom + fake-indexeddb: this file exercises IndexedDB persistence logic,
 // not browser layout or input fidelity — the real-IDB contract stays pinned
-// by idb-document-index/loro-store/browser-backend/browser-idb-migration
+// by idb-document-index/loro-store/browser-backend/browser-idb
 // in the browser project.
 import 'fake-indexeddb/auto'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'

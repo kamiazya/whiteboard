@@ -170,10 +170,6 @@ const BANNED = [
     ],
     exempt: [
       ...Object.keys(BROWSER_LOCAL_IN_PACKAGES),
-      // PERSISTED value under a `.strict()` schema whose loader falls back to
-      // defaults on any parse failure: renaming it in place would discard an
-      // existing reader's whole settings payload. It moves with a migration.
-      'apps/web/src/lib/user-settings-store.ts',
       // Generates `docs/assets/browser-local-list.png`, which ADR-0008 names
       // in its own prose. Renaming the asset would make a decision record
       // false about a file that no longer exists, and rewriting the ADR to
@@ -209,16 +205,7 @@ const BANNED = [
       'README.md',
       'apps/web/DESIGN.md',
     ],
-    exempt: [
-      // The v1->v2 settings migration and its tests. They spell the old key
-      // because reading a payload written under it is their entire job —
-      // the same reason a database migration names the columns as they stood
-      // at its point in the log.
-      'apps/web/src/lib/user-settings-store.ts',
-      'apps/web/src/lib/user-settings-store.test.ts',
-      'apps/web/src/lib/user-settings-store.property.test.ts',
-      '.claude/rules/vocabulary.md',
-    ],
+    exempt: ['.claude/rules/vocabulary.md'],
   },
   // The same keeper-axis `local`, in the word order the pattern above cannot
   // see: `local` ahead of what it modifies (a files source, a document
@@ -268,10 +255,7 @@ const BANNED = [
     word: "'local-daemon' (as a value)",
     instead: "'daemon'",
     dirs: ['apps/web/src'],
-    exempt: [
-      'apps/web/src/lib/user-settings-store.ts',
-      'apps/web/src/lib/user-settings-store.test.ts',
-    ],
+    exempt: [],
   },
   // The keeper was once named by a `dataMode: 'daemon' | 'local'` prop pair —
   // the same retired `local` on the same axis, spelled as a prop. It is

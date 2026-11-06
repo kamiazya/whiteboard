@@ -67,7 +67,6 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/hooks/use-document-file-seams.test.tsx': 3,
   'apps/web/src/lib/browser-backend.browser.test.tsx': 1,
   'apps/web/src/lib/browser-backend.restore.browser.test.tsx': 1,
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1,
   'apps/web/src/lib/render-store.browser.test.tsx': 1,
   'apps/web/src/lib/replica-refresh.test.ts': 5,
   'apps/web/src/lib/sse-shared-worker-resend.test.ts': 1,

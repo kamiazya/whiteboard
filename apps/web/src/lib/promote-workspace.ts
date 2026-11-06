@@ -24,12 +24,9 @@
  * the person does NOT own goes through `accept-transferred-record.ts`, at
  * that keeper's own origin.
  *
- * The caller owns the fold: a legacy row-plane document that has not been
- * absorbed into the tree yet is not in the record this reads, so the promote
- * surface must run after the startup fold (any FoldingBrowserIndex read
- * performs it; the Settings section folds explicitly before counting, since
- * it can be a session's first surface) — the same ordering every other
- * record consumer relies on.
+ * A workspace whose documents predate the tree is not moved:
+ * `countBrowserWorkspaceDocuments`, which the section asks before it offers
+ * the move, refuses it by name.
  */
 
 import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
@@ -43,6 +40,7 @@ import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import {
   type CarriedPlanes,
@@ -54,6 +52,7 @@ import {
 import { countOf } from './count-wording.js'
 import { putDaemonImage } from './daemon-file-adapter.js'
 import { DocumentFileStore } from './document-file-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { imageRefusal } from './image-upload-policy.js'
 import { describeTransferFailure, errorName, type FailureCopy } from './keeper-transfer-failure.js'
 import {
@@ -87,8 +86,15 @@ export interface PromoteWorkspaceOptions {
  */
 export async function countBrowserWorkspaceDocuments(
   workspaceDocs: WorkspaceDocs,
+  registry: Pick<IdbDocumentIndex, 'holdsPreTreeRecords'> = new IdbDocumentIndex(),
 ): Promise<number> {
-  const record = await workspaceDocs.open(getBrowserWorkspaceId())
+  const workspaceId = getBrowserWorkspaceId()
+  // Documents older builds wrote outside the record are not in it, so a count
+  // of the record would offer "nothing to move" over a workspace full of them.
+  if (await registry.holdsPreTreeRecords(workspaceId)) {
+    throw new BrowserStorageRefusedError('pre-tree-records', workspaceId)
+  }
+  const record = await workspaceDocs.open(workspaceId)
   if (record === null) return 0
   return readWorkspaceDocuments(record).length
 }

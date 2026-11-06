@@ -19,7 +19,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
@@ -129,7 +129,7 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
   it('tapping Undo in the history cluster reverts the last committed edit', async () => {
     // The mobile path: no keyboard exists, so the cluster button must drive
     // the same Loro UndoManager the Cmd/Ctrl+Z shortcut does.
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
 
@@ -183,7 +183,7 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
   })
 
   it('a created node survives remount, and a deleted one stays gone', async () => {
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
 
@@ -218,7 +218,7 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
 
     cleanup()
     latestMountedCanvases = []
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(async () => {
       const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
@@ -252,7 +252,7 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
 
     cleanup()
     latestMountedCanvases = []
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(async () => {
       const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))

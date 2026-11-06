@@ -20,9 +20,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { pwaOptions } from '../vite-pwa-options.js'
 import { App } from './App.js'
 import { BRIDGE_DAEMON_BASE_URL } from './lib/bridge-address.js'
+import { sharedBrowserDocumentIndex } from './lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 import type { ExtensionConnection } from './lib/extension-connection.js'
-import { sharedFoldingBrowserIndex } from './lib/folding-browser-index.js'
 import type { ProviderState } from './lib/provider.js'
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
@@ -73,7 +73,7 @@ afterEach(() => {
 async function documentCount(): Promise<number> {
   // The index the list page itself writes through: the workspace tree is
   // where a document lives, the plain IndexedDB rows are a cache of it.
-  const index = sharedFoldingBrowserIndex()
+  const index = sharedBrowserDocumentIndex()
   return (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).length
 }
 

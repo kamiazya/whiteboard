@@ -3,9 +3,6 @@ import {
   createUserSettingsStore,
   defaultUserSettings,
   fitLeftBehind,
-  LEGACY_V1_STORAGE_KEY,
-  LEGACY_V2_STORAGE_KEY,
-  LEGACY_V3_STORAGE_KEY,
   LEGACY_V4_STORAGE_KEY,
   STORAGE_KEY,
   userSettingsSchema,
@@ -296,377 +293,9 @@ describe('appearance settings', () => {
   })
 })
 
-describe('v1 -> v2 migration', () => {
+describe('v4 -> v5 migration', () => {
   beforeEach(() => {
     localStorage.clear()
-  })
-
-  // A full v1 payload: every field a real reader could be holding.
-  function writeV1(storage: Record<string, unknown> = {}): void {
-    localStorage.setItem(
-      LEGACY_V1_STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        storage: {
-          localDaemonBaseUrl: 'http://127.0.0.1:3099',
-          knownDaemonBaseUrls: ['http://127.0.0.1:3099'],
-          dismissedDaemonBaseUrls: ['http://127.0.0.1:4000'],
-          lastConnectedWorkspaceId: 'ws-1',
-          lastConnectedPath: 'notes/plan',
-          dismissedPersistenceWarningAt: '2026-07-05T00:00:00.000Z',
-          dismissedBetaBannerAt: '2026-07-06T00:00:00.000Z',
-          dismissedDaemonCtaAt: '2026-07-07T00:00:00.000Z',
-          dismissedDaemonCtaInstanceId: 'inst-1',
-          ...storage,
-        },
-        migration: { browserToDaemon: { lastImportedDocumentId: 'doc-1' } },
-        capabilities: { webMcpEnabled: true, webMcpMaxTier: 2 },
-        appearance: { faviconStyle: 'dot' },
-      }),
-    )
-  }
-
-  it('carries the daemon connection across under its new name', () => {
-    writeV1()
-    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-  })
-
-  // The whole point of the increment: renaming in place would have discarded
-  // ALL of this, not just the daemon URL, because the schema is `.strict()`
-  // and load() falls back to defaults on any parse failure.
-  it('carries every live stored field across unchanged', () => {
-    writeV1()
-    const loaded = createUserSettingsStore().load()
-    // The two dismissal stamps the v1 seed carries go in the chained v4->v5
-    // step; the connection is the one storage field a v1 payload still has.
-    expect(loaded.storage).toEqual({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    // browserToDaemon is dropped by the chained v2->v3 step, not carried.
-    expect(loaded.migration).toEqual({})
-    // webMcpMaxTier went IN this bump, not through it: declared speculative
-    // in the very first schema, never written or read by anything since. The
-    // v1 seed above still carries it, pinning that a payload holding the
-    // retired key MIGRATES (parse-tolerated) rather than being discarded by
-    // the strict parse.
-    expect(loaded.capabilities).toEqual({ webMcpEnabled: true })
-    expect(loaded.appearance).toEqual({ faviconStyle: 'dot' })
-  })
-
-  // Both are fields nothing read or wrote. A dead field does not need a better
-  // name, so the migration drops them rather than carrying them under one.
-  it('drops the two dead fields rather than renaming them', () => {
-    writeV1({ preferredProvider: 'local-daemon', lastBrowserCanvasId: 'canvas-1' })
-    const loaded = createUserSettingsStore().load()
-    expect(loaded.storage).not.toHaveProperty('preferredProvider')
-    expect(loaded.storage).not.toHaveProperty('lastBrowserCanvasId')
-    // and their presence must not fail the parse and cost the rest
-    expect(loaded.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-  })
-
-  it('persists the migrated payload under the current key and removes the v1 one', () => {
-    writeV1()
-    createUserSettingsStore().load()
-    expect(localStorage.getItem(LEGACY_V1_STORAGE_KEY)).toBeNull()
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
-    expect(stored.version).toBe(5)
-    expect(stored.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-  })
-
-  it('a current payload wins and no migration runs, so a stale v1 key cannot resurrect', () => {
-    writeV1()
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 5,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:4321' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe('http://127.0.0.1:4321')
-    // untouched, because the current key answered
-    expect(localStorage.getItem(LEGACY_V1_STORAGE_KEY)).not.toBeNull()
-  })
-
-  // The v1 schema was `.strict()` for exactly this reason; the migration must
-  // not become the hole that lets a token-shaped key through.
-  it('refuses a v1 payload carrying an unknown token-shaped key', () => {
-    localStorage.setItem(
-      LEGACY_V1_STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099', daemonToken: 'super-secret' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
-  })
-
-  it('reset() clears the un-migrated v1 key too, so nothing resurrects', () => {
-    writeV1()
-    const store = createUserSettingsStore()
-    store.reset()
-    expect(store.load()).toEqual(defaultUserSettings())
-  })
-
-  it('a v1 payload with no daemon connection migrates without inventing one', () => {
-    localStorage.setItem(
-      LEGACY_V1_STORAGE_KEY,
-      JSON.stringify({ version: 1, storage: {}, migration: {}, capabilities: {} }),
-    )
-    const loaded = createUserSettingsStore().load()
-    expect(loaded.storage).not.toHaveProperty('daemonBaseUrl')
-    expect(loaded.version).toBe(5)
-  })
-})
-
-describe('v2 -> v3 migration', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
-
-  // A full v2 payload as a real reader could be holding it: the retired
-  // browserToDaemon block plus a promotion record from before the counts
-  // became required.
-  function writeV2(migration: Record<string, unknown> = {}): void {
-    localStorage.setItem(
-      LEGACY_V2_STORAGE_KEY,
-      JSON.stringify({
-        version: 2,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          knownDaemonBaseUrls: ['http://127.0.0.1:3099'],
-          lastConnectedWorkspaceId: 'ws-1',
-        },
-        migration: {
-          browserToDaemon: { lastImportedDocumentId: 'doc-1' },
-          ...migration,
-        },
-        capabilities: { webMcpEnabled: true },
-        appearance: { faviconStyle: 'dot' },
-      }),
-    )
-  }
-
-  it('carries the payload across, persists it under the current key, and removes the v2 one', () => {
-    writeV2()
-    const loaded = createUserSettingsStore().load()
-    expect(loaded.version).toBe(5)
-    expect(loaded.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-    expect(loaded.capabilities).toEqual({ webMcpEnabled: true })
-    expect(loaded.appearance).toEqual({ faviconStyle: 'dot' })
-    expect(localStorage.getItem(LEGACY_V2_STORAGE_KEY)).toBeNull()
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
-    expect(stored.version).toBe(5)
-  })
-
-  // Written by the retired per-document import panel, read by nothing since.
-  // A field nobody reads goes IN the migration (dropped), not through it.
-  it('drops migration.browserToDaemon', () => {
-    writeV2()
-    const loaded = createUserSettingsStore().load()
-    expect(loaded.migration).not.toHaveProperty('browserToDaemon')
-  })
-
-  // The v2 promotion schema was all-optional, so a stored ok:true record may
-  // lack the counts the union now requires. The migration fills them once,
-  // which is where the old describeResult `??` fallbacks moved to.
-  it('normalizes a partial ok promotion record into the union shape', () => {
-    writeV2({
-      promotion: { at: '2026-08-01T00:00:00.000Z', workspaceId: 'ws-a', ok: true },
-    })
-    expect(createUserSettingsStore().load().migration.promotion).toEqual({
-      at: '2026-08-01T00:00:00.000Z',
-      workspaceId: 'ws-a',
-      ok: true,
-      promotedCount: 0,
-      shadowedPaths: [],
-      blobsMissing: [],
-      blobsFailed: [],
-    })
-  })
-
-  it('normalizes a reason-less failure record', () => {
-    writeV2({
-      promotion: { at: '2026-08-01T00:00:00.000Z', workspaceId: 'ws-a', ok: false },
-    })
-    expect(createUserSettingsStore().load().migration.promotion).toEqual({
-      at: '2026-08-01T00:00:00.000Z',
-      workspaceId: 'ws-a',
-      ok: false,
-      reason: 'unknown error',
-    })
-  })
-
-  it('a current payload wins and a stale v2 key cannot resurrect', () => {
-    writeV2()
-    createUserSettingsStore().save({
-      ...defaultUserSettings(),
-      storage: { daemonBaseUrl: 'http://127.0.0.1:4321' },
-    })
-    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe('http://127.0.0.1:4321')
-  })
-
-  it('a v1 payload chains all the way to the current version', () => {
-    localStorage.setItem(
-      LEGACY_V1_STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: { browserToDaemon: { lastImportedAt: '2026-07-01T00:00:00.000Z' } },
-        capabilities: {},
-      }),
-    )
-    const loaded = createUserSettingsStore().load()
-    expect(loaded.version).toBe(5)
-    expect(loaded.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-    expect(loaded.migration).not.toHaveProperty('browserToDaemon')
-    expect(localStorage.getItem(LEGACY_V1_STORAGE_KEY)).toBeNull()
-  })
-
-  it('reset() clears the un-migrated v2 key too, so nothing resurrects', () => {
-    writeV2()
-    const store = createUserSettingsStore()
-    store.reset()
-    expect(store.load()).toEqual(defaultUserSettings())
-  })
-
-  // The stored shape is a discriminated union now: an ok record cannot claim
-  // a failure reason, and a failure cannot carry promoted counts. Such a
-  // payload is tampered/corrupt, and invalid means defaults.
-  it('reads a failure record that also carries success-arm fields as the failure it is', () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 5,
-        storage: {},
-        migration: {
-          promotion: {
-            at: '2026-08-01T00:00:00.000Z',
-            workspaceId: 'ws-a',
-            ok: false,
-            reason: 'x',
-            promotedCount: 3,
-          },
-        },
-        capabilities: {},
-      }),
-    )
-    expect(createUserSettingsStore().load().migration.promotion).toEqual({
-      at: '2026-08-01T00:00:00.000Z',
-      workspaceId: 'ws-a',
-      ok: false,
-      reason: 'x',
-    })
-  })
-
-  it('rejects a success record missing what its writer always writes', () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 5,
-        storage: {},
-        migration: {
-          promotion: { at: '2026-08-01T00:00:00.000Z', workspaceId: 'ws-a', ok: true },
-        },
-        capabilities: {},
-      }),
-    )
-    expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
-  })
-})
-
-describe('v3 -> v4 migration', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
-
-  // A full v3 payload as a paired browser could be holding it: every field the
-  // pairing link and the loopback probe wrote, and a move a passkey confirmed.
-  function writeV3(): void {
-    localStorage.setItem(
-      LEGACY_V3_STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          lastConnectedWorkspaceId: 'ws-1',
-          lastConnectedPath: 'notes/plan',
-          knownDaemonBaseUrls: ['http://127.0.0.1:3099'],
-          dismissedDaemonBaseUrls: ['http://127.0.0.1:4000'],
-          dismissedDaemonCtaAt: '2026-07-07T00:00:00.000Z',
-          dismissedDaemonCtaInstanceId: 'inst-1',
-          dismissedPersistenceWarningAt: '2026-07-05T00:00:00.000Z',
-          replicas: {
-            'ws-1': { daemonBaseUrl: 'http://127.0.0.1:3099', syncedAt: '2026-09-01T00:00:00Z' },
-          },
-        },
-        migration: {
-          promotion: {
-            at: '2026-08-01T00:00:00.000Z',
-            workspaceId: 'ws-a',
-            ok: true,
-            promotedCount: 2,
-            shadowedPaths: [],
-            blobsMissing: [],
-            blobsFailed: [],
-            attested: true,
-          },
-        },
-        capabilities: { webMcpEnabled: true },
-        appearance: { faviconStyle: 'dot' },
-      }),
-    )
-  }
-
-  it('drops the pairing-era fields and keeps everything else', () => {
-    writeV3()
-    const loaded = createUserSettingsStore().load()
-    expect(loaded).toEqual({
-      version: 5,
-      storage: {
-        daemonBaseUrl: 'http://127.0.0.1:3099',
-        replicas: {
-          'ws-1': { daemonBaseUrl: 'http://127.0.0.1:3099', syncedAt: '2026-09-01T00:00:00Z' },
-        },
-      },
-      migration: {
-        promotion: {
-          at: '2026-08-01T00:00:00.000Z',
-          workspaceId: 'ws-a',
-          ok: true,
-          promotedCount: 2,
-          shadowedPaths: [],
-          blobsMissing: [],
-          blobsFailed: [],
-        },
-      },
-      capabilities: { webMcpEnabled: true },
-      appearance: { faviconStyle: 'dot' },
-    })
-  })
-
-  it('persists the migrated payload under the current key and removes the v3 one', () => {
-    writeV3()
-    createUserSettingsStore().load()
-    expect(localStorage.getItem(LEGACY_V3_STORAGE_KEY)).toBeNull()
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null').version).toBe(5)
-  })
-
-  it('a current payload wins and a stale v3 key cannot resurrect', () => {
-    writeV3()
-    createUserSettingsStore().save({
-      ...defaultUserSettings(),
-      storage: { daemonBaseUrl: 'http://127.0.0.1:4321' },
-    })
-    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe('http://127.0.0.1:4321')
-  })
-
-  it('reset() clears the un-migrated v3 key too, so nothing resurrects', () => {
-    writeV3()
-    const store = createUserSettingsStore()
-    store.reset()
-    expect(store.load()).toEqual(defaultUserSettings())
   })
 
   it('a live payload still carrying a retired field loads without it', () => {
@@ -680,12 +309,6 @@ describe('v3 -> v4 migration', () => {
       }),
     )
     expect(createUserSettingsStore().load().storage).toEqual({})
-  })
-})
-
-describe('v4 -> v5 migration', () => {
-  beforeEach(() => {
-    localStorage.clear()
   })
 
   // A full v4 payload: the connection, the two dismissal stamps nothing has
@@ -792,5 +415,31 @@ describe('v4 -> v5 migration', () => {
       }),
     )
     expect(createUserSettingsStore().load().storage).toEqual({})
+  })
+})
+
+describe('a payload older than the one migration left', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  // Spelled as literals: the keys are no longer named anywhere in the store,
+  // which is the point — a v1, v2 or v3 payload is not read at all.
+  it.each([
+    ['whiteboard:user-settings:v1', 1],
+    ['whiteboard:user-settings:v2', 2],
+    ['whiteboard:user-settings:v3', 3],
+  ])('loads defaults over a payload under %s and writes nothing', (key, version) => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: { webMcpEnabled: true },
+      }),
+    )
+    expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
   })
 })

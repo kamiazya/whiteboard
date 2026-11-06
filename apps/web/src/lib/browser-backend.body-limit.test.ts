@@ -33,13 +33,9 @@ import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
-import type { LoroStore } from './loro-store.js'
 
-// jsdom has no IndexedDB, so the startup fold and the timestamp touch are
-// replaced by their outcome; see browser-backend.read-failure.test.ts.
-vi.mock('./fold-workspace.js', () => ({
-  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
-}))
+// jsdom has no IndexedDB, so the timestamp touch is replaced by its
+// outcome; see browser-backend.read-failure.test.ts.
 vi.mock('./loro-store.js', () => ({ LoroStore: class {}, touchContentTimestamp: async () => {} }))
 
 const TARGET = {
@@ -64,7 +60,7 @@ async function connected(body: string) {
       return null
     },
   } as unknown as WorkspaceDocs
-  const backend = new BrowserBackend(TARGET, docs, {} as LoroStore)
+  const backend = new BrowserBackend(TARGET, docs)
   const reasons: string[] = []
   const refusals: string[] = []
   let snapshot: Uint8Array | null = null
@@ -246,7 +242,7 @@ async function connectedBoard() {
       return null
     },
   } as unknown as WorkspaceDocs
-  const backend = new BrowserBackend(BOARD, docs, {} as LoroStore)
+  const backend = new BrowserBackend(BOARD, docs)
   const reasons: string[] = []
   const refusals: string[] = []
   let snapshot: Uint8Array | null = null

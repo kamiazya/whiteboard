@@ -1,21 +1,15 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Loro } from 'loro-crdt'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
-import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { createSeededDocumentAt } from '../lib/create-seeded-document.js'
 import { LoroStore } from '../lib/loro-store.js'
-import { seedLegacyRow } from './seed-legacy-row.js'
 
 /**
- * Seeds one document the way an older build left it in the real browser
- * stores: a legacy index row, a per-document content record, and
- * (optionally) the default pointer. The startup fold moves it into the
- * workspace tree on first read, which is the path a returning user's
- * documents take.
+ * Seeds one empty document in the real browser stores, through the same
+ * create every surface uses — a node in the workspace tree and its listing
+ * clock — and (optionally) the default pointer.
  *
- * Returns the id the row was minted with. The content record is written
- * here rather than by the caller because it is keyed by that id, and a test
- * that seeds only the row gets a document with no last-edited time and no
- * bytes to open.
+ * Returns the id the document was minted with.
  */
 export async function seedIdbDocument({
   path,
@@ -28,13 +22,11 @@ export async function seedIdbDocument({
   kind?: DocumentKind
   makeDefault?: boolean
 }): Promise<string> {
-  const entry = await seedLegacyRow({
-    workspaceId: getBrowserWorkspaceId(),
+  const entry = await createSeededDocumentAt(new BrowserDocumentIndex(), new LoroStore(), {
     path,
     kind,
     ...(name === undefined ? {} : { name }),
   })
-  await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
   if (makeDefault) await new IdbDefaultDocumentPointer().set(entry.documentId)
   return entry.documentId
 }

@@ -1,9 +1,6 @@
 import { type DocumentKind, generateDocumentId } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, documentEntrySchema } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from '../lib/browser-idb.js'
-import { resolveBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { inTransaction, request } from '../lib/idb-tx.js'
 
 export interface LegacyRowInput {
@@ -16,20 +13,15 @@ export interface LegacyRowInput {
 }
 
 /**
- * Writes one legacy per-document index row — the shape older builds wrote
- * and the startup fold reads and retires — straight into its store.
+ * Writes one per-document index row — the shape builds before the workspace
+ * tree wrote — straight into its store, so a test can prove the browser
+ * keeper REFUSES a workspace holding one rather than reading it as empty.
  *
- * Directly, because no production path writes one any more: a document this
- * build creates lives in the workspace tree. A test about the fold, a
- * migration or the stored shape still needs the row, so it is written here
- * in the shape `IdbDocumentIndex.listDocuments` hydrates.
- *
- * The workspace's registry row is written too when it is absent — bare, and
- * never over an existing one — because every browser that holds a legacy row
- * also holds its workspace, and the fold lists rows through a read that
- * refuses an unknown workspace. `add`, not `put`, for the row itself, so
- * seeding a path twice fails rather than replacing the first row behind a
- * test's back.
+ * Directly, because no production path writes one any more. The workspace's
+ * registry row is written too when it is absent — bare, and never over an
+ * existing one — because every browser that holds such a row also holds its
+ * workspace. `add`, not `put`, for the row itself, so seeding a path twice
+ * fails rather than replacing the first row behind a test's back.
  */
 export async function seedLegacyRow(
   input: LegacyRowInput,
@@ -51,35 +43,4 @@ export async function seedLegacyRow(
     )
   })
   return entry
-}
-
-/**
- * Whether a legacy row still names `documentId`, read through the same
- * listing the fold reads rows with — so "retired" here means retired to the
- * fold too.
- */
-export async function hasLegacyRow(
-  { workspaceId, documentId }: { readonly workspaceId: string; readonly documentId: string },
-  dbName?: string,
-): Promise<boolean> {
-  const rows = await new IdbDocumentIndex(dbName).listDocuments({ workspaceId })
-  return rows.some((row) => row.documentId === documentId)
-}
-
-/**
- * The browser workspace's legacy rows, read through the listing the startup
- * fold reads them with and held as a port-shaped index — for the summary
- * layer, which takes a `DocumentIndex`, while the row store is not one.
- * Resolves the workspace id first, as the boot chain does, and is a snapshot:
- * read again for each answer that has to be current.
- */
-export async function legacyRowsOfBrowserWorkspace(
-  dbName?: string,
-): Promise<InMemoryDocumentIndex> {
-  const workspaceId = await resolveBrowserWorkspaceId(dbName)
-  const index = new InMemoryDocumentIndex()
-  index.seedWorkspace({ workspaceId })
-  const rows = await new IdbDocumentIndex(dbName).listDocuments({ workspaceId })
-  for (const row of rows) index.seed({ ...row, workspaceId })
-  return index
 }

@@ -15,8 +15,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -41,13 +41,13 @@ function hideDocument(): () => void {
   }
 }
 
-async function storedBody(store: FoldingBrowserIndex): Promise<string | undefined> {
+async function storedBody(store: BrowserDocumentIndex): Promise<string | undefined> {
   const entry = (await listBrowserDocuments(store)).find((row) => row.kind === 'markdown')
   const content = await loadDocumentContent(entry?.documentId ?? '')
   return content?.getText('body').toString()
 }
 
-async function typeIntoNewNote(store: FoldingBrowserIndex): Promise<void> {
+async function typeIntoNewNote(store: BrowserDocumentIndex): Promise<void> {
   await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
   renderPage(<BrowserDocumentPage store={store} />)
   const editable = await waitFor(
@@ -76,7 +76,7 @@ describe('a new note left inside the save window', () => {
   })
 
   it('keeps the typed text when the tab is hidden', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await typeIntoNewNote(store)
     const restore = hideDocument()
     try {
@@ -91,7 +91,7 @@ describe('a new note left inside the save window', () => {
   })
 
   it('keeps the typed text on pagehide', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await typeIntoNewNote(store)
     window.dispatchEvent(new Event('pagehide'))
     vi.useRealTimers()

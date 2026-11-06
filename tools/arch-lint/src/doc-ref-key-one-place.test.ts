@@ -41,11 +41,6 @@ function spellings(source: string): number {
 }
 
 const ALLOWLIST: Readonly<Record<string, { readonly count: number; readonly reason: string }>> = {
-  'apps/web/src/lib/browser-idb-upgrades.ts': {
-    count: 5,
-    reason:
-      'an IndexedDB upgrade rewrites rows from the key shape an older database holds, so it must stay frozen rather than follow the live spelling',
-  },
   'apps/web/src/test-utils/browser-document.ts': {
     count: 1,
     reason:

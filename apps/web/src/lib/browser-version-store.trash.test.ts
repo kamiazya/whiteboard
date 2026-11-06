@@ -24,11 +24,11 @@ import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { VERSIONS_STORE, whiteboardDbName } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { inTransaction, request } from './idb-tx.js'
 
 claimIsolatedWhiteboardDb('browserversiontrash')
@@ -56,7 +56,7 @@ describe('a browser document delete and its saved versions', () => {
   })
 
   it('keeps the version rows through the delete and rejoins them on a restore from the Trash', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const docs = new BrowserWorkspaceDocs()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
@@ -82,7 +82,7 @@ describe('a browser document delete and its saved versions', () => {
   })
 
   it("drops the version rows with a purge from the Trash, and only that document's", async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const docs = new BrowserWorkspaceDocs()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
@@ -104,7 +104,7 @@ describe('a browser document delete and its saved versions', () => {
   })
 
   it('keeps the version rows when the purge finds nothing in the Trash', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const docs = new BrowserWorkspaceDocs()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })

@@ -144,6 +144,12 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
 
   // Dev-workflow prose (.claude/rules, .claude/skills). History and worked
   // examples first: each names a thing that is gone, in a sentence that says so.
+  '.claude/rules/vocabulary.md#localDaemonBaseUrl':
+    'the rule records a stored settings key retired by a migration; the migration has since gone too',
+  '.claude/rules/vocabulary.md#preferredProvider': 'same sentence',
+  '.claude/rules/vocabulary.md#lastBrowserCanvasId': 'same sentence',
+  '.claude/skills/testing-techniques/resources/executable-rungs.md#foldWorkspaceDocuments':
+    'a measurement table row attributing log records to the deleted startup fold',
   '.claude/rules/app-web.md#drawAs': 'names the deleted state to describe the chain it fed',
   '.claude/rules/app-web.md#AppShellWorkspaces':
     'a history sentence about the seam both implementations used to share',

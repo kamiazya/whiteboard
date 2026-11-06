@@ -21,10 +21,10 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { commands } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { projectDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
@@ -70,7 +70,7 @@ const boardDoc = (n: number): Loro => {
 beforeEach(clearWhiteboardDb)
 
 it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 }, async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const readings: Record<number, { coldMs: number; repeatMs: number }> = {}

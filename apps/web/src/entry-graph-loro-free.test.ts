@@ -3,7 +3,7 @@
 // STATIC imports: Vite modulepreloads each of those chunks from index.html,
 // so a fresh visitor downloads them before first paint. loro-crdt's WASM
 // bindings (and everything that imports them — the workspace-document
-// machinery behind FoldingBrowserIndex) belong behind the React.lazy page
+// machinery behind BrowserDocumentIndex) belong behind the React.lazy page
 // boundary, where every page that needs them already lives.
 //
 // This walks App.tsx's static-import closure over src/ and fails when any
@@ -11,7 +11,7 @@
 // gate (smoke-bundle-size.mjs) would also catch the regression, but only
 // after a production build; this is the nearest-layer version of the same
 // budget, and it names the offending module instead of a byte total.
-// Measured: App.tsx statically importing FoldingBrowserIndex moved the
+// Measured: App.tsx statically importing BrowserDocumentIndex moved the
 // critical path from ~114 KB to 158.9 KB gzip — loro's bindings plus the
 // schema/store modules it drags in.
 

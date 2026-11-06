@@ -19,14 +19,14 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { announceVersion, listenToWorkspace } from './workspace-broadcast.js'
 
 claimIsolatedWhiteboardDb('browser-backend-cross-tab')
@@ -96,7 +96,7 @@ it('an edit saved in one tab reaches the other as a remote update', async () => 
 })
 
 /** A note in the record, with content, through the production index — the way a page finds one. */
-async function note(index: FoldingBrowserIndex, path: string, name: string, body: string) {
+async function note(index: BrowserDocumentIndex, path: string, name: string, body: string) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
@@ -106,9 +106,7 @@ async function note(index: FoldingBrowserIndex, path: string, name: string, body
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, body)
-  expect(
-    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' })),
-  ).toBe(true)
+  await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
   return entry.documentId
 }
 
@@ -121,7 +119,7 @@ function pageBody(page: Awaited<ReturnType<typeof open>>, documentId: string): s
 // Link writes the record from outside any backend, so the page open on the
 // source learns of it only if that write is announced.
 it('a page open on a note shows the links Link wrote into it', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const beta = await note(index, 'beta', 'Beta', 'The target.')
   const gamma = await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
@@ -134,7 +132,7 @@ it('a page open on a note shows the links Link wrote into it', async () => {
 })
 
 it('a page open on a note shows a reference a rename repointed', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   await note(index, 'x/target', 'Target', 'The target.')
   const daily = await note(index, 'daily', 'Daily', 'see [[x/target]]')
@@ -193,7 +191,7 @@ it('a delete made elsewhere reaches the tab holding that document', async () => 
   const a = await open(target(DOC, 'design'))
   opened.push(a.backend)
 
-  await new FoldingBrowserIndex().deleteDocument({
+  await new BrowserDocumentIndex().deleteDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: 'design',
   })

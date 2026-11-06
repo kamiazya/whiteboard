@@ -25,6 +25,7 @@ import {
   workspacePath,
 } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
+import { sharedBrowserDocumentIndex } from '../lib/browser-document-index.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
@@ -42,7 +43,6 @@ import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { documentHeading } from '../lib/document-title.js'
 import { faviconStatusOf } from '../lib/favicon.js'
-import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -115,7 +115,7 @@ function useBrowserDocument(
     // Stable across renders (the shared accessor memoizes). Living here rather
     // than in App keeps loro-crdt off the entry chunk
     // (entry-graph-loro-free.test.ts).
-    store = sharedFoldingBrowserIndex(),
+    store = sharedBrowserDocumentIndex(),
     loro,
     initialPath,
     pointer,
@@ -483,7 +483,7 @@ function useBrowserDocument(
     move: { source: tagsSource, path: documentPath, moveTo: movePath },
   })
 
-  const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
+  const resolved = browserTerminalAnswer(renderState, backendError, startFresh, persistence)
   const openDocumentId = documentId ?? undefined
   const { connections, linkify } = useBrowserConnections({
     index: store,
