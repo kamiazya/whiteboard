@@ -1,0 +1,41 @@
+# Fails a pull request that ADDS a dependency with a known vulnerability,
+# read from the dependency graph's diff between base and head
+# (https://github.com/actions/dependency-review-action). It is the
+# per-change half of the policy in docs/contributing/security-baseline.md
+# (OSPS-VM-05.03): `pnpm audit:prod` in ci.yml and audit.yml judge the whole
+# tree, this judges what the change introduces — including a manifest
+# ecosystem pnpm does not audit, such as the GitHub Actions a workflow pins.
+#
+# The threshold matches `pnpm audit:prod`'s `--audit-level=high` over runtime
+# scope, so one advisory is not a blocker in one gate and noise in the other.
+
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Review added dependencies
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+          # A summary comment needs pull-requests: write; the job summary
+          # carries the same table without it.
+          comment-summary-in-pr: never
+          # Advisories suppressed as not exploitable, with the reason for each
+          # in .github/security/whiteboard.openvex.json. Must equal
+          # pnpm-workspace.yaml's auditConfig.ignoreGhsas
+          # (vex-audit-ignores.test.ts).
+          allow-ghsas: GHSA-qwww-vcr4-c8h2, GHSA-hp3w-g68c-fv3c
