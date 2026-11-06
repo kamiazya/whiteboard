@@ -219,3 +219,35 @@ describe('the gate exits on its verdict', () => {
     expect(r.sleeps).toEqual([2000])
   })
 })
+
+describe('the gate reads the scope plan out of NEEDS_JSON', () => {
+  const skipped = {
+    name: 'test-browser (1)',
+    status: 'completed',
+    conclusion: 'success',
+    steps: [
+      { name: 'Not affected by this change', status: 'completed', conclusion: 'success' },
+      { name: 'Complete job', status: 'completed', conclusion: 'success' },
+    ],
+  }
+  const needs = (run: boolean) =>
+    JSON.stringify({
+      scope: {
+        result: 'success',
+        outputs: { plan: JSON.stringify({ jobs: { 'test-browser': { run } } }) },
+      },
+      'test-browser': { result: 'success' },
+    })
+  const jobs = [job('scope', 'success'), skipped]
+
+  it('passes a skip the plan agrees with', () => {
+    const r = runGate({ ...FULL_ENV, NEEDS_JSON: needs(false) }, [page(2, jobs)])
+    expect(r.status).toBe(0)
+  })
+
+  it('fails a skip the plan says the change reaches', () => {
+    const r = runGate({ ...FULL_ENV, NEEDS_JSON: needs(true) }, [page(2, jobs)])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/test-browser \(1\): skipped its work as not affected/)
+  })
+})
