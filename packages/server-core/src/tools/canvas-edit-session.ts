@@ -9,7 +9,6 @@ import {
   applyNodePatch,
   boundsOf,
   CANVAS_MAX_NODES,
-  type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
   endIn,
@@ -147,7 +146,6 @@ export class CanvasEditSession {
   nodes: SpatialNode[]
   edges: CanvasEdge[]
   lines: CanvasLine[]
-  comments: CanvasComment[]
   /**
    * Read ONCE, off the board as it stood before this batch — the same
    * anchoring `PlacementCursor` does, and for the same reason: re-reading
@@ -161,7 +159,6 @@ export class CanvasEditSession {
   readonly touchedNodes = new Set<string>()
   readonly touchedEdges = new Set<string>()
   readonly touchedLines = new Set<string>()
-  readonly touchedComments = new Set<string>()
   readonly geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
   readonly cursor = new PlacementCursor()
   /**
@@ -211,7 +208,6 @@ export class CanvasEditSession {
     this.boardWidth = prevailingWidth(canvas.nodes)
     this.edges = [...canvas.edges]
     this.lines = [...(canvas.lines ?? [])]
-    this.comments = [...(canvas.comments ?? [])]
     this.nodeLocks = new Set(readNodeLocks(doc))
     this.edgeLocks = new Set(readEdgeLocks(doc))
     this.measure = measure

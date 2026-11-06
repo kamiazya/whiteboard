@@ -44,8 +44,7 @@ import { refuseOpenChangeGrowth } from './open-annotation-ceilings.js'
  * as the patch it comes to. What is absent follows from ADR-0029's own
  * decisions: `tidy` has no anchor, `region.set` deletes what it was not told
  * about (so it can be neither drawn as a set of priors nor adopted in part),
- * `comment.*` is the annotation layer rather than content, and a lock is a
- * claim on a document rather than a change to it.
+ * and a lock is a claim on a document rather than a change to it.
  */
 const PROPOSABLE: ReadonlySet<string> = new Set<string>([...PROPOSED_CHANGE_OPS, 'node.splice'])
 

@@ -66,8 +66,6 @@ const EXEMPT: Record<string, string> = {
   'node.lock': 'unlocking is the one op a locked element still accepts',
   'edge.lock': 'unlocking is the one op a locked element still accepts',
   tidy: 'treats a locked node as a fixed obstacle and routes around it rather than refusing',
-  'comment.add': 'the annotation layer floats above content and is not what a lock covers',
-  'comment.resolve': 'the annotation layer floats above content and is not what a lock covers',
 }
 
 /** Every op the tool accepts, read from the schema the model is shown. */
@@ -91,7 +89,7 @@ describe('wb_canvas_edit locks', () => {
   test('classifies every op as guarded or exempt, and no op as both', () => {
     const ops = opNames()
     // The subject is present: the vocabulary is far larger than this floor.
-    expect(ops.length).toBeGreaterThan(15)
+    expect(ops.length).toBeGreaterThan(12)
     expect(Object.keys(GUARDED).filter((name) => name in EXEMPT)).toEqual([])
     expect([...Object.keys(GUARDED), ...Object.keys(EXEMPT)].sort()).toEqual([...ops].sort())
   })

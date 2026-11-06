@@ -98,7 +98,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
     .strict(),
 ])
 
-const threadEditInputSchema = z
+export const threadEditInputSchema = z
   .object({
     workspaceId: workspaceAddressArgSchema,
     documentId: documentIdSchema,

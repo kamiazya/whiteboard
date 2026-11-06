@@ -235,8 +235,7 @@ A label — of an edge, a line or a group — carries at most **1,024
 characters**, and one comment message at most **4,096**. Each is laid out
 again on every render of its board, at a cost that grows with its length.
 `wb_canvas_edit` refuses a longer `label` on `node.add`, `node.patch`,
-`edge.add`, `edge.patch`, `line.add` and `line.patch`, and a longer `text` on
-`comment.add`; `wb_thread_edit` refuses a longer `body` on `thread.add` and
+`edge.add`, `edge.patch`, `line.add` and `line.patch`; `wb_thread_edit` refuses a longer `body` on `thread.add` and
 `message.add`. The editor's label and comment boxes refuse a longer edit and
 say why. The daemon's sync routes refuse an update that adds or grows one past
 its bound with `413` and `{"error":"label_too_large"}` or
@@ -361,7 +360,7 @@ not judged against it, and a longer list arriving that way reads the same way.
 
 An id a caller chooses for something it creates carries at most **256
 characters**: a node's, an edge's or a line's `id` on `wb_canvas_edit`'s
-`node.add`, `edge.add` and `line.add`, a comment's `id` on `comment.add`, a
+`node.add`, `edge.add` and `line.add`, a
 `threadId` on `wb_thread_edit`'s `thread.add`, a change's `id` on
 `wb_body_edit`'s `body.replace`, and the `proposalId` either tool takes. A
 longer one is refused with "an id is longer than the 256-character limit for
@@ -468,8 +467,8 @@ than the count: at 2,000 nodes, 500 open threads add about two seconds and
 adopted or dismissed change, stay in the document and are never deleted, so
 resolving or deciding is how a document at a limit takes another.
 
-`wb_thread_edit` (a `thread.add`, or a `thread.resolve` that reopens) and
-`wb_canvas_edit`'s `comment.add` refuse the op that would pass the thread
+`wb_thread_edit` (a `thread.add`, or a `thread.resolve` that reopens) refuses
+the op that would pass the thread
 limit — "the document would hold 501 open comment threads, past the limit of
 500 open comment threads for one document" — and write nothing. A proposal
 from `wb_canvas_edit` or `wb_body_edit` is refused when it would leave the

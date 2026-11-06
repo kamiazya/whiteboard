@@ -1,7 +1,7 @@
 /**
  * The per-document ceilings on open comment threads and open proposed
  * changes, as the tools hold them: every surface that opens one —
- * `wb_thread_edit`, `wb_canvas_edit`'s `comment.add` and its propose mode,
+ * `wb_thread_edit`, `wb_canvas_edit`'s propose mode,
  * and `wb_body_edit`'s proposals — refuses the op that would take a document
  * past its bound, counting what the document already holds open.
  */
@@ -170,19 +170,6 @@ describe("wb_thread_edit's ceiling check, what it costs", () => {
     } finally {
       parses.mockRestore()
     }
-  })
-})
-
-describe('wb_canvas_edit holds the open-thread ceiling', () => {
-  test('a comment.add past the ceiling is refused by name', async () => {
-    const deps = await seeded('spatial', threads(DOCUMENT_MAX_OPEN_THREADS))
-    await expect(
-      createCanvasEditTool(deps).execute({
-        ...target,
-        mode: 'apply',
-        ops: [{ op: 'comment.add', comment: { text: 'one more', targetNodeId: 'a' } }],
-      }),
-    ).rejects.toThrow(pastThreads)
   })
 })
 

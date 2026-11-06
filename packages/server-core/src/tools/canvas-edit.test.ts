@@ -68,7 +68,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.applied).toBe(3)
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [] })
     // The result carries the board AFTER the batch, so a caller never has
     // to spend a second round trip re-reading what it just wrote.
     expect(result.snapshot.nodes.map((n) => n.id)).toEqual(['a', 'b'])
@@ -200,7 +200,7 @@ describe('wb_canvas_edit tool', () => {
       ],
     })
 
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [] })
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
     expect(canvas.nodes[0]).toMatchObject({ x: 7, color: '3' })
@@ -894,7 +894,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(second.geometry).toEqual([])
-    expect(second.touched).toEqual({ nodes: [], edges: [], lines: [], comments: [] })
+    expect(second.touched).toEqual({ nodes: [], edges: [], lines: [] })
   })
 })
 
