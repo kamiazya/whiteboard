@@ -45,6 +45,8 @@ import { isRunAsScript } from './is-run-as-script.mjs'
 export const SKIPPABLE_JOBS = {
   'stress-changed-tests':
     "job-level `if: github.event_name == 'pull_request'`, so it does not run on push or merge_group",
+  'dependency-review':
+    "job-level `if: github.event_name == 'pull_request'`: the action diffs the dependency graph between base and head, so it has no meaning on push to main or merge_group and skips there",
 }
 
 /** `test-jsdom (1)` is a leg of the job `test-jsdom`. */
