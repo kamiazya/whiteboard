@@ -274,6 +274,15 @@ function MenuOption({
   )
 }
 
+/** `:focus-visible`, read defensively: an engine without the selector draws the ring. */
+function isFocusVisible(element: Element): boolean {
+  try {
+    return element.matches(':focus-visible')
+  } catch {
+    return true
+  }
+}
+
 export function FacetOption({
   name,
   label,
@@ -310,6 +319,10 @@ export function FacetOption({
       // A card prints its word, so a tooltip repeating it is noise.
       title={glyph === undefined || card ? undefined : label}
       onFocus={(event) => {
+        // A keyboard's focus only: a tap or a click leaves focus on the radio
+        // too, and a ring there reads as a second, heavier "selected" next to
+        // the fill every other option uses.
+        if (!isFocusVisible(event.target)) return
         event.currentTarget.style.outline = `2px solid ${RING}`
         event.currentTarget.style.outlineOffset = '1px'
       }}
