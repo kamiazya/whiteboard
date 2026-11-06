@@ -8,6 +8,17 @@ ADR cites by requirement number (QR-n). Amends
 [ADR-0052](0052-edge-keeper.md) in one respect: the edge keeper is built in
 Rust on workers-rs, not as a TypeScript composition root (decision 6).
 
+**Correction note (2026-11-06, the skeleton and its gates landed).** Three
+details below read differently from what shipped, and the record keeps the
+original words with this note beside them: the `unsafe` ledger is counted by
+`cargo xtask unsafe-ledger`, a lexer over each dependency's source, not by
+cargo-geiger (decision 11); the hardening check reports the stack protector
+and requires it only for a binary containing C or C++, since stable rustc
+cannot emit one for Rust (owner decision; QR-28d); and CI selects the Rust
+jobs by PATH (`PATH_JOBS` in `tools/checks/src/affected.mjs`) rather than
+through `cargo metadata` (decision 10) — the per-crate graph is the next
+cut once there is more than one crate worth distinguishing.
+
 ## Context
 
 **Everything except the UI is TypeScript today, and it already runs in three

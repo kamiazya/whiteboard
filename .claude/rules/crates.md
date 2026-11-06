@@ -70,7 +70,14 @@ imports ANYTHING, with a presence guard on the crate's own function count
 
 `pnpm rust:check` is the merge gate and `pnpm rust:release:check` the
 release one; `tools/checks/src/rust-check.mjs` and `rust-release-check.mjs`
-list the steps, and CI's `rust` job runs them (`.github/workflows/ci.yml`).
+list the steps. CI's `rust` job runs both plus `pnpm rust:build:wasm`, and
+`rust-fuzz-pr` runs `pnpm rust:fuzz:pr`; both are scoped by PATH
+(`PATH_JOBS` in `tools/checks/src/affected.mjs`), so a change to the Cargo
+root files, `.cargo/` or `crates/` runs them and not the vitest matrix, and
+any other change skips them as a declared skip. Every target runs nightly
+in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
+restores read-only. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
+steps and cache paths to the scripts.
 
 - **Toolchain** is `rust-toolchain.toml` (1.97.0, pinned exactly) and
   `wasm-bindgen-cli` 0.2.130, pinned to the crate version. `crates/fuzz` is a
@@ -97,7 +104,10 @@ list the steps, and CI's `rust` job runs them (`.github/workflows/ci.yml`).
   both sides.
 - **Size**: `crates/wasm-size-ledger.json` pins each shipped wasm artifact's
   bytes, ceiling over actual fails and a stale ceiling fails too;
-  `cargo xtask size --update` only lowers.
+  `cargo xtask size --update` only lowers. It measures the artifact
+  `cargo xtask dist wasm` ships — the build `pnpm rust:build:wasm` and
+  `repro-check` use too — so `rust:check` needs wasm-bindgen-cli at the
+  pinned version.
 - **Release gates** (`cargo xtask harden-check <bin>`: PIE, full RELRO, NX,
   no RPATH, stripped, cargo-auditable section; the stack protector is
   REPORTED, required only with `--require-stack-protector`, since stable
