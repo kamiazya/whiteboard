@@ -9,6 +9,10 @@
 // formatting, lints and the stable replay of every committed fuzz regression
 // are separate steps over its manifest, built without the libFuzzer driver.
 //
+// `cargo xtask size` measures the shipped wasm, so it runs the release build
+// (`cargo xtask dist wasm`) and needs wasm-bindgen-cli at the pinned version;
+// it fails naming the install command when that is missing.
+//
 // cargo-deny is a separate install, not part of the toolchain. When it is
 // absent this FAILS and says how to install it, rather than skipping: a
 // supply-chain gate that quietly does not run reads exactly like one that

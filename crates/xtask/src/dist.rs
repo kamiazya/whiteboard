@@ -19,7 +19,9 @@
 //!   proves they held.
 //! - **Wasm**: the release profile for `wasm32-unknown-unknown`, then
 //!   `wasm-bindgen` at the version Cargo.toml pins, with the name and
-//!   producers sections removed, as `pnpm rust:build:wasm` does.
+//!   producers sections removed. `pnpm rust:build:wasm` is this build, and
+//!   `cargo xtask size` measures what it writes, so the ledgered bytes are
+//!   the shipped ones.
 //!
 //! `RUSTFLAGS` from the caller's environment is ignored: these flags are the
 //! whole set, passed as `CARGO_ENCODED_RUSTFLAGS`.
@@ -30,7 +32,7 @@ use std::process::Command;
 use crate::metadata::{self, WASM_TARGET};
 
 pub(crate) const NATIVE_PACKAGE: &str = "whiteboard-native-fixture";
-const WASM_PACKAGE: &str = "whiteboard-wasm";
+pub(crate) const WASM_PACKAGE: &str = "whiteboard-wasm";
 const AUDITABLE_INSTALL: &str = "cargo install --locked cargo-auditable --version 0.7.7";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +67,12 @@ pub(crate) fn rustflags(
         flags.extend(["-Crelocation-model=pie".to_owned(), "-Crelro-level=full".to_owned()]);
     }
     flags
+}
+
+/// Where `dist` builds when no `--target-dir` is given: apart from the dev
+/// builds, whose rustflags differ.
+pub(crate) fn default_target_dir(target_directory: &Path) -> PathBuf {
+    target_directory.join("dist")
 }
 
 fn cargo_home() -> PathBuf {
@@ -199,7 +207,7 @@ pub(crate) fn run_task(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
     };
     let meta = metadata::load()?;
     let target_dir = match rest {
-        [] => meta.target_directory.join("dist"),
+        [] => default_target_dir(&meta.target_directory),
         ["--target-dir", dir] => PathBuf::from(dir),
         _ => return Err(usage()),
     };

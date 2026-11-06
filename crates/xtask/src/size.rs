@@ -1,5 +1,10 @@
 //! `cargo xtask size`: every shipped wasm artifact fits its ledgered ceiling.
 //!
+//! What it measures is the cargo artifact `cargo xtask dist wasm` writes —
+//! the release build, with its remapped paths — not a plain `cargo build
+//! --release`, whose bytes differ (by 8 B on the skeleton, the length of the
+//! paths it bakes in) and never ship.
+//!
 //! The browser downloads and Workers instantiate every byte, so growth is a
 //! decision rather than drift. The ledger is shrink-only with headroom: an
 //! artifact over its ceiling fails, and so does a ceiling more than the
@@ -8,11 +13,11 @@
 //! raising one is a hand edit whose reason a reviewer reads.
 
 use std::collections::BTreeMap;
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
-use crate::metadata::{self, WASM_TARGET};
+use crate::dist;
+use crate::metadata;
 use crate::wasm_imports::{WASM_BINDINGS, artifact};
 
 pub(crate) const LEDGER_PATH: &str = "crates/wasm-size-ledger.json";
@@ -90,15 +95,24 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
     let mut violations = coverage(&ledger, WASM_BINDINGS);
     let mut report = Vec::new();
     let mut changed = false;
+    let dist_dir = dist::default_target_dir(&metadata.target_directory);
+    let shipped = dist::build(&metadata.workspace_root, &dist_dir, dist::Artifact::Wasm)?;
     for name in WASM_BINDINGS {
-        let status = Command::new(metadata::cargo())
-            .args(["build", "--quiet", "--package", name, "--target", WASM_TARGET, "--release"])
-            .status()
-            .map_err(|e| vec![format!("cargo did not run: {e}")])?;
-        if !status.success() {
-            return Err(vec![format!("building {name} for {WASM_TARGET} failed")]);
+        if *name != dist::WASM_PACKAGE {
+            violations.push(format!(
+                "{name}: `cargo xtask dist wasm` does not build it, so its shipped bytes cannot \
+                 be measured; teach dist to build it"
+            ));
+            continue;
         }
-        let path = artifact(&metadata.target_directory, "release", name);
+        let path = artifact(&dist_dir, "release", name);
+        if !shipped.contains(&path) {
+            violations.push(format!(
+                "{name}: {} is not a file `cargo xtask dist wasm` ships",
+                path.display()
+            ));
+            continue;
+        }
         let actual = std::fs::metadata(&path)
             .map_err(|e| vec![format!("cannot stat {}: {e}", path.display())])?
             .len();
@@ -183,6 +197,18 @@ mod tests {
         let v = coverage(&l, &["b"]);
         assert!(v.contains(&"b: a shipped wasm artifact with no ledger entry".to_owned()));
         assert!(v.contains(&"a: a ledger entry for an artifact nothing builds".to_owned()));
+    }
+
+    #[test]
+    fn the_ledger_measures_the_artifact_the_release_build_ships() {
+        // `size` reads the bytes `cargo xtask dist wasm` writes, so a
+        // ledgered artifact dist does not build would have nothing to measure.
+        assert_eq!(WASM_BINDINGS, [crate::dist::WASM_PACKAGE]);
+        let target = std::path::Path::new("/t");
+        assert_eq!(
+            artifact(&crate::dist::default_target_dir(target), "release", WASM_BINDINGS[0]),
+            std::path::Path::new("/t/dist/wasm32-unknown-unknown/release/whiteboard_wasm.wasm"),
+        );
     }
 
     #[test]
