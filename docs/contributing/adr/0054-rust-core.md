@@ -349,7 +349,12 @@ safety net. The stable toolchain everywhere. Wasm artifacts use
 `panic = "abort"`: a panic DISCARDS the instance, and the shim creates a new
 one and REHYDRATES it from persisted state, tested in CI by a scenario that
 poisons an instance and shows the next operation succeeding. The native
-daemon fails only the request that panicked and keeps serving (QR-26c).
+daemon builds with `panic = "unwind"` in its OWN release profile and catches a
+panic at the request boundary (`catch_unwind` around the request's handler):
+that request fails with a refusal (500), and the daemon keeps serving
+(QR-26c). The skeleton's workspace-wide `[profile.release]` sets
+`panic = "abort"`; it MUST be split per artifact when the daemon binding
+lands, so that the wasm artifacts keep `abort` and the daemon alone unwinds.
 
 | Alternative | Why rejected |
 |---|---|
@@ -464,7 +469,7 @@ rows above, a later ADR may revise one:
 | Worktrees | A per-worktree `CARGO_TARGET_DIR` seeded from the main checkout; targets installed by the session hook; lanes pre-built (QR-32c) | A cold build per worktree |
 | Wasm memory | Peak-memory reports on a real board, Workers startup measured, an explicit maximum memory, `opt-level` chosen per artifact (QR-22d) | One optimisation level for every artifact |
 | Errors | `thiserror` in libraries; `anyhow` only in the daemon's `main`, banned from core and ops by the architecture map; a `kind()` tied to the generated codes (QR-26b) | Type-erased errors in libraries |
-| Exit criteria | Structure-preserving or redesigned recorded per module; a TypeScript deletion deadline; rollback is flipping the switch (QR-33b) | Leaving the TypeScript in place indefinitely "just in case" |
+| Exit criteria | Structure-preserving or redesigned recorded per module; a TypeScript deletion deadline (by default the release after the switch first defaults to `rust`); rollback is flipping the switch (QR-33b) | Leaving the TypeScript in place indefinitely "just in case" |
 | Crash reports | A local, redacted report written by the panic hook and attached by the user through the support bundle; no telemetry (QR-25c) | A hosted crash service |
 
 Considered and not adopted: cargo-semver-checks (no crate is published; the
@@ -654,7 +659,7 @@ returns the TypeScript answer. Each function's lifecycle:
 |---|---|---|---|
 | 1 | `ts` | TypeScript only | the Rust port compiles and its native tests pass |
 | 2 | `differential` | both, in CI and in dogfooding; TypeScript answers | the parity checklist (QR-33) is met |
-| 3 | `rust` | Rust answers; TypeScript is still present, so rollback is flipping the switch back | one release with no mismatch reported, and no later than the deletion deadline recorded at the switch |
+| 3 | `rust` | Rust answers; TypeScript is still present, so rollback is flipping the switch back | one release with no mismatch reported; by default the TypeScript is deleted in the next release, later only with a recorded reason |
 | 4 | — | TypeScript deleted; its tests kept and pointed at the shim | the whole package is absorbed |
 | 5 | — | tests move to Rust (proptest) | — |
 
@@ -690,8 +695,10 @@ Generated code is checked in: `crates/*/src/generated/*.rs` and
 
 **Per-module exit criteria** (QR-33b), recorded in the PR that moves a
 module's first switch to `rust`: whether the port is structure-preserving or
-redesigned, and why; the release by which its TypeScript is deleted (N
-releases after the switch, N recorded per module); and that rollback is
+redesigned, and why; the release by which its TypeScript is deleted — by
+default the release AFTER the one in which the module's switch first defaults
+to `rust`, so one release of differential data, and later only with a
+recorded reason; and that rollback is
 flipping the switch in the composition root, nothing more. A
 structure-preserving port is the default: reading the two side by side is
 what lets layer 1 of the harness carry most of the proof. Another TypeScript
