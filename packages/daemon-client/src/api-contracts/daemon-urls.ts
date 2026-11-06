@@ -57,7 +57,10 @@ type DocumentsSuffix =
   | `versions/${string}`
 
 function documentsFamilyUrl(workspaceId: string, path: string, suffix: DocumentsSuffix): string {
-  const base = `${workspaceDocumentsApiUrl(workspaceId)}/${encodeDocumentPath(path)}`
+  return withSuffix(`${workspaceDocumentsApiUrl(workspaceId)}/${encodeDocumentPath(path)}`, suffix)
+}
+
+function withSuffix(base: string, suffix: DocumentsSuffix): string {
   return suffix === '' ? base : `${base}/${suffix}`
 }
 
@@ -96,11 +99,14 @@ export function documentVersionsPageApiUrl(
   path: string,
   query: ListVersionsRequest = {},
 ): string {
+  return versionsPageUrl(documentVersionsApiUrl(workspaceId, path), query)
+}
+
+function versionsPageUrl(base: string, query: ListVersionsRequest): string {
   const params = new URLSearchParams()
   if (query.cursor !== undefined) params.set('cursor', query.cursor)
   if (query.limit !== undefined) params.set('limit', String(query.limit))
   const search = params.toString()
-  const base = documentVersionsApiUrl(workspaceId, path)
   return search === '' ? base : `${base}?${search}`
 }
 
@@ -124,8 +130,7 @@ function documentByIdFamilyUrl(
   documentId: string,
   suffix: DocumentsSuffix,
 ): string {
-  const base = `${workspaceDocumentsApiUrl(workspaceId)}/${enc(documentId)}`
-  return suffix === '' ? base : `${base}/${suffix}`
+  return withSuffix(`${workspaceDocumentsApiUrl(workspaceId)}/${enc(documentId)}`, suffix)
 }
 
 /** DELETE a document and everything under it. */
@@ -158,12 +163,7 @@ export function documentVersionsPageByIdApiUrl(
   documentId: string,
   query: ListVersionsRequest = {},
 ): string {
-  const params = new URLSearchParams()
-  if (query.cursor !== undefined) params.set('cursor', query.cursor)
-  if (query.limit !== undefined) params.set('limit', String(query.limit))
-  const search = params.toString()
-  const base = documentVersionsByIdApiUrl(workspaceId, documentId)
-  return search === '' ? base : `${base}?${search}`
+  return versionsPageUrl(documentVersionsByIdApiUrl(workspaceId, documentId), query)
 }
 
 export function versionDocumentByIdApiUrl(
