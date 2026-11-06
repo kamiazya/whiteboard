@@ -20,10 +20,15 @@ drawing: a handwritten word selects, moves and recolours as a whole.
 
 While **Draw** is armed, a strip of pen options sits just above the toolbar:
 
-- **Color** — **Default** (the board's own ink) or one of the six preset colours.
-  The swatches are drawn in the board's theme, so they show the
-  ink you will get.
-- **Width** — **Thin**, **Medium** or **Thick**.
+- **Color** — **Default** (the board's own ink, shown as a dot of that ink) or
+  one of the six preset colours. The swatches are drawn in the board's theme,
+  so they show the ink you will get.
+- **Width** — **Thin**, **Medium** or **Thick**, each sample a line of
+  visibly heavier weight.
+
+Where the strip has no room for both groups in one row — on a phone — the
+colours take one row and the widths the row below it. **Zoom to fit** leaves
+room for the strip, so nothing it frames ends up underneath it.
 
 The next stroke you draw takes the colour and width you picked, and the stroke
 under your pen already shows them while you draw. The pen keeps your choice
