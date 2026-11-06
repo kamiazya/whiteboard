@@ -4,7 +4,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { folderDisplayName, type NestedFolderPlan } from '../../lib/folder-names.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { ContextMenu } from '../ui/ContextMenu.js'
-import { ErrorLine } from './FolderDialogParts.js'
+import { ErrorLine, NESTED_FOLDER_HINT } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
 import { MoveDocumentsHereDialog } from './MoveDocumentsHereDialog.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
@@ -71,6 +71,7 @@ function nameDialogCopy(dialog: FolderDialog | null, names: FolderNamesState['na
     description:
       'The folder appears in the list once a document is in it. Create it, then add a note or canvas there, or move a document in.',
     initialName: '',
+    hint: NESTED_FOLDER_HINT,
     submitLabel: 'Create folder',
   }
 }

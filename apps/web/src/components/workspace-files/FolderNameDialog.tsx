@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ interface FolderNameDialogProps {
   title: string
   description: string
   initialName: string
+  /** A line under the field saying how a name is read, when it is read specially. */
+  hint?: string | undefined
   /**
    * Why a name cannot be used, or null: the folder-name rule and the
    * duplicate check, asked before anything is sent.
@@ -31,6 +33,7 @@ function FolderNameForm({
   title,
   description,
   initialName,
+  hint,
   refuse,
   submitLabel,
   busy,
@@ -40,6 +43,7 @@ function FolderNameForm({
 }: Omit<FolderNameDialogProps, 'open' | 'onCloseAutoFocus'>) {
   const [name, setName] = useState(initialName)
   const [issue, setIssue] = useState<string | null>(null)
+  const hintId = useId()
 
   return (
     <form
@@ -59,10 +63,16 @@ function FolderNameForm({
           Folder name
           <input
             value={name}
+            aria-describedby={hint === undefined ? undefined : hintId}
             onChange={(event) => setName(event.target.value)}
             className="rounded border px-2 py-1 pointer-coarse:min-h-11"
           />
         </label>
+        {hint !== undefined && (
+          <span id={hintId} className="text-muted-foreground text-xs">
+            {hint}
+          </span>
+        )}
         <ErrorLine message={issue ?? error} />
       </div>
       <DialogActions

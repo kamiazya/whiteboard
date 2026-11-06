@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '../ui/dialog.js'
 import { documentPathRefusal } from './document-path-refusal.js'
-import { DialogActions, ErrorLine } from './FolderDialogParts.js'
+import { DialogActions, ErrorLine, NESTED_FOLDER_HINT } from './FolderDialogParts.js'
 import { joinPath } from './folder-moves.js'
 
 /** The folders a typed new folder makes on its way, each with the name it was given. */
@@ -136,7 +136,7 @@ function NewFolderField({ value, onChange }: { value: string; onChange: (next: s
         className="rounded border px-2 py-1"
       />
       <span id="move-new-folder-hint" className="text-muted-foreground text-xs">
-        Use “/” for a folder inside a folder: “Class/Week 6” makes both.
+        {NESTED_FOLDER_HINT}
       </span>
     </div>
   )
