@@ -39,6 +39,7 @@ import {
   firstRetired,
   refuseRetiredShape,
   retiredEdgeShape,
+  retiredElementsShape,
   retiredNodeShape,
 } from './retired-stored-shape.js'
 
@@ -641,6 +642,7 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   readonly canvas: SpatialCanvas
   readonly skipped: number
 } {
+  refuseRetiredShape(retiredElementsShape(doc))
   const readNodes = readStored(doc.getMap(NODES_KEY), spatialNodeSchema, retiredNodeShape)
   const readEdges = readStored(doc.getMap(EDGES_KEY), canvasEdgeSchema, retiredEdgeShape)
   const readLines = readStored(doc.getMap(LINES_KEY), canvasLineSchema, () => null)

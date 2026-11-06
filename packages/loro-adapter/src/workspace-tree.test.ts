@@ -10,7 +10,7 @@
  */
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc, UndoManager } from 'loro-crdt'
+import { type ContainerID, LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import {
@@ -249,10 +249,11 @@ describe('workspace tree', () => {
       ])
     })
 
-    it('a legacy movable-list container (`elements`) survives write and projection as a value copy', () => {
+    it('a sequence root of any name is carried by kind through write and projection, and its read is refused', () => {
       // Old clients still push `elements` MovableList docs through the
       // daemon's update route. The tree cannot silently drop a container
-      // kind it does not favour — that turns a rename into content loss.
+      // kind it does not favour — that turns a rename into content loss. The
+      // refusal of a read depends on the carry keeping the bytes.
       const standalone = new LoroDoc()
       const list = standalone.getMovableList('elements')
       list.push({ id: 'old-element' })
@@ -261,10 +262,20 @@ describe('workspace tree', () => {
       const doc = workspace()
       adopt(doc, { path: 'legacy', documentId: ID_A, kind: 'spatial' }, standalone)
 
+      // Read through getShallowValue + getContainerById so the proof itself
+      // opens no root.
+      const carried = (d: LoroDoc): unknown => {
+        const cid = d.getShallowValue().elements
+        return typeof cid === 'string' ? d.getContainerById(cid as ContainerID)?.toJSON() : cid
+      }
       const projected = projectWorkspaceDocument(doc, ID_A)
       expect(projected).not.toBeNull()
       if (projected === null) return
-      expect(projected.getMovableList('elements').toJSON()).toEqual([{ id: 'old-element' }])
+      expect(carried(projected)).toEqual([{ id: 'old-element' }])
+      expect(() => readSpatialCanvas(projected)).toThrow(/retired Excalidraw `elements` list/)
+      expect(() => readSpatialCanvas(documentContainers(doc, ID_A))).toThrow(
+        /retired Excalidraw `elements` list/,
+      )
 
       // And the diff write keeps it in step.
       const changed = new LoroDoc()
@@ -274,7 +285,7 @@ describe('workspace tree', () => {
       changed.commit()
       writeWorkspaceDocumentContent(doc, ID_A, changed)
       const reprojected = projectWorkspaceDocument(doc, ID_A)
-      expect(reprojected?.getMovableList('elements').toJSON()).toEqual([
+      expect(reprojected === null ? null : carried(reprojected)).toEqual([
         { id: 'old-element' },
         { id: 'second' },
       ])

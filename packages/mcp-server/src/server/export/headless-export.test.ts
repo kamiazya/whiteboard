@@ -9,7 +9,6 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { captureLogsForTests } from '../log.js'
 import { testStoreScope } from '../routes/_test-helpers.js'
 import type { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } from './headless-renderer.js'
 
@@ -85,7 +84,7 @@ describe('exportCanvasHeadless', () => {
     expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
   })
 
-  it('exports an empty canvas, without a warning, for a doc holding only the retired elements list', async () => {
+  it('refuses, rather than exporting an empty canvas, a doc holding entries in the retired elements list', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
     const rect = list.insertContainer(0, new LoroMap())
@@ -95,21 +94,14 @@ describe('exportCanvasHeadless', () => {
     doc.commit()
     await saveDocument('0149W95NTZ1DZPVKF0NG8BBBRH', 'design', doc)
 
-    const capture = captureLogsForTests('debug')
-    try {
-      const result = await exportCanvasHeadless({
+    await expect(
+      exportCanvasHeadless({
         scope: testStoreScope(),
         workspaceId: '0149W95NTZ1DZPVKF0NG8BBBRH',
         path: 'design',
-      })
-      expect(result.png.length).toBeGreaterThan(0)
-      expect(renderSpy).toHaveBeenCalledTimes(1)
-      const [canvas] = renderSpy.mock.calls[0]!
-      expect(canvas.nodes).toEqual([])
-      expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
-    } finally {
-      capture.restore()
-    }
+      }),
+    ).rejects.toThrow(/retired Excalidraw `elements` list/)
+    expect(renderSpy).not.toHaveBeenCalled()
   })
 })
 

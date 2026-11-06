@@ -5,7 +5,7 @@
  * key here and never for each other, which is what keeps them from forming a
  * value cycle `cycle-check.ts` would fail on.
  */
-import type { LoroMap, LoroText } from 'loro-crdt'
+import type { LoroList, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 
 /**
  * Where one document's containers live.
@@ -30,6 +30,11 @@ export interface DocumentContainers {
    */
   peekMap?(key: string): LoroMap | undefined
   /**
+   * The sequence (`LoroMovableList` or `LoroList`) at `key` if one is there,
+   * opening none; `peekMap`'s contract for the one root shape that is a list.
+   */
+  peekList?(key: string): LoroMovableList | LoroList | undefined
+  /**
    * Part of the seam because the bridge decides where a write ENDS, and that
    * is not something to leave each caller to remember. A tree-node host
    * delegates to the document its node belongs to.
@@ -43,6 +48,13 @@ export interface DocumentContainers {
  * refused (`RetiredCommentPlaneError`) rather than read as having none.
  */
 export const RETIRED_COMMENTS_KEY = 'comments'
+/**
+ * The canvas's elements as the Excalidraw-era clients stored them: a sequence
+ * root. Nothing reads or writes it and content-sync still carries it by kind;
+ * a document holding entries there is refused (`retired-stored-shape.ts`)
+ * rather than read as an empty canvas.
+ */
+export const RETIRED_ELEMENTS_KEY = 'elements'
 /**
  * The annotation layer's thread plane (ADR-0026), one level deeper than the
  * comments map above: a map of thread containers, each holding its anchor and

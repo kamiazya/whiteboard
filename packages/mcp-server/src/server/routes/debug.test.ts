@@ -126,7 +126,9 @@ describe('GET /api/debug', () => {
     expect(await nodeCountsAt('01Y6HC4DNGKCTQSSQRN6CNKF33')).toEqual({ 'canvas-1': 2 })
   })
 
-  it('counts no nodes for a document holding only the retired elements list', async () => {
+  // The count is advisory and soft-fails: readSpatialCanvas refuses the
+  // document, which this reports as 0 rather than as an empty canvas.
+  it('counts 0 for a document holding the retired elements list, whose read is refused', async () => {
     await mkdir(join(tempDir, '01CQ0HQWW8AY123AC8V2WTRS85'), { recursive: true })
     await saveDocument('01CQ0HQWW8AY123AC8V2WTRS85', 'canvas-1', makeDocWithRetiredElements(2))
 

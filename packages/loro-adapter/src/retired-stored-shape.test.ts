@@ -1,8 +1,20 @@
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeDocumentKind } from './document-envelope.js'
-import { deleteSpatialNode, readSpatialCanvas, withSpatialBatch } from './loro-bridge.js'
+import {
+  deleteSpatialNode,
+  readSpatialCanvas,
+  withSpatialBatch,
+  writeSpatialCanvas,
+} from './loro-bridge.js'
 import { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  projectWorkspaceDocument,
+  writeWorkspaceDocumentContent,
+} from './workspace-tree.js'
 
 /**
  * Shapes an older version stored and no reader serves any more. Each is
@@ -172,5 +184,119 @@ describe('a canvas element in a retired stored shape is refused, not dropped', (
     const doc = docWith(() => {})
     expect(retiredStoredShapeIn(doc)).toBeNull()
     expect(readSpatialCanvas(doc).nodes.map((node) => node.id)).toEqual(['ok'])
+  })
+})
+
+describe('the retired Excalidraw `elements` list is refused while it holds entries', () => {
+  const ELEMENTS = /retired Excalidraw `elements` list/
+  const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+  function standaloneWith(
+    open: (doc: LoroDoc) => { push(v: unknown): void },
+    entries: number,
+  ): LoroDoc {
+    const doc = new LoroDoc()
+    const list = open(doc)
+    for (let i = 0; i < entries; i += 1) list.push({ id: `old-${i}` })
+    doc.commit()
+    return doc
+  }
+  const movable = (doc: LoroDoc) => doc.getMovableList('elements')
+  const legacy = (doc: LoroDoc) => doc.getList('elements')
+
+  function treeHost(standalone: LoroDoc) {
+    const ws = new LoroDoc()
+    ws.setPeerId(1n)
+    createWorkspaceDocumentAtPath(ws, { path: 'old', documentId: ID, kind: 'spatial' })
+    writeWorkspaceDocumentContent(ws, ID, standalone)
+    return { ws, host: documentContainers(ws, ID) }
+  }
+
+  it.each([
+    ['MovableList', movable],
+    ['List', legacy],
+  ] as const)('refuses a LoroDoc host holding a %s root, by name', (_kind, open) => {
+    const doc = standaloneWith(open, 1)
+    expect(retiredStoredShapeIn(doc)).toMatch(ELEMENTS)
+    expect(() => readSpatialCanvas(doc)).toThrow(RetiredStoredShapeError)
+    expect(() => readSpatialCanvas(doc)).toThrow(ELEMENTS)
+  })
+
+  it('refuses it beside current nodes too', () => {
+    const doc = standaloneWith(movable, 2)
+    doc.getMap('nodes').set('ok', CURRENT_NODE)
+    doc.commit()
+    expect(retiredStoredShapeIn(doc)).toMatch(/\(2 entries\)/)
+  })
+
+  it('refuses a tree-node host and its standalone projection alike', () => {
+    const { ws, host } = treeHost(standaloneWith(movable, 1))
+    expect(retiredStoredShapeIn(host)).toMatch(ELEMENTS)
+    expect(() => readSpatialCanvas(host)).toThrow(ELEMENTS)
+    const projected = projectWorkspaceDocument(ws, ID)
+    expect(projected).not.toBeNull()
+    if (projected === null) return
+    expect(retiredStoredShapeIn(projected)).toMatch(ELEMENTS)
+  })
+
+  it('does not refuse a root that was opened and never written', () => {
+    // An old client that merely opened the list leaves an empty root in its
+    // snapshots; it carries nothing.
+    const source = standaloneWith(movable, 0)
+    const doc = new LoroDoc()
+    doc.import(source.export({ mode: 'snapshot' }))
+    expect(Object.keys(doc.getShallowValue())).toContain('elements')
+    expect(retiredStoredShapeIn(doc)).toBeNull()
+    expect(() => readSpatialCanvas(doc)).not.toThrow()
+    const { host } = treeHost(doc)
+    expect(retiredStoredShapeIn(host)).toBeNull()
+  })
+
+  it('answers what it always did for a document without the root', () => {
+    const doc = docWith(() => {})
+    expect(retiredStoredShapeIn(doc)).toBeNull()
+    expect(retiredStoredShapeIn(doc)).toBeNull()
+    expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toEqual(['ok'])
+    const { host } = treeHost(doc)
+    expect(retiredStoredShapeIn(host)).toBeNull()
+  })
+
+  describe('the probe opens nothing', () => {
+    // Other probes in the chain open the roots they read (a LoroDoc's roots are
+    // implicit), so the pin is on `elements` itself plus the oplog: opening it
+    // would list it in the shallow value even though it writes no op.
+    const shape = (doc: LoroDoc) => ({
+      holdsElements: 'elements' in doc.getShallowValue(),
+      frontiers: JSON.stringify(doc.frontiers()),
+      bytes: doc.export({ mode: 'update' }).length,
+    })
+
+    it.each([
+      ['without the root', () => new LoroDoc()],
+      ['with a nodes root only', () => docWith(() => {})],
+      ['with the root held', () => standaloneWith(movable, 1)],
+    ] as const)('leaves a LoroDoc %s unchanged', (_name, make) => {
+      const doc = make()
+      const before = shape(doc)
+      retiredStoredShapeIn(doc)
+      try {
+        readSpatialCanvas(doc)
+      } catch {}
+      expect(shape(doc)).toEqual(before)
+    })
+
+    it('leaves a tree node without the root unchanged', () => {
+      const source = new LoroDoc()
+      writeSpatialCanvas(source, {
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'x' })],
+        edges: [],
+      })
+      const { ws, host } = treeHost(source)
+      const state = () => JSON.stringify([ws.toJSON(), ws.frontiers()])
+      const before = state()
+      retiredStoredShapeIn(host)
+      readSpatialCanvas(host)
+      expect(state()).toBe(before)
+    })
   })
 })

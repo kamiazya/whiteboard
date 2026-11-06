@@ -212,8 +212,8 @@ overrides:
 # Advisories acknowledged as not applicable to this codebase. Each entry needs a
 # reason and should be re-checked when the affected dependency is next touched.
 # The same list is published as VEX (.github/security/whiteboard.openvex.json)
-# and allowed in dependency-review.yml; vex-audit-ignores.test.ts holds all
-# three equal.
+# and allowed in ci.yml's dependency-review job; vex-audit-ignores.test.ts
+# holds all three equal.
 auditConfig:
   ignoreGhsas:
     # react-router RSC-mode CSRF (patched only in >=8.3.0). apps/web is a Vite

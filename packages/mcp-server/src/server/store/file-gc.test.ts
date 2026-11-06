@@ -119,8 +119,8 @@ async function seedFreshFile(
   await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xcd))
 }
 
-// The retired 'elements' shape, for the tests that pin that nothing reads
-// it any more. Every other test seeds through the current nodes-model fixture
+// The retired 'elements' shape, for the tests that pin that a record holding
+// it is refused, never swept. Every other test seeds through the current nodes-model fixture
 // (spatial-doc.js) instead.
 function makeDocWithImage(fileId: string): LoroDoc {
   const doc = new LoroDoc()
@@ -183,16 +183,17 @@ describe('purgeDanglingFiles', () => {
     expect(remaining).toEqual(['used-a.png', 'used-b.png'])
   })
 
-  it('a doc holding only the retired elements list protects no file', async () => {
-    // Nothing converts that list into nodes and no reader draws it, so an
-    // image only it names is as unreachable as an orphan upload.
+  it('refuses to sweep a workspace holding entries in the retired elements list, deleting nothing', async () => {
+    // No reader serves that list, so the sweep fails closed, never unlinking.
     await saveDocument(WS_LEGACY, 'page', makeDocWithImage('legacy-image'))
     await seedFile(WS_LEGACY, 'legacy-image', '.png', 321)
 
-    const result = await purgeDanglingFiles(WS_LEGACY, withVersions())
-
-    expect(result.purgedCount).toBe(1)
-    expect(result.purgedBytes).toBe(321)
+    await expect(purgeDanglingFiles(WS_LEGACY, withVersions())).rejects.toThrow(
+      /retired Excalidraw `elements` list/,
+    )
+    expect(await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_LEGACY))).toEqual([
+      'legacy-image.png',
+    ])
   })
 
   it('returns zero counts for a workspace with no files dir yet', async () => {
@@ -223,7 +224,7 @@ describe('purgeDanglingFiles', () => {
     }
   })
 
-  it('mixed workspace: a nodes-model doc protects its file while a legacy-elements doc does not', async () => {
+  it('mixed workspace: one retired-list doc fails the whole sweep closed, unrelated orphan included', async () => {
     await saveDocument(WS_MIXED, 'legacy-page', makeDocWithImage('legacy-ref'))
     await saveDocument(WS_MIXED, 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
 
@@ -231,14 +232,13 @@ describe('purgeDanglingFiles', () => {
     await seedFile(WS_MIXED, 'nodes-ref', '.png', 20)
     await seedFile(WS_MIXED, 'unrelated-orphan', '.png', 30)
 
-    const result = await purgeDanglingFiles(WS_MIXED, withVersions())
-
-    expect(result.purgedCount).toBe(2)
-    expect(result.purgedBytes).toBe(40)
+    await expect(purgeDanglingFiles(WS_MIXED, withVersions())).rejects.toThrow(
+      /retired Excalidraw `elements` list/,
+    )
     const remaining = (
       await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_MIXED))
     ).sort()
-    expect(remaining).toEqual(['nodes-ref.png'])
+    expect(remaining).toEqual(['legacy-ref.png', 'nodes-ref.png', 'unrelated-orphan.png'])
   })
 
   it('does not protect an upload whose id merely matches a plain (non-asset:) file value', async () => {
