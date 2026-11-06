@@ -32,7 +32,7 @@ describe('createOAuthResourceServerAuthStrategy — header parsing', () => {
   // and other malformed shapes are all rejected before the validator
   // is even consulted.
 
-  it('rejects missing Authorization header → 401 auth.required (validator never invoked)', async () => {
+  it('rejects missing Authorization header → 401 auth_required (validator never invoked)', async () => {
     const { validator, calls } = makeFakeValidator({
       ok: true,
       subject: 'sub-1',
@@ -49,7 +49,7 @@ describe('createOAuthResourceServerAuthStrategy — header parsing', () => {
     expect(decision.ok).toBe(false)
     if (!decision.ok) {
       expect(decision.status).toBe(401)
-      expect(decision.code).toBe('auth.required')
+      expect(decision.code).toBe('auth_required')
     }
     expect(calls).toHaveLength(0)
   })
@@ -163,7 +163,7 @@ describe('createOAuthResourceServerAuthStrategy — defence-in-depth scope subse
   // scopes narrower than `requiredScopes` must NOT authorize the
   // request. The strategy re-checks subset relation at the boundary.
 
-  it('rejects with 403 auth.forbidden when validator returns ok but granted scopes are insufficient', async () => {
+  it('rejects with 403 auth_forbidden when validator returns ok but granted scopes are insufficient', async () => {
     const { validator } = makeFakeValidator({
       ok: true,
       subject: 'user-42',
@@ -181,7 +181,7 @@ describe('createOAuthResourceServerAuthStrategy — defence-in-depth scope subse
     expect(decision.ok).toBe(false)
     if (!decision.ok) {
       expect(decision.status).toBe(403)
-      expect(decision.code).toBe('auth.forbidden')
+      expect(decision.code).toBe('auth_forbidden')
     }
   })
 
@@ -271,11 +271,11 @@ describe('createOAuthResourceServerAuthStrategy — validator failure mapping', 
     expect(decision.ok).toBe(false)
     if (!decision.ok) {
       expect(decision.status).toBe(expectedStatus)
-      expect(decision.code).toBe('auth.required')
+      expect(decision.code).toBe('auth_required')
     }
   })
 
-  it('maps validator insufficient_scope → 403 auth.forbidden', async () => {
+  it('maps validator insufficient_scope → 403 auth_forbidden', async () => {
     const { validator } = makeFakeValidator({ ok: false, reason: 'insufficient_scope' })
     const strategy = createOAuthResourceServerAuthStrategy({ validator })
     const decision = await strategy.authorize({
@@ -287,7 +287,7 @@ describe('createOAuthResourceServerAuthStrategy — validator failure mapping', 
     expect(decision.ok).toBe(false)
     if (!decision.ok) {
       expect(decision.status).toBe(403)
-      expect(decision.code).toBe('auth.forbidden')
+      expect(decision.code).toBe('auth_forbidden')
     }
   })
 
@@ -359,7 +359,7 @@ describe('createAsyncAuthStrategyMiddleware', () => {
     const { strategy } = makeStrategy({
       ok: false,
       status: 401,
-      code: 'auth.required',
+      code: 'auth_required',
       wwwAuthenticate: 'Bearer',
     })
     const app = new Hono()
@@ -372,12 +372,12 @@ describe('createAsyncAuthStrategyMiddleware', () => {
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toBe('Bearer')
     const body = await res.text()
-    expect(body).toBe('{"error":"auth.required"}')
+    expect(body).toBe('{"error":"auth_required"}')
     expect(body).not.toContain('canary-token-XYZ')
   })
 
   it('emits HTTP 403 WITHOUT WWW-Authenticate on 403 decision (insufficient credentials cannot be retried with a new auth round)', async () => {
-    const { strategy } = makeStrategy({ ok: false, status: 403, code: 'auth.forbidden' })
+    const { strategy } = makeStrategy({ ok: false, status: 403, code: 'auth_forbidden' })
     const app = new Hono()
     app.use('*', createAsyncAuthStrategyMiddleware({ strategy, requiredScopes: ['canvas:write'] }))
     app.get('/api/x', (c) => c.text('downstream'))
@@ -387,7 +387,7 @@ describe('createAsyncAuthStrategyMiddleware', () => {
     })
     expect(res.status).toBe(403)
     expect(res.headers.get('www-authenticate')).toBeNull()
-    expect(await res.text()).toBe('{"error":"auth.forbidden"}')
+    expect(await res.text()).toBe('{"error":"auth_forbidden"}')
   })
 
   it('does NOT call downstream when strategy rejects', async () => {
@@ -395,7 +395,7 @@ describe('createAsyncAuthStrategyMiddleware', () => {
     const { strategy } = makeStrategy({
       ok: false,
       status: 401,
-      code: 'auth.required',
+      code: 'auth_required',
       wwwAuthenticate: 'Bearer',
     })
     const app = new Hono()
@@ -411,7 +411,7 @@ describe('createAsyncAuthStrategyMiddleware', () => {
 })
 
 describe('createOAuthResourceServerAuthStrategy — validator exception handling', () => {
-  it('catches a thrown exception from validator and returns 401 auth.required', async () => {
+  it('catches a thrown exception from validator and returns 401 auth_required', async () => {
     const throwingValidator: OAuthResourceTokenValidator = {
       async validate() {
         throw new Error('Network error: ECONNREFUSED https://idp.example/.well-known/jwks.json')
@@ -427,7 +427,7 @@ describe('createOAuthResourceServerAuthStrategy — validator exception handling
     expect(decision.ok).toBe(false)
     if (!decision.ok) {
       expect(decision.status).toBe(401)
-      expect(decision.code).toBe('auth.required')
+      expect(decision.code).toBe('auth_required')
     }
   })
 

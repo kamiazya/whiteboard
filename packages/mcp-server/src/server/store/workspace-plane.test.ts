@@ -203,8 +203,8 @@ it('readSnapshotManifest answers for a tree-served document with generation 0, m
 
 it('routes a document ref by ITS OWN workspace, with no documents-table lookup (S6)', async () => {
   // The ref carries the workspace since W3, so the route needs no reverse
-  // row lookup — and migration 0017 dropped the documents table outright,
-  // so there is no mirror row to fall back to even in principle.
+  // row lookup — and the schema has no documents table, so there is no
+  // mirror row to fall back to even in principle.
   const { routed } = await stores()
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('tree-truth'), {
     kind: 'spatial',
@@ -239,9 +239,9 @@ it('workspace-tree refs pass straight through to the inner store', async () => {
 })
 
 it('an index create lists and resolves with NO documents row anywhere (S7)', async () => {
-  // The tree is the whole record of what exists: migration 0017 dropped the
-  // documents table outright, so there is nothing for a create to write to
-  // it even in principle.
+  // The tree is the whole record of what exists: the schema has no
+  // documents table, so there is nothing for a create to write to it even
+  // in principle.
   const { index } = await stores()
   await index.createWorkspace({ workspaceId: '0199E9CNYY2432MXX4VVSRXR29' })
   const entry = await index.createDocument({

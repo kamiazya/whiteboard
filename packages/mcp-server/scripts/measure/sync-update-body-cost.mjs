@@ -5,10 +5,9 @@
  * Run:
  *   node --import tsx/esm scripts/measure/sync-update-body-cost.mjs [chars...]
  *
- * Three writes, each inserting N characters of prose into a markdown body
+ * Two writes, each inserting N characters of prose into a markdown body
  * that already exists:
  *
- *   document    applyDocumentUpdate        POST /api/w/:ws/document/<path>/update
  *   workspace   applyWorkspaceDocumentUpdate POST /api/w/:ws/workspace-document/update
  *   promote     promoteWorkspace           POST /api/w/:ws/workspace-document/promote
  *
@@ -47,7 +46,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
-  applyDocumentUpdate,
   applyWorkspaceDocumentUpdate,
   promoteWorkspace,
   wbDocumentCreate,
@@ -117,29 +115,6 @@ async function seeded(deps) {
 /** The body as stored, read the way every reader reads it. */
 async function storedBodyLength(deps) {
   return readMarkdownBody(await deps.liveDocuments.get('ws', 'notes')).length
-}
-
-async function documentRow(chars) {
-  return withStore(async (deps) => {
-    await seeded(deps)
-    const client = (await deps.liveDocuments.get('ws', 'notes')).fork()
-    const from = client.oplogVersion()
-    client.getText('body').insert(0, prose(chars))
-    client.commit()
-    const update = client.export({ mode: 'update', from })
-    const bodyBefore = await storedBodyLength(deps)
-    const { cpuMs, outcome } = await cpu(async () => {
-      await applyDocumentUpdate(deps, { workspaceId: 'ws', path: 'notes', update })
-      return 'applied'
-    })
-    return {
-      cpuMs,
-      outcome,
-      bodyBefore,
-      bodyAfter: await storedBodyLength(deps),
-      bytes: update.length,
-    }
-  })
 }
 
 async function workspaceRow(chars) {
@@ -273,7 +248,6 @@ const RUN_COUNTS = (process.env.RUN_COUNTS ?? '1,2,4,8').split(',').map(Number)
 const rows = []
 for (const chars of CHARS) {
   for (const [route, run] of [
-    ['document', documentRow],
     ['workspace', workspaceRow],
     ['promote', promoteRow],
   ]) {

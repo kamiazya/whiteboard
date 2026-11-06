@@ -27,8 +27,6 @@ import { readProposals } from './proposals.js'
  * is already in the content read above, and a dismissed one will never draw.
  */
 export function collectImageRefIds(doc: DocumentContainers): Set<string> {
-  // The body container only: a legacy body stored as a text node is already
-  // part of the canvas read.
   const body = doc.getText(MARKDOWN_BODY_KEY).toString()
   const refs = storedImageRefs({ canvas: readSpatialCanvas(doc), body })
   return new Set([...refs, ...proposedImageRefs(doc)].map(imageRefId))

@@ -27,7 +27,6 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
-export { rootsNoDocumentNodeHolds } from './document-node-roots.js'
 export { isEngineTrap } from './engine-trap.js'
 export { type EnvelopeKindBreach, envelopeKindBreach, statedKindSplit } from './envelope-kind.js'
 export {
@@ -55,7 +54,7 @@ export {
   writeSpatialEdge,
   writeSpatialNode,
 } from './loro-bridge.js'
-export { MARKDOWN_BODY_NODE_ID, readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
+export { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
   readWorkspaceDocumentName,
@@ -70,6 +69,7 @@ export {
 } from './proposals.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'
+export { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
 export { countSpatialNodes } from './spatial-node-count.js'
 export { stateSize } from './state-size.js'
 export { holdsContainerCreation } from './sync-structure-limits.js'

@@ -185,10 +185,13 @@ describe('a malformed workspace address', () => {
     expect(await res.json()).toMatchObject({ error: 'invalid_workspace_id' })
   })
 
-  it('is still Problem Details on a document route', async () => {
+  it('is still the route’s own 400 on a document route', async () => {
     const res = await call(await app(), probe('DELETE', '/documents/a'), 'bad.handle')
 
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ title: expect.stringContaining('bad.handle') })
+    expect(await res.json()).toEqual({
+      error: 'invalid_workspace_id',
+      message: expect.stringContaining('bad.handle'),
+    })
   })
 })

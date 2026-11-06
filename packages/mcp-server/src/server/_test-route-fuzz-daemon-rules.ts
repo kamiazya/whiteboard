@@ -143,11 +143,6 @@ export const RULES: Record<string, Rule> = {
     answers: 'json',
     response: clientCountResponseSchema,
   },
-  'POST /api/w/:workspaceId/document/*/update': {
-    answers: 'json',
-    raw: true,
-    response: updateDocumentResponseSchema,
-  },
   'POST /api/w/:workspaceId/document/*/export': {
     answers: 'json',
     body: exportRequestSchema,

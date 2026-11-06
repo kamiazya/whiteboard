@@ -68,7 +68,10 @@ describe('POST /api/workspaces losing a segment race', () => {
       true,
     )
     expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ title: expect.stringContaining('notes') })
+    expect(await res.json()).toEqual({
+      error: 'workspace_segment_taken',
+      message: expect.stringContaining('notes'),
+    })
     expect(await deps.documentIndex.listWorkspaces()).toEqual(before)
   })
 })

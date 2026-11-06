@@ -6,8 +6,8 @@
  * agent path does not: only the index's row delete takes the lock, from
  * inside. Without the teardown taking the lock around the WHOLE sequence, a
  * version saved by a concurrent writer could land beside a document that is
- * already gone — a row nothing can reach, since 0016 dropped the cascade
- * that used to collect it.
+ * already gone — a row nothing can reach, since no foreign key cascades a
+ * version row away with its document.
  *
  * A delete into the trash KEEPS the document's rows, because a restore
  * rejoins them; the purge is what removes them. So "no orphan" is asserted

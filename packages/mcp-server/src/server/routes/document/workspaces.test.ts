@@ -17,6 +17,7 @@ import {
   seedWorkspaceRow,
   testDocumentRouterOptions,
   withTempDataDir,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 const SESSION1 = '01M8BBN7JS60N0ZAR13NP8SXBF'
@@ -44,21 +45,8 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock the store so `getDoc` can be gated to control interleaving against a
-// concurrent rename/delete. It must be THIS module: `getDoc` is the store's
-// cached read, and doc-cache.js (which holds the LRU it reads through) never
-// exports it. Mocking the wrong module is silent — a factory spreading
-// `...actual` just adds a property nobody imports, and the race never stages.
-vi.mock('../../store/document-store.js', async () => {
-  const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-    '../../store/document-store.js',
-  )
-  return { ...actual, getDoc: vi.fn(actual.getDoc) }
-})
-
 const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
 
-const { getDoc } = await import('../../store/document-store.js')
 const documentStore = await import('../../store/document-store.js')
 const { saveDocument } = documentStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
@@ -298,36 +286,36 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     })
 
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toContain('design/login')
+    const json = (await res.json()) as { message?: string }
+    expect(json.message).toContain('design/login')
   })
 
-  it('returns 404 with Problem Details { title } for a missing canvas', async () => {
+  it('returns 404 with the error contract for a missing canvas', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request(`/api/workspaces/${SESSION1}/documents/never-created`, {
       method: 'DELETE',
     })
     expect(res.status).toBe(404)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-    expect(json).not.toHaveProperty('error')
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
+    expect(json).toMatchObject({ error: 'not_found' })
   })
 
-  it('returns 400 with Problem Details { title } for an invalid workspaceId or path', async () => {
+  it('returns 400 with the error contract for an invalid workspaceId or path', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const badWs = await app.request('/api/workspaces/bad.workspace/documents/canvas-a', {
       method: 'DELETE',
     })
     expect(badWs.status).toBe(400)
-    expect(typeof ((await badWs.json()) as { title?: string }).title).toBe('string')
+    expect(typeof ((await badWs.json()) as { message?: string }).message).toBe('string')
 
     const badPath = await app.request(`/api/workspaces/${SESSION1}/documents/bad.path`, {
       method: 'DELETE',
     })
     expect(badPath.status).toBe(400)
-    expect(typeof ((await badPath.json()) as { title?: string }).title).toBe('string')
+    expect(typeof ((await badPath.json()) as { message?: string }).message).toBe('string')
   })
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
@@ -372,11 +360,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request(`/api/w/${SESSION1}/document/cached/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
+    await writeDocumentUpdate(serverDeps, SESSION1, 'cached', update)
     expect(peekDoc(SESSION1, 'cached')).toBeDefined()
 
     const delRes = await app.request(`/api/workspaces/${SESSION1}/documents/cached`, {
@@ -417,8 +401,8 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     })
 
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toContain('c/x')
+    const json = (await res.json()) as { message?: string }
+    expect(json.message).toContain('c/x')
   })
 
   it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
@@ -460,7 +444,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await createTestDocument(serverDeps, { workspaceId: SESSION1, path: 'a' })
   })
 
-  it('returns 404 with Problem Details { title } for a missing source canvas', async () => {
+  it('returns 404 with the error contract for a missing source canvas', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request(`/api/workspaces/${SESSION1}/documents/never-created/path`, {
       method: 'PUT',
@@ -468,13 +452,13 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       body: JSON.stringify({ path: 'target' }),
     })
     expect(res.status).toBe(404)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-    expect(json).not.toHaveProperty('error')
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
+    expect(json).toMatchObject({ error: 'not_found' })
   })
 
-  it('returns 409 with Problem Details { title } when the target path is already taken', async () => {
+  it('returns 409 with the error contract when the target path is already taken', async () => {
     await saveDocument(SESSION1, 'a', new LoroDoc())
     await saveDocument(SESSION1, 'b', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
@@ -484,9 +468,9 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       body: JSON.stringify({ path: 'b' }),
     })
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
 
     // Neither canvas was mutated by the rejected rename.
     const listRes = await app.request(`/api/workspaces/${SESSION1}/documents`)
@@ -494,70 +478,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(listJson.documents.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
-  it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old path', async () => {
-    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const baseDoc = new LoroDoc()
-    baseDoc.getText('content').insert(0, 'original')
-    baseDoc.commit()
-    await saveDocument(SESSION1, 'a', baseDoc)
-
-    // A client update built against the pre-rename base.
-    const clientDoc = LoroDoc.fromSnapshot(baseDoc.export({ mode: 'snapshot' }))
-    const fromVV = clientDoc.version()
-    clientDoc.getText('content').insert('original'.length, ' + edit')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: fromVV }) as Uint8Array<ArrayBuffer>
-
-    // Stall the /update route's getDoc() call so a rename can be fired
-    // while the request is paused mid-flight, matching the real race: the
-    // read resolves before the rename runs, the write happens after.
-    let releaseGetDoc: () => void = () => undefined
-    const getDocGate = new Promise<void>((resolve) => {
-      releaseGetDoc = resolve
-    })
-    let signalGetDocCalled: () => void = () => undefined
-    const getDocCalled = new Promise<void>((resolve) => {
-      signalGetDocCalled = resolve
-    })
-    const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-      '../../store/document-store.js',
-    )
-    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
-      signalGetDocCalled()
-      await getDocGate
-      return actual.getDoc(workspaceId, path)
-    })
-
-    const updatePromise = app.request(`/api/w/${SESSION1}/document/a/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
-
-    await getDocCalled
-
-    // Fire the rename while the update is stalled mid-flight.
-    const renamePromise = app.request(`/api/workspaces/${SESSION1}/documents/a/path`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'b' }),
-    })
-    // Give the rename a chance to run before letting the stalled read continue.
-    await new Promise((r) => setTimeout(r, 20))
-    releaseGetDoc()
-
-    const [updateRes, renameRes] = await Promise.all([updatePromise, renamePromise])
-    expect(renameRes.status).toBe(200)
-    expect(updateRes.status).toBe(409) // nothing at the old path holds what it builds on
-
-    // Exactly one canvas must survive -- the update must not have silently
-    // inserted a phantom duplicate back at the old path.
-    const listRes = await app.request(`/api/workspaces/${SESSION1}/documents`)
-    const listJson = (await listRes.json()) as { documents: { path: string }[] }
-    expect(listJson.documents.map((c) => c.path)).toEqual(['b'])
-  })
-
-  it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
+  it('returns 400 with the error contract for invalid input shapes', async () => {
     await saveDocument(SESSION1, 'a', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
@@ -598,9 +519,9 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(badCurrentPath.status).toBe(400)
 
     for (const res of [noBody, badNewPath, emptyPath, badWorkspace, badCurrentPath]) {
-      const body = (await res.json()) as { title?: string }
-      expect(typeof body.title).toBe('string')
-      expect(body.title!.length).toBeGreaterThan(0)
+      const body = (await res.json()) as { message?: string }
+      expect(typeof body.message).toBe('string')
+      expect(body.message!.length).toBeGreaterThan(0)
     }
   })
 
@@ -620,11 +541,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request(`/api/w/${SESSION1}/document/a/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
+    await writeDocumentUpdate(serverDeps, SESSION1, 'a', update)
     expect(peekDoc(SESSION1, 'a')).toBeDefined()
 
     const renameRes = await app.request(`/api/workspaces/${SESSION1}/documents/a/path`, {
@@ -655,11 +572,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       mode: 'update',
       from: anotherPrevVV,
     }) as Uint8Array<ArrayBuffer>
-    await app.request(`/api/w/${SESSION1}/document/a/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: anotherUpdate,
-    })
+    await writeDocumentUpdate(serverDeps, SESSION1, 'a', anotherUpdate)
 
     const freshSnapshotRes = await app.request(`/api/w/${SESSION1}/document/a/snapshot`)
     expect(freshSnapshotRes.status).toBe(200)

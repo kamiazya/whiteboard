@@ -5,7 +5,6 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
-  holdsRetiredCommentPlane,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -40,6 +39,9 @@ export type BackendErrorReason =
   // A record still holding comments in the plane before threads, which no
   // reader serves; refused rather than shown without them (decision 27).
   | 'retired-comment-plane'
+  // A record holding a node, edge, canvas or body shape an older version
+  // stored and no reader serves; refused rather than shown without it.
+  | 'retired-stored-shape'
 
 import type {
   CommentThread,
@@ -66,6 +68,7 @@ import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
+import { unreadableContent, unreadableSnapshot } from './unreadable-snapshot.js'
 
 const log = getAppLogger('document-sync')
 
@@ -595,6 +598,15 @@ export function createDocumentSyncSession(
     deps.generations.nextApplyGeneration()
     const content = isStale() ? null : contentOf(targetDoc)
     if (content === null) return
+    // The same refusal the snapshot gets: an update from an older peer can
+    // bring the retired plane in after load, and a throw here would escape
+    // the import subscription unhandled while the stale canvas stays up.
+    const unreadable = unreadableContent(content)
+    if (unreadable !== null) {
+      deps.onBackendError(unreadable)
+      deps.onStatusChange('error')
+      return
+    }
     const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two
@@ -759,7 +771,6 @@ export function createDocumentSyncSession(
   const bodyBindingOf = bodyBindingFor({
     contentOf,
     onEdited: bodyEdited,
-    isCurrent: (target) => target === doc,
   })
   function getBodyBinding(): BodyBinding | null {
     return bodyBindingOf(doc)
@@ -868,22 +879,9 @@ export function createDocumentSyncSession(
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
         if (doc !== null && documentRemoved(newDoc)) return
-        // A scoped session's contract with its backend: the workspace bytes
-        // hold this document's tree node. Bytes that do not are unreadable
-        // FOR THIS DOCUMENT — reported like any other unreadable content,
-        // never thrown into the accessors (which would take React down with
-        // a doc the session cannot serve anyway).
-        if (
-          deps.contentDocumentId !== undefined &&
-          resolveWorkspaceDocumentById(newDoc, deps.contentDocumentId) === null
-        ) {
-          deps.onBackendError('corrupt-snapshot')
-          deps.onStatusChange('error')
-          return
-        }
-        const arriving = contentOf(newDoc)
-        if (arriving !== null && holdsRetiredCommentPlane(arriving)) {
-          deps.onBackendError('retired-comment-plane')
+        const unreadable = unreadableSnapshot(newDoc, deps.contentDocumentId, contentOf)
+        if (unreadable !== null) {
+          deps.onBackendError(unreadable)
           deps.onStatusChange('error')
           return
         }

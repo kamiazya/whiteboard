@@ -187,7 +187,10 @@ function createWorkspace(routes: FakeDaemonRoutes, init?: RequestInit): Promise<
   const body = createWorkspaceRequestSchema.safeParse(
     JSON.parse(typeof init?.body === 'string' ? init.body : 'null') as unknown,
   )
-  if (!body.success) return Promise.resolve(jsonResponse({ title: 'displayName is required' }, 400))
+  if (!body.success)
+    return Promise.resolve(
+      jsonResponse({ error: 'invalid_body', message: 'displayName is required' }, 400),
+    )
   const { displayName } = body.data
   return (
     overrideOf(routes.onCreateWorkspace?.(displayName)) ??
@@ -271,7 +274,7 @@ function duplicateDocument(
   const rows = withSummaryDefaults(typeof listed === 'function' ? listed() : (listed ?? []))
   const source = rows.find((row) => row.path === path)
   if (source === undefined)
-    return jsonResponse({ title: `No document "${path}" to duplicate` }, 404)
+    return jsonResponse({ error: 'not_found', message: `No document "${path}" to duplicate` }, 404)
   return jsonResponse(
     duplicateDocumentResponseSchema.parse({
       document: {
@@ -303,7 +306,7 @@ interface Route {
   ) => Response | Promise<Response>
 }
 
-const notFound = () => jsonResponse({ title: 'Not found' }, 404)
+const notFound = () => jsonResponse({ error: 'not_found', message: 'Not found' }, 404)
 
 /**
  * A valid answer for the reads a page makes beside its workspace and document

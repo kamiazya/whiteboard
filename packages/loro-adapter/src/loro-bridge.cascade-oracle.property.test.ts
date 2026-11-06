@@ -26,7 +26,6 @@ import { describe, expect } from 'vitest'
 import { readCommentThreads, writeCommentThread, writeThreadMessage } from './comment-threads.js'
 import { EDGE_LOCKS_KEY, EDGES_KEY, LINES_KEY, NODE_LOCKS_KEY, NODES_KEY } from './containers.js'
 import { sameValue } from './document-envelope-reconcile.js'
-import { liftLegacyExtension } from './legacy-lifts.js'
 import {
   readSpatialCanvas,
   reconcileSpatialCanvas,
@@ -82,7 +81,7 @@ function oldDeleteNodeCascadeInto(doc: Doc, nodeId: string): boolean {
   let swept = 0
   const edgesMap = doc.getMap(EDGES_KEY)
   for (const edgeId of edgesMap.keys()) {
-    const parsed = canvasEdgeSchema.safeParse(liftLegacyExtension(edgesMap.get(edgeId)))
+    const parsed = canvasEdgeSchema.safeParse(edgesMap.get(edgeId))
     if (parsed.success && anchoredOnAny(parsed.data, ids)) {
       edgesMap.delete(edgeId)
       oldDropLockInto(doc, EDGE_LOCKS_KEY, edgeId)

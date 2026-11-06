@@ -17,14 +17,14 @@ describe('the not-found translations over the port error', () => {
     })
   })
 
-  it('answers the caller-supplied title for an absent document', () => {
+  it('answers the caller-supplied message for an absent document', () => {
     expect(notFoundAs('Document "notes/a" not found')(absent)).toEqual({
       status: 404,
-      body: { title: 'Document "notes/a" not found' },
+      body: { error: 'not_found', message: 'Document "notes/a" not found' },
     })
   })
 
-  it('answers an absent workspace in the shared workspace voice, not the document title', () => {
+  it('answers an absent workspace in the shared workspace voice, not the document message', () => {
     expect(notFoundAs('gone')(new WorkspaceNotFoundError('ws'))).toEqual({
       status: 404,
       body: { error: 'workspace_not_found', message: 'Workspace "ws" not found' },

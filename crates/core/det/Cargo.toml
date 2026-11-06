@@ -1,0 +1,12 @@
+[package]
+name = "whiteboard-det"
+description = "Deterministic primitives shared by every core crate: JS-compatible number formatting, pinned math, UTF-16 helpers and seeded randomness."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

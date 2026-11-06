@@ -35,7 +35,9 @@ scan says.
   expanded — a route added without a rule fails the ledger, and a rule
   without a route fails it the other way. A route may answer (2xx, 204 for
   a store, 501 when the composition lacks the feature) or refuse with a
-  JSON reason (4xx, and 503 for "no browser is connected"); a 5xx or a
+  JSON reason (4xx, and 503 for "no browser is connected"), and the body
+  parses under `apiErrorBodySchema` — one family, `{ error, message?, hint? }`
+  with a snake_case code; no route answers `{ title }`; a 5xx or a
   plain-text body is a failure. `refusesOnly:` names why the seed cannot
   reach a route (sync needs an open stream, a fresh data dir has no
   installed font) and is checked to stay
@@ -62,7 +64,7 @@ scan says.
   test beside it: a document update whose bytes Loro cannot decode escaped
   the handler as a thrown decode error (now 400 `invalid_body`, checked
   with `decodeImportBlobMeta` before the import, as the workspace-document
-  route already did); an export `scale` the schema admitted but that sized
+  route already did; that per-document route is since retired); an export `scale` the schema admitted but that sized
   the render to nothing answered 500 `headless_export_failed` (the schema
   now bounds `scale`/`padding`, and the renderer's zero-size
   refusal maps to 400); a missing file answered Hono's plain-text 404 (now
@@ -113,9 +115,9 @@ scan says.
   sits behind `refuseUnknownWorkspace` and `refuseTrashedDocument`
   (`routes/document.ts`'s `refuseUnaddressable`), so a fixture seeds its
   workspace with `createWorkspace` / `seedWorkspaceRow` rather than by
-  posting an update to an unknown handle. A never-created PATH in a known
-  workspace still takes its first update: that is how an open page starts
-  a document.
+  posting to an unknown handle. Nothing writes a document's content by path
+  over HTTP: a fixture seeds content with `writeDocumentUpdate`
+  (`routes/_test-helpers.ts`) or edits the record through `postDocumentEdit`.
 
 ## The export reads the workspace's tag library (ADR-0040 decision 5)
 

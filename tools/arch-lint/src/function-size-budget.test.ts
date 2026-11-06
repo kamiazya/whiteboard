@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { type MeasuredFunction, measureSource } from './function-size-measure.js'
+import { measureRustSource, rustSourceFiles } from './rust-source.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 
@@ -722,5 +723,91 @@ describe('functions stay under the line budget, or are recorded shrinking', () =
     )
 
     expect(shared).toEqual([])
+  })
+})
+
+/**
+ * Rust `fn` bodies under `crates/`, on the SAME 50-line budget and contract,
+ * measured by `rust-source.ts`'s brace matching over code with comments and
+ * literals blanked — a lexical reading, which is exact for Rust because a
+ * body's braces are tokens and the language requires them to balance, macro
+ * bodies included. Closures count toward the `fn` holding them, as callbacks
+ * do above. One ledger for source and tests, since a Rust test module lives
+ * in the file it tests.
+ */
+const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
+  // The map checked against itself and the workspace against the map: one
+  // pass per rule, each a few lines, run in sequence. The next shrink is one
+  // function per rule, the way the TypeScript checks are one module each.
+  'crates/xtask/src/arch_map.rs#check_map': 62,
+  'crates/xtask/src/arch_map.rs#check_members': 64,
+  // Building the artifact, then reading and judging it against the ledger,
+  // inline; the build and the judgement are the two halves to split.
+  'crates/xtask/src/size.rs#run': 56,
+  // Builds every core crate for wasm32 and judges each artifact's imports in
+  // one loop; the per-artifact judgement is the half to lift out.
+  'crates/xtask/src/wasm_imports.rs#run': 76,
+  // The release environment, then one arm per artifact (native through
+  // cargo-auditable, wasm through wasm-bindgen); each arm is the function to
+  // lift out.
+  'crates/xtask/src/dist.rs#build': 70,
+  // One ELF reading per mitigation (PIE, RELRO, NX, RPATH, strip, audit
+  // data), in sequence; a function per mitigation is the next shrink.
+  'crates/xtask/src/harden.rs#inspect_elf64': 51,
+  // The fuzz registry checked against itself, the fuzz crate's bins and its
+  // regressions: one pass per rule, the same shape as check_map above.
+  'crates/xtask/src/inputs.rs#check': 74,
+  // Each artifact scanned by cargo-about for its own target and its notices
+  // judged, inline; the per-artifact judgement is the half to lift out.
+  'crates/xtask/src/notices.rs#run': 60,
+  // A hand lexer: one match arm per token class it must skip (comments,
+  // nested comments, strings, raw and byte strings, chars against
+  // lifetimes). A function per literal form is the next shrink.
+  'crates/xtask/src/unsafe_ledger.rs#count_unsafe': 80,
+}
+
+const RUST_MEASURED = rustSourceFiles().flatMap((path) =>
+  measureRustSource(readFileSync(join(REPO_ROOT, path), 'utf8'), path),
+)
+
+const RUST_BY_KEY = new Map(RUST_MEASURED.map((row) => [row.key, row.lines]))
+
+describe('Rust functions stay under the line budget, or are recorded shrinking', () => {
+  it('measured the functions the crates hold', () => {
+    expect(RUST_MEASURED.length).toBeGreaterThan(40)
+    expect(RUST_BY_KEY.has('crates/xtask/src/main.rs#main')).toBe(true)
+  })
+
+  it('flags a planted over-budget fn and passes the short ones beside it', () => {
+    const planted = readFileSync(
+      join(import.meta.dirname, '__fixtures__/rust/long-function.rs'),
+      'utf8',
+    )
+    const over = measureRustSource(planted, 'planted.rs')
+      .filter((row) => row.lines > LINE_BUDGET && !(row.key in RUST_FUNCTION_SIZE_GRANDFATHER))
+      .map((row) => row.key)
+    expect(over).toEqual(['planted.rs#Board.tall'])
+  })
+
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: RUST_MEASURED,
+    ledgers: [RUST_FUNCTION_SIZE_GRANDFATHER],
+    ledgerOf: () => RUST_FUNCTION_SIZE_GRANDFATHER,
+    readingOf: (key) => RUST_BY_KEY.get(key),
+    wording: {
+      titles: {
+        unlisted: 'holds no un-recorded Rust fn over the budget',
+        grown: 'holds no recorded Rust fn that has grown past its ceiling',
+        shrunk: 'holds no Rust entry that has shrunk to budget — delete it instead',
+        missing: 'holds no Rust entry for a fn that was renamed, moved or deleted',
+        headroom: 'holds no Rust entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: (row) =>
+        `${row.key}: ${row.lines} lines, over the ${LINE_BUDGET}-line budget and not recorded — split it, or add it here with a reason in the diff`,
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
   })
 })

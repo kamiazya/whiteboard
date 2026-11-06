@@ -34,8 +34,7 @@ const WORKSPACE_ID = 'ws-1'
 function plantUnreadableRecords(doc: LoroDoc): void {
   doc.getMap('nodes').set('future-node', {
     id: 'future-node',
-    type: 'text',
-    text: 'written by a newer client',
+    resource: { mimeType: 'text/markdown', content: 'written by a newer client' },
     x: 900,
     y: 900,
     width: 100,

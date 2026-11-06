@@ -80,14 +80,6 @@ const CASES: readonly {
     noun: 'Request body',
   },
   {
-    route: 'live document update',
-    method: 'POST',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/update',
-    build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
-    limit: 16 * MIB,
-    noun: 'Update',
-  },
-  {
     route: 'workspace document update',
     method: 'POST',
     path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/update',

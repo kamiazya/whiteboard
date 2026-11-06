@@ -80,13 +80,6 @@ async function daemon() {
 
 type Daemon = Awaited<ReturnType<typeof daemon>>
 
-const loroUpdate = (): Uint8Array<ArrayBuffer> => {
-  const doc = new LoroDoc()
-  doc.getMap('m').set('k', 'v')
-  doc.commit()
-  return doc.export({ mode: 'update' }) as Uint8Array<ArrayBuffer>
-}
-
 interface Probe {
   readonly method: string
   readonly suffix: string
@@ -106,13 +99,6 @@ function probeFor(method: string, action: string): Probe {
           init: { headers: { 'content-type': 'image/png' }, body: new Uint8Array([1, 2, 3]) },
         }
       : { method, suffix, init: { headers: {} } }
-  }
-  if (method === 'POST' && action === 'update') {
-    return {
-      method,
-      suffix,
-      init: { headers: { 'content-type': 'application/octet-stream' }, body: loroUpdate() },
-    }
   }
   if (method === 'POST') {
     return {
@@ -154,9 +140,9 @@ describe('a handle no workspace holds, on the document routes', () => {
     const probes = await documentProbes()
     const labels = probes.map((p) => `${p.method} ${p.suffix}`)
 
-    // snapshot, update, client-count, export, export-svg and the file pair.
-    expect(probes.length).toBeGreaterThanOrEqual(7)
-    expect(labels).toContain('POST /document/doc/update')
+    // snapshot, client-count, export, export-svg and the file pair.
+    expect(probes.length).toBeGreaterThanOrEqual(6)
+    expect(labels).toContain('POST /document/doc/export')
     expect(labels).toContain('PUT /document/doc/file/abc')
   })
 
@@ -184,8 +170,7 @@ describe('a handle no workspace holds, on the document routes', () => {
 
   it('lists no workspace afterwards on GET /api/workspaces', async () => {
     const d = await daemon()
-    const update = probeFor('POST', 'update')
-    await send(d, update, GONE)
+    await send(d, probeFor('PUT', 'file/:fileId'), GONE)
 
     const res = await d.app.request('/api/workspaces', {
       headers: { Authorization: `Bearer ${TOKEN}` },
@@ -203,13 +188,11 @@ describe('a workspace that exists, on the document routes', () => {
   it.each([
     ['its id', KNOWN],
     ['its segment', KNOWN_SEGMENT],
-  ])('takes an update and an upload addressed by %s', async (_label, address) => {
+  ])('takes an upload addressed by %s', async (_label, address) => {
     const d = await daemon()
 
-    const update = await send(d, probeFor('POST', 'update'), address)
     const upload = await send(d, probeFor('PUT', 'file/:fileId'), address)
 
-    expect(update.status).toBe(200)
     expect(upload.status).toBe(204)
   })
 
@@ -236,13 +219,10 @@ describe('a workspace that exists, on the document routes', () => {
 })
 
 // A tab that still holds a document someone deleted keeps writing to it. The
-// write must not recreate the path as a second, unrelated document while the
-// original sits in Trash. A path that was never created is a different case:
-// the first write from an open page is how a document begins there.
+// write must not reach the path while the original sits in Trash.
 describe('a document in the trash, on the document routes', () => {
   async function trashed(d: Daemon, address: string): Promise<void> {
-    const made = await send(d, probeFor('POST', 'update'), address)
-    expect(made.status).toBe(200)
+    await d.serverDeps.liveDocuments.save(address, 'doc', new LoroDoc(), { kind: 'spatial' })
     const gone = await d.app.request(`/api/workspaces/${address}/documents/doc`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${TOKEN}` },
@@ -252,14 +232,11 @@ describe('a document in the trash, on the document routes', () => {
   const liveDocuments = async (d: Daemon) =>
     (await d.serverDeps.documentIndex.listDocuments({ workspaceId: KNOWN })).map((e) => e.path)
 
-  it.each([
-    ['an update', probeFor('POST', 'update')],
-    ['an upload', probeFor('PUT', 'file/:fileId')],
-  ])('refuses %s and recreates nothing', async (_label, probe) => {
+  it('refuses an upload and recreates nothing', async () => {
     const d = await daemon()
     await trashed(d, KNOWN)
 
-    const res = await send(d, probe, KNOWN)
+    const res = await send(d, probeFor('PUT', 'file/:fileId'), KNOWN)
 
     expect(res.status).toBe(404)
     expect(apiErrorBodySchema.parse(await res.json())).toEqual({
@@ -269,30 +246,21 @@ describe('a document in the trash, on the document routes', () => {
     expect(await liveDocuments(d)).toEqual([])
   })
 
-  it('still lets the first write from an open page begin a document that was never created', async () => {
-    const d = await daemon()
-
-    const res = await send(d, probeFor('POST', 'update'), KNOWN)
-
-    expect(res.status).toBe(200)
-    expect(await liveDocuments(d)).toEqual(['doc'])
-  })
-
   // The refusal is about the path the trash names, so a trashed neighbour
   // must not stop a new document beginning anywhere else.
-  it('lets a never-created path begin while the trash holds a different one', async () => {
+  it('takes an upload under another path while the trash holds this one', async () => {
     const d = await daemon()
     await trashed(d, KNOWN)
-    const update = probeFor('POST', 'update')
+    const upload = probeFor('PUT', 'file/:fileId')
     const elsewhere = {
-      ...update,
-      suffix: update.suffix.replace('/document/doc/', '/document/other/'),
+      ...upload,
+      suffix: upload.suffix.replace('/document/doc/', '/document/other/'),
     }
 
     const res = await send(d, elsewhere, KNOWN)
 
-    expect(res.status).toBe(200)
-    expect(await liveDocuments(d)).toEqual(['other'])
+    expect(res.status).toBe(204)
+    expect(await liveDocuments(d)).toEqual([])
   })
 
   it('takes writes again once a document is created at the path the trash entry names', async () => {
@@ -300,17 +268,17 @@ describe('a document in the trash, on the document routes', () => {
     await trashed(d, KNOWN)
     await d.serverDeps.liveDocuments.save(KNOWN, 'doc', new LoroDoc(), { kind: 'spatial' })
 
-    const res = await send(d, probeFor('POST', 'update'), KNOWN)
+    const res = await send(d, probeFor('PUT', 'file/:fileId'), KNOWN)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(204)
   })
 })
 
 describe('a malformed workspace address, on the document routes', () => {
-  it('is still the route’s own Problem Details 400', async () => {
+  it('is still the route’s own 400', async () => {
     const d = await daemon()
 
-    const res = await send(d, probeFor('POST', 'update'), 'bad.handle')
+    const res = await send(d, probeFor('PUT', 'file/:fileId'), 'bad.handle')
 
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ error: 'invalid_workspace_id' })
@@ -319,10 +287,10 @@ describe('a malformed workspace address, on the document routes', () => {
   it('leaves a malformed document path to the route’s own 400 on a workspace that exists', async () => {
     const d = await daemon()
 
-    const res = await d.app.request(`/api/w/${KNOWN}/document/bad.path/update`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${TOKEN}` },
-      body: loroUpdate(),
+    const res = await d.app.request(`/api/w/${KNOWN}/document/bad.path/file/abc`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'image/png' },
+      body: new Uint8Array([1, 2, 3]),
     })
 
     expect(res.status).toBe(400)
@@ -365,12 +333,12 @@ describe('server mode, on the document routes', () => {
       body: JSON.stringify({ displayName: 'Plans' }),
     })
     const { workspaceId } = (await created.json()) as { workspaceId: string }
-    const update = probeFor('POST', 'update')
+    const upload = probeFor('PUT', 'file/:fileId')
     const asEve = (workspace: string) =>
-      app.request(`${PUBLIC_URL}/api/w/${workspace}${update.suffix}`, {
-        method: 'POST',
-        headers: { ...eve, ...update.init.headers },
-        ...(update.init.body === undefined ? {} : { body: update.init.body }),
+      app.request(`${PUBLIC_URL}/api/w/${workspace}${upload.suffix}`, {
+        method: 'PUT',
+        headers: { ...eve, ...upload.init.headers },
+        ...(upload.init.body === undefined ? {} : { body: upload.init.body }),
       })
 
     const real = await asEve(workspaceId)

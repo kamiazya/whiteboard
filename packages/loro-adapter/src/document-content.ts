@@ -3,6 +3,7 @@ import type { DocumentContainers } from './containers.js'
 import { readCoreFacets, readDocumentKind } from './document-envelope.js'
 import { readSpatialCanvas } from './loro-bridge.js'
 import { readMarkdownBody } from './markdown-body.js'
+import { refuseRetiredShape, retiredMarkdownCanvasShape } from './retired-stored-shape.js'
 
 /**
  * What a document holds, as the one half its kind names. Discriminated so a
@@ -24,8 +25,9 @@ export type DocumentContent =
  *
  * Recorded nowhere, a document is SPATIAL: it is the only kind that existed
  * before kinds did (migration `0005-canvases-kind` maps a null kind to it),
- * and a markdown document's stored form also parses as a canvas, so the
- * opposite default would draw a pre-kind diagram as prose. A stored kind this
+ * so the opposite default would draw a pre-kind diagram as prose. A markdown
+ * document whose canvas still holds the body an older writer stored there is
+ * refused (`RetiredStoredShapeError`). A stored kind this
  * build does not recognise reads as recorded nowhere, as `readDocumentKind`
  * answers it.
  */
@@ -36,6 +38,7 @@ export function readDocumentContent(doc: DocumentContainers, kind?: DocumentKind
   // The OKF summary rides with the body because search indexes it as text the
   // document says about itself; both keepers read content through here.
   const description = readCoreFacets(doc)?.description
+  refuseRetiredShape(retiredMarkdownCanvasShape(doc))
   return {
     kind: 'markdown',
     body: readMarkdownBody(doc),

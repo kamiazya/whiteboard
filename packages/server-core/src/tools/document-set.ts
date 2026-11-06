@@ -9,7 +9,6 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   readTrustFacets,
-  MARKDOWN_BODY_NODE_ID as TEXT_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
@@ -35,24 +34,6 @@ import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js
 import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
 import { refuseUnusableStencilLibrary } from './stencil-library.js'
 import { refuseFrontmatterTags } from './tag-library.js'
-
-/**
- * Whether a canvas is one this tool could itself have written, and so holds
- * nothing a markdown write would destroy.
- *
- * A markdown document written today has an empty canvas — the body is a
- * CRDT text container. One written by the older writer stored the body as a
- * single `okf-body` text node, which made it ALSO a valid one-node spatial
- * canvas, so "has any node" cannot tell such a document from a diagram.
- * Accepting that legacy shape as well keeps documents that predate both the
- * container and kinds editable, without letting a real diagram through.
- */
-function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: readonly unknown[] }) {
-  if (canvas.edges.length > 0) return false
-  return (
-    canvas.nodes.length === 0 || (canvas.nodes.length === 1 && canvas.nodes[0]?.id === TEXT_NODE_ID)
-  )
-}
 
 export const documentSetInputSchema = z
   .object({
@@ -301,11 +282,13 @@ function keepsDeclaredGenerated(
 function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
   const kind = readDocumentKind(doc)
   if (kind === undefined) {
+    // A markdown document written today has an empty canvas: the body is a
+    // CRDT text container, so any element is content this write would lose.
     const existing = readSpatialCanvas(doc)
-    if (!isMarkdownShaped(existing)) {
+    if (existing.nodes.length > 0 || existing.edges.length > 0) {
       throw new DocumentContentLossError(
         documentId,
-        `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
+        `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a markdown body. ` +
           'Edit it through wb_canvas_edit, which records it as spatial and keeps them.',
       )
     }
@@ -316,7 +299,7 @@ function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
     throw new DocumentKindMismatchError(
       documentId,
       kind,
-      'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_canvas_edit instead.',
+      'This writes OKF Markdown, which would replace its nodes and edges with a markdown body. Edit a spatial document through wb_canvas_edit instead.',
     )
   }
 }
@@ -416,14 +399,7 @@ export function createDocumentSetOperation(deps: ServerDeps) {
         ...(verified === undefined ? {} : { verified }),
       })
 
-      // The body goes in the CRDT text container, and this clears the
-      // spatial canvas with it (see writeMarkdownBody). Older documents
-      // stored it as an `okf-body` TEXT NODE, which made every markdown
-      // document also parse as a valid one-node canvas — the ambiguity that
-      // forces every reference resolver to ask the document its kind before
-      // it can tell prose from a diagram. Reads handle both shapes, so
-      // stored documents need no migration; they converge as they are
-      // rewritten.
+      // The body goes in the CRDT text container (see writeMarkdownBody).
       writeMarkdownBody(doc, body)
 
       await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)

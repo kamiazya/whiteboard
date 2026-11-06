@@ -60,35 +60,13 @@ class LoroTextSync implements PluginValue {
     private readonly doc: LoroDoc,
     private readonly readText: ReadBoundText,
     private readonly commit: () => void,
-    private readonly adoptInitial: ((text: string) => void) | undefined,
   ) {
     this.unsubscribe = doc.subscribe(() => this.reconcile())
     // Deferred because a ViewPlugin is constructed DURING a state update, and
     // CodeMirror refuses a dispatch from inside one. A microtask is the first
     // moment the view will accept the seeding — and a view can be destroyed
     // before it arrives, which is what `disposed` below is for.
-    queueMicrotask(() => this.seed())
-  }
-
-  /**
-   * The first reconcile, with one case of its own: an EMPTY container under a
-   * view that already shows text. The view was opened on the document's body
-   * as read (`readMarkdownBody`), which falls back to a pre-unification body
-   * stored as a canvas text node — so this is that document, and reconciling
-   * would empty the editor and let the next keystroke write a one-character
-   * container that hides the prose (the container wins on read). The owner
-   * adopts the text into the container instead.
-   */
-  private seed(): void {
-    if (this.disposed) return
-    const current = this.view.state.doc.toString()
-    if (this.adoptInitial !== undefined && current.length > 0) {
-      if (this.readText(this.doc)?.length === 0) {
-        this.adoptInitial(current)
-        return
-      }
-    }
-    this.reconcile()
+    queueMicrotask(() => this.reconcile())
   }
 
   /** Make the view say what the container says, in one minimal splice. */
@@ -188,13 +166,6 @@ export interface LoroTextSyncOptions {
    * before the commit lands.
    */
   readonly commit?: () => void
-  /**
-   * Writes a pre-unification body — the text the view opened on while the
-   * container was still empty — into the container, the owner's way (see
-   * `LoroTextSync.seed`). Absent, the view is reconciled to the container as
-   * it stands.
-   */
-  readonly adoptInitial?: (text: string) => void
 }
 
 export function loroTextSync(
@@ -203,9 +174,7 @@ export function loroTextSync(
   options: LoroTextSyncOptions = {},
 ): Extension {
   const commit = options.commit ?? (() => doc.commit())
-  return ViewPlugin.define(
-    (view) => new LoroTextSync(view, doc, readText, commit, options.adoptInitial),
-  )
+  return ViewPlugin.define((view) => new LoroTextSync(view, doc, readText, commit))
 }
 
 /**
@@ -218,15 +187,9 @@ export function sessionBodyBinding(
     doc: LoroDoc
     readText: ReadBoundText
     commit: () => void
-    adopt: (text: string) => void
   } | null,
 ): Extension[] | undefined {
   return binding === null
     ? undefined
-    : [
-        loroTextSync(binding.doc, binding.readText, {
-          commit: binding.commit,
-          adoptInitial: binding.adopt,
-        }),
-      ]
+    : [loroTextSync(binding.doc, binding.readText, { commit: binding.commit })]
 }

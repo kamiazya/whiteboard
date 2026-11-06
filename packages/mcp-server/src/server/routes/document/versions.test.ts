@@ -11,9 +11,10 @@ import { writeMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  postDocumentEdit,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   testStoreScope,
@@ -83,28 +84,21 @@ describe('versions API', () => {
   })
 
   it('saves an auto-version immediately when autoVersionQuietMs=0', async () => {
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    writeSpatialCanvas(clientDoc, {
-      nodes: [textNode({ id: 'e1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
-      edges: [],
-    })
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
-
     const app = createDocumentRouter(
       testDocumentRouterOptions({
         serverDeps,
         autoVersionQuietMs: 0,
       }),
     )
-    const resUpdate = await app.request(
-      '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: update,
-      },
+    const resUpdate = await postDocumentEdit(
+      app,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) =>
+        writeSpatialCanvas(containers, {
+          nodes: [textNode({ id: 'e1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+          edges: [],
+        }),
     )
     expect(resUpdate.status).toBe(200)
 
@@ -396,28 +390,22 @@ describe('versions API', () => {
     expect(body.version.operator).toEqual({ kind: 'human' })
   })
 
-  it('POST /update auto-version persists system/auto-save operator', async () => {
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    const list = clientDoc.getMovableList('elements')
-    const m = list.insertContainer(0, new LoroMap())
-    m.set('id', 'e-auto')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
-
+  it('a sync update auto-versions under the system/auto-save operator', async () => {
     const app = createDocumentRouter(
       testDocumentRouterOptions({
         serverDeps,
         autoVersionQuietMs: 0,
       }),
     )
-    const resUpdate = await app.request(
-      '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: update,
-      },
+    const resUpdate = await postDocumentEdit(
+      app,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) =>
+        writeSpatialCanvas(containers, {
+          nodes: [textNode({ id: 'e-auto', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+          edges: [],
+        }),
     )
     expect(resUpdate.status).toBe(200)
 

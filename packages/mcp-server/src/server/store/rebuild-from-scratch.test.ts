@@ -4,7 +4,7 @@
  * content, names, pins, versions, rename, delete — must work
  * across a restart with no `documents` table at all.
  *
- * Migration 0017 dropped the table outright; nothing here may need it. If a
+ * The schema has no such table; nothing here may need it. If a
  * future change quietly reintroduces a row read or write, this file is what
  * goes red.
  */
@@ -66,7 +66,7 @@ function canvasDoc(text: string): LoroDoc {
   return doc
 }
 
-/** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
+/** The schema has no documents table: the tree is the whole address book. */
 const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('the whole document surface works with no documents table at all, across a restart', async () => {

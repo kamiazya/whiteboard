@@ -53,7 +53,7 @@ function imported(entry: string, file: string): LoroDoc {
 const asSet = (f: Frontiers) => f.map(({ peer, counter }) => `${counter}@${peer}`).sort()
 
 describe('cross-version corpus', () => {
-  it('holds at least the entry written before the 1.13.6 bump', () => {
+  it('contains the 1.13.6 compatibility fixture', () => {
     expect(entries).toContain('loro-1.13.6')
   })
 

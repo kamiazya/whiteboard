@@ -22,11 +22,11 @@
 //
 // Failure-reason → HTTP status mapping (locked by tests):
 //
-//   401 auth.required   ─ missing | malformed | invalid_signature
+//   401 auth_required   ─ missing | malformed | invalid_signature
 //                        | invalid_issuer | invalid_audience
 //                        | expired | revoked | validator_unavailable
 //                        | not_access_token
-//   403 auth.forbidden  ─ insufficient_scope
+//   403 auth_forbidden  ─ insufficient_scope
 //
 // 401 is "credentials missing or invalid; retry with auth" — a
 // `WWW-Authenticate: Bearer` challenge ships, per RFC 7235 / 6750.
@@ -93,14 +93,14 @@ export interface AsyncAuthStrategy {
 const UNAUTHORIZED: AuthDecision = {
   ok: false,
   status: 401,
-  code: 'auth.required',
+  code: 'auth_required',
   wwwAuthenticate: 'Bearer',
 }
 
 const FORBIDDEN: AuthDecision = {
   ok: false,
   status: 403,
-  code: 'auth.forbidden',
+  code: 'auth_forbidden',
 }
 
 // 401 retries with a credential; 403 is understood and insufficient.

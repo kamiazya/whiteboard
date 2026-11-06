@@ -17,6 +17,8 @@ const IS_READ_FAILURE: Record<BackendErrorReason, boolean> = {
   'read-unavailable': true,
   // Refused on read: no reader serves the plane before threads.
   'retired-comment-plane': true,
+  // Refused on read: no reader serves a node, edge or body shape before ADR-0037/0038.
+  'retired-stored-shape': true,
   'storage-failure': false,
   'document-removed': false,
 }

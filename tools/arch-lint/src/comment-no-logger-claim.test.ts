@@ -23,6 +23,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { readCrateMap } from './crate-map.js'
+import { rustCommentLines } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { stripComments } from './strip-comments.js'
 import { trackedFiles } from './tracked-files.js'
@@ -33,10 +35,23 @@ const NO_LOGGER_ACROSS_LINES = /\bno[\s*/]+logger\b/i
 /** A comment line's leading markers: `//`, `/*`, or a block comment's `*`. */
 const LEADING_MARKERS = /^[\s*/]*/
 
+/**
+ * The crates with a logger to hand: `whiteboard-log` itself and every crate
+ * the crate map allows to depend on it, read from the map so a crate that
+ * gains the dependency is scanned the day it does.
+ */
+const LOGGER_CRATE_DIRS: readonly string[] = readCrateMap()
+  .filter(
+    (crate) =>
+      crate.name === 'whiteboard-log' || crate.allowedInternalDeps.includes('whiteboard-log'),
+  )
+  .map((crate) => `${crate.path}/`)
+
 const isScanned = (path: string): boolean =>
-  /\.(?:tsx?|mts)$/.test(path) &&
-  (path.startsWith('packages/server-core/src/') ||
-    path.startsWith('packages/mcp-server/src/server/'))
+  (/\.(?:tsx?|mts)$/.test(path) &&
+    (path.startsWith('packages/server-core/src/') ||
+      path.startsWith('packages/mcp-server/src/server/'))) ||
+  (path.endsWith('.rs') && LOGGER_CRATE_DIRS.some((dir) => path.startsWith(dir)))
 
 /** Comment lines that say it about a package that truly has none. Keyed by file. */
 const TRUE_OF_ANOTHER_PACKAGE: Readonly<Record<string, string>> = {
@@ -67,7 +82,7 @@ function commentLines(text: string, fileName: string): string[] {
  */
 function claimsIn(text: string, fileName = 'fixture.ts'): number[] {
   if (!NO_LOGGER_ACROSS_LINES.test(text)) return []
-  const comments = commentLines(text, fileName)
+  const comments = fileName.endsWith('.rs') ? rustCommentLines(text) : commentLines(text, fileName)
   return comments.flatMap((comment, index) => {
     const next = comments[index + 1] ?? ''
     const joined = `${comment} ${next.replace(LEADING_MARKERS, '')}`
@@ -101,6 +116,16 @@ describe('no comment in a tree with a logger claims it has none', () => {
     expect(claimsIn('// no logger here\n// nor no logger there')).toEqual([1, 2])
     expect(claimsIn('// answers no\nconst logger = getLogger()')).toEqual([])
     expect(claimsIn('// answers no\n\n// logger set up below')).toEqual([])
+    expect(claimsIn('//! A core crate with no logger of its own.', 'lib.rs')).toEqual([1])
+    expect(claimsIn('/* nested /* */ no\n * logger */', 'lib.rs')).toEqual([1])
+    expect(claimsIn('const S: &str = r#"\n// no logger\n"#;', 'lib.rs')).toEqual([])
+  })
+
+  it('scans every crate the crate map lets reach the logger', () => {
+    expect(LOGGER_CRATE_DIRS).toEqual(
+      expect.arrayContaining(['crates/core/log/', 'crates/core/codec/', 'crates/bindings/wasm/']),
+    )
+    expect(files).toContain('crates/core/log/src/lib.rs')
   })
 
   it('scans both trees, the files that once said it among them', () => {

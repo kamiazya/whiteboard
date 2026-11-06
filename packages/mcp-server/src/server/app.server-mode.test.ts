@@ -47,11 +47,11 @@ function makeScopeStrategy(grantedScopes: readonly AuthScope[]): AsyncAuthStrate
   return {
     async authorize(input) {
       if (!input.authorizationHeader) {
-        return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+        return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
       }
       for (const scope of input.requiredScopes) {
         if (!granted.has(scope)) {
-          return { ok: false, status: 403, code: 'auth.forbidden' }
+          return { ok: false, status: 403, code: 'auth_forbidden' }
         }
       }
       return {
@@ -67,7 +67,7 @@ function makeScopeStrategy(grantedScopes: readonly AuthScope[]): AsyncAuthStrate
 // answer is the membership refusal — what matters here is that it is not the
 // scope refusal.
 async function expectScopeGatePassed(res: Response): Promise<void> {
-  expect(await res.json()).not.toMatchObject({ error: 'auth.forbidden' })
+  expect(await res.json()).not.toMatchObject({ error: 'auth_forbidden' })
 }
 
 const BEARER = 'Bearer any-valid-server-mode-token'
@@ -439,9 +439,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/w/:wid/document/:path/update → 403 with canvas:read only (requires canvas:write)', async () => {
+    it('POST /api/w/:wid/workspace-document/update → 403 with canvas:read only (requires canvas:write)', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/document/canvas-a/update', {
+      const res = await app.request('/api/w/w1/workspace-document/update', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
@@ -675,7 +675,7 @@ describe('app — server-mode composition', () => {
     const SECRET = 'super-secret-server-mode-bearer-XYZABC12345'
     const alwaysDeny: AsyncAuthStrategy = {
       async authorize() {
-        return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+        return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
       },
     }
     const app = createApp({

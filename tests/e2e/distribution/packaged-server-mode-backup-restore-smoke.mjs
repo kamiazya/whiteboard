@@ -76,7 +76,7 @@ const CANVAS_NODE_ID = 'smoke-node-1'
 const requireFromServer = createRequire(
   pathToFileURL(resolve(REPO_ROOT, 'packages/mcp-server/package.json')),
 )
-const { LoroDoc } = requireFromServer('loro-crdt')
+const { LoroDoc, LoroMap } = requireFromServer('loro-crdt')
 
 /**
  * The canvas NODES a snapshot carries, as a stable string.
@@ -98,13 +98,24 @@ function canvasNodes(bytes) {
   )
 }
 
-/** A Loro update that puts one node into an otherwise empty canvas. */
-function nodeUpdateBytes() {
-  const doc = new LoroDoc()
-  // `nodes`, keyed by node id, is the shape loro-adapter's readSpatialCanvas
-  // reads; the fields are spatialNodeSchema's text variant. Writing anywhere
-  // else would store bytes the product never looks at.
-  doc.getMap('nodes').set(CANVAS_NODE_ID, {
+/**
+ * The workspace-record update that puts one node into the otherwise empty
+ * root-level canvas at `path`, built on the record as `snapshot` holds it —
+ * what an editor sends to `workspace-document/update`. A document's content
+ * lives on its node in the record's `tree`, under the same keys a standalone
+ * document uses: `nodes`, keyed by node id, is what loro-adapter's
+ * readSpatialCanvas reads, and the fields are spatialNodeSchema's text variant.
+ */
+function nodeUpdateBytes(snapshot, path) {
+  const record = new LoroDoc()
+  record.import(snapshot)
+  const from = record.oplogVersion()
+  const node = record
+    .getTree('tree')
+    .roots()
+    .find((root) => root.data.get('segment') === path)
+  if (node === undefined) fail(`scenario 3: no node at "${path}" in the workspace record`)
+  node.data.getOrCreateContainer('nodes', new LoroMap()).set(CANVAS_NODE_ID, {
     id: CANVAS_NODE_ID,
     type: 'text',
     text: 'seeded by the backup/restore smoke',
@@ -113,8 +124,8 @@ function nodeUpdateBytes() {
     width: 200,
     height: 60,
   })
-  doc.commit()
-  return doc.export({ mode: 'update' })
+  record.commit()
+  return record.export({ mode: 'update', from })
 }
 
 const BACKUP_RESTORE_ENTRY = resolve(
@@ -356,14 +367,21 @@ try {
     // Put real content in the canvas before capturing it. Without this the
     // smoke backed up an EMPTY document and asserted over its bytes, which
     // could not have caught a backup that dropped canvas content.
+    const recordRes = await authedFetch(
+      serverBaseUrl,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/workspace-document/snapshot`,
+      jwt,
+    )
+    if (!recordRes.ok) fail(`scenario 3: workspace record fetch failed with ${recordRes.status}`)
+    const record = new Uint8Array(await recordRes.arrayBuffer())
     const updateRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/update`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/workspace-document/update`,
       jwt,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: nodeUpdateBytes(),
+        body: nodeUpdateBytes(record, CANVAS_PATH),
       },
     )
     if (!updateRes.ok) fail(`scenario 3: canvas update failed with ${updateRes.status}`)

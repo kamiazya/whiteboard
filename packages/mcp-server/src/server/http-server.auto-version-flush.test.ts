@@ -1,9 +1,12 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { socketFetch, testSocketPath } from '../shared/test-utils/socket-fetch.js'
+import { postDocumentEdit } from './routes/_test-helpers.js'
 
 /**
  * A checkpoint is taken once a document has been QUIET for five minutes, so
@@ -53,23 +56,18 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
   })
 
   it('writes the checkpoint an edit left pending when close() runs', async () => {
-    const clientDoc = new LoroDoc()
-    const from = clientDoc.version()
-    const element = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
-    element.set('id', 'e1')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from }) as Uint8Array<ArrayBuffer>
-
     const socketPath = testSocketPath()
     running = await startHttpServer({ socketPath })
 
-    const res = await socketFetch(socketPath)(
-      '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: update,
-      },
+    const res = await postDocumentEdit(
+      { request: socketFetch(socketPath) },
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) =>
+        writeSpatialCanvas(containers, {
+          nodes: [textNode({ id: 'e1', text: 'e1', x: 0, y: 0, width: 10, height: 10 })],
+          edges: [],
+        }),
     )
     expect(res.status).toBe(200)
 

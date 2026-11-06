@@ -83,7 +83,7 @@ describe('duplicating from the daemon keeper’s list', () => {
           ...rows,
           { path: 'alpha-copy', name: 'Alpha (copy)', updatedAt: rows[0]!.updatedAt },
         ]
-        return jsonResponse({ title: 'Upstream timed out' }, 500)
+        return jsonResponse({ error: 'refused', message: 'Upstream timed out' }, 500)
       },
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
@@ -106,7 +106,8 @@ describe('duplicating from the daemon keeper’s list', () => {
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
-      onDuplicateDocument: () => jsonResponse({ title: 'Upstream timed out' }, 500),
+      onDuplicateDocument: () =>
+        jsonResponse({ error: 'refused', message: 'Upstream timed out' }, 500),
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await selectCard('Alpha')
@@ -123,7 +124,7 @@ describe('duplicating from the daemon keeper’s list', () => {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', name: 'Beta', updatedAt: new Date().toISOString() }],
       },
-      onDuplicateDocument: () => jsonResponse({ title: 'Not found' }, 404),
+      onDuplicateDocument: () => jsonResponse({ error: 'refused', message: 'Not found' }, 404),
     })
     const { rerender } = render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,

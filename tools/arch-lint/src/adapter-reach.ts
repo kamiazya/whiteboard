@@ -67,8 +67,6 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
   'server/mcp-content-slots.ts',
   'server/daemon-actor.ts',
   'server/current-workspace.ts',
-  // Startup clean-up of data-dir artifacts a retired feature left behind.
-  'server/purge-legacy-trust-file.ts',
 ]
 
 /**

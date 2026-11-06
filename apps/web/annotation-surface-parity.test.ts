@@ -210,7 +210,7 @@ const PARITY = {
   'resolve-reopen': {
     canvas: {
       pinnedBy:
-        'apps/web/src/components/spatial-editor/comment-resolve.browser.test.tsx#"Resolve" on a comment writes set-comment-resolved and the comment leaves the canvas',
+        'apps/web/src/components/spatial-editor/comment-resolve.browser.test.tsx#"Resolve" on a comment writes set-thread-status and the comment leaves the canvas',
     },
     rail: {
       pinnedBy:
