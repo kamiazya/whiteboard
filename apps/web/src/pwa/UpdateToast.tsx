@@ -38,12 +38,12 @@ export function UpdateToast({ onReload, onDismiss }: UpdateToastProps) {
   // centering for the duration of the entrance.
   return (
     <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-      <div
-        role="status"
-        aria-live="polite"
-        className="flex items-center gap-3 rounded-lg border bg-background px-4 py-2 text-sm shadow-lg animate-in fade-in-0 slide-in-from-bottom-2 duration-(--motion-duration-normal) ease-(--motion-ease-out)"
-      >
-        <span>Update available</span>
+      <div className="flex items-center gap-3 rounded-lg border bg-background px-4 py-2 text-sm shadow-lg animate-in fade-in-0 slide-in-from-bottom-2 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
+        {/* The live region is the message alone: a status region speaks its
+            whole text, and the buttons inside it ran on as "…ReloadLater". */}
+        <span role="status" aria-live="polite">
+          Update available
+        </span>
         <button
           type="button"
           onClick={onReload}
