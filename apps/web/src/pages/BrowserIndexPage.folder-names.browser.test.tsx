@@ -71,7 +71,11 @@ describe('a named folder in a browser-kept workspace', () => {
     const first = mount(index, 'class')
     await newSubfolderOf('class', 'Week 6')
 
-    const trail = await screen.findByRole('navigation', { name: 'Folder path' })
+    // The LOAD window, like every other first find here: on a loaded runner
+    // the subfolder's trail landed past the default one second once the
+    // first list settles the workspace record before it answers (measured on
+    // CI's `--repeats=3` pass, 1 of 6 runs).
+    const trail = await screen.findByRole('navigation', { name: 'Folder path' }, LOAD)
     await waitFor(() => expect(within(trail).getByRole('button', { name: 'Week 6' })).toBeTruthy())
 
     await userEvent.click(screen.getByRole('button', { name: 'New document' }))
