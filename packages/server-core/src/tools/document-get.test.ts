@@ -235,21 +235,21 @@ describe('wb_document_get reads a document in its own format', () => {
     // readable ones with it.
     const deps = makeDeps()
     const retired = await createDoc(deps, 'spatial')
-    const doc = await loadOrCreateDocument(deps, 'ws', retired)
+    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired)
     doc
       .getMap('nodes')
       .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
     doc.commit()
-    await saveDocumentSnapshot(deps, 'ws', retired, doc)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired, doc)
+    await deps.documentIndex.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     const { documentId: readable } = await wbDocumentCreate(deps, {
-      workspaceId: 'ws',
+      workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
       path: 'doc-readable',
       kind: 'spatial',
     })
 
     const { documents, failed } = await createDocumentGetTool(deps).execute({
-      workspaceId: 'ws',
+      workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
       documentIds: [retired, readable],
     })
 
