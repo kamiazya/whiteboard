@@ -119,6 +119,15 @@ for the words. A problem is shown, and a screen reader told, only once it has
 lasted a moment — one that clears by itself is never announced — and never on an
 ordinary save.
 
+If you used an early build of the browser app, its saved data may be in a format
+this version no longer reads. Nothing is migrated, and nothing is shown as empty
+or deleted: the page says why the data cannot be opened. A workspace written as
+per-document records is refused on its own (other workspaces in this browser keep
+working; start a new one); a whole browser database from an older version cannot
+be opened at all, so clear this site's data in your browser settings to start
+over. A single document saved in a retired form is named as such and is not
+offered for deletion. Workspaces kept by the daemon are not affected.
+
 **Where to go next:** want your AI agent (Claude Code, Codex, Gemini) to draw with
 you, or durable canvases as files on disk? That's the **Local daemon** — see
 [Quick install](../../README.md#quick-install). Curious how whiteboard scales from a
