@@ -33,7 +33,7 @@ import { isShippedPath, walkSourceFiles } from './source-scan.js'
 const ACTIONS_FILE = 'packages/daemon-client/src/api-contracts/document-url.ts'
 
 const NO_CALLER_REASON_EXPORT =
-  'no first-party caller; maintainer decision open (ADR-0038 export projection): expose through wb_scene_render/CLI, document as socket-only scripting API, or delete'
+  'no first-party caller by decision (owner, 2026-11-06): kept as the socket-only scripting API, whose supported caller is curl over the daemon socket — docs/how-to/export-a-canvas-from-the-daemon.md'
 
 /** Actions the daemon serves that nothing in the product calls, each with why. */
 const LEDGER: Readonly<Record<string, string>> = {
