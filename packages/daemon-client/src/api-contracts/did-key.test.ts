@@ -15,30 +15,35 @@
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { didKeyToEd25519PublicKey, ed25519PublicKeyToDidKey } from './did-key.js'
+import { ed25519PublicKeyToDidKey } from './did-key.js'
 
+// Each published identifier beside the raw key it names, the key read off the
+// identifier's own bytes (multicodec header 0xed 0x01, then 32 key bytes).
 const SPEC_DID_KEYS = [
-  'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP',
-  'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
-  'did:key:z6MknCCLeeHBUaHu4aHSVLDCYQW9gjVJ7a63FpMvtuVMy53T',
-  'did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH',
+  [
+    'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP',
+    'CV-aGlld3nVdgnhoZK0D36Wk-9aIMlZjZOK2XhPMnkQ',
+  ],
+  [
+    'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+    'Lm_M42cB3HkUiODQsXRcweM6TByfzEHGO9ND274JcOY',
+  ],
+  [
+    'did:key:z6MknCCLeeHBUaHu4aHSVLDCYQW9gjVJ7a63FpMvtuVMy53T',
+    'cwGXz9hryEvuEo-cBcLTBWnnr9kBjx2_1xTMndtgth4',
+  ],
+  [
+    'did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH',
+    'lJZrfAjkBXdfjebMHEUI9usidAPhAlssitLXR3OYxbI',
+  ],
 ] as const
 
 describe('did:key — against identifiers this codec did not produce', () => {
-  // The load-bearing case. If base58 or the multicodec prefix is wrong, a
-  // published identifier will not survive decode-then-encode, and no amount
-  // of internal consistency hides it.
-  it.each(SPEC_DID_KEYS)('round-trips %s byte-for-byte', (did) => {
-    const publicKey = didKeyToEd25519PublicKey(did)
-    expect(publicKey, 'a published Ed25519 did:key must decode').not.toBeNull()
-    expect(ed25519PublicKeyToDidKey(publicKey as string)).toBe(did)
-  })
-
-  it.each(SPEC_DID_KEYS)('decodes %s to exactly 32 key bytes', (did) => {
-    const publicKey = didKeyToEd25519PublicKey(did) as string
-    // base64url of 32 bytes is 43 unpadded characters.
-    expect(publicKey).toHaveLength(43)
-    expect(publicKey).toMatch(/^[A-Za-z0-9_-]+$/)
+  // The load-bearing case. If base58 or the multicodec prefix is wrong, the
+  // key will not encode to the identifier everyone else publishes for it,
+  // and no amount of internal consistency hides it.
+  it.each(SPEC_DID_KEYS)('encodes to %s byte-for-byte', (did, publicKey) => {
+    expect(ed25519PublicKeyToDidKey(publicKey)).toBe(did)
   })
 })
 
@@ -48,13 +53,11 @@ describe('ed25519PublicKeyToDidKey', () => {
   // header is wrong — which is how this reads as a check rather than a
   // restatement of the format.
   fcTest.prop([fc.uint8Array({ minLength: 32, maxLength: 32 })], withDefaults())(
-    'every Ed25519 key yields a did:key beginning z6Mk, and round-trips',
+    'every Ed25519 key yields a did:key beginning z6Mk',
     (keyBytes) => {
-      const publicKey = bytesToBase64Url(keyBytes)
-      const did = ed25519PublicKeyToDidKey(publicKey)
+      const did = ed25519PublicKeyToDidKey(bytesToBase64Url(keyBytes))
       expect(did).not.toBeNull()
       expect(did as string).toMatch(/^did:key:z6Mk/)
-      expect(didKeyToEd25519PublicKey(did as string)).toBe(publicKey)
     },
   )
 
@@ -67,45 +70,3 @@ describe('ed25519PublicKeyToDidKey', () => {
     expect(ed25519PublicKeyToDidKey('not base64url!!')).toBeNull()
   })
 })
-
-describe('didKeyToEd25519PublicKey', () => {
-  it.each([
-    ['a non-did string', 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'],
-    ['another DID method', 'did:web:example.com'],
-    ['a multibase prefix other than z', 'did:key:f6Mkhaxg'],
-    ['a character outside the base58 alphabet', 'did:key:z6Mkhax0OIl'],
-    ['an empty method-specific id', 'did:key:z'],
-  ])('refuses %s', (_label, input) => {
-    expect(didKeyToEd25519PublicKey(input)).toBeNull()
-  })
-
-  // x25519-pub is 0xec in the same multicodec table — one byte away from
-  // ed25519-pub, and a key-agreement key rather than a signing one. Accepting
-  // it would mean naming the wrong kind of key with the right-looking string.
-  it('refuses a well-formed did:key whose multicodec is not ed25519-pub', () => {
-    const x25519 = new Uint8Array(34)
-    x25519[0] = 0xec
-    x25519[1] = 0x01
-    const did = `did:key:z${base58EncodeForTest(x25519)}`
-    expect(didKeyToEd25519PublicKey(did)).toBeNull()
-  })
-})
-
-// A deliberately separate, naive base58 encoder for the ONE fixture that has
-// to be built rather than quoted. Sharing the implementation under test would
-// make that case agree with whatever the codec does.
-function base58EncodeForTest(bytes: Uint8Array): string {
-  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  let value = 0n
-  for (const byte of bytes) value = value * 256n + BigInt(byte)
-  let out = ''
-  while (value > 0n) {
-    out = ALPHABET[Number(value % 58n)] + out
-    value /= 58n
-  }
-  for (const byte of bytes) {
-    if (byte !== 0) break
-    out = `1${out}`
-  }
-  return out
-}

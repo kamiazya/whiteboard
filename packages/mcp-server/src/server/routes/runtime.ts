@@ -109,7 +109,6 @@ function mountPing(app: Hono, options: Pick<RuntimeRouterOptions, 'instanceId' |
         identity: {
           alg: options.identity.alg,
           publicKey: options.identity.publicKey,
-          did: options.identity.did,
         },
       }),
     )

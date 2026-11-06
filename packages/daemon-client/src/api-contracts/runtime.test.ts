@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { didKeyToEd25519PublicKey } from './did-key.js'
 import {
   daemonIdentitySchema,
   daemonPingResponseSchema,
@@ -44,51 +43,19 @@ describe('daemonPingResponseSchema', () => {
   })
 })
 
-// A real published Ed25519 did:key and the base64url key it decodes to, so
-// the pair below is a fact about the method rather than this codec's output.
-const REAL_DID = 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP'
-const REAL_KEY = didKeyToEd25519PublicKey(REAL_DID) as string
-const OTHER_DID = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'
-
-describe('daemonIdentitySchema binds the did to the key it names', () => {
-  it('accepts an identity whose did decodes to its own publicKey', () => {
-    const parsed = daemonIdentitySchema.parse({
-      alg: 'Ed25519',
-      publicKey: REAL_KEY,
-      did: REAL_DID,
-    })
-    expect(parsed.did).toBe(REAL_DID)
-  })
-
-  // Wire-compat: a daemon predating the did advertises the key alone, and
-  // that has to keep parsing.
-  it('accepts an identity with no did at all', () => {
-    expect(daemonIdentitySchema.parse({ alg: 'Ed25519', publicKey: REAL_KEY }).did).toBeUndefined()
-  })
-
-  // The one that matters. Both fields claim to name the same key, and until
-  // the schema checked it a responder could advertise the pinned publicKey
-  // beside a did naming a DIFFERENT key — so a verifier that imported from
-  // the did would check signatures against the responder's own key while
-  // believing it had the pinned one.
-  it('refuses a did that names a different key than publicKey', () => {
+describe('daemonIdentitySchema', () => {
+  // The identity is the raw key and its algorithm, nothing else: a field a
+  // daemon still sends beside them is an answer this contract tolerates and
+  // drops, never a second name for the key that some reader could trust.
+  it('reads the key alone, dropping a did a daemon still sends', () => {
+    const publicKey = 'CV-aGlld3nVdgnhoZK0D36Wk-9aIMlZjZOK2XhPMnkQ'
     expect(
-      daemonIdentitySchema.safeParse({ alg: 'Ed25519', publicKey: REAL_KEY, did: OTHER_DID })
-        .success,
-    ).toBe(false)
-  })
-
-  it.each([
-    ['a did:key that is not base58btc', 'did:key:z6Mkhax0OIl'],
-    [
-      'a did:key carrying another multicodec',
-      'did:key:z6LSbysY2xFMRpGMhb7tFTLMpeuPRaqaWM1yECx2AtzE3KCc',
-    ],
-    ['a prefix with nothing after it', 'did:key:'],
-  ])('refuses %s', (_label, did) => {
-    expect(
-      daemonIdentitySchema.safeParse({ alg: 'Ed25519', publicKey: REAL_KEY, did }).success,
-    ).toBe(false)
+      daemonIdentitySchema.parse({
+        alg: 'Ed25519',
+        publicKey,
+        did: 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP',
+      }),
+    ).toEqual({ alg: 'Ed25519', publicKey })
   })
 })
 
