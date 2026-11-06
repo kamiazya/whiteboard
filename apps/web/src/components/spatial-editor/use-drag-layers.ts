@@ -16,6 +16,7 @@ import type {
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  frameTitleObstacles,
   layoutSpatialEdges,
   renderSceneToSvg,
   sceneBounds,
@@ -334,6 +335,7 @@ export function useDragLayers({
       canvas,
       selectableBoxes,
       frozenEdgeSides,
+      frameTitles: frameTitleObstacles(canvas.nodes, gestureCommitted.scene.nodes),
     })
   }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted, settling])
 
