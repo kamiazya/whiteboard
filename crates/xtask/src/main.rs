@@ -5,6 +5,7 @@ mod dist;
 mod harden;
 mod inputs;
 mod metadata;
+mod repro;
 mod size;
 mod unsafe_ledger;
 mod wasm_imports;
@@ -26,6 +27,8 @@ tasks:
   dist native|wasm [--target-dir <dir>]
                     the release build of a shipped artifact (remapped paths,
                     SOURCE_DATE_EPOCH, cargo-auditable for native)
+  repro-check [native|wasm]...
+                    two release builds, from two source paths, are byte-equal
   unsafe-ledger [--update]
                     dependency `unsafe` fits crates/unsafe-ledger.json";
 
@@ -42,6 +45,7 @@ fn main() -> ExitCode {
         ["size", "--update"] => size::run(size::Mode::Update),
         ["harden-check", rest @ ..] => harden::run(rest),
         ["dist", rest @ ..] => dist::run_task(rest),
+        ["repro-check", rest @ ..] => repro::run(rest),
         ["unsafe-ledger"] => unsafe_ledger::run(unsafe_ledger::Mode::Check),
         ["unsafe-ledger", "--update"] => unsafe_ledger::run(unsafe_ledger::Mode::Update),
         _ => Err(vec![USAGE.to_owned()]),
