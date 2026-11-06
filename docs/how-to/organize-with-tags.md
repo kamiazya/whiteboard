@@ -136,6 +136,13 @@ is drawn in it, and the legend lists the key — a colour you set on a box with
 a swatch stays yours and is never explained by a key, which is why it gets no
 legend.
 
+The first colour you set creates the library document at `tags` if the
+workspace has none. The document list shows it labelled **Tag library** — on
+its card and among search results — and its preview says it keeps the
+workspace's tag colours rather than that nothing is written. Deleting it is
+allowed, but the confirmation says first that every tag colour set in the
+workspace goes with it.
+
 A few things worth knowing:
 
 - Only `key:value` tags have a menu; a plain tag has nowhere in the library

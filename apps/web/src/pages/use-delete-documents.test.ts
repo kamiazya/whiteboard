@@ -255,3 +255,22 @@ describe('useDeleteDocuments', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('a delete that takes the tag library', () => {
+  it('tells the dialog, single or bulk', () => {
+    const { result } = renderHook(() =>
+      useDeleteDocuments({
+        keeper: 'browser',
+        deleteEach: vi.fn(async () => ({ failed: [], lastError: null })),
+        lookup: () => undefined,
+        refresh: vi.fn(),
+      }),
+    )
+    act(() =>
+      result.current.requestDelete({ paths: ['notes', 'tags'], displayName: '2 documents' }),
+    )
+    expect(result.current.dialog.pending?.tagLibrary).toBe(true)
+    act(() => result.current.requestDelete({ paths: ['notes'], displayName: 'Notes' }))
+    expect(result.current.dialog.pending?.tagLibrary).toBeUndefined()
+  })
+})

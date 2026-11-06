@@ -18,7 +18,14 @@ export interface DeleteDocumentsDialogProps {
    * card: the menu item that opened the dialog is gone by then, and with no
    * Trigger Radix would land on <body>.
    */
-  pending: { displayName: string; kind?: DocumentKind; count?: number; path?: string } | null
+  pending: {
+    displayName: string
+    kind?: DocumentKind
+    count?: number
+    path?: string
+    /** One of the documents is the workspace's stored tag library, whose colours go with it. */
+    tagLibrary?: boolean
+  } | null
   busy: boolean
   error: string | null
   /**
@@ -31,6 +38,10 @@ export interface DeleteDocumentsDialogProps {
   onCancel: () => void
   onConfirm: () => void
 }
+
+/** Said before the tag library goes, since nothing about an empty-looking note says what it keeps. */
+const TAG_LIBRARY_WARNING =
+  "It is this workspace's tag library: deleting it removes every tag colour set in this workspace."
 
 // Confirmation for the per-card Delete action both list pages render.
 export function DeleteDocumentsDialog({
@@ -65,9 +76,9 @@ export function DeleteDocumentsDialog({
       }
       // A bulk delete spans kinds, so the noun cannot come from one
       // document's kind the way the singular subject's does.
-      description={DESTRUCTIVE_COPY[action](
+      description={`${DESTRUCTIVE_COPY[action](
         pending?.count === undefined ? kindNoun(pending?.kind) : 'documents',
-      )}
+      )}${pending?.tagLibrary === true ? ` ${TAG_LIBRARY_WARNING}` : ''}`}
       error={error}
       confirmLabel="Delete"
       onCancel={onCancel}
