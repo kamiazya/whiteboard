@@ -13,18 +13,8 @@ paths:
   `Scene`). Plain TypeScript types, never Zod: a scene does not cross a
   process boundary, so per zod-schema-discipline it needs no runtime schema.
 - `contribution.ts`: the shape a plugin contributes to drawing — `NodeOutline`,
-  `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`,
-  the edge-router contract (`EdgeRouteRequest`/`EdgeRoute`/`EdgeRouter`), and
+  `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`, and
   `RenderContribution` itself.
-
-  A router returns a ROUTE — points, and whether they curve — never a scene
-  node. Terminating on a silhouette, the arrowheads, the paint and the ink
-  are the renderer's, and it applies them to every edge the same way; a
-  router that built the node would be a second producer of that geometry,
-  which is the drift canvas-render's one-producer rule exists to prevent.
-  It receives the sides the anchor pass chose (that pass runs first, across
-  the whole edge set, because fan-out needs to see every end sharing a
-  side), so sides are its input rather than its answer.
 
 A contribution SELECTS its router the way it selects a silhouette:
 `routers` by bare name plus `readRouting` answering one, with the renderer
