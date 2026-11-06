@@ -88,6 +88,10 @@ a REQUIRED content seam, since placement alone would pass an empty copy.
 `DuplicatingInMemoryDocumentIndex` is the row-backed double's form of it,
 given a synchronous content-copy seam, and answers the same suite. `KeyedSerializer` is the one per-key, submission-ordered,
 non-poisoning async queue (the index's writes).
+`StoredDocumentUnreadableCode` carries `'retired-envelope'`: intact data in an envelope the
+keeper no longer reads, never lifted or deleted — the opposite of `'malformed'`. `docRefKey`'s
+`document:` form stays because the daemon still mints `kind: 'document'` for `deleteDoc`; the
+browser refuses a stored key of that shape by name (`RetiredDocumentKeyError`).
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never
