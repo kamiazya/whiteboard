@@ -127,6 +127,7 @@ function composeEdge(
   routingStyle: EdgeRoutingStyle | undefined,
   anchors: EdgeAnchorPair | undefined,
   routingBudget: RoutingBudget,
+  titles: readonly LabelObstacle[],
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
@@ -140,7 +141,7 @@ function composeEdge(
   // written against another deployment's plugins still draws.
   const routed = pullEdgeOntoOutlines(
     contributedRoute(canvas, edge, options, anchors) ??
-      routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget),
+      routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget, titles),
     canvas,
     edge,
     options.nodeOutlines,
@@ -242,7 +243,9 @@ function pullEdgeOntoOutlines(
 
 /**
  * Where each frame's title is drawn: above the frame's border, outside the
- * box a node obstacle covers, yet text a label must not land on.
+ * box a node obstacle covers, yet text a label must not land on and a route
+ * must go round — which routing, being measure-free, cannot know unless it
+ * is handed these boxes.
  */
 function frameTitleBoxes(
   nodes: readonly SpatialNode[],
@@ -598,8 +601,6 @@ function composeEdgesAndLabels(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  // One anchor pass for the whole edge set: fan-out needs to see every end
-  // sharing a side, which a per-edge route cannot.
   // Facet-aware by DEFAULT (visual.edges/v0): resolution lives here rather
   // than at the call sites for the
   // same reason the tokeniser default does — every surface that lays a
@@ -635,12 +636,14 @@ function composeEdgesAndLabels(
   // same question whichever the element is, and the anchoring pass has to see
   // every element or two of them will pick the same side of one box.
   const routable: readonly RoutableElement[] = [...canvas.edges, ...(canvas.lines ?? [])]
-  // One routing account for the side pass and the final routes together.
+  // One anchor pass and routing account for every edge (fan-out needs each end
+  // sharing a side), told where frame titles are, as the router is.
   const budget = createRoutingBudget()
   const overrides = resolved.edgeSideOverrides
-  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, overrides, budget)
+  const titles = frameTitleBoxes(canvas.nodes, resolved)
+  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, overrides, budget, titles)
   const routedEdges = routable.map((edge) =>
-    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id), budget),
+    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id), budget, titles),
   )
   // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
   // hop" is asked of the edge that would draw the arc. Crossings are still
@@ -659,7 +662,7 @@ function composeEdgesAndLabels(
           if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
           return { ...edge, jumps }
         })
-  const obstacles = labelObstacles(canvas.nodes, frameTitleBoxes(canvas.nodes, resolved))
+  const obstacles = labelObstacles(canvas.nodes, titles)
   const labelContent = routable
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)

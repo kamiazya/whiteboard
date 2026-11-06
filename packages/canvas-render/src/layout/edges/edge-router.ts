@@ -1,7 +1,7 @@
 /**
  * The ROUTER: one edge's path between two placed anchors, around the boxes
  * in its way. The authored-bend route, the self-loop, the straight style's
- * stub-and-chord, and the orthogonal style's zero-bend slide, elbow
+ * stub-and-chord, and the orthogonal style's zero-bend slide (`side-slides.ts`), elbow
  * candidates, detours and Hanan-grid search (`grid-route.ts`) — `routeEdge`
  * chooses among them and never throws (a missing endpoint degrades to a
  * zero-length path).
@@ -27,25 +27,39 @@ import {
   rectOf,
   segmentCrossesRect,
   sidePoint,
-  tangentCoordinate,
   unionRect,
   withoutRepeats,
 } from './edge-geometry.js'
-import {
-  bendCount,
-  interiorInkThrough,
-  oppositeSide,
-  type SidePair,
-  SLIDE_CORNER_INSET_PX,
-} from './edge-rules.js'
+import { bendCount, interiorInkThrough, type SidePair } from './edge-rules.js'
 import type { EdgeAnchorPair } from './edge-sides.js'
 import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } from './edge-sides.js'
 import { routeOnGrid } from './grid-route.js'
 import type { RouteEnds, RouteObstacles } from './route-ends.js'
 import type { RoutingBudget } from './routing-budget.js'
+import {
+  deepenedCorridor,
+  slideAlongSide,
+  slidForApproach,
+  tryZeroBendSlide,
+} from './side-slides.js'
+import {
+  approachesSideways,
+  cornerDetour,
+  type DetourObstacle,
+  squareEnds,
+  strictInterior,
+} from './straight-detour.js'
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
+
+/**
+ * How close a route may pass to a frame's title, in px. Less than a box's
+ * margin: the text's measured box already ends where its last glyph does,
+ * and a box's margin made a line passing just beyond a title's end turn
+ * aside for it.
+ */
+const LABEL_MARGIN_PX = 2
 
 /** How far a detour keeps clear of the boxes it steps around, in px. */
 const OBSTACLE_CLEARANCE_PX = 16
@@ -121,74 +135,43 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
 }
 
 /**
- * A path from `start` to `end` that steps around everything in `obstacles`.
+ * A path from `start` to `end` that steps around what is in its way.
  *
- * Four candidates — over, under, left of, right of the blocking region — each
- * a pair of waypoints on one side of it. The shortest candidate that is
- * itself clear wins; if none is clear the shortest is used anyway, because
- * layout has to return SOMETHING and a route that still crosses is better
- * than a thrown error or a straight line through everything.
+ * The direct segment when nothing blocks it; otherwise the shortest path
+ * through the corners of the boxes actually in the way (`cornerDetour`), which
+ * keeps a straight connection as close to one line as the board allows. The
+ * edge's own two boxes are in that search too, tested by their strict
+ * interior, so a turn never takes the line back through the box it leaves or
+ * the one it reaches.
  *
- * Deliberately not a visibility graph or A*: this runs per edge on every
- * layout, and four candidates against a union box handles the arrangements
- * that actually occur (a node or two sitting between two others). A denser
- * search belongs behind the routing-style setting, not in the default path.
+ * When the side search asked for `around` (the corner route crossed another
+ * edge that the outer lane does not), or the corner search finds nothing
+ * within its budget, four candidates
+ * round the box covering everything in the way — over, under, left of, right
+ * of it — and the shortest clear one wins; if none is clear the shortest is
+ * used anyway, because layout has to return SOMETHING and a route that still
+ * crosses is better than a thrown error or a straight line through
+ * everything.
  */
 function routeStraight(
   start: Point,
   end: Point,
   inflated: readonly Rect[],
   raw: readonly Rect[],
+  endpointRects: readonly Rect[],
+  around: boolean,
 ): Point[] {
   const region = blockingRegion(start, end, inflated)
   if (region === undefined) return [start, end]
-  return bestCandidate(detourCandidates(start, end, region), inflated, raw)
-}
-
-/** Below this outward-to-tangential ratio (~14°), an approach reads as
- * running along the side rather than into it. */
-const SIDEWAYS_RATIO = 0.25
-
-/**
- * Whether a straight run from `anchor` toward `other` would leave through
- * the anchor side's outward half-plane. When it would not (the direction
- * grazes along the side or points back across the node — the shape an
- * occlusion-moved side produces), the edge needs a perpendicular stub
- * first, or it draws sliding along the node's own border and the arrowhead
- * meets the side edge-on.
- */
-function approachesSideways(anchor: Point, other: Point, side: EdgeSide): boolean {
-  const vx = other.x - anchor.x
-  const vy = other.y - anchor.y
-  // Coincident anchors have no direction to graze along — the degenerate
-  // zero-length path stays minimal rather than growing stubs.
-  if (vx === 0 && vy === 0) return false
-  const normal = outwardNormal(side)
-  const outward = normal.x * vx + normal.y * vy
-  const tangential = Math.abs(normal.x * vy - normal.y * vx)
-  return outward <= tangential * SIDEWAYS_RATIO
-}
-
-/**
- * The anchor slid along its side so the run to `target` is axis-aligned,
- * or undefined when the target's coordinate falls outside the side's span
- * (keeping a corner inset). A side midpoint is a default, not authored
- * data — trading it for a rectilinear route is the better-looking edge.
- */
-function slideAlongSide(
-  anchor: Point,
-  rect: Rect,
-  side: EdgeSide,
-  target: Point,
-): Point | undefined {
-  if (side === 'left' || side === 'right') {
-    const lo = rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
-    const hi = rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
-    return target.y >= lo && target.y <= hi ? { x: anchor.x, y: target.y } : undefined
-  }
-  const lo = rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
-  const hi = rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
-  return target.x >= lo && target.x <= hi ? { x: target.x, y: anchor.y } : undefined
+  if (around) return bestCandidate(detourCandidates(start, end, region), inflated, raw)
+  const obstacles: DetourObstacle[] = [
+    ...inflated.map((block, i) => ({ block, body: raw[i] as Rect, escapable: true })),
+    ...endpointRects.map((body) => ({ block: strictInterior(body), body, escapable: false })),
+  ]
+  return (
+    cornerDetour(start, end, obstacles, OBSTACLE_CLEARANCE_PX) ??
+    bestCandidate(detourCandidates(start, end, region), inflated, raw)
+  )
 }
 
 /**
@@ -198,9 +181,47 @@ function slideAlongSide(
  * facing-pair canvas keeps its two-point segment. When exactly one end is
  * sideways, the clean end's anchor slides along its own side to meet the
  * stub corridor squarely — one long axis-aligned run plus one right-angle
- * turn, instead of a diagonal into the stub.
+ * turn, instead of a diagonal into the stub. Only when that run is clear: a
+ * slid anchor that still has to detour buys no straight run, and moving it
+ * can land it on another edge's anchor on the same side, which the anchor
+ * pass spread apart and the router cannot see.
  */
 function routeStraightWithApproach(
+  ends: RouteEnds,
+  { inflated, raw }: RouteObstacles,
+  around: boolean,
+): Point[] {
+  const {
+    start,
+    end,
+    from: { side: fromSide, rect: fromRect, depth: fromDepth },
+    to: { side: toSide, rect: toRect, depth: toDepth },
+  } = ends
+  const own = [fromRect, toRect]
+  // Stepping round leaves and arrives along the sides' normals: from the
+  // anchor itself its first leg runs along the box's own border whenever
+  // the lane it heads for is above or below it.
+  if (around && blockingRegion(start, end, inflated) !== undefined) {
+    const exit = stubFrom(start, fromSide, fromDepth)
+    const entry = stubFrom(end, toSide, toDepth)
+    return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, true), end])
+  }
+  // Every shape below can bend at a corner beside one of its boxes and meet
+  // that box edge-on, whichever end already took a stub: an end that did
+  // leaves along its normal, so squaring touches only the other.
+  return squareEnds(approachedPath(ends, { inflated, raw }, around), {
+    exit: stubFrom(start, fromSide, fromDepth),
+    entry: stubFrom(end, toSide, toDepth),
+    fromSide,
+    toSide,
+    clear: (a, b) =>
+      blockingRegion(a, b, inflated) === undefined &&
+      !own.some((rect) => segmentCrossesRect(a, b, strictInterior(rect))),
+  })
+}
+
+/** `routeStraightWithApproach`'s path before its glancing ends are squared. */
+function approachedPath(
   {
     start,
     end,
@@ -208,27 +229,31 @@ function routeStraightWithApproach(
     to: { side: toSide, rect: toRect, depth: toDepth },
   }: RouteEnds,
   { inflated, raw }: RouteObstacles,
+  around: boolean,
 ): Point[] {
+  const own = [fromRect, toRect]
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
-  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
+  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw, own, around)
+  // The straight run from a slid anchor, or undefined when there is none.
+  const clearRun = (from: Point | undefined, to: Point | undefined): Point[] | undefined => {
+    if (from === undefined || to === undefined) return undefined
+    const run = routeStraight(from, to, inflated, raw, own, around)
+    return run.length === 2 ? run : undefined
+  }
   if (toSideways && !fromSideways) {
     const entry = stubFrom(end, toSide, toDepth)
-    const slid = slideAlongSide(start, fromRect, fromSide, entry)
-    if (slid !== undefined) {
-      return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
-    }
+    const run = clearRun(slideAlongSide(start, fromRect, fromSide, entry), entry)
+    if (run !== undefined) return withoutRepeats([...run, end])
   }
   if (fromSideways && !toSideways) {
     const exit = stubFrom(start, fromSide, fromDepth)
-    const slid = slideAlongSide(end, toRect, toSide, exit)
-    if (slid !== undefined) {
-      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
-    }
+    const run = clearRun(exit, slideAlongSide(end, toRect, toSide, exit))
+    if (run !== undefined) return withoutRepeats([start, ...run])
   }
   const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
-  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
+  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, around), end])
 }
 function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
@@ -238,61 +263,6 @@ function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_
   }
 }
 
-/**
- * Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can often
- * share one tangent coordinate — anchors are renderer-chosen defaults, so
- * sliding one end along its side buys a single straight segment instead of
- * a stub-jog-stub elbow. Facing is required (each side's outward normal
- * points toward the other end), or an authored opposing pair with the nodes
- * swapped would draw a line backwards through both. A blocked lane answers
- * undefined and the caller falls through to the elbows.
- */
-function tryZeroBendSlide(
-  start: Point,
-  end: Point,
-  fromSide: EdgeSide,
-  toSide: EdgeSide,
-  fromRect: Rect,
-  toRect: Rect,
-  inflated: readonly Rect[],
-): Point[] | undefined {
-  if (fromSide !== oppositeSide(toSide)) return undefined
-  const fromNormal = outwardNormal(fromSide)
-  const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
-  if (!facing) return undefined
-  const span = (rect: Rect, side: EdgeSide): readonly [number, number] =>
-    side === 'left' || side === 'right'
-      ? [
-          rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
-          rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
-        ]
-      : [
-          rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
-          rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
-        ]
-  const withTangent = (anchor: Point, side: EdgeSide, t: number): Point =>
-    side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
-  const [fromLo, fromHi] = span(fromRect, fromSide)
-  const [toLo, toHi] = span(toRect, toSide)
-  const lo = Math.max(fromLo, toLo)
-  const hi = Math.min(fromHi, toHi)
-  if (lo > hi) return undefined
-  const startT = tangentCoordinate(fromSide, start)
-  const endT = tangentCoordinate(toSide, end)
-  // Keep an existing anchor when one already lies in the shared lane
-  // (departure first, then the arrival's fan position), else move as
-  // little as possible.
-  const t =
-    startT >= lo && startT <= hi
-      ? startT
-      : endT >= lo && endT <= hi
-        ? endT
-        : Math.min(hi, Math.max(lo, startT))
-  const alignedStart = withTangent(start, fromSide, t)
-  const alignedEnd = withTangent(end, toSide, t)
-  if (!pathIsClear([alignedStart, alignedEnd], inflated)) return undefined
-  return [alignedStart, alignedEnd]
-}
 /** The obstacles whose rects touch `box`, with the inflated and raw lists
  * kept in step — the two windowing passes in routeOrthogonal differ only in
  * the box they prune to. */
@@ -311,78 +281,6 @@ function windowObstacles(
     }
   }
   return near
-}
-
-/**
- * An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so an
- * approach shorter than this leaves the arrow with no line behind it — it
- * reads as a marker stuck to the box rather than an edge arriving at it. Two
- * arrow-lengths gives the head its own run plus the same again of plain line.
- */
-const MIN_APPROACH_PX = 20
-
-/**
- * The departure anchor slid along its OWN side so a perpendicular pair has
- * runway to arrive on.
- *
- * A perpendicular pair takes its corner from the departure anchor's tangent
- * coordinate, so the approach is only as long as that anchor is far from the
- * arrival side. Sliding lengthens it without adding a corner; a side with no
- * room to slide keeps the anchor and falls through to the stub-and-elbow
- * path.
- */
-function slidForApproach(
-  start: Point,
-  end: Point,
-  fromSide: EdgeSide,
-  toSide: EdgeSide,
-  fromRect: Rect,
-  toNormal: Point,
-): Point {
-  if (fromSide === toSide || fromSide === oppositeSide(toSide)) return start
-  const approach = toNormal.x * (start.x - end.x) + toNormal.y * (start.y - end.y)
-  if (approach <= 0 || approach >= MIN_APPROACH_PX) return start
-  const shortfall = MIN_APPROACH_PX - approach
-  return (
-    slideAlongSide(start, fromRect, fromSide, {
-      x: start.x + toNormal.x * shortfall,
-      y: start.y + toNormal.y * shortfall,
-    }) ?? start
-  )
-}
-
-/**
- * A same-side pair's shared corridor, deepened just enough to clear the
- * arrival anchor by a full approach.
- *
- * The approach is measured from the DEPARTURE anchor, so an arrival box that
- * reaches further out than the departure box eats into it, and one that
- * reaches further than the stub is deep leaves the corridor arriving from
- * inside. Deepening is the same-side analogue of the departure slide: it
- * buys the runway without adding a bend, because the corridor is a segment
- * the route already draws.
- *
- * Only the band where the corridor clears the arrival anchor but by less
- * than an approach. Deeper than that (`approach <= 0`) the corridor arrives
- * from inside, the arrival stub is kept, and that stub IS the runway —
- * deepening those turns a sound route into a long detour around the outside
- * of a box that reaches far further out than its partner. Inside the band
- * the correction is bounded by MIN_APPROACH_PX, so the corridor never moves
- * more than one approach.
- */
-function deepenedCorridor(
-  start: Point,
-  end: Point,
-  fromSide: EdgeSide,
-  toSide: EdgeSide,
-  fromDepth: number,
-  toNormal: Point,
-): number {
-  if (fromSide !== toSide) return fromDepth
-  const arrivalOvershoot = toNormal.x * (end.x - start.x) + toNormal.y * (end.y - start.y)
-  const approach = fromDepth - arrivalOvershoot
-  if (approach <= 0 || approach >= MIN_APPROACH_PX) return fromDepth
-  return arrivalOvershoot + MIN_APPROACH_PX
 }
 
 /**
@@ -626,6 +524,16 @@ function selfLoopRoute(
  * neighbour's margin band, `bestCandidate`'s second tier accepts a band
  * crossing to escape rather than tunnelling through the node itself.
  *
+ * The straight style keeps a box an anchor merely TOUCHES: its corner search
+ * escapes a box by its strict interior, so a line can leave a border point
+ * and still go round the body behind it — and the side search's cost model
+ * already prices ink through such a box, so dropping it made the two
+ * disagree. The orthogonal routes test clearance inclusively and keep the
+ * older rule.
+ *
+ * `labels` (a frame's title) join the list on the same terms as a node: text
+ * drawn outside every box is as much in the way as a box.
+ *
  * `others` is the caller's O(nodes) list handed over intact — the
  * side-choice search routes each edge many times per layout, and the ends do
  * not change inside it.
@@ -636,21 +544,36 @@ function routeObstacles(
   start: Point,
   end: Point,
   others: readonly Rect[] | undefined,
-): { obstacles: Rect[]; rawObstacles: Rect[] } {
+  labels: readonly Rect[],
+  touchedBlocks: boolean,
+): RouteObstacles {
   const fromId = endNode(edge.from)
   const toId = endNode(edge.to)
-  const rawObstacles = (
-    others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const boxes = others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
+  const holds = touchedBlocks ? strictlyContains : containsPoint
+  const clear = (rect: Rect) => !holds(rect, start) && !holds(rect, end)
+  const grown = (margin: number) => (rect: Rect) => ({
+    x: rect.x - margin,
+    y: rect.y - margin,
+    w: rect.w + 2 * margin,
+    h: rect.h + 2 * margin,
+  })
+  const rawBoxes = boxes.filter(clear)
+  const inflatedBoxes = rawBoxes.map(grown(ROUTE_MARGIN_PX))
+  // Built only when there is something to add: this runs per trial routing,
+  // and copying the whole node list for nothing showed in the bench.
+  if (labels.length === 0) return { raw: rawBoxes, inflated: inflatedBoxes }
+  const rawLabels = labels.filter(clear)
   return {
-    rawObstacles,
-    obstacles: rawObstacles.map((rect) => ({
-      x: rect.x - ROUTE_MARGIN_PX,
-      y: rect.y - ROUTE_MARGIN_PX,
-      w: rect.w + 2 * ROUTE_MARGIN_PX,
-      h: rect.h + 2 * ROUTE_MARGIN_PX,
-    })),
+    raw: [...rawBoxes, ...rawLabels],
+    inflated: [...inflatedBoxes, ...rawLabels.map(grown(LABEL_MARGIN_PX))],
   }
+}
+
+function strictlyContains(rect: Rect, point: Point): boolean {
+  return (
+    point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
+  )
 }
 
 /**
@@ -727,6 +650,9 @@ export function routeEdge(
   // The layout's account for grid searches (`routing-budget.ts`); omitted,
   // this route's grid search is unbounded.
   budget?: RoutingBudget,
+  // Text outside every node rect a route must not cross (a frame's title),
+  // measured by the layout since routing is measure-free.
+  labels: readonly Rect[] = [],
 ): ResolvedEdgeNode {
   const fromRect = rectAtEnd(nodes, edge.from)
   const toRect = rectAtEnd(nodes, edge.to)
@@ -751,7 +677,8 @@ export function routeEdge(
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
-  const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others)
+  const strict = style === 'straight'
+  const obstacleSet = routeObstacles(nodes, edge, start, end, others, labels, strict)
   const ends: RouteEnds = {
     start,
     end,
@@ -762,7 +689,6 @@ export function routeEdge(
     },
     to: { side: toSide, rect: toRect, depth: anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX },
   }
-  const obstacleSet: RouteObstacles = { inflated: obstacles, raw: rawObstacles }
 
   return {
     kind: 'edge',
@@ -774,7 +700,7 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraightWithApproach(ends, obstacleSet)
+        ? routeStraightWithApproach(ends, obstacleSet, anchors?.around === true)
         : routeOrthogonal(ends, obstacleSet, budget),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,

@@ -76,6 +76,19 @@ test('side-choice search', { timeout: 0 }, async ({ bench }) => {
   )
 })
 
+// The same search for the straight style, which is what a board with no
+// routing facet and no theme draws — so the one most canvases pay for.
+test('side-choice search, straight', { timeout: 0 }, async ({ bench }) => {
+  await bench.compare(
+    bench('assignEdgeAnchors straight 60 nodes / 200 edges', () => {
+      assignEdgeAnchors(dense.nodes, dense.edges, 'straight')
+    }),
+    bench('assignEdgeAnchors straight clustered 144 nodes / 165 edges', () => {
+      assignEdgeAnchors(clustered.nodes, clustered.edges, 'straight')
+    }),
+  )
+})
+
 // The primitives the search calls, so a regression can be attributed rather
 // than guessed at: if the search slows down but these did not, the cost is in
 // how many times it calls them.

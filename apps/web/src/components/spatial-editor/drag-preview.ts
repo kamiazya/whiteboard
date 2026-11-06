@@ -22,6 +22,7 @@ import {
   type EdgeSides,
   edgeArrowPolygons,
   flattenDrawnEdgePath,
+  type LabelObstacle,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -58,6 +59,13 @@ export interface ConnectPreviewContext {
    * loop) on every pointer move.
    */
   readonly frozenEdgeSides?: ReadonlyMap<string, EdgeSides>
+  /**
+   * Where the committed scene draws each frame's title
+   * (`frameTitleObstacles`): the layout routes round them, so the preview
+   * must be told of them too or it draws a line through a title the drop
+   * steps round.
+   */
+  readonly frameTitles?: readonly LabelObstacle[]
 }
 
 /**
@@ -180,12 +188,14 @@ function previewLine(
   // a board that sends every route to the grid search runs that search
   // unbounded on each frame of the gesture.
   const budget = createRoutingBudget()
+  const titles = connect.frameTitles ?? []
   const anchors = assignEdgeAnchors(
     nodes,
     [...canvas.edges, tentative],
     routingStyle,
     connect.frozenEdgeSides,
     budget,
+    titles,
   )
   const routed = routeEdge(
     nodes,
@@ -194,6 +204,7 @@ function previewLine(
     anchors.get(tentative.id),
     undefined,
     budget,
+    titles,
   )
   return {
     kind: 'line',

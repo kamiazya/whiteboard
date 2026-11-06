@@ -441,11 +441,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
-  // Both raised (+2, +3) for the layout's routing budget, which the repair
-  // pass's routes and the search spend from; `assignEdgeAnchors` +1 more for
-  // leaving the edges drawn as a contact mark out of the search.
+  // Raised for the layout's routing budget, which the repair pass's routes
+  // spend from.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 71,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 56,
   'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
   // The trial evaluator's three steps are named closures (applySelfCosts /
   // applyPairCosts / rescorePairsOf / rescorePairInto), each carrying the

@@ -36,6 +36,11 @@ export const MUTATED = [
   // pinned, because the router has several optimal routes and ordering them
   // here would fix one by accident.
   'src/layout/edges/min-heap.ts',
+  // The straight style's corner search: a search, held by
+  // `straight-detour.properties.test.ts`, whose oracle is written from the
+  // definition (a route clear of every obstacle's open interior) rather than
+  // from the search, so a survivor is a corner or clearance nothing pins.
+  'src/layout/edges/straight-detour.ts',
   // Colour by intent (ADR-0040 decision 5): three properties over random
   // boards and libraries, stated from the declaration rather than the code.
   'src/tags/declared-colours.ts',
@@ -145,6 +150,12 @@ export const MINUTES = {
   'src/layout/edges/edge-crossing-sweep.ts': 23.3,
   'src/layout/edges/grid-route.ts': 42,
   'src/layout/edges/min-heap.ts': 5,
+  // ESTIMATED, not yet measured on a runner: 257 mutants, priced at
+  // `grid-route.ts`'s rate (303 mutants, 42 minutes), the file whose tests
+  // and timeouts it shares. A local run (2026-11-06, 3 runners on a machine
+  // at load ~20) tested 66 in 27 minutes, 0 survived and 6 timed out, and
+  // was stopped there; replace this with the weekly run's figure.
+  'src/layout/edges/straight-detour.ts': 36,
   'src/tags/declared-colours.ts': 1.3,
   'src/svg/format.ts': 3.8,
   'src/xml-escape.ts': 6.8,

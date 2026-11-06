@@ -382,9 +382,23 @@ describe('the mutation lane covers what it says it covers', () => {
     // line weight a stroke's named weight draws at. Outside the lane: a
     // three-entry table and one product, pinned by `stroke-weight.test.ts`
     // and mutated by hand against it (the call removed, the factor changed).
+    //
+    // 120 and 24 with `layout/edges/straight-detour.ts`, the straight
+    // style's corner search, which the lane DOES cover: it is a search, and
+    // `straight-detour.properties.test.ts` states its oracle from the
+    // definition rather than from the code — checked by hand against three
+    // mutations (the escape test, a corner's clearance, a skipped obstacle)
+    // before the lane took it. Its `MINUTES` figure is an estimate until a
+    // weekly run measures it (`stryker-targets.mjs` says how).
+    //
+    // 122 with two modules split out of files the lane does not mutate
+    // either, to keep them under the size budget: `layout/edges/side-slides.ts`
+    // (moving a route's end along its side, from `edge-router.ts`) and
+    // `layout/edges/coincident-ends.ts` (scoring a repaired pair, from
+    // `spatial-edges.ts`). Same code, same tests, same answer as before.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 23,
-      production: 119,
+      mutated: 24,
+      production: 122,
     })
   })
 

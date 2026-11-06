@@ -1,0 +1,204 @@
+// A straight connection that has to avoid something stays as close to
+// straight as it can: it bends at the corner of the box in its way, and
+// steps around the boxes actually in its way rather than around one box
+// covering all of them — which drew a short connection as a long
+// right-angle detour around everything between its ends.
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { describe, expect, it } from 'vitest'
+import { stackedFramesBoard } from '../../test-utils/routing-corpus.js'
+import { crossings, interiorInk, pathLength } from '../../test-utils/routing-metrics.js'
+import { node } from '../../test-utils/spatial-node.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
+
+const rectOf = (n: SpatialNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })
+
+function route(nodes: readonly SpatialNode[], edge: CanvasEdge) {
+  const { path } = routeEdge(nodes, edge, 'straight')
+  const start = path[0]!
+  const end = path[path.length - 1]!
+  return {
+    path,
+    ratio: pathLength(path) / Math.hypot(end.x - start.x, end.y - start.y),
+    inkThrough: (id: string) => interiorInk(path, rectOf(nodes.find((n) => n.id === id)!)),
+  }
+}
+
+describe('a straight connection around a box in its way', () => {
+  it('bends once, at the blocking box', () => {
+    // The direct line runs from a's bottom to b's top, through c's middle.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const routed = route(nodes, { id: 'e', from: { node: 'a' }, to: { node: 'b' } })
+    expect(routed.inkThrough('c')).toBe(0)
+    expect(routed.path).toHaveLength(3)
+    expect(routed.ratio).toBeLessThan(1.15)
+  })
+
+  it('steps around each blocker rather than their union', () => {
+    // Two tall boxes on the line, one reaching down and one reaching up: the
+    // box covering both spans 650px across the line, and going round it is
+    // the long way, where passing over one and under the other is not.
+    const nodes = [
+      node('a', 0, 200, 120, 80),
+      node('b', 720, 200, 120, 80),
+      node('c1', 220, 150, 100, 400),
+      node('c2', 500, -100, 100, 400),
+    ]
+    const routed = route(nodes, { id: 'e', from: { node: 'a' }, to: { node: 'b' } })
+    expect(routed.inkThrough('c1')).toBe(0)
+    expect(routed.inkThrough('c2')).toBe(0)
+    expect(routed.ratio).toBeLessThan(1.5)
+  })
+
+  it('arrives across the side it reaches, not along it', () => {
+    // On two stacked frames of notes, a1 -> b6 passes the column between
+    // them at a corner; the leg on from that corner ran 7 degrees off b6's
+    // left side, sliding into the box edge-on.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const edge = edges.find((e) => e.id === 'a1_b6')!
+    const routed = routeEdge(nodes, edge, 'straight', anchors.get(edge.id))
+    const end = routed.path[routed.path.length - 1]!
+    const before = routed.path[routed.path.length - 2]!
+    const normal = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] }[routed.toSide]
+    const [nx, ny] = normal as [number, number]
+    const outward = nx * (before.x - end.x) + ny * (before.y - end.y)
+    const along = Math.abs(nx * (before.y - end.y) - ny * (before.x - end.x))
+    expect(outward).toBeGreaterThan(along * 0.25)
+  })
+})
+
+describe('every end on two stacked frames', () => {
+  it('meets its box across the side, not along it', () => {
+    // a2 -> b5 leaves a2's top through a stub, so only its arrival could
+    // glance — and did, sliding into b5's top at 8 degrees from a corner
+    // beside it.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const normals = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] } as const
+    const glancing: string[] = []
+    for (const edge of edges) {
+      const routed = routeEdge(nodes, edge, 'straight', anchors.get(edge.id))
+      const { path } = routed
+      const ends = [
+        { at: path[0]!, next: path[1]!, side: routed.fromSide },
+        { at: path[path.length - 1]!, next: path[path.length - 2]!, side: routed.toSide },
+      ]
+      for (const { at, next, side } of ends) {
+        const [nx, ny] = normals[side]
+        const outward = nx * (next.x - at.x) + ny * (next.y - at.y)
+        const along = Math.abs(nx * (next.y - at.y) - ny * (next.x - at.x))
+        if (outward <= along * 0.25) glancing.push(`${edge.id} ${side}`)
+      }
+    }
+    expect(glancing).toEqual([])
+  })
+})
+
+describe('a straight connection that would cross another to save length', () => {
+  it('steps round instead, when that leaves the two uncrossed', () => {
+    // a1 -> b6 and a3 -> b1 run corner to opposite corner between two
+    // stacked frames. Bending at the corners of what blocks each makes the
+    // two diagonals cross; stepping one round everything in its way does not.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const paths = edges.map((edge) => routeEdge(nodes, edge, 'straight', anchors.get(edge.id)).path)
+    expect(crossings(paths)).toBe(0)
+  })
+
+  it('keeps the corner route where stepping round buys nothing', () => {
+    // The search starts every straight edge stepping round; with nothing
+    // else on the board to cross, it must hand back the corner route.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edges = [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }]
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    expect(anchors.get('e')?.around).toBeUndefined()
+    const { path } = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e'))
+    expect(path).toHaveLength(3)
+  })
+
+  it('routes round the box covering everything in the way when asked', () => {
+    // The corner route bends once at c's corner; `around` steps round c in
+    // right angles, the way it did before corner routes existed.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edge = { id: 'e', from: { node: 'a' }, to: { node: 'b' } }
+    const corner = routeEdge(nodes, edge, 'straight', { fromSide: 'bottom', toSide: 'top' })
+    const around = routeEdge(nodes, edge, 'straight', {
+      fromSide: 'bottom',
+      toSide: 'top',
+      around: true,
+    })
+    expect(around.path).not.toEqual(corner.path)
+    expect(
+      around.path.every(
+        (p, i) => i === 0 || p.x === around.path[i - 1]!.x || p.y === around.path[i - 1]!.y,
+      ),
+    ).toBe(true)
+  })
+})
+
+describe('a box an anchor only touches', () => {
+  it('is still in the way of the line to that anchor', () => {
+    // e lands on n3's left side at a point on n2's top border, n2 reaching
+    // up under n3. A box touched by an anchor can still be gone round, and
+    // the direct line ran through n2's body.
+    const nodes = [
+      node('n0', 369, 90, 89, 42),
+      node('n1', 5, 200, 101, 141),
+      node('n2', 95, 149, 194, 101),
+      node('n3', 173, 123, 102, 52),
+    ]
+    const edges = [{ id: 'e', from: { node: 'n1' }, to: { node: 'n3' } }]
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const { path } = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e'))
+    const n2 = rectOf(nodes[2]!)
+    // An end strictly inside n2 cannot be reached without entering it, which
+    // is the scoreboard's exemption too; any other route must stay out.
+    const within = (p: { x: number; y: number }) =>
+      p.x > n2.x && p.x < n2.x + n2.w && p.y > n2.y && p.y < n2.y + n2.h
+    const unavoidable = within(path[0]!) || within(path[path.length - 1]!)
+    expect(unavoidable ? 0 : interiorInk(path, n2)).toBe(0)
+  })
+})
+
+describe('ends the anchor pass spread along one side', () => {
+  it('stay apart once routed, with two boxes stacked on each other', () => {
+    // s3 and s5 occupy one place, so s5's right-side anchor touches s3 and
+    // its route has to go round it. Sliding its far end along the hub's
+    // side to meet a corridor that then detours anyway put it on e-s3's
+    // anchor (fast-check's shrunk counterexample).
+    const hub = (id: string, x: number, y: number) => node(id, x, y, 100, 100)
+    const nodes = [
+      hub('hub', 0, 0),
+      hub('s2', 300, 450),
+      hub('s3', 300, 0),
+      hub('s1', 300, -150),
+      hub('s5', 300, 0),
+    ]
+    const edges = [
+      { id: 'e-s2', from: { node: 's2' }, to: { node: 'hub', side: 'top' as const } },
+      { id: 'e-s3', from: { node: 's3' }, to: { node: 'hub' } },
+      { id: 'e-s1', from: { node: 's1' }, to: { node: 'hub' } },
+      { id: 'e-s5', from: { node: 's5' }, to: { node: 'hub' } },
+    ]
+    const anchors = assignEdgeAnchors(nodes, edges)
+    const atHub = edges.map((edge) => {
+      const { path } = routeEdge(nodes, edge, 'straight', anchors.get(edge.id))
+      const end = path[path.length - 1]!
+      return `${end.x},${end.y}`
+    })
+    expect(new Set(atHub).size).toBe(atHub.length)
+  })
+})

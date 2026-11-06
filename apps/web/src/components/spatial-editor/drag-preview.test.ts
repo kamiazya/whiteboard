@@ -1,9 +1,16 @@
 // @vitest-environment node
 
+import {
+  constantRatioMeasureText,
+  flattenDrawnEdgePath,
+  frameTitleObstacles,
+  layoutSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
+import { editorLayoutBase } from '../../lib/spatial/scene-render-core.js'
 import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import type { GestureState } from './gestures.js'
 
@@ -144,6 +151,57 @@ describe('computeDragPreview — connecting', () => {
   it('returns undefined without a connect context', () => {
     const state = connectingState()
     expect(computeDragPreview(state, boxes, { x: 300, y: 400 })).toBeUndefined()
+  })
+})
+
+describe('computeDragPreview — connecting past a frame title', () => {
+  // A note above a frame, connected to a member of it: the straight line
+  // between them drops through the frame's title, which the committed
+  // layout routes round.
+  const canvas: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'above', x: 40, y: 0, width: 160, height: 80, text: '' }),
+      groupNode({
+        id: 'frame',
+        x: 0,
+        y: 200,
+        width: 400,
+        height: 200,
+        label: 'Next actions agreed with the team',
+      }),
+      textNode({ id: 'member', x: 40, y: 260, width: 160, height: 80, text: '' }),
+    ],
+    edges: [],
+  }
+  const layout = editorLayoutBase({ measure: constantRatioMeasureText })
+  const selectableBoxes: NodeBox[] = canvas.nodes
+    .filter((n) => n.id !== 'frame')
+    .map((n) => ({ id: n.id, box: { x: n.x, y: n.y, width: n.width, height: n.height } }))
+
+  it('previews the line the drop draws', () => {
+    // The titles as the editor reads them: off the scene it has committed.
+    const committed = layoutSpatialCanvas(canvas, layout)
+    const frameTitles = frameTitleObstacles(canvas.nodes, committed.nodes)
+    expect(frameTitles).toHaveLength(1)
+    const preview = computeDragPreview(
+      connectingState({ fromNodeId: 'above' }),
+      selectableBoxes,
+      { x: 120, y: 300 },
+      { canvas, selectableBoxes, frameTitles },
+    )
+    const dropped = layoutSpatialCanvas(
+      { ...canvas, edges: [{ id: 'e', from: { node: 'above' }, to: { node: 'member' } }] },
+      layout,
+    ).nodes.find((n) => n.kind === 'edge' && n.id === 'e')
+    expect(dropped?.kind).toBe('edge')
+    if (dropped?.kind !== 'edge') return
+    // The committed path is not the straight drop, so agreeing with it means
+    // the preview went round the title too.
+    expect(dropped.path.length).toBeGreaterThan(2)
+    expect(preview).toMatchObject({
+      kind: 'line',
+      path: flattenDrawnEdgePath(dropped.path, [], dropped.rounded === true),
+    })
   })
 })
 
