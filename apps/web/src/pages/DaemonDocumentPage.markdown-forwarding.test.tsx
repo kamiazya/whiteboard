@@ -11,7 +11,6 @@
 
 import {
   MARKDOWN_BODY_KEY,
-  MARKDOWN_BODY_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
@@ -91,16 +90,14 @@ function markdownSnapshot(): Uint8Array {
 }
 
 /**
- * The shape before the writers were unified: the body stored as the
- * `okf-body` TEXT NODE of a canvas, the `body` container empty. Still on
- * disk wherever an older MCP document write left a note.
+ * The shape before the writers were unified, which no reader serves: the
+ * body stored as the `okf-body` TEXT NODE of a canvas, the `body` container
+ * empty. Spelled as it stood.
  */
 function preUnificationSnapshot(): Uint8Array {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [
-      textNode({ id: MARKDOWN_BODY_NODE_ID, x: 0, y: 0, width: 400, height: 200, text: BODY }),
-    ],
+    nodes: [textNode({ id: 'okf-body', x: 0, y: 0, width: 400, height: 200, text: BODY })],
     edges: [],
   })
   writeCoreFacets(doc, { type: 'markdown' })
@@ -164,11 +161,12 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
     )
   })
 
-  it('opens a pre-unification note on its prose, and an edit keeps it', async () => {
+  it('does not open a note still holding its body as the okf-body node', async () => {
     // The body lives in a canvas text node and the `body` container is empty.
-    // A binding reconciles the editor FROM the container on mount, so without
-    // a conversion the prose left the editor and the first keystroke wrote a
-    // one-character container that hid it (the container wins on read).
+    // No reader serves that shape: bound as usual, the editor would open on
+    // nothing and the first keystroke would write a body that hides the prose.
+    // The session refuses the snapshot (`retired-stored-shape`), so no editor
+    // binds and nothing is written back.
     mounted.views.length = 0
     const backend = new FakeDocumentBackend(preUnificationSnapshot)
     renderInRouter(
@@ -179,26 +177,10 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
         createBackend={() => backend}
       />,
     )
-    const editor = await screen.findByTestId('markdown-source-stub', undefined, {
-      timeout: 10_000,
-    })
-    await waitFor(() => expect(editor.dataset.bound).toBe('yes'))
-    const view = mounted.views.at(-1)
-    if (view === undefined) throw new Error('no editor view mounted')
-    // After the binding's first reconcile, not just at construction.
-    await new Promise<void>((resolve) => queueMicrotask(resolve))
-    expect(view.state.doc.toString()).toBe(BODY)
 
-    view.dispatch({ changes: { from: view.state.doc.length, insert: ' - edited here' } })
-
-    await waitFor(
-      () => {
-        const replay = new LoroDoc()
-        replay.import(backend.snapshot)
-        for (const update of backend.pushed) replay.import(update)
-        expect(replay.getText(MARKDOWN_BODY_KEY).toString()).toBe(`${BODY} - edited here`)
-      },
-      { timeout: 10_000 },
-    )
+    await waitFor(() => expect(screen.getByText(/Opening this document/)).toBeTruthy())
+    expect(screen.queryByTestId('markdown-source-stub')).toBeNull()
+    expect(mounted.views).toEqual([])
+    expect(backend.pushed).toEqual([])
   })
 })

@@ -66,19 +66,7 @@ async function seedWorkspace(
   })
   await seedDoc(store, NOTE_ID, (doc) => {
     writeDocumentKind(doc, 'markdown')
-    writeSpatialCanvas(doc, {
-      nodes: [
-        textNode({
-          id: 'okf-body',
-          x: 0,
-          y: 0,
-          width: 600,
-          height: 400,
-          text: '# Weekly notes\n\nShipped it.',
-        }),
-      ],
-      edges: [],
-    })
+    writeMarkdownBody(doc, '# Weekly notes\n\nShipped it.')
   })
 }
 

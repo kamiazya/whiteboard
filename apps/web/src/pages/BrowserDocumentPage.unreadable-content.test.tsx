@@ -10,6 +10,7 @@
  */
 import 'fake-indexeddb/auto'
 import { cleanup, screen, waitFor } from '@testing-library/react'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -79,6 +80,25 @@ describe('a document this build cannot read', () => {
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
     await expectLoggedFailure('startup fold left documents behind')
+  })
+
+  it('says the content is in a retired shape rather than opening without it', async () => {
+    // A node an older version stored in the node-kind union before ADR-0038,
+    // which no reader serves: opened as usual, the `.strict()` model would
+    // drop it and the board would show without it.
+    const legacy = new LoroDoc()
+    legacy
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    legacy.commit()
+    await seedDocumentWithContent({ snapshot: legacy.export({ mode: 'snapshot' }) })
+
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/form this version no longer reads/i)
+    })
+    expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
   })
 
   it('stops reporting the failure once a readable document is opened', async () => {

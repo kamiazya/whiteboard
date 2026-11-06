@@ -1,10 +1,9 @@
 import {
-  readCommentThreads,
+  RetiredStoredShapeError,
   readDocumentKind,
   readFacets,
   readMarkdownBody,
   readSpatialCanvas,
-  writeCommentThread,
   writeDocumentKind,
   writeFacets,
   writeSpatialCanvas,
@@ -233,12 +232,10 @@ describe('wb_document_set tool', () => {
     expect(readDocumentKind(await loadDoc(store, DOCUMENT_ID))).toBe('markdown')
   })
 
-  test('a document predating kinds that holds only an OKF body is still healed', async () => {
-    // A markdown document's stored content is a valid spatial canvas: its
-    // body lives in one text node. So "holds nodes" alone would refuse the
-    // pre-kind markdown documents the OKF import path produced, and send
-    // them to wb_canvas_edit, which would declare them spatial — the wrong
-    // kind, and the "no way back" the healing exists to prevent.
+  test('a document still holding its body as the okf-body text node is refused, and left as it was', async () => {
+    // No reader serves that shape (owner decision 27). Read as the empty
+    // container, the write's own provenance check would judge the stored
+    // body as absent, and the old prose would be overwritten unseen.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedDoc(store, DOCUMENT_ID, (doc) => {
@@ -251,55 +248,17 @@ describe('wb_document_set tool', () => {
     })
     const tool = createDocumentSetOperation(makeDeps(store))
 
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      markdown: '---\ntype: note\n---\nNew body.',
-    })
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: '---\ntype: note\n---\nNew body.',
+      }),
+    ).rejects.toThrow(RetiredStoredShapeError)
 
     const doc = await loadDoc(store, DOCUMENT_ID)
-    expect(readDocumentKind(doc)).toBe('markdown')
-    expect(readMarkdownBody(doc)).toBe('New body.')
-    // The legacy okf-body node it was healed FROM is gone, so a later read
-    // cannot find a stale second body behind the fresh one.
-    expect(readSpatialCanvas(doc).nodes).toEqual([])
-  })
-
-  test('a note stored in the okf-body shape keeps its comment threads across the write', async () => {
-    const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    await seedDoc(store, DOCUMENT_ID, (doc) => {
-      writeDocumentKind(doc, 'markdown')
-      writeSpatialCanvas(doc, {
-        nodes: [
-          textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: 'Old body.' }),
-        ],
-        edges: [],
-      })
-      writeCommentThread(doc, {
-        id: 't1',
-        anchor: {
-          kind: 'text',
-          quote: { prefix: '', exact: 'Old', suffix: ' body.' },
-          start: 0,
-          end: 3,
-        },
-        status: 'open',
-        createdAt: '2026-09-02T00:00:00.000Z',
-        messages: [{ id: 'm1', body: 'tighten this', author: 'human:yuki' }],
-      })
-    })
-    const tool = createDocumentSetOperation(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      markdown: '---\ntype: note\n---\nNew body.',
-    })
-
-    const doc = await loadDoc(store, DOCUMENT_ID)
-    expect(readMarkdownBody(doc)).toBe('New body.')
-    expect(readCommentThreads(doc).map((thread) => thread.id)).toEqual(['t1'])
+    expect(readDocumentKind(doc)).toBeUndefined()
+    expect(readSpatialCanvas(doc).nodes.map((node) => node.id)).toEqual(['okf-body'])
   })
 
   test('a document predating kinds that holds nodes is refused, not flattened', async () => {

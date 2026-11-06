@@ -367,7 +367,7 @@ describe('wb_version_restore', () => {
 
     expect(refusal).toBeInstanceOf(DocumentKindMismatchError)
     expect((refusal as Error).message).toMatch(
-      /Document notes\/other is a spatial document\..*single text node/,
+      /Document notes\/other is a spatial document\..*a markdown body/,
     )
     expect(textOf(occupant)).toBe('occupant')
     expect(live.kinds.get('notes/other')).toBe('spatial')
