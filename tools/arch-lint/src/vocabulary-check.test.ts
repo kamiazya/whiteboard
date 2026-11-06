@@ -14,8 +14,19 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { crateDirs } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath } from './source-scan.js'
+
+/**
+ * Every crate's `src` under `crates/`, found from its `Cargo.toml` so a crate
+ * is scanned the day it exists. The migration ports TypeScript into these
+ * trees file by file, and a retired word carried across in a port is exactly
+ * the reintroduction this guard exists to stop.
+ */
+const CRATE_SRC_DIRS: readonly string[] = crateDirs()
+  .map((dir) => `${dir}/src`)
+  .filter((dir) => existsSync(join(REPO_ROOT, dir)))
 
 /**
  * Every directory whose source this rule governs: both composition roots,
@@ -45,6 +56,7 @@ const SCAN_DIRS = [
   'packages/mcp-server/src',
   'packages/server-core/src',
   'tests',
+  ...CRATE_SRC_DIRS,
 ]
 
 /** Every package's `src`, found rather than listed so a new package is scanned the day it exists. */
@@ -154,6 +166,7 @@ const BANNED = [
       // guard's scope followed where the first rename happened, not where the
       // word was.
       ...PACKAGE_SRC_DIRS,
+      ...CRATE_SRC_DIRS,
     ],
     exempt: [
       ...Object.keys(BROWSER_LOCAL_IN_PACKAGES),
@@ -227,6 +240,7 @@ const BANNED = [
       '.claude',
       'README.md',
       'apps/web/DESIGN.md',
+      ...CRATE_SRC_DIRS,
     ],
     exempt: [],
   },
@@ -240,7 +254,10 @@ const BANNED = [
     word: 'WebSocket / WS (as a live transport)',
     instead:
       "'SSE' or 'sync stream' — pages sync over SSE with POSTs upstream (ADR-0050); say 'WebSocket' only to state that it is retired",
-    dirs: [...PACKAGE_SRC_DIRS, 'apps/web/src'],
+    // A Rust test module sits in the file it tests, so in a crate this
+    // reads tests too: a test that names the retired transport says so in
+    // an exemption rather than by its path.
+    dirs: [...PACKAGE_SRC_DIRS, 'apps/web/src', ...CRATE_SRC_DIRS],
     productionOnly: true,
     exempt: Object.keys(WEBSOCKET_WORDING),
   },
@@ -325,7 +342,7 @@ function listSourceFiles(dir: string): string[] {
       files.push(...listSourceFiles(full))
       continue
     }
-    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md|ya?ml)$/.test(entry.name)) files.push(full)
+    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md|ya?ml|rs|toml)$/.test(entry.name)) files.push(full)
   }
   return files
 }
@@ -411,6 +428,22 @@ describe('retired vocabulary', () => {
       expect(entry.reaches.filter((path) => !scanned.has(path))).toEqual([])
     })
   }
+
+  it('scans the crates, and reads a Rust file the way it reads any other', () => {
+    // The daemon halves (`localDaemon`, `'local-daemon'`) stay out of the
+    // crates for the reason they stay out of `packages/mcp-server`: the
+    // daemon crate absorbs that package, and there `local-daemon` is the
+    // network-sense auth mode, opposite `server-mode`.
+    expect(CRATE_SRC_DIRS).toContain('crates/xtask/src')
+    const scanned = scannedFilesByWord.get('slug') ?? new Set<string>()
+    expect([...scanned].filter((path) => path.endsWith('.rs')).length).toBeGreaterThan(10)
+    const planted = listSourceFiles(join(import.meta.dirname, '__fixtures__/rust')).filter((file) =>
+      file.endsWith('comment-violations.rs'),
+    )
+    expect(planted).toHaveLength(1)
+    const hits = linesOf(planted[0] ?? '').filter((line) => BANNED[0].pattern.test(line))
+    expect(hits).toEqual(["/// The document's slug, as a path segment."])
+  })
 
   it('scans the packages it claims to', () => {
     // A directory listing that came back short would scan nothing under

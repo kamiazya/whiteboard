@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registeredTools } from './registered-tools.js'
+import { commentLinesOf, rustCode } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
@@ -71,7 +72,21 @@ const isPackageSource = (path: string): boolean =>
  * gates are scripts, and the function a gate's comment names is where a reader
  * goes to learn what it protects. Measured when added: one unresolved name.
  */
-const isCommentSource = (path: string): boolean => isPackageSource(path) || /\.mjs$/.test(path)
+const isCommentSource = (path: string): boolean =>
+  isPackageSource(path) || /\.mjs$/.test(path) || isRustSource(path)
+
+const isRustSource = (path: string): boolean => /^crates\/.+\.rs$/.test(path)
+
+/**
+ * A Rust comment names its own crate's functions in snake_case, which neither
+ * shape above can see: a multi-word lower-case name (`without_negative_zero`),
+ * read in `.rs` comments only. A one-word name (`run`, `load`) is ordinary
+ * prose as often as a symbol, so it is not read.
+ */
+const RUST_SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/
+
+const looksLikeOwnSymbolIn = (file: string, name: string): boolean =>
+  looksLikeOwnSymbol(name) || (isRustSource(file) && RUST_SNAKE_CASE.test(name))
 
 /** Prose the dev workflow reads: the always-on and path-scoped rules, and every skill. */
 const isWorkflowProse = (path: string): boolean =>
@@ -268,33 +283,59 @@ interface Mention {
 
 const tracked = trackedFiles(REPO_ROOT)
 
+/**
+ * The text of a file that is CODE: a Rust file's with comments and literals
+ * blanked by its lexer, a TOML manifest's (where a crate's lint table names
+ * the lints its comments explain) without `#` lines, anything else without its
+ * comment lines.
+ */
+function codeLines(file: string, text: string): string[] {
+  if (file.endsWith('.rs')) return rustCode(text).split('\n')
+  const comment = file.endsWith('.toml') ? (line: string) => /^\s*#/.test(line) : isComment
+  return text.split('\n').filter((line) => !comment(line))
+}
+
 function codeIdentifiers(): Set<string> {
   const names = new Set<string>()
   for (const file of tracked) {
-    if (!/\.(?:tsx?|mjs|cjs|js|json|css|sql)$/.test(file)) continue
+    if (!/\.(?:tsx?|mjs|cjs|js|json|css|sql|rs|toml)$/.test(file)) continue
     // Its allowlist spells every exempt name, so reading it would make each
     // one "exist" the moment this file is committed.
     if (file === SELF) continue
-    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
-      if (isComment(line)) continue
+    const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    for (const line of codeLines(file, text)) {
       for (const match of line.matchAll(/[A-Za-z_$][\w$]*/g)) names.add(match[0])
     }
+    if (file.endsWith('.rs')) for (const name of namesSpelledOnlyAsStrings(text)) names.add(name)
   }
   return names
 }
 
+/**
+ * An environment variable or an ELF tag is a name Rust code can only spell as
+ * a string (`env::var("SOURCE_DATE_EPOCH")`), so a comment naming one points
+ * at code even though the lexer blanks the literal. Upper-case only: a
+ * snake_case symbol inside a message string is prose, and must not rescue a
+ * comment pointing at a symbol that is gone.
+ */
+function namesSpelledOnlyAsStrings(text: string): string[] {
+  return [...text.matchAll(/"([A-Z][A-Z0-9_]{2,})"/g)].map((match) => match[1] ?? '')
+}
+
+/** The backticked names in one file's comments that have the shape of this repo's own symbol. */
+function mentionsInFile(file: string, text: string): Mention[] {
+  return commentLinesOf(file, text).flatMap((comment) =>
+    [...comment.matchAll(/`([A-Za-z_$][\w$]*)`/g)].flatMap((match) => {
+      const name = match[1] ?? ''
+      return looksLikeOwnSymbolIn(file, name) ? [{ key: `${file}#${name}`, file, name }] : []
+    }),
+  )
+}
+
 function mentions(): Mention[] {
-  const found: Mention[] = []
-  for (const file of tracked.filter(isCommentSource)) {
-    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
-      if (!isComment(line)) continue
-      for (const match of line.matchAll(/`([A-Za-z_$][\w$]*)`/g)) {
-        const name = match[1] ?? ''
-        if (looksLikeOwnSymbol(name)) found.push({ key: `${file}#${name}`, file, name })
-      }
-    }
-  }
-  return found
+  return tracked
+    .filter(isCommentSource)
+    .flatMap((file) => mentionsInFile(file, readFileSync(join(REPO_ROOT, file), 'utf8')))
 }
 
 function proseMentions(): Mention[] {
@@ -330,6 +371,35 @@ describe('an identifier a source comment points at is one the code still has', (
     expect(UNRESOLVED.length).toBeLessThan(MENTIONS.length / 10)
     expect(MENTIONS.some(({ file }) => /\.test\.tsx?$/.test(file))).toBe(true)
     expect(MENTIONS.some(({ file }) => file.endsWith('.mjs'))).toBe(true)
+    // Six in the crates when the Rust arm landed; the floor keeps a lexer or
+    // a root that stopped reaching them from reading as a clean tree.
+    expect(MENTIONS.filter(({ file }) => isRustSource(file)).length).toBeGreaterThan(3)
+  })
+
+  it('reads a Rust file by its comments, not by the literals that look like one', () => {
+    const planted = (name: string) =>
+      readFileSync(join(import.meta.dirname, '__fixtures__/rust', name), 'utf8')
+    const names = (name: string) =>
+      mentionsInFile('crates/planted.rs', planted(name))
+        .map((mention) => mention.name)
+        .filter((mention) => !EXISTING.has(mention))
+    expect(names('comment-violations.rs')).toEqual(['GONE_CONSTANT_NAME'])
+    expect(names('comment-clean.rs')).toEqual([])
+    // Code a Rust file holds is code, and a name in its literal or comment is not.
+    expect(EXISTING.has('without_negative_zero')).toBe(true)
+    expect(EXISTING.has('unwrap_used')).toBe(true)
+  })
+
+  it('counts an upper-case name a Rust file spells only as a string, and no other', () => {
+    expect(namesSpelledOnlyAsStrings('std::env::var("PLANTED_ENV_VAR_X")')).toEqual([
+      'PLANTED_ENV_VAR_X',
+    ])
+    // A snake_case symbol inside a message is prose, not a spelling of code.
+    expect(namesSpelledOnlyAsStrings('"planted_symbol is unset"')).toEqual([])
+    expect(namesSpelledOnlyAsStrings('"SOURCE_DATE_EPOCH is unset"')).toEqual([])
+    // Named in the tree: dist.rs reads these through env::var and .env().
+    expect(EXISTING.has('SOURCE_DATE_EPOCH')).toBe(true)
+    expect(EXISTING.has('CARGO_ENCODED_RUSTFLAGS')).toBe(true)
   })
 
   it('has no pointer at a symbol that is gone', () => {

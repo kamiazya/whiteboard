@@ -12,7 +12,7 @@ red. The loss is found, if ever, by a person noticing their reply is gone.
 
 So the rule here is the repo's rule everywhere else, sharpened: **a claim
 about Loro is worth what its measurement is worth.** The version is pinned
-in `pnpm-workspace.yaml` (`loro-crdt: "1.13.6"`), the API has changed
+in `pnpm-workspace.yaml` (`loro-crdt: "1.17.1"`), the API has changed
 under this repo more than once, and `loro.dev` is not reachable from this
 environment anyway. What IS reachable and authoritative is shipped inside
 the package — see "Where the answers actually are" below.
@@ -140,6 +140,32 @@ ancestor that does not contain the key**, each writing something the other
 cannot produce, then importing both ways. Assert on the merged content of
 both replicas; "they converged" alone passes when both converged on the
 loss.
+
+## Bumping the version
+
+Bytes the OUTGOING version wrote are what every keeper holds on the day of
+an upgrade, and no other test reads any: each one reads bytes the installed
+version wrote a moment before. So a bump starts by adding a corpus entry
+under the OLD version, in its own commit:
+
+```bash
+pnpm --filter @kamiazya/whiteboard-mcp exec tsx \
+  ../loro-adapter/scripts/write-cross-version-fixture.ts
+```
+
+That writes one directory per installed version under
+`packages/loro-adapter/fixtures/cross-version/` (`loro-1.13.6`, `loro-1.17.1`:
+snapshot, full update, shallow snapshot, and that version's own reading of
+them); `cross-version-corpus.test.ts` reads every entry under whatever is
+installed. The writer refuses an existing entry unless `--force` is passed —
+an entry's value is that the version under test had no part in writing it.
+
+Measurements that say "on 1.13.6" were taken there. Two were re-measured on
+1.17.1 by hand and still hold: `getOrCreateContainer` loses one side
+(`{"fromB": "reply B"}` on both replicas), and `doc.version().toJSON()`
+still answers `{}`. The rest stand on the tests that pin them, which pass
+on 1.17.1; a number that moves on a later bump is re-pinned with the
+version it was taken on.
 
 ## What this repo already does right
 

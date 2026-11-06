@@ -7,6 +7,12 @@ adopted a Worker keeper for personal workspaces, and it settles the questions
 that addendum left open: where the code lives, which runtimes are supported,
 how tenancy is bounded, and who may reach it.
 
+**Amended by [ADR-0054](0054-rust-core.md) (2026-11-06):** the edge keeper is
+built in Rust, as a workers-rs binding of the same core, operations and HTTP
+adapter the daemon uses, not as a TypeScript composition root over
+`createServer(deps)`; it is designed to the Workers free plan's budgets. The
+tenancy, access, runtime-support and licensing decisions below stand.
+
 ## Context
 
 ADR-0044 decided that a keeper on Cloudflare's Durable Objects is worth

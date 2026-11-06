@@ -1,0 +1,9 @@
+# The nightly the fuzz targets and sanitizers build with (ADR-0054 decision
+# 16): libFuzzer's coverage instrumentation and `-Zsanitizer` are unstable.
+# Everything else in the repository builds with the stable toolchain pinned
+# in the root rust-toolchain.toml. `pnpm rust:fuzz:*` reads the channel from
+# here and passes it explicitly, so the pin holds from the repository root.
+[toolchain]
+channel = "nightly-2026-11-01"
+profile = "minimal"
+components = ["llvm-tools", "rust-src"]
