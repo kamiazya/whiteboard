@@ -393,12 +393,6 @@ const nodePatchSchema = z
   .strict()
 
 /**
- * One step of a batch. The verbs are the ones the retired single-purpose
- * tools carried, so nothing an agent could do before is missing here — plus
- * `node.remove` / `edge.remove`, which had no tool at all: without them the
- * only way to delete anything is a whole-document replace.
- */
-/**
  * The refusal a retired comment verb gets. A conversation is the document's
  * annotation layer, one plane for a canvas and a note alike (ADR-0026
  * decision 6), so its verbs live on `wb_thread_edit`; a model that reaches
@@ -421,6 +415,12 @@ const retiredCommentVerb = {
   },
 }
 
+/**
+ * One step of a batch. The verbs are the ones the retired single-purpose
+ * tools carried, so nothing an agent could do before is missing here — plus
+ * `node.remove` / `edge.remove`, which had no tool at all: without them the
+ * only way to delete anything is a whole-document replace.
+ */
 const canvasOpSchema = z.discriminatedUnion(
   'op',
   [

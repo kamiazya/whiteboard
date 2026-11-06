@@ -9,7 +9,11 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { setCommentThreadStatus, writeThreadInto, writeThreadMessage } from './comment-threads.js'
+import {
+  setCommentThreadStatus,
+  writeCommentThread,
+  writeThreadMessage,
+} from './comment-threads.js'
 import type { DocumentContainers } from './containers.js'
 import { setProposedChangeStatusInto, writeProposal } from './proposals.js'
 import {
@@ -59,8 +63,8 @@ function stored(placement: Placement, seed: (doc: DocumentContainers) => void): 
 
 function threads(open: number, resolved = 0) {
   return (doc: DocumentContainers) => {
-    for (let i = 0; i < open; i += 1) writeThreadInto(doc, thread(i))
-    for (let i = 0; i < resolved; i += 1) writeThreadInto(doc, thread(`r${i}`, 'resolved'))
+    for (let i = 0; i < open; i += 1) writeCommentThread(doc, thread(i))
+    for (let i = 0; i < resolved; i += 1) writeCommentThread(doc, thread(`r${i}`, 'resolved'))
   }
 }
 
@@ -87,7 +91,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   describe('open comment threads', () => {
     it('refuses a thread opened past the per-document ceiling', () => {
       const base = stored(placement, threads(DOCUMENT_MAX_OPEN_THREADS))
-      const update = updateFrom(placement, base, (doc) => writeThreadInto(doc, thread('extra')))
+      const update = updateFrom(placement, base, (doc) => writeCommentThread(doc, thread('extra')))
       expect(judged(base, update)).toEqual({
         shape: 'open-threads',
         count: DOCUMENT_MAX_OPEN_THREADS + 1,
@@ -110,7 +114,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
       const base = stored(placement, threads(DOCUMENT_MAX_OPEN_THREADS, 3))
       const update = updateFrom(placement, base, (doc) => {
         setCommentThreadStatus(doc, 't0', 'resolved')
-        writeThreadInto(doc, thread('extra'))
+        writeCommentThread(doc, thread('extra'))
       })
       expect(judged(base, update)).toBeNull()
     })
@@ -127,7 +131,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
       const base = stored(placement, threads(DOCUMENT_MAX_OPEN_THREADS + 2))
       const update = updateFrom(placement, base, (doc) => {
         setCommentThreadStatus(doc, 't0', 'resolved')
-        writeThreadInto(doc, thread('extra'))
+        writeCommentThread(doc, thread('extra'))
       })
       expect(judged(base, update)).toBeNull()
     })
@@ -143,13 +147,15 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
     it('takes the reply that brings a thread to the ceiling', () => {
       const base = stored(placement, (doc) =>
-        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES - 1)),
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES - 1)),
       )
       expect(judged(base, updateFrom(placement, base, reply('extra')))).toBeNull()
     })
 
     it('refuses the reply one past the ceiling', () => {
-      const base = stored(placement, (doc) => writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES)))
+      const base = stored(placement, (doc) =>
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES)),
+      )
       expect(judged(base, updateFrom(placement, base, reply('extra')))).toEqual({
         shape: 'thread-messages',
         count: THREAD_MAX_MESSAGES + 1,
@@ -159,7 +165,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
     it('counts a resolved thread too', () => {
       const base = stored(placement, (doc) =>
-        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES, 'resolved')),
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES, 'resolved')),
       )
       expect(judged(base, updateFrom(placement, base, reply('extra')))).toMatchObject({
         shape: 'thread-messages',
@@ -169,7 +175,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
     it('refuses a thread arriving whole with more messages than the ceiling', () => {
       const base = stored(placement, threads(1))
       const update = updateFrom(placement, base, (doc) =>
-        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES + 1)),
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES + 1)),
       )
       expect(judged(base, update)).toMatchObject({
         shape: 'thread-messages',
@@ -179,8 +185,8 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
     it('holds each thread to the ceiling alone, not the document', () => {
       const base = stored(placement, (doc) => {
-        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES - 1))
-        writeThreadInto(doc, {
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES - 1))
+        writeCommentThread(doc, {
           ...thread('other'),
           messages: Array.from({ length: THREAD_MAX_MESSAGES }, (_, m) => ({
             id: `o${m}`,
@@ -193,7 +199,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
     it('still takes an edit to a message of a thread already past the ceiling, but no reply', () => {
       const base = stored(placement, (doc) =>
-        writeThreadInto(doc, longThread(THREAD_MAX_MESSAGES + 2)),
+        writeCommentThread(doc, longThread(THREAD_MAX_MESSAGES + 2)),
       )
       const edit = updateFrom(placement, base, (doc) =>
         writeThreadMessage(doc, 'tlong', { id: 'm0', body: 'edited' }),

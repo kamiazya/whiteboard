@@ -191,8 +191,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and so cannot leave this file without a value cycle back into it. Raised
   // by 15 for a folder's display name: its schema, its read, and the promotion
   // that drops it — the two folder-name writers live in
-  // packages/loro-adapter/src/workspace-folder-name.ts.
-  'packages/loro-adapter/src/workspace-tree.ts': 1091,
+  // packages/loro-adapter/src/workspace-folder-name.ts. Raised by four for
+  // `peekMap`, the non-opening probe a tree node owes the retired comments
+  // plane's refusal: only this file holds a node's live data map.
+  'packages/loro-adapter/src/workspace-tree.ts': 1095,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -213,7 +215,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // node go, stop writing, and say so. Raised by three more for a trash
   // restore bringing the node back, which resumes it. Lowered by two when the
   // per-reader guards became one content lookup that answers null meanwhile.
-  'apps/web/src/lib/document-sync-session.ts': 1257,
+  // Raised by twenty for the annotation layer leaving the canvas (ADR-0026):
+  // the conversations a thread command leaves are published from `onChange`
+  // beside the canvas (the effect itself is `thread-commands.ts`), and a
+  // snapshot still holding the retired comments plane is refused there, next
+  // to the corrupt-record refusal it mirrors.
+  'apps/web/src/lib/document-sync-session.ts': 1277,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -393,7 +400,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DaemonIndexPage.test.tsx': 2077,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
-  'packages/canvas-render/src/layout/comments.test.ts': 823,
   'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
@@ -411,12 +417,13 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The refresh asking for the style the last result drew, which needs the
   // file's embedded-host and fake-App setup, and a click's anchor naming the
   // member drawn over a frame the document stores first, which needs the same.
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1375,
+  // +1: the widget's comment box opens a thread (`wb_thread_edit`).
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1376,
   // An unchanged canvas reconciling to no ops, which the "writes only what
   // changed" test above it could not see; the delete cascade pinned over ink
   // (anchored ink goes, free ink stays, the line's lock goes with it); and the
   // import block naming the envelope and body modules the bridge is split into.
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1356,
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1118,
   // A scoreboard whose rows are pinned exactly is one whose history is prose, so
   // each row says why it moved rather than a changelog: the harness handing the
   // tools the bundled registry (the seam is required and the tools fall back to
@@ -431,7 +438,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Then two more reasons: restore's written id and the totals.
   // Then the markdown size limit and the explicit-propose sentence: two rows and the totals.
   // Then the document path bound beside four rows and both totals.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1050,
+  // +15: the rows the retired comment ops and the snapshot's `comments` moved, each with its reason.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1065,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
@@ -525,7 +533,8 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // proposal-author and facet-write refusal checks (`smoke/lib/*.mjs`).
   // Raised by 2 for the folder.rename step's import and call; the step is
   // packages/mcp-server/scripts/smoke/lib/folder-rename.mjs.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2723,
+  // +8: the retired comment.add refused, and canvas_view's threads checked whole now that its scene carries none.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2731,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

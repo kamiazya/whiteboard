@@ -172,8 +172,9 @@ Do not rediscover these; they are wired and tested.
 
 - **Batching.** `withSpatialBatch` owns the commit boundary for a user
   action. A write helper called under it must not commit — an extra commit
-  splits one action into two undo steps. That is why `comment-threads.ts`
-  has both `writeCommentThread` (commits) and `writeThreadInto` (does not).
+  splits one action into two undo steps. A thread write is not one of
+  them: `comment-threads.ts`'s writers each commit, because no canvas
+  batch writes the annotation layer — the canvas carries no comments.
 - **Export modes.** `mode: 'update'` with a `VersionVector` for the
   incremental path, `'snapshot'` for stored state, `'shallow-snapshot'`
   with a frontier for compaction (`document-store.ts`). The delta log is

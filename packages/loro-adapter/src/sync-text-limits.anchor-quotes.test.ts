@@ -9,7 +9,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { writeThreadInto } from './comment-threads.js'
+import { writeCommentThread } from './comment-threads.js'
 import { type DocumentContainers, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import { setProposedChangeStatusInto, writeProposal } from './proposals.js'
 import {
@@ -82,7 +82,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   it("refuses a thread whose quote is longer than an anchor's may be", () => {
     const base = stored(placement)
     const update = updateFrom(placement, base, (doc) =>
-      writeThreadInto(doc, textThread('t1', TEXT_ANCHOR_QUOTE_MAX_CHARS + 1)),
+      writeCommentThread(doc, textThread('t1', TEXT_ANCHOR_QUOTE_MAX_CHARS + 1)),
     )
     expect(judged(base, update)).toEqual({
       shape: 'anchor-quote',
@@ -95,7 +95,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   it('takes a thread quoting exactly the bound', () => {
     const base = stored(placement)
     const update = updateFrom(placement, base, (doc) =>
-      writeThreadInto(doc, textThread('t1', TEXT_ANCHOR_QUOTE_MAX_CHARS)),
+      writeCommentThread(doc, textThread('t1', TEXT_ANCHOR_QUOTE_MAX_CHARS)),
     )
     expect(judged(base, update)).toBeNull()
   })
@@ -133,7 +133,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   })
 
   it('does not read a long value elsewhere in a thread as its anchor', () => {
-    const base = stored(placement, (doc) => writeThreadInto(doc, textThread('t1', 4)))
+    const base = stored(placement, (doc) => writeCommentThread(doc, textThread('t1', 4)))
     const update = updateFrom(placement, base, (doc) =>
       (doc.getMap(THREADS_KEY).get('t1') as LoroMap).set('note', {
         quote: { exact: quoted(TEXT_ANCHOR_QUOTE_MAX_CHARS + 1) },
