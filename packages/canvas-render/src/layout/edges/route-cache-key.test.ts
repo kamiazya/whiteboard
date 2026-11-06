@@ -50,6 +50,7 @@ describe('routeCacheKey — complete over everything routeEdge reads', () => {
     ['toSide', { ...base, toSide: 'bottom' as const }],
     ['fromLaneDepth', { ...base, fromLaneDepth: 21 }],
     ['toLaneDepth', { ...base, toLaneDepth: 21 }],
+    ['around', { ...base, around: true as const }],
   ])('changing %s changes the key', (_field, changed) => {
     expect(routeCacheKey(edge, changed)).not.toBe(routeCacheKey(edge, base))
   })

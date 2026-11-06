@@ -6,7 +6,7 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { stackedFramesBoard } from '../../test-utils/routing-corpus.js'
-import { interiorInk, pathLength } from '../../test-utils/routing-metrics.js'
+import { crossings, interiorInk, pathLength } from '../../test-utils/routing-metrics.js'
 import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
@@ -69,5 +69,40 @@ describe('a straight connection around a box in its way', () => {
     const outward = nx * (before.x - end.x) + ny * (before.y - end.y)
     const along = Math.abs(nx * (before.y - end.y) - ny * (before.x - end.x))
     expect(outward).toBeGreaterThan(along * 0.25)
+  })
+})
+
+describe('a straight connection that would cross another to save length', () => {
+  it('steps round instead, when that leaves the two uncrossed', () => {
+    // a1 -> b6 and a3 -> b1 run corner to opposite corner between two
+    // stacked frames. Bending at the corners of what blocks each makes the
+    // two diagonals cross; stepping one round everything in its way does not.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const paths = edges.map((edge) => routeEdge(nodes, edge, 'straight', anchors.get(edge.id)).path)
+    expect(crossings(paths)).toBe(0)
+  })
+
+  it('routes round the box covering everything in the way when asked', () => {
+    // The corner route bends once at c's corner; `around` steps round c in
+    // right angles, the way it did before corner routes existed.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edge = { id: 'e', from: { node: 'a' }, to: { node: 'b' } }
+    const corner = routeEdge(nodes, edge, 'straight', { fromSide: 'bottom', toSide: 'top' })
+    const around = routeEdge(nodes, edge, 'straight', {
+      fromSide: 'bottom',
+      toSide: 'top',
+      around: true,
+    })
+    expect(around.path).not.toEqual(corner.path)
+    expect(
+      around.path.every(
+        (p, i) => i === 0 || p.x === around.path[i - 1]!.x || p.y === around.path[i - 1]!.y,
+      ),
+    ).toBe(true)
   })
 })

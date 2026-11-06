@@ -193,7 +193,7 @@ export type EdgeStyleOf = (edge: RoutableElement) => EdgeRoutingStyle
  * a test rather than by a reader remembering to check it.
  */
 export function routeCacheKey(edge: RoutableElement, a: EdgeAnchorPair | undefined): string {
-  return `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}`
+  return `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}|${a?.around}`
 }
 
 /**
@@ -289,7 +289,8 @@ function createConfigScore(
     a?.fromLaneDepth === b?.fromLaneDepth &&
     a?.toLaneDepth === b?.toLaneDepth &&
     a?.fromSide === b?.fromSide &&
-    a?.toSide === b?.toSide
+    a?.toSide === b?.toSide &&
+    a?.around === b?.around
 
   // Same edge, same anchors, same obstacles -> same path. A trial re-sides
   // ONE edge, but that recomputes the anchor groups it leaves and joins, so
@@ -680,9 +681,17 @@ function optimizeSideChoices(
    * Incumbent-wins-ties (edge-rules.ts), so a tie never triggers churn and
    * the lexicographic loop cannot oscillate.
    */
-  const candidatesOf = (edge: RoutableElement, index: number): SidePair[] => {
+  const candidatesOf = (edge: RoutableElement, index: number, chosen: SidePair): SidePair[] => {
     const named = endSide(edge.from) !== undefined && endSide(edge.to) !== undefined
-    return sideCandidatesFor(edge, byId, named && score.selfThrough(index))
+    const pairs = sideCandidatesFor(edge, byId, named && score.selfThrough(index))
+    if (styleOf(edge) !== 'straight' || isSelfLoop(edge)) return pairs
+    // Every pair again, stepping round what is in the way: tried after the
+    // corner routes, so it is taken only where no side choice alone helps.
+    const sided = (pairs.length > 0 ? pairs : [chosen]).map(({ fromSide, toSide }) => ({
+      fromSide,
+      toSide,
+    }))
+    return [...pairs, ...sided.map((pair) => ({ ...pair, around: true as const }))]
   }
   // `exhausted` once the account refuses a trial: a refused trial is never
   // adopted, so the search ends on the sides it has rather than building
@@ -691,8 +700,14 @@ function optimizeSideChoices(
     const chosen = score.sideOf(edge.id)
     if (chosen === undefined) return 'kept'
     const index = edgeIndexById.get(edge.id) ?? -1
-    for (const candidate of candidatesOf(edge, index)) {
-      if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
+    for (const candidate of candidatesOf(edge, index, chosen)) {
+      if (
+        candidate.fromSide === chosen.fromSide &&
+        candidate.toSide === chosen.toSide &&
+        candidate.around === chosen.around
+      ) {
+        continue
+      }
       const trial = new Map(score.sides())
       trial.set(edge.id, candidate)
       const evaluated = score.evaluateTrial(trial, index)
@@ -1090,6 +1105,7 @@ export function assignEdgeAnchors(
       merged.set(id, {
         fromSide: endSide(edge.from) ?? pair.fromSide,
         toSide: endSide(edge.to) ?? pair.toSide,
+        ...(pair.around === true ? { around: true as const } : {}),
       })
       locked.add(id)
     }

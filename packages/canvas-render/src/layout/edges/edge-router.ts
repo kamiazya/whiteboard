@@ -54,6 +54,14 @@ import {
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
 
+/**
+ * How close a route may pass to a frame's title, in px. Less than a box's
+ * margin: the text's measured box already ends where its last glyph does,
+ * and a box's margin made a line passing just beyond a title's end turn
+ * aside for it.
+ */
+const LABEL_MARGIN_PX = 2
+
 /** How far a detour keeps clear of the boxes it steps around, in px. */
 const OBSTACLE_CLEARANCE_PX = 16
 
@@ -137,7 +145,9 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
  * interior, so a turn never takes the line back through the box it leaves or
  * the one it reaches.
  *
- * When the corner search finds nothing within its budget, four candidates
+ * When the side search asked for `around` (the corner route crossed another
+ * edge that the outer lane does not), or the corner search finds nothing
+ * within its budget, four candidates
  * round the box covering everything in the way — over, under, left of, right
  * of it — and the shortest clear one wins; if none is clear the shortest is
  * used anyway, because layout has to return SOMETHING and a route that still
@@ -150,9 +160,11 @@ function routeStraight(
   inflated: readonly Rect[],
   raw: readonly Rect[],
   endpointRects: readonly Rect[],
+  around: boolean,
 ): Point[] {
   const region = blockingRegion(start, end, inflated)
   if (region === undefined) return [start, end]
+  if (around) return bestCandidate(detourCandidates(start, end, region), inflated, raw)
   const obstacles: DetourObstacle[] = [
     ...inflated.map((block, i) => ({ block, body: raw[i] as Rect, escapable: true })),
     ...endpointRects.map((body) => ({ block: strictInterior(body), body, escapable: false })),
@@ -202,12 +214,21 @@ function routeStraightWithApproach(
     to: { side: toSide, rect: toRect, depth: toDepth },
   }: RouteEnds,
   { inflated, raw }: RouteObstacles,
+  around: boolean,
 ): Point[] {
   const own = [fromRect, toRect]
+  // Stepping round leaves and arrives along the sides' normals: from the
+  // anchor itself its first leg runs along the box's own border whenever
+  // the lane it heads for is above or below it.
+  if (around && blockingRegion(start, end, inflated) !== undefined) {
+    const exit = stubFrom(start, fromSide, fromDepth)
+    const entry = stubFrom(end, toSide, toDepth)
+    return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, true), end])
+  }
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
   if (!fromSideways && !toSideways) {
-    return squareEnds(routeStraight(start, end, inflated, raw, own), {
+    return squareEnds(routeStraight(start, end, inflated, raw, own, around), {
       exit: stubFrom(start, fromSide, fromDepth),
       entry: stubFrom(end, toSide, toDepth),
       fromSide,
@@ -221,19 +242,19 @@ function routeStraightWithApproach(
     const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
     if (slid !== undefined) {
-      return withoutRepeats([...routeStraight(slid, entry, inflated, raw, own), end])
+      return withoutRepeats([...routeStraight(slid, entry, inflated, raw, own, around), end])
     }
   }
   if (fromSideways && !toSideways) {
     const exit = stubFrom(start, fromSide, fromDepth)
     const slid = slideAlongSide(end, toRect, toSide, exit)
     if (slid !== undefined) {
-      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw, own)])
+      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw, own, around)])
     }
   }
   const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
-  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own), end])
+  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, around), end])
 }
 function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
@@ -649,19 +670,22 @@ function routeObstacles(
   const fromId = endNode(edge.from)
   const toId = endNode(edge.to)
   const boxes = others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  // Concatenated only when there is something to add: this runs per trial
-  // routing, and copying the whole node list for nothing showed in the bench.
-  const rawObstacles = (labels.length === 0 ? boxes : [...boxes, ...labels]).filter(
-    (rect) => !containsPoint(rect, start) && !containsPoint(rect, end),
-  )
+  const clear = (rect: Rect) => !containsPoint(rect, start) && !containsPoint(rect, end)
+  const grown = (margin: number) => (rect: Rect) => ({
+    x: rect.x - margin,
+    y: rect.y - margin,
+    w: rect.w + 2 * margin,
+    h: rect.h + 2 * margin,
+  })
+  const rawBoxes = boxes.filter(clear)
+  const inflatedBoxes = rawBoxes.map(grown(ROUTE_MARGIN_PX))
+  // Built only when there is something to add: this runs per trial routing,
+  // and copying the whole node list for nothing showed in the bench.
+  if (labels.length === 0) return { rawObstacles: rawBoxes, obstacles: inflatedBoxes }
+  const rawLabels = labels.filter(clear)
   return {
-    rawObstacles,
-    obstacles: rawObstacles.map((rect) => ({
-      x: rect.x - ROUTE_MARGIN_PX,
-      y: rect.y - ROUTE_MARGIN_PX,
-      w: rect.w + 2 * ROUTE_MARGIN_PX,
-      h: rect.h + 2 * ROUTE_MARGIN_PX,
-    })),
+    rawObstacles: [...rawBoxes, ...rawLabels],
+    obstacles: [...inflatedBoxes, ...rawLabels.map(grown(LABEL_MARGIN_PX))],
   }
 }
 
@@ -790,7 +814,7 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraightWithApproach(ends, obstacleSet)
+        ? routeStraightWithApproach(ends, obstacleSet, anchors?.around === true)
         : routeOrthogonal(ends, obstacleSet, budget),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,

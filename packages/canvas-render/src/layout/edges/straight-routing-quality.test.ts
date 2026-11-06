@@ -248,6 +248,16 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 //   and routing is measure-free, so neither could see it on its own). Going
 //   round a title is longer: on the generated boards long detours 5 -> 16,
 //   worst ratio 1.58 -> 2.37, bends 864 -> 1008, crossings 107 -> 109.
+//
+// Then the side search was given the old route back as a CANDIDATE
+// (`SidePair.around`: step round everything in the way, leaving and arriving
+// along the sides' normals), tried after every corner route, so it is taken
+// only where the corner routes cross something it does not. Crossings
+// persona 3 -> 1, generated 109 -> 72 (76 before any corner route),
+// synthetic 187 -> 164, lattice 592 -> 531; paid in length (generated
+// ratio 1.12 -> 1.16, long detours 16 -> 32; lattice long detours 3 -> 16,
+// worst 1.53 -> 2.04). A frame title's margin dropped to 2px at the same
+// time, since a box's 8px turned a line passing a title's end aside.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -255,14 +265,14 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // 2618/1860 (1.408), worst 1.69 before the corner detours.
-      length: 2065,
+      length: 2304,
       direct: 1673,
-      ratio: 1.234,
-      worstRatio: 1.42,
-      longDetours: 0,
+      ratio: 1.377,
+      worstRatio: 1.59,
+      longDetours: 1,
       grazingEnds: 1,
-      bends: 12,
-      crossings: 3,
+      bends: 11,
+      crossings: 1,
       borderInk: 0,
     })
   })
@@ -273,14 +283,14 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.194, worst 1.91, 66 long detours before.
-      length: 279816,
-      direct: 249756,
-      ratio: 1.12,
+      length: 289202,
+      direct: 249267,
+      ratio: 1.16,
       worstRatio: 2.37,
-      longDetours: 16,
-      grazingEnds: 114,
-      bends: 1008,
-      crossings: 109,
+      longDetours: 32,
+      grazingEnds: 99,
+      bends: 1035,
+      crossings: 72,
       borderInk: 0,
     })
   })
@@ -288,18 +298,18 @@ describe('straight routing quality', () => {
   it('reports the synthetic corpus', { timeout: 180_000 }, () => {
     expect(score(syntheticLayouts(2000), routedOnly)).toEqual({
       violations: { foreign: 25, 'own-endpoint': 20 },
-      interiorInk: 3446,
+      interiorInk: 3418,
       titleCrossings: 0,
       // ratio 1.116, worst 11.63, 245 long detours before.
-      length: 858299,
-      direct: 801178,
-      ratio: 1.071,
+      length: 866090,
+      direct: 802139,
+      ratio: 1.08,
       worstRatio: 7.67,
-      longDetours: 130,
-      grazingEnds: 119,
-      bends: 1902,
-      crossings: 187,
-      borderInk: 879,
+      longDetours: 150,
+      grazingEnds: 115,
+      bends: 1944,
+      crossings: 164,
+      borderInk: 891,
     })
   })
 
@@ -309,14 +319,14 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.068, worst 2.01, 26 long detours before.
-      length: 1176854,
-      direct: 1150196,
-      ratio: 1.023,
-      worstRatio: 1.53,
-      longDetours: 3,
+      length: 1194487,
+      direct: 1152403,
+      ratio: 1.037,
+      worstRatio: 2.04,
+      longDetours: 16,
       grazingEnds: 0,
-      bends: 1434,
-      crossings: 592,
+      bends: 1561,
+      crossings: 531,
       borderInk: 0,
     })
   })

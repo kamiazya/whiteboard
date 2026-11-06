@@ -86,6 +86,7 @@ interface AnchorEntry {
   toLaneDepth?: number
   fromSide?: EdgeSide
   toSide?: EdgeSide
+  around?: true
 }
 
 /**
@@ -418,6 +419,12 @@ export function computeAnchorsFor(
   const anchors = new Map<string, AnchorEntry>(entries)
 
   const applyPins = (): void => {
+    // The route variant rides with the sides it was chosen with; placement
+    // reads sides only, so it is copied on here rather than threaded through.
+    for (const [id, pair] of sides) {
+      const entry = anchors.get(id)
+      if (pair.around === true && entry !== undefined) anchors.set(id, { ...entry, around: true })
+    }
     if (pins === undefined) return
     for (const [id, pin] of pins) {
       const entry = anchors.get(id)

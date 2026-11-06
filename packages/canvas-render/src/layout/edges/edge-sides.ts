@@ -173,6 +173,8 @@ export interface EdgeAnchorPair {
    */
   readonly fromSide?: EdgeSide
   readonly toSide?: EdgeSide
+  /** The side pass's `SidePair.around`, carried to the router the same way. */
+  readonly around?: true
 }
 
 /** A resolved side pair for one edge, as consumed by `edgeSideOverrides`. */
