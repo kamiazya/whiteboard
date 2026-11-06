@@ -13,7 +13,7 @@
  *   paragraph  prose with spaces and no blank line
  *   word       one unbroken run of a single letter: nothing to wrap at
  *
- * A comment is written through `comment.add`, which opens a thread whose
+ * A comment is written through `wb_thread_edit`'s `thread.add`, whose
  * opening message is the one a board draws. Each row is a fresh document of
  * two text boxes, so no row prices the previous one's text.
  */
@@ -25,6 +25,7 @@ import {
   createCanvasRenderSvgTool,
   wbDocumentCreate,
 } from '@kamiazya/whiteboard-server-core'
+import { createThreadEditTool } from '../../../server-core/src/tools/thread-edit.ts'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { setDataDirForTests } from '../../src/shared/data-dir-secure.ts'
 
@@ -38,7 +39,10 @@ function textOfLength(length) {
 }
 
 const KINDS = {
-  comment: (text, [a]) => ({ op: 'comment.add', comment: { text, targetNodeId: a } }),
+  comment: (text, [a]) => ({
+    tool: 'thread',
+    op: { op: 'thread.add', anchor: { kind: 'spatial', nodeId: a, x: 200, y: 0 }, body: text },
+  }),
   edge: (text, [a, b]) => ({
     op: 'edge.add',
     edge: { from: { node: a }, to: { node: b }, label: text },
@@ -80,6 +84,7 @@ const { serverDeps: deps } = await bootSelfHostDeps(served)
 await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
 const edit = createCanvasEditTool(deps)
 const render = createCanvasRenderSvgTool(deps)
+const thread = createThreadEditTool(deps)
 const ms = (usage) => (usage.user + usage.system) / 1000
 
 console.log('kind     shape      chars  write cpu ms  render cpu ms  render ms/Ki')
@@ -107,18 +112,22 @@ for (const kind of (process.env.KINDS ?? Object.keys(KINDS).join(',')).split(','
     })
     const text = textOfLength(length)
     const writeBefore = process.cpuUsage()
-    const written = await edit.execute({
-      workspaceId: 'ws-1',
-      documentId,
-      mode: 'apply',
-      ops: [KINDS[kind](text, base.touched.nodes)],
-    })
+    const drafted = KINDS[kind](text, base.touched.nodes)
+    const written =
+      drafted.tool === 'thread'
+        ? await thread.execute({ workspaceId: 'ws-1', documentId, ops: [drafted.op] })
+        : await edit.execute({ workspaceId: 'ws-1', documentId, mode: 'apply', ops: [drafted] })
     const writeCpu = ms(process.cpuUsage(writeBefore))
     // A harness whose writes silently do nothing prints small, plausible numbers.
-    if (written.applied !== 1) throw new Error(`${kind} ${length}: the write did not apply`)
+    const applied = drafted.tool === 'thread' ? written.threads.length : written.applied
+    if (applied !== 1) throw new Error(`${kind} ${length}: the write did not apply`)
 
     const renderBefore = process.cpuUsage()
-    const { svg } = await render.execute({ workspaceId: 'ws-1', documentId })
+    const { svg } = await render.execute({
+      workspaceId: 'ws-1',
+      documentId,
+      comments: kind === 'comment',
+    })
     const renderCpu = ms(process.cpuUsage(renderBefore))
     // A group's label is cut to its box, so the drawn head is what is checked.
     if (!svg.includes(text.slice(0, 5)))

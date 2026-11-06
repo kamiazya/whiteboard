@@ -2,7 +2,6 @@ import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
   anchoredOnAny,
-  canvasCommentSchema,
   canvasEdgeSchema,
   canvasLineSchema,
   endIn,
@@ -13,7 +12,6 @@ import {
   spatialNodeSchema,
   withNodeText,
 } from '@kamiazya/whiteboard-model'
-import { commentAnchor } from './canvas-edit-comment.js'
 import { fail } from './canvas-edit-error.js'
 import { patchWithCheckedFacets, withCheckedFacets } from './canvas-edit-facets.js'
 import { type CanvasEditInput, draftContent, type NodeDraft } from './canvas-edit-ops.js'
@@ -709,35 +707,6 @@ const CANVAS_EDIT_HANDLERS: {
     bringMembersIn(ctx, index, op.op, group, op.nodes, inScopeIds)
 
     settleRegionEdges(ctx, index, op.op, members, op.edges, droppedIds)
-    return
-  },
-  'comment.add': (ctx, op, index) => {
-    const draft = op.comment
-    const id = draft.id ?? mintId(new Set(ctx.s.comments.map((comment) => comment.id)), 'c')
-    if (ctx.s.comments.some((comment) => comment.id === id)) {
-      fail(index, op.op, `comment id "${id}" is already on the canvas`)
-    }
-    const at = commentAnchor(ctx.s, index, op.op, draft)
-    const parsed = canvasCommentSchema.safeParse({
-      ...draft,
-      id,
-      ...at,
-      createdAt: draft.createdAt ?? new Date().toISOString(),
-    })
-    if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
-    ctx.s.comments = [...ctx.s.comments, parsed.data]
-    ctx.s.touchedComments.add(id)
-    return
-  },
-  'comment.resolve': (ctx, op, index) => {
-    if (!ctx.s.comments.some((comment) => comment.id === op.id)) {
-      fail(index, op.op, `comment "${op.id}" is not on the canvas`)
-    }
-    const resolved = op.resolved ?? true
-    ctx.s.comments = ctx.s.comments.map((comment) =>
-      comment.id === op.id ? { ...comment, resolved } : comment,
-    )
-    ctx.s.touchedComments.add(op.id)
     return
   },
   tidy: (ctx, op, index) => {

@@ -306,14 +306,7 @@ shapeFor.wb_thread_edit = (inputs) =>
   }))
 
 /** What `wb_canvas_edit` refuses under `mode: 'propose'`: verbs with no single anchor to follow. */
-const UNPROPOSABLE = new Set([
-  'tidy',
-  'region.set',
-  'comment.add',
-  'comment.resolve',
-  'node.lock',
-  'edge.lock',
-])
+const UNPROPOSABLE = new Set(['tidy', 'region.set', 'node.lock', 'edge.lock'])
 const TEXT_NODE_PATCH_FIELDS = new Set(['x', 'y', 'width', 'height', 'color', 'text'])
 const SEEDED_NODES = new Set(['n1', 'n2', 'g1'])
 
@@ -380,13 +373,6 @@ function fitCanvasOp(op: Fields, facets: { node: Fields; edge: Fields }): Fields
     case 'node.remove':
     case 'node.lock':
       return { ...targeted, id: 'n1' }
-    case 'comment.resolve':
-      return { ...targeted, id: 'c1' }
-    case 'comment.add': {
-      // About a node the board has, so the server anchors it there.
-      const { targetEdgeId: _edge, ...comment } = op.comment as Fields
-      return { ...op, comment: { ...comment, targetNodeId: 'n1' } }
-    }
     case 'edge.patch':
       return { ...targeted, id: 'e1', patch: fitElement(op.patch, edgeEnd, facets.edge) }
     case 'edge.remove':
@@ -502,8 +488,6 @@ const OP_REACH: Record<string, OpReach> = {
   'wb_canvas_edit/node.lock': 'answers',
   'wb_canvas_edit/edge.lock': 'answers',
   'wb_canvas_edit/tidy': 'answers',
-  'wb_canvas_edit/comment.add': 'answers',
-  'wb_canvas_edit/comment.resolve': 'answers',
   'wb_canvas_edit/region.set': 'answers',
   'wb_thread_edit/thread.add': 'answers',
   'wb_thread_edit/message.add': 'answers',

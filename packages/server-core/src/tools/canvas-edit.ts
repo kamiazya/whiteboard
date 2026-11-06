@@ -1,6 +1,5 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
-  readAnnotations,
   readDocumentKind,
   setEdgeLock,
   setNodeLock,
@@ -11,7 +10,6 @@ import {
   CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
-  type CanvasComment,
   compareCodeUnit,
   type ExtensionFacets,
   growsPast,
@@ -19,22 +17,17 @@ import {
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
-import type { AgentActivityTouched } from '../agent-activity-touched.js'
 import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
-import {
-  announceAgentActivity,
-  COMMENT_SUMMARY_WORDS,
-  notificationFailed,
-  resolveSummaryWord,
-} from './agent-activity.js'
+import { announceAgentActivity, notificationFailed } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { CanvasEditError, describeIssues, fail } from './canvas-edit-error.js'
 import { applyCanvasOp, type CanvasEditContext } from './canvas-edit-handlers.js'
 import {
   type CanvasEditInput,
   type CanvasEditOutput,
+  type CanvasEditTouched,
   canvasEditInputSchema,
   canvasEditOutputSchema,
 } from './canvas-edit-ops.js'
@@ -43,7 +36,6 @@ import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { registryForFacetWrites } from './facet-write.js'
-import { openThreadsRefusal } from './open-annotation-ceilings.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -60,7 +52,7 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
 // reason it is lazy beside the predicate that decides it.
 
 /**
- * The facets buckets a batch's ops write. Locks, tidy and comments carry none,
+ * The facets buckets a batch's ops write. Locks and tidy carry none,
  * and `node.patch` has no `facets` field at all — `wb_facet_set` is where a
  * node's facets change.
  */
@@ -238,12 +230,11 @@ async function commitAsProposal({
  * carrying Set iteration order. Typed as the notifier port's shape so the
  * tool's answer and the browser's outline are built from one object.
  */
-function sortedTouched(s: CanvasEditSession): AgentActivityTouched {
+function sortedTouched(s: CanvasEditSession): CanvasEditTouched {
   return {
     nodes: [...s.touchedNodes].sort(),
     edges: [...s.touchedEdges].sort(),
     lines: [...s.touchedLines].sort(),
-    comments: [...s.touchedComments].sort(),
   }
 }
 
@@ -261,7 +252,7 @@ function sortedTouched(s: CanvasEditSession): AgentActivityTouched {
 async function announceEdit(
   deps: ServerDeps,
   input: CanvasEditInput,
-  touched: AgentActivityTouched,
+  touched: CanvasEditTouched,
 ): Promise<void> {
   const { workspaceId, documentId } = input
   announceAgentActivity(deps, { workspaceId, documentId, ...touched }, summarizeOps(input.ops))
@@ -284,21 +275,14 @@ async function announceEdit(
 
 type CanvasOp = CanvasEditInput['ops'][number]
 
-type SummaryBucket =
-  | 'added'
-  | 'changed'
-  | 'removed'
-  | 'locked'
-  | 'unlocked'
-  | 'tidied'
-  | (typeof COMMENT_SUMMARY_WORDS)[number]
+type SummaryBucket = 'added' | 'changed' | 'removed' | 'locked' | 'unlocked' | 'tidied'
 
 /**
  * Which tally each op contributes to. Keyed by the op union, so a new op owes
  * an answer here before it compiles. `null` is a deliberate silence:
  * `node.splice` rewrites part of a body and `region.set` restates a group's
  * membership, and neither reads as one of the tallies a person counts. A
- * lock's and a resolve's tally depend on the op's own `locked` / `resolved`.
+ * lock's tally depends on the op's own `locked`.
  */
 const OP_SUMMARY_BUCKET = {
   'node.add': () => 'added',
@@ -312,8 +296,6 @@ const OP_SUMMARY_BUCKET = {
   'line.remove': () => 'removed',
   'node.lock': (op) => (op.locked ? 'locked' : 'unlocked'),
   'edge.lock': (op) => (op.locked ? 'locked' : 'unlocked'),
-  'comment.add': () => 'commented',
-  'comment.resolve': (op) => resolveSummaryWord(op.resolved),
   tidy: () => 'tidied',
   'node.splice': null,
   'region.set': null,
@@ -321,17 +303,13 @@ const OP_SUMMARY_BUCKET = {
   [K in CanvasOp['op']]: ((op: Extract<CanvasOp, { op: K }>) => SummaryBucket) | null
 }
 
-/**
- * The order a summary reads in; each tally is reported under its own name.
- * The comment words are the thread plane's shared ones.
- */
+/** The order a summary reads in; each tally is reported under its own name. */
 const SUMMARY_ORDER: readonly SummaryBucket[] = [
   'added',
   'changed',
   'removed',
   'locked',
   'unlocked',
-  ...COMMENT_SUMMARY_WORDS,
 ]
 
 function summaryBucketOf(op: CanvasOp): SummaryBucket | undefined {
@@ -371,7 +349,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_edit' as const,
     description:
-      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. A batch of CONTENT changes is stored as a proposal for a person to adopt or dismiss rather than changing the document — that is the default, because nobody watches you type. Pass mode:"apply" to change the document directly, which is what to do when a person just asked you to draw. A batch carrying anything a proposal cannot represent — comments, locks, tidy, region.set — applies when no mode is given, since those are not content; an explicit mode:"propose" refuses such a batch. Pass proposalId to keep several calls in one proposal.',
+      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges. Comments are not ops here; open, reply to and resolve them with wb_thread_edit. Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. A batch of CONTENT changes is stored as a proposal for a person to adopt or dismiss rather than changing the document — that is the default, because nobody watches you type. Pass mode:"apply" to change the document directly, which is what to do when a person just asked you to draw. A batch carrying anything a proposal cannot represent — locks, tidy, region.set — applies when no mode is given, since those are not content; an explicit mode:"propose" refuses such a batch. Pass proposalId to keep several calls in one proposal.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
@@ -393,16 +371,12 @@ function editedCanvas(canvas: SpatialCanvas, s: CanvasEditSession): SpatialCanva
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
     ...(canvas.tags !== undefined && { tags: canvas.tags }),
     ...(s.lines.length > 0 && { lines: s.lines }),
-    ...(s.comments.length > 0 && { comments: s.comments }),
+    ...(canvas.comments !== undefined && { comments: canvas.comments }),
   }
 }
 
-const openComments = (comments: readonly CanvasComment[]): number =>
-  comments.filter((comment) => comment.resolved !== true).length
-
 /**
- * Refuses the op that takes the board past a per-canvas ceiling, or the
- * document past its open-thread ceiling, judged
+ * Refuses the op that takes the board past a per-canvas ceiling, judged
  * against the board as loaded: a canvas stored past one still takes a batch
  * that ends no larger than it began, so removing is how it shrinks.
  */
@@ -411,14 +385,7 @@ function refuseCanvasGrowth(
   s: CanvasEditSession,
   index: number,
   op: string,
-  openThreadsAtLoad: number,
 ): void {
-  // Every comment is a thread, but not every thread is a comment (a note-set
-  // or a document-level one is not), so the batch's comments move the
-  // document's open-thread count by what they themselves opened.
-  const opened = openComments(s.comments) - openComments(canvas.comments ?? [])
-  const threads = openThreadsRefusal(openThreadsAtLoad, openThreadsAtLoad + opened)
-  if (threads !== undefined) fail(index, op, threads)
   if (growsPast(CANVAS_MAX_NODES, canvas.nodes.length, s.nodes.length)) {
     fail(
       index,
@@ -457,10 +424,9 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   // an inline switch would simply fall through and report a batch applied
   // having ignored the op.
   const ctx: CanvasEditContext = { s, facetRegistry }
-  const openThreadsAtLoad = readAnnotations(doc).filter((thread) => thread.status === 'open').length
   input.ops.forEach((op, index) => {
     applyCanvasOp(ctx, op, index)
-    refuseCanvasGrowth(canvas, s, index, op.op, openThreadsAtLoad)
+    refuseCanvasGrowth(canvas, s, index, op.op)
   })
 
   const candidate = editedCanvas(canvas, s)

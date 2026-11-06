@@ -57,10 +57,6 @@ const CREATED_IDS: ReadonlyArray<readonly [string, Parse]> = [
       }),
   ],
   [
-    'comment.add comment.id',
-    (id) => canvas({ op: 'comment.add', comment: { id, x: 0, y: 0, text: 'a' } }),
-  ],
-  [
     'wb_canvas_edit proposalId',
     (id) =>
       canvas(

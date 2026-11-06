@@ -50,9 +50,8 @@ export function announceAgentActivity(
 
 /**
  * The words a watching person reads for a write to a document's threads, in
- * the order a summary lists them. Both `wb_canvas_edit` and `wb_thread_edit`
- * write the same thread plane (ADR-0026), so they share one vocabulary: the
- * same act must read the same whichever tool the agent reached for.
+ * the order a summary lists them. `wb_thread_edit` is the one writer of the
+ * thread plane (ADR-0026 decision 6).
  */
 export const COMMENT_SUMMARY_WORDS = ['commented', 'replied', 'resolved', 'reopened'] as const
 

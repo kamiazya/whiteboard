@@ -21,7 +21,7 @@ import { createRefreshControl } from './widget/refresh-control.js'
 import { guardSceneLinks, type SceneLinkGuard } from './widget/scene-links.js'
 import { loadThemeFont } from './widget/theme-font.js'
 import { toolErrorText } from './widget/tool-error-text.js'
-import { canvasViewCall, commentAddCall } from './widget/widget-tool-calls.js'
+import { canvasViewCall, threadAddCall } from './widget/widget-tool-calls.js'
 
 declare global {
   interface Window {
@@ -388,8 +388,8 @@ async function mountFromHost(
     // point at its own spot.
     let pendingAnchor: { x: number; y: number; targetNodeId?: string } | undefined
 
-    // The widget's ONE write: a comment.add against the clicked anchor
-    // (ADR-0024). The input clears on WRITE success rather than after the
+    // The widget's ONE write: a thread opened at the clicked anchor
+    // (ADR-0026). The input clears on WRITE success rather than after the
     // follow-up refresh: once the edit is committed server-side, keeping
     // the text would invite a duplicate resubmit if only the refresh
     // failed; a refused or failed write keeps text AND anchor for retry.
@@ -398,7 +398,7 @@ async function mountFromHost(
       const anchor = pendingAnchor
       commentControl?.setBusy(true)
       try {
-        const result = await app.callServerTool(commentAddCall(committed, anchor, text))
+        const result = await app.callServerTool(threadAddCall(committed, anchor, text))
         if (isErrorResult(result)) {
           commentControl?.setError(failureReason(result, COMMENT_NOT_SENT))
           return

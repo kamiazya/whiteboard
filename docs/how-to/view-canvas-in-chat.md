@@ -64,8 +64,8 @@ spot — click beside it for that.
 Behind the same gate as Refresh, the widget shows a comment field. **Click the
 canvas** to pick the spot the comment is about — clicking inside a node pins
 the comment to that node, so it follows the node if the agent later moves it —
-then type and press **Comment**. The widget writes one `comment.add` through
-`wb_canvas_edit`, and the comment renders as an amber pin with a floating
+then type and press **Comment**. The widget opens one comment thread through
+`wb_thread_edit`'s `thread.add`, and the comment renders as an amber pin with a floating
 bubble on every surface that shows the canvas (this widget, the web app,
 exports). The submit button stays disabled until a spot is picked, because a
 comment is about a place.
@@ -85,7 +85,7 @@ host call did not get through — and clears as soon as you type again. The
 field itself stops at that 4,096-character limit. A Refresh that fails shows
 its reason on the same line and leaves the last loaded view in place. This is the widget's ONE write — everything
 else stays read-only, and the only tools it can ever call through the host
-are `canvas_view` and this comment.
+are `canvas_view` and `wb_thread_edit`, for this comment.
 
 ## What you do not get (yet)
 
@@ -94,7 +94,7 @@ This is **Phase A** of MCP Apps support:
 - The view is **read-only apart from commenting**. Refresh reloads the
   current document, but there is no in-widget editing, moving, or deleting of
   existing content — and no in-widget resolving of comments yet (an agent
-  resolves them with a `comment.resolve` op).
+  resolves them with `wb_thread_edit`'s `thread.resolve` op).
 - Only `canvas_view` is UI-linked. It is the sole tool whose registration carries
   `_meta.ui.resourceUri`; every other tool returns ordinary structured content. A
   tool that opened the full editor would have to pass the daemon's base URL into the

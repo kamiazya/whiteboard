@@ -60,7 +60,6 @@ const LABEL_WRITERS: ReadonlyArray<readonly [string, (label: string) => unknown]
 const MESSAGE_WRITERS: ReadonlyArray<readonly [string, (body: string) => unknown]> = [
   ['thread.add', (body) => threadBatch({ op: 'thread.add', anchor: { kind: 'document' }, body })],
   ['message.add', (body) => threadBatch({ op: 'message.add', threadId: 't1', body })],
-  ['comment.add', (text) => canvasBatch({ op: 'comment.add', comment: { text, x: 0, y: 0 } })],
 ]
 
 describe('the size of one label is declared once', () => {

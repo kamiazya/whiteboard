@@ -12,6 +12,7 @@ export {
   createCanvasViewTool,
 } from '../tools/canvas-view.js'
 export { createFacetListTool } from '../tools/facet-list.js'
+export { threadEditInputSchema } from '../tools/thread-edit.js'
 export { createVersionListTool } from '../tools/version-list.js'
 export { createVersionRestoreTool, versionRestoreOutputSchema } from '../tools/version-restore.js'
 export { createVersionSaveTool } from '../tools/version-save.js'

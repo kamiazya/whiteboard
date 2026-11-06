@@ -2,13 +2,10 @@
 // import server-core, so no compiler sees the two ends together. This is the one
 // place they meet: the exact arguments the widget sends, parsed by the schemas
 // the server registers for those tools.
+import { canvasViewCall, threadAddCall } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import {
-  canvasViewCall,
-  commentAddCall,
-} from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
-import {
-  canvasEditInputSchema,
   canvasViewInputSchema,
+  threadEditInputSchema,
 } from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { describe, expect, it } from 'vitest'
 
@@ -34,28 +31,28 @@ describe("the widget's outbound tool calls against the server's input schemas", 
     expect(canvasViewCall(target).arguments).toEqual(target)
   })
 
-  it('a comment pinned on a point is accepted by wb_canvas_edit', () => {
-    const call = commentAddCall(target, { x: 12, y: 34 }, 'move this')
-    expect(call.name).toBe('wb_canvas_edit')
-    const parsed = canvasEditInputSchema.safeParse(call.arguments)
+  it('a comment pinned on a point is accepted by wb_thread_edit', () => {
+    const call = threadAddCall(target, { x: 12, y: 34 }, 'move this')
+    expect(call.name).toBe('wb_thread_edit')
+    const parsed = threadEditInputSchema.safeParse(call.arguments)
     expect(parsed.error?.issues).toBeUndefined()
     expect(parsed.success).toBe(true)
   })
 
-  it('a comment pinned on a node carries both the point and the target', () => {
-    const call = commentAddCall(target, { x: 12, y: 34, targetNodeId: 'n1' }, 'rename')
-    const parsed = canvasEditInputSchema.parse(call.arguments)
+  it('a comment pinned on a node carries both the point and the node', () => {
+    const call = threadAddCall(target, { x: 12, y: 34, targetNodeId: 'n1' }, 'rename')
+    const parsed = threadEditInputSchema.parse(call.arguments)
     expect(parsed.ops[0]).toMatchObject({
-      op: 'comment.add',
-      comment: { x: 12, y: 34, targetNodeId: 'n1', text: 'rename' },
+      op: 'thread.add',
+      anchor: { kind: 'spatial', x: 12, y: 34, nodeId: 'n1' },
+      body: 'rename',
     })
   })
 
-  it('the wb_canvas_edit schema refuses a comment with no text, so a dropped field is visible here', () => {
-    const call = commentAddCall(target, { x: 1, y: 2 }, 'ok')
-    const comment = call.arguments.ops[0].comment
-    const { text: _text, ...withoutText } = comment
-    const broken = { ...call.arguments, ops: [{ op: 'comment.add', comment: withoutText }] }
-    expect(canvasEditInputSchema.safeParse(broken).success).toBe(false)
+  it('the wb_thread_edit schema refuses a thread with no body, so a dropped field is visible here', () => {
+    const call = threadAddCall(target, { x: 1, y: 2 }, 'ok')
+    const { body: _body, ...withoutBody } = call.arguments.ops[0]
+    const broken = { ...call.arguments, ops: [withoutBody] }
+    expect(threadEditInputSchema.safeParse(broken).success).toBe(false)
   })
 })

@@ -29,7 +29,6 @@ const BOARD: SpatialCanvas = {
   ],
   edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
   lines: [POINT_LINE],
-  comments: [{ id: 'c', x: 5, y: 5, text: 'hm', createdAt: '2026-01-01T00:00:00.000Z' }],
 }
 
 /**
@@ -51,14 +50,12 @@ const ONE_OF_EACH: { [K in Op['op']]: Extract<Op, { op: K }> } = {
   'node.lock': { op: 'node.lock', id: 'a', locked: true },
   'edge.lock': { op: 'edge.lock', id: 'e', locked: true },
   tidy: { op: 'tidy' },
-  'comment.add': { op: 'comment.add', comment: { x: 1, y: 1, text: 'new' } },
-  'comment.resolve': { op: 'comment.resolve', id: 'c' },
   'region.set': { op: 'region.set', within: 'g', nodes: [] },
 }
 
 describe('wb_canvas_edit default mode, op by op', () => {
   test('covers every verb the tool accepts', () => {
-    expect(Object.keys(ONE_OF_EACH).length).toBeGreaterThan(15)
+    expect(Object.keys(ONE_OF_EACH).length).toBeGreaterThan(13)
   })
 
   test.each(
@@ -136,10 +133,8 @@ describe('wb_canvas_edit default mode, op by op', () => {
 describe('an explicit mode:"propose" and the verbs a proposal cannot carry', () => {
   const direct = Object.values(ONE_OF_EACH).filter((op) => !isProposableOp(op.op))
 
-  test('covers comments, locks, tidy and region.set', () => {
+  test('covers locks, tidy and region.set', () => {
     expect(direct.map((op) => op.op).sort()).toEqual([
-      'comment.add',
-      'comment.resolve',
       'edge.lock',
       'node.lock',
       'region.set',
@@ -189,13 +184,9 @@ describe('the tool description', () => {
   test('names every verb family a batch applies directly when no mode is given', () => {
     const { description } = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
     const direct = Object.keys(ONE_OF_EACH).filter((op) => !isProposableOp(op))
-    // Families, as the description words them: comment.* -> comments, *.lock -> locks.
-    const families = new Set(
-      direct.map((op) =>
-        op.startsWith('comment.') ? 'comments' : op.endsWith('.lock') ? 'locks' : op,
-      ),
-    )
-    expect([...families].sort()).toEqual(['comments', 'locks', 'region.set', 'tidy'])
+    // Families, as the description words them: *.lock -> locks.
+    const families = new Set(direct.map((op) => (op.endsWith('.lock') ? 'locks' : op)))
+    expect([...families].sort()).toEqual(['locks', 'region.set', 'tidy'])
     for (const family of families) expect(description).toContain(family)
     expect(description).not.toContain('splice')
   })
