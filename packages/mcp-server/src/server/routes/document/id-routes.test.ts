@@ -240,6 +240,12 @@ describe('a document addressed by id', () => {
     expect((await d.send(byPath('foo', '/versions'))).status).toBe(200)
   })
 
+  it('keeps a document whose path is ULID-shaped reachable by path', async () => {
+    const d = await daemon()
+    await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: UNKNOWN_ID })
+    expect((await d.send(byPath(UNKNOWN_ID, '/versions'))).status).toBe(200)
+  })
+
   it('refuses a malformed workspace handle with the handle 400', async () => {
     const d = await daemon()
     const res = await d.send(`/api/workspaces/has%20space/documents/${UNKNOWN_ID}/snapshot`)

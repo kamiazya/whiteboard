@@ -139,6 +139,9 @@ type DocumentsHandler = (
 ) => Promise<Response> | Response
 
 const resolvedDocuments = new WeakMap<HonoRequest, DocumentEntry | null>()
+// Requests whose ULID-shaped segment names no live id but IS a live document's
+// path; the path family answers those.
+const pathShadowed = new WeakSet<HonoRequest>()
 
 /**
  * What the document-id address resolved to for this request: the entry, `null`
@@ -169,6 +172,14 @@ export function resolveDocumentAddress(deps: Pick<ServerDeps, 'documentIndex'>):
     const workspaceId = await workspaceIdFromHandle(c, handle)
     const entry = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
     resolvedDocuments.set(c.req, entry)
+    // A single-segment path may be ULID-shaped; an id miss that is a path hit
+    // must stay reachable by path.
+    if (
+      entry === null &&
+      (await deps.documentIndex.resolveDocument({ workspaceId, path: documentId })) !== null
+    ) {
+      pathShadowed.add(c.req)
+    }
     return next()
   }
 }
@@ -180,8 +191,9 @@ const isDocumentId = (c: Context) => documentIdSchema.safeParse(c.req.param('doc
  * and hands the handler the placement the id resolves to, so an address that
  * names a document by id reaches the same handler as one that names its path.
  *
- * A `:documentId` that is not a canonical ULID falls through to the path
- * family, which shares this URL grammar until the path form leaves.
+ * A `:documentId` that is not a canonical ULID, or that is one naming no live
+ * id but a live document's path, falls through to the path family, which
+ * shares this URL grammar until the path form leaves.
  */
 export function onDocumentRoute(
   app: Hono,
@@ -195,6 +207,7 @@ export function onDocumentRoute(
     if (!documentIdSchema.safeParse(documentId).success) return next()
     const parsed = await parseWorkspaceHandle(c, c.req.param('workspaceId') ?? '')
     if ('refusal' in parsed) return parsed.refusal
+    if (pathShadowed.has(c.req)) return next()
     const entry = resolvedDocumentOf(c)
     if (entry === undefined) {
       throw new Error('document id route mounted without resolveDocumentAddress')
