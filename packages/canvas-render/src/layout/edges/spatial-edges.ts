@@ -16,8 +16,9 @@ import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { bestRepairedPair } from './coincident-ends.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
-import type { AnchorContext, AnchorGroups } from './edge-anchors.js'
+import type { AnchorGroups } from './edge-anchors.js'
 import {
   anchorContext,
   buildAnchorGroups,
@@ -32,12 +33,11 @@ import {
   sharedCorners,
 } from './edge-crossing-sweep.js'
 import type { Point, Rect } from './edge-geometry.js'
-import { boundingBoxOf, centerOf, midpointExtent, pathLength, rectOf } from './edge-geometry.js'
+import { boundingBoxOf, centerOf, midpointExtent, rectOf } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import {
   accumulateCost,
   addCost,
-  bendCount,
   COST_QUANTUM,
   fullyContains,
   hasRepairableProblem,
@@ -49,14 +49,10 @@ import {
   shouldAdoptCandidate,
   zeroPenalty,
 } from './edge-rules.js'
-import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
+import type { EdgeAnchorOverride, EdgeAnchorPair, EdgeStyleOf } from './edge-sides.js'
 import { initialSideChoices, rankedSidePairs } from './edge-sides.js'
 import type { RoutingBudget } from './routing-budget.js'
-import { createRoutingBudget, PAIR_LOOKUP_VISITS, searchShare, spend } from './routing-budget.js'
-
-/** An arrowhead's own length: a final segment shorter than this paints an
- * arrow with no line under it (see edge-arrows.ts's ARROW_LENGTH). */
-const ARROW_RUNWAY_PX = 10
+import { createRoutingBudget, PAIR_LOOKUP_VISITS, searchShare } from './routing-budget.js'
 
 /**
  * The routing cost of a configuration as a lexicographic integer tuple, one
@@ -177,17 +173,6 @@ const FULL_OPT_MAX_EDGES = 40
 const TRIAL_BUDGET_EDGES = 16
 
 /**
- * How ONE edge is routed. A function rather than a value because the answer
- * is per edge (an edge's own `visual.edges/v0` facet narrows the canvas's),
- * and every internal pass here already holds the edge when it needs to ask.
- *
- * The route cache is unaffected: `routeCacheKey` starts with `edge.id`, an
- * edge's style cannot change within one `assignEdgeAnchors` call, so no two
- * entries with the same key were ever routed under different styles.
- */
-export type EdgeStyleOf = (edge: RoutableElement) => EdgeRoutingStyle
-
-/**
  * The route cache's key: an edge plus every field of the anchor pair that
  * `routeEdge` reads. Exported so the completeness of that list is pinned by
  * a test rather than by a reader remembering to check it.
@@ -273,9 +258,9 @@ function createConfigScore(
   align: boolean,
   pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
   routeCache: Map<string, readonly Point[]> | undefined,
-  byId: ReadonlyMap<string, SpatialNode>,
   budget: RoutingBudget,
 ) {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
   const othersFor = edges.map((e) => {
     const from = endNode(e.from)
     const to = endNode(e.to)
@@ -612,6 +597,47 @@ function trialEdgesFor(
   return ranked.map((r) => r.edge)
 }
 
+type ConfigScore = ReturnType<typeof createConfigScore>
+
+/**
+ * Each edge still stepping round what is in its way tries its corner route
+ * on the same sides, and takes it unless that costs something — the one move
+ * the search makes on a TIE. It cannot oscillate: it only ever clears
+ * `around`, and nothing else sets it on a tie.
+ */
+function shortened(
+  score: ConfigScore,
+  edges: readonly RoutableElement[],
+  locked: ReadonlySet<string> | undefined,
+): ReadonlyMap<string, SidePair> {
+  for (const [index, edge] of edges.entries()) {
+    const chosen = score.sideOf(edge.id)
+    if (chosen?.around !== true || locked?.has(edge.id)) continue
+    const trial = new Map(score.sides())
+    trial.set(edge.id, { fromSide: chosen.fromSide, toSide: chosen.toSide })
+    const evaluated = score.evaluateTrial(trial, index)
+    if (evaluated === undefined) break
+    if (!lessCost(score.cost(), evaluated.cost)) score.adopt(trial, evaluated)
+  }
+  return score.sides()
+}
+
+/**
+ * A straight edge's candidates, then each pair once more stepping round what
+ * is in the way: tried after the corner routes, so it is taken only where no
+ * side choice alone helps.
+ */
+function andSteppingRound(pairs: readonly SidePair[], chosen: SidePair): SidePair[] {
+  const sided = pairs.length > 0 ? pairs : [chosen]
+  return [
+    ...pairs,
+    ...sided.map(({ fromSide, toSide }) => ({ fromSide, toSide, around: true as const })),
+  ]
+}
+
+const samePair = (a: SidePair, b: SidePair): boolean =>
+  a.fromSide === b.fromSide && a.toSide === b.toSide && a.around === b.around
+
 /**
  * Bounded global improvement over per-edge side choices: iterate edges in
  * document order; adopt an alternative ranked pair only when the WHOLE
@@ -664,7 +690,6 @@ function optimizeSideChoices(
     align,
     pins,
     cache,
-    byId,
     budget,
   )
   const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
@@ -672,25 +697,7 @@ function optimizeSideChoices(
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
   // crossings is healthy, and reshuffling it purely to shave bends is
   // churn, not repair.
-  /**
-   * Each edge still stepping round what is in its way tries its corner route
-   * on the same sides, and takes it unless that costs something — which is
-   * the one move this search makes on a TIE. It cannot oscillate: it only
-   * ever clears `around`, and nothing else sets it on a tie.
-   */
-  const shorten = (): ReadonlyMap<string, SidePair> => {
-    for (const [index, edge] of edges.entries()) {
-      const chosen = score.sideOf(edge.id)
-      if (chosen?.around !== true || locked?.has(edge.id)) continue
-      const trial = new Map(score.sides())
-      trial.set(edge.id, { fromSide: chosen.fromSide, toSide: chosen.toSide })
-      const evaluated = score.evaluateTrial(trial, index)
-      if (evaluated === undefined) break
-      if (!lessCost(score.cost(), evaluated.cost)) score.adopt(trial, evaluated)
-    }
-    return score.sides()
-  }
-
+  const shorten = () => shortened(score, edges, locked)
   if (!hasRepairableProblem(score.cost())) return shorten()
 
   /**
@@ -703,14 +710,9 @@ function optimizeSideChoices(
   const candidatesOf = (edge: RoutableElement, index: number, chosen: SidePair): SidePair[] => {
     const named = endSide(edge.from) !== undefined && endSide(edge.to) !== undefined
     const pairs = sideCandidatesFor(edge, byId, named && score.selfThrough(index))
-    if (styleOf(edge) !== 'straight' || isSelfLoop(edge)) return pairs
-    // Every pair again, stepping round what is in the way: tried after the
-    // corner routes, so it is taken only where no side choice alone helps.
-    const sided = (pairs.length > 0 ? pairs : [chosen]).map(({ fromSide, toSide }) => ({
-      fromSide,
-      toSide,
-    }))
-    return [...pairs, ...sided.map((pair) => ({ ...pair, around: true as const }))]
+    return styleOf(edge) === 'straight' && !isSelfLoop(edge)
+      ? andSteppingRound(pairs, chosen)
+      : pairs
   }
   // `exhausted` once the account refuses a trial: a refused trial is never
   // adopted, so the search ends on the sides it has rather than building
@@ -720,13 +722,7 @@ function optimizeSideChoices(
     if (chosen === undefined) return 'kept'
     const index = edgeIndexById.get(edge.id) ?? -1
     for (const candidate of candidatesOf(edge, index, chosen)) {
-      if (
-        candidate.fromSide === chosen.fromSide &&
-        candidate.toSide === chosen.toSide &&
-        candidate.around === chosen.around
-      ) {
-        continue
-      }
+      if (samePair(candidate, chosen)) continue
       const trial = new Map(score.sides())
       trial.set(edge.id, candidate)
       const evaluated = score.evaluateTrial(trial, index)
@@ -750,109 +746,6 @@ function optimizeSideChoices(
     if (!improved) break
   }
   return shorten()
-}
-
-interface RepairScore {
-  pair: SidePair
-  tier: number
-  bends: number
-  length: number
-}
-
-/**
- * The best side pair among `candidates` for a collided edge, or `undefined`
- * when none reaches it at all.
- *
- * EVERY candidate is scored, not just the first that qualifies: two
- * predicates are needed and neither alone is enough — "not coincident" alone
- * accepted a pair that reached the far side straight THROUGH the target, and
- * "first clean one" alone accepted a four-bend loop around both boxes when a
- * short hop up the shared side was available. Clean is the requirement;
- * shortest-and-straightest picks among the clean.
- *
- * Three TIERS, because they are not equally important and treating them as
- * one filter made an edge vanish: clean with runway is best, clean without
- * runway still beats an ugly route, and ANY visible route beats the collided
- * pair. Visibility is the requirement; the rest is preference.
- */
-function bestRepairedPair(
-  candidates: readonly SidePair[],
-  ctx: {
-    edge: RoutableElement
-    edgeIndex: number
-    nodes: readonly SpatialNode[]
-    labels: readonly Rect[]
-    ctx: AnchorContext
-    repaired: ReadonlyMap<string, SidePair>
-    placement: AnchorGroups
-    align: boolean
-    pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined
-    styleOf: EdgeStyleOf
-    fromRect: Rect
-    toRect: Rect
-    coincides: (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string) => boolean
-    budget: RoutingBudget
-  },
-): (RepairScore & { placement: AnchorGroups }) | 'exhausted' | undefined {
-  const { edge, edgeIndex, nodes, labels, repaired, placement, align, pins, styleOf } = ctx
-  const { fromRect, toRect, coincides, budget } = ctx
-  let best: (RepairScore & { placement: AnchorGroups }) | undefined
-  for (const pair of candidates) {
-    const sided: SidePair = {
-      fromSide: endSide(edge.from) ?? pair.fromSide,
-      toSide: endSide(edge.to) ?? pair.toSide,
-    }
-    const trial = new Map(repaired)
-    trial.set(edge.id, sided)
-    // Patched, not rebuilt: where every edge collided one side holds them all.
-    const work = patchWork(ctx.ctx, placement, trial, edgeIndex) + ctx.ctx.edges.length
-    if (!spend(budget, 'repairs', work + nodes.length)) return 'exhausted'
-    const trialPlacement = patchAnchorGroups(ctx.ctx, placement, trial, edgeIndex)
-    const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins, trialPlacement)
-    if (coincides(trialAnchors, edge.id)) continue
-    const anchors = trialAnchors.get(edge.id)
-    const { path } = routeEdge(nodes, edge, styleOf(edge), anchors, undefined, budget, labels)
-    const scored = scoreRepairedRoute(sided, path, fromRect, toRect)
-    if (best === undefined || betterRepair(scored, best)) {
-      best = { ...scored, placement: trialPlacement }
-    }
-  }
-  return best
-}
-
-/**
- * One candidate route's tier, bends and length.
- *
- * The arrowhead is drawn ON the final segment, so a route that arrives with
- * no runway paints an arrow with no line under it. Re-siding is choosing
- * this route from scratch, so it can decline those.
- */
-function scoreRepairedRoute(
-  pair: SidePair,
-  path: readonly Point[],
-  fromRect: Rect,
-  toRect: Rect,
-): RepairScore {
-  const tail = path[path.length - 1]
-  const beforeTail = path[path.length - 2]
-  const runway =
-    tail === undefined || beforeTail === undefined
-      ? 0
-      : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
-  const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
-  return {
-    pair,
-    tier: clean && runway >= ARROW_RUNWAY_PX ? 0 : clean ? 1 : 2,
-    bends: bendCount(path),
-    length: pathLength(path),
-  }
-}
-
-/** Tier first, then fewer bends, then shorter. */
-function betterRepair(a: RepairScore, b: RepairScore): boolean {
-  if (a.tier !== b.tier) return a.tier < b.tier
-  if (a.bends !== b.bends) return a.bends < b.bends
-  return a.length < b.length
 }
 
 /**
@@ -945,6 +838,52 @@ function anchorsWithoutCoincidentEnds(
 }
 
 /**
+ * `sides` with each overridden edge's frozen pair (a side the edge names
+ * itself still wins), and the set of edges that froze.
+ */
+function withOverrides(
+  sides: ReadonlyMap<string, SidePair>,
+  edges: readonly RoutableElement[],
+  sideOverrides: ReadonlyMap<string, EdgeAnchorOverride>,
+): { merged: Map<string, SidePair>; locked: Set<string> } {
+  const merged = new Map(sides)
+  const locked = new Set<string>()
+  for (const [id, pair] of sideOverrides) {
+    const edge = edges.find((e) => e.id === id)
+    if (edge === undefined || merged.get(id) === undefined) continue
+    merged.set(id, {
+      fromSide: endSide(edge.from) ?? pair.fromSide,
+      toSide: endSide(edge.to) ?? pair.toSide,
+      ...(pair.around === true ? { around: true as const } : {}),
+    })
+    locked.add(id)
+  }
+  return { merged, locked }
+}
+
+/**
+ * `seed` with every free straight edge stepping round what is in its way —
+ * the search's starting point, since that is the route that crosses least,
+ * and its `shorten` takes the corner route back wherever that costs nothing.
+ * Starting from the corner routes left crossings no single-edge move could
+ * undo: two diagonals crossing through one gap need BOTH to step round.
+ */
+function steppingRound(
+  seed: ReadonlyMap<string, SidePair>,
+  edges: readonly RoutableElement[],
+  styleOf: EdgeStyleOf,
+  locked: ReadonlySet<string> | undefined,
+): ReadonlyMap<string, SidePair> {
+  const around = new Map(seed)
+  for (const edge of edges) {
+    const pair = seed.get(edge.id)
+    if (pair === undefined || locked?.has(edge.id) || styleOf(edge) !== 'straight') continue
+    around.set(edge.id, { ...pair, around: true })
+  }
+  return around
+}
+
+/**
  * Side choices for a canvas of ANY size: `optimizeSideChoices` directly when
  * the edge set fits its gate, otherwise the same search run over spatial
  * REGIONS of the canvas.
@@ -993,30 +932,20 @@ function optimizeAcrossRegions(
     // layout-wide map would therefore buy nothing and hold every completed
     // region's paths until the layout finished.
     const routeCache = new Map<string, readonly Point[]>()
-    const unaligned = optimizeSideChoices(
-      nodes,
-      labels,
-      regionEdges,
-      styleOf,
-      seed,
-      locked,
-      false,
-      undefined,
-      routeCache,
-      budget,
-    )
-    return optimizeSideChoices(
-      nodes,
-      labels,
-      regionEdges,
-      styleOf,
-      unaligned,
-      locked,
-      true,
-      pins,
-      routeCache,
-      budget,
-    )
+    const run = (from: ReadonlyMap<string, SidePair>, align: boolean, p: typeof pins) =>
+      optimizeSideChoices(
+        nodes,
+        labels,
+        regionEdges,
+        styleOf,
+        from,
+        locked,
+        align,
+        p,
+        routeCache,
+        budget,
+      )
+    return run(run(steppingRound(seed, regionEdges, styleOf, locked), false, undefined), true, pins)
   }
 
   if (edges.length <= CROSSING_OPT_MAX_EDGES) return bothRuns(edges, initial)
@@ -1106,50 +1035,17 @@ export function assignEdgeAnchors(
   // The layout's routing account (`routing-budget.ts`); a caller routing the
   // edges again afterwards passes the same one.
   budget: RoutingBudget = createRoutingBudget(),
-  // Text outside every node a route must not cross (a frame's title), the
-  // same list the caller hands `routeEdge` — a search that prices different
-  // obstacles from the router's trades real quality for imaginary savings.
+  // A frame's title and any other text a route must not cross: the list the
+  // caller hands `routeEdge`, so the search prices what the router avoids.
   labels: readonly Rect[] = [],
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const edges = allEdges.filter((edge) => !marksContact(nodes, edge))
   const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
-  // A straight edge starts out stepping round what is in its way — the
-  // route that crosses least — and the search's `shorten` takes the corner
-  // route wherever that costs nothing. Starting from the corner routes left
-  // crossings no single-edge move could undo: two diagonals crossing
-  // through one gap need BOTH to step round.
-  const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) => {
-    const around = new Map(seed)
-    for (const edge of edges) {
-      const pair = seed.get(edge.id)
-      if (pair === undefined || locked?.has(edge.id) || styleOf(edge) !== 'straight') continue
-      around.set(edge.id, { ...pair, around: true })
-    }
-    return optimizeAcrossRegions(
-      nodes,
-      labels,
-      edges,
-      styleOf,
-      around,
-      locked,
-      sideOverrides,
-      budget,
-    )
-  }
+  const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) =>
+    optimizeAcrossRegions(nodes, labels, edges, styleOf, seed, locked, sideOverrides, budget)
   if (sideOverrides !== undefined) {
-    const merged = new Map(sides)
-    const locked = new Set<string>()
-    for (const [id, pair] of sideOverrides) {
-      const edge = edges.find((e) => e.id === id)
-      if (edge === undefined || merged.get(id) === undefined) continue
-      merged.set(id, {
-        fromSide: endSide(edge.from) ?? pair.fromSide,
-        toSide: endSide(edge.to) ?? pair.toSide,
-        ...(pair.around === true ? { around: true as const } : {}),
-      })
-      locked.add(id)
-    }
+    const { merged, locked } = withOverrides(sides, edges, sideOverrides)
     // Edges OUTSIDE the override map (the carried ones) still go through
     // the optimizer, against the locked rest — initial ranking alone can
     // disagree with what the committed render will pick, and the drop
@@ -1169,14 +1065,6 @@ export function assignEdgeAnchors(
     // own box); a clean one short-circuits after one scoring sweep.
     sides = optimize(sides)
   }
-  return anchorsWithoutCoincidentEnds(
-    nodes,
-    labels,
-    edges,
-    sides,
-    styleOf,
-    true,
-    sideOverrides,
-    budget,
-  )
+  const repair = anchorsWithoutCoincidentEnds
+  return repair(nodes, labels, edges, sides, styleOf, true, sideOverrides, budget)
 }

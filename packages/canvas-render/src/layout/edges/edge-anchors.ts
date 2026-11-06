@@ -392,18 +392,29 @@ function pinnedEntry(entry: AnchorEntry, pin: EdgeAnchorOverride): AnchorEntry {
   }
 }
 
+/**
+ * The route variant rides with the sides it was chosen with. Placement reads
+ * sides only, so it is copied onto the placed entries rather than threaded
+ * through placement.
+ */
+function copyAround(sides: ReadonlyMap<string, SidePair>, anchors: Map<string, AnchorEntry>): void {
+  for (const [id, pair] of sides) {
+    const entry = anchors.get(id)
+    if (pair.around === true && entry !== undefined) anchors.set(id, { ...entry, around: true })
+  }
+}
+
 /** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
 export function computeAnchorsFor(
   ctx: AnchorContext,
   sides: ReadonlyMap<string, SidePair>,
-  // Alignment never varies WITHIN one optimizer run: sliding anchors
-  // mid-optimization changes trial costs, which shifts side-choice
-  // equilibria on multi-edge documents in ways the ranking never anticipated
-  // (observed: a bystander edge re-siding onto a worse face). The search
-  // proper therefore runs entirely unaligned, and `assignEdgeAnchors` hands
-  // its settled configuration back through a SECOND, entirely aligned run —
-  // see `optimizeSideChoices`'s own `align` parameter. Each run is internally
-  // consistent, so neither can oscillate.
+  // Alignment never varies WITHIN one optimizer run: sliding anchors mid-run
+  // changes trial costs, which shifts side-choice equilibria on multi-edge
+  // documents in ways the ranking never anticipated (observed: a bystander
+  // edge re-siding onto a worse face). The search proper therefore runs
+  // unaligned, and `assignEdgeAnchors` hands its settled configuration back
+  // through a SECOND, aligned run — see `optimizeSideChoices`'s `align`.
+  // Each run is internally consistent, so neither can oscillate.
   align = true,
   // Committed anchor state to pin verbatim (live-drag bystanders): the
   // pinned ends still COUNT toward their group's fan-out fractions, so a
@@ -419,12 +430,7 @@ export function computeAnchorsFor(
   const anchors = new Map<string, AnchorEntry>(entries)
 
   const applyPins = (): void => {
-    // The route variant rides with the sides it was chosen with; placement
-    // reads sides only, so it is copied on here rather than threaded through.
-    for (const [id, pair] of sides) {
-      const entry = anchors.get(id)
-      if (pair.around === true && entry !== undefined) anchors.set(id, { ...entry, around: true })
-    }
+    copyAround(sides, anchors)
     if (pins === undefined) return
     for (const [id, pin] of pins) {
       const entry = anchors.get(id)

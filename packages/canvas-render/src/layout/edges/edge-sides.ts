@@ -13,7 +13,7 @@
  * of them: a side is chosen before anything is placed or routed.
  */
 
-import type { EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { Point, Rect } from './edge-geometry.js'
@@ -284,3 +284,14 @@ export const ORTHOGONAL_STUB_PX = 20
  * the deepest stub ~200px out; cap distinct lanes and share the outermost
  * if that ever hurts. */
 export const STUB_LANE_STEP_PX = 12
+
+/**
+ * How ONE edge is routed. A function rather than a value because the answer
+ * is per edge (an edge's own `visual.edges/v0` facet narrows the canvas's),
+ * and every pass of the side search already holds the edge when it needs to ask.
+ *
+ * The route cache is unaffected: `routeCacheKey` starts with `edge.id`, an
+ * edge's style cannot change within one `assignEdgeAnchors` call, so no two
+ * entries with the same key were ever routed under different styles.
+ */
+export type EdgeStyleOf = (edge: RoutableElement) => EdgeRoutingStyle

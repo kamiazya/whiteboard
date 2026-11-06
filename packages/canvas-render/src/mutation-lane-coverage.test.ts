@@ -385,9 +385,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // oracle written from the definition, checked against three hand
     // mutations (the escape test, a corner's clearance, a skipped
     // obstacle), each of which it caught.
+    //
+    // 121 with two modules split out of files the lane does not mutate
+    // either, to keep them under the size budget: `layout/edges/side-slides.ts`
+    // (moving a route's end along its side, from `edge-router.ts`) and
+    // `layout/edges/coincident-ends.ts` (scoring a repaired pair, from
+    // `spatial-edges.ts`). Same code, same tests, same answer as before.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 119,
+      production: 121,
     })
   })
 

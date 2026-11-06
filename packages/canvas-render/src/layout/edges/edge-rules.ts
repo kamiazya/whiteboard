@@ -23,12 +23,10 @@ import { COST_QUANTUM, inkAlongRects, quantize, selfRetracedInk, tunnelledInk } 
 export { COST_QUANTUM }
 
 /**
- * Which sides an edge leaves and arrives on — and, for a straight connection
- * with something in its way, whether it steps round everything in the way at
- * once (`around`) rather than bending at the corners of what blocks it. The
- * corner route is shorter and the default; `around` is the side search's
- * alternative when the shorter line crosses another edge, which is a
- * decision only the search can take since only it sees every edge.
+ * Which sides an edge leaves and arrives on, and whether a straight one
+ * steps round everything in its way at once (`around`) rather than bending
+ * at the corners of what blocks it — a choice only the side search can make,
+ * since only it sees which route crosses another edge.
  */
 export type SidePair = {
   readonly fromSide: EdgeSide
