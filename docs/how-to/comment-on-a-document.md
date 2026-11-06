@@ -29,7 +29,8 @@ including a conversation whose subject has since been deleted, which is
 marked `anchor gone` rather than hidden. On a canvas such a conversation keeps
 its pin where its node used to be, and its card says that what it was about
 has been deleted: deleting a node never deletes the conversations about it,
-including ones a duplicate carried over. **Resolve** puts it away.
+including ones a duplicate carried over (**Duplicate without comments**
+makes a copy that carries none). **Resolve** puts it away.
 
 ## Comment on a passage of markdown
 

@@ -15,6 +15,7 @@
  * way.
  */
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Braces, Copy, FolderInput, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
@@ -24,6 +25,10 @@ import {
   MoveOpenDocument,
   type OpenMovePicker,
 } from '../components/workspace-files/MoveOpenDocument.js'
+import {
+  DUPLICATE_WITHOUT_COMMENTS,
+  WITHOUT_ANNOTATIONS,
+} from '../lib/duplicate-without-comments.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
 import { useAnnounceNotice } from './document-notice.js'
 import { useDeleteDocument } from './use-delete-document.js'
@@ -33,8 +38,11 @@ export interface UseDocumentActionsOptions {
   /** The document on screen, or undefined while the list has not named one. */
   readonly documentId: string | undefined
   readonly documentKind: DocumentKind
-  /** Resolves with the copy, or rejects; this bundle watches only the refusal. */
-  readonly duplicateDocument: () => Promise<unknown>
+  /**
+   * Resolves with the copy, or rejects; this bundle watches only the refusal.
+   * `request` asks for the copy without its comments.
+   */
+  readonly duplicateDocument: (request?: DuplicateDocumentRequest) => Promise<unknown>
   /** Resolves once the document is gone, or rejects. */
   readonly deleteDocument: () => Promise<void>
   /** Runs once the delete resolved; the page leaves the document it showed. */
@@ -98,6 +106,28 @@ function CopyAsJsonCanvasItem({ canvas }: { canvas: SpatialCanvas }) {
   )
 }
 
+/** Duplicate, and the copy that leaves the comments behind; both off while one is in flight. */
+function DuplicateItems({
+  disabled,
+  onDuplicate,
+}: {
+  disabled: boolean
+  onDuplicate: (request?: DuplicateDocumentRequest) => Promise<void>
+}) {
+  return (
+    <>
+      <DropdownMenuItem disabled={disabled} onSelect={() => void onDuplicate()}>
+        <Copy aria-hidden="true" className="size-3.5" />
+        Duplicate
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={disabled} onSelect={() => void onDuplicate(WITHOUT_ANNOTATIONS)}>
+        <Copy aria-hidden="true" className="size-3.5" />
+        {DUPLICATE_WITHOUT_COMMENTS}
+      </DropdownMenuItem>
+    </>
+  )
+}
+
 export function useDocumentActions({
   documentId,
   documentKind,
@@ -140,10 +170,7 @@ export function useDocumentActions({
             Move to folder…
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-          <Copy aria-hidden="true" className="size-3.5" />
-          Duplicate
-        </DropdownMenuItem>
+        <DuplicateItems disabled={isDuplicating} onDuplicate={handleDuplicate} />
         <DropdownMenuItem
           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
           onSelect={() => setConfirmDelete(true)}

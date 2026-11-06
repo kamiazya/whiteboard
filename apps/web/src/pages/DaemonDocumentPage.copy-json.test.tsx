@@ -161,7 +161,7 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
     // The CONTROL: the menu opened and has the rows that are not conditional,
     // so an absent Copy row is the gate working rather than a menu that never
     // rendered.
-    expect(await screen.findByRole('menuitem', { name: /duplicate/i })).toBeTruthy()
+    expect(await screen.findByRole('menuitem', { name: 'Duplicate' })).toBeTruthy()
     expect(menu.textContent).not.toContain('Copy as JSON Canvas')
   })
 })

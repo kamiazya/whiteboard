@@ -1,5 +1,6 @@
 import {
   DAEMON_DEFAULT_SEGMENT,
+  type DuplicateDocumentRequest,
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -548,7 +549,7 @@ export function DaemonIndexPage({
   // One request: the daemon places the copy beside its source and names it,
   // the same operation the browser keeper runs on its own record.
   const handleDuplicate = useCallback(
-    async (sourcePath: string) => {
+    async (sourcePath: string, request?: DuplicateDocumentRequest) => {
       if (duplicatingPath !== null) return
       const workspaceAtStart = selectedWorkspace
       if (!workspaceAtStart) return
@@ -561,7 +562,7 @@ export function DaemonIndexPage({
       // its completion (the rows refresh) to the page is gated separately,
       // below, on whether that workspace is still the one being viewed.
       try {
-        await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath)
+        await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, request)
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)

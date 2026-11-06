@@ -89,6 +89,14 @@ beside it shows; a copy of an unnamed document starts from what its row shows,
 so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy is selected in the list, and a
 "Duplicated _name_" notice offers **Open** for it.
 
+**Duplicate** copies the whole document, its comments and open proposals
+included. **Duplicate without comments**, next to it in a document's menu and
+in an open document's **More actions**, copies only what the document says:
+the copy starts with no comment threads and no proposals, and the original
+keeps every one of its own. The copy is named and placed the same way. Both
+are offered on every document; on one that has no comments they make the
+same copy.
+
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.

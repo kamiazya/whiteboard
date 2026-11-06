@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -373,7 +374,7 @@ interface BrowserIndexBodyProps {
   onOpenDocument: BrowserIndexPageProps['onOpenDocument']
   filesRevision: number
   onCreate: (kind: DocumentKind) => void | Promise<void>
-  onDuplicate: (path: string) => void | Promise<void>
+  onDuplicate: (path: string, request?: DuplicateDocumentRequest) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
   capacity: KeeperCapacity
 }
@@ -445,7 +446,7 @@ function BrowserFilesPanel(props: BrowserIndexBodyProps) {
       onOpenDocument={props.onOpenDocument}
       // Duplicating does NOT open the copy, matching the daemon row: the
       // person is working in the list, and the copy appears there.
-      onDuplicateDocument={(path) => void props.onDuplicate(path)}
+      onDuplicateDocument={(path, request) => void props.onDuplicate(path, request)}
       {...deleteRequestsFor(props.onRequestDelete)}
       revision={props.filesRevision}
     />
@@ -614,12 +615,12 @@ export function BrowserIndexPage({
   // same source race on the name the copy is given.
   const [duplicating, setDuplicating] = useState(false)
   const handleDuplicate = useCallback(
-    async (sourcePath: string) => {
+    async (sourcePath: string, request?: DuplicateDocumentRequest) => {
       if (duplicating) return
       setDuplicating(true)
       setError(null)
       try {
-        await duplicateBrowserDocument({ index, clock, sourcePath })
+        await duplicateBrowserDocument({ index, clock, sourcePath, ...request })
         // ONLY the duplicate itself is under this catch. The bump is what
         // re-reads the list (the load effect follows it) and that effect owns
         // its own refusal — so a re-read that fails after the copy exists is

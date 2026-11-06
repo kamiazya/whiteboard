@@ -18,6 +18,10 @@ import { type ComponentProps, useContext } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import {
+  DUPLICATE_WITHOUT_COMMENTS,
+  WITHOUT_ANNOTATIONS,
+} from '../../lib/duplicate-without-comments.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -413,6 +417,11 @@ export function cardMenuItemsFor(
             label: 'Duplicate',
             icon: <CopyPlus />,
             onSelect: () => onDuplicateDocument(entry.path),
+          },
+          {
+            label: DUPLICATE_WITHOUT_COMMENTS,
+            icon: <CopyPlus />,
+            onSelect: () => onDuplicateDocument(entry.path, WITHOUT_ANNOTATIONS),
           },
         ]),
     ...pinMenuItem(entry, source, togglePinned),

@@ -111,7 +111,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     // The item is resolved BEFORE the act: RTL turns the act environment off
     // inside findBy*, so a query nested in act fails as an act complaint
     // naming neither.
-    const duplicate = await screen.findByRole('menuitem', { name: /duplicate/i })
+    const duplicate = await screen.findByRole('menuitem', { name: 'Duplicate' })
     await act(async () => {
       fireEvent.pointerUp(duplicate)
     })
@@ -122,10 +122,44 @@ describe('duplicating a daemon-kept document from its own page', () => {
         'http://127.0.0.1:3099',
         'w1',
         'agent-note',
+        undefined,
       ),
     )
     // Following the copy is the half a lib test cannot see: a duplicate that
     // leaves you on the original reads as one that never happened.
+    await waitFor(() => expect(constructed.at(-1)?.path).toBe('agent-note-copy'))
+  })
+
+  it('asks the daemon for a copy without comments from More actions', async () => {
+    await act(async () => {
+      render(
+        <DaemonDocumentPage
+          daemonBaseUrl="http://127.0.0.1:3099"
+          workspaceId="w1"
+          path="agent-note"
+        />,
+      )
+    })
+    await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
+    mockListDocuments.mockResolvedValue({
+      documents: [SOURCE, { ...COPY, updatedAt: '2026-01-02' }],
+    })
+
+    await openDocumentOpsMenu()
+    const bare = await screen.findByRole('menuitem', { name: 'Duplicate without comments' })
+    await act(async () => {
+      fireEvent.pointerUp(bare)
+    })
+
+    await waitFor(() =>
+      expect(mockDuplicate).toHaveBeenCalledWith(
+        expect.anything(),
+        'http://127.0.0.1:3099',
+        'w1',
+        'agent-note',
+        { withoutAnnotations: true },
+      ),
+    )
     await waitFor(() => expect(constructed.at(-1)?.path).toBe('agent-note-copy'))
   })
 
@@ -150,7 +184,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
 
     await openDocumentOpsMenu()
-    const duplicate = await screen.findByRole('menuitem', { name: /duplicate/i })
+    const duplicate = await screen.findByRole('menuitem', { name: 'Duplicate' })
     // The CONTROL: enabled before the click. Without it, an assertion that the
     // row is disabled during flight passes against a row that is disabled
     // always — or against a menu that never opened.
@@ -165,7 +199,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     await openDocumentOpsMenu()
     await waitFor(async () =>
       expect(
-        (await screen.findByRole('menuitem', { name: /duplicate/i })).getAttribute('aria-disabled'),
+        (await screen.findByRole('menuitem', { name: 'Duplicate' })).getAttribute('aria-disabled'),
       ).toBe('true'),
     )
 
