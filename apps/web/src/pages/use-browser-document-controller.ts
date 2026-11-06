@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { documentNameSchema } from '@kamiazya/whiteboard-model'
 import {
   DisplayNameTakenError,
@@ -103,7 +104,7 @@ export interface BrowserDocumentController {
   // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
   // then switches to it — matching the create-then-open flow the UI expects.
-  duplicateDocument(): Promise<DocumentSnapshot>
+  duplicateDocument(request?: DuplicateDocumentRequest): Promise<DocumentSnapshot>
 }
 
 /**
@@ -712,21 +713,25 @@ export function useBrowserDocumentController(
   // What a duplicate IS lives in one place for both surfaces (the index row
   // has only a path); this side adds what only an open document owes —
   // flushing its pending save first, and moving the editor onto the copy.
-  const duplicateDocument = useCallback(async (): Promise<DocumentSnapshot> => {
-    const flushed = await flushSave()
-    if (!flushed) throw new Error('Failed to save pending changes before duplicating.')
-    const source = snapshotRef.current
-    if (source === null) throw new Error('No canvas is open to duplicate.')
+  const duplicateDocument = useCallback(
+    async (request?: DuplicateDocumentRequest): Promise<DocumentSnapshot> => {
+      const flushed = await flushSave()
+      if (!flushed) throw new Error('Failed to save pending changes before duplicating.')
+      const source = snapshotRef.current
+      if (source === null) throw new Error('No canvas is open to duplicate.')
 
-    const fresh = await duplicateBrowserDocument({
-      index: indexRef.current,
-      clock: clockRef.current,
-      sourcePath: source.path,
-    })
+      const fresh = await duplicateBrowserDocument({
+        index: indexRef.current,
+        clock: clockRef.current,
+        sourcePath: source.path,
+        ...request,
+      })
 
-    await switchDocument(fresh.documentId)
-    return fresh
-  }, [flushSave, switchDocument])
+      await switchDocument(fresh.documentId)
+      return fresh
+    },
+    [flushSave, switchDocument],
+  )
 
   return {
     loro: loroRef.current,

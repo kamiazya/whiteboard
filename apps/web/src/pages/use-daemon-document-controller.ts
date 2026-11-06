@@ -1,5 +1,6 @@
 import type {
   DocumentSummary,
+  DuplicateDocumentRequest,
   WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { messageOf } from '@kamiazya/whiteboard-model'
@@ -53,7 +54,7 @@ export interface DaemonDocumentController {
    * `useDuplicateDocument` the browser keeper uses — one hook, so the two
    * keepers cannot word the same refusal differently.
    */
-  duplicateDocument: () => Promise<void>
+  duplicateDocument: (request?: DuplicateDocumentRequest) => Promise<void>
   /**
    * Delete the document on screen and move to what is left.
    *
@@ -259,22 +260,26 @@ export function useDaemonDocumentController(
     [daemonFetch, daemonBaseUrl, workspaceId, relist],
   )
 
-  const duplicateDocument = useCallback(async (): Promise<void> => {
-    if (workspaceId === null || path === null) {
-      throw new Error('No document is open to duplicate.')
-    }
-    const { document: copy } = await duplicateDocumentApi(
-      daemonFetch,
-      daemonBaseUrl,
-      workspaceId,
-      path,
-    )
-    // Same two steps `createDocument` ends with, and the same order: the list
-    // is refreshed BEFORE the path moves, so the page never points at a
-    // document its own switcher does not hold yet.
-    await relist(workspaceId)
-    setPath(copy.path)
-  }, [daemonFetch, daemonBaseUrl, workspaceId, path, relist])
+  const duplicateDocument = useCallback(
+    async (request?: DuplicateDocumentRequest): Promise<void> => {
+      if (workspaceId === null || path === null) {
+        throw new Error('No document is open to duplicate.')
+      }
+      const { document: copy } = await duplicateDocumentApi(
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        path,
+        request,
+      )
+      // Same two steps `createDocument` ends with, and the same order: the list
+      // is refreshed BEFORE the path moves, so the page never points at a
+      // document its own switcher does not hold yet.
+      await relist(workspaceId)
+      setPath(copy.path)
+    },
+    [daemonFetch, daemonBaseUrl, workspaceId, path, relist],
+  )
 
   const deleteDocument = useCallback(async (): Promise<void> => {
     if (workspaceId === null || path === null) {

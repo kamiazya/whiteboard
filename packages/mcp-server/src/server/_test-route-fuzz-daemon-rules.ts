@@ -6,6 +6,7 @@ import {
   compactWorkspaceResultSchema,
   createWorkspaceRequestSchema,
   deleteDocumentResponseSchema,
+  duplicateDocumentRequestSchema,
   duplicateDocumentResponseSchema,
   listDocumentsResponseSchema,
   listTrashResponseSchema,
@@ -115,6 +116,7 @@ export const RULES: Record<string, Rule> = {
   },
   'POST /api/workspaces/:workspaceId/documents/*/duplicate': {
     answers: 'json',
+    body: duplicateDocumentRequestSchema,
     response: duplicateDocumentResponseSchema,
   },
   'PUT /api/workspaces/:workspaceId/folders/name': {

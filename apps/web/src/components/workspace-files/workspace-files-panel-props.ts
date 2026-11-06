@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 
@@ -46,7 +47,7 @@ export interface WorkspaceFilesPanelProps {
    * delete, and a second copy of either would be a second set of rules for
    * the same destructive act.
    */
-  onDuplicateDocument?: (path: string) => void
+  onDuplicateDocument?: (path: string, options?: DuplicateDocumentRequest) => void
   onRequestDelete?: (path: string, displayName: string, kind?: DocumentKind) => void
   /**
    * Delete every one of these paths, behind ONE confirmation.

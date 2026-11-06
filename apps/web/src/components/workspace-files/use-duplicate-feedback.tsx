@@ -2,6 +2,9 @@ import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
+
+type DuplicateHandler = NonNullable<WorkspaceFilesPanelProps['onDuplicateDocument']>
 
 interface DuplicatedCopy {
   readonly entry: WorkspaceDocumentEntry
@@ -81,7 +84,7 @@ export function useDuplicateFeedback({
   select,
 }: {
   documents: readonly WorkspaceDocumentEntry[] | null
-  onDuplicateDocument: ((path: string) => void) | undefined
+  onDuplicateDocument: WorkspaceFilesPanelProps['onDuplicateDocument']
   select: (entry: WorkspaceDocumentEntry) => void
 }) {
   const asked = useRef<DuplicateAsked | null>(null)
@@ -92,7 +95,8 @@ export function useDuplicateFeedback({
   const listed = useRef(documents)
   listed.current = documents
   const duplicate = useCallback(
-    (path: string) => {
+    (...args: Parameters<DuplicateHandler>) => {
+      const [path] = args
       const rows = listed.current ?? []
       const source = rows.find((entry) => entry.path === path)
       asked.current = {
@@ -101,7 +105,7 @@ export function useDuplicateFeedback({
         from: source === undefined ? path : documentLabel(source, 'leaf'),
         askedAt: Date.now(),
       }
-      onDuplicateDocument?.(path)
+      onDuplicateDocument?.(...args)
     },
     [onDuplicateDocument],
   )

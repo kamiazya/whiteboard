@@ -1,4 +1,6 @@
 // @vitest-environment node
+
+import { duplicateDocumentRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -425,6 +427,22 @@ describe('duplicateDocument', () => {
       `${DAEMON_BASE_URL}/api/workspaces/w1/documents/notes/roadmap/duplicate`,
     )
     expect(initArg?.method).toBe('POST')
+    expect(duplicateDocumentRequestSchema.parse(JSON.parse(String(initArg?.body)))).toEqual({})
+  })
+
+  it('carries a request for a copy without comments in the body', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ document: { documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'a-copy' } }),
+      )
+
+    await duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'a', { withoutAnnotations: true })
+
+    const [, initArg] = fetchFn.mock.calls[0]
+    expect(duplicateDocumentRequestSchema.parse(JSON.parse(String(initArg?.body)))).toEqual({
+      withoutAnnotations: true,
+    })
   })
 
   it("rejects on a refusal, surfacing the daemon's reason", async () => {

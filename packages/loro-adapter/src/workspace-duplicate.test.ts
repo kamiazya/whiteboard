@@ -1,6 +1,9 @@
+import type { CommentThread, Proposal } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { readCommentThreads, writeCommentThread } from './comment-threads.js'
 import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
+import { readProposals, writeProposal } from './proposals.js'
 import { duplicateWorkspaceDocument } from './workspace-duplicate.js'
 import {
   createWorkspaceDocumentAtPath,
@@ -101,5 +104,86 @@ describe('duplicateWorkspaceDocument', () => {
         .map((entry) => entry.documentId)
         .sort(),
     ).toEqual([OTHER, SOURCE].sort())
+  })
+})
+
+const THREAD: CommentThread = {
+  id: 't1',
+  anchor: { kind: 'document' },
+  status: 'open',
+  createdAt: '2026-09-02T00:00:00.000Z',
+  messages: [{ id: 'm1', body: 'which release?', author: 'human:yuki' }],
+}
+
+const PROPOSAL: Proposal = {
+  id: 'p1',
+  author: 'process:layout-agent',
+  createdAt: '2026-09-06T00:00:00.000Z',
+  changes: [
+    {
+      id: 'c1',
+      status: 'open',
+      op: 'node.patch',
+      nodeId: 'n1',
+      patch: { x: 4 },
+      assumed: { x: 1 },
+    },
+  ],
+}
+
+function annotatedRoadmap(): LoroDoc {
+  const doc = workspaceWithRoadmap()
+  const source = documentContainers(doc, SOURCE)
+  writeCommentThread(source, THREAD)
+  writeProposal(source, PROPOSAL)
+  doc.commit()
+  return doc
+}
+
+const COPY_INPUT = {
+  sourceDocumentId: SOURCE,
+  documentId: COPY,
+  path: 'notes/roadmap-copy',
+  name: 'Roadmap (copy)',
+}
+
+describe('duplicateWorkspaceDocument and the annotation layer', () => {
+  it('carries the comment threads and proposals by default', () => {
+    const doc = annotatedRoadmap()
+
+    duplicateWorkspaceDocument(doc, COPY_INPUT)
+
+    const copy = documentContainers(doc, COPY)
+    expect(readCommentThreads(copy).map((thread) => thread.id)).toEqual(['t1'])
+    expect(readProposals(copy).map((proposal) => proposal.id)).toEqual(['p1'])
+  })
+
+  it('leaves the threads and proposals behind when asked, and the source keeps them', () => {
+    const doc = annotatedRoadmap()
+
+    const entry = duplicateWorkspaceDocument(doc, { ...COPY_INPUT, withoutAnnotations: true })
+
+    expect(entry).toMatchObject({ documentId: COPY, name: 'Roadmap (copy)' })
+    const copy = documentContainers(doc, COPY)
+    expect(readMarkdownBody(copy)).toBe('# Roadmap\n\nship it')
+    expect(readCommentThreads(copy)).toEqual([])
+    expect(readProposals(copy)).toEqual([])
+    const source = documentContainers(doc, SOURCE)
+    expect(readCommentThreads(source).map((thread) => thread.id)).toEqual(['t1'])
+    expect(readProposals(source).map((proposal) => proposal.id)).toEqual(['p1'])
+  })
+
+  // The pre-threads plane is still read as a fallback, so a copy carrying it
+  // would show the conversation it was meant to leave behind.
+  it('leaves a legacy comments plane behind too', () => {
+    const doc = workspaceWithRoadmap()
+    documentContainers(doc, SOURCE)
+      .getMap('comments')
+      .set('legacy-1', { id: 'legacy-1', x: 1, y: 2, text: 'old' })
+    doc.commit()
+
+    duplicateWorkspaceDocument(doc, { ...COPY_INPUT, withoutAnnotations: true })
+
+    expect(documentContainers(doc, COPY).getMap('comments').size).toBe(0)
   })
 })

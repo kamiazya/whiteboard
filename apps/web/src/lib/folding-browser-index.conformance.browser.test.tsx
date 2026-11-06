@@ -14,8 +14,10 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  readCommentThreads,
   readMarkdownBody,
   resolveWorkspaceDocument,
+  writeCommentThread,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
@@ -136,6 +138,20 @@ function markdownContent(dbName: string) {
     },
     read: async (workspaceId: string, path: string) =>
       readMarkdownBody((await at(workspaceId, path)).containers),
+    comment: async (workspaceId: string, path: string, threadId: string) => {
+      const { doc, containers } = await at(workspaceId, path)
+      writeCommentThread(containers, {
+        id: threadId,
+        anchor: { kind: 'document' },
+        status: 'open',
+        messages: [{ id: `${threadId}-m1`, body: 'a question' }],
+      })
+      await docs.save(workspaceId, doc)
+    },
+    threadIds: async (workspaceId: string, path: string) =>
+      readCommentThreads((await at(workspaceId, path)).containers)
+        .map((thread) => thread.id)
+        .sort(),
   }
 }
 

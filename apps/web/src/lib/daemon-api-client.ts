@@ -6,6 +6,7 @@ import {
   type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
   type DocumentSearchResponse,
+  type DuplicateDocumentRequest,
   type DuplicateDocumentResponse,
   deleteDocumentResponseSchema,
   documentApiUrl,
@@ -293,19 +294,25 @@ export async function getDocumentSnapshot(
 /**
  * Copy a document beside itself, in ONE request: the daemon derives the
  * copy's path and name and writes them with the content as one change, so
- * there is no half-made copy for this side to clean up.
+ * there is no half-made copy for this side to clean up. `request` asks for a
+ * copy without the annotation layer; absent, the copy is whole.
  */
 export function duplicateDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
+  request: DuplicateDocumentRequest = {},
 ): Promise<DuplicateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
     `${daemonBaseUrl}${documentDuplicateApiUrl(workspaceId, path)}`,
     duplicateDocumentResponseSchema,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    },
   )
 }
 

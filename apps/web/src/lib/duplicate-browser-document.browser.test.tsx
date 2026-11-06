@@ -5,8 +5,10 @@
  */
 import {
   documentContainers,
+  readCommentThreads,
   readMarkdownBody,
   resolveWorkspaceDocument,
+  writeCommentThread,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { beforeEach, expect, it } from 'vitest'
@@ -38,9 +40,23 @@ async function seedRoadmap(index: FoldingBrowserIndex): Promise<void> {
   const record = await docs.open(workspaceId)
   const entry = record === null ? null : resolveWorkspaceDocument(record, 'notes/roadmap')
   if (record === null || entry === null) throw new Error('the seeded document is not in the record')
-  writeMarkdownBody(documentContainers(record, entry.documentId), '# Roadmap\n\nship it')
+  const containers = documentContainers(record, entry.documentId)
+  writeMarkdownBody(containers, '# Roadmap\n\nship it')
+  writeCommentThread(containers, {
+    id: 't1',
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'which release?' }],
+  })
   record.commit()
   await docs.save(workspaceId, record)
+}
+
+async function threadIdsAt(path: string): Promise<string[]> {
+  const record = await new BrowserWorkspaceDocs().open(getBrowserWorkspaceId())
+  const entry = record === null ? null : resolveWorkspaceDocument(record, path)
+  if (record === null || entry === null) throw new Error(`no document at ${path}`)
+  return readCommentThreads(documentContainers(record, entry.documentId)).map((t) => t.id)
 }
 
 it('copies beside the source, named after it, with its content and a last-edited time', async () => {
@@ -82,4 +98,22 @@ it('lands two duplicates started together on two paths', async () => {
     'notes/roadmap-copy',
     'notes/roadmap-copy-2',
   ])
+})
+
+it('copies without the comment threads when asked, and the source keeps them', async () => {
+  const index = new FoldingBrowserIndex()
+  await seedRoadmap(index)
+
+  const copy = await duplicateBrowserDocument({
+    index,
+    clock: idbContentClock(),
+    sourcePath: 'notes/roadmap',
+    withoutAnnotations: true,
+  })
+
+  expect(copy).toMatchObject({ path: 'notes/roadmap-copy', name: 'Roadmap (copy)' })
+  const content = await loadDocumentContent(copy.documentId)
+  expect(content === null ? null : readMarkdownBody(content)).toBe('# Roadmap\n\nship it')
+  await expect(threadIdsAt('notes/roadmap-copy')).resolves.toEqual([])
+  await expect(threadIdsAt('notes/roadmap')).resolves.toEqual(['t1'])
 })

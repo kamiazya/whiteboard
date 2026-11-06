@@ -14,7 +14,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   createWorkspaceDocumentAtPath,
+  readCommentThreads,
   readMarkdownBody,
+  writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -109,6 +111,21 @@ const liveMarkdownContent = {
   },
   async read(workspaceId: string, path: string): Promise<string> {
     return readMarkdownBody(await getDoc(workspaceId, path))
+  },
+  async comment(workspaceId: string, path: string, threadId: string): Promise<void> {
+    const doc = await getDoc(workspaceId, path)
+    writeCommentThread(doc, {
+      id: threadId,
+      anchor: { kind: 'document' },
+      status: 'open',
+      messages: [{ id: `${threadId}-m1`, body: 'a question' }],
+    })
+    await saveDocument(workspaceId, path, doc, { kind: 'markdown', overwrite: true })
+  },
+  async threadIds(workspaceId: string, path: string): Promise<string[]> {
+    return readCommentThreads(await getDoc(workspaceId, path))
+      .map((thread) => thread.id)
+      .sort()
   },
 }
 

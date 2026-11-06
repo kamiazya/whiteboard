@@ -3,7 +3,16 @@ import { z } from 'zod'
 import type { DocumentEntry, DocumentIndex } from './document-index.js'
 
 export const duplicateDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
+  .object({
+    workspaceId: workspaceIdSchema,
+    path: documentPathSchema,
+    /**
+     * Copy the content alone: the copy starts with no comment threads and no
+     * open proposals (the annotation layer, ADR-0026 / ADR-0029), while the
+     * source keeps all of them. Absent copies the whole document.
+     */
+    withoutAnnotations: z.boolean().optional(),
+  })
   .strict()
 export type DuplicateDocumentInput = z.infer<typeof duplicateDocumentInputSchema>
 

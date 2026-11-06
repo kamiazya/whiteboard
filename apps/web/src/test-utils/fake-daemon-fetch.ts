@@ -20,7 +20,9 @@
 
 import {
   createWorkspaceRequestSchema,
+  type DuplicateDocumentRequest,
   deleteDocumentResponseSchema,
+  duplicateDocumentRequestSchema,
   duplicateDocumentResponseSchema,
   listDocumentsResponseSchema,
   listTrashResponseSchema,
@@ -109,7 +111,11 @@ export interface FakeDaemonRoutes {
    * Return a Response (or a pending one) to override the default: the copy a
    * keeper makes beside a listed source, or 404 for a path the list lacks.
    */
-  onDuplicateDocument?: (workspaceId: string, path: string) => Overriding
+  onDuplicateDocument?: (
+    workspaceId: string,
+    path: string,
+    request: DuplicateDocumentRequest,
+  ) => Overriding
   onSetDocumentName?: (workspaceId: string, path: string, name: string) => void
   /** The OKF the preview route answers, by document id. */
   okfByDocumentId?: Record<string, DocumentOkfV1Response>
@@ -244,6 +250,11 @@ function setDocumentName(
   )
 }
 
+/** The duplicate's options as the route reads them: an absent body asks for a whole copy. */
+function duplicateRequestOf(init: RequestInit | undefined): DuplicateDocumentRequest {
+  return duplicateDocumentRequestSchema.parse(init?.body === undefined ? {} : parseBody(init))
+}
+
 /** The copy the daemon would make, by the rules both keepers share. */
 function duplicateDocument(routes: FakeDaemonRoutes, workspaceId: string, path: string): Response {
   const listed = routes.documentsByWorkspace[workspaceId]
@@ -369,8 +380,8 @@ const ROUTES: readonly Route[] = [
   {
     pattern: DUPLICATE,
     method: 'POST',
-    handle: (routes, m) =>
-      overrideOf(routes.onDuplicateDocument?.(seg(m, 1), seg(m, 2))) ??
+    handle: (routes, m, init) =>
+      overrideOf(routes.onDuplicateDocument?.(seg(m, 1), seg(m, 2), duplicateRequestOf(init))) ??
       duplicateDocument(routes, seg(m, 1), seg(m, 2)),
   },
 ]
