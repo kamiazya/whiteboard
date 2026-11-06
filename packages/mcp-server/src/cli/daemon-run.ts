@@ -19,7 +19,6 @@ import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { warnWhenDataDirIsTempFallback } from '../server/data-dir-fallback.js'
 import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
-import { purgeLegacyWebOriginTrustFile } from '../server/purge-legacy-trust-file.js'
 import { resolveReplicaEnv } from '../server/replica-env.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import { armLocalDaemonTail } from '../server/store/workspace-tail.js'
@@ -75,25 +74,6 @@ function installDaemonSignalHandlers(close: () => Promise<void>): void {
   }
   process.once('SIGTERM', handle)
   process.once('SIGINT', handle)
-}
-
-/**
- * Best-effort, on every startup: the stale silent-reconnect credential file
- * holds enrolled public keys and hashed legacy secrets for a feature that no
- * longer has a server half, and its outcome must never decide whether the
- * daemon starts. `purgeLegacyWebOriginTrustFile` already swallows its own
- * expected failures (ENOENT, permission errors); this catch is
- * defense-in-depth against any other rejection reaching the caller.
- */
-async function purgeLegacyTrustFile(dataDir: string): Promise<void> {
-  try {
-    await purgeLegacyWebOriginTrustFile(dataDir)
-  } catch (err) {
-    getLogger('daemon-startup').warning(
-      { err: err as Error },
-      'legacy reconnect trust-file purge failed unexpectedly',
-    )
-  }
 }
 
 /** A refusal an operator can fix by changing one setting. */
@@ -231,8 +211,6 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   // Read back through the seam (not options.dataDir) so the registry and the
   // startup lock share the same resolved-absolute path the stores will use.
   const dataDir = getDataDir()
-
-  await purgeLegacyTrustFile(dataDir)
 
   const refusal = startupEnvRefusal(options.env ?? process.env, options)
   if (refusal !== null) return refusal.outcome

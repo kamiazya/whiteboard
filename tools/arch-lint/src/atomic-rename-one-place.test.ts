@@ -45,10 +45,6 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
     calls: 1,
     why: "the synchronous secret writer; it fsyncs before the rename and syncs the directory through the helper module's syncDirectorySync",
   },
-  'packages/mcp-server/src/server/tenant/data-layout.ts': {
-    calls: 1,
-    why: 'moves a whole legacy directory into the tenant layout; no file data is staged',
-  },
   'packages/mcp-server/src/server/store/backup-pass.ts': {
     calls: 1,
     why: 'seals a finished backup by renaming its staging DIRECTORY; syncTree fsyncs every file and directory in it before, and the parent is synced after',
@@ -162,6 +158,6 @@ describe('a file is renamed into place in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(5)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
   })
 })

@@ -178,7 +178,12 @@ points at (credentials removed), never an assumed `~/.whiteboard`.
   Versions, comments and uploaded images do not travel in those files. With
   nothing to keep, move the data directory aside and restart. A backup taken
   by the earlier release (`whiteboard server backup`) restores the old
-  database and is refused the same way, so it is not a way across.
+  database and is refused the same way, so it is not a way across. The same
+  refusal, with the same message, answers a data directory still in a layout
+  an earlier release wrote — a flat `blobs/` or `<workspaceId>/files/` at its
+  top (from before tenants), or the retired `trusted-web-origins.json` /
+  `.lock` — found before the database is opened, so nothing in it is moved,
+  removed or created.
 - **The database was migrated by a newer release.** It recorded a migration
   after the last one this build publishes, so this build is the older side.
   Upgrade `@kamiazya/whiteboard-mcp` (or rebuild a current checkout) and keep

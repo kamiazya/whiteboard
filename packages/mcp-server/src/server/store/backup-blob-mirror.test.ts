@@ -23,6 +23,7 @@ import {
   mirrorBlobsIntoBackup,
   readBackupBlobManifest,
 } from './backup-blob-mirror.js'
+import { IncompatibleDatabaseError } from './db/incompatible-database.js'
 
 let root: string
 let dataDir: string
@@ -104,29 +105,20 @@ describe('the backup blob mirror', () => {
    * made the old shape slower as the data grew. Only an untouched file proves
    * the skip happened.
    */
-  it('reads a manifest written before tenants existed as the tenant that keeper had', async () => {
-    // v2 recorded one keeper's blobs with no tenant. Read as "no tenant at
-    // all" a restore would put nothing back; read as the self-host tenant it
-    // puts them where that keeper kept them.
+  // v2 recorded one keeper's blobs with no tenant. This build reads no older
+  // shape, and a backup carrying one restores a database it refuses too, so
+  // the manifest is refused with the same message, naming the backup.
+  it('refuses a manifest an earlier release wrote, naming the export and re-import path', async () => {
     const backupDir = join(backupRoot, '2026-01-01T00-00-00.000Z')
     await mkdir(backupDir, { recursive: true })
-    const digest = 'a'.repeat(64)
     await writeFile(
       join(backupDir, 'blobs.json'),
-      JSON.stringify({
-        schemaVersion: 2,
-        blobs: [digest],
-        files: { '01JWORKSPACE00000000000000/versions/v1.png': 'b'.repeat(64) },
-        mirror: 'parent',
-      }),
+      JSON.stringify({ schemaVersion: 2, blobs: ['a'.repeat(64)], files: {}, mirror: 'parent' }),
     )
-    const refs = await readBackupBlobManifest(backupDir)
-    expect(refs?.mirror).toBe('parent')
-    expect(Object.keys(refs?.tenants ?? {})).toEqual([SELF_HOST_TENANT_ID])
-    expect(refs?.tenants[SELF_HOST_TENANT_ID]?.blobs).toEqual(new Set([digest]))
-    expect(refs?.tenants[SELF_HOST_TENANT_ID]?.files).toEqual({
-      '01JWORKSPACE00000000000000/versions/v1.png': 'b'.repeat(64),
-    })
+    const err = await readBackupBlobManifest(backupDir).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    expect((err as Error).message).toContain(backupDir)
+    expect((err as Error).message).toContain('earlier release')
   })
 
   it('mirrors every tenant, and records which tenant each blob belongs to', async () => {
@@ -509,15 +501,6 @@ describe('the backup blob mirror', () => {
           tenants: { 'self-host': { blobs: [], files: { [key]: digest } } },
         })
         await expect(readBackupBlobManifest(current)).rejects.toBeInstanceOf(
-          BackupManifestUnusableError,
-        )
-        const legacy = join(backupRoot, '2026-01-05T00-00-00.000Z')
-        await mkdir(legacy, { recursive: true })
-        await writeFile(
-          join(legacy, 'blobs.json'),
-          JSON.stringify({ schemaVersion: 2, mirror: 'self', blobs: [], files: { [key]: digest } }),
-        )
-        await expect(readBackupBlobManifest(legacy)).rejects.toBeInstanceOf(
           BackupManifestUnusableError,
         )
       })

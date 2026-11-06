@@ -6,6 +6,10 @@ import { restoreDataDir } from '../server/backup-restore.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
+import {
+  IncompatibleDatabaseError,
+  retiredStorageMessage,
+} from '../server/store/db/incompatible-database.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { makeWritableByOthers } from '../shared/test-utils/writable-by-others.js'
 import { serverRestoreOutputSchema } from './operator-json.js'
@@ -144,6 +148,32 @@ describe('runServerRestore', () => {
       expect(outcome.message).not.toMatch(new RegExp(tmpRoot.replace(/[/\\]/g, '.')))
       expect(outcome.message).not.toMatch(/not empty/)
       expect(outcome.message).toBe('restore failed')
+    }
+  })
+
+  // A backup an earlier release wrote restores a database boot refuses, so
+  // the restore refuses first and says how to carry the documents across —
+  // still without naming a path.
+  it('error: a backup an earlier release wrote is refused with the way across, no path leak', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(backupDir)
+    await writeFile(join(backupDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: vi.fn(async () => {
+        throw new IncompatibleDatabaseError(retiredStorageMessage(`The backup ${backupDir}`))
+      }),
+    })
+
+    expect(outcome.kind).toBe('error')
+    if (outcome.kind === 'error') {
+      expect(outcome.message).not.toMatch(new RegExp(tmpRoot.replace(/[/\\]/g, '.')))
+      expect(outcome.message).toContain('earlier release')
+      expect(outcome.message).toContain('Import file')
     }
   })
 
