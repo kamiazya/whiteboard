@@ -8,7 +8,7 @@ import { nudgeSettledMessage } from './canvas-announcement-text.js'
  * than key auto-repeat's gap and a deliberate run of presses, short enough
  * that the answer still reads as the answer to them.
  */
-export const NUDGE_SETTLE_MS = 700
+const NUDGE_SETTLE_MS = 700
 
 interface NudgeRun {
   readonly ids: readonly string[]
