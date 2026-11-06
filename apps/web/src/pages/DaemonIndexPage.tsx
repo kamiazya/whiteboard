@@ -62,7 +62,7 @@ function workspaceOpenedByDefault<W extends { readonly segment?: string }>(
   return workspaces.find((w) => w.segment === DAEMON_DEFAULT_SEGMENT) ?? workspaces[0]
 }
 
-// daemon-api-client errors are already sanitized (Problem Details title or a
+// daemon-api-client errors are already sanitized (the daemon's message or a
 // generic status message), so one is safe to show — except a 404, which on a
 // create is the WORKSPACE, and whose reason is written for an MCP caller: it
 // names a tool parameter.

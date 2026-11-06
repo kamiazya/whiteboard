@@ -11,7 +11,7 @@ import type { LoroDoc, VersionVector } from 'loro-crdt'
 import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
-import { importWithinSyncLimits } from './apply-document-update-limit.js'
+import { importWithinSyncLimits } from './sync-update-limit.js'
 import { isSyncWriteRefusal } from './sync-write-refusals.js'
 
 const log = getLogger('workspace-document')
@@ -112,7 +112,7 @@ export async function applyWorkspaceDocumentUpdate(
     const target = droppableRecord(deps, workspaceId)
     const since = doc.oplogVersion()
     try {
-      importWithinSyncLimits(doc, update, target, { workspaceRecord: true })
+      importWithinSyncLimits(doc, update, target)
     } catch (err: unknown) {
       if (isSyncWriteRefusal(err)) {
         throw err

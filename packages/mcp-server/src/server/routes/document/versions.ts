@@ -59,7 +59,6 @@ function saveVersionIssueMessage(error: z.ZodError): string {
 
 /** An empty body is valid — a version needs neither a label nor an operator. */
 const SAVE_VERSION_BODY: ReadJsonBodyOptions = {
-  voice: 'code',
   optional: true,
   refuseShape: (error) => errorBody('invalid_body', saveVersionIssueMessage(error)),
 }

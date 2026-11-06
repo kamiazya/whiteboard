@@ -330,8 +330,8 @@ describe('trash routes', () => {
     })
     expect(restore.status).toBe(404)
     // Said in the words the browser keeper throws for the same refusal.
-    expect(((await restore.json()) as { title: string }).title).toBe(
-      trashRestoreRefusal(doomedId as string, null).title,
+    expect(((await restore.json()) as { message: string }).message).toBe(
+      trashRestoreRefusal(doomedId as string, null).message,
     )
     // Only the named entry went.
     const keptRestore = await app.request(`/api/workspaces/${WS}/trash/${keptId}/restore`, {
@@ -362,8 +362,8 @@ describe('trash routes', () => {
     })
 
     expect(again.status).toBe(409)
-    expect(((await again.json()) as { title: string }).title).toBe(
-      trashRestoreRefusal(documentId, 'twice').title,
+    expect(((await again.json()) as { message: string }).message).toBe(
+      trashRestoreRefusal(documentId, 'twice').message,
     )
     expect(await resolveDocumentIdAtPath(WS, 'twice')).toBe(documentId)
   })
@@ -423,8 +423,8 @@ describe('trash routes', () => {
     const live = await app.request(`/api/workspaces/${WS}/trash/${liveId}`, { method: 'DELETE' })
 
     expect(live.status).toBe(404)
-    expect(((await live.json()) as { title: string }).title).toBe(
-      trashPurgeRefusal(liveId as string).title,
+    expect(((await live.json()) as { message: string }).message).toBe(
+      trashPurgeRefusal(liveId as string).message,
     )
     expect(await resolveDocumentIdAtPath(WS, 'live')).toBe(liveId)
     expect(await versionRowDocumentIds(WS)).toEqual([liveId])

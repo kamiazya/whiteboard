@@ -16,6 +16,7 @@ import {
   commentMessageSchema,
   commentThreadSchema,
   compareMessages,
+  movedAnchor,
   type SpatialAnchor,
   spatialAnchorRect,
   TEXT_ANCHOR_CONTEXT_MAX_CHARS,
@@ -562,5 +563,36 @@ describe('canvasCommentsOf', () => {
     })
     const [comment] = canvasCommentsOf([passage], [node, { ...node, x: 900 }])
     expect(comment?.x).toBe(110)
+  })
+})
+
+describe('movedAnchor', () => {
+  const to = { x: 40, y: 50 }
+  it('moves a point, a node and an edge anchor, keeping what each names', () => {
+    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2 }, to)).toEqual({
+      kind: 'spatial',
+      x: 40,
+      y: 50,
+    })
+    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2, nodeId: 'n1' }, to)).toEqual({
+      kind: 'spatial',
+      x: 40,
+      y: 50,
+      nodeId: 'n1',
+    })
+    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2, edgeId: 'e1' }, to)).toEqual({
+      kind: 'spatial',
+      x: 40,
+      y: 50,
+      edgeId: 'e1',
+    })
+  })
+  it('leaves a node set, a region and a non-spatial anchor where they are', () => {
+    const set = { kind: 'spatial', x: 1, y: 2, nodeIds: ['n1', 'n2'] } as const
+    const region = { kind: 'spatial', x: 1, y: 2, width: 10, height: 10 } as const
+    const document = { kind: 'document' } as const
+    expect(movedAnchor(set, to)).toBe(set)
+    expect(movedAnchor(region, to)).toBe(region)
+    expect(movedAnchor(document, to)).toBe(document)
   })
 })

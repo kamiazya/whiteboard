@@ -28,7 +28,19 @@ export function unreadableSnapshot(
     return 'corrupt-snapshot'
   }
   const content = contentOf(arriving)
-  if (content === null) return null
+  return content === null ? null : unreadableContent(content)
+}
+
+/**
+ * The content half of the judgement, for the document a session already
+ * serves: a LIVE update from an older peer can bring a retired shape in after
+ * load, and the readers it would reach run inside the import subscription,
+ * where a throw escapes as an unhandled rejection with the stale canvas still
+ * up.
+ */
+export function unreadableContent(
+  content: DocumentContainers,
+): 'retired-comment-plane' | 'retired-stored-shape' | null {
   if (holdsRetiredCommentPlane(content)) return 'retired-comment-plane'
   if (retiredStoredShapeIn(content) !== null) return 'retired-stored-shape'
   return null

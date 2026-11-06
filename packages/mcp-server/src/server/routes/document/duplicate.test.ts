@@ -121,7 +121,7 @@ describe('POST …/documents/<path>/duplicate', () => {
     const res = await app.request(documentDuplicateApiUrl(WS, deep), { method: 'POST' })
 
     expect(res.status).toBe(409)
-    expect(((await res.json()) as { title: string }).title).toMatch(/no room beside/)
+    expect(((await res.json()) as { message: string }).message).toMatch(/no room beside/)
     const listed = await app.request(`/api/workspaces/${WS}/documents`)
     const { documents } = (await listed.json()) as { documents: { path: string }[] }
     expect(documents.map((row) => row.path)).toEqual([deep])

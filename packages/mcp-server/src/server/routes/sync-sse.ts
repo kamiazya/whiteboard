@@ -206,7 +206,7 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): boolea
   return true
 }
 
-const SYNC_BODY: ReadJsonBodyOptions = { voice: 'code', refuseShape: invalidRequestBody }
+const SYNC_BODY: ReadJsonBodyOptions = { refuseShape: invalidRequestBody }
 
 /**
  * The stream a sync POST addresses, or the refusal to answer instead.

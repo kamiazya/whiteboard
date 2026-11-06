@@ -8,6 +8,7 @@ import {
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 vi.mock('../../config.js', () => ({
@@ -56,22 +57,14 @@ function nodesModelDocUpdate(nodeIds: string[]): Uint8Array<ArrayBuffer> {
 // unless the keeper bounds merge points itself.
 describe('restore points stay bounded', () => {
   async function seedEditedCanvas(app: ReturnType<typeof createRouter>): Promise<string> {
-    await app.request('/api/w/session1/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: nodesModelDocUpdate(['v1-node']),
-    })
+    await writeDocumentUpdate(serverDeps, 'session1', 'canvas-a', nodesModelDocUpdate(['v1-node']))
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
     })
     const { version } = (await saveRes.json()) as { version: { id: string } }
-    await app.request('/api/w/session1/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: nodesModelDocUpdate(['after-v1']),
-    })
+    await writeDocumentUpdate(serverDeps, 'session1', 'canvas-a', nodesModelDocUpdate(['after-v1']))
     // The newest version holds the edit, so restoring v1 really changes the
     // document rather than restating what the history already records.
     await app.request('/api/workspaces/session1/documents/canvas-a/versions', {

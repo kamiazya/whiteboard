@@ -5,9 +5,9 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import {
-  documentSnapshotUrl,
   documentSyncKey,
-  documentUpdateUrl,
+  workspaceDocSnapshotUrl,
+  workspaceDocUpdateUrl,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
 } from './sync-key.js'
@@ -35,21 +35,12 @@ describe('a per-document sync key names the workspace it was built from', () => 
     },
   )
 
-  // A dot segment is no document path, and the URL builders refuse one.
-  const addressablePathArb = pathArb.filter((path) =>
-    path.split('/').every((segment) => segment !== '.' && segment !== '..'),
-  )
-
-  fcTest.prop([handleArb, addressablePathArb], withDefaults())(
-    'the update and snapshot routes address the same handle the key was built from',
+  fcTest.prop([handleArb, pathArb], withDefaults())(
+    'no binary route is addressed by a per-document key',
     (handle, path) => {
       const key = documentSyncKey(handle, path)
-      expect(documentUpdateUrl('http://d', key)).toMatch(
-        new RegExp(`^http://d/api/w/${handle}/document/.+/update$`),
-      )
-      expect(documentSnapshotUrl('http://d', key)).toMatch(
-        new RegExp(`^http://d/api/w/${handle}/document/.+/snapshot$`),
-      )
+      expect(workspaceDocUpdateUrl('http://d', key)).toBeNull()
+      expect(workspaceDocSnapshotUrl('http://d', key)).toBeNull()
     },
   )
 })

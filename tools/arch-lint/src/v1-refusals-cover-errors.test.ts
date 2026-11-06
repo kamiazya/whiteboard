@@ -83,8 +83,6 @@ const EXEMPT: Readonly<Record<string, string>> = {
   NotASpatialDocumentError: 'raised by the render tools on a document that is not spatial',
   TooManyVersionsError:
     'raised by a manual version save — the daemon versions route and wb_version_save; /api/v1 saves no version',
-  DocumentCreationRefusedError:
-    'raised only by the per-document sync update’s lazy create, a daemon route; /api/v1 creates documents by POST …/documents',
   FragmentNotFoundError: CANVAS_TOOLS,
   ThreadEditError: CANVAS_TOOLS,
   CanvasEditError: CANVAS_TOOLS,
@@ -159,8 +157,6 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
   DocumentKindChangedError:
     "raised by the sync update operations on a CRDT update; /api/v1 takes no CRDT bytes, and its writes set a document's kind only at creation",
-  RootNoDocumentHoldsError:
-    'raised by applyDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes content through the bridge, which names only the content containers',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

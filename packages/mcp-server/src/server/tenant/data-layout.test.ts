@@ -11,8 +11,8 @@ import {
   isAnyTenantBlobsPath,
   isBlobShardName,
   listTenants,
-  moveLegacyDataDirUnderTenant,
   parseBlobShard,
+  retiredLayoutEntries,
   storeAreaOf,
   tenantRoot,
   workspaceFilesDir,
@@ -71,67 +71,38 @@ describe('a tenant own files, beside its blobs', () => {
   })
 })
 
-describe('moving a data directory written before tenants existed', () => {
-  async function seedLegacy(): Promise<void> {
+describe('a data directory in a layout this build no longer reads', () => {
+  it('names the flat blob store, a flat workspace files directory and the retired trust store', async () => {
     await mkdir(join(dataDir, 'blobs', 'ab'), { recursive: true })
     await writeFile(join(dataDir, 'blobs', 'ab', 'cdef'), 'blob-bytes')
     await mkdir(join(dataDir, 'ws-1', 'files'), { recursive: true })
-    await writeFile(join(dataDir, 'ws-1', 'files', 'a.png'), 'file-bytes')
-    // Keeper-wide neighbours that must NOT move.
-    await writeFile(join(dataDir, 'whiteboard.db'), 'db')
-    await writeFile(join(dataDir, 'daemon-identity.json'), '{}')
-    await mkdir(join(dataDir, 'models'), { recursive: true })
-  }
+    await writeFile(join(dataDir, 'trusted-web-origins.json'), '{}')
+    await mkdir(join(dataDir, 'trusted-web-origins.lock'))
 
-  it('moves blobs and workspace files under the tenant, and leaves the keeper own files', async () => {
-    await seedLegacy()
-    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF)
-    expect(moved).toEqual({ blobs: true, workspaces: ['ws-1'] })
-    expect(await readdir(join(dataDir, 'tenants', SELF, 'blobs', 'ab'))).toEqual(['cdef'])
-    expect(await readdir(workspaceFilesDir(dataDir, SELF, 'ws-1'))).toEqual(['a.png'])
-    expect((await readdir(dataDir)).sort()).toEqual([
-      'daemon-identity.json',
-      'models',
-      'tenants',
-      'whiteboard.db',
+    expect(await retiredLayoutEntries(dataDir)).toEqual([
+      'blobs',
+      'trusted-web-origins.json',
+      'trusted-web-origins.lock',
+      join('ws-1', 'files'),
     ])
+    // Found, never moved or removed: the caller refuses, and the person decides.
+    expect(await readdir(join(dataDir, 'blobs', 'ab'))).toEqual(['cdef'])
+    expect(await readdir(join(dataDir, 'ws-1'))).toEqual(['files'])
   })
 
-  it.each([
-    ['models', 'models'],
-    ['the staging area', PENDING_WRITES_DIRNAME],
-    ['tenants', 'tenants'],
-  ])('leaves %s alone even when it holds a directory named files', async (_name, dirname) => {
-    await mkdir(join(dataDir, dirname, 'files'), { recursive: true })
-
-    expect(await moveLegacyDataDirUnderTenant(dataDir, SELF)).toEqual({
-      blobs: false,
-      workspaces: [],
-    })
-    expect(await readdir(join(dataDir, dirname))).toEqual(['files'])
-    expect(await readdir(dataDir)).toEqual([dirname])
-  })
-
-  it('is a no-op the second time, so a restart does not move a live tenant back', async () => {
-    await seedLegacy()
-    await moveLegacyDataDirUnderTenant(dataDir, SELF)
-    expect(await moveLegacyDataDirUnderTenant(dataDir, SELF)).toEqual({
-      blobs: false,
-      workspaces: [],
-    })
-    expect(await readdir(join(dataDir, 'tenants', SELF, 'blobs', 'ab'))).toEqual(['cdef'])
-  })
-
-  it('leaves a legacy workspace dir alone when the tenant already holds that workspace', async () => {
-    await seedLegacy()
+  it('finds nothing in the current layout, beside the keeper own files and an export', async () => {
+    await mkdir(join(dataDir, 'tenants', SELF, 'blobs', 'ab'), { recursive: true })
     await mkdir(workspaceFilesDir(dataDir, SELF, 'ws-1'), { recursive: true })
-    await writeFile(join(workspaceFilesDir(dataDir, SELF, 'ws-1'), 'kept.png'), 'newer')
-    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF)
-    expect(moved.workspaces).toEqual([])
-    // The tenant's own copy stands, and the legacy directory is still there to
-    // look at rather than merged blindly.
-    expect(await readdir(workspaceFilesDir(dataDir, SELF, 'ws-1'))).toEqual(['kept.png'])
-    expect(await readdir(join(dataDir, 'ws-1', 'files'))).toEqual(['a.png'])
+    await mkdir(join(dataDir, 'ws-1', 'exports'), { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'db')
+    await mkdir(join(dataDir, 'models', 'files'), { recursive: true })
+    await mkdir(join(dataDir, PENDING_WRITES_DIRNAME, 'files'), { recursive: true })
+
+    expect(await retiredLayoutEntries(dataDir)).toEqual([])
+  })
+
+  it('finds nothing in a data directory that does not exist yet', async () => {
+    expect(await retiredLayoutEntries(join(dataDir, 'not-yet'))).toEqual([])
   })
 })
 

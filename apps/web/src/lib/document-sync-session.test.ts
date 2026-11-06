@@ -767,6 +767,48 @@ describe('createDocumentSyncSession', () => {
     expect(session.getCanvas().nodes).toEqual([])
   })
 
+  it.each([
+    {
+      reason: 'retired-comment-plane',
+      write: (peer: LoroDoc) =>
+        peer.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' }),
+    },
+    {
+      reason: 'retired-stored-shape',
+      write: (peer: LoroDoc) =>
+        peer
+          .getMap('nodes')
+          .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 }),
+    },
+  ])('refuses a LIVE update that brings $reason in, instead of throwing out of the import', async ({
+    reason,
+    write,
+  }) => {
+    // Only the snapshot was guarded; an older peer syncing a retired shape
+    // after load reached the readers inside the import subscription, and
+    // the throw escaped it as an unhandled rejection while the session kept
+    // serving the stale canvas.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const snapshot = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshot)
+    expect(deps.onBackendError).not.toHaveBeenCalled()
+    const peer = new LoroDoc()
+    peer.import(snapshot)
+    const from = peer.version()
+    write(peer)
+    peer.commit()
+
+    backend._ctrl.handlers!.onRemoteUpdate(peer.export({ mode: 'update', from }))
+
+    // The import subscription delivers on a later tick; a throw there is an
+    // unhandled rejection the test runner reports, not a return value.
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith(reason))
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+  })
+
   it('a thread command is published at once, before the debounced commit lands', async () => {
     // The layer is a plane beside the canvas, so no canvas value carries a
     // new pin: the session publishes the conversations the command leaves

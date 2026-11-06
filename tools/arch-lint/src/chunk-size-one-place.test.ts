@@ -20,14 +20,14 @@
  * declares and passes its own, and this scan is about the writers of the
  * EXISTING planes agreeing with each other, never about capping the helper.
  *
- * Four declarations are allowlisted, in three kinds, and none of them is a
+ * Three declarations are allowlisted, in three kinds, and none of them is a
  * writer that picked its own production value. A fifth is a test seed that
  * states the production size by literal, listed as the debt it is.
  *
- * Two are frozen historical values rather than debt: a migration's numbers
- * are the ones it RAN with, and reading a live constant would retroactively
- * change what an already-migrated record claims about itself, which
- * `browser-idb-upgrades.ts` says at its own declaration. One is a
+ * One is a frozen historical value rather than debt: an upgrade step's
+ * numbers are the ones it RAN with, and reading a live constant would
+ * retroactively change what an already-migrated record claims about itself,
+ * which `browser-idb-upgrades.ts` says at its own declaration. One is a
  * deliberate INVALID value, `writeUnreadableRecord`'s `-1`, so the
  * conformance suite can put a store into the state its own reader refuses.
  * One is deliberately TINY, the conformance suite's own 4 bytes, because at
@@ -105,10 +105,6 @@ interface AllowedDeclaration {
 }
 
 const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': {
-    declarations: [{ text: 'IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
-    reason: 'a migration replays with the value it originally wrote; its own comment says so',
-  },
   'apps/web/src/lib/browser-idb-upgrades.ts': {
     declarations: [{ text: 'LEGACY_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
     reason:
@@ -258,7 +254,7 @@ describe('the snapshot chunk size is written in one place', () => {
     }
   })
 
-  it('the allowlist holds exactly the four classified declarations', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
+  it('the allowlist holds exactly the three classified declarations', () => {
+    expect(Object.keys(ALLOWLIST)).toHaveLength(3)
   })
 })

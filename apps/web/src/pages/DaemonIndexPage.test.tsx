@@ -182,7 +182,7 @@ describe('DaemonIndexPage', () => {
         if (workspaceId !== 'ws-a') return undefined
         // ws-a is gone; the workspace list the page already holds is stale.
         routes.workspaces = [{ workspaceId: 'ws-b' }]
-        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+        return jsonResponse({ error: 'refused', message: 'Workspace "ws-a" not found' }, 404)
       },
     }
     installFakeDaemonFetch(routes)
@@ -222,7 +222,7 @@ describe('DaemonIndexPage', () => {
       onListDocuments: (workspaceId) => {
         if (workspaceId !== 'ws-a') return undefined
         staleFetches += 1
-        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+        return jsonResponse({ error: 'refused', message: 'Workspace "ws-a" not found' }, 404)
       },
     }
     installFakeDaemonFetch(routes)
@@ -259,7 +259,7 @@ describe('DaemonIndexPage', () => {
         // Only the re-list is held open; the first workspaces GET already ran.
         routes.delayWorkspaces = relistGate
         routes.workspaces = [{ workspaceId: 'ws-b' }]
-        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+        return jsonResponse({ error: 'refused', message: 'Workspace "ws-a" not found' }, 404)
       },
     }
     installFakeDaemonFetch(routes)
@@ -943,7 +943,7 @@ describe('DaemonIndexPage', () => {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      onDuplicateDocument: () => jsonResponse({ title: 'Not found' }, 404),
+      onDuplicateDocument: () => jsonResponse({ error: 'refused', message: 'Not found' }, 404),
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await selectCard('Alpha')
@@ -1191,7 +1191,9 @@ describe('DaemonIndexPage', () => {
         const path = JSON.parse(String(init?.body ?? '{}')).path as string
         created.push(path)
         if (serverPaths.includes(path)) {
-          return Promise.resolve(jsonResponse({ title: `Document "${path}" already exists` }, 409))
+          return Promise.resolve(
+            jsonResponse({ error: 'refused', message: `Document "${path}" already exists` }, 409),
+          )
         }
         serverPaths = [...serverPaths, path]
         return Promise.resolve(
@@ -1447,7 +1449,7 @@ describe('DaemonIndexPage', () => {
           return rows
         },
       },
-      onDeleteDocument: () => jsonResponse({ title: 'Canvas not found' }, 404),
+      onDeleteDocument: () => jsonResponse({ error: 'refused', message: 'Canvas not found' }, 404),
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
@@ -1887,7 +1889,8 @@ describe('the workspace names the page', () => {
       },
       onDeleteDocument: (_ws, path) => {
         attempts.push(path)
-        if (path === 'beta' && betaFails) return jsonResponse({ title: 'nope' }, 500)
+        if (path === 'beta' && betaFails)
+          return jsonResponse({ error: 'refused', message: 'nope' }, 500)
         rows = rows.filter((r) => r.path !== path)
         return undefined
       },
@@ -1941,7 +1944,7 @@ describe('the workspace names the page', () => {
         },
       },
       onDeleteDocument: (_ws, path) => {
-        if (path === 'beta') return jsonResponse({ title: 'nope' }, 500)
+        if (path === 'beta') return jsonResponse({ error: 'refused', message: 'nope' }, 500)
         rows = rows.filter((r) => r.path !== path)
         return undefined
       },
@@ -1989,7 +1992,7 @@ describe('the workspace names the page', () => {
         },
       },
       onDeleteDocument: (_ws, path) => {
-        if (path === 'beta') return jsonResponse({ title: 'not found' }, 404)
+        if (path === 'beta') return jsonResponse({ error: 'refused', message: 'not found' }, 404)
         rows = rows.filter((r) => r.path !== path)
         return undefined
       },

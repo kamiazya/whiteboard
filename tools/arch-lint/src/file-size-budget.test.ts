@@ -1,6 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { rustSourceFiles } from './rust-source.js'
 import {
   isExcludedPath,
   REPO_ROOT,
@@ -576,6 +578,69 @@ describe('file-size budget: scripts, same 800-line budget, same shrink-only cont
         headroom: 'holds no script entry whose ceiling stands far above its reading — lower it',
       },
       unlisted: ({ key, lines }) => `${key}: ${lines} lines`,
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
+  })
+})
+
+/**
+ * Rust under `crates/`, on the SAME 800-line budget and the same shrink-only
+ * contract. The migration moves TypeScript into crates file by file, and a
+ * ledger that read only `.ts` would let a ported module land at any size
+ * while this file reported a clean tree. Tests share the ledger: a Rust test
+ * module sits in the file it tests (`#[cfg(test)] mod tests`), so file and
+ * test are one subject here. Empty when it landed — the largest crate file
+ * was 515 lines.
+ */
+const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {}
+
+/** The over-budget Rust files a ledger does not name, under `repoRoot`'s `crates/`. */
+function unlistedRustFiles(repoRoot: string, ledger: Readonly<Record<string, number>>): string[] {
+  return rustSourceFiles(repoRoot).filter(
+    (key) => lineCount(join(repoRoot, key)) > LINE_BUDGET && !(key in ledger),
+  )
+}
+
+describe('file-size budget: Rust, same 800-line budget, same shrink-only contract', () => {
+  const rustFiles = rustSourceFiles()
+
+  // A walk that stopped finding `.rs` files would pass every assertion below
+  // over an empty set.
+  it('reaches the crates this repo has', () => {
+    expect(rustFiles.length).toBeGreaterThan(10)
+    expect(rustFiles).toContain('crates/xtask/src/arch_map.rs')
+  })
+
+  it('flags an over-budget crate file and passes one at the budget', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rust-file-size-'))
+    try {
+      mkdirSync(join(root, 'crates/core/x/src'), { recursive: true })
+      writeFileSync(join(root, 'crates/core/x/src/big.rs'), '//\n'.repeat(LINE_BUDGET + 1))
+      writeFileSync(join(root, 'crates/core/x/src/fits.rs'), '//\n'.repeat(LINE_BUDGET))
+      expect(unlistedRustFiles(root, {})).toEqual(['crates/core/x/src/big.rs'])
+      expect(unlistedRustFiles(root, { 'crates/core/x/src/big.rs': 801 })).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: rustFiles.map((key) => ({ key, lines: lineCount(join(REPO_ROOT, key)) })),
+    ledgers: [RUST_FILE_SIZE_GRANDFATHER],
+    ledgerOf: () => RUST_FILE_SIZE_GRANDFATHER,
+    readingOf,
+    wording: {
+      titles: {
+        unlisted: 'flags no over-budget Rust file outside RUST_FILE_SIZE_GRANDFATHER',
+        grown: 'holds every grandfathered Rust file at or under its recorded ceiling',
+        shrunk: 'holds no Rust entry that has shrunk to budget — delete it instead',
+        missing: 'holds no Rust entry for a file that moved or was deleted',
+        headroom: 'holds no Rust entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: ({ key, lines }) => `${key}: ${lines} lines — split the module`,
       grown: (key, lines, ceiling) =>
         `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
       shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
