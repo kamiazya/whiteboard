@@ -1149,6 +1149,75 @@ jobs:
             crates/fuzz/regressions
           retention-days: 14
 
+  # zizmor (https://docs.zizmor.sh): static analysis of the workflows and
+  # composite actions themselves — template injection, credential persistence,
+  # dangerous triggers, excessive permissions, and impostor commits behind a
+  # pinned SHA (the online audits). A finding at the `regular` persona fails
+  # the job; a deliberate exception is an inline `# zizmor: ignore[<rule>]` or
+  # an entry in .github/zizmor.yml, each with its reason beside it.
+  #
+  # Run the same audit locally with `uvx zizmor@1.32.0 .github/` (or pipx).
+  zizmor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          # Fail the job on a finding. With advanced security on, the action
+          # uploads SARIF and exits 0, which gates nothing.
+          advanced-security: false
+          version: 1.32.0
+          persona: regular
+          config: .github/zizmor.yml
+
+  # Fails a pull request that ADDS a dependency with a known vulnerability,
+  # read from the dependency graph's diff between base and head
+  # (https://github.com/actions/dependency-review-action). It is the
+  # per-change half of the policy in docs/contributing/security-baseline.md
+  # (OSPS-VM-05.03): `pnpm audit:prod` in the check job and audit.yml judge
+  # the whole tree, this judges what the change introduces — including a
+  # manifest ecosystem pnpm does not audit, such as the GitHub Actions a
+  # workflow pins.
+  #
+  # The threshold matches `pnpm audit:prod`'s `--audit-level=high` over runtime
+  # scope, so one advisory is not a blocker in one gate and noise in the other.
+  #
+  # Pull requests only: the action diffs base against head, which a push to
+  # main or a merge_group commit does not give it. ci-gate declares the skip.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Review added dependencies
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+          # A summary comment needs pull-requests: write; the job summary
+          # carries the same table without it.
+          comment-summary-in-pr: never
+          # Advisories suppressed as not exploitable, with the reason for each
+          # in .github/security/whiteboard.openvex.json. Must equal
+          # pnpm-workspace.yaml's auditConfig.ignoreGhsas
+          # (vex-audit-ignores.test.ts).
+          allow-ghsas: GHSA-qwww-vcr4-c8h2, GHSA-hp3w-g68c-fv3c
+
   # The change scope of this run, for ci-gate and the run summary: which
   # vitest projects and jobs a pull request reaches (tools/checks/src/
   # affected.mjs). Any event but pull_request selects everything, and so does
@@ -1210,6 +1279,8 @@ jobs:
       - dry-run-docker
       - rust
       - rust-fuzz-pr
+      - zizmor
+      - dependency-review
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # A job-level block REPLACES the workflow's `contents: read` rather than

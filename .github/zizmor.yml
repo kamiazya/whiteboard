@@ -1,5 +1,5 @@
 # zizmor (https://docs.zizmor.sh) configuration, read by
-# .github/workflows/zizmor.yml and by a local `zizmor .github/` alike.
+# ci.yml's zizmor job and by a local `zizmor .github/` alike.
 rules:
   # Suggests the `$/` self-repository syntax for local actions in place of
   # `./`. Not adopted: every workflow guard in tools/arch-lint names the
