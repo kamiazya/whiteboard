@@ -38,21 +38,32 @@ impl Metadata {
     pub(crate) fn members(&self) -> impl Iterator<Item = &Package> {
         self.packages.iter().filter(|p| self.workspace_members.contains(&p.id))
     }
+}
 
-    /// A member's directory relative to the workspace root, `/`-separated.
-    pub(crate) fn relative_dir(&self, package: &Package) -> String {
-        let dir = package.manifest_path.parent().unwrap_or(Path::new(""));
-        let rel = dir.strip_prefix(&self.workspace_root).unwrap_or(dir);
-        rel.components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
-    }
+/// A package's directory relative to `root`, `/`-separated.
+pub(crate) fn relative_to(root: &Path, package: &Package) -> String {
+    let dir = package.manifest_path.parent().unwrap_or(Path::new(""));
+    let rel = dir.strip_prefix(root).unwrap_or(dir);
+    rel.components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 pub(crate) fn load() -> Result<Metadata, Vec<String>> {
+    run_metadata(&[])
+}
+
+/// The workspace whose root manifest is `manifest` (a nested workspace such
+/// as the fuzz crate's).
+pub(crate) fn load_at(manifest: &Path) -> Result<Metadata, Vec<String>> {
+    run_metadata(&["--manifest-path".as_ref(), manifest.as_os_str()])
+}
+
+fn run_metadata(extra: &[&std::ffi::OsStr]) -> Result<Metadata, Vec<String>> {
     let output = Command::new(cargo())
         .args(["metadata", "--format-version", "1", "--no-deps"])
+        .args(extra)
         .output()
         .map_err(|e| vec![format!("cargo metadata did not run: {e}")])?;
     if !output.status.success() {

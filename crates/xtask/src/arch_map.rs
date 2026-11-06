@@ -86,20 +86,33 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let map = load_map(&metadata)?;
     let mut members = Vec::new();
     for package in metadata.members() {
-        let manifest = std::fs::read_to_string(&package.manifest_path)
-            .map_err(|e| vec![format!("cannot read {}: {e}", package.manifest_path.display())])?;
-        members.push(Member {
-            name: package.name.clone(),
-            dir: metadata.relative_dir(package),
-            deps: package.dependencies.iter().map(|d| (d.name.clone(), d.is_dev())).collect(),
-            inherits_workspace_lints: inherits_workspace_lints(&manifest),
-            declares_core_lints: package.manifest_path.parent().is_some_and(|dir| {
-                std::fs::read_to_string(dir.join("src/lib.rs"))
-                    .is_ok_and(|lib| lib.lines().any(|l| l.trim() == CORE_TOTALITY_LINTS))
-            }),
-        });
+        members.push(member_of(package, &metadata.workspace_root)?);
     }
+    let root_lints = workspace_lints(&read(&metadata.workspace_root.join("Cargo.toml"))?);
     let mut violations = check_map(&map);
+    // A present crate kept out of the root workspace (the nightly-only fuzz
+    // crate) is checked as a member of its own workspace, whose
+    // `[workspace.lints]` must equal the root's: it cannot inherit them.
+    let root_names: BTreeSet<String> = members.iter().map(|m| m.name.clone()).collect();
+    for (name, entry) in &map.crates {
+        let manifest = metadata.workspace_root.join(&entry.path).join("Cargo.toml");
+        if entry.status != Status::Present || root_names.contains(name) || !manifest.is_file() {
+            continue;
+        }
+        let text = read(&manifest)?;
+        if !text.lines().any(|l| l.trim() == "[workspace]") {
+            continue;
+        }
+        if workspace_lints(&text) != root_lints {
+            violations.push(format!(
+                "{name}: its own workspace's [workspace.lints] differs from the root Cargo.toml's"
+            ));
+        }
+        let nested = metadata::load_at(&manifest)?;
+        for package in nested.members() {
+            members.push(member_of(package, &metadata.workspace_root)?);
+        }
+    }
     violations.extend(check_members(&map, &members));
     if violations.is_empty() {
         let edges: usize = members.iter().map(|m| m.deps.len()).sum();
@@ -113,6 +126,41 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
         violations.insert(0, format!("arch-map: {MAP_PATH} is violated:"));
         Err(violations)
     }
+}
+
+fn read(path: &std::path::Path) -> Result<String, Vec<String>> {
+    std::fs::read_to_string(path).map_err(|e| vec![format!("cannot read {}: {e}", path.display())])
+}
+
+fn member_of(package: &metadata::Package, root: &std::path::Path) -> Result<Member, Vec<String>> {
+    let manifest = read(&package.manifest_path)?;
+    Ok(Member {
+        name: package.name.clone(),
+        dir: metadata::relative_to(root, package),
+        deps: package.dependencies.iter().map(|d| (d.name.clone(), d.is_dev())).collect(),
+        inherits_workspace_lints: inherits_workspace_lints(&manifest),
+        declares_core_lints: package.manifest_path.parent().is_some_and(|dir| {
+            std::fs::read_to_string(dir.join("src/lib.rs"))
+                .is_ok_and(|lib| lib.lines().any(|l| l.trim() == CORE_TOTALITY_LINTS))
+        }),
+    })
+}
+
+/// The `[workspace.lints*]` tables of a manifest as `key = value` lines,
+/// comments and blank lines dropped, so two copies compare by content.
+pub(crate) fn workspace_lints(manifest: &str) -> Vec<String> {
+    let mut in_lints = false;
+    let mut lines = Vec::new();
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or_default().trim();
+        if line.starts_with('[') {
+            in_lints = line.starts_with("[workspace.lints");
+        }
+        if in_lints && !line.is_empty() {
+            lines.push(line.to_owned());
+        }
+    }
+    lines
 }
 
 /// `[lints]` followed by `workspace = true`, the only way a member inherits
@@ -375,6 +423,16 @@ mod tests {
     }
 
     #[test]
+    fn workspace_lints_compare_by_content_not_comments() {
+        let a = "[workspace]\n[workspace.lints.rust]\n# why\nunsafe_code = \"forbid\"\n\n[profile.release]\nlto = true\n";
+        let b =
+            "[workspace.lints.rust]\nunsafe_code = \"forbid\" # same\n[lints]\nworkspace = true\n";
+        assert_eq!(workspace_lints(a), workspace_lints(b));
+        assert_eq!(workspace_lints(a), vec!["[workspace.lints.rust]", "unsafe_code = \"forbid\""]);
+        assert_ne!(workspace_lints(a), workspace_lints(&b.replace("forbid", "deny")));
+    }
+
+    #[test]
     fn a_consistent_map_and_workspace_pass() {
         let m = map(BASE);
         assert_eq!(check_map(&m), Vec::<String>::new());
@@ -509,7 +567,8 @@ mod tests {
         // The subject is present: the whole target graph, not just today's crates.
         let planned = m.crates.values().filter(|c| c.status == Status::Planned).count();
         assert!(planned >= 15, "only {planned} planned crates declared");
-        // Reserved for the fuzz targets, which build on nightly only.
-        assert_eq!(m.crates.get("whiteboard-fuzz").map(|c| c.status), Some(Status::Planned));
+        // The fuzz crate is present as a workspace of its own (nightly only),
+        // which `run` checks through its own metadata.
+        assert_eq!(m.crates.get("whiteboard-fuzz").map(|c| c.status), Some(Status::Present));
     }
 }

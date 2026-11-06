@@ -1,4 +1,14 @@
 {
-  "$comment": "Every entry point that takes UNTRUSTED input (a parser, a sync-frame decoder, an HTTP or MCP JSON-RPC body, a loro import, JSON across the wasm boundary, a font file) declares its caps here, read by `cargo xtask inputs`: maxBytes it will read, maxDepth it will recurse or nest, maxMillis it may run. An entry missing any cap fails. Keys are `<crate>::<path to the entry function>`; the crate must be in crates/architecture-map.json.",
-  "entries": {}
+  "$comment": "The registry of entry points that take UNTRUSTED input (a parser, a sync-frame decoder, an HTTP or MCP JSON-RPC body, a loro import, JSON across the wasm boundary, a font file), and the one list the fuzz targets are derived from (QR-28b, QR-29a). Read by `cargo xtask inputs`. Keys are `<crate>::<path to the entry function>`; `crate` repeats the key's crate and must be in crates/architecture-map.json. Each entry declares maxBytes it will read, maxDepth it will recurse or nest, maxMillis it may run, optionally maxNodes it will build, and the `fuzzTarget` in crates/fuzz that exercises it. A missing cap, a target with no entry and an entry with no target all fail. `pnpm rust:fuzz:*` runs a target with libFuzzer's -max_len at maxBytes and -timeout at maxMillis rounded up to a second. `template: true` marks the one entry that is not an untrusted-input entry: it carries the fuzz pipeline until the first ported parser lands, and its caps bound the fuzzer rather than a refusal in the function.",
+  "entries": {
+    "whiteboard-det::utf16::len": {
+      "crate": "whiteboard-det",
+      "fuzzTarget": "det_utf16_len",
+      "template": true,
+      "maxBytes": 4096,
+      "maxDepth": 1,
+      "maxMillis": 100,
+      "reason": "template entry: a flat string, so depth 1; 4 KiB keeps libFuzzer's executions per second high, and 100 ms is far above the microseconds a 4 KiB length takes"
+    }
+  }
 }

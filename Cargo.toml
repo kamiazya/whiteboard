@@ -8,8 +8,12 @@ members = [
   "crates/core/log",
   "crates/core/edge-routing",
   "crates/bindings/wasm",
+  "crates/bindings/native-fixture",
   "crates/xtask",
 ]
+# A workspace of its own: it builds only on the pinned nightly (see its
+# Cargo.toml).
+exclude = ["crates/fuzz"]
 
 [workspace.package]
 version = "0.0.0"
@@ -57,6 +61,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 wasm-bindgen = "=0.2.130"
 wasmparser = "0.263.0"
+object = { version = "0.39.1", default-features = false, features = ["std", "read_core", "elf"] }
 
 # The release profile is the WASM size profile: the browser and Workers pay
 # for every byte. The native daemon gets its own speed-tuned profile when it
@@ -74,6 +79,14 @@ wasmparser = "0.263.0"
 opt-level = "s"
 lto = true
 codegen-units = 1
+# Panic policy for wasm (ADR-0054 decision 20): abort, on the stable
+# toolchain. A wasm panic traps and the instance is discarded; the shim
+# recreates it and REHYDRATES from persisted state. Unwinding on
+# wasm32-unknown-unknown needs nightly `-Zbuild-std`, and catching would
+# leave whatever state the panic interrupted. Panics are prevented by the
+# lints above (no unwrap/expect/panic, totality lints in core); abort is the
+# safety net, and the poison-and-recover scenario that proves the net is
+# `cargo xtask poison-recover`'s plan.
 panic = "abort"
 # Debug info only: a full strip also drops the `target_features` section
 # wasm-bindgen reads to decide which wasm features it may assume. The name
@@ -85,6 +98,22 @@ strip = "debuginfo"
 # skeleton: 30522 -> 30753 bytes (+0.8%); re-measure size and speed when a
 # ported crate with real integer arithmetic is linked in.
 overflow-checks = true
+
+# What a shipped NATIVE binary is built with (`cargo xtask dist native`),
+# checked by `cargo xtask harden-check` and `cargo xtask repro-check`.
+#
+# - opt-level 3: native size is not paid per page load, speed is.
+# - strip = "symbols": no .symtab or debug sections ship (harden-check). The
+#   wasm profile cannot strip fully (wasm-bindgen reads `target_features`).
+# - panic = "unwind": the native daemon fails only the request that
+#   panicked and keeps serving (ADR-0054 decision 20), which needs the
+#   request boundary to catch the unwind; under abort one bad request would
+#   take every client down with it.
+[profile.dist-native]
+inherits = "release"
+opt-level = 3
+strip = "symbols"
+panic = "unwind"
 
 # What `cargo xtask wasm-imports` links each core crate under: release code
 # generation without LTO, which would drop every function nothing exports
