@@ -172,7 +172,7 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
     }
   })
 
-  it('leaves no two overlays on top of each other, touch sizing included', () => {
+  it('leaves no two overlays on top of each other, touch sizing included', async () => {
     const { Host } = makeEditorHost({
       initial: canvas0,
       size: { width, height },
@@ -181,24 +181,37 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
     const { container } = render(<Host />)
     const root = rootOf(container)
     const controlCount = root.querySelectorAll('[data-testid="tool-palette"] button').length
+    collectChromeOrFail(root, `${width}x${height}`)
 
-    const chrome = collectChromeOrFail(root, `${width}x${height}`).map((entry) =>
-      entry.name === 'tool-palette'
-        ? { ...entry, rect: asTouchDock(entry.rect, controlCount) }
-        : entry,
-    )
-
-    for (let i = 0; i < chrome.length; i++) {
-      for (let j = i + 1; j < chrome.length; j++) {
-        const a = chrome[i]
-        const b = chrome[j]
-        if (a === undefined || b === undefined) continue
-        expect(
-          overlaps(a.rect, b.rect),
-          `${a.name} ${describeRect(a.rect)} overlaps ${b.name} ${describeRect(b.rect)}`,
-        ).toBe(false)
-      }
+    // Grown on the page rather than on paper: the overview measures the dock
+    // and stands above it once the dock reaches under its column, so a rect
+    // inflated only here would collide with an overview that, on a real
+    // touch device, has already moved.
+    const dock = root.querySelector<HTMLElement>('[data-testid="tool-palette"]')
+    if (dock !== null) {
+      const touch = asTouchDock(dock.getBoundingClientRect(), controlCount)
+      dock.style.minWidth = `${touch.width}px`
+      dock.style.minHeight = `${touch.height}px`
     }
+
+    const collisions = () => {
+      const chrome = collectChrome(root)
+      const found: string[] = []
+      for (let i = 0; i < chrome.length; i++) {
+        for (let j = i + 1; j < chrome.length; j++) {
+          const a = chrome[i]
+          const b = chrome[j]
+          if (a === undefined || b === undefined) continue
+          if (overlaps(a.rect, b.rect)) {
+            found.push(
+              `${a.name} ${describeRect(a.rect)} overlaps ${b.name} ${describeRect(b.rect)}`,
+            )
+          }
+        }
+      }
+      return found
+    }
+    await expect.poll(collisions).toEqual([])
   })
 })
 
