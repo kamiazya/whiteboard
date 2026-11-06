@@ -5,7 +5,7 @@ import { LoroDoc } from 'loro-crdt'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { touchContentTimestamp } from '../lib/loro-store.js'
+import { touchContentTimestamp } from '../lib/content-timestamp.js'
 
 /**
  * Writes standalone-document bytes INTO an existing tree node and stamps its

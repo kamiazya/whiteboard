@@ -387,7 +387,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // sibling, the note-body embed, have failed on CI from branches that cannot
   // reach them, so the note covers the two as one subject.
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 997, // main's seeding through the tree plus the okf-body refusal case, in place of the two pre-unification ones
-  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
+  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 822,
   // The cancel case: the page's effect cleanup has to stop the replica refresh
   // and the push it armed, and both schedulers' mocks have to answer a spy
   // cancel rather than undefined.
@@ -400,7 +400,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // splits it, which replaced three hand-written invalid catch-all bodies.
   'apps/web/src/pages/DaemonIndexPage.test.tsx': 2077,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
-  'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
+  'apps/web/src/pages/use-browser-document-controller.test.ts': 1253,
   'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,

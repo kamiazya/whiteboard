@@ -2,6 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { RETIRED_PICTURE, RETIRED_PICTURE_LABEL } from '../lib/document-file-contract.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.js'
 
@@ -84,6 +85,23 @@ describe('useReferenceSeams', () => {
     await waitFor(() =>
       expect(result.current.resolveReference('asset:pic')).toEqual({
         image: { href: 'blob:asset:pic' },
+      }),
+    )
+    expect(loadImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('labels a picture saved in a retired form rather than drawing the written path', async () => {
+    const loadImage = vi.fn(async () => RETIRED_PICTURE)
+    const { result } = renderHook(() =>
+      useReferenceSeams({
+        body: 'see ![shot](asset:old) here',
+        load: async () => undefined,
+        loadImage,
+      }),
+    )
+    await waitFor(() =>
+      expect(result.current.resolveReference('asset:old')).toEqual({
+        label: RETIRED_PICTURE_LABEL,
       }),
     )
     expect(loadImage).toHaveBeenCalledTimes(1)

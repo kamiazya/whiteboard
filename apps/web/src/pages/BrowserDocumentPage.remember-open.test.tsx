@@ -8,7 +8,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { browserMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
 import { readRecentIds } from '../lib/recent-documents.js'
 import { readSeenDigest } from '../lib/seen-documents.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
@@ -16,24 +15,8 @@ import {
   latestEditorProps,
   resetCapturedEditorProps,
 } from '../test-utils/capturing-spatial-editor.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const MAIN = '005AFMSY38DJQW16BGNTZ49EKR'
-
-class FakeLoroStore implements LoroStoreLike {
-  private byId = new Map<string, Uint8Array>()
-  async save(id: string, bytes: Uint8Array): Promise<void> {
-    this.byId.set(id, bytes)
-  }
-  createEmptySnapshot(): Uint8Array {
-    return new Uint8Array([1, 2, 3])
-  }
-  async load(id: string): Promise<LoroLoadResult> {
-    const bytes = this.byId.get(id)
-    if (bytes === undefined) return { kind: 'not-found' }
-    return { kind: 'ok', snapshot: bytes }
-  }
-}
 
 vi.mock('../lib/browser-backend.js', () => ({
   BrowserBackend: class {
@@ -91,7 +74,6 @@ describe('BrowserDocumentPage remembers the open', () => {
               store={store.index}
               pointer={store.pointer}
               clock={store.clock}
-              loro={new FakeLoroStore()}
               initialPath="main"
             />
           ),

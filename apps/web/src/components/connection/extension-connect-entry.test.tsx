@@ -44,7 +44,6 @@ describe('connecting through the extension', () => {
       <MemoryRouter initialEntries={['/']}>
         <BrowserIndexPage
           index={store.index}
-          loro={store.loro}
           pointer={store.pointer}
           clock={store.clock}
           onOpenDocument={vi.fn()}

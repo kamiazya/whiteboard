@@ -61,7 +61,6 @@ it('lists the workspace switched to, told apart by count', async () => {
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
-        loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={vi.fn()}

@@ -42,7 +42,6 @@ describe('useBrowserDocumentController delete', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -82,7 +81,6 @@ describe('useBrowserDocumentController delete', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -101,7 +99,6 @@ describe('useBrowserDocumentController delete', () => {
     await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -124,7 +121,6 @@ describe('useBrowserDocumentController delete', () => {
     await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -165,7 +161,6 @@ describe('useBrowserDocumentController delete', () => {
     })
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: async (ids) => {
           if (parkC1 && ids.includes(C1)) {

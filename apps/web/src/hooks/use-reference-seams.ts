@@ -22,6 +22,8 @@ import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { useCallback, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
+import { RETIRED_PICTURE, RETIRED_PICTURE_LABEL } from '../lib/document-file-contract.js'
+import type { ImageSize } from '../lib/image-natural-size.js'
 import { useImageSizes } from './use-image-sizes.js'
 import { type LoadImageUrl, useImageUrls } from './use-image-urls.js'
 import {
@@ -93,6 +95,17 @@ function pendingTargets(
   return new Set(referenceTargets({ bodies: [body], loaded }).filter((t) => !cache.has(t)))
 }
 
+/** The hrefs a decode can size: a retired picture has none. */
+function drawableHrefs(imageUrls: ReadonlyMap<string, string>): string[] {
+  return [...imageUrls.values()].filter((href) => href !== RETIRED_PICTURE)
+}
+
+/** What a picture's slot draws: the image at its decoded size, or the label for a retired one. */
+function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>) {
+  if (href === RETIRED_PICTURE) return { label: RETIRED_PICTURE_LABEL }
+  return { image: { href, ...sizes.get(href) } }
+}
+
 export function useReferenceSeams({
   body,
   resolveAlias,
@@ -145,7 +158,7 @@ export function useReferenceSeams({
 
   // A picture alone in its paragraph draws at its natural size, which only a
   // decode can tell; until it answers the picture keeps a line-sized box.
-  const imageSizes = useImageSizes(useMemo(() => [...imageUrls.values()], [imageUrls]))
+  const imageSizes = useImageSizes(useMemo(() => drawableHrefs(imageUrls), [imageUrls]))
 
   return useMemo(
     () =>
@@ -155,7 +168,7 @@ export function useReferenceSeams({
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
         extra: (ref) => {
           const href = imageUrls.get(ref)
-          return href === undefined ? undefined : { image: { href, ...imageSizes.get(href) } }
+          return href === undefined ? undefined : pictureExtra(href, imageSizes)
         },
       }),
     [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle],

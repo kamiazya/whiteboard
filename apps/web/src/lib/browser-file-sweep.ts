@@ -36,6 +36,7 @@ import { savedVersionReads, savedVersionRows } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
@@ -147,10 +148,11 @@ export async function sweepUnreferencedFiles(
   options: BrowserFileSweepOptions = {},
 ): Promise<BrowserFileSweepResult> {
   const { dbName } = options
-  const keys = await storedRecordKeys(dbName)
-  if (keys.some((key) => workspaceIdOfStoredDocKey(key) === null)) {
+  // The same probe the pages refuse on: one definition, two readers.
+  if (await new IdbDocumentIndex(dbName).holdsPreTreeContentRecords()) {
     return { kind: 'stood-down', reason: 'unfolded-documents' }
   }
+  const keys = await storedRecordKeys(dbName)
   const scan = await scanBrowserWorkspaces(browserKeptWorkspaceIds(keys), dbName)
   if (scan.kind === 'stood-down') return scan
   if (!(await recordsUnmoved(keys, scan.signatures, dbName))) {

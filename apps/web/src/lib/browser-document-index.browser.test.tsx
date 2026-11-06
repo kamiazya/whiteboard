@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedPreTreeContentRow } from '../test-utils/seed-retired-sync-row.js'
 import {
   seedTreeContent,
   seedWorkspaceDocumentContent,
@@ -20,7 +21,7 @@ import {
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -65,6 +66,24 @@ describe('BrowserDocumentIndex (tree-backed composition)', () => {
     await index.createDocument({ workspaceId: fresh, path: 'plan', kind: 'markdown' })
     expect((await index.listDocuments({ workspaceId: fresh })).map((e) => e.path)).toEqual(['plan'])
     expect((await index.listWorkspaces()).map((w) => w.workspaceId)).toContain(fresh)
+  })
+
+  it('refuses the browser workspace over a per-document content record, and only that one', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    await seedPreTreeContentRow(generateDocumentId())
+    const index = new BrowserDocumentIndex()
+    const refusal = { name: 'BrowserStorageRefusedError', reason: 'pre-tree-records' }
+    await expect(index.listDocuments({ workspaceId })).rejects.toMatchObject(refusal)
+    await expect(
+      index.createDocument({ workspaceId, path: 'new-one', kind: 'spatial' }),
+    ).rejects.toMatchObject(refusal)
+
+    // A record carries no workspace id and was only ever minted in the
+    // browser's own, so a workspace another keeper holds is not refused by it.
+    const other = generateDocumentId()
+    await index.createWorkspace({ workspaceId: other, segment: 'other' })
+    await index.createDocument({ workspaceId: other, path: 'plan', kind: 'markdown' })
+    expect((await index.listDocuments({ workspaceId: other })).map((e) => e.path)).toEqual(['plan'])
   })
 
   it('delete evacuates into the trash; restore brings the document back under the same id', async () => {
@@ -118,8 +137,8 @@ describe('BrowserDocumentIndex (tree-backed composition)', () => {
     const content = await loadDocumentContent(entry.documentId)
     const node = content === null ? null : readSpatialCanvas(content).nodes[0]
     expect(node === null || node === undefined ? null : nodeText(node)).toBe('seeded')
-    // Nothing legacy was written: the tree node IS the content record.
-    expect((await new LoroStore().load(entry.documentId)).kind).toBe('not-found')
+    // No per-document record was written: the tree node IS the content record.
+    expect(await new IdbDocumentIndex().holdsPreTreeContentRecords()).toBe(false)
 
     await index.setDocumentName({
       workspaceId: getBrowserWorkspaceId(),

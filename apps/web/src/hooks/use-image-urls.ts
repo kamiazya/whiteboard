@@ -15,21 +15,26 @@
  * times. Waiting for the refs to change instead left the picture on its card
  * for the life of the page, since an open board's pictures do not change on
  * their own; the bound is what keeps a read that always fails from spinning.
+ *
+ * `RETIRED_PICTURE` is a third, terminal answer: it is installed in the map
+ * under the ref, as the value, so the caller can label the slot, and it is
+ * never asked for again. It is not an object URL and is never revoked.
  */
 import { useEffect, useRef, useState } from 'react'
+import { RETIRED_PICTURE } from '../lib/document-file-contract.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
-export type LoadImageUrl = (ref: string) => Promise<string | undefined>
+export type LoadImageUrl = (ref: string) => Promise<string | undefined | typeof RETIRED_PICTURE>
 
 type Outcome =
   | { readonly ref: string; readonly kind: 'url'; readonly url: string }
+  | { readonly ref: string; readonly kind: 'retired' }
   | { readonly ref: string; readonly kind: 'absent' | 'failed' }
-type Installed = Extract<Outcome, { kind: 'url' }>
 
 export function useImageUrls(
   refs: readonly string[],
   load: LoadImageUrl | undefined,
-): ReadonlyMap<string, string> {
+): ReadonlyMap<string, string | typeof RETIRED_PICTURE> {
   const [urls, setUrls] = useState<ReadonlyMap<string, string>>(new Map())
   const urlsRef = useRef<ReadonlyMap<string, string>>(urls)
   urlsRef.current = urls
@@ -46,7 +51,7 @@ export function useImageUrls(
 
   useEffect(
     () => () => {
-      for (const url of urlsRef.current.values()) URL.revokeObjectURL(url)
+      revokeAll(urlsRef.current)
     },
     [],
   )
@@ -93,6 +98,13 @@ export function useImageUrls(
   return urls
 }
 
+/** Releases every object URL; a retired picture holds none. */
+function revokeAll(urls: ReadonlyMap<string, string>): void {
+  for (const url of urls.values()) {
+    if (url !== RETIRED_PICTURE) URL.revokeObjectURL(url)
+  }
+}
+
 type Settled = Map<string, 'absent' | number>
 
 function isWanted(ref: string, urls: ReadonlyMap<string, string>, settled: Settled): boolean {
@@ -116,17 +128,20 @@ function withUrls(
   prev: ReadonlyMap<string, string>,
   loaded: readonly Outcome[],
 ): ReadonlyMap<string, string> {
-  const installed = loaded.filter((outcome): outcome is Installed => outcome.kind === 'url')
+  const installed = loaded.filter((outcome) => outcome.kind === 'url' || outcome.kind === 'retired')
   if (installed.length === 0) return prev
   const next = new Map(prev)
-  for (const outcome of installed) next.set(outcome.ref, outcome.url)
+  for (const outcome of installed) {
+    next.set(outcome.ref, outcome.kind === 'url' ? outcome.url : RETIRED_PICTURE)
+  }
   return next
 }
 
 async function outcomeOf(loader: LoadImageUrl, ref: string): Promise<Outcome> {
   try {
     const url = await loader(ref)
-    return url === undefined ? { ref, kind: 'absent' } : { ref, kind: 'url', url }
+    if (url === undefined) return { ref, kind: 'absent' }
+    return url === RETIRED_PICTURE ? { ref, kind: 'retired' } : { ref, kind: 'url', url }
   } catch {
     return { ref, kind: 'failed' }
   }

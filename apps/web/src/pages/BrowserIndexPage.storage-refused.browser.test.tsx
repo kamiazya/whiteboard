@@ -6,6 +6,7 @@
  * gone.
  */
 
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -13,9 +14,11 @@ import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { DB_VERSION } from '../lib/browser-idb.js'
 import { BrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { documentReadFailureMessage } from '../lib/document-read-failure.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedPreTreeContentRow, seedRetiredEnvelope } from '../test-utils/seed-retired-sync-row.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 const DB = claimIsolatedWhiteboardDb('browserindexpage-storage-refused')
@@ -45,6 +48,30 @@ describe('list page over storage this build does not read', () => {
       </MemoryRouter>,
     )
     const message = new BrowserStorageRefusedError('pre-tree-records').message
+    expect(await screen.findByText(message, undefined, { timeout: 10_000 })).toBeTruthy()
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
+  it('says why a per-document content record cannot be opened instead of offering onboarding', async () => {
+    await seedPreTreeContentRow(generateDocumentId())
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={() => {}} />
+      </MemoryRouter>,
+    )
+    const message = new BrowserStorageRefusedError('pre-tree-records').message
+    expect(await screen.findByText(message, undefined, { timeout: 10_000 })).toBeTruthy()
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
+  it('names a retired sync envelope instead of the generic load failure', async () => {
+    await seedRetiredEnvelope(getBrowserWorkspaceId())
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={() => {}} />
+      </MemoryRouter>,
+    )
+    const message = documentReadFailureMessage('retired-stored-shape')
     expect(await screen.findByText(message, undefined, { timeout: 10_000 })).toBeTruthy()
     expect(screen.queryByText('What will you make first?')).toBeNull()
   })

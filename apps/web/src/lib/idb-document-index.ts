@@ -34,9 +34,10 @@ import {
   WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
+  workspaceIdOfStoredDocKey,
 } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
-import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
+import { DOCUMENT_INDEX_STORE, SYNC_DOCUMENTS_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
 import { refuseIfRemovedIn, TOMBSTONE_STORE } from './workspace-tombstone.js'
@@ -209,5 +210,22 @@ export class IdbDocumentIndex {
       const range = IDBKeyRange.bound([workspaceId], [workspaceId, []])
       return (await request(tx.objectStore(DOCUMENT_INDEX_STORE).count(range))) > 0
     })
+  }
+
+  /**
+   * Whether the sync store still holds a per-document content record
+   * (`document:<id>`) — the shape builds before the workspace tree kept a
+   * document's content in. Nothing this build writes or reads is keyed that
+   * way, so a true answer is a browser workspace it refuses
+   * (`BrowserStorageRefusedError`) and the file sweep stands down over: the
+   * sweep must not delete files a record it cannot read may still name.
+   * Keys only, never a value. A `workspace-tree:` key with a non-canonical id
+   * throws (`StoredWorkspaceKeyError`), a failure of the probe and no verdict.
+   */
+  async holdsPreTreeContentRecords(): Promise<boolean> {
+    const keys = await this.tx([SYNC_DOCUMENTS_STORE], 'readonly', (tx) =>
+      request(tx.objectStore(SYNC_DOCUMENTS_STORE).getAllKeys()),
+    )
+    return keys.some((key) => typeof key === 'string' && workspaceIdOfStoredDocKey(key) === null)
   }
 }

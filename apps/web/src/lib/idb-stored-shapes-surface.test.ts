@@ -16,7 +16,7 @@
  *
  * The probe is a module that names an object store AND hands a record to a
  * schema. Both halves are needed: the store constants alone catch writers
- * that never validate (`loro-store.ts` chunks bytes and parses nothing),
+ * that never validate (`content-timestamp.ts` writes a clock and parses nothing),
  * and a schema parse alone catches every network client in `lib/`.
  *
  * Source comes from `?raw`, not `node:fs`: apps/web is browser-only and
