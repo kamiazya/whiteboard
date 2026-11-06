@@ -292,7 +292,7 @@ line's label, being one line, as "Escape discards, Enter keeps". Pressing
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
 undo. Press `Esc` on a new note before typing and it is removed; leaving the canvas
-while a new note is still empty removes it too.
+while a new note is still empty removes it too, and so does closing or reloading the page: the next time this tab opens the canvas, a note you added and never typed into is gone.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
