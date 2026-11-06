@@ -330,11 +330,10 @@ export function useDragLayers({
     // canvas around the pointer stays still and pointer frames skip the
     // crossing-optimization loop. The prospective edge itself derives
     // fresh each frame.
-    const frozenEdgeSides = frozenSidesOf(gestureCommitted.scene)
     return computeDragPreview(gestureState, boxes, livePoint, {
       canvas,
       selectableBoxes,
-      frozenEdgeSides,
+      frozenEdgeSides: frozenSidesOf(gestureCommitted.scene),
       frameTitles: frameTitleObstacles(canvas.nodes, gestureCommitted.scene.nodes),
     })
   }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted, settling])
