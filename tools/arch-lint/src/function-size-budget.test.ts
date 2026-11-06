@@ -747,6 +747,23 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Builds every core crate for wasm32 and judges each artifact's imports in
   // one loop; the per-artifact judgement is the half to lift out.
   'crates/xtask/src/wasm_imports.rs#run': 76,
+  // The release environment, then one arm per artifact (native through
+  // cargo-auditable, wasm through wasm-bindgen); each arm is the function to
+  // lift out.
+  'crates/xtask/src/dist.rs#build': 70,
+  // One ELF reading per mitigation (PIE, RELRO, NX, RPATH, strip, audit
+  // data), in sequence; a function per mitigation is the next shrink.
+  'crates/xtask/src/harden.rs#inspect_elf64': 51,
+  // The fuzz registry checked against itself, the fuzz crate's bins and its
+  // regressions: one pass per rule, the same shape as check_map above.
+  'crates/xtask/src/inputs.rs#check': 74,
+  // Each artifact scanned by cargo-about for its own target and its notices
+  // judged, inline; the per-artifact judgement is the half to lift out.
+  'crates/xtask/src/notices.rs#run': 60,
+  // A hand lexer: one match arm per token class it must skip (comments,
+  // nested comments, strings, raw and byte strings, chars against
+  // lifetimes). A function per literal form is the next shrink.
+  'crates/xtask/src/unsafe_ledger.rs#count_unsafe': 80,
 }
 
 const RUST_MEASURED = rustSourceFiles().flatMap((path) =>
