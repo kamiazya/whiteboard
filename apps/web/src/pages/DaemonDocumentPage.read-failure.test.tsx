@@ -120,8 +120,11 @@ describe('a daemon-kept document this build cannot read', () => {
     expect(backend.pushed).toEqual([])
     // The shell chip reads the same screen: no session was built, and
     // nothing retries it, so it must not claim to be reconnecting over an
-    // error screen that offers no retry.
-    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'not-opened' })
+    // error screen that offers no retry. The page reports it from an effect
+    // after the commit that draws the screen, so it is waited for.
+    await waitFor(() =>
+      expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'not-opened' }),
+    )
   })
 
   it('a board still holding the flat comments plane shows the read-failure screen, not the loading copy', async () => {
