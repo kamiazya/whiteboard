@@ -5,7 +5,6 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { NODES_KEY } from './containers.js'
 import { writeSpatialNode } from './loro-bridge.js'
 import { importWithinTextLimits, syncTextLimitJudge } from './sync-text-limits.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -88,27 +87,6 @@ describe('syncTextLimitJudge', () => {
       nodeId: 'n1',
       container: expect.any(String),
     })
-  })
-
-  it("measures a legacy node's text as the reader lifts it, past a short resource beside it", () => {
-    // A value carrying the legacy `type` is read from its `text`, whatever
-    // `resource` it also holds — so that is the text the bound must see.
-    const base = record({ [DOC_ID]: 'short' })
-    const client = base.fork()
-    const from = client.oplogVersion()
-    documentContainers(client, DOC_ID)
-      .getMap(NODES_KEY)
-      .set('n1', {
-        ...{ id: 'n1', x: 0, y: 0, width: 200, height: 100, type: 'text' },
-        text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
-        resource: { mimeType: 'text/markdown', content: 'short' },
-      })
-    client.commit()
-    const update = client.export({ mode: 'update', from })
-    const breach = { shape: 'node-text', chars: NODE_TEXT_MAX_CHARS + 1, nodeId: 'n1' }
-
-    expect(importWithinTextLimits(base.fork(), update).breach).toMatchObject(breach)
-    expect(syncTextLimitJudge(base)(update)).toMatchObject(breach)
   })
 
   it('judges each update against the record as it now stands, whoever wrote to it since', () => {

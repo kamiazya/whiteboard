@@ -34,8 +34,8 @@ import {
   sameValue,
   writeCanvasFacetsField,
 } from './document-envelope-reconcile.js'
-import { LEGACY_EXTENSION_FIELD, liftLegacyExtension, liftStoredNode } from './legacy-lifts.js'
 import { refuseReservedKey } from './reserved-key-write.js'
+import { refuseRetiredShape, retiredEdgeShape, retiredNodeShape } from './retired-stored-shape.js'
 
 /** The board's own tags: one value under its own key, like the facets. */
 const TAGS_FIELD = CANVAS_TAGS_FIELD
@@ -142,13 +142,6 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
   const canvasMap = doc.getMap(CANVAS_KEY)
   writeOptionalField(canvasMap, CANVAS_FACETS_FIELD, canvas.facets)
   writeOptionalField(canvasMap, TAGS_FIELD, canvas.tags)
-  // A write converges the record — but only when there is something to
-  // converge. An unconditional delete is one oplog op per save forever, on
-  // every document that never had the old key: measured at +10000 bytes on
-  // the growth scoreboard, which is what caught it.
-  if (canvasMap.get(LEGACY_EXTENSION_FIELD) !== undefined) {
-    canvasMap.delete(LEGACY_EXTENSION_FIELD)
-  }
 
   // A resync states the whole truth of the CANVAS. The annotation layer is a
   // plane beside it (ADR-0026 decision 1), so no canvas write reaches it.
@@ -275,7 +268,7 @@ function sweepAnchoredInto(doc: DocumentContainers, ids: ReadonlySet<string>): v
   if (ids.size === 0) return
   const edgesMap = doc.getMap(EDGES_KEY)
   for (const edgeId of edgesMap.keys()) {
-    const parsed = canvasEdgeSchema.safeParse(liftLegacyExtension(edgesMap.get(edgeId)))
+    const parsed = canvasEdgeSchema.safeParse(edgesMap.get(edgeId))
     if (parsed.success && anchoredOnAny(parsed.data, ids)) {
       edgesMap.delete(edgeId)
       dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
@@ -607,16 +600,23 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   return readSpatialCanvasWithSkipped(doc).canvas
 }
 
-/** Each stored record the schema accepts, and how many it refused. */
+/**
+ * Each stored record the schema accepts, and how many it refused. A record in
+ * a retired shape is not one of the refused: it throws
+ * `RetiredStoredShapeError`, since skipping it would open the canvas without
+ * an element the document still holds.
+ */
 function readStored<T>(
   map: CanvasMap,
   schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
-  lift: (raw: unknown) => unknown,
+  retired: (id: string, raw: unknown) => string | null,
 ): { kept: T[]; skipped: number } {
   const kept: T[] = []
   let skipped = 0
   for (const id of map.keys()) {
-    const parsed = schema.safeParse(lift(map.get(id)))
+    const raw = map.get(id)
+    refuseRetiredShape(retired(id, raw))
+    const parsed = schema.safeParse(raw)
     if (parsed.success) kept.push(parsed.data)
     else skipped += 1
   }
@@ -634,9 +634,9 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   readonly canvas: SpatialCanvas
   readonly skipped: number
 } {
-  const readNodes = readStored(doc.getMap(NODES_KEY), spatialNodeSchema, liftStoredNode)
-  const readEdges = readStored(doc.getMap(EDGES_KEY), canvasEdgeSchema, liftLegacyExtension)
-  const readLines = readStored(doc.getMap(LINES_KEY), canvasLineSchema, (raw) => raw)
+  const readNodes = readStored(doc.getMap(NODES_KEY), spatialNodeSchema, retiredNodeShape)
+  const readEdges = readStored(doc.getMap(EDGES_KEY), canvasEdgeSchema, retiredEdgeShape)
+  const readLines = readStored(doc.getMap(LINES_KEY), canvasLineSchema, () => null)
   const { kept: nodes } = readNodes
   const { kept: edges } = readEdges
   const { kept: lines } = readLines

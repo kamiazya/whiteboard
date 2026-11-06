@@ -673,24 +673,6 @@ describe('a sync update that writes a node', () => {
     expect(storedText(store)).toHaveLength(NODE_TEXT_MAX_CHARS + 5)
   })
 
-  it('in the legacy shape, carrying its text in its own field, is judged the same', async () => {
-    const store = new StoredDoc(spatialSeed())
-
-    await expect(
-      send(store, (doc) =>
-        doc.getMap('nodes').set('n1', {
-          id: 'n1',
-          type: 'text',
-          text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
-          x: 0,
-          y: 0,
-          width: 200,
-          height: 100,
-        }),
-      ),
-    ).rejects.toMatchObject({ name: 'NodeTextTooLargeError' })
-  })
-
   it('under a workspace-tree node is refused through the workspace record', async () => {
     const seed = new LoroDoc()
     createWorkspaceDocumentAtPath(seed, { path: 'board', documentId: OTHER_ID, kind: 'spatial' })

@@ -1,6 +1,7 @@
 import {
   ReservedKeyWriteError,
   RetiredCommentPlaneError,
+  RetiredStoredShapeError,
   SYNC_TEXT_BREACH_CODES,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
@@ -601,6 +602,10 @@ const REFUSALS: readonly Refusal[] = [
   // reader serves (owner decision 27): a conflict with what is stored, and
   // the message says the data is untouched.
   refusalOf(RetiredCommentPlaneError, (err: RetiredCommentPlaneError) => err.code, 409),
+  // A document still holding a node, edge, canvas or body in a shape an older
+  // version stored and no reader serves: refused for the same reason, and
+  // the message names what was found.
+  refusalOf(RetiredStoredShapeError, (err: RetiredStoredShapeError) => err.code, 409),
   // Two display names for one document, which no server choice could settle.
   refusalOf(DocumentNameConflictError, 'document_name_conflict', 400),
   // Deleting a document takes the documents below it only when the caller

@@ -1,4 +1,8 @@
-import { ReservedKeyWriteError, RetiredCommentPlaneError } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  ReservedKeyWriteError,
+  RetiredCommentPlaneError,
+  RetiredStoredShapeError,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import {
   DocumentNotFoundError,
@@ -277,6 +281,12 @@ describe('DELETE /api/v1 document whose index raises a refusal of its own', () =
       error: () => new RetiredCommentPlaneError(2),
       status: 409,
       code: 'retired_comment_plane',
+    },
+    {
+      error: () =>
+        new RetiredStoredShapeError('node "n1" stored in the pre-ADR-0038 node-kind union'),
+      status: 409,
+      code: 'retired_stored_shape',
     },
   ])('answers $code as $status JSON', async ({ error, status, code }) => {
     const store = new FakeDocumentStore()
