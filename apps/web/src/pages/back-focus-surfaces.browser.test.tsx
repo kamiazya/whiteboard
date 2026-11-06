@@ -8,8 +8,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { forgetSearchQueries } from '../lib/search-query-memory.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -49,10 +50,18 @@ describe('Back focus', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    // The list remembers its query for the tab, so a repeat would type into
+    // the last run's search.
+    forgetSearchQueries()
+  })
 
   it('returns to the folder-tree row the document was opened from', async () => {
     const router = await listWithOneCanvas()
+    // The choice is remembered in localStorage, which the next file in the
+    // same browser reads: a list left in one column has no Recent lane.
+    onTestFinished(() => localStorage.removeItem('whiteboard.document-browser.columns.v1'))
     await userEvent.click(screen.getByRole('button', { name: 'One column' }))
     const row = () => document.querySelector<HTMLElement>('main [role="tree"] [data-doc-path]')
     await waitFor(() => expect(row()).not.toBeNull(), SLOW)
