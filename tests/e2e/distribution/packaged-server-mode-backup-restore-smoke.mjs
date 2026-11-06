@@ -104,7 +104,10 @@ function canvasNodes(bytes) {
  * what an editor sends to `workspace-document/update`. A document's content
  * lives on its node in the record's `tree`, under the same keys a standalone
  * document uses: `nodes`, keyed by node id, is what loro-adapter's
- * readSpatialCanvas reads, and the fields are spatialNodeSchema's text variant.
+ * readSpatialCanvas reads, and the fields are spatialNodeSchema's — what the
+ * node SHOWS is a resource (ADR-0038), not a `type`: the pre-ADR-0038 kind
+ * union is a retired stored shape, and the sync judge refuses an update that
+ * writes one with 400.
  */
 function nodeUpdateBytes(snapshot, path) {
   const record = new LoroDoc()
@@ -117,12 +120,11 @@ function nodeUpdateBytes(snapshot, path) {
   if (node === undefined) fail(`scenario 3: no node at "${path}" in the workspace record`)
   node.data.getOrCreateContainer('nodes', new LoroMap()).set(CANVAS_NODE_ID, {
     id: CANVAS_NODE_ID,
-    type: 'text',
-    text: 'seeded by the backup/restore smoke',
     x: 10,
     y: 20,
     width: 200,
     height: 60,
+    resource: { mimeType: 'text/markdown', content: 'seeded by the backup/restore smoke' },
   })
   record.commit()
   return record.export({ mode: 'update', from })
