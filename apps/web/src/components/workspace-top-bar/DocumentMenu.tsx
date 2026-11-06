@@ -1,6 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { BookmarkPlus, Download, EllipsisVertical, Printer } from 'lucide-react'
 import { type ReactNode, type RefObject, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -13,11 +14,13 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu.js'
 import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
+import { SilentToast } from '../../components/ui/toast.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 import { usePictureExportPreferences } from '../../hooks/usePictureExportPreferences.js'
 import type { EditorSelection, SelectionSource } from '../../lib/spatial/editor-handle.js'
 import type { ExportScope } from '../../lib/spatial/selection-picture.js'
+import { MARKDOWN_SAVED_NOTICE, NOTICE_CAVEAT_SEPARATOR } from './useSceneExport.js'
 
 interface DocumentMenuProps {
   /**
@@ -119,6 +122,7 @@ export function DocumentMenu({
       <span role="status" aria-live="polite" className="sr-only">
         {notice ?? ''}
       </span>
+      <MarkdownSavedToast notice={notice} />
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -326,5 +330,34 @@ function MarkdownSaveItem({ onSave }: { readonly onSave: () => void }) {
         as PDF.
       </span>
     </DropdownMenuItem>
+  )
+}
+
+/**
+ * A Markdown save is confirmed on screen as well as aloud: the file is the
+ * text alone, and what it left out has to reach a sighted reader at the
+ * moment it happened, not only under the menu entry they already closed.
+ * Silent, because the status region above already speaks the same notice.
+ * Portalled to the body so no transformed ancestor in the header can become
+ * the containing block of its fixed position.
+ */
+function MarkdownSavedToast({ notice }: { readonly notice: string | null | undefined }) {
+  if (notice == null || !notice.startsWith(MARKDOWN_SAVED_NOTICE)) return null
+  const caveat = notice.slice(MARKDOWN_SAVED_NOTICE.length + NOTICE_CAVEAT_SEPARATOR.length)
+  return createPortal(
+    <SilentToast
+      testId="markdown-saved-toast"
+      message={
+        <>
+          <span className="font-medium">{MARKDOWN_SAVED_NOTICE}</span>
+          {caveat !== '' && (
+            <span className="text-muted-foreground block text-xs">
+              {`${caveat.charAt(0).toUpperCase()}${caveat.slice(1)}.`}
+            </span>
+          )}
+        </>
+      }
+    />,
+    document.body,
   )
 }

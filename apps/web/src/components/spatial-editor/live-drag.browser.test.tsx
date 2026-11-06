@@ -6,7 +6,7 @@
 
 import { assignEdgeAnchors } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -505,4 +505,53 @@ it('a themed board keeps its look while a node is carried: ghost and backdrop al
   // the canvas's theme resolution.
   const live = container.querySelector('[data-testid="live-edges"]')
   expect(live?.innerHTML ?? '').toContain('wb-glow')
+})
+
+it('keeps a bystander that steps round on its committed route mid-drag', async () => {
+  // Two frames stacked, with diagonals between them that cross unless one
+  // steps round what is in its way — the committed (straight) render does.
+  // Dragging the lone note `z`, which carries no edge, must leave every
+  // connection exactly where the committed render drew it: the frozen
+  // override has to carry the stepping-round choice, or that edge jumps to
+  // its corner route the moment the drag starts.
+  const note = (id: string, x: number, y: number) =>
+    textNode({ id, x, y, width: 160, height: 100, text: id })
+  const board: SpatialCanvas = {
+    nodes: [
+      groupNode({ id: 'ideas', x: 0, y: 0, width: 640, height: 300, label: 'Ideas' }),
+      groupNode({ id: 'actions', x: 0, y: 380, width: 640, height: 300, label: 'Next' }),
+      note('a1', 40, 40),
+      note('a2', 240, 40),
+      note('a3', 440, 40),
+      note('a5', 240, 170),
+      note('b1', 40, 420),
+      note('b2', 240, 420),
+      note('b5', 240, 550),
+      note('b6', 440, 550),
+      textNode({ id: 'z', x: 760, y: 40, width: 80, height: 60, text: 'z' }),
+    ],
+    edges: [
+      { id: 'a1_b6', from: { node: 'a1' }, to: { node: 'b6' } },
+      { id: 'a2_b5', from: { node: 'a2' }, to: { node: 'b5' } },
+      { id: 'a3_b1', from: { node: 'a3' }, to: { node: 'b1' } },
+      { id: 'a5_b2', from: { node: 'a5' }, to: { node: 'b2' } },
+    ],
+  }
+  const committed = assignEdgeAnchors(board.nodes, board.edges, 'straight')
+  expect(board.edges.some((edge) => committed.get(edge.id)?.around === true)).toBe(true)
+
+  const { Host } = makeEditorHost({ initial: board, size: SIZE })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const routes = (scope: ParentNode) =>
+    [...scope.querySelectorAll('polyline')].map((p) => p.getAttribute('points') ?? '').sort()
+  const content = () => container.querySelector('[data-testid="canvas-content"]')
+  await vi.waitFor(() => expect(routes(content() ?? container)).toHaveLength(4))
+  const before = routes(content() ?? container)
+
+  await dragWithoutRelease(root, [800, 70], [800, 130])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live).not.toBeNull()
+  expect(routes(live ?? container)).toEqual(before)
 })

@@ -4,6 +4,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { FolderNames } from '../../lib/folder-names.js'
 import { foldersOf } from './folder-moves.js'
+import { readPendingFolderNames, writePendingFolderNames } from './pending-folder-names-store.js'
 import { refusalMessage } from './use-rename-document.js'
 
 /**
@@ -77,6 +78,25 @@ function useRefusal() {
 }
 
 /**
+ * The pending names, read from this tab's session for the workspace on
+ * screen and written back as they change. The render after a switch still
+ * holds the departed workspace's names and writes them once under the new
+ * scope; the reset's own render writes the new workspace's straight back.
+ */
+function useSessionPending(source: WorkspaceFilesSource, scope: string | undefined) {
+  const [pending, setPending] = useState<FolderNames>(() => readPendingFolderNames(scope))
+
+  // SCOPE RESET — a name given in the departed workspace names nothing here.
+  useEffect(() => {
+    setPending(readPendingFolderNames(scope))
+  }, [source, scope])
+
+  useEffect(() => writePendingFolderNames(scope, pending), [scope, pending])
+
+  return [pending, setPending] as const
+}
+
+/**
  * Names given to folders no document is in yet, and the flush that writes one
  * once the listing shows a document under it. The pending name stays until
  * the write answers, so the folder never flickers back to its segment; a
@@ -86,14 +106,14 @@ function usePendingFolderNames(
   source: WorkspaceFilesSource,
   standing: readonly string[],
   reload: () => Promise<void>,
+  scope: string | undefined,
 ) {
-  const [pending, setPending] = useState<FolderNames>(new Map())
+  const [pending, setPending] = useSessionPending(source, scope)
   const writing = useRef(new Set<string>())
   const { refusal, setRefusal, dismissRefusal } = useRefusal()
 
-  // SCOPE RESET — a name given in the departed workspace names nothing here.
+  // SCOPE RESET — a write in flight for the departed workspace answers nothing here.
   useEffect(() => {
-    setPending(new Map())
     writing.current = new Set()
     setRefusal(null)
   }, [source])
@@ -164,13 +184,14 @@ function useKeepEmptiedNames(
  * that do not exist yet.
  *
  * A folder exists only while a document is in it, so an empty named folder is
- * not stored — its name is held HERE and written once the listing shows a
- * document under it. Until then the name still shows, which is what lets a
+ * not stored by the keeper — its name is held HERE, for this tab's session
+ * under `scope`, and written once the listing shows a document under it. Until then the name still shows, which is what lets a
  * new subfolder be opened under the name it was given.
  */
 export function useFolderNames(
   source: WorkspaceFilesSource,
   documents: readonly WorkspaceDocumentEntry[] | null,
+  scope?: string | undefined,
 ): FolderNamesState {
   const { stored, reload } = useStoredFolderNames(source, documents)
   const standing = useMemo(() => foldersOf(documents ?? []), [documents])
@@ -178,6 +199,7 @@ export function useFolderNames(
     source,
     standing,
     reload,
+    scope,
   )
 
   useKeepEmptiedNames(source, documents, standing, stored, remember)

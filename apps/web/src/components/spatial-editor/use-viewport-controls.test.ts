@@ -2,7 +2,11 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { IDENTITY_VIEWPORT } from '../../lib/spatial/viewport.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
+
+/** The one-row dock's strip: the floor the measured occlusion answers with when nothing is measured. */
+const DOCK_OCCLUSION_PX = bottomChromeOcclusionPx(null)
+
 import { useViewportControls } from './use-viewport-controls.js'
 
 const SIZE = { width: 800, height: 600 }

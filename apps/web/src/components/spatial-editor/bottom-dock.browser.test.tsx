@@ -2,8 +2,9 @@
 // independently-positioned history cluster overlapped the widening palette
 // (user phone screenshot, 2026-08-08). The dock is now the single layout
 // authority with a FIXED small button set — creation tools live in the "+"
-// menu (user decision, tldraw/FigJam shape), so the dock stays one row at
-// any viewport and new node types never widen it. Imports the real
+// menu (user decision, tldraw/FigJam shape), so new node types never widen
+// it. Where one row cannot hold every tool (a phone), the tools fold onto a
+// row of their own rather than scrolling out of sight. Imports the real
 // stylesheet: this test is ABOUT layout.
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -11,7 +12,10 @@ import '../../index.css'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { SpatialEditor } from './SpatialEditor.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
+
+/** The one-row dock's strip: the floor the measured occlusion answers with when nothing is measured. */
+const DOCK_OCCLUSION_PX = bottomChromeOcclusionPx(null)
 
 afterEach(cleanup)
 
@@ -30,7 +34,14 @@ function renderAt(width: number) {
   )
 }
 
-it('the dock keeps history and tools in ONE single-row container that fits a phone width', () => {
+/** The distinct rows the dock's buttons sit on. */
+function rowsOf(palette: HTMLElement): number {
+  return new Set(
+    [...palette.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)),
+  ).size
+}
+
+it('the dock keeps history and tools in ONE container that fits a phone width', () => {
   const { container } = renderAt(375)
   const host = container.firstElementChild as HTMLElement
   const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
@@ -40,18 +51,22 @@ it('the dock keeps history and tools in ONE single-row container that fits a pho
   // second floating island left to collide with.
   expect(palette.contains(cluster)).toBe(true)
 
-  // The dock fits the narrow host in a single row.
+  // The dock fits the narrow host, folded onto at most two rows.
   const hostRect = host.getBoundingClientRect()
   const dockRect = palette.getBoundingClientRect()
   expect(dockRect.left).toBeGreaterThanOrEqual(hostRect.left)
   expect(dockRect.right).toBeLessThanOrEqual(hostRect.right)
-  const tops = new Set(
-    [...palette.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)),
-  )
-  expect(tops.size).toBe(1)
+  expect(rowsOf(palette)).toBeLessThanOrEqual(2)
 })
 
-it('the dock is the same in every mode, and still fits a phone width in one row', () => {
+it('keeps the dock on one row wherever one row holds it', () => {
+  const { container } = renderAt(600)
+  const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+  expect(palette.querySelectorAll('button').length).toBeGreaterThan(6)
+  expect(rowsOf(palette)).toBe(1)
+})
+
+it('the dock is the same in every mode, and still fits a phone width', () => {
   const { container } = renderAt(375)
   const host = container.firstElementChild as HTMLElement
   const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
@@ -75,24 +90,31 @@ it('the dock is the same in every mode, and still fits a phone width in one row'
   const dockRect = palette.getBoundingClientRect()
   expect(dockRect.left).toBeGreaterThanOrEqual(hostRect.left)
   expect(dockRect.right).toBeLessThanOrEqual(hostRect.right)
-  const tops = new Set(
-    [...palette.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)),
-  )
-  expect(tops.size).toBe(1)
+  expect(rowsOf(palette)).toBeLessThanOrEqual(2)
 })
 
-it('DOCK_OCCLUSION_PX still covers what the dock actually paints over', () => {
-  const { container } = renderAt(375)
+it('DOCK_OCCLUSION_PX still covers what a one-row dock paints over', () => {
+  const { container } = renderAt(600)
   const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
   const host = container.firstElementChild as HTMLElement
 
-  // The viewport subtracts this constant instead of measuring, so this is
-  // the only thing standing between a class change on the dock and nodes
-  // quietly parking underneath it again.
+  // The floor the measured strip never drops below, and the answer wherever
+  // nothing can be measured — so it must still cover the one-row dock.
   const covered = host.getBoundingClientRect().bottom - palette.getBoundingClientRect().top
   expect(covered).toBeLessThanOrEqual(DOCK_OCCLUSION_PX)
   // And not wildly generous: a too-large inset wastes canvas on every pan.
   expect(covered).toBeGreaterThan(DOCK_OCCLUSION_PX - 24)
+})
+
+it('measures the strip a folded dock paints over, so nothing is placed under it', () => {
+  const { container } = renderAt(375)
+  const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+  const host = container.firstElementChild as HTMLElement
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  expect(rowsOf(palette)).toBe(2)
+  const covered = host.getBoundingClientRect().bottom - palette.getBoundingClientRect().top
+  expect(covered).toBeGreaterThan(DOCK_OCCLUSION_PX)
+  expect(bottomChromeOcclusionPx(root)).toBeGreaterThanOrEqual(covered)
 })
 
 it('creation entries live in the + menu, which opens upward inside the viewport', () => {

@@ -24,6 +24,7 @@ import { registerTestWorkspace } from '../test-utils/browser-document.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { emulateCoarsePointer } from '../test-utils/coarse-pointer.js'
 import { setViewport } from '../test-utils/viewport.js'
 
 // No real IndexedDB in this file (`BrowserStoreDouble` is in-memory), so
@@ -40,6 +41,7 @@ afterEach(async () => {
     await document.exitFullscreen()
   }
   cleanup()
+  await emulateCoarsePointer(false)
   await setViewport(1280, 900)
 })
 
@@ -214,4 +216,24 @@ it('declares a corner breakpoint that still clears the dock', async () => {
   // Still in corner mode at exactly the breakpoint — and still clear of the dock.
   expect(window.innerHeight - a.bottom).toBeLessThan(24)
   expect(rectsOverlap(a, b), `exit ${JSON.stringify(a)} vs dock ${JSON.stringify(b)}`).toBe(false)
+})
+
+// On a finger the dock folds onto two rows and stands about 110px tall, so a
+// fixed lift sized for the one-row strip puts the control on the folded dock's
+// upper-left corner. The control measures the chrome under its column instead.
+it('stands clear of the folded touch dock at a phone width', async () => {
+  await emulateCoarsePointer(true)
+  await setViewport(360, 780)
+  await renderLoaded()
+  const exit = await enterStubbedFullscreen()
+
+  const dock = document.querySelector<HTMLElement>('[data-testid="tool-palette"]')
+  expect(dock, 'the canvas dock must be on screen for this to mean anything').not.toBeNull()
+  const folded = (dock as HTMLElement).getBoundingClientRect()
+  expect(folded.height, 'the dock must have folded onto two rows').toBeGreaterThan(80)
+  await expect
+    .poll(() =>
+      rectsOverlap(exit.getBoundingClientRect(), (dock as HTMLElement).getBoundingClientRect()),
+    )
+    .toBe(false)
 })

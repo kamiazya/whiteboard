@@ -61,3 +61,22 @@ it('a click on the frame border still selects the frame', async () => {
   await vi.waitFor(() => expect(nodeSelection(container)).not.toBeNull())
   expect(edgeHighlight(container)).toBeNull()
 })
+
+it("a click on an edge running over a frame's name strip selects the edge", async () => {
+  // Two notes level with the strip above the frame's top edge (y 300), so the
+  // straight edge between them runs through the strip, clear of the name.
+  const overStrip: SpatialCanvas = {
+    nodes: [
+      groupNode({ id: 'frame', x: 160, y: 300, width: 400, height: 200, label: 'Next' }),
+      textNode({ id: 'a', x: 20, y: 240, width: 100, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 620, y: 240, width: 100, height: 60, text: 'B' }),
+    ],
+    edges: [{ id: 'e1', from: { node: 'a', side: 'right' }, to: { node: 'b', side: 'left' } }],
+  }
+  const { Host } = makeEditorHost({ initial: overStrip })
+  const { container } = render(<Host />)
+
+  await userEvent.click(rootOf(container), { position: { x: 480, y: 270 } })
+  await vi.waitFor(() => expect(edgeHighlight(container)).not.toBeNull())
+  expect(nodeSelection(container)).toBeNull()
+})

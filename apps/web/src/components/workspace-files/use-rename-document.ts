@@ -3,10 +3,12 @@ import { type RefObject, useCallback, useRef, useState } from 'react'
 import { z } from 'zod'
 import { refuseTakenDocumentName } from '../../lib/display-name-taken.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { documentPathTakenMessage } from '../../lib/document-path-taken.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { FolderNames } from '../../lib/folder-names.js'
-import { documentLanding, focusLanding } from './folder-landing.js'
+import { useAnnouncer } from '../annotations/announcer.js'
+import { documentLanding, focusLanding, refocus } from './folder-landing.js'
 
 /**
  * The rename flow: which document the dialog is open for, whether a submit is
@@ -44,6 +46,8 @@ export interface RenameDocument {
    * the dialog, which is gone by then, so it fell to <body>.
    */
   readonly onCloseAutoFocus: (event: Event) => void
+  /** "Renamed <before> to <after>", for the polite region beside the dialog. */
+  readonly announcement: string
 }
 
 /**
@@ -82,20 +86,45 @@ interface RenameDocumentDeps {
   readonly rootRef: RefObject<HTMLElement | null>
 }
 
-/** Where focus goes as the dialog closes: the card of the document a saved rename landed on. */
+/**
+ * Where focus goes as the dialog closes: the card of the document a saved
+ * rename landed on, or — dismissed — the control that opened it while it is
+ * still on screen, else the card it was opened for: a menu item that opened
+ * it is gone, and Radix, with no Trigger, lands on <body>.
+ */
 function useRenameLanding(rootRef: RefObject<HTMLElement | null>) {
   const landing = useRef<string | null>(null)
+  const openedFor = useRef<{ element: Element | null; path: string } | null>(null)
+  const noteOpener = useCallback((entry: WorkspaceDocumentEntry) => {
+    openedFor.current = { element: document.activeElement, path: entry.path }
+  }, [])
   const onCloseAutoFocus = useCallback(
     (event: Event) => {
-      const path = landing.current
+      const saved = landing.current
+      const from = openedFor.current
       landing.current = null
+      openedFor.current = null
+      if (saved === null && refocus(from?.element)) return event.preventDefault()
+      const path = saved ?? from?.path ?? null
       if (path !== null && focusLanding(rootRef.current, documentLanding(path))) {
         event.preventDefault()
       }
     },
     [rootRef],
   )
-  return { landing, onCloseAutoFocus }
+  return { landing, noteOpener, onCloseAutoFocus }
+}
+
+/** What a saved rename is announced as, or undefined when nothing a reader hears changed. */
+function renameAnnouncement(
+  entry: WorkspaceDocumentEntry,
+  name: string | undefined,
+  newPath: string,
+): string | undefined {
+  const before = documentLabel(entry, 'leaf')
+  const after = documentLabel({ path: newPath, name: name ?? null }, 'leaf')
+  if (before !== after) return `Renamed ${before} to ${after}`
+  return newPath === entry.path ? undefined : `Moved ${before} to ${newPath}`
 }
 
 export function useRenameDocument({
@@ -106,14 +135,19 @@ export function useRenameDocument({
   rootRef,
 }: RenameDocumentDeps): RenameDocument {
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
-  const { landing, onCloseAutoFocus } = useRenameLanding(rootRef)
+  const { announcement, announce } = useAnnouncer()
+  const { landing, noteOpener, onCloseAutoFocus } = useRenameLanding(rootRef)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const open = useCallback((entry: WorkspaceDocumentEntry) => {
-    setError(null)
-    setRenaming(entry)
-  }, [])
+  const open = useCallback(
+    (entry: WorkspaceDocumentEntry) => {
+      noteOpener(entry)
+      setError(null)
+      setRenaming(entry)
+    },
+    [noteOpener],
+  )
 
   // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
   // lets scoped-screen-state.test.ts verify the setters from here.
@@ -138,6 +172,8 @@ export function useRenameDocument({
         }
         landing.current = newPath
         setRenaming(null)
+        const said = renameAnnouncement(entry, name, newPath)
+        if (said !== undefined) announce(said)
       } catch (err) {
         // The server names the PRODUCED path that collided, which on a
         // subtree move is often not the one typed here.
@@ -156,8 +192,8 @@ export function useRenameDocument({
         setBusy(false)
       }
     },
-    [source, moveDocument, refreshAndSelect, listed],
+    [source, moveDocument, refreshAndSelect, listed, announce],
   )
 
-  return { renaming, busy, error, open, cancel, submit, onCloseAutoFocus }
+  return { renaming, busy, error, open, cancel, submit, onCloseAutoFocus, announcement }
 }

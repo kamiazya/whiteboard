@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { folderContents } from './folder-contents.js'
+import { isTagLibrary, TagLibraryBadge } from './tag-library-document.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -43,6 +44,8 @@ export interface FolderContentsListProps {
   onActivateDocument?: (entry: WorkspaceDocumentEntry) => void
   /** Right-click or touch long-press on a document card — the object-action menu hook. */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
+  /** F2 on a focused card: the rename its menu offers, without the menu. */
+  onRenameDocument?: (entry: WorkspaceDocumentEntry) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
   /**
@@ -172,6 +175,7 @@ function cardDescription(
     changed: `${uid}-changed`,
     conflict: `${uid}-conflict`,
     pin: `${uid}-pin`,
+    library: `${uid}-library`,
     age: `${uid}-age`,
     tags: `${uid}-tags`,
   }
@@ -179,6 +183,7 @@ function cardDescription(
     changed?.has(entry.documentId) ? ids.changed : undefined,
     entry.shadowed ? ids.conflict : undefined,
     entry.pinOrder !== undefined ? ids.pin : undefined,
+    isTagLibrary(entry) ? ids.library : undefined,
     entry.updatedAt !== undefined ? ids.age : undefined,
     (entry.tags?.length ?? 0) > 0 ? ids.tags : undefined,
   ]
@@ -187,23 +192,27 @@ function cardDescription(
   return { ids, describedBy }
 }
 
-/** The card's open and menu gestures, each present only when the host handles it. */
+/** The card's open, rename and menu gestures, each present only when the host handles it. */
 function cardHandlers(
   entry: WorkspaceDocumentEntry,
   onActivateDocument: FolderContentsListProps['onActivateDocument'],
   onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu'],
+  onRenameDocument: FolderContentsListProps['onRenameDocument'],
 ) {
   return {
     onDoubleClick: onActivateDocument === undefined ? undefined : () => onActivateDocument(entry),
     onKeyDown:
-      onActivateDocument === undefined
+      onActivateDocument === undefined && onRenameDocument === undefined
         ? undefined
         : (event: KeyboardEvent<HTMLButtonElement>) => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && onActivateDocument !== undefined) {
               // Without this the keydown ALSO fires the native
               // button click, selecting after the open.
               event.preventDefault()
               onActivateDocument(entry)
+            } else if (event.key === 'F2' && onRenameDocument !== undefined) {
+              event.preventDefault()
+              onRenameDocument(entry)
             }
           },
     onContextMenu:
@@ -230,6 +239,7 @@ function CardHeading({
       <span data-testid="card-title" className="truncate text-sm">
         {documentLabel(entry, 'leaf')}
       </span>
+      {isTagLibrary(entry) && <TagLibraryBadge id={ids.library} />}
       {entry.shadowed && (
         <span
           id={ids.conflict}
@@ -286,6 +296,17 @@ function CardCaption({
   )
 }
 
+/** What a card takes from the list's own props. */
+type CardProp =
+  | 'selectedPath'
+  | 'selection'
+  | 'changed'
+  | 'renderThumbnail'
+  | 'onOpen'
+  | 'onActivateDocument'
+  | 'onDocumentContextMenu'
+  | 'onRenameDocument'
+
 /**
  * A document, as a card. Everything it shows beyond the name is a fact the
  * ROW carries — a kind, a path conflict, a pin, when it last moved, its tags
@@ -300,16 +321,8 @@ function DocumentCard({
   onOpen,
   onActivateDocument,
   onDocumentContextMenu,
-}: {
-  entry: WorkspaceDocumentEntry
-  selectedPath: FolderContentsListProps['selectedPath']
-  selection: FolderContentsListProps['selection']
-  changed: FolderContentsListProps['changed']
-  renderThumbnail: FolderContentsListProps['renderThumbnail']
-  onOpen: FolderContentsListProps['onOpen']
-  onActivateDocument: FolderContentsListProps['onActivateDocument']
-  onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu']
-}) {
+  onRenameDocument,
+}: { entry: WorkspaceDocumentEntry } & Pick<FolderContentsListProps, CardProp>) {
   const { ids, describedBy } = cardDescription(useId(), entry, changed)
   const dragProps = useDocumentDragProps(entry.path)
   return (
@@ -326,7 +339,7 @@ function DocumentCard({
         aria-current={entry.path === selectedPath ? 'true' : undefined}
         aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
         onClick={() => onOpen({ kind: 'document', document: entry })}
-        {...cardHandlers(entry, onActivateDocument, onDocumentContextMenu)}
+        {...cardHandlers(entry, onActivateDocument, onDocumentContextMenu, onRenameDocument)}
         // `group` + `aria-pressed:` so the SELECTED look is derived from
         // the attribute a screen reader reads, rather than written a
         // second time from `selection.has(...)`. toggle-state-surface
@@ -426,6 +439,7 @@ export function FolderContentsList({
   onOpen,
   onActivateDocument,
   onDocumentContextMenu,
+  onRenameDocument,
   selectedPath,
   selection,
   changed,
@@ -477,6 +491,7 @@ export function FolderContentsList({
             onOpen={onOpen}
             onActivateDocument={onActivateDocument}
             onDocumentContextMenu={onDocumentContextMenu}
+            onRenameDocument={onRenameDocument}
           />
         </li>
       ))}

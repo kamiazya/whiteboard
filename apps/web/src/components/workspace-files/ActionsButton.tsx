@@ -18,29 +18,44 @@ export function ActionsButton({
   name,
   onOpen,
   className,
+  reveal = false,
 }: {
   /** The object it acts on; the accessible name is "<name> actions". */
   readonly name: string
   readonly onOpen: (x: number, y: number) => void
   readonly className?: string
+  /**
+   * Also drawn with a fine pointer, shown while its `group/row` is hovered or
+   * holds focus: a row with no visible picture of its menu read as having
+   * none. Out of the tab order there — the row's own Shift+F10 is the
+   * keyboard's way, and a second stop per row would double the Tabs.
+   */
+  readonly reveal?: boolean
 }) {
-  if (!hasCoarsePointer()) return null
+  const coarse = hasCoarsePointer()
+  if (!coarse && !reveal) return null
   return (
     <button
       type="button"
+      // Out of the tab order where it is only a picture of the row's menu.
+      tabIndex={coarse ? undefined : -1}
       aria-label={`${name} actions`}
       aria-haspopup="menu"
+      title={coarse ? undefined : 'Actions (Shift+F10)'}
       onClick={(event) => {
         event.stopPropagation()
         const rect = event.currentTarget.getBoundingClientRect()
         onOpen(rect.left, rect.bottom)
       }}
       className={cn(
-        'text-muted-foreground hover:text-foreground hover:bg-accent flex size-11 shrink-0 items-center justify-center rounded-md',
+        'text-muted-foreground hover:text-foreground hover:bg-accent flex shrink-0 items-center justify-center',
+        coarse
+          ? 'size-11 rounded-md'
+          : 'size-6 rounded opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
         className,
       )}
     >
-      <Ellipsis aria-hidden="true" className="size-5" />
+      <Ellipsis aria-hidden="true" className={coarse ? 'size-5' : 'size-4'} />
     </button>
   )
 }

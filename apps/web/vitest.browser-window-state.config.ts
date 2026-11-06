@@ -27,6 +27,11 @@
  * keeping it failed 2 of 3 — and a neutral file in the same position passed
  * 4 of 4, so the fullscreen test is necessary rather than incidental.
  *
+ * A second thing qualifies: Chromium's touch emulation
+ * (`test-utils/coarse-pointer.ts`). Turned off again, it leaves the page
+ * reading `(pointer: fine)` and `(hover: hover)` as false, which hides every
+ * `pointer-fine:` control from the files that run in that page next.
+ *
  * A separate project is a separate browser instance, so the sharing that the
  * defect needs cannot happen. `vitest-projects.test.ts` pins that a
  * `.window-state.browser.test.*` file lands here and NOT in `web-browser`.

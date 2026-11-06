@@ -13,6 +13,13 @@
  * NEEDS the name has it: a real-fullscreen file sat in the shared project
  * with every guard green.
  *
+ * Touch emulation earns the project too, by the same reasoning: turned off,
+ * Chromium leaves the page reading `(pointer: fine)` and `(hover: hover)` as
+ * false (`apps/web/src/test-utils/coarse-pointer.ts` records the
+ * measurement), so the next file in that page loses its `pointer-fine:`
+ * controls. A file that calls the helper, or the CDP method under it, is held
+ * to the suffix the same way.
+ *
  * The second half keeps the suffix honest. A file that carries it without
  * touching fullscreen pays for a separate browser instance (startup and no
  * parallelism with its neighbours) for nothing, and a file that stops using
@@ -56,6 +63,14 @@ const STUBBED_FLAG =
 // then `click(button)` / `button.click()`: the click names no fullscreen.
 const BOUND_FULLSCREEN_QUERY =
   /(?:const|let)\s+(\w+)\s*=\s*[^\n]*(?:(?:get|find|query)(?:All)?By\w*|locator)\([\s\S]{0,120}?\bfullscreen\b/gi
+
+/** A test that puts the page on an emulated finger, which no call takes back. */
+const TOUCH_EMULATION = /\bemulateCoarsePointer\(|\bsetTouchEmulationEnabled\b/
+
+/** Whether a file leaves the page in a state the next file cannot tolerate. */
+function leavesWindowState(source: string): boolean {
+  return entersRealFullscreen(source) || TOUCH_EMULATION.test(source)
+}
 
 const ISOLATED_NAME = /\.window-state\.browser\.test\.tsx?$/
 const BROWSER_NAME = /\.browser\.test\.tsx?$/
@@ -141,13 +156,24 @@ describe('real fullscreen is isolated in its own browser project', () => {
     expect(offenders).toEqual([])
   })
 
-  it('has no window-state file that never enters fullscreen', () => {
-    const unearned = browserFiles()
-      .filter((file) => ISOLATED_NAME.test(file))
-      .filter((file) => !entersRealFullscreen(readFileSync(file, 'utf-8')))
+  it('has no touch-emulating browser test outside the window-state project', () => {
+    const offenders = browserFiles()
+      .filter((file) => !ISOLATED_NAME.test(file))
+      .filter((file) => TOUCH_EMULATION.test(readFileSync(file, 'utf-8')))
       .map(
         (file) =>
-          `${rel(file)}: carries the window-state suffix but never enters real fullscreen — drop the suffix so it shares the web-browser project`,
+          `${rel(file)}: emulates touch — name it *.window-state.browser.test.tsx, or the next file in its page loses every pointer-fine: control`,
+      )
+    expect(offenders).toEqual([])
+  })
+
+  it('has no window-state file that leaves the window as it found it', () => {
+    const unearned = browserFiles()
+      .filter((file) => ISOLATED_NAME.test(file))
+      .filter((file) => !leavesWindowState(readFileSync(file, 'utf-8')))
+      .map(
+        (file) =>
+          `${rel(file)}: carries the window-state suffix but neither enters real fullscreen nor emulates touch — drop the suffix so it shares the web-browser project`,
       )
     expect(unearned).toEqual([])
   })

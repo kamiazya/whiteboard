@@ -453,7 +453,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Escape'],
     display: 'Esc',
     description:
-      'Cancel the gesture or clear the selection; on a connection reached with Tab, back to its node; discards text being edited; puts the eraser down',
+      'Cancel the gesture or clear the selection; on a connection reached with Tab, back to its node; discards text being edited; puts the eraser or the Connect tool down',
     handledInline: true,
   },
   {

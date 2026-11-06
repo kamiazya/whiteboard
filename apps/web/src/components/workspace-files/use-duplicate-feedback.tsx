@@ -2,6 +2,7 @@ import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { TOAST_ACTION_CLASS, Toast } from '../ui/toast.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
 type DuplicateHandler = NonNullable<WorkspaceFilesPanelProps['onDuplicateDocument']>
@@ -129,26 +130,15 @@ export function DuplicatedToast({
 }) {
   if (copy === null) return null
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2">
-      <div
-        role="status"
-        aria-live="polite"
-        className="bg-background animate-in fade-in-0 slide-in-from-bottom-2 flex items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-lg duration-(--motion-duration-normal) ease-(--motion-ease-out)"
-      >
-        <span className="min-w-0 truncate">
-          Duplicated {copy.from}
-          {copy.withoutComments ? ' without comments' : ''}
-        </span>
-        {onOpen !== undefined && (
-          <button
-            type="button"
-            onClick={() => onOpen(copy.entry)}
-            className="hover:bg-accent rounded-md border px-2 py-0.5 font-medium pointer-coarse:min-h-11 pointer-coarse:px-3"
-          >
+    <Toast
+      message={`Duplicated ${copy.from}${copy.withoutComments ? ' without comments' : ''}`}
+      actions={
+        onOpen !== undefined && (
+          <button type="button" onClick={() => onOpen(copy.entry)} className={TOAST_ACTION_CLASS}>
             Open
           </button>
-        )}
-      </div>
-    </div>
+        )
+      }
+    />
   )
 }

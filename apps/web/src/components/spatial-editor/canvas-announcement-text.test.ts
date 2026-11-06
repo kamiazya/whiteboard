@@ -2,7 +2,12 @@ import type { CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { freehandLine } from '../../lib/spatial/freehand.js'
-import { canvasChangeMessage, selectionMessage, tidyMessage } from './canvas-announcement-text.js'
+import {
+  canvasChangeMessage,
+  nudgeSettledMessage,
+  selectionMessage,
+  tidyMessage,
+} from './canvas-announcement-text.js'
 
 const a = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
 const b = textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' })
@@ -21,6 +26,21 @@ describe('what a canvas change sounds like', () => {
     ).toBe('Frame added')
     expect(canvasChangeMessage(two, empty)).toBe('Deleted 2 nodes')
     expect(canvasChangeMessage(two, { nodes: [a], edges: [] })).toBe('Deleted 1 node')
+  })
+
+  it('a further frame says how many there are now, so repeats are told apart', () => {
+    const first = groupNode({ id: 'g1', x: 0, y: 0, width: 50, height: 50 })
+    const second = groupNode({ id: 'g2', x: 100, y: 0, width: 50, height: 50 })
+    const third = groupNode({ id: 'g3', x: 200, y: 0, width: 50, height: 50 })
+    expect(
+      canvasChangeMessage({ nodes: [first], edges: [] }, { nodes: [second, first], edges: [] }),
+    ).toBe('Frame 2 added')
+    expect(
+      canvasChangeMessage(
+        { nodes: [second, first], edges: [] },
+        { nodes: [third, second, first], edges: [] },
+      ),
+    ).toBe('Frame 3 added')
   })
 
   it('a frame that arrives around existing nodes says it framed them', () => {
@@ -217,5 +237,33 @@ describe('what a tidy sounds like', () => {
   it('a move that changes nothing is not a tidy', () => {
     expect(tidyMessage(nodes, [{ id: 'p', x: 20, y: 40 }])).toBe('Already tidy')
     expect(tidyMessage(nodes, [])).toBe('Already tidy')
+  })
+})
+
+describe('where a run of nudges left the selection', () => {
+  const frame = groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 200, label: 'Went well' })
+  const inFrame = textNode({ id: 'n', x: 40, y: 40, width: 100, height: 40, text: 'Energy' })
+
+  it('names the note, the whole distance, and the frame it ended in', () => {
+    const canvas = { nodes: [frame, inFrame], edges: [] }
+    expect(nudgeSettledMessage(canvas, ['n'], { dx: 64, dy: -8 })).toBe(
+      'Energy moved 64 right, 8 up, in Went well',
+    )
+  })
+
+  it('says when the note ended in no frame, and counts a group', () => {
+    const loose = { ...inFrame, x: 600 }
+    expect(
+      nudgeSettledMessage({ nodes: [frame, loose], edges: [] }, ['n'], { dx: 0, dy: 32 }),
+    ).toBe('Energy moved 32 down, not in a frame')
+    expect(
+      nudgeSettledMessage({ nodes: [frame, loose, b], edges: [] }, ['n', 'b'], { dx: 8, dy: 0 }),
+    ).toBe('2 nodes moved 8 right')
+  })
+
+  it('a run that came back to where it began says so', () => {
+    expect(nudgeSettledMessage({ nodes: [a], edges: [] }, ['a'], { dx: 0, dy: 0 })).toBe(
+      'A back where it was',
+    )
   })
 })

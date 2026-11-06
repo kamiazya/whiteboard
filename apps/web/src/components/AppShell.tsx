@@ -1,5 +1,12 @@
 import { Maximize2, Minimize2, Settings } from 'lucide-react'
-import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover.js'
@@ -20,6 +27,7 @@ import { DaemonAddress } from './connection/DaemonAddress.js'
 import { ExtensionConnectEntry } from './connection/ExtensionConnectEntry.js'
 import { SkipToContent } from './shell/SkipToContent.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
+import { useBottomChromeClearance } from './spatial-editor/use-bottom-chrome-clearance.js'
 
 /**
  * The honest-detach floor for a moved workspace: a cold load whose silent
@@ -129,6 +137,9 @@ export interface AppShellProps {
   readonly workspaces?: KeeperWorkspaces
 }
 
+/** The editor chrome along the bottom edge this control may have to stand above. */
+const EDITOR_BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
+
 /**
  * The way back out of fullscreen.
  *
@@ -166,7 +177,10 @@ export interface AppShellProps {
  *
  * 70px is that strip: the dock's own 0.75rem offset, its 46px, and the gap
  * again. It clears the markdown formatting bar (44px) too, so no page has
- * to say anything about either.
+ * to say anything about either. It is the FLOOR, not the answer: on a finger
+ * the dock folds onto two rows and stands about 110px tall, so the control
+ * also measures the editor chrome under its column and stands above that
+ * when it is higher.
  */
 function ExitFullscreenControl({
   buttonRef,
@@ -175,9 +189,22 @@ function ExitFullscreenControl({
   buttonRef: RefObject<HTMLButtonElement | null>
   onExit: () => void
 }) {
+  const [measured, lift] = useBottomChromeClearance<HTMLButtonElement>(
+    true,
+    EDITOR_BOTTOM_CHROME,
+    'viewport',
+  )
+  const ref = useCallback(
+    (el: HTMLButtonElement | null) => {
+      measured.current = el
+      buttonRef.current = el
+    },
+    [measured, buttonRef],
+  )
   return (
     <button
-      ref={buttonRef}
+      ref={ref}
+      style={lift === undefined ? undefined : { bottom: `${lift}px` }}
       type="button"
       aria-label="Exit fullscreen"
       data-testid="shell-exit-fullscreen"

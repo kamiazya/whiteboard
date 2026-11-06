@@ -1256,12 +1256,20 @@ grow (the 2026-08-08 phone overlap).
 
 The dock's button set is FIXED and small ([history | select/connect | +]):
 creation tools live in the "+" menu (the tldraw/FigJam shape, user
-decision 2026-08-08), so the dock stays a single row at any viewport and
-a new node type extends the menu, never the dock's width. Wrapping and
-overflow-scrolling are both rejected: wrapping stacks rows as tools grow,
-and scrolling clips popovers anchored inside the dock (version history,
-the + menu). Opening the + menu focuses its first entry (keyboard path:
-Enter, Enter).
+decision 2026-08-08), so a new node type extends the menu, never the
+dock's width. Where one row cannot hold every control whole — a phone, at
+the 44px touch size — the dock folds onto exactly TWO rows: the five tools
+along the bottom, nearest the thumb, and history, + and zoom above them.
+Whether it folds is measured (`useStackWhenCramped` tries the single row),
+never a breakpoint, since it depends on what the host docks and on the
+pointer. A free wrap stays rejected (it strands separators and stacks rows
+as tools grow), and so does scrolling the tools: a tool scrolled out of a
+strip gives no sign it is there, and the half-cut buttons at its edges read
+as stray glyphs. The folded dock is taller than `DOCK_OCCLUSION_PX`, so
+placement, reveal and fit read `bottomChromeOcclusionPx`, which measures the
+bottom chrome; the Draw options and the overview's toggle stand above
+whatever reaches under them (`useBottomChromeClearance`). Opening the +
+menu focuses its first entry (keyboard path: Enter, Enter).
 
 ## Keyboard shortcuts: one catalog
 

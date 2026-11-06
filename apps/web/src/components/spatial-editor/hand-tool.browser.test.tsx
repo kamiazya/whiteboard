@@ -10,7 +10,10 @@ import { userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
+
+/** The one-row dock's strip: the floor the measured occlusion answers with when nothing is measured. */
+const DOCK_OCCLUSION_PX = bottomChromeOcclusionPx(null)
 
 afterEach(cleanup)
 

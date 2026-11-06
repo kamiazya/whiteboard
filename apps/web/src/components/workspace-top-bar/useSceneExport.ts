@@ -36,16 +36,22 @@ async function textHasPicture(blob: Blob): Promise<boolean> {
   return PICTURE_OR_EMBED.test(new TextDecoder().decode(await blob.arrayBuffer()))
 }
 
+/** How a Markdown save's confirmation begins: the menu shows that one on screen as well. */
+export const MARKDOWN_SAVED_NOTICE = `Saved as ${EXPORT_CONFIG.md.saved}`
+
+/** Where a confirmation's caveat starts, after what was saved. */
+export const NOTICE_CAVEAT_SEPARATOR = ' — '
+
 /** What the confirmation says the saved text left out, if anything. */
 async function savedCaveat(format: SceneExportFormat, blob: Blob): Promise<string> {
   // An image in a canvas is an `asset:` reference to the workspace's file,
   // so the saved text does not carry its pixels.
   if (format === 'canvas' && (await textHasAsset(blob))) {
-    return ' — images are referenced, not embedded'
+    return `${NOTICE_CAVEAT_SEPARATOR}images are referenced, not embedded`
   }
   // A note's pictures and embedded diagrams are named, not drawn, in its .md.
   if (format === 'md' && (await textHasPicture(blob))) {
-    return ' — pictures and embedded diagrams are not included; for a handout, use Print / Save as PDF'
+    return `${NOTICE_CAVEAT_SEPARATOR}pictures and embedded diagrams are not included; for a handout, use Print / Save as PDF`
   }
   return ''
 }

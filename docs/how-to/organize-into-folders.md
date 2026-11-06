@@ -65,9 +65,11 @@ including the name you just gave a folder the move made.
 ## Rename a folder
 
 Right-click a folder (a card in the list or an entry in the tree) and choose
-**Rename…**. On a touch screen use the **…** button beside the folder —
-the segments of the folder path above the list carry one too — or long-press
-it. Type the new name and press **Enter**; **Escape** cancels. Only the name
+**Rename…**, or focus it and press **F2**. **Shift+F10** or the Menu key opens
+the same menu from the keyboard. In the tree a **…** button shows beside a
+folder while the pointer is over it or the row has focus. On a touch screen use
+the **…** button beside the folder — the segments of the folder path above the
+list carry one too — or long-press it. Type the new name and press **Enter**; **Escape** cancels. Only the name
 changes: the folder's address, every document's path under it and every link
 into it stay as they are.
 
@@ -79,6 +81,10 @@ the other folder's name as it is written and, for a folder inside another, the
 folder it is in: 'Another folder in "Q3 Planning" is already called "Hiring"'. Two
 folders that came to share a name by syncing two copies of the workspace keep
 both names; nothing is renamed for you.
+
+A document is renamed the same way: **Rename…** in its menu, or **F2** on its
+focused card. A saved rename is announced as "Renamed _old name_ to _new
+name_".
 
 Names nobody typed follow the same rule without asking you. A note that is
 still unnamed takes its name from its first heading only when no other
@@ -123,15 +129,26 @@ path). It asks for a name; **Create folder** opens the new folder, showing the
 name you gave it, with keyboard focus on its name in the folder path and a
 screen reader told "In _name_, empty". After a move, focus goes to the folder
 the document went to (or the document itself, after **Move documents here…**).
+Closing any of these dialogs with **Escape** or **Cancel** puts focus back where
+you opened it from — the **New folder** button, or the folder or document whose
+menu you used.
 
 A folder exists only while a document is in it, and the dialog says so before
 you create it: the new folder is empty until you put a document there, and its
-name is kept by the page until then and saved with the folder once a document
-lands in it. The empty folder offers **New note here** and **New canvas here**,
+name is kept in this browser tab until then — a reload or coming back to the
+folder in the same tab still shows it, and so does a folder you make inside it
+— and saved with the folder once a document lands in it. A new tab or a new
+browser session does not have it. The empty folder offers **New note here** and **New canvas here**,
 which create the document inside it, and **Move documents here…**, which lists
 every other document in the workspace with a checkbox and where it is now: tick
 the ones to file there and choose **Move here**. Leaving it empty lets it go,
 name and all. The same duplicate rule as a rename applies.
+
+A `/` nests here exactly as it does in **Move to folder… > New folder…**, and
+the dialog says so under its field: `Workshops/Template` makes a folder called
+“Workshops” with a folder called “Template” inside it, and opens “Template”. A part that matches a folder already there is that folder, so
+only the missing levels are made; typing a path whose every folder already
+exists is refused with the last folder's name, since nothing would be made.
 
 The page keeps a folder's name the same way when a move takes the last document
 out of it: move a document back in during the same visit and the folder comes
