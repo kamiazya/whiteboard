@@ -75,6 +75,23 @@ describe('what a canvas change sounds like', () => {
     )
   })
 
+  it('drawings that come back are said to be restored, a new one stays silent', () => {
+    const drawn = (id: string) =>
+      freehandLine(
+        id,
+        [
+          { x: 0, y: 0 },
+          { x: 20, y: 30 },
+          { x: 40, y: 10 },
+        ],
+        1,
+      ) as CanvasLine
+    const back = { ...empty, lines: [drawn('s'), drawn('t')] }
+    expect(canvasChangeMessage(empty, back, false, new Set(['s', 't']))).toBe('Restored 2 drawings')
+    // A stroke the pen just laid down was never on the board before.
+    expect(canvasChangeMessage(empty, back, false, new Set())).toBeUndefined()
+  })
+
   it('several nodes at once are counted, not itemised', () => {
     expect(canvasChangeMessage(empty, { nodes: [a, b, c], edges: [] })).toBe('3 nodes added')
   })

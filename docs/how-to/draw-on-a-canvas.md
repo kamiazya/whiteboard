@@ -41,8 +41,8 @@ drawing erases it too.
 The eraser takes only drawings: boxes, connections and lines ruled between two
 points stay where they are, and so does a locked drawing. A drawing made of
 several strokes loses only the strokes you crossed. One sweep is one step, so
-one undo brings back everything it erased, and a screen reader hears "Erased 2
-drawings".
+one undo brings back everything it erased. A screen reader hears "Erased 2
+drawings" for the sweep and "Restored 2 drawings" for the undo.
 
 Press `Esc`, or pick another tool, to put the eraser down.
 

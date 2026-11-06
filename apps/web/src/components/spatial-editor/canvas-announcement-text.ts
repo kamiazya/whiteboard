@@ -90,6 +90,8 @@ export function canvasChangeMessage(
   next: SpatialCanvas,
   /** The eraser is what removed them, so drawings are said to be erased. */
   erasing = false,
+  /** Ink ids this board has shown before: one coming back is RESTORED (an undo, a redo). */
+  seenLineIds: ReadonlySet<string> = new Set(),
 ): string | undefined {
   const prevIds = new Set(prev.nodes.map((node) => node.id))
   const nextIds = new Set(next.nodes.map((node) => node.id))
@@ -112,7 +114,30 @@ export function canvasChangeMessage(
   if (goneEdges.length > 0 && newEdges.length === 0) {
     return `Deleted ${plural(goneEdges.length, 'edge', 'edges')}`
   }
-  return goneLinesMessage(prev, next, erasing) ?? membershipMessage(prev, next)
+  return (
+    goneLinesMessage(prev, next, erasing) ??
+    restoredLinesMessage(prev, next, seenLineIds) ??
+    membershipMessage(prev, next)
+  )
+}
+
+/**
+ * Ink that is back after leaving — an undone erase or delete, a redone
+ * stroke — said the way its going was. A stroke the pen has just laid down
+ * was never on the board, and stays silent: drawing is a run of strokes,
+ * and narrating each would drown the reader.
+ */
+function restoredLinesMessage(
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+  seenLineIds: ReadonlySet<string>,
+): string | undefined {
+  const had = new Set((prev.lines ?? []).map((line) => line.id))
+  const back = (next.lines ?? []).filter((line) => !had.has(line.id))
+  if (back.length === 0 || !back.every((line) => seenLineIds.has(line.id))) return undefined
+  return back.every(isFreehandStroke)
+    ? `Restored ${plural(back.length, 'drawing', 'drawings')}`
+    : `Restored ${plural(back.length, 'line', 'lines')}`
 }
 
 /**
