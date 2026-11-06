@@ -28,7 +28,11 @@ describe('useDeleteDocuments', () => {
         kind: 'spatial',
       })
     })
-    expect(result.current.dialog.pending).toEqual({ displayName: 'Alpha board', kind: 'spatial' })
+    expect(result.current.dialog.pending).toEqual({
+      displayName: 'Alpha board',
+      kind: 'spatial',
+      path: 'alpha',
+    })
   })
 
   it('shows the bulk subject and the bulk sentence for more than one path', () => {
@@ -112,7 +116,11 @@ describe('useDeleteDocuments', () => {
     // The list behind the dialog has changed, so it is re-read even though
     // the dialog stays open.
     expect(refresh).toHaveBeenCalledTimes(1)
-    expect(result.current.dialog.pending).toEqual({ displayName: 'Beta board', kind: 'spatial' })
+    expect(result.current.dialog.pending).toEqual({
+      displayName: 'Beta board',
+      kind: 'spatial',
+      path: 'beta',
+    })
     expect(result.current.dialog.action).toBe('delete-document')
     expect(result.current.dialog.error).toBe('1 of 2 could not be deleted.')
 
@@ -245,5 +253,24 @@ describe('useDeleteDocuments', () => {
     })
     expect(result.current.dialog.pending).toBeNull()
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a delete that takes the tag library', () => {
+  it('tells the dialog, single or bulk', () => {
+    const { result } = renderHook(() =>
+      useDeleteDocuments({
+        keeper: 'browser',
+        deleteEach: vi.fn(async () => ({ failed: [], lastError: null })),
+        lookup: () => undefined,
+        refresh: vi.fn(),
+      }),
+    )
+    act(() =>
+      result.current.requestDelete({ paths: ['notes', 'tags'], displayName: '2 documents' }),
+    )
+    expect(result.current.dialog.pending?.tagLibrary).toBe(true)
+    act(() => result.current.requestDelete({ paths: ['notes'], displayName: 'Notes' }))
+    expect(result.current.dialog.pending?.tagLibrary).toBeUndefined()
   })
 })

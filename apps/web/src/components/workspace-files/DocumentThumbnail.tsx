@@ -21,6 +21,7 @@ import { PREVIEW_PADDING_PX } from '../../lib/preview-padding.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox, withoutLinks } from './fit-svg.js'
 import { type DocumentRender, EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
+import { isTagLibrary } from './tag-library-document.js'
 
 export interface DocumentThumbnailProps {
   readonly document: WorkspaceDocumentEntry
@@ -97,7 +98,9 @@ function Undrawn({ document, empty }: { document: WorkspaceDocumentEntry; empty:
         data-kind={kind}
         className="text-muted-foreground min-h-0 w-full flex-1 opacity-60"
       />
-      <span className="text-muted-foreground text-xs leading-none">Empty</span>
+      <span className="text-muted-foreground text-xs leading-none">
+        {isTagLibrary(document) ? 'Tag colours' : 'Empty'}
+      </span>
     </span>
   )
 }

@@ -4,6 +4,13 @@ const CANCEL_CLASS = 'rounded-md border px-3 py-1.5 text-sm hover:bg-accent poin
 const PRIMARY_CLASS =
   'bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm disabled:opacity-50 pointer-coarse:min-h-11'
 
+/**
+ * What "/" means wherever a new folder is named. One sentence for every entry
+ * point, because the rule is one: the same word nesting in one dialog and
+ * refused in the next is two rules to a reader.
+ */
+export const NESTED_FOLDER_HINT = 'Use “/” for a folder inside a folder: “Class/Week 6” makes both.'
+
 /** A refusal worded beside the field it concerns; nothing when there is none. */
 export function ErrorLine({ message }: { message: string | null }) {
   if (message === null) return null

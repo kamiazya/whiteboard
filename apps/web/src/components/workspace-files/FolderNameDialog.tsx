@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ interface FolderNameDialogProps {
   title: string
   description: string
   initialName: string
+  /** A line under the field saying how a name is read, when it is read specially. */
+  hint?: string | undefined
   /**
    * Why a name cannot be used, or null: the folder-name rule and the
    * duplicate check, asked before anything is sent.
@@ -27,10 +29,42 @@ interface FolderNameDialogProps {
   onCloseAutoFocus: (event: Event) => void
 }
 
+/** The name field, and the line under it saying how a name is read when it is read specially. */
+function NameField({
+  value,
+  onChange,
+  hint,
+}: {
+  value: string
+  onChange: (next: string) => void
+  hint: string | undefined
+}) {
+  const hintId = useId()
+  return (
+    <>
+      <label className="flex flex-col gap-1 text-sm">
+        Folder name
+        <input
+          value={value}
+          aria-describedby={hint === undefined ? undefined : hintId}
+          onChange={(event) => onChange(event.target.value)}
+          className="rounded border px-2 py-1 pointer-coarse:min-h-11"
+        />
+      </label>
+      {hint !== undefined && (
+        <span id={hintId} className="text-muted-foreground text-xs">
+          {hint}
+        </span>
+      )}
+    </>
+  )
+}
+
 function FolderNameForm({
   title,
   description,
   initialName,
+  hint,
   refuse,
   submitLabel,
   busy,
@@ -55,14 +89,7 @@ function FolderNameForm({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-2 py-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Folder name
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className="rounded border px-2 py-1 pointer-coarse:min-h-11"
-          />
-        </label>
+        <NameField value={name} onChange={setName} hint={hint} />
         <ErrorLine message={issue ?? error} />
       </div>
       <DialogActions

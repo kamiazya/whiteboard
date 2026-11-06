@@ -25,6 +25,7 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { type FolderNames, folderDisplayName, folderTrail } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
+import { isTagLibrary, TagLibraryBadge } from './tag-library-document.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
 import { type SearchCombobox, searchOptionId } from './use-search-combobox.js'
@@ -229,6 +230,7 @@ function SearchResultCard({
           >
             <Highlighted text={locationOf(entry.path, folderNames)} query={query} />
           </span>
+          {isTagLibrary(entry) && <TagLibraryBadge />}
           {(entry.tags?.length ?? 0) > 0 && (
             /* A #tag query matches nothing visible in title or location, so the
              row must show the tag that put it here. */

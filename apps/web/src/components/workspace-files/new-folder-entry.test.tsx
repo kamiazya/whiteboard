@@ -100,3 +100,48 @@ describe('filing existing documents into an empty new folder', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 })
+
+describe('a "/" typed into New folder', () => {
+  it('nests, naming each folder it makes, with the same hint as Move to folder', async () => {
+    const { source } = renderPanel()
+    const dialog = await newFolderFromToolbar('Workshops/Template')
+    expect(within(dialog).getByText(/“Class\/Week 6” makes both/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create folder' }))
+
+    const trail = await screen.findByRole('navigation', { name: 'Folder path' })
+    await waitFor(() =>
+      expect(within(trail).getByRole('button', { name: 'Template' })).toBeTruthy(),
+    )
+    expect(within(trail).getByRole('button', { name: 'Workshops' })).toBeTruthy()
+
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(await within(contents).findByRole('button', { name: 'New note here' }))
+    await waitFor(() =>
+      expect(source.createDocument).toHaveBeenCalledWith(
+        expect.stringMatching(/^workshops\/template\//),
+        'markdown',
+        undefined,
+      ),
+    )
+    await waitFor(() => expect(source.setFolderName).toHaveBeenCalledWith('workshops', 'Workshops'))
+    expect(source.setFolderName).toHaveBeenCalledWith('workshops/template', 'Template')
+  })
+
+  it('opens an existing level and refuses a whole path that already stands', async () => {
+    renderPanel()
+    fireEvent.submit(
+      within(await newFolderFromToolbar('Workshops'))
+        .getByLabelText('Folder name')
+        .closest('form') as HTMLElement,
+    )
+    await screen.findByTestId('folder-contents')
+    fireEvent.click(
+      within(await screen.findByRole('navigation', { name: 'Folder path' })).getByRole('button', {
+        name: 'Workspace',
+      }),
+    )
+    const dialog = await newFolderFromToolbar('workshops')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create folder' }))
+    expect(await within(dialog).findByText(/already called "Workshops"/)).toBeTruthy()
+  })
+})

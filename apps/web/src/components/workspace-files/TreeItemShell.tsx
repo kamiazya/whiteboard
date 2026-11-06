@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type HTMLAttributes, type ReactNode, useState } from 'react'
 
 function ExpandToggle({
   name,
@@ -43,6 +43,8 @@ interface TreeItemShellProps {
   row: ReactNode | ((group: { toggle: () => void; expanded: boolean }) => ReactNode)
   /** The nested items, rendered while expanded. */
   children: ReactNode
+  /** What the item itself answers to while it, rather than a control in it, has focus. */
+  itemProps?: HTMLAttributes<HTMLDivElement>
 }
 
 export function TreeItemShell({
@@ -51,6 +53,7 @@ export function TreeItemShell({
   hasChildren,
   row,
   children,
+  itemProps,
 }: Readonly<TreeItemShellProps>) {
   const [expanded, setExpanded] = useState(true)
   const toggle = () => setExpanded((prev) => !prev)
@@ -61,12 +64,13 @@ export function TreeItemShell({
     // tabIndex satisfies useFocusableInteractive; actual keyboard operation
     // happens through the nested native buttons, which are tabbable.
     <div
+      {...itemProps}
       role="treeitem"
       tabIndex={-1}
       aria-expanded={hasChildren ? expanded : undefined}
       aria-label={label}
     >
-      <div className="flex items-center gap-1">
+      <div className="group/row flex items-center gap-1">
         {hasChildren ? (
           <ExpandToggle name={name} expanded={expanded} onToggle={toggle} />
         ) : (

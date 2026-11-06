@@ -195,7 +195,13 @@ it('a held folder opens the folder menu the panel offers through context', () =>
   function FolderHost() {
     return (
       <FolderActionsContext.Provider
-        value={{ dropInto: vi.fn(), openFolderMenu, gatherInto: vi.fn() }}
+        value={{
+          dropInto: vi.fn(),
+          openFolderMenu,
+          gatherInto: vi.fn(),
+          renameFolder: vi.fn(),
+          canRename: () => true,
+        }}
       >
         <Surface />
       </FolderActionsContext.Provider>

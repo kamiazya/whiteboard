@@ -7,9 +7,15 @@ import {
   folderNameTakenMessage,
   folderShowingName,
   folderTrail,
-  newFolderSegmentIn,
   planNestedFolder,
 } from './folder-names.js'
+
+/** The address one new folder named `name` gets under `parent`, as a typed New folder plans it. */
+function newFolderSegmentIn(parent: string, name: string, taken: readonly string[]): string {
+  const plan = planNestedFolder(name, { folders: [], names: new Map(), taken, from: parent })
+  if ('refusal' in plan) throw new Error(plan.refusal)
+  return plan.path
+}
 
 const names = new Map([
   ['class', 'Class'],
@@ -78,7 +84,7 @@ const pathArb = fc
 const parentArb = fc.constantFrom('', 'a', 'a/b')
 const nameArb = fc.constantFrom('Week 6', 'week 6', 'A', '第六週', '!!!', 'Folder')
 
-describe('newFolderSegmentIn (fast-check)', () => {
+describe('a new folder address (fast-check)', () => {
   fcTest.prop([parentArb, nameArb, fc.array(pathArb, { maxLength: 12 })], withDefaults())(
     'answers a well-formed path directly under the parent that nothing taken holds',
     (parent, name, taken) => {
