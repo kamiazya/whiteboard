@@ -45,7 +45,7 @@ export function duplicateWorkspaceDocument(
   const content = projectWorkspaceDocument(
     doc,
     input.sourceDocumentId,
-    input.withoutAnnotations === true ? { omit: ANNOTATION_LAYER_KEYS } : {},
+    input.withoutAnnotations === true ? ANNOTATION_LAYER_KEYS : undefined,
   )
   if (source === null || content === null) return null
   const created = createWorkspaceDocumentAtPath(doc, {
@@ -59,8 +59,4 @@ export function duplicateWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
-const ANNOTATION_LAYER_KEYS: ReadonlySet<string> = new Set([
-  THREADS_KEY,
-  COMMENTS_KEY,
-  PROPOSALS_KEY,
-])
+const ANNOTATION_LAYER_KEYS = new Set([THREADS_KEY, COMMENTS_KEY, PROPOSALS_KEY])
