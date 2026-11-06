@@ -645,9 +645,15 @@ export const spatialCanvasSchema = z
      * files. Adding `lines: []` to every one of them would be the largest part
      * of this diff by far, all of it noise, on a field almost every board
      * leaves empty — and a diff a reviewer cannot read is a diff nobody
-     * reviews. An absent `lines` and an empty one say the same thing, which is
-     * the canonicalisation the codec already makes for an empty extension
-     * object.
+     * reviews.
+     *
+     * The rule that makes optional safe: EMPTY IS SPELLED ABSENT. Every reader
+     * treats an absent `lines` and `[]` alike, and every producer omits an
+     * empty one — the Loro bridge's read, the cascade, the OCIF lift and
+     * `wb_canvas_edit`'s write all drop it. They must, because the JSON
+     * Canvas projection writes `x-whiteboard.lines` whenever the field is
+     * PRESENT: `lines: []` would project to `"x-whiteboard": { "lines": [] }`,
+     * bytes its absence does not produce.
      */
     lines: z.array(canvasLineSchema).optional(),
     /**
