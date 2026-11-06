@@ -93,7 +93,8 @@ so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy 
 included. **Duplicate without comments**, next to it in a document's menu and
 in an open document's **More actions**, copies only what the document says:
 the copy starts with no comment threads and no proposals, and the original
-keeps every one of its own. The copy is named and placed the same way. Both
+keeps every one of its own. The copy is named and placed the same way, and
+the notice reads "Duplicated _name_ without comments". Both
 are offered on every document; on one that has no comments they make the
 same copy.
 
