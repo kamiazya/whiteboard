@@ -31,8 +31,9 @@ import {
   NoRoomForCopyError,
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
+  type ApiErrorBody,
+  errorBody,
   type ServerDeps,
   type WbDocumentMoveResult,
   wbDocumentDelete,
@@ -71,7 +72,6 @@ import {
   pathTakenAs,
   refusedBy,
   segmentTaken,
-  titleRefusal,
   workspaceNotFound,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -307,8 +307,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // forward its arguments and add a name.
   app.post('/api/workspaces', async (c) => {
     const body = await readJsonBody(c, createWorkspaceRequestSchema, {
-      voice: 'problem',
-      refuseShape: (error) => titleRefusal(error, 'displayName is required'),
+      refuseShape: (error) => invalidBodyRefusal(error, 'displayName is required'),
     })
     if ('refusal' in body) return body.refusal
     const { displayName } = body.data
@@ -343,8 +342,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     const malformed = refuseMalformedHandle(c, handle)
     if (malformed !== null) return malformed
     const parsed = await readJsonBody(c, renameWorkspaceRequestSchema, {
-      voice: 'problem',
-      refuseShape: (error) => titleRefusal(error, 'segment or displayName must be valid'),
+      refuseShape: (error) => invalidBodyRefusal(error, 'segment or displayName must be valid'),
     })
     if ('refusal' in parsed) return parsed.refusal
 
@@ -418,34 +416,28 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // from drifting. All this translates is the ADDRESS — this surface names a
   // document by path, the operation by the id the index assigned — and the
   // absent case, which is a 404 here and a throw there.
-  onDocumentsRoute(
-    app,
-    'delete',
-    [],
-    async (c, workspaceId, path) => {
-      try {
-        const deps = options.serverDeps
-        const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
-        if (entry === null) {
-          return c.json({ title: `Document "${path}" not found` }, 404)
-        }
-        await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
-        const response: DeleteDocumentResponse = { ok: true }
-        return c.json(response)
-      } catch (err) {
-        // The tree index refuses an unknown workspace with a throw where the
-        // retired SQL index answered null; both are a 404.
-        const owned = firstOwned(err, [workspaceNotFound, hasDescendants, corruptStored])
-        if (owned) return c.json(owned.body, owned.status)
-        // A busy database is the app's to answer (503 with Retry-After): the
-        // one failure here a caller can act on by retrying.
-        if (isDatabaseBusy(err)) throw err
-        getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
-        return c.json({ title: 'Failed to delete document.' } satisfies ApiErrorBody, 500)
+  onDocumentsRoute(app, 'delete', [], async (c, workspaceId, path) => {
+    try {
+      const deps = options.serverDeps
+      const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+      if (entry === null) {
+        return c.json(errorBody('not_found', `Document "${path}" not found`), 404)
       }
-    },
-    { badRequest: 'problem-details' },
-  )
+      await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
+      const response: DeleteDocumentResponse = { ok: true }
+      return c.json(response)
+    } catch (err) {
+      // The tree index refuses an unknown workspace with a throw where the
+      // retired SQL index answered null; both are a 404.
+      const owned = firstOwned(err, [workspaceNotFound, hasDescendants, corruptStored])
+      if (owned) return c.json(owned.body, owned.status)
+      // A busy database is the app's to answer (503 with Retry-After): the
+      // one failure here a caller can act on by retrying.
+      if (isDatabaseBusy(err)) throw err
+      getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
+      return c.json(errorBody('internal_error', 'Failed to delete document.'), 500)
+    }
+  })
 
   // Rename a document's path in place: same documentId, same versions and
   // bytes, just a new placement. Old URLs carrying the old path 404 by
@@ -460,60 +452,53 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   //
   // The web app's move/rename UI reaches exactly this route
   // (`WorkspaceFilesPanel` -> `daemon-files-source` -> `PUT …/documents/:path/path`).
-  onDocumentsRoute(
-    app,
-    'put',
-    ['path'],
-    async (c, workspaceId, path) => {
-      const body = await readJsonBody(c, renameDocumentPathRequestSchema, {
-        voice: 'problem',
-        refuseShape: (error) => titleRefusal(error, 'path is required'),
+  onDocumentsRoute(app, 'put', ['path'], async (c, workspaceId, path) => {
+    const body = await readJsonBody(c, renameDocumentPathRequestSchema, {
+      refuseShape: (error) => invalidBodyRefusal(error, 'path is required'),
+    })
+    if ('refusal' in body) return body.refusal
+    const newPath = body.data.path
+    const invalidDocumentPath = refusedBy(() => validateDocumentPath(newPath))
+    if (invalidDocumentPath) {
+      return c.json(invalidDocumentPath, 400)
+    }
+    try {
+      const deps = options.serverDeps
+      const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+      if (entry === null) {
+        return c.json(errorBody('not_found', `Document "${path}" not found`), 404)
+      }
+      const moved = await wbDocumentMove(deps, {
+        workspaceId,
+        documentId: entry.documentId,
+        path: newPath,
       })
-      if ('refusal' in body) return body.refusal
-      const newPath = body.data.path
-      const invalidDocumentPath = refusedBy(() => validateDocumentPath(newPath))
-      if (invalidDocumentPath) {
-        return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
-      }
-      try {
-        const deps = options.serverDeps
-        const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
-        if (entry === null) {
-          return c.json({ title: `Document "${path}" not found` }, 404)
-        }
-        const moved = await wbDocumentMove(deps, {
-          workspaceId,
-          documentId: entry.documentId,
-          path: newPath,
-        })
-        logFollowOutcome(workspaceId, moved)
-        const response: RenameDocumentPathResponse = { path: newPath }
-        return c.json(response)
-      } catch (err) {
-        // Absent is a 404 here and a throw there — the same translation the
-        // delete makes, in the opposite direction. An unknown WORKSPACE is
-        // not a missing document: it answers as it does everywhere else.
-        //
-        // The path collision forwards the RAISED message rather than
-        // rebuilding one from newPath: a subtree move collides on a PRODUCED
-        // path, so the path the caller asked for is often free and naming it
-        // sends them to retry the one thing that was never the problem.
-        const owned = firstOwned(err, [
-          notFoundAs(`Document "${path}" not found`),
-          moveIntoSelf,
-          displayNameTaken,
-          pathTakenAs(),
-          corruptStored,
-          pastWorkspaceCeiling,
-        ])
-        if (owned) return c.json(owned.body, owned.status)
-        if (isDatabaseBusy(err)) throw err
-        getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
-        return c.json({ title: 'Failed to rename document.' } satisfies ApiErrorBody, 500)
-      }
-    },
-    { badRequest: 'problem-details' },
-  )
+      logFollowOutcome(workspaceId, moved)
+      const response: RenameDocumentPathResponse = { path: newPath }
+      return c.json(response)
+    } catch (err) {
+      // Absent is a 404 here and a throw there — the same translation the
+      // delete makes, in the opposite direction. An unknown WORKSPACE is
+      // not a missing document: it answers as it does everywhere else.
+      //
+      // The path collision forwards the RAISED message rather than
+      // rebuilding one from newPath: a subtree move collides on a PRODUCED
+      // path, so the path the caller asked for is often free and naming it
+      // sends them to retry the one thing that was never the problem.
+      const owned = firstOwned(err, [
+        notFoundAs(`Document "${path}" not found`),
+        moveIntoSelf,
+        displayNameTaken,
+        pathTakenAs(),
+        corruptStored,
+        pastWorkspaceCeiling,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
+      if (isDatabaseBusy(err)) throw err
+      getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
+      return c.json(errorBody('internal_error', 'Failed to rename document.'), 500)
+    }
+  })
 
   return app
 }
@@ -532,12 +517,15 @@ export interface DuplicateRouterOptions {
   serverDeps: ServerDeps
 }
 
-const NO_DUPLICATES: ApiErrorBody = { title: 'This composition cannot duplicate documents.' }
+const NO_DUPLICATES: ApiErrorBody = errorBody(
+  'not_implemented',
+  'This composition cannot duplicate documents.',
+)
 
 /** A source path two documents carry, or one too deep for a copy beside it. */
 const cannotPlaceCopy: ErrorAnswer = (err) =>
   err instanceof DocumentPathContestedError || err instanceof NoRoomForCopyError
-    ? { status: 409, body: { title: err.message } }
+    ? { status: 409, body: errorBody('cannot_place_copy', err.message) }
     : null
 
 /**
@@ -563,39 +551,32 @@ function duplicateAnswer(
 export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): Hono {
   const app = new Hono()
 
-  onDocumentsRoute(
-    app,
-    'post',
-    ['duplicate'],
-    async (c, workspaceId, path) => {
-      const asked = await readJsonBody(c, duplicateDocumentRequestSchema, {
-        voice: 'problem',
-        optional: true,
-        refuseShape: (error) => titleRefusal(error, 'invalid duplicate options'),
+  onDocumentsRoute(app, 'post', ['duplicate'], async (c, workspaceId, path) => {
+    const asked = await readJsonBody(c, duplicateDocumentRequestSchema, {
+      optional: true,
+      refuseShape: (error) => invalidBodyRefusal(error, 'invalid duplicate options'),
+    })
+    if ('refusal' in asked) return asked.refusal
+    const { documentIndex } = serverDeps
+    if (!hasDocumentDuplicates(documentIndex)) return c.json(NO_DUPLICATES, 501)
+    try {
+      const withoutAnnotations = asked.data.withoutAnnotations === true
+      const copy = await documentIndex.duplicateDocument({
+        workspaceId,
+        path,
+        ...(withoutAnnotations ? { withoutAnnotations: true } : {}),
       })
-      if ('refusal' in asked) return asked.refusal
-      const { documentIndex } = serverDeps
-      if (!hasDocumentDuplicates(documentIndex)) return c.json(NO_DUPLICATES, 501)
-      try {
-        const withoutAnnotations = asked.data.withoutAnnotations === true
-        const copy = await documentIndex.duplicateDocument({
-          workspaceId,
-          path,
-          ...(withoutAnnotations ? { withoutAnnotations: true } : {}),
-        })
-        return c.json(duplicateAnswer(copy, withoutAnnotations))
-      } catch (err) {
-        const owned = firstOwned(err, [
-          notFoundAs(`No document "${path}" to duplicate`),
-          cannotPlaceCopy,
-          pastWorkspaceCeiling,
-        ])
-        if (owned) return c.json(owned.body, owned.status)
-        throw err
-      }
-    },
-    { badRequest: 'problem-details' },
-  )
+      return c.json(duplicateAnswer(copy, withoutAnnotations))
+    } catch (err) {
+      const owned = firstOwned(err, [
+        notFoundAs(`No document "${path}" to duplicate`),
+        cannotPlaceCopy,
+        pastWorkspaceCeiling,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
+      throw err
+    }
+  })
 
   return app
 }
@@ -610,13 +591,12 @@ function mountFolderNameRoute(app: Hono, deps: ServerDeps): void {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     const body = await readJsonBody(c, setFolderNameRequestSchema, {
-      voice: 'code',
       refuseShape: (error) => invalidBodyRefusal(error, 'path is required'),
     })
     if ('refusal' in body) return body.refusal
     const index = deps.documentIndex
     if (!hasDocumentFolders(index)) {
-      return c.json({ title: 'This keeper does not name folders.' } satisfies ApiErrorBody, 501)
+      return c.json(errorBody('not_implemented', 'This keeper does not name folders.'), 501)
     }
     try {
       await index.setFolderName({

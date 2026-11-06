@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { apiErrorBodySchema, apiErrorReason, issueText } from './api-errors.js'
+import { apiErrorBodySchema, apiErrorReason, errorBody, issueText } from './api-errors.js'
 
 describe('apiErrorBodySchema', () => {
   it.each([
-    [{ title: 'Document not found' }],
     [{ error: 'not_found' }],
     [{ error: 'not_found', message: 'Document "x" does not exist' }],
     // A refusal that names what it concerns (ADR-0051: a sole owner's deletion).
@@ -20,6 +19,10 @@ describe('apiErrorBodySchema', () => {
     [{}],
     [{ oops: 1 }],
     [{ title: '' }],
+    // One family: a Problem Details body is not a daemon refusal.
+    [{ title: 'Document not found' }],
+    // A dotted code is not a code.
+    [{ error: 'auth.forbidden' }],
     [{ message: 'reason without a code' }],
     // The EMISSION contract stays closed: an undeclared field a route wrote is
     // a reason put where no reader looks. Reading is the tolerant half.
@@ -32,10 +35,8 @@ describe('apiErrorBodySchema', () => {
 })
 
 describe('apiErrorReason', () => {
-  it('returns the title for the Problem Details arm', () => {
-    expect(apiErrorReason({ title: 'Document "x" already exists' })).toBe(
-      'Document "x" already exists',
-    )
+  it('reads no reason from a Problem Details body', () => {
+    expect(apiErrorReason({ title: 'Document "x" already exists' })).toBeUndefined()
   })
 
   it('returns the message for the code+reason arm', () => {
@@ -48,7 +49,6 @@ describe('apiErrorReason', () => {
     expect(apiErrorReason({ error: 'rate_limited', message: 'slow down', retryAfter: 3 })).toBe(
       'slow down',
     )
-    expect(apiErrorReason({ title: 'Gone', type: 'about:blank', status: 410 })).toBe('Gone')
   })
 
   it('reads the sentence of a refusal naming the workspaces it concerns', () => {
@@ -61,6 +61,27 @@ describe('apiErrorReason', () => {
     expect(apiErrorReason({ error: 'not_found' })).toBeUndefined()
     expect(apiErrorReason({ oops: 1 })).toBeUndefined()
     expect(apiErrorReason(undefined)).toBeUndefined()
+  })
+})
+
+describe('errorBody', () => {
+  it('builds a body the contract admits', () => {
+    expect(apiErrorBodySchema.parse(errorBody('auth_forbidden', 'needs workspace:write'))).toEqual({
+      error: 'auth_forbidden',
+      message: 'needs workspace:write',
+    })
+  })
+
+  it('refuses at compile time a literal code outside the grammar', () => {
+    // Each line is a type error; the runtime call only keeps the directive honest.
+    // @ts-expect-error a dotted code
+    errorBody('auth.forbidden')
+    // @ts-expect-error a sentence in the code slot
+    errorBody('malformed Origin header')
+    // @ts-expect-error an uppercase code
+    errorBody('Not_found')
+    // @ts-expect-error a doubled separator
+    errorBody('not__found')
   })
 })
 

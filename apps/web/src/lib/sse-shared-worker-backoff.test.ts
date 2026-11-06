@@ -65,7 +65,7 @@ const server = setupServer(
     const doc = docOf(params)
     bump(snapshotAttempts, doc)
     if (snapshotDownFor.has(doc)) return new HttpResponse('restarting', { status: 503 })
-    return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+    return HttpResponse.json({ error: 'refused', message: 'Canvas not found' }, { status: 404 })
   }),
   http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, ({ params }) => {
     const doc = docOf(params)

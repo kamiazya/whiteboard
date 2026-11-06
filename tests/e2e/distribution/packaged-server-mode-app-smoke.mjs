@@ -87,11 +87,11 @@ function makeScopeStrategy(grantedScopes, person) {
   return {
     async authorize(input) {
       if (!input.authorizationHeader) {
-        return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+        return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
       }
       for (const scope of input.requiredScopes) {
         if (!granted.has(scope)) {
-          return { ok: false, status: 403, code: 'auth.forbidden' }
+          return { ok: false, status: 403, code: 'auth_forbidden' }
         }
       }
       return {
@@ -163,12 +163,12 @@ function administeredBySmokeCaller(base) {
 // The scope gate is what scenarios 5a/5b judge. Past it, server mode still
 // gates MEMBERSHIP: `smoke-sub` is nobody's member, so a workspace route may
 // answer 403 `not_a_member` — that is the gate after the one under test, so
-// only an auth refusal (401, or 403 `auth.forbidden`) fails these.
+// only an auth refusal (401, or 403 `auth_forbidden`) fails these.
 async function scopeGateRefused(res) {
   if (res.status === 401) return true
   if (res.status !== 403) return false
   const body = await res.clone().text()
-  return body.includes('auth.forbidden')
+  return body.includes('auth_forbidden')
 }
 
 async function req(app, method, path, opts = {}) {

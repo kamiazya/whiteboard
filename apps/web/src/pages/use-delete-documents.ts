@@ -98,7 +98,7 @@ async function attempt(
       error: partialDeleteMessage(failed.length, pending.paths.length, lastError, FALLBACK[keeper]),
     }
   } catch (err) {
-    // daemon-api-client errors are already sanitized (problem-details title
+    // daemon-api-client errors are already sanitized (the daemon's message
     // or a generic status message), and the browser's are its own.
     return { pending, error: messageOf(err, FALLBACK[keeper]) }
   }

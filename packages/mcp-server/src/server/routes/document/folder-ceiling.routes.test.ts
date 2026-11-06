@@ -2,15 +2,14 @@
  * Every daemon route that places a NEW document through the per-document save
  * refuses at the workspace's folder ceiling with the 413 `too_many_folders`
  * the workspace-record sync update answers, since placing a document creates
- * every folder its path names that the tree does not hold yet: the
- * per-document update's lazy create and a version restored to a new path. A
- * new document whose folders already exist adds none and is still taken.
+ * every folder its path names that the tree does not hold yet: a version
+ * restored to a new path.
  */
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readWorkspaceNodes, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
@@ -68,24 +67,9 @@ async function fillTo(total: number): Promise<void> {
   await saveWorkspaceDoc(WS, record)
 }
 
-function elementUpdate(id: string): Uint8Array<ArrayBuffer> {
-  const client = new LoroDoc()
-  const from = client.version()
-  client.getMovableList('elements').insertContainer(0, new LoroMap()).set('id', id)
-  client.commit()
-  return client.export({ mode: 'update', from }) as Uint8Array<ArrayBuffer>
-}
-
 function router() {
   return createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 }
-
-const postUpdate = (path: string, body: Uint8Array<ArrayBuffer>) =>
-  router().request(`/api/w/${WS}/document/${path}/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body,
-  })
 
 async function expectRefusedAtCeiling(res: Response, path: string): Promise<void> {
   expect(res.status).toBe(413)
@@ -96,22 +80,6 @@ async function expectRefusedAtCeiling(res: Response, path: string): Promise<void
 }
 
 describe('placing a new document at the folder ceiling', () => {
-  it('refuses an update whose new path needs a folder the tree lacks', async () => {
-    await fillTo(CEILING)
-    expect(await storedFolders()).toBe(CEILING)
-
-    await expectRefusedAtCeiling(await postUpdate('fresh/doc', elementUpdate('e1')), 'fresh/doc')
-  })
-
-  it('still takes a new document whose folders already exist', async () => {
-    await fillTo(CEILING)
-
-    const res = await postUpdate('f0/doc', elementUpdate('e2'))
-
-    expect(res.status).toBe(200)
-    expect(await storedFolders()).toBe(CEILING)
-  })
-
   it('refuses a version restored to a new path under a missing folder', async () => {
     await saveDocument(WS, 'canvas-a', new LoroDoc())
     const app = router()

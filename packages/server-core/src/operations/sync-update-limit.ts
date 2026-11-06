@@ -2,14 +2,12 @@ import {
   envelopeKindBreach,
   importWithinTextLimits,
   readWorkspaceNodes,
-  rootsNoDocumentNodeHolds,
   UnjudgedImportError,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
-  type DocumentKind,
   documentPathSchema,
   folderNameRefusal,
 } from '@kamiazya/whiteboard-model'
@@ -23,7 +21,6 @@ import {
   FolderNameRefusedError,
   isSyncWriteRefusal,
   OffGrammarPathError,
-  RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
   TooManyDocumentsError,
   TooManyFoldersError,
@@ -194,36 +191,26 @@ function folderNamesRefusal(after: Placement, earlier: Placement): FolderNameRef
 function kindRefusal(
   doc: LoroDoc,
   kindWrittenIn: ReadonlySet<ContainerID>,
-  options: SyncLimitsOptions,
 ): DocumentKindChangedError | null {
   if (kindWrittenIn.size === 0) return null
-  const recordedAtRoot = options.workspaceRecord ? null : options.recordedKind
-  const breach = envelopeKindBreach(doc, kindWrittenIn, recordedAtRoot)
+  const breach = envelopeKindBreach(doc, kindWrittenIn, null)
   if (breach === null) return null
   return new DocumentKindChangedError(breach.recorded, breach.kind, breach.documentId)
 }
 
-/** Which record the update is for, and what a standalone document records as its kind. */
-type SyncLimitsOptions =
-  | { readonly workspaceRecord: true }
-  | { readonly workspaceRecord: false; readonly recordedKind: DocumentKind | null }
-
 /**
- * Imports a client's update into a CACHED document unless it breaks a text
- * bound (`SYNC_TEXT_BREACH_CODES` lists them) or, for a workspace record,
- * what the record's readers need of a node — in which case nothing of it is
- * kept, and the refusal is thrown as its `SyncWriteRefusalError`.
+ * Imports a client's update into a CACHED workspace record unless it breaks a
+ * text bound (`SYNC_TEXT_BREACH_CODES` lists them) or what the record's
+ * readers need of a node — in which case nothing of it is kept, and the
+ * refusal is thrown as its `SyncWriteRefusalError`.
  *
  * What the update does to text is `importWithinTextLimits`'s judgement, the
  * one the browser keeper takes too; this adds what only the daemon's sync
  * surface owes: readable node meta, the path grammar and the name bound.
  * Those are checked only for an update that writes a workspace node's meta
- * or moves one (`placementRefusal`); a body edit pays nothing for them. A
- * standalone document's update instead answers for the roots it adds, since
- * its content is saved onto its node's own map (`rootsNoDocumentNodeHolds`).
- * Either may leave a document's envelope saying only the kind the document
- * records (`envelopeKindBreach`): its node's, or `recordedKind` for a
- * standalone document, `null` meaning one being created.
+ * or moves one (`placementRefusal`); a body edit pays nothing for them. An
+ * update may leave a document's envelope saying only the kind its node
+ * records (`envelopeKindBreach`).
  *
  * Every refusal drops the cached instance instead of saving, so the next
  * read rebuilds it from storage and nothing of the write survives — and so
@@ -239,12 +226,8 @@ export function importWithinSyncLimits(
   doc: LoroDoc,
   update: Uint8Array,
   target: CachedTarget,
-  options: SyncLimitsOptions,
 ): void {
   const before = doc.oplogFrontiers()
-  // Judged against the document as it was, so a root it already held — which
-  // no save could have written onto its node — does not refuse every edit after.
-  const heldBefore = new Set(options.workspaceRecord ? [] : rootsNoDocumentNodeHolds(doc))
   const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
   let landed = false
   try {
@@ -257,13 +240,8 @@ export function importWithinSyncLimits(
     // First: a parked change was judged by nothing below.
     if (pending) refuse(target, new CausalGapError())
     if (breach !== null) refuse(target, textBreachRefusal(breach))
-    const kindChanged = kindRefusal(doc, kindWrittenIn, options)
+    const kindChanged = kindRefusal(doc, kindWrittenIn)
     if (kindChanged !== null) refuse(target, kindChanged)
-    if (!options.workspaceRecord) {
-      const added = rootsNoDocumentNodeHolds(doc).filter((root) => !heldBefore.has(root))
-      if (added.length > 0) refuse(target, new RootNoDocumentHoldsError(added))
-      return
-    }
     if (!touchesNodeMeta) return
     const refusal = placementRefusal(doc, before, trapped)
     if (refusal !== null) refuse(target, refusal)

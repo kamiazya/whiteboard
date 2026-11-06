@@ -28,7 +28,11 @@ import {
 } from './api-contracts/sync-write-refusal.js'
 import { createSseFrameParser } from './sse-frames.js'
 import type { ClientTextMessage } from './sync-frames.js'
-import { documentSnapshotUrl, documentUpdateUrl, workspaceHandleOfSyncKey } from './sync-key.js'
+import {
+  workspaceDocSnapshotUrl,
+  workspaceDocUpdateUrl,
+  workspaceHandleOfSyncKey,
+} from './sync-key.js'
 import {
   MAX_DOCS_PER_STREAM,
   type SyncClientMessageRequest,
@@ -348,8 +352,8 @@ export class SseStreamHub implements SseStreamSource {
    * endpoint of its own.
    */
   async push(doc: string, update: Uint8Array): Promise<void> {
-    const url = documentUpdateUrl(this.options.baseUrl, doc)
-    if (url === null) throw new Error(`not a document key: ${doc}`)
+    const url = workspaceDocUpdateUrl(this.options.baseUrl, doc)
+    if (url === null) throw new Error(`not a workspace key: ${doc}`)
     const res = await this.options.fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -399,8 +403,8 @@ export class SseStreamHub implements SseStreamSource {
    * one. Everything else non-ok throws, same reasoning as `push`.
    */
   async snapshot(doc: string): Promise<Uint8Array | null> {
-    const url = documentSnapshotUrl(this.options.baseUrl, doc)
-    if (url === null) throw new Error(`not a document key: ${doc}`)
+    const url = workspaceDocSnapshotUrl(this.options.baseUrl, doc)
+    if (url === null) throw new Error(`not a workspace key: ${doc}`)
     const res = await this.options.fetch(url)
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`snapshot refused: ${res.status}`)

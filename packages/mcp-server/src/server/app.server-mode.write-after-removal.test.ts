@@ -110,7 +110,7 @@ interface Write {
 const get = (headers: Record<string, string>, url: string) =>
   app.request(`${PUBLIC_URL}${url}`, { headers })
 
-// Each route that takes a stored-content body: the record, a document, a file.
+// Each route that takes a stored-content body: the record and a file.
 const WRITES: Record<string, Write> = {
   'workspace-document update': {
     method: 'POST',
@@ -125,20 +125,7 @@ const WRITES: Record<string, Write> = {
       return doc.getMap('probe').get('written') === true
     },
   },
-  'document update': {
-    method: 'POST',
-    path: 'document/board/update',
-    contentType: 'application/octet-stream',
-    bytes: probeUpdate,
-    async landed(headers, workspaceId) {
-      const res = await get(headers, `/api/w/${workspaceId}/document/board/snapshot`)
-      if (res.status === 404) return false
-      expect(res.status).toBe(200)
-      const doc = new LoroDoc()
-      doc.import(new Uint8Array(await res.arrayBuffer()))
-      return doc.getMap('probe').get('written') === true
-    },
-  },
+
   'file upload': {
     method: 'PUT',
     path: 'document/board/file/probe-file',

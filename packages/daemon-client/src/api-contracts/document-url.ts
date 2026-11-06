@@ -42,13 +42,7 @@ export function encodeDocumentPath(path: string): string {
  * added or renamed in one place only; `document-url-actions.test.ts` in
  * mcp-server requires a registered route behind every entry.
  */
-export const DOCUMENT_API_ACTIONS = [
-  'snapshot',
-  'update',
-  'export',
-  'export-svg',
-  'client-count',
-] as const
+export const DOCUMENT_API_ACTIONS = ['snapshot', 'export', 'export-svg', 'client-count'] as const
 
 export type DocumentApiAction = (typeof DOCUMENT_API_ACTIONS)[number]
 
