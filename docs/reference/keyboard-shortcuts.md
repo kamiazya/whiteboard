@@ -273,13 +273,13 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Cmd/Ctrl + I` | Italicise the selection, or the word at the caret |
 | `Cmd/Ctrl + E` | Mark the selection, or the word at the caret, as code |
 | `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
-| `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
+| `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line: none, unchecked, checked, none again. A screen reader hears "Task unchecked", "Task checked" or "Task removed". In a canvas node's editor it saves instead |
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
 | `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. A blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 | `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
 
-The formatting bar above a markdown document is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
+The formatting bar above a markdown document names each button's shortcut in its tooltip ("Task (⌘/Ctrl+Enter)"). It is one `Tab` stop. `Left` and `Right` move between its buttons, `Home` and `End` jump to the first and last, and `Tab` leaves it; coming back with `Shift + Tab` lands on the button you were last on.
 
 ## On the canvas with a screen reader
 

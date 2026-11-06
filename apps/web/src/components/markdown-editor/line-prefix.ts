@@ -97,7 +97,10 @@ function targetPrefixes(state: EditorState): LinePrefix[] {
  * end. Reports unhandled when no line would change, so a keybinding can
  * fall through and a menu item cannot put a junk entry in the undo history.
  */
-function rewritePrefixes(next: (line: LinePrefix, index: number) => LinePrefix): StateCommand {
+function rewritePrefixes(
+  next: (line: LinePrefix, index: number) => LinePrefix,
+  userEvent = 'input',
+): StateCommand {
   return ({ state, dispatch }) => {
     const changes: { from: number; to: number; insert: string }[] = []
     targetLines(state).forEach((line, index) => {
@@ -116,7 +119,7 @@ function rewritePrefixes(next: (line: LinePrefix, index: number) => LinePrefix):
         // assoc 1: a caret at the marker's insertion point lands after it.
         selection: state.selection.map(changeSet, 1),
         scrollIntoView: true,
-        userEvent: 'input',
+        userEvent,
       }),
     )
     return true
@@ -137,6 +140,25 @@ export function setListMarker(kind: 'bullet' | 'ordered'): StateCommand {
         ? { ...line, marker: 'none', checkbox: 'none' }
         : { ...line, marker: kind, number: kind === 'ordered' ? index + 1 : line.number },
     )(target)
+  }
+}
+
+/**
+ * The user event a task cycle is dispatched under, so a host can say what it
+ * did. A sub-event of `input`, so history still groups it with typing.
+ */
+export const TASK_CYCLE_EVENT = 'input.task'
+
+/** What a screen reader hears after a cycle: the state of the caret's line. */
+export function taskCycleAnnouncement(state: EditorState): string {
+  const line = parseLinePrefix(state.doc.lineAt(state.selection.main.head).text)
+  switch (line.checkbox) {
+    case 'open':
+      return 'Task unchecked'
+    case 'done':
+      return 'Task checked'
+    case 'none':
+      return 'Task removed'
   }
 }
 
@@ -162,7 +184,7 @@ export const cycleTaskCheckbox: StateCommand = rewritePrefixes((line) => {
     case 'done':
       return { ...line, checkbox: 'none' }
   }
-})
+}, TASK_CYCLE_EVENT)
 
 /**
  * Toggles the quote marker over the target lines. When every target line is

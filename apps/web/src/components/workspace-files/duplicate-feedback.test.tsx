@@ -49,6 +49,9 @@ describe('duplicating a document from its menu', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
 
     const toast = await screen.findByText('Duplicated Budget review')
+    // The live region speaks the sentence alone: the Open button's text
+    // inside it ran on as "…reviewOpen".
+    expect(toast.closest('[role="status"]')?.textContent).toBe('Duplicated Budget review')
     const copyCard = (await screen.findAllByTestId('card-title'))
       .find((each) => each.textContent === 'Budget review (copy)')
       ?.closest('button') as HTMLElement
