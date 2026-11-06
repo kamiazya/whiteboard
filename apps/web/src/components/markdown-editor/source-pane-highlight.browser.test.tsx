@@ -74,6 +74,31 @@ describe('SourcePane markdown highlighting (real browser)', () => {
     expect(getComputedStyle(marker).color).not.toBe(getComputedStyle(heading).color)
   })
 
+  it('draws a list item in the ink of a paragraph, only its marker receding', async () => {
+    render(
+      <MarkdownEditor
+        theme="light"
+        value={'plain paragraph text\n\n- item text'}
+        onChange={vi.fn()}
+      />,
+    )
+    const content = document.querySelector('.cm-content') as HTMLElement
+    // The element that actually paints a piece of text, whatever wraps it.
+    const inkOf = (text: string) => {
+      const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.textContent?.includes(text))
+          return getComputedStyle(node.parentElement as Element).color
+      }
+      return null
+    }
+    await expect.poll(() => spanFor(content, '-')).not.toBeNull()
+    expect(inkOf('item text')).toBe(inkOf('plain paragraph text'))
+    expect(getComputedStyle(spanFor(content, '-') as HTMLElement).color).not.toBe(
+      inkOf('item text'),
+    )
+  })
+
   // The preview pane parses through codec's pipeline
   // (remark-gfm + remark-math), so a source pane on plain CommonMark
   // silently disagrees with it: GFM constructs render in the preview while

@@ -35,6 +35,11 @@ import { swallowRetypedMarkerExtension } from './swallow-retyped-marker.js'
  * and the enclosing heading's, and a `HighlightStyle` applies every matching
  * rule — so `.cm-md-marker` has to win on the shared properties by order in
  * the stylesheet, not by being the only match.
+ *
+ * `tags.list` is deliberately unstyled: lang-markdown puts it on a list's
+ * whole TEXT, not its marker (the marker is `processingInstruction`), so
+ * styling it muted every list item to the markers' grey and the list read as
+ * disabled beside the paragraphs around it.
  */
 const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, class: 'cm-md-heading' },
@@ -45,7 +50,6 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.url, class: 'cm-md-url' },
   { tag: tags.monospace, class: 'cm-md-code' },
   { tag: tags.quote, class: 'cm-md-quote' },
-  { tag: tags.list, class: 'cm-md-list' },
   { tag: tags.contentSeparator, class: 'cm-md-separator' },
   { tag: tags.labelName, class: 'cm-md-label' },
   { tag: tags.processingInstruction, class: 'cm-md-marker' },
