@@ -50,8 +50,31 @@ it('a full frame grows down to take the next note', () => {
   const b = textNode({ id: 'b', x: 232, y: 364, width: 200, height: 100, text: 'b' })
   expect(nextSpotInFrame(frame, [frame, a, b], size)).toEqual({
     center: { x: 332, y: 546 },
-    grownHeight: 428,
+    grow: { x: 200, y: 200, width: 400, height: 428 },
   })
+})
+
+it('a full frame with a neighbour under it grows sideways, not into the neighbour', () => {
+  const full = groupNode({ id: 'f', x: 200, y: 200, width: 264, height: 296, label: 'Now' })
+  const a = textNode({ id: 'a', x: 232, y: 232, width: 200, height: 100, text: 'a' })
+  const b = textNode({ id: 'b', x: 232, y: 364, width: 200, height: 100, text: 'b' })
+  const below = groupNode({ id: 'n', x: 200, y: 560, width: 264, height: 200, label: 'Later' })
+  expect(nextSpotInFrame(full, [full, a, b, below], size)).toEqual({
+    center: { x: 564, y: 282 },
+    grow: { x: 200, y: 200, width: 496, height: 296 },
+  })
+})
+
+it('a neighbour frame reaching into the frame is not what the next note goes below', () => {
+  // The neighbour overlaps the frame's right side and ends lower; the frame
+  // grows away from it, and the note stays level with the frame's own notes.
+  const full = groupNode({ id: 'f', x: 200, y: 200, width: 264, height: 296, label: 'Next' })
+  const a = textNode({ id: 'a', x: 232, y: 232, width: 200, height: 100, text: 'a' })
+  const b = textNode({ id: 'b', x: 232, y: 364, width: 200, height: 100, text: 'b' })
+  const over = groupNode({ id: 'o', x: 440, y: 100, width: 320, height: 600, label: 'Now' })
+  const spot = nextSpotInFrame(full, [over, full, a, b], size)
+  expect(spot.center.y).toBeLessThan(496)
+  expect(spot.grow).toEqual({ x: -32, y: 200, width: 496, height: 296 })
 })
 
 it('a named frame reserves its name strip; an unnamed one draws none', () => {
@@ -72,4 +95,16 @@ it('a note asked for beside a node in nested frames goes to the innermost frame'
   expect(frameForNewNote(inner, nodes)?.id).toBe('i')
   expect(frameForNewNote(loose, nodes)).toBeUndefined()
   expect(frameForNewNote(undefined, nodes)).toBeUndefined()
+})
+
+it('a frame boxed in on every side grows down from its own notes, not a neighbour', () => {
+  const full = groupNode({ id: 'f', x: 200, y: 200, width: 264, height: 296, label: 'Next' })
+  const a = textNode({ id: 'a', x: 232, y: 232, width: 200, height: 100, text: 'a' })
+  const b = textNode({ id: 'b', x: 232, y: 364, width: 200, height: 100, text: 'b' })
+  const over = groupNode({ id: 'o', x: 440, y: 100, width: 320, height: 600, label: 'Now' })
+  const beside = groupNode({ id: 's', x: -300, y: 200, width: 280, height: 200, label: 'Then' })
+  expect(nextSpotInFrame(full, [over, beside, full, a, b], size)).toEqual({
+    center: { x: 332, y: 546 },
+    grow: { x: 200, y: 200, width: 264, height: 428 },
+  })
 })

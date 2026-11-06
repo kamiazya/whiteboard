@@ -1,9 +1,10 @@
-import { frameHolds, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { frameHolds, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import { creationObstacles, PLACEMENT_GAP_PX } from '../../lib/spatial/frame-interior.js'
 import { type Box, boxesIntersect, findFreeSpot } from '../../lib/spatial/geometry.js'
+import { nextInRow } from '../../lib/spatial/row-placement.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
@@ -63,6 +64,34 @@ function frameBoxAt(at: Point): Box {
 function frameSpawnPoint(at: Point, obstacles: readonly Box[], visible: Box | undefined): Point {
   if (!obstacles.some((other) => boxesIntersect(frameBoxAt(at), other))) return at
   return findFreeSpot(at, GROUP_FRAME_SIZE, obstacles, visible)
+}
+
+/**
+ * Where the next frame of a board's run goes when nobody pointed: right of
+ * the last row of top-level frames, on its top line, wrapping below — so
+ * frames made one after another read in the order they were made. Only while
+ * some of that row is on screen; a person who panned away is asking for the
+ * view they are looking at. Undefined leaves the choice to `placeFrame`.
+ */
+function frameInRow(canvas: SpatialCanvas, visible: Box | undefined): Point | undefined {
+  const frames = canvas.nodes.filter(isFrame)
+  const topLevel = frames.filter(
+    (frame) => !frames.some((other) => other.id !== frame.id && frameHolds(other, frame)),
+  )
+  const [first, ...rest] = topLevel
+  if (first === undefined) return undefined
+  if (visible !== undefined && !topLevel.some((frame) => boxesIntersect(frame, visible)))
+    return undefined
+  const corner = nextInRow({
+    peers: [first, ...rest],
+    size: GROUP_FRAME_SIZE,
+    obstacles: frameObstacles(canvas, PLACEMENT_GAP_PX),
+    visible,
+    gap: PLACEMENT_GAP_PX,
+    // A row's bottom, the gap, then the next row's name strip.
+    rowGap: PLACEMENT_GAP_PX + FRAME_TOP_CLEARANCE_PX,
+  })
+  return { x: corner.x + GROUP_FRAME_SIZE.width / 2, y: corner.y + GROUP_FRAME_SIZE.height / 2 }
 }
 
 /**
@@ -241,7 +270,12 @@ export function useNodeCreation({
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    const point = placeFrame(at ?? viewCenter(), canvasRef.current, visibleCanvasRect())
+    const visible = visibleCanvasRect()
+    const point =
+      at !== undefined
+        ? placeFrame(at, canvasRef.current, visible)
+        : (frameInRow(canvasRef.current, visible) ??
+          placeFrame(viewCenter(), canvasRef.current, visible))
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({

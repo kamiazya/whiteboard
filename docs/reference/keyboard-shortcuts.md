@@ -130,9 +130,14 @@ A frame carries every unlocked node that sits wholly inside it, whether you
 drag it or nudge it with the arrow keys, and the move is one undo step.
 With a frame selected, or a node that sits inside one, `N` puts the new note
 in that frame's next free spot (the innermost frame, when frames nest), 32px
-clear of what it already holds, and grows the frame if it is full. So typing
+clear of what it already holds, and grows the frame if it is full — down,
+or right or left when growing down would run into a neighbour, so a grown
+frame never reaches over another frame or its notes. So typing
 a note, pressing `Escape` and pressing `N` again keeps filling the same frame. A new
-note or frame never lands over a frame's name. A frame is carried by its border band and its name strip. A drag that starts on
+note or frame never lands over a frame's name. **Add > Frame** puts each new
+frame to the right of the last row of frames, on the same top line and 32px
+apart, and starts a new row below once the row would leave the screen, so
+frames made one after another read left to right in the order you made them. A frame is carried by its border band and its name strip. A drag that starts on
 the frame's empty interior sweeps a selection band instead, so you can pick up
 the notes inside without moving the frame; a tap there still selects the frame.
 A press that moves less than a few pixels is a tap: the node stays exactly where
