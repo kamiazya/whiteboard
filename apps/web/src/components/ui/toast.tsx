@@ -56,3 +56,25 @@ export function Toast({
     </ToastFrame>
   )
 }
+
+/**
+ * The same toast drawn for the eye alone, for a notice a live region that is
+ * already mounted speaks: the same words from two regions are two
+ * announcements. It carries no actions, since a hidden button is one a
+ * screen reader cannot reach, and its message may wrap to a second line.
+ */
+export function SilentToast({
+  message,
+  testId,
+}: {
+  readonly message: ReactNode
+  readonly testId?: string
+}) {
+  return (
+    <ToastFrame silent>
+      <span className="min-w-0" data-testid={testId}>
+        {message}
+      </span>
+    </ToastFrame>
+  )
+}
