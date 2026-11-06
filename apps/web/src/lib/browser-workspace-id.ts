@@ -29,6 +29,7 @@ import { describeThrown, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard
 import { storedWorkspaceEntrySchema, type WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { WORKSPACES_STORE } from './browser-idb.js'
+import { isBrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { inTransaction, request } from './idb-tx.js'
 import { createSubscribers } from './subscribers.js'
 import { resolveWorkspaceAddress, workspaceHandle } from './workspace-handle.js'
@@ -118,6 +119,11 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
           'await it in the boot chain, or use the test seam',
       )
     case 'failed':
+      // A refusal by name travels as itself, so every reader that knows the
+      // type says the storage's own sentence rather than a generic one;
+      // measured over a pre-reset database in the real app, where the boot's
+      // degraded path had turned it into "Failed to load documents".
+      if (isBrowserStorageRefusedError(state.cause)) throw state.cause
       throw new Error(`browser workspace unavailable: ${causeMessage(state.cause)}`)
   }
 }
