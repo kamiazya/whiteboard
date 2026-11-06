@@ -1,82 +1,24 @@
-// A markdown document's body: the Loro text container it lives in, and the
-// legacy node-side shape an older writer left, read but never written.
-import {
-  nodeKind,
-  nodeText,
-  type SpatialCanvas,
-  type SpatialNode,
-} from '@kamiazya/whiteboard-model'
+// A markdown document's body: the Loro text container it lives in.
 import { type DocumentContainers, MARKDOWN_BODY_KEY } from './containers.js'
-import { clearSpatialElementsInto, readSpatialCanvas } from './loro-bridge.js'
 import { spliceText } from './minimal-change.js'
+import { refuseRetiredShape, retiredMarkdownBodyShape } from './retired-stored-shape.js'
 
 /**
- * The stored id of the single text node a markdown document's body lives in
- * on older daemon documents. Nothing writes it — `document.set`
- * writes the text container — but stored documents still hold one, so it is
- * how a reader finds such a body and how that tool recognises a document it
- * could itself have written.
- */
-export const MARKDOWN_BODY_NODE_ID = 'okf-body'
-
-/**
- * A markdown document's body, whichever way this codebase stored it.
+ * A markdown document's body: the Loro TEXT CONTAINER named `body`, which
+ * every writer writes (`writeMarkdownBody`). An empty string for a document
+ * with no body is the honest answer — a valid state, not a failure.
  *
- * Every writer now writes the Loro TEXT CONTAINER named `body`
- * (`writeMarkdownBody`). It did not start that way: `document.set` used
- * to store the body as a single `okf-body` TEXT NODE inside the spatial
- * canvas — which is why a markdown document also parsed as a perfectly
- * valid, if odd, canvas — while apps/web's editor wrote the container so a
- * CRDT editing session had something to bind to. Neither side could read
- * the other's documents until this function existed, and stored documents
- * still hold the old shape, so it keeps reading both.
- *
- * The container wins when both are present: writers supersede the node
- * rather than removing it in a migration, so where both exist the container
- * is the newer one.
- *
- * Falls back to the FIRST text node rather than requiring the id, because
- * documents written before the id was stable still have to be readable. An
- * empty string for a document with no body at all is the honest answer: it
- * has no body, which is a valid state, not a failure.
+ * Throws `RetiredStoredShapeError` for a body still stored as the retired
+ * `okf-body` text node, which read as the container alone would be a note
+ * with its prose silently gone.
  */
 export function readMarkdownBody(doc: DocumentContainers): string {
-  const container = doc.getText(MARKDOWN_BODY_KEY).toString()
-  if (container.length > 0) return container
-
-  return markdownBodyFromCanvas(readSpatialCanvas(doc))
+  refuseRetiredShape(retiredMarkdownBodyShape(doc))
+  return doc.getText(MARKDOWN_BODY_KEY).toString()
 }
 
 /**
- * The node a markdown document's body lives in, given an already-read
- * canvas: the stable id first, then the first text node (pre-stable-id
- * documents), matching `readMarkdownBody`'s node-side selection exactly.
- *
- * Asks the content seam what a node HOLDS rather than narrowing on the
- * stored discriminant, so it says the same thing before and after ADR-0038
- * decision 3 dissolves that union. It answers a `SpatialNode` rather than a
- * narrowed type derived from the union itself — the only thing the caller
- * wants from that narrowing is `.text`, which `nodeText` gives without it.
- */
-function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialNode | undefined {
-  const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
-  if (byId !== undefined && nodeKind(byId) === 'text') return byId
-  return nodes.find((node) => nodeKind(node) === 'text')
-}
-
-/**
- * The node-side half of `readMarkdownBody`. Private on purpose: it is a
- * legacy READ fallback for documents an older writer left, and exporting it
- * is what let a caller treat the node as a live representation to write.
- */
-function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
-  const node = findMarkdownBodyNode(canvas.nodes)
-  return (node === undefined ? undefined : nodeText(node)) ?? ''
-}
-
-/**
- * Replaces a markdown document's body, and makes the document stop being a
- * spatial canvas at the same time.
+ * Replaces a markdown document's body.
  *
  * The CONTAINER is the representation, not a text node inside the spatial
  * canvas. Two reasons, and the second is the one that keeps biting:
@@ -88,12 +30,8 @@ function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
  *   perfectly valid spatial canvas holding one node. That is why anything
  *   resolving a reference has to ask the document its kind before it can
  *   tell prose from a diagram: "does it parse as a canvas" answers yes for
- *   both. Writing the container and emptying the canvas removes the
- *   ambiguity at the source rather than guarding against it downstream.
- *
- * Clearing the canvas also supersedes a legacy `okf-body` node left by the
- * older writer, so a rewritten document cannot keep a stale second body for
- * a later reader to find.
+ *   both. Writing the container removes the ambiguity at the source rather
+ *   than guarding against it downstream.
  */
 export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
   writeMarkdownBodyInto(doc, body)
@@ -108,11 +46,4 @@ export function writeMarkdownBodyInto(doc: DocumentContainers, body: string): vo
   // every rich-text mark down with the characters it removed — which is the
   // annotation layer's passages. See `minimalChange` for the measurements.
   spliceText(doc.getText(MARKDOWN_BODY_KEY), body)
-  // Only the elements a legacy body occupied. The note's comment threads
-  // live in the same document and are its readers' content, not part of the
-  // body, so the whole-truth canvas resync — which deletes every thread it
-  // is not handed — must never run here. On the usual note the canvas is
-  // already empty and this adds no op, which matters because it runs on
-  // every keystroke in the browser editor.
-  clearSpatialElementsInto(doc)
 }

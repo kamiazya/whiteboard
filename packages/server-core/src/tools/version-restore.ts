@@ -110,7 +110,7 @@ function kindMismatchRefusal(result: {
 }): DocumentKindMismatchError {
   const detail =
     result.targetKind === 'spatial'
-      ? 'Restoring a markdown version onto it would replace its nodes and edges with a single text node. Restore into a new targetPath instead.'
+      ? 'Restoring a markdown version onto it would replace its nodes and edges with a markdown body. Restore into a new targetPath instead.'
       : 'Restoring a spatial version onto it would replace its markdown body with a canvas. Restore into a new targetPath instead.'
   return new DocumentKindMismatchError(result.targetPath, result.targetKind, detail)
 }

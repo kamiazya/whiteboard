@@ -785,7 +785,6 @@ export function createDocumentSyncSession(
   const bodyBindingOf = bodyBindingFor({
     contentOf,
     onEdited: bodyEdited,
-    isCurrent: (target) => target === doc,
   })
   function getBodyBinding(): BodyBinding | null {
     return bodyBindingOf(doc)

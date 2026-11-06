@@ -165,21 +165,6 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
 }
 
 /**
- * Removes every node, edge and line, with their locks, and nothing else. Not
- * the resync with an empty canvas: that states the whole truth of the canvas,
- * so it would also delete the canvas's own tags and facets. A map with
- * nothing in it costs no op.
- */
-export function clearSpatialElementsInto(doc: DocumentContainers): void {
-  const nodesMap = doc.getMap(NODES_KEY)
-  const edgesMap = doc.getMap(EDGES_KEY)
-  const linesMap = doc.getMap(LINES_KEY)
-  dropEvery(doc, nodesMap, new Set(nodesMap.keys()), NODE_LOCKS_KEY)
-  dropEvery(doc, edgesMap, new Set(edgesMap.keys()), EDGE_LOCKS_KEY)
-  dropEvery(doc, linesMap, new Set(linesMap.keys()), EDGE_LOCKS_KEY)
-}
-
-/**
  * A canvas field set when present, and removed when absent — but only when
  * there is something to remove. A canvas that returned to the default must
  * stop rendering a preference the author turned off, while one that never had

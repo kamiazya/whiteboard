@@ -4,7 +4,13 @@
 // both silent — the `.strict()` model drops an element it cannot parse, and
 // an absent key reads as "nothing here".
 import type { LoroMap } from 'loro-crdt'
-import { CANVAS_KEY, type DocumentContainers, EDGES_KEY, NODES_KEY } from './containers.js'
+import {
+  CANVAS_KEY,
+  type DocumentContainers,
+  EDGES_KEY,
+  MARKDOWN_BODY_KEY,
+  NODES_KEY,
+} from './containers.js'
 
 /**
  * The key a canvas's facets, and a node's or edge's facets and embed, were
@@ -68,6 +74,41 @@ export function retiredCanvasShape(canvasMap: LoroMap): string | null {
     : `canvas settings stored under the pre-ADR-0037 \`${PRE_ADR_0037_EXTENSION_KEY}\` key`
 }
 
+/**
+ * The id of the single text node an older `document.set` stored a markdown
+ * body in, inside the spatial canvas. Spelled as it stood; nothing writes it,
+ * and a document still holding one is refused (below).
+ */
+const RETIRED_BODY_NODE_ID = 'okf-body'
+
+/**
+ * Whether this document's body is still the retired `okf-body` text node: an
+ * empty container beside it. A container with text is the current body
+ * whatever else the canvas holds, so only the empty one could hide prose.
+ * Opens no container on a tree host.
+ */
+export function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
+  const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
+  if (nodes?.get(RETIRED_BODY_NODE_ID) === undefined) return null
+  return doc.getText(MARKDOWN_BODY_KEY).length > 0
+    ? null
+    : `a markdown body stored as the \`${RETIRED_BODY_NODE_ID}\` canvas text node`
+}
+
+/**
+ * A MARKDOWN document whose canvas holds any node at all, with an empty body:
+ * a body an older writer stored as a text node under some other id, before
+ * `okf-body` was stable. Asked only where the kind is known, since on a
+ * spatial document nodes are the content.
+ */
+export function retiredMarkdownCanvasShape(doc: DocumentContainers): string | null {
+  if (doc.getText(MARKDOWN_BODY_KEY).length > 0) return null
+  const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
+  return nodes === undefined || nodes.size === 0
+    ? null
+    : 'a markdown body stored as a canvas text node'
+}
+
 /** Throws `RetiredStoredShapeError` for a shape a check above found. */
 export function refuseRetiredShape(found: string | null): void {
   if (found !== null) throw new RetiredStoredShapeError(found)
@@ -97,6 +138,7 @@ export function retiredStoredShapeIn(doc: DocumentContainers): string | null {
   return (
     firstRetired(peek(NODES_KEY), retiredNodeShape) ??
     firstRetired(peek(EDGES_KEY), retiredEdgeShape) ??
-    (canvasMap === undefined ? null : retiredCanvasShape(canvasMap))
+    (canvasMap === undefined ? null : retiredCanvasShape(canvasMap)) ??
+    retiredMarkdownBodyShape(doc)
   )
 }

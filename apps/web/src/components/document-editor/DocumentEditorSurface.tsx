@@ -22,9 +22,9 @@ import { MarkdownEditor, type MarkdownEditorProps } from '../markdown-editor/Mar
 
 /**
  * What a backend must supply to edit a markdown document, independent of
- * how it stores the body (browser: the `body` text container via a
- * CRDT binding; daemon: the `okf-body` node through the sync session's
- * command path). Editor-facing options are picked from the editor's own
+ * how it keeps the body (browser: the `body` text container via a CRDT
+ * binding; daemon: the same container through the sync session's body
+ * binding). Editor-facing options are picked from the editor's own
  * props so this never becomes a second, drifting copy of that contract.
  */
 export interface MarkdownDocumentSession

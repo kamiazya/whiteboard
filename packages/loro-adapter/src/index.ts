@@ -55,7 +55,7 @@ export {
   writeSpatialEdge,
   writeSpatialNode,
 } from './loro-bridge.js'
-export { MARKDOWN_BODY_NODE_ID, readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
+export { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
   readWorkspaceDocumentName,
