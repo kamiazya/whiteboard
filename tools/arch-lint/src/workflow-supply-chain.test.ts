@@ -259,3 +259,41 @@ describe('dependency-review.yml — a pull request adding a vulnerable dependenc
     }
   })
 })
+
+// zizmor audits the workflows themselves — template injection, credential
+// persistence, dangerous triggers, impostor commits behind a pinned SHA. It
+// gates only while it FAILS on a finding: with advanced-security on, the
+// action uploads SARIF and exits 0, and with its default `latest` the rules
+// judging a PR move without one.
+describe('zizmor.yml — workflow findings fail the pull request', () => {
+  const workflow = readOptionalWorkflow('zizmor.yml')
+  const steps = Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
+  const audit = steps.find((step) => (step.uses ?? '').startsWith('zizmorcore/zizmor-action@'))
+
+  it('exists', () => {
+    expect(existsSync(join(WORKFLOWS_DIR, 'zizmor.yml'))).toBe(true)
+  })
+
+  it('runs on pull_request and on the default branch, never on a base-token trigger', () => {
+    const on = (workflow.on ?? {}) as Record<string, { branches?: string[] } | null>
+    expect(Object.hasOwn(on, 'pull_request')).toBe(true)
+    expect(on.push?.branches).toEqual(['main'])
+    expect(
+      Object.keys(on).filter((t) => t === 'pull_request_target' || t === 'workflow_run'),
+    ).toEqual([])
+  })
+
+  it('fails on a finding instead of uploading it, at a pinned zizmor version', () => {
+    expect(audit).toBeDefined()
+    expect(audit?.with?.['advanced-security']).toBe(false)
+    expect(String(audit?.with?.version ?? 'latest')).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  it('reads the repository config and holds a read-only token', () => {
+    expect(existsSync(join(REPO_ROOT, '.github/zizmor.yml'))).toBe(true)
+    expect(writeScopes(workflow.permissions)).toEqual([])
+    for (const job of Object.values(workflow.jobs ?? {})) {
+      expect(writeScopes(job.permissions)).toEqual([])
+    }
+  })
+})
